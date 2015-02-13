@@ -5319,14 +5319,16 @@ type
   // - woFullExpand will generate a debugger-friendly layout, including instance
   // class name, sets/enumerates as text, and reference pointer - as used by
   // TSynLog and ObjectToJSONFull()
-  // - woStoreClassName will add a "ClassName":"TMyClass", field
+  // - woStoreClassName will add a "ClassName":"TMyClass" field
+  // - woStorePointer will add a "Address":"0431298a" field
   // - woHumanReadableFullSetsAsStar will store an human-readable set with
   // all its enumerates items set to be stored as ["*"]
   // - woHumanReadableEnumSetAsComment will add a comment at the end of the
   // line, containing all available values of the enumaration or set, e.g:
   // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
   TTextWriterWriteObjectOption = (
-    woHumanReadable, woDontStoreDefault, woFullExpand, woStoreClassName,
+    woHumanReadable, woDontStoreDefault, woFullExpand,
+    woStoreClassName, woStorePointer,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;

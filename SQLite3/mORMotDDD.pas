@@ -168,7 +168,7 @@ type
     // restart a service on demand)
     function Start: TCQRSResult;
     /// abort the service/daemon, returning statistics about the whole execution
-    function Stop(out Statistics: variant): TCQRSResult;
+    function Stop(out Information: variant): TCQRSResult;
   end;
 
 

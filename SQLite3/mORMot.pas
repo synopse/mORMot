@@ -758,6 +758,7 @@ unit mORMot;
     - sets including all enumerate values will be written in JSON as "*"
       with woHumanReadable option (and recognized as such e.g. by JSONToObject);
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
+    - new woStorePointer option to let ObjectToJSON() add "Address":"0431298a"  
     - introducing TInterfaceFactoryGenerated so that interface methods can be
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
     - introducing TInjectableObject to easily implement the IoC SOLID pattern,
@@ -1795,7 +1796,8 @@ function ObjectToJSONDebug(Value: TObject): RawUTF8;
 // - if the supplied context format matches '{....}' then it will be added
 // as a corresponding TDocVariant JSON object
 function ObjectToVariantDebug(Value: TObject;
-  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant; overload;
+  ContextFormat: PUTF8Char; const ContextArgs: array of const;
+  const ContextName: RawUTF8='context'): variant; overload;
 
 /// will serialize any TObject into a TDocVariant document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) 
@@ -12324,6 +12326,10 @@ type
     // TSQLAuthGroup to the TSQLModel (if not already there)
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); reintroduce; virtual;
     /// Server initialization with a temporary Database Model
+    // - a Model will be created with supplied tables, and owned by the server
+    // - if you instantiate a TSQLRestServerFullMemory or TSQLRestServerDB
+    // with this constructor, an in-memory engine will be created, with
+    // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const Tables: array of TSQLRecordClass;
       aHandleUserAuthentication: boolean=false);
     /// release memory and any existing pipe initialized by ExportServer()
@@ -35114,7 +35120,8 @@ begin
     result := 'null' else
   if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
     result := FormatUTF8('{"%":?)',[Value],[Exception(Value).Message],True) else
-    result := ObjectToJSON(Value,[woDontStoreDefault,woFullExpand]);
+    result := ObjectToJSON(Value,
+      [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]);
 end;
 
 function ObjectToVariantDebug(Value: TObject): variant;
@@ -35123,13 +35130,14 @@ begin
 end;
 
 function ObjectToVariantDebug(Value: TObject;
-  ContextFormat: PUTF8Char; const ContextArgs: array of const): variant;
+  ContextFormat: PUTF8Char; const ContextArgs: array of const;
+  const ContextName: RawUTF8): variant;
 begin
   result := _JsonFast(ObjectToJSONDebug(Value));
   if ContextFormat<>'' then
     if ContextFormat[0]='{' then
-      _ObjAddProps(['context',_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
-      _ObjAddProps(['context',FormatUTF8(ContextFormat,ContextArgs)],result);
+      _ObjAddProps([ContextName,_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
+      _ObjAddProps([ContextName,FormatUTF8(ContextFormat,ContextArgs)],result);
 end;
 
 function UrlEncode(const NameValuePairs: array of const): RawUTF8;
@@ -37530,7 +37538,13 @@ begin
       Add(' ');
     Add(TSQLRecord(Value).fID);
     Add(',');
-  end;
+  end else
+    if woStorePointer in Options then begin // "Address":"0431298a" field
+      HR;
+      AddShort('"Address":"');
+      AddPointer(PtrUInt(Value));
+      Add('"',',');
+    end;
   repeat
     for i := 1 to InternalClassPropInfo(aClassType,P) do begin
       if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
