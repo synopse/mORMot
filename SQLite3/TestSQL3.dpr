@@ -122,7 +122,6 @@ uses
   {$endif FPC}
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
-  dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
   dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
   {$endif NOVARIANTS}
