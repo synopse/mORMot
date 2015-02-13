@@ -824,7 +824,7 @@ begin
         end else
         if not (Field in StoredClassProps.ExternalDB.FieldNamesMatchInternal) then begin
           if Field=0 then
-            name := 'RowID' else
+            name := 'ID' else // RowID may be reserved (e.g. for Oracle)
             name := fStoredClassRecordProps.Fields.List[Field-1].Name;
           W.AddShort(' as ');
           if (FunctionName='') or (FunctionKnown=funcDistinct) then
