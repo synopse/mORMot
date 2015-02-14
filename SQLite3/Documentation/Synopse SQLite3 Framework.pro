@@ -2093,7 +2093,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !    Baby.Address := 'New York City';
 !    Baby.BirthDate := Date;
 !    Baby.Sex := sMale;
-!!    ID := Client.Add(Baby);
+!!    ID := Client.Add(Baby,true);
 !  finally
 !    Baby.Free; // manage memory as usual
 !  end;
@@ -2277,7 +2277,7 @@ If we take again the {\f1\fs20 TSQLBaby} sample, we may write:
 !    Baby.Address := Address;
 !    Baby.BirthDate := Date;
 !    Baby.Sex := sMale;
-!!    result := Client.Add(Baby);
+!!    result := Client.Add(Baby,true);
 !  finally
 !    Baby.Free;
 !  end;
@@ -2291,7 +2291,7 @@ To ease this pretty usual pattern, the framework offers some kind of automatic m
 !  Baby.Address := Address;
 !  Baby.BirthDate := Date;
 !  Baby.Sex := sMale;
-!!  result := Client.Add(Baby);
+!!  result := Client.Add(Baby,true);
 !end; // local Baby instance will be released here
 It may also be useful for queries.\line Instead of writing:
 !var aMale: TSQLBaby;
@@ -2370,7 +2370,7 @@ When creating such records, use temporary instances for each detail object, as s
 !    Two.MyFileDate := ....
 !    Two.MyFileSize := ...
 !!    MyFile.SecondOne:= TSQLMyFileInfo(MyDataBase.Add(Two,True)); // add Two and store ID in MyFile.SecondOne
-!    MyDataBase.Add(MyFile);
+!    MyDataBase.Add(MyFile,true);
 !  finally
 !     MyFile.Free;
 !     Two.Free;
@@ -2516,7 +2516,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !  writeln(aRec.Data);     // will write '{"name":"Joe","age":30}' (auto-converted to JSON string)
 !  aRec.Data.age := aRec.Data.age+1;    // one year older
 !  aRec.Data.interests := 'football';   // add a property to the schema
-!  aID := aClient.Add(aRec);            // will store {"name":"Joe","age":31,"interests":"footbal"}
+!  aID := aClient.Add(aRec,true);       // will store {"name":"Joe","age":31,"interests":"footbal"}
 !  aRec.Free;
 !  // now we can retrieve the data either via the aID created integer, or via Name='Joe'
 !end;
