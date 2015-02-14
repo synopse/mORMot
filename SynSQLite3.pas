@@ -3625,11 +3625,7 @@ begin
       result := sqlite3.changes(DB);
       {$ifdef WITHLOG}
       if fLog<>nil then
-        {$ifdef DELPHI5OROLDER}
-        fLog.Add.Log(sllDB,'LastChangeCount='+Int64ToUTF8(result),self);
-        {$else}
         fLog.Add.Log(sllDB,'LastChangeCount=%',result,self);
-        {$endif}
       {$endif}
     finally
       UnLock;
@@ -3908,12 +3904,8 @@ begin
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
     if Log<>nil then
-      {$ifdef DELPHI5OROLDER}
-      Log.Log(sllError,'Open('+utf8+') error '+sqlite3_resultToErrorText(result));
-      {$else}
       Log.Log(sllError,'open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
-      {$endif}
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
@@ -4980,8 +4972,7 @@ begin
   res := config(SQLITE_CONFIG_MALLOC,@mem);
   if res<>SQLITE_OK then
     {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed'
-      {$ifndef DELPHI5OROLDER}+' as %',[res]{$endif}) else
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
     {$endif}
     fUseInternalMM := true;
 end;
@@ -5042,9 +5033,7 @@ begin
     raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
   end; // some APIs like config() key() or trace() may not be available
   {$ifdef WITHLOG}
-  SynSQLite3Log.Add.Log(sllInfo,'Loaded external '+
-    {$ifdef DELPHI5OROLDER}LibraryName+' version '+libversion
-    {$else}'% version %',[LibraryName,libversion]{$endif});
+  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,libversion]);
   {$endif}
 end;
 

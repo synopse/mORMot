@@ -7282,11 +7282,7 @@ end;
 
 procedure LogTruncatedColumn(const Col: TSQLDBColumnProperty);
 begin
-  {$ifdef DELPHI5OROLDER}
-  SynDBLog.Add.Log(sllDB,'Truncated column '+Col.ColumnName);
-  {$else}
   SynDBLog.Add.Log(sllDB,'Truncated column %',Col.ColumnName);
-  {$endif}
 end;
 
 function TrimLeftSchema(const TableName: RawUTF8): RawUTF8;

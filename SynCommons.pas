@@ -2964,7 +2964,8 @@ function ExcludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
 
 /// alias to IncludeTrailingBackslash() function
 function IncludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
-{$endif}
+
+{$endif DELPHI5OROLDER}
 
 /// extract file name, without its extension
 function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
@@ -2979,6 +2980,9 @@ function GetFileNameExtIndex(const FileName, CSVExt: TFileName): integer;
 
 /// copy one file to another, similar to the Windows API
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
+
+/// copy the date of one file to another 
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 
 /// retrieve a property value in a text-encoded class
 // - follows the Delphi serialized text object format, not standard .ini
@@ -3814,12 +3818,6 @@ type
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
-    /// set all content of one dynamic array to the current array
-    // - both must be of the same exact type
-    procedure Copy(const Source: TDynArray);
-    /// set all content of one dynamic array to the current array
-    // - both must be of the same exact type
-    procedure CopyFrom(const Source; MaxElem: integer); 
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
     {$ifndef DELPHI5OROLDER}
@@ -3827,6 +3825,12 @@ type
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
     function Equals(const B: TDynArray): boolean;
+    /// set all content of one dynamic array to the current array
+    // - both must be of the same exact type
+    procedure Copy(const Source: TDynArray);
+    /// set all content of one dynamic array to the current array
+    // - both must be of the same exact type
+    procedure CopyFrom(const Source; MaxElem: integer);
     {$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
@@ -4525,11 +4529,13 @@ procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 // - this unit includes a fast optimized asm version for x86
 procedure RecordClear(var Dest; TypeInfo: pointer);
 
+{$ifndef DELPHI5OROLDER}
 /// copy a dynamic array content from source to Dest
 // - uses internally the TDynArray.CopyFrom() method and two temporary
 // TDynArray wrappers
 procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
   TypeInfo: pointer);
+{$endif}
 
 /// fill a dynamic array content from a binary serialization as saved by
 // DynArraySave() / TDynArray.Save()
@@ -5463,7 +5469,6 @@ type
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     procedure AddFloatStr(P: PUTF8Char);
-{$ifndef DELPHI5OROLDER} { array of const is buggy in Delphi 5 :( }
     /// append strings or integers with a specified format
     // - % = #37 indicates a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
@@ -5485,7 +5490,6 @@ type
     {$endif}
     procedure Add(const Format: RawUTF8; const Values: array of const;
       Escape: TTextWriterKind=twNone); overload;
-{$endif DELPHI5OROLDER}
     /// append some values at once
     // - text values (e.g. RawUTF8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
@@ -11534,10 +11538,6 @@ begin
     {$endif FPC}
     {$endif MSWINDOWS}
     {$endif ISDELPHIXE}
-    {$ifndef DELPHI5OROLDER}
-//    if result=Dest then
-//      TSynLogTestLog.DebuggerNotify([GetLastError,CodePage],'Error % on CodePage %');
-    {$endif}
   end;
   result^ := #0;
 end;
@@ -18830,6 +18830,7 @@ begin
 end;
 
 {$ifdef DELPHI5OROLDER}
+
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): boolean;
@@ -18862,6 +18863,26 @@ end;
 function IncludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
 begin
   result := IncludeTrailingBackslash(FileName);
+end;
+
+{$endif DELPHI5OROLDER}
+
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+{$ifdef MSWINDOWS}
+var FileTime: TFileTime;
+    D: THandle;
+begin
+  D := FileOpen(Dest,fmOpenWrite);
+  if D<>THandle(-1) then begin
+    result := GetFileTime(SourceHandle,nil,nil,@FileTime) and
+              SetFileTime(D,nil,nil,@FileTime);
+    FileClose(D);
+  end else
+    result := false;
+end;
+{$else}
+begin
+  result := FileSetDate(Dest,FileGetDate(SourceHandle))=0;
 end;
 {$endif}
 
@@ -27023,11 +27044,7 @@ end;
 constructor TJSONCustomParserCustomSimple.CreateFixedArray(
   const aPropertyName: RawUTF8; aFixedSize: cardinal);
 begin
-  {$ifdef DELPHI5OROLDER}
-  inherited Create(aPropertyName,'FixedByte'+UInt32ToUTF8(aFixedSize));
-  {$else}
   inherited Create(aPropertyName,FormatUTF8('Fixed%Byte',[aFixedSize]));
-  {$endif}
   fKnownType := ktFixedArray;
   fFixedSize := aFixedSize;
   fDataSize := aFixedSize;
@@ -30226,6 +30243,7 @@ end;
 
 { ****************** TDynArray wrapper }
 
+{$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like CopyFrom()
 procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
   TypeInfo: pointer);
 var DestDynArray: TDynArray;
@@ -30233,6 +30251,7 @@ begin
   DestDynArray.Init(TypeInfo,Dest);
   DestDynArray.CopyFrom(Source,SourceMaxElem);
 end;
+{$endif}
 
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 var DynArray: TDynArray;
@@ -31593,7 +31612,27 @@ begin
   end;
   result := true;
 end;
-{$endif}
+
+procedure TDynArray.Copy(const Source: TDynArray);
+var n: Cardinal;
+begin
+  if (fValue=nil) or (Source.fValue=nil) or (ArrayType<>Source.ArrayType) then
+    Exit;
+  SetCapacity(Source.Capacity);
+  n := Source.Count;
+  if ElemType=nil then
+    move(Source.fValue^^,fValue^^,n*ElemSize) else
+    CopyArray(fValue^,Source.fValue^,ElemType,n);
+end;
+
+procedure TDynArray.CopyFrom(const Source; MaxElem: integer);
+var SourceDynArray: TDynArray;
+begin
+  SourceDynArray.Init(fTypeInfo,pointer(@Source)^);
+  SourceDynArray.fCountP := @MaxElem; // would set Count=0 at Init()
+  Copy(SourceDynArray);
+end;
+{$endif DELPHI5OROLDER}
 
 function TDynArray.IndexOf(const Elem): integer;
 var P: pointer;
@@ -31852,26 +31891,6 @@ begin
     @fCompare := @aCompare;
     fSorted := false;
   end;
-end;
-
-procedure TDynArray.Copy(const Source: TDynArray);
-var n: Cardinal;
-begin
-  if (fValue=nil) or (Source.fValue=nil) or (ArrayType<>Source.ArrayType) then
-    Exit;
-  SetCapacity(Source.Capacity);
-  n := Source.Count;
-  if ElemType=nil then
-    move(Source.fValue^^,fValue^^,n*ElemSize) else
-    CopyArray(fValue^,Source.fValue^,ElemType,n);
-end;
-
-procedure TDynArray.CopyFrom(const Source; MaxElem: integer);
-var SourceDynArray: TDynArray;
-begin
-  SourceDynArray.Init(fTypeInfo,pointer(@Source)^);
-  SourceDynArray.fCountP := @MaxElem; // would set Count=0 at Init()
-  Copy(SourceDynArray);
 end;
 
 procedure TDynArray.Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
@@ -33268,16 +33287,8 @@ procedure TTextWriter.WriteObject(Value: TObject; Options: TTextWriterWriteObjec
 var i: integer;
 begin
   if Value<>nil then
-    if Value.InheritsFrom(Exception) then begin
-    {$ifdef DELPHI5OROLDER}
-      Add('{','"');
-      AddShort(Value.ClassName);
-      Add('"',':');
-      AddString(Exception(Value).Message);
-      Add('"','}');
-    {$else}
-      Add('{"%":"%"}',[Value.ClassType,Exception(Value).Message]);
-    {$endif} end else
+    if Value.InheritsFrom(Exception) then
+      Add('{"%":"%"}',[Value.ClassType,Exception(Value).Message]) else
     if Value.InheritsFrom(TRawUTF8List) then
     with TRawUTF8List(Value) do begin
       self.Add('[');
@@ -33818,7 +33829,6 @@ begin // code below must match TDynArray.LoadFromJSON
   Add(']');
 end;
 
-{$ifndef DELPHI5OROLDER}
 procedure TTextWriter.Add(const Format: RawUTF8; const Values: array of const;
   Escape: TTextWriterKind=twNone);
 var ValuesIndex: integer;
@@ -33876,7 +33886,6 @@ write:  if B>=BEnd then
     inc(ValuesIndex);
   until false;
 end;
-{$endif}
 
 procedure TTextWriter.AddLine(const Text: shortstring);
 begin
@@ -41836,7 +41845,7 @@ begin
       finally
         D.Free;
       end;
-      result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
+      result := FileSetDateFrom(Dest,S.Handle);
     finally
       S.Free;
     end;
@@ -41889,7 +41898,7 @@ begin
       finally
         D.Free;
       end;
-      result := FileSetDate(Dest,FileGetDate(S.Handle))=0;
+      result := FileSetDateFrom(Dest,S.Handle);
     finally
       S.Free;
     end;

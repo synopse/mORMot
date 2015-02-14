@@ -1209,13 +1209,8 @@ begin
 {$else}
     Int32ToUtf8(Status,msg);
 {$endif}
-  SynDBLog.Add.Log(sllError,
-  {$ifdef DELPHI5OROLDER}
-    msg+' for column "'+Column^.ColumnName+'" at row '+Int32ToUTF8(fCurrentRow)+
-    ' for '+fSQL);
-  {$else}
-    'Invalid "%" status for column "%" at row % for %',[msg,Column^.ColumnName,fCurrentRow,fSQL],self);
-  {$endif}
+  SynDBLog.Add.Log(sllError,'Invalid "%" status for column "%" at row % for %',
+    [msg,Column^.ColumnName,fCurrentRow,fSQL],self);
 end;
 
 function TOleDBStatement.GetCol(Col: integer; out Column: PSQLDBColumnProperty): pointer;
@@ -1739,9 +1734,7 @@ end;
 destructor TOleDBStatement.Destroy;
 begin
   try
-    {$ifndef DELPHI5OROLDER}
     SynDBLog.Add.Log(sllDB,'Rows = %',[self,TotalRowsRetrieved],self);
-    {$endif}
     CloseRowSet;
   finally
     fCommand := nil;
@@ -2221,11 +2214,7 @@ begin
         result := true;
       except
       end;
-    {$ifdef DELPHI5OROLDER}
-    SynDBLog.Add.Log(sllDB,'CreateDatabase returned '+Int32ToUTF8(ord(result)));
-    {$else}
     SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
-    {$endif}
   finally
     DB := null;
     Catalog := nil;
@@ -2620,9 +2609,7 @@ initialization
   assert(sizeof(TOleDBStatementParam) and (sizeof(Int64)-1)=0);
 
 finalization
-  {$ifndef DELPHI5OROLDER}
   if OleDBCoinitialized<>0 then
     SynDBLog.Add.Log(sllError,'Missing TOleDBConnection.Destroy call = %',
       OleDBCoInitialized);
-  {$endif}
 end.

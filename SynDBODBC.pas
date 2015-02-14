@@ -1047,10 +1047,8 @@ begin
       raise EODBCException.CreateUTF8(
         '%.Connect: unrecognized provider DBMSName=% DriverName=% DBMSVersion=%',
         [self,DBMSName,DriverName,DBMSVersion]);
-    {$ifndef DELPHI5OROLDER}
     Log.Log(sllDebug,'Connected to % using % % recognized as %',
       [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
-    {$endif}
     // notify any re-connection
     inherited Connect;
   except

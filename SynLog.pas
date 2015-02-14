@@ -233,7 +233,6 @@ type
   // - all logging expect UTF-8 encoded text, i.e. usualy English text
   ISynLog = interface(IUnknown)
     ['{527AC81F-BC41-4717-B089-3F74DE56F1AE}']
-{$ifndef DELPHI5OROLDER}
     /// call this method to add some information to the log at a specified level
     // - see the format in TSynLog.Log() method description
     // (not compatible with default SysUtils.Format function)
@@ -243,7 +242,6 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
       Instance: TObject=nil); overload;
-{$endif}
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
     // class name and address (to be used e.g. if you didn't call TSynLog.Enter()
@@ -650,10 +648,8 @@ type
     class function FamilyCreate: TSynLogFamily;
     procedure DoEnterLeave(aLevel: TSynLogInfo);
     procedure CreateLogWriter; virtual;
-{$ifndef DELPHI5OROLDER}
     procedure LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
-      const TextArgs: array of const; Instance: TObject); overload; 
-{$endif}
+      const TextArgs: array of const; Instance: TObject); overload;
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
@@ -663,9 +659,9 @@ type
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINE}inline;{$endif}
     procedure LogCurrentTime;
     procedure LogFileHeader; virtual;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     procedure AddMemoryStats; virtual;
-{$endif}
+    {$endif}
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
     procedure ComputeFileName; virtual;
@@ -768,7 +764,6 @@ type
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
     class function Void: TSynLogClass;
-{$ifndef DELPHI5OROLDER}
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
     // - will force a manual breakpoint if tests are run from the IDE
@@ -796,7 +791,6 @@ type
     /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArg: Int64;
       aInstance: TObject=nil); overload;
-{$endif}
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
     // class name and address (to be used e.g. if you didn't call TSynLog.Enter()
@@ -2412,13 +2406,8 @@ begin
     try
       try
         fEchoRemoteEvent(nil,sllClient,
-        {$ifdef DELPHI5OROLDER}
-          NowToString(false)+'00'+LOG_LEVEL_TEXT[sllClient]+
-          '    Remote Client Disconnected');
-        {$else}
           FormatUTF8('%00%    Remote Client % Disconnected',
           [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
-        {$endif}
       finally
         FreeAndNil(fEchoRemoteClient);
       end;
@@ -2825,7 +2814,6 @@ begin
   {$endif}
 end;
 
-{$ifndef DELPHI5OROLDER}
 procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
   aInstance: TObject);
 begin
@@ -2846,7 +2834,6 @@ begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,TextFmt,[TextArg],aInstance);
 end;
-{$endif}
 
 procedure TSynLog.Log(Level: TSynLogInfo; const Text: RawUTF8; aInstance: TObject;
   TextTruncateAtLength: integer);
@@ -2932,7 +2919,6 @@ begin
 end;
 {$STACKFRAMES OFF}
 
-{$ifndef DELPHI5OROLDER}
 class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
   const Format: RawUTF8; const Args: array of const);
 var Msg: RawUTF8;
@@ -2942,7 +2928,7 @@ begin
     Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
     OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
-    {$endif}                                                      
+    {$endif}
     {$ifdef LINUX}
     //write(Msg);
     {$endif}
@@ -2952,7 +2938,6 @@ begin
     asm int 3 end; // force manual breakpoint if tests are run from the IDE
   {$endif}
 end;
-{$endif}
 
 procedure TSynLog.LogFileHeader;
 var WithinEvents: boolean;
@@ -3195,7 +3180,6 @@ begin
   end;
 end;
 
-{$ifndef DELPHI5OROLDER}
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArgs: array of const; Instance: TObject);
 var LastError: cardinal;
@@ -3216,7 +3200,6 @@ begin
       SetLastError(LastError);
   end;
 end;
-{$endif}
 
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
   Instance: TObject; TextTruncateAtLength: integer);

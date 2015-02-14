@@ -709,9 +709,7 @@ end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
-  {$ifndef DELPHI5OROLDER}
   TSynLogTestLog.DebuggerNotify(sllFail,'#% %',[fAssertions-fAssertionsBeforeRun,msg]);
-  {$endif}
   if Owner<>nil then // avoid GPF
     Owner.Failed(msg,self);
   Inc(fAssertionsFailed);
@@ -1105,20 +1103,10 @@ begin
 end;
 
 procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
-{$ifdef DELPHI5OROLDER}
-var tmp: RawUTF8;
-{$endif}
 begin
   inherited;
   with TestCase[fCurrentMethod] do begin
-    {$ifdef DELPHI5OROLDER}
-    tmp := Ident+': '+TestName[fCurrentMethodIndex];
-    if msg<>'' then
-      tmp := tmp+' "'+msg+'"';
-    fLogFile.Log(sllFail,tmp);
-    {$else}
     fLogFile.Log(sllFail,'%: % "%"',[Ident,TestName[fCurrentMethodIndex],msg],aTest);
-    {$endif}
     {$ifdef KYLIX3}
     fLogFile.Flush(true);
     // we do not have a debugger for CrossKylix -> stop here!
@@ -1129,7 +1117,6 @@ begin
     {$endif}
   end;
 end;
-
 
 
 end.

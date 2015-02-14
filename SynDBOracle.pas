@@ -336,10 +336,8 @@ type
     fRowBuffer: TByteDynArray;
     fBoundCursor: array of pointer;
     fInternalBufferSize: cardinal;
-{$ifndef DELPHI5OROLDER}
     // warning: shall be 32 bits aligned!
     fTimeElapsed: TPrecisionTimer;
-{$endif}
     fUseServerSideStatementCache: boolean;
     function DateTimeToDescriptor(aDateTime: TDateTime): pointer;
     procedure FreeHandles(AfterError: boolean);
@@ -1851,11 +1849,9 @@ begin
       end;
       fAnsiConvert := TSynAnsiConvert.Engine(CharSetIDToCodePage(fOCICharSet));
     end;
-    {$ifndef DELPHI5OROLDER}
     Log.Log(sllInfo,'Connected to % as % with %, codepage % (%/%)',
       [Props.ServerName,Props.UserID,Props.ClientVersion,fAnsiConvert.CodePage,
        fOCICharSet,OracleCharSetName(fOCICharSet)],self);
-    {$endif}
     with NewStatement do
     try // ORM will send date/time as ISO8601 text -> force encoding
       Execute('ALTER SESSION SET NLS_DATE_FORMAT=''YYYY-MM-DD-HH24:MI:SS''',false);
@@ -2366,14 +2362,9 @@ end;
 destructor TSQLDBOracleStatement.Destroy;
 begin
   try
-    {$ifndef DELPHI5OROLDER}
     fTimeElapsed.Resume;
-    {$endif}
     FreeHandles(false);
-    {$ifndef DELPHI5OROLDER}
-    SynDBLog.Add.Log(sllDB,'% row(s) in %',
-      [TotalRowsRetrieved,fTimeElapsed.Stop],self);
-    {$endif}
+    SynDBLog.Add.Log(sllDB,'% row(s) in %',[TotalRowsRetrieved,fTimeElapsed.Stop],self);
   finally
     inherited;
   end;
@@ -2383,9 +2374,7 @@ constructor TSQLDBOracleStatement.CreateFromExistingStatement(
   aConnection: TSQLDBConnection; aStatement: POCIStmt);
 begin
   Create(aConnection);
-  {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
-  {$endif}
   fStatement := aStatement;
   try
     fExpectResults := true;
@@ -2520,9 +2509,7 @@ begin
   with SynDBLog.Add do
     if sllSQL in Family.Level then
       Log(sllSQL,SQLWithInlinedParams,self,2048);
-  {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
-  {$endif}
   ociArraysCount := 0;
   Env := (Connection as TSQLDBOracleConnection).fEnv;
   Context := TSQLDBOracleConnection(Connection).fContext;
@@ -3096,15 +3083,11 @@ begin
               ColumnValueDBCharSet := oCharSet else
               if (ColumnValueDBCharSet<>oCharSet) and
                  not SimilarCharSet(ColumnValueDBCharSet,oCharSet) then
-              // log a warning, but use the connection-level code page
-              {$ifdef DELPHI5OROLDER}
-                SynDBLog.Add.Log(sllWarning,'Column has wrong charset -> possible data loss');
-              {$else}
+                // log a warning, but use the connection-level code page
                 SynDBLog.Add.Log(sllWarning,'Column "%" has % (%) charset - expected % (%) '+
                   '-> possible data loss',[ColumnName,
                    ColumnValueDBCharSet,OracleCharSetName(ColumnValueDBCharSet),
                    oCharSet,OracleCharSetName(oCharSet)]);
-              {$endif}
           end;
           SQLCS_NCHAR: // NVARCHAR2 -> set max UTF-8 bytes from chars
             if ColumnValueInlined then begin
@@ -3185,9 +3168,7 @@ procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8;
 var oSQL: RawUTF8;
     Env: POCIEnv;
 begin
-  {$ifndef DELPHI5OROLDER}
   fTimeElapsed.ProfileCurrentMethod;
-  {$endif}
   try
     if (fStatement<>nil) or (fColumnCount>0) then
       raise ESQLDBOracle.CreateUTF8('%.Prepare should be called only once',[self]);
@@ -3231,10 +3212,8 @@ begin
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if sav<>0 then begin // ignore if just retrieved ROW #1
     if SeekFirst then begin
-      {$ifndef DELPHI5OROLDER}
       fTimeElapsed.Resume;
       try
-      {$endif}
 {      if OCI.major_version<9 then
         raise ESQLDBOracle.CreateFmt('Oracle Client %s does not support OCI_FETCH_FIRST',
           [OCI.ClientRevision]); }
@@ -3242,29 +3221,23 @@ begin
         FetchTest(Status); // error + set fRowCount+fRowFetchedCurrent
         if fCurrentRow<0 then // should not happen
           raise ESQLDBOracle.Create('OCI_FETCH_FIRST did not reset cursor');
-      {$ifndef DELPHI5OROLDER}
       finally
         fTimeElapsed.Pause;
       end;
-      {$endif}
     end else begin
       // ensure we have some data in fRowBuffer[] for this row
       inc(fRowFetchedCurrent);
       if fRowFetchedCurrent>=fRowFetched then begin // reached end of buffer
         if fRowFetchedEnded then
           exit; // no more data
-        {$ifndef DELPHI5OROLDER}
         fTimeElapsed.Resume;
         try
-        {$endif}
           FetchRows;
           if fRowFetched=0 then
             exit; // no more row available -> return false + fCurrentRow=-1
-        {$ifndef DELPHI5OROLDER}
         finally
           fTimeElapsed.Pause;
         end;
-        {$endif}
       end;
     end;
   end;

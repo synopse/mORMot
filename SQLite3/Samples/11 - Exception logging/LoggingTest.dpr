@@ -44,10 +44,6 @@ type
 var
   TestLevel: TSynLogInfo = high(TSynLogInfo);
 
-const
-  sTestLevel: PWinAnsiChar = 'TestLevel';
-  sTestSet: PWinAnsiChar = 'set';
-
 procedure TTestLogClass.TestLog;
 var ILog: ISynLog;
     S: TSynLogInfos;
@@ -55,8 +51,8 @@ begin
   ILog := TSQLLog.Enter(self);
   // do some stuff
   ILog.Log(sllCustom1);
-  ILog.Log(sllInfo,sTestLevel,TypeInfo(TSynLogInfo),TestLevel);
-  ILog.Log(sllInfo,sTestSet,TypeInfo(TSynLogInfos),S);
+  ILog.Log(sllInfo,'TestLevel',TypeInfo(TSynLogInfo),TestLevel);
+  ILog.Log(sllInfo,'set',TypeInfo(TSynLogInfos),S);
   ILog.Log(sllDebug,ILog.Instance);
   if TestLevel=low(TestLevel) then
     TTestLogClass(nil).ClassName; // will raise an access violation
