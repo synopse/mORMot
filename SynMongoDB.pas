@@ -779,7 +779,7 @@ function BSON(const JSON: RawUTF8): TBSONDocument; overload;
 // explicitely via BSON-like extensions: any complex value (e.g. a TDateTime
 // or a BSONVariant binary) won't be handled as expected - use the overloaded
 // BSON() with explicit BSONVariant() name/value pairs instead
-function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocument; overload;
+function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument; overload;
 
 /// store some TDocVariant custom variant content into BSON encoded binary
 // - will write either a BSON object or array, depending of the internal
@@ -858,7 +858,7 @@ procedure BSONVariant(JSON: PUTF8Char; var result: variant); overload;
 // into a TBSONVariant betDoc type instance
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, as with the overloaded BSON() function
-function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): variant; overload;
+function BSONVariant(const Format: RawUTF8; const Args,Params: array of const): variant; overload;
 
 /// convert a TDocVariant variant into a TBSONVariant betDoc type instance
 function BSONVariant(doc: TDocVariantData): variant; overload;
@@ -2052,7 +2052,7 @@ type
     // ! ...
     // !   products.insert('{ item: ?, qty: ? }',['card',15],@oid);
     // !   writeln(oid.ToText);
-    procedure Insert(Document: PUTF8Char; const Params: array of const;
+    procedure Insert(const Document: RawUTF8; const Params: array of const;
       CreatedObjectID: PBSONObjectID=nil); overload;
     /// insert one or more documents in the collection
     // - Documents is an array of TDocVariant (i.e. created via _JsonFast()
@@ -2101,7 +2101,7 @@ type
     // - supplied JSON could be either strict or in MongoDB Shell syntax:
     // - will perform either an insert or an update, depending of the
     // presence of the _id field, as overloaded Save(const Document: variant)
-    procedure Save(Document: PUTF8Char; const Params: array of const;
+    procedure Save(const Document: RawUTF8; const Params: array of const;
       CreatedObjectID: PBSONObjectID=nil); overload;
 
     /// modifies an existing document or several documents in a collection
@@ -2137,7 +2137,7 @@ type
     // ! // the updated document is now:
     // ! { "_id" : 11, "item" : "Divine Comedy", "price" : 18, "stock" : 7 }
     procedure Update(Query: PUTF8Char; const QueryParams: array of const;
-      Update: PUTF8Char; const UpdateParams: array of const;
+      const Update: RawUTF8; const UpdateParams: array of const;
       Flags: TMongoUpdateFlags=[]); overload;
     /// modifies some fields of an existing document in a collection
     // - by default, Update() or Save() will replace the whole document
@@ -2285,7 +2285,7 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aConnection: TMongoConnection); reintroduce;
   published
     /// the associated connection
@@ -2299,7 +2299,7 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aDatabase: TMongoDatabase); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aDatabase: TMongoDatabase); reintroduce;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
@@ -2323,7 +2323,7 @@ type
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
       aRequest: TMongoRequest=nil); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aConnection: TMongoConnection; aRequest: TMongoRequest); reintroduce;
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
@@ -4240,11 +4240,11 @@ begin
   result := true;
 end;
 
-function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocument;
+function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument;
 var JSON: RawUTF8;
     v: variant;
 begin
-  if (Format<>nil) and (PWord(Format)^=ord('?')) and (high(Params)>=0) then begin
+  if (Format='?') and (high(Params)>=0) then begin
     VarRecToVariant(Params[0],v);
     if DocVariantType.IsOfType(v) then begin
       result := BSON(TDocVariantData(v));
@@ -4252,6 +4252,7 @@ begin
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
+  UniqueRawUTF8(JSON);
   JSONBufferToBSONDocument(pointer(JSON),result);
 end;
 
@@ -4279,7 +4280,7 @@ begin
   BSONVariantType.FromBSONDocument(tmp,result);
 end;
 
-function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): variant; overload;
+function BSONVariant(const Format: RawUTF8; const Args,Params: array of const): variant; overload;
 begin
   BSONVariantType.FromBSONDocument(BSON(Format,Args,Params),result);
 end;
@@ -5120,7 +5121,7 @@ begin
   fConnection := aConnection;
 end;
 
-constructor EMongoConnectionException.CreateUTF8(Format: PUTF8Char; const Args: array of const;
+constructor EMongoConnectionException.CreateUTF8(const Format: RawUTF8; const Args: array of const;
   aConnection: TMongoConnection);
 begin
   inherited CreateUTF8(Format,Args);
@@ -5137,7 +5138,7 @@ begin
   fRequest := aRequest;
 end;
 
-constructor EMongoRequestException.CreateUTF8(Format: PUTF8Char;
+constructor EMongoRequestException.CreateUTF8(const Format: RawUTF8;
   const Args: array of const; aConnection: TMongoConnection;
   aRequest: TMongoRequest);
 begin
@@ -5206,7 +5207,7 @@ begin
   fDatabase := aDatabase;
 end;
 
-constructor EMongoDatabaseException.CreateUTF8(Format: PUTF8Char;
+constructor EMongoDatabaseException.CreateUTF8(const Format: RawUTF8;
   const Args: array of const; aDatabase: TMongoDatabase);
 begin
   inherited CreateUTF8(Format,Args,aDatabase.Client.Connections[0]);
@@ -5769,7 +5770,7 @@ begin // return TRUE if _id has been computed (i.e. save=insert)
     CreatedObjectID^.FromVariant(oid)
 end;
 
-procedure TMongoCollection.Insert(Document: PUTF8Char;
+procedure TMongoCollection.Insert(const Document: RawUTF8;
   const Params: array of const; CreatedObjectID: PBSONObjectID);
 var doc: variant;
     oid: variant;
@@ -5791,7 +5792,7 @@ begin
     Update(BSONVariant(['_id',oid]),Document,[mufUpsert])
 end;
 
-procedure TMongoCollection.Save(Document: PUTF8Char;
+procedure TMongoCollection.Save(const Document: RawUTF8;
   const Params: array of const; CreatedObjectID: PBSONObjectID);
 var doc: variant;
 begin
@@ -5800,7 +5801,7 @@ begin
 end;
 
 procedure TMongoCollection.Update(Query: PUTF8Char;
-  const QueryParams: array of const; Update: PUTF8Char;
+  const QueryParams: array of const; const Update: RawUTF8;
   const UpdateParams: array of const; Flags: TMongoUpdateFlags);
 var quer,upd: variant;
 begin

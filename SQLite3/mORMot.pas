@@ -712,6 +712,8 @@ unit mORMot;
       that SELECT with a simple table name in its FROM clause will now be
       checked againsts TSQLAccessRight.GET[] access rights
     - BREAKING CHANGE: added aSentData parameter to TNotifySQLEvent/OnUpdateEvent
+    - BREAKING CHANGE: SQL "where" clause defined as PUTF8Char constant text
+      have been changed into RawUTF8, to let the compiler fully handle Unicode
     - remove some unused TPropInfo methods, which were duplicates of the
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
@@ -1796,7 +1798,7 @@ function ObjectToJSONDebug(Value: TObject): RawUTF8;
 // - if the supplied context format matches '{....}' then it will be added
 // as a corresponding TDocVariant JSON object
 function ObjectToVariantDebug(Value: TObject;
-  ContextFormat: PUTF8Char; const ContextArgs: array of const;
+  const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8='context'): variant; overload;
 
 /// will serialize any TObject into a TDocVariant document
@@ -4693,11 +4695,11 @@ type
       Status: integer=HTML_BADREQUEST); overload;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
-    procedure Error(Format: PUTF8Char; const Args: array of const;
+    procedure Error(const Format: RawUTF8; const Args: array of const;
       Status: integer=HTML_BADREQUEST); overload;
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
-    procedure Error(E: Exception; Format: PUTF8Char; const Args: array of const;
+    procedure Error(E: Exception; const Format: RawUTF8; const Args: array of const;
       Status: integer=HTML_BADREQUEST); overload;
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overridden
@@ -5364,7 +5366,7 @@ type
     - note that this method prototype changed with revision 1.17 of the
       framework: array of const used to be ParamsSQLWhere and '%' in the
       FormatSQLWhere statement, whereas it now expects bound parameters as '?' }
-    constructor Create(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    constructor Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const); overload;
     {/ this constructor initializes the object as above, and fills its content
       from a client or server connection, using a specified WHERE clause
@@ -5380,7 +5382,7 @@ type
       - using '?' and BoundsSQLWhere[] is perhaps more readable in your code, and
       will in all case create a request with :(..): inline parameters, with
       automatic RawUTF8 quoting if necessary }
-    constructor Create(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    constructor Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const); overload;
 
     {/ this constructor initializes the object as above, and prepares itself to
@@ -5428,7 +5430,7 @@ type
         you want to Update the retrieved record content later, since any
         missing fields will be left with previous values - but BatchUpdate() can be
         safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    constructor CreateAndFillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    constructor CreateAndFillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object as above, and prepares itself to
       loop through a statement using a specified WHERE clause
@@ -5449,7 +5451,7 @@ type
         you want to Update the retrieved record content later, since any
         missing fields will be left with previous values - but BatchUpdate() can be
         safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    constructor CreateAndFillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    constructor CreateAndFillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     {/ this constructor initializes the object as above, and prepares itself to
@@ -5541,7 +5543,7 @@ type
       - the aFormatSQLJoin clause will replace all '%' chars with the supplied
         aParamsSQLJoin[] supplied values, and bind all '?' chars as bound
         parameters with aBoundsSQLJoin[] values }
-    constructor CreateAndFillPrepareMany(aClient: TSQLRest; aFormatSQLJoin: PUTF8Char;
+    constructor CreateAndFillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 
     {/ this method create a clone of the current record, with same ID and properties
@@ -5753,7 +5755,7 @@ type
        you want to Update the retrieved record content later, since any
        missing fields will be left with previous values - but BatchUpdate() can be
        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    function FillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    function FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to get values using a specified WHERE clause with '%' and '?' parameters
      - returns true in case of success, false in case of an error during SQL request
@@ -5775,7 +5777,7 @@ type
        you want to Update the retrieved record content later, since any
        missing fields will be left with previous values - but BatchUpdate() can be
        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
-    function FillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+    function FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     {/ prepare to get values from a list of IDs
@@ -5827,7 +5829,7 @@ type
        methods of nested TSQLRecordMany instances which may override the Dest
        instance content (e.g. ManySelect) to avoid any GPF
      - is used by TSQLRecord.CreateAndFillPrepareMany constructor }
-    function FillPrepareMany(aClient: TSQLRest; aFormatSQLJoin: PUTF8Char;
+    function FillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
     {/ fill all published properties of an object from a TSQLTable prepared row
       - FillPrepare() must have been called before
@@ -8564,7 +8566,7 @@ type
     /// call this method if the callback implementation failed
     procedure Error(const aErrorMessage: RawUTF8); overload;
     /// call this method if the callback implementation failed
-    procedure Error(Format: PUTF8Char; const Args: array of const); overload;
+    procedure Error(const Format: RawUTF8; const Args: array of const); overload;
     /// the stubbing / mocking generator
     property Sender: TInterfaceStub read fSender;
     /// the mocking generator associated test case
@@ -8845,7 +8847,7 @@ type
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     procedure InternalGetInstance(out aStubbedInterface); virtual;
     function InternalCheck(aValid,aExpectationFailed: boolean;
-      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; virtual;
+      const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
@@ -9128,7 +9130,7 @@ type
   protected
     fTestCase: TSynTestCase;
     function InternalCheck(aValid,aExpectationFailed: boolean;
-      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; override;
+      const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; override;
   public
     /// initialize an interface mock from TypeInfo(IMyInterface)
     // - aTestCase.Check() will be called in case of mocking failure
@@ -10044,7 +10046,7 @@ type
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalLog(Format: PWinAnsiChar; const Args: array of const;
+    procedure InternalLog(const Format: RawUTF8; const Args: array of const;
       Level: TSynLogInfo); overload;
     /// internal method used by Delete(Table,SQLWhere) method
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
@@ -10239,7 +10241,7 @@ type
     // framework: array of const used to be Args and '%' in the FormatSQLWhere
     // statement, whereas it now expects bound parameters as '?'
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const): RawUTF8; overload;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
@@ -10248,11 +10250,11 @@ type
     // ! OneFieldValue(TSQLRecord,'Name','%=?',['ID'],[aID])
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const): RawUTF8; overload;
+      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
     /// get one integer value of an unique field with a Where Clause
     // - this overloaded function will return the field value as integer
     function OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
+      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
       out Data: Int64): boolean; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
     // - example of use: OneFieldValue(TSQLRecord,'Name',23)
@@ -10358,7 +10360,7 @@ type
     // framework: array of const used to be Args and '%' in the WhereClauseFormat
     // statement, whereas it now expects bound parameters as '?'
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      WhereClauseFormat: PUTF8Char; const BoundsSQLWhere: array of const): TSQLTableJSON; overload;
+      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTableJSON; overload;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - FieldNames can be the CSV list of field names to be retrieved
@@ -10371,7 +10373,7 @@ type
     // ! Table := MultiFieldValues(TSQLRecord,'Name','%=?',['ID'],[aID]);
     // - call overloaded MultiFieldValues() / ExecuteList() to get the list
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-      WhereClauseFormat: PUTF8Char; const Args, Bounds: array of const): TSQLTableJSON; overload;
+      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TSQLTableJSON; overload;
     /// retrieve the main field (mostly 'Name') value of the specified record
     // - use GetMainFieldName() method to get the main field name
     // - use OneFieldValue() method to get the field value
@@ -10417,7 +10419,7 @@ type
     // this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
-    function Retrieve(WhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+    function Retrieve(const WhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
       Value: TSQLRecord): boolean; overload;
     /// get a member from its ID
     // - return true on success
@@ -10470,7 +10472,7 @@ type
     // responsible of freeing the instance
     // - this TObjectList will contain a list of all matching records
     // - return nil on error
-    function RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+    function RetrieveList(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList; overload;
     /// get a list of members from a SQL statement as RawJSON
@@ -10491,7 +10493,7 @@ type
     // without any conversion, so this method would be the fastest, but complex
     // types like dynamic array would be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
-    function RetrieveListJSON(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+    function RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): RawJSON;
     {$ifndef NOVARIANTS}
@@ -10530,7 +10532,7 @@ type
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
-      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
       LastRecordID: PID=nil): variant; overload;
     /// get one member from a SQL statement as a TDocVariant
@@ -10539,7 +10541,7 @@ type
     // TSQLRecord layout, so complex types like dynamic array would be returned
     // as a true array of values 
     function RetrieveDocVariant(Table: TSQLRecordClass;
-      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8): variant; 
     {$endif NOVARIANTS}
     /// get a list of members from a SQL statement as T*ObjArray
@@ -10558,7 +10560,7 @@ type
     // when the T*ObjArray list is not needed any more 
     // - returns true on success, false on error
     function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
-      FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): boolean;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
@@ -10573,13 +10575,13 @@ type
     // - expect the same format as FormatUTF8() function, replacing all '%' chars
     // with Args[] values
     // - return true on success
-    function ExecuteFmt(SQLFormat: PUTF8Char; const Args: array of const): boolean; overload;
+    function ExecuteFmt(const SQLFormat: RawUTF8; const Args: array of const): boolean; overload;
     /// Execute directly a SQL statement with supplied parameters, with no result
     // - expect the same format as FormatUTF8() function, replacing all '%' chars
     // with Args[] values, and all '?' chars with Bounds[] (inlining them
     // with :(...): and auto-quoting strings)
     // - return true on success
-    function ExecuteFmt(SQLFormat: PUTF8Char; const Args, Bounds: array of const): boolean; overload;
+    function ExecuteFmt(const SQLFormat: RawUTF8; const Args, Bounds: array of const): boolean; overload;
     /// unlock the corresponding record
     // - record should have been locked previously e.g. with Retrieve() and
     // forupdate=true, i.e. retrieved not via GET with LOCK REST-like verb
@@ -10620,7 +10622,8 @@ type
     // when adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
     // - call internaly the Add virtual method above
-    function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const; ForcedID: TID=0): TID; overload;
+    function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
+      ForcedID: TID=0): TID; overload;
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
@@ -10650,7 +10653,8 @@ type
     // TSQLRawBlob and TSQLRecordMany kind (i.e. only so called "simple fields")
     // - return true on success
     // - call internaly the Update() / EngineUpdate() virtual methods 
-    function Update(aTable: TSQLRecordClass; aID: TID; const aSimpleFields: array of const): boolean; overload;
+    function Update(aTable: TSQLRecordClass; aID: TID;
+      const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
     // - implements REST POST if Value.ID=0 or PUT collection on Value.ID
     // - will return the created or updated ID
@@ -10732,7 +10736,7 @@ type
     // currency / RawUTF8 values to be bound to the request as parameters
     // - is a simple wrapper around:
     // ! Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere))
-    function Delete(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+    function Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const): boolean; overload;
 
     /// access the internal caching parameters for a given TSQLRecord
@@ -10932,7 +10936,7 @@ type
     // - return a TObjectList<T> on success (possibly with Count=0) - caller is
     // responsible of freeing the instance
     // - return nil on error
-    function RetrieveList<T: TSQLRecord>(FormatSQLWhere: PUTF8Char;
+    function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
     {$endif}
@@ -11145,7 +11149,7 @@ type
     // database back-end used (especially for external databases)
     // - can be set e.g. to ',"totalRows":%' value (note that the initial "," is
     // expected by the produced JSON content, and % will be set with the value)
-    SendTotalRowsCountFmt: PUTF8Char;
+    SendTotalRowsCountFmt: RawUTF8;
   end;
 
   /// used for statistics update in TSQLRestServer.URI()
@@ -12061,7 +12065,7 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
-    function CreateBackgroundThread(Format: PUTF8Char; const Args: array of const): TSynBackgroundThreadMethod;
+    function CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
     function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
@@ -13384,8 +13388,8 @@ type
     // - using inlined parameters via :(...): in SQLWhereFormat is always a good idea
     // - for one TClass, you should better use TSQLRest.MultiFieldValues()
     // - will call the List virtual method internaly
-    function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
-      SQLWhereFormat: PUTF8Char; const Args: array of const): TSQLTableJSON; overload;
+    function ListFmt(const Tables: array of TSQLRecordClass;
+      const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTableJSON; overload;
     /// retrieve a list of members as a TSQLTable
     // - implements REST GET collection
     // - in this version, the WHERE clause can be created with the same format
@@ -13395,8 +13399,8 @@ type
     // ! Table := ListFmt([TSQLRecord],'Name','ID=?',[],[aID]);
     // - for one TClass, you should better use TSQLRest.MultiFieldValues()
     // - will call the List virtual method internaly
-    function ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
-      SQLWhereFormat: PUTF8Char; const Args, Bounds: array of const): TSQLTableJSON; overload;
+    function ListFmt(const Tables: array of TSQLRecordClass;
+      const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTableJSON; overload;
     /// dedicated method used to retrieve matching IDs using a fast R-Tree index
     // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
     // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
@@ -14672,7 +14676,7 @@ const
     Results: 'RESULTS=';
     Select: 'SELECT=';
     Where: 'WHERE=';
-    SendTotalRowsCountFmt: nil);
+    SendTotalRowsCountFmt: '');
 
   /// options to specify no index createon for TSQLRestServer.CreateMissingTables
   // and TSQLRecord.InitializeTable methods
@@ -21143,10 +21147,6 @@ end;
 
 { TINIWriter }
 
-const
-  sWriteObject1: PWinAnsiChar = #13'[%]'#13;
-  sWriteObject2: PWinAnsiChar = '%%=%'#13;
-  
 procedure TINIWriter.WriteObject(Value: TObject; const SubCompName: RawUTF8='';
   WithSection: boolean=true);
 var P: PPropInfo;
@@ -21162,39 +21162,39 @@ begin
     if WithSection then
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-      Add(sWriteObject1,[PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^]);
+      Add(#13'[%]'#13,[PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^]);
     for i := 1 to InternalClassPropInfo(PPointer(Value)^,P) do begin
       case P^.PropType^.Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}:
-          Add(sWriteObject2,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
+          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
         {$ifdef FPC}tkBool,{$endif}
         tkEnumeration, tkInteger, tkSet: begin
           V := P^.GetOrdProp(Value);
           if V<>P^.Default then
-            Add(sWriteObject2,[SubCompName,P^.Name,V]);
+            Add('%%=%'#13,[SubCompName,P^.Name,V]);
         end;
         {$ifdef FPC}tkAString,{$endif} tkLString:
-          Add(sWriteObject2,[SubCompName,P^.Name,P^.GetLongStrValue(Value)]);
+          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetLongStrValue(Value)]);
         tkFloat: begin
           VT[0] := AnsiChar(ExtendedToString(VT,P^.GetFloatProp(Value),DOUBLE_PRECISION));
-          Add(sWriteObject2,[SubCompName,P^.Name,VT]);
+          Add('%%=%'#13,[SubCompName,P^.Name,VT]);
         end;
         tkWString: begin
           P^.GetWideStrProp(Value,WS);
-          Add(sWriteObject2,[SubCompName,P^.Name,WS]);
+          Add('%%=%'#13,[SubCompName,P^.Name,WS]);
         end;
         {$ifdef UNICODE}
         tkUString: // write converted to UTF-8
-          Add(sWriteObject2,[SubCompName,P^.Name,P^.GetUnicodeStrProp(Value)]);
+          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetUnicodeStrProp(Value)]);
         {$endif}
         tkDynArray: begin
-          Add(sWriteObject2,[SubCompName,P^.Name]);
+          Add('%%=%'#13,[SubCompName,P^.Name]);
           AddDynArrayJSON(P^.GetDynArray(Value));
           Add(#13);
         end;
         {$ifdef PUBLISHRECORD}
         tkRecord{$ifdef FPC},tkObject{$endif}:
-          Add(sWriteObject2,[SubCompName,P^.Name,BinToBase64WithMagic(
+          Add('%%=%'#13,[SubCompName,P^.Name,BinToBase64WithMagic(
             RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
         {$endif}
         tkClass: begin
@@ -21205,7 +21205,7 @@ begin
         {$ifndef NOVARIANTS}
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
           P^.GetVariantProp(Value,VV);
-          Add(sWriteObject2,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
+          Add('%%=%'#13,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
         end;
         {$endif}
       end; // tkString (shortstring) is not handled
@@ -23138,7 +23138,7 @@ begin
     aClient.Retrieve(aSQLWhere,self);
 end;
 
-constructor TSQLRecord.Create(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+constructor TSQLRecord.Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const);
 begin
   Create;
@@ -23146,7 +23146,7 @@ begin
     aClient.Retrieve(FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),self);
 end;
 
-constructor TSQLRecord.Create(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+constructor TSQLRecord.Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
   const ParamsSQLWhere, BoundsSQLWhere: array of const);
 begin
   Create;
@@ -23316,20 +23316,20 @@ begin
   result := true;
 end;
 
-function TSQLRecord.FillPrepare(aClient: TSQLRest; FormatSQLWhere: PUTF8Char;
+function TSQLRecord.FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean;
 begin
-  if (FormatSQLWhere=nil) or (high(BoundsSQLWhere)<0) then
+  if (FormatSQLWhere='') or (high(BoundsSQLWhere)<0) then
     result := false else
     result := FillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
       aCustomFieldsCSV);
 end;
 
 function TSQLRecord.FillPrepare(aClient: TSQLRest;
-  FormatSQLWhere: PUTF8Char; const ParamsSQLWhere, BoundsSQLWhere: array of const;
+  const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 begin
-  if (FormatSQLWhere=nil) or ((high(ParamsSQLWhere)<0)and(high(BoundsSQLWhere)<0)) then
+  if (FormatSQLWhere='') or ((high(ParamsSQLWhere)<0)and(high(BoundsSQLWhere)<0)) then
     result := false else
     result := FillPrepare(aClient,
       FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
@@ -23930,7 +23930,7 @@ begin
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
-  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8='');
 begin
   CreateAndFillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
@@ -23938,7 +23938,7 @@ begin
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
-  FormatSQLWhere: PUTF8Char; const ParamsSQLWhere,
+  const FormatSQLWhere: RawUTF8; const ParamsSQLWhere,
   BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8);
 begin
   CreateAndFillPrepare(aClient,
@@ -23975,7 +23975,7 @@ begin
     raise EORMException.CreateUTF8('No nested TSQLRecord to JOIN in %',[self]);
   SQL := props.SQL.SelectAllJoined;
   if aFormatSQLJoin<>'' then
-    SQL := SQL+FormatUTF8(pointer(SQLFromWhere(aFormatSQLJoin)),
+    SQL := SQL+FormatUTF8(SQLFromWhere(aFormatSQLJoin),
       aParamsSQLJoin,aBoundsSQLJoin);
   T := aClient.ExecuteList(props.props.JoinedFieldsTable,SQL);
   if T=nil then
@@ -24003,7 +24003,7 @@ begin
 end;
 
 constructor TSQLRecord.CreateAndFillPrepareMany(aClient: TSQLRest;
-  aFormatSQLJoin: PUTF8Char; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
+  const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 begin
   Create;
   if Length(RecordProps.ManyFields)=0 then
@@ -24015,7 +24015,7 @@ begin
 end;
 
 function TSQLRecord.FillPrepareMany(aClient: TSQLRest;
-  aFormatSQLJoin: PUTF8Char; const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
+  const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
 var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
     aField: string[3];
     aMany: RawUTF8;
@@ -24029,7 +24029,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
     end;
     M: TSQLRecordMany;
     D: TSQLRecord;
-    P: PUTF8Char;
+    J,JBeg: PUTF8Char;
     Objects: array of TSQLRecord;
     ObjectsClass: array of TSQLRecordClass;
 
@@ -24184,27 +24184,28 @@ begin
     Props.fSQLFillPrepareMany := aSQL;
   end;
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
-  if aFormatSQLJoin<>nil then begin
+  if aFormatSQLJoin<>'' then begin
     aSQLWhere := '';
+    JBeg := pointer(aFormatSQLJoin);
     repeat
-      P := aFormatSQLJoin;
-      while not (ord(P^) in IsIdentifier) do begin
-        case P^ of
-        '"':  repeat inc(P) until P^ in [#0,'"'];
-        '''': repeat inc(P) until P^ in [#0,''''];
+      J := JBeg;
+      while not (ord(J^) in IsIdentifier) do begin
+        case J^ of
+        '"':  repeat inc(J) until J^ in [#0,'"'];
+        '''': repeat inc(J) until J^ in [#0,''''];
         end;
-        if P^=#0 then break;
-        inc(P);
+        if J^=#0 then break;
+        inc(J);
       end;
-      if P<>aFormatSQLJoin then begin // append ' ',')'..
-        SetString(aSQLFrom,aFormatSQLJoin,P-aFormatSQLJoin);
+      if J<>JBeg then begin // append ' ',')'..
+        SetString(aSQLFrom,PAnsiChar(JBeg),J-JBeg);
         aSQLWhere := aSQLWhere+aSQLFrom;
-        aFormatSQLJoin := P;
+        JBeg := J;
       end;
-      if P^=#0 then break;
-      aSQLWhere := aSQLWhere+ProcessField(aFormatSQLJoin);
-    until aFormatSQLJoin^=#0;
-    aSQL := aSQL+' and ('+FormatUTF8(pointer(aSQLWhere),aParamsSQLJoin,aBoundsSQLJoin)+')';
+      if J^=#0 then break;
+      aSQLWhere := aSQLWhere+ProcessField(JBeg);
+    until JBeg^=#0;
+    aSQL := aSQL+' and ('+FormatUTF8(aSQLWhere,aParamsSQLJoin,aBoundsSQLJoin)+')';
   end;
   // execute SQL statement and retrieve data
   T := aClient.ExecuteList(ObjectsClass,aSQL);
@@ -25875,7 +25876,7 @@ begin
   {$endif}
 end;
 
-procedure TSQLRest.InternalLog(Format: PWinAnsiChar;
+procedure TSQLRest.InternalLog(const Format: RawUTF8; 
   const Args: array of const; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
@@ -25927,13 +25928,13 @@ begin
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
-  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const): RawUTF8;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
 begin
   result := OneFieldValue(Table,FieldName,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass;
-  const FieldName: RawUTF8; WhereClauseFmt: PUTF8Char;
+  const FieldName: RawUTF8; const WhereClauseFmt: RawUTF8;
   const Args, Bounds: array of const): RawUTF8;
 begin
   result := OneFieldValue(Table,FieldName,FormatUTF8(WhereClauseFmt,Args,Bounds));
@@ -25955,7 +25956,7 @@ begin
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
-  WhereClauseFmt: PUTF8Char; const Args, Bounds: array of const;
+  const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 var Res: array[0..0] of RawUTF8;
     err: integer;
@@ -26152,13 +26153,13 @@ begin
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
-  WhereClauseFormat: PUTF8Char; const BoundsSQLWhere: array of const): TSQLTableJSON;
+  const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTableJSON;
 begin
   result := MultiFieldValues(Table,FieldNames,FormatUTF8(WhereClauseFormat,[],BoundsSQLWhere));
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
-  const FieldNames: RawUTF8; WhereClauseFormat: PUTF8Char;
+  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
   const Args, Bounds: array of const): TSQLTableJSON;
 begin
   result := MultiFieldValues(Table,FieldNames,FormatUTF8(WhereClauseFormat,Args,Bounds));
@@ -26221,7 +26222,7 @@ begin
     end;
 end;
 
-function TSQLRest.RetrieveList(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+function TSQLRest.RetrieveList(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList;
 var T: TSQLTable;
 begin
@@ -26238,7 +26239,7 @@ begin
   end;
 end;
 
-function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): RawJSON;
 var sql: RawUTF8;
 begin
@@ -26250,7 +26251,7 @@ begin
 end;
 
 function TSQLRest.RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
-  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 var T: TSQLTable;
 begin
@@ -26269,7 +26270,7 @@ end;
 {$ifndef NOVARIANTS}
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
   const ObjectName: RawUTF8;
-  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PID): variant;
 var T: TSQLTable;
     res: variant;
@@ -26296,31 +26297,30 @@ end;
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
   const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PID): variant;
 begin
-  result := RetrieveDocVariantArray(Table,ObjectName,nil,[],CustomFieldsCSV,
+  result := RetrieveDocVariantArray(Table,ObjectName,'',[],CustomFieldsCSV,
     FirstRecordID,LastRecordID);
 end;
 
 function TSQLRest.RetrieveDocVariant(Table: TSQLRecordClass;
-  FormatSQLWhere: PUTF8Char; const BoundsSQLWhere: array of const;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8): variant;
 var T: TSQLTable;
     bits: TSQLFieldBits;
     Rec: TSQLRecord;
-    len: integer;
+    ID: TID;
 begin
   SetVariantNull(result);
   if (self<>nil) and (Table<>nil) then begin
-    with Table.RecordProps do
+    with Table.RecordProps do // optimized primary key direct access
     if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
-       (BoundsSQLWhere[0].VType=vtInteger) and
+       VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and 
        FieldIndexsFromCSV(CustomFieldsCSV,bits) then
       if IsZero(bits) then
         exit else
-      if bits-SimpleFieldsBits[soSelect]=[] then begin
-        len := StrLen(FormatSQLWhere);
-        if IdemPropNameU('RowID=?',FormatSQLWhere,len) or
-           IdemPropNameU('ID=?',FormatSQLWhere,len) then begin
-          Rec := Table.Create(self,BoundsSQLWhere[0].VInteger);
+      if bits-SimpleFieldsBits[soSelect]=[] then
+        if IdemPropNameU('RowID=?',FormatSQLWhere) or
+           IdemPropNameU('ID=?',FormatSQLWhere) then begin
+          Rec := Table.Create(self,ID);
           try
             result := Rec.GetAsDocVariant(True,bits);
           finally
@@ -26328,9 +26328,8 @@ begin
           end;
           exit;
         end;
-      end;
     T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
-    if T<>nil then
+    if T<>nil then                   
     try
       T.ToDocVariant(1,result)
     finally
@@ -26373,7 +26372,7 @@ begin // this version handles locking and use fast EngineRetrieve() method
   result := true;
 end;
 
-function TSQLRest.Retrieve(WhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+function TSQLRest.Retrieve(const WhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
   Value: TSQLRecord): boolean;
 var where: RawUTF8;
 begin
@@ -26530,7 +26529,7 @@ begin
     result := false;
 end;
 
-function TSQLRest.Delete(Table: TSQLRecordClass; FormatSQLWhere: PUTF8Char;
+function TSQLRest.Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const): boolean;
 begin
   result := Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
@@ -26904,13 +26903,13 @@ begin
   result := EngineExecute(aSQL);
 end;
 
-function TSQLRest.ExecuteFmt(SQLFormat: PUTF8Char;
+function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args: array of const): boolean;
 begin
   result := EngineExecute(FormatUTF8(SQLFormat,Args));
 end;
 
-function TSQLRest.ExecuteFmt(SQLFormat: PUTF8Char;
+function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args, Bounds: array of const): boolean;
 begin
   result := EngineExecute(FormatUTF8(SQLFormat,Args,Bounds));
@@ -27079,10 +27078,10 @@ end;
 
 function TSQLRest.RetrieveList<T>(const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
 begin
-  result := RetrieveList<T>(nil,[],aCustomFieldsCSV);
+  result := RetrieveList<T>('',[],aCustomFieldsCSV);
 end;
 
-function TSQLRest.RetrieveList<T>(FormatSQLWhere: PUTF8Char;
+function TSQLRest.RetrieveList<T>(const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
 var Table: TSQLTable;
 begin
@@ -29242,7 +29241,7 @@ begin
      result := false;
 end;
 
-function TSQLRestServer.CreateBackgroundThread(Format: PUTF8Char; const Args: array of const): TSynBackgroundThreadMethod;
+function TSQLRestServer.CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
 begin
   result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args));
   result.OnBeforeExecute := BeginCurrentThread;
@@ -29930,7 +29929,7 @@ begin
           end;
           SQLWhere := trim(SQLWhere);
           if (SQLResults<>0) and not ContainsUTF8(pointer(SQLWhere),'LIMIT ') then begin
-            if (Server.URIPagingParameters.SendTotalRowsCountFmt<>nil) then begin
+            if (Server.URIPagingParameters.SendTotalRowsCountFmt<>'') then begin
               if SQLWhere=SQLWhereCount then begin
                 i := PosEx('ORDER BY ',UpperCase(SQLWhereCount));
                 if i>0 then // if ORDER BY already in the SQLWhere clause
@@ -29953,7 +29952,7 @@ begin
         Call.OutBody := Server.InternalListRawUTF8(TableIndex,SQL);
         if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
           Call.OutStatus := HTML_SUCCESS;  // 200 OK
-          if Server.URIPagingParameters.SendTotalRowsCountFmt<>nil then
+          if Server.URIPagingParameters.SendTotalRowsCountFmt<>'' then
             if Server.NoAJAXJSON then begin
               P := pointer(Call.OutBody);
               L := length(Call.OutBody);
@@ -30501,14 +30500,14 @@ begin
     Error('',Status);
 end;
 
-procedure TSQLRestServerURIContext.Error(Format: PUTF8Char;
+procedure TSQLRestServerURIContext.Error(const Format: RawUTF8;
   const Args: array of const; Status: integer);
 begin
   Error(FormatUTF8(Format,Args),Status);
 end;
 
 procedure TSQLRestServerURIContext.Error(E: Exception;
-  Format: PUTF8Char; const Args: array of const; Status: integer);
+  const Format: RawUTF8; const Args: array of const; Status: integer);
 var msg,exc: RawUTF8;
 begin
   msg := FormatUTF8(Format,Args);
@@ -34680,13 +34679,13 @@ begin
 end;
 
 function TSQLRestClient.ListFmt(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8;
-  SQLWhereFormat: PUTF8Char; const Args: array of const): TSQLTableJSON;
+  const SQLWhereFormat: RawUTF8; const Args: array of const): TSQLTableJSON;
 begin
   result := List(Tables,SQLSelect,FormatUTF8(SQLWhereFormat,Args));
 end;
 
 function TSQLRestClient.ListFmt(const Tables: array of TSQLRecordClass;
-  const SQLSelect: RawUTF8; SQLWhereFormat: PUTF8Char;
+  const SQLSelect: RawUTF8; const SQLWhereFormat: RawUTF8;
   const Args, Bounds: array of const): TSQLTableJSON;
 begin
   result := List(Tables,SQLSelect,FormatUTF8(SQLWhereFormat,Args,Bounds));
@@ -35130,12 +35129,12 @@ begin
 end;
 
 function ObjectToVariantDebug(Value: TObject;
-  ContextFormat: PUTF8Char; const ContextArgs: array of const;
+  const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8): variant;
 begin
   result := _JsonFast(ObjectToJSONDebug(Value));
   if ContextFormat<>'' then
-    if ContextFormat[0]='{' then
+    if ContextFormat[1]='{' then
       _ObjAddProps([ContextName,_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
       _ObjAddProps([ContextName,FormatUTF8(ContextFormat,ContextArgs)],result);
 end;
@@ -36660,7 +36659,7 @@ begin
       SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
   result := aClient.ExecuteList([PSQLRecordClass(Self)^,
      TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
-    FormatUTF8(pointer(SQL),
+    FormatUTF8(SQL,
       [Select, DestProps.Props.SQLTableName,SelfProps.Props.SQLTableName,
        SelfProps.Props.SQLTableName,aSourceID, SelfProps.Props.SQLTableName,
        DestProps.Props.SQLTableName, aDestWhereSQL]));
@@ -36757,7 +36756,7 @@ begin
         Result := '%:(%): AND %' else // inlined parameters
         Result := '%% AND %' else // no inlined parameters -> not cached
       Result := '%:(%):'; // no additional where clause -> inline ID
-    Result := FormatUTF8(pointer(result),[FieldName[isDest],aID,aAndWhereSQL]);
+    Result := FormatUTF8(result,[FieldName[isDest],aID,aAndWhereSQL]);
   end;
 end;
 
@@ -39474,7 +39473,7 @@ type
     constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
       const Error: RawUTF8); overload;
     constructor Create(Sender: TInterfaceStub; const Method: TServiceMethod;
-      Format: PUTF8Char; const Args: array of const); overload;
+      const Format: RawUTF8; const Args: array of const); overload;
   end;
 
 
@@ -39537,7 +39536,7 @@ begin
 end;
 {$else}
 var method: ^TServiceMethod;
-procedure RaiseError(Format: PUTF8Char; const Args: array of const);
+procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 begin
   raise EInterfaceFactoryException.CreateUTF8('Invalid %.FakeCall() for %.%: %',
     [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,FormatUTF8(Format,Args)]);
@@ -40349,7 +40348,7 @@ var P: Pointer;
     m,a: integer;
     n: cardinal;
     aURI: RawUTF8;
-procedure RaiseError(Format: PUTF8Char; const Args: array of const);
+procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 begin
   raise EInterfaceFactoryException.CreateUTF8(
     '%.AddMethodsFromTypeInfo: %.% %',
@@ -40570,7 +40569,7 @@ begin
 end;
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
-  const Method: TServiceMethod; Format: PUTF8Char; const Args: array of const);
+  const Method: TServiceMethod; const Format: RawUTF8; const Args: array of const);
 begin
   Create(Sender,Method,FormatUTF8(Format,Args));
 end;
@@ -40615,7 +40614,8 @@ begin
   fEventParams := aEventParams;
 end;
 
-procedure TOnInterfaceStubExecuteParamsAbstract.Error(Format: PUTF8Char; const Args: array of const);
+procedure TOnInterfaceStubExecuteParamsAbstract.Error(
+  const Format: RawUTF8; const Args: array of const);
 begin
   Error(FormatUTF8(Format,Args));
 end;
@@ -40757,7 +40757,7 @@ begin
 end;
 
 function TInterfaceStub.InternalCheck(aValid,aExpectationFailed: boolean;
-  aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean;
+  const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean;
 begin
   result := aValid;
   if aExpectationFailed and not aValid then
@@ -41242,7 +41242,7 @@ begin
 end;
 
 function TInterfaceMock.InternalCheck(aValid,aExpectationFailed: boolean;
-      aErrorMsgFmt: PUTF8Char; const aErrorMsgArgs: array of const): boolean; 
+  const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; 
 begin
   if fTestCase=nil then
     result := inherited InternalCheck(aValid,aExpectationFailed,aErrorMsgFmt,aErrorMsgArgs) else begin

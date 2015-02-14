@@ -516,7 +516,7 @@ begin
     result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
   {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllTrace,pointer(FName),TypeInfo(TServiceState),result);
+  SQLite3Log.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result);
   {$endif}
 end;
 

@@ -283,7 +283,7 @@ begin
       'from ArticleSearch where ArticleSearch match ? '+whereClause+
       'order by rank desc'+ARTICLE_DEFAULT_LIMIT+')as r on (r.docid=Article.id)';
     articles := RestModel.RetrieveDocVariantArray(
-      TSQLArticle,'',pointer(whereClause),[match,rank],
+      TSQLArticle,'',whereClause,[match,rank],
       'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
     with DocVariantDataSafe(articles)^do
       if (Kind=dvArray) and (Count>0) then
@@ -303,12 +303,12 @@ begin
   if (lastID=0) and (tag=0) then begin // use simple cache if no parameters
     if not fDefaultData.AddExistingProp('Articles',Scope) then
       fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'',pointer(ARTICLE_DEFAULT_ORDER),[],
+        TSQLArticle,'',ARTICLE_DEFAULT_ORDER,[],
         ARTICLE_FIELDS,nil,@fDefaultLastID),Scope);
     lastID := fDefaultLastID;
   end else // use more complex request using lastID + tag parameters
     scope := _ObjFast(['Articles',RestModel.RetrieveDocVariantArray(
-        TSQLArticle,'',Pointer(whereClause+ARTICLE_DEFAULT_ORDER),[lastID,tag],
+        TSQLArticle,'',whereClause+ARTICLE_DEFAULT_ORDER,[lastID,tag],
         ARTICLE_FIELDS,nil,@lastID)]);
   if lastID>1 then begin
     _ObjAddProps(['lastID',lastID],Scope);

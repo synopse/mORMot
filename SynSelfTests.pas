@@ -2839,9 +2839,9 @@ begin
     Check(not IsZero(pointer(W),length(W)));
     fillchar(pointer(W)^,length(W),0);
     Check(IsZero(pointer(W),length(W)));
-    Check(FormatUTF8(pointer(U),[])=U);
+    Check(FormatUTF8(U,[])=U);
 {$ifndef DELPHI5OROLDER}
-    res := FormatUTF8(pointer(U),[],[]); // Delphi 5 bug with high([])>0 :( 
+    res := FormatUTF8(U,[],[]); // Delphi 5 bug with high([])>0 :( 
     Check(length(res)=Length(u));
     Check(res=u);
     Check(FormatUTF8('%',[U])=U);
@@ -5751,7 +5751,7 @@ begin
   o := _Json('{ tags: { $in: [ /^be/, /^st/ ] } }');
   u := VariantSaveMongoJSON(o,modMongoStrict);
   Check(u='{"tags":{"$in":[{"$regex":"^be","$options":""},{"$regex":"^st","$options":""}]}}');
-  b := pointer(BSON(Pointer(u),[],[]));
+  b := pointer(BSON(u,[],[]));
   u2 := VariantSaveMongoJSON(o,modMongoShell);
   Check(u2='{tags:{$in:[/^be/,/^st/]}}');
   u := VariantSaveMongoJSON(_Json(u),modMongoShell);
@@ -8575,7 +8575,7 @@ begin
         MD2.Free;
       end;
     end;
-    Check(MS.FillPrepareMany(aClient,nil,[],[]));
+    Check(MS.FillPrepareMany(aClient,'', [],[]));
     CheckOK;
     Check(MS.FillPrepareMany(aClient,'DestList.Dest.SignatureTime<>?',[],[0]));
     CheckOK;

@@ -5305,7 +5305,7 @@ function TSQLDBConnectionProperties.SQLFieldCreate(const aField: TSQLDBColumnCre
   var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
   if (aField.DBType=ftUTF8) and (aField.Width-1<fSQLCreateFieldMax) then
-    result := FormatUTF8(pointer(fSQLCreateField[ftNull]),[aField.Width]) else
+    result := FormatUTF8(fSQLCreateField[ftNull],[aField.Width]) else
     result := fSQLCreateField[aField.DBType];
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
     result := result+' NOT NULL';

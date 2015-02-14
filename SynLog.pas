@@ -46,6 +46,8 @@ unit SynLog;
 
   Version 1.18
   - first public release, extracted from SynCommons.pas unit
+  - BREAKING CHANGE: PWinAnsiChar type for constant text parameters has been
+    changed into RawUTF8, to allow logging of any Unicode text 
   - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
@@ -239,7 +241,7 @@ type
     // (to be used if you didn't call TSynLog.Enter() method first)
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArgs: array of const;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
       Instance: TObject=nil); overload;
 {$endif}
     /// call this method to add some information to the log at a specified level
@@ -264,7 +266,7 @@ type
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
     // able to write TObject/TSQLRecord and sets content as JSON
-    procedure Log(Level: TSynLogInfo; aName: PWinAnsiChar;
+    procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
       aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -649,12 +651,12 @@ type
     procedure DoEnterLeave(aLevel: TSynLogInfo);
     procedure CreateLogWriter; virtual;
 {$ifndef DELPHI5OROLDER}
-    procedure LogInternal(Level: TSynLogInfo; TextFmt: PWinAnsiChar;
+    procedure LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
       const TextArgs: array of const; Instance: TObject); overload; 
 {$endif}
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
-    procedure LogInternal(Level: TSynLogInfo; aName: PWinAnsiChar;
+    procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
      aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload; 
     // any call to this method MUST call UnLock
     function LogHeaderLock(Level: TSynLogInfo): boolean;
@@ -771,7 +773,7 @@ type
     // - log some warning message to the TSynLog family
     // - will force a manual breakpoint if tests are run from the IDE
     class procedure DebuggerNotify(Level: TSynLogInfo;
-      const Args: array of const; Format: PWinAnsiChar=nil);
+      const Format: RawUTF8; const Args: array of const);
     /// call this method to add some information to the log at the specified level
     // - % = #37 indicates a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
@@ -786,13 +788,13 @@ type
     // text (with chars < #128) with some values to be inserted inside
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArgs: array of const;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
       aInstance: TObject=nil); overload;
     /// same as Log(Level,TextFmt,[]) but with one RawUTF8 parameter
-    procedure Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArg: RawUTF8;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArg: RawUTF8;
       aInstance: TObject=nil); overload;
     /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
-    procedure Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArg: Int64;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArg: Int64;
       aInstance: TObject=nil); overload;
 {$endif}
     /// call this method to add some information to the log at the specified level
@@ -829,7 +831,7 @@ type
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSQLLog from mORMot.pas unit will be able to write
     // TObject/TSQLRecord and sets content as JSON
-    procedure Log(Level: TSynLogInfo; aName: PWinAnsiChar;
+    procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
       aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -2824,21 +2826,21 @@ begin
 end;
 
 {$ifndef DELPHI5OROLDER}
-procedure TSynLog.Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArgs: array of const;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
   aInstance: TObject);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,TextFmt,TextArgs,aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArg: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArg: RawUTF8;
   aInstance: TObject=nil);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,TextFmt,[TextArg],aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; TextFmt: PWinAnsiChar; const TextArg: Int64;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArg: Int64;
   aInstance: TObject=nil);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
@@ -2886,7 +2888,7 @@ begin
       LogInternal(Level,'Instance=nil',nil,maxInt);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; aName: PWinAnsiChar;
+procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUTF8;
   aTypeInfo: pointer; var aValue; Instance: TObject=nil);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
@@ -2932,15 +2934,15 @@ end;
 
 {$ifndef DELPHI5OROLDER}
 class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
-  const Args: array of const; Format: PWinAnsiChar=nil);
+  const Format: RawUTF8; const Args: array of const);
 var Msg: RawUTF8;
 begin
-  if Format<>nil then begin
-    Msg := FormatUTF8(PUTF8Char(Format),Args);
+  if Format<>''then begin
+    Msg := FormatUTF8(Format,Args);
     Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
-    OutputDebugStringA(pointer(Msg));
-    {$endif}
+    OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
+    {$endif}                                                      
     {$ifdef LINUX}
     //write(Msg);
     {$endif}
@@ -3194,7 +3196,7 @@ begin
 end;
 
 {$ifndef DELPHI5OROLDER}
-procedure TSynLog.LogInternal(Level: TSynLogInfo; TextFmt: PWinAnsiChar;
+procedure TSynLog.LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
   const TextArgs: array of const; Instance: TObject);
 var LastError: cardinal;
 begin
@@ -3256,14 +3258,14 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternal(Level: TSynLogInfo; aName: PWinAnsiChar;
+procedure TSynLog.LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
    aTypeInfo: pointer; var aValue; Instance: TObject=nil);
 begin
   if LogHeaderLock(Level) then
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ');
-    fWriter.AddNoJSONEscape(aName);
+    fWriter.AddString(aName);
     fWriter.Add('=');
     fWriter.AddTypedJSON(aTypeInfo,aValue);
   finally

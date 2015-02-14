@@ -374,6 +374,9 @@ unit SynCommons;
     now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
   - BREAKING CHANGE: TTextWriter.Add(Format) won't handle the alternate $ % tags
     any more, unless you define the OLDTEXTWRITERFORMAT conditional
+  - BREAKING CHANGE: FormatUTF8() and TTextWriter.Add(Format) PUTF8Char type for
+    constant text parameter has been changed into RawUTF8, to let the compiler
+    handle any Unicode content as expected
   - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Win32/Win64 target platform only
     for the SynCommons and mORMot* units, but see SynCrossPlatform* units for
     clients on all other targets, including OSX and the NextGen compilers)
@@ -1797,7 +1800,7 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
-function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8; overload;
+function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
 
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
@@ -1810,7 +1813,7 @@ function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8; ove
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
-function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const;
+function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean=false): RawUTF8; overload;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
@@ -1820,6 +1823,11 @@ function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const;
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
+
+/// convert an open array (const Args: array of const) argument to an Int64
+// - returns TRUE and set Value if the supplied argument is a vtInteger or vtInt64
+// - returns FALSE if the argument is not an integer 
+function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
 // encoded as with :(..:) inlined parameters in FormatUTF8(Format,Args,Params)
@@ -4038,7 +4046,7 @@ type
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
     function AddUniqueName(const aName: RawUTF8;
-      ExceptionMsg: PUTF8Char; const ExceptionArgs: array of const): pointer;
+      const ExceptionMsg: RawUTF8; const ExceptionArgs: array of const): pointer;
     /// search for a given element name, make it unique, and add it to the array
     // - expected element layout is to have a RawUTF8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
@@ -5475,7 +5483,7 @@ type
     // ready, so we expect the input format to be WinAnsi, i.e. mostly English
     // text (with chars < #128) with some values to be inserted inside
     {$endif}
-    procedure Add(Format: PWinAnsiChar; const Values: array of const;
+    procedure Add(const Format: RawUTF8; const Values: array of const;
       Escape: TTextWriterKind=twNone); overload;
 {$endif DELPHI5OROLDER}
     /// append some values at once
@@ -5577,7 +5585,7 @@ type
     /// append some chars to the buffer
     // - if Len is 0, Len is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJSONEscape(P: Pointer; Len: integer=0);
+    procedure AddNoJSONEscape(P: Pointer; Len: integer=0); overload;
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
     // - this function implements what is specified in the official SQLite3
@@ -5652,6 +5660,11 @@ type
     // - escapes chars according to the JSON RFC
     // - very fast (avoid most temporary storage)
     procedure AddJSONEscape(const V: TVarRec); overload;
+    /// append an open array constant value to the buffer
+    // - "" won't be added for string values
+    // - string values may be escaped, depending on the supplied parameter
+    // - very fast (avoid most temporary storage)
+    procedure Add(const V: TVarRec; Escape: TTextWriterKind=twNone); overload;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aWriter.AddJSONEscape(['name','John','year',1972]);
@@ -5685,7 +5698,7 @@ type
     // ! '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}'
     // - will call internally _JSONFastFmt() to create a temporary TDocVariant
     // with all its features - so is slightly slower than other AddJSON* methods
-    procedure AddJSON(Format: PUTF8Char; const Args,Params: array of const);
+    procedure AddJSON(const Format: RawUTF8; const Args,Params: array of const);
 {$endif}
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - expect a dynamic array TDynArray wrapper as incoming parameter
@@ -6793,7 +6806,7 @@ function JSONEncode(const NameValuePairs: array of const): RawUTF8; overload;
 // ! '{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}'
 // - will call internally _JSONFastFmt() to create a temporary TDocVariant with
 // all its features - so is slightly slower than other JSONEncode* functions
-function JSONEncode(Format: PUTF8Char; const Args,Params: array of const): RawUTF8; overload;
+function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8; overload;
 {$endif}
 
 /// encode the supplied RawUTF8 array data as an UTF-8 valid JSON array content
@@ -7435,7 +7448,7 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of the supplied variant
-    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the DefaultSynLogExceptionToStr()
@@ -7892,12 +7905,12 @@ function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; o
   {$ifdef HASINLINE}inline;{$endif}
 
 /// name the current thread so that it would be easily identified in the IDE debugger
-procedure SetCurrentThreadName(Format: PUTF8Char; const Args: array of const);
+procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 
 /// name a thread so that it would be easily identified in the IDE debugger
 // - you can force this function to do nothing by setting the NOSETTHREADNAME
 // conditional, if you have issues with this feature when debugging your app
-procedure SetThreadName(ThreadID: cardinal; Format: PUTF8Char; const Args: array of const);
+procedure SetThreadName(ThreadID: cardinal; const Format: RawUTF8; const Args: array of const);
 
 type
   TSynBackgroundThreadAbstract = class;
@@ -10747,7 +10760,7 @@ function _Json(const JSON: RawUTF8;
 // properties can be slow - if you expect the data to be read-only or not
 // propagated into another place, add dvoValueCopiedByReference in Options
 // will increase the process speed a lot, or use _JsonFast()
-function _JsonFmt(Format: PUTF8Char; const Args,Params: array of const;
+function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant;
 
 /// initialize a variant instance to store some document-based content
@@ -10798,7 +10811,7 @@ function _JsonFast(const JSON: RawUTF8): variant;
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID():
-function _JsonFastFmt(Format: PUTF8Char; const Args,Params: array of const): variant;
+function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
 
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
@@ -13188,6 +13201,19 @@ begin
   end;
 end;
 
+function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
+begin
+  case V.VType of
+    vtInteger: value := V.VInteger;
+    vtInt64:   value := V.VInt64^;
+    else begin
+      result := false;
+      exit;
+    end;
+  end;
+  result := true;
+end;
+
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
 var isString: boolean;
 begin
@@ -15548,7 +15574,7 @@ const
 
 function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
   out wasNull: boolean): PUTF8Char;
-var PDeb: PAnsiChar;
+var PBeg: PAnsiChar;
     L: integer;
     c: cardinal;
 begin
@@ -15581,7 +15607,7 @@ begin
   end;
   '-','+','0'..'9': begin // allow 0 or + in SQL
     // check if P^ is a true numerical value
-    PDeb := pointer(P);
+    PBeg := pointer(P);
     ParamType := sptInteger;
     repeat inc(P) until not (P^ in ['0'..'9']); // check digits
     if P^='.' then begin
@@ -15601,7 +15627,7 @@ begin
       if P^='-' then inc(P);
       while P^ in ['0'..'9'] do inc(P);
     end;
-    SetRawUTF8(ParamValue,PDeb,P-PDeb);
+    SetRawUTF8(ParamValue,PBeg,P-PBeg);
   end;
   'n':
   if PInteger(P)^=NULL_LOW then begin
@@ -15820,7 +15846,7 @@ begin
     SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,DOUBLE_PRECISION));
 end;
 
-function FormatUTF8(Format: PUTF8Char; const Args: array of const): RawUTF8;
+function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
 // only supported token is %, with any const arguments
 var i, blocksN, L, argN: PtrInt;
     blocks: array of record
@@ -15828,7 +15854,7 @@ var i, blocksN, L, argN: PtrInt;
       Len: integer;
     end;
     Arg: TRawUTF8DynArray;
-    PDeb: PUTF8Char;
+    F,FDeb: PUTF8Char;
 procedure Add(aText: PUTF8Char; aLen: Integer);
 begin
   if aLen>0 then begin
@@ -15842,11 +15868,11 @@ begin
   end;
 end;
 begin
-  if (Format=nil) or (high(Args)<0) then begin
+  if (Format='') or (high(Args)<0) then begin
     result := Format; // no formatting to process
     exit;
   end;
-  if PWord(Format)^=ord('%') then begin
+  if Format='%' then begin
     VarRecToUTF8(Args[0],result); // optimize raw conversion
     exit;
   end;
@@ -15856,42 +15882,43 @@ begin
   blocksN := 0;
   argN := 0;
   L := 0;
-  while Format^<>#0 do begin
-    if Format^<>'%' then begin
-      PDeb := Format;
-      while (Format^<>'%') and (Format^<>#0) do inc(Format);
-      Add(PDeb,Format-PDeb);
+  F := pointer(Format);
+  while F^<>#0 do begin
+    if F^<>'%' then begin
+      FDeb := F;
+      while (F^<>'%') and (F^<>#0) do inc(F);
+      Add(FDeb,F-FDeb);
     end;
-    if Format^=#0 then break;
-    inc(Format); // jump '%'
+    if F^=#0 then break;
+    inc(F); // jump '%'
     if argN<=high(Args) then begin
       VarRecToUTF8(Args[argN],arg[argN]);
       Add(pointer(arg[argN]),length(arg[argN]));
-      Inc(argN);
+      inc(argN);
     end else
-    if Format^<>#0 then begin // no more available Args -> add all remaining text
-      Add(Format,StrLen(Format));
+    if F^<>#0 then begin // no more available Args -> add all remaining text
+      Add(F,StrLen(F));
       break;
     end;
   end;
   if L=0 then
     exit;
   SetLength(result,L);
-  Format := pointer(result);
+  F := pointer(result);
   for i := 0 to blocksN-1 do
   with blocks[i] do begin
-    move(Text^,Format^,Len);
-    inc(Format,Len);
+    move(Text^,F^,Len);
+    inc(F,Len);
   end;
 end;
 
-function FormatUTF8(Format: PUTF8Char; const Args, Params: array of const; JSONFormat: boolean): RawUTF8; overload;
-// support both % and ? tokens
+function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8; overload;
+// supports both % and ? tokens
 var i, tmpN, L, A, P, len: PtrInt;
     isParam: AnsiChar;
     tmp: TRawUTF8DynArray; 
     inlin: set of 0..255; 
-    PDeb: PUTF8Char;
+    F,FDeb: PUTF8Char;
     wasString: Boolean;
 const QUOTECHAR: array[boolean] of AnsiChar = ('''','"');
       NOTTOQUOTE: array[boolean] of set of 0..31 = (
@@ -15903,29 +15930,34 @@ begin
     result := Format; // no formatting to process
     exit;
   end;
+  if Format='%' then begin
+    VarRecToUTF8(Args[0],result); // optimize raw conversion
+    exit;
+  end;
   result := '';
   tmpN := 0;
   FillChar(inlin,SizeOf(inlin),0);
   L := 0;
   A := 0;
   P := 0;
-  while Format^<>#0 do begin
-    if Format^<>'%' then begin
-      PDeb := Format;
-      while not (Format^ in [#0,'%','?']) do inc(Format);
-Txt:  len := Format-PDeb;
+  F := pointer(Format);
+  while F^<>#0 do begin
+    if F^<>'%' then begin
+      FDeb := F;
+      while not (F^ in [#0,'%','?']) do inc(F);
+Txt:  len := F-FDeb;
       if len>0 then begin
         inc(L,len);
         if tmpN=length(tmp) then
           SetLength(tmp,tmpN+8);
-        SetString(tmp[tmpN],PDeb,len); // add inbetween text
+        SetString(tmp[tmpN],FDeb,len); // add inbetween text
         inc(tmpN);
       end;
     end;
-    if Format^=#0 then
+    if F^=#0 then
       break;
-    isParam := Format^;
-    inc(Format); // jump '%' or '?'
+    isParam := F^;
+    inc(F); // jump '%' or '?'
     if (isParam='%') and (A<=high(Args)) then begin // handle % substitution
       if tmpN=length(tmp) then
         SetLength(tmp,tmpN+8);
@@ -15959,9 +15991,9 @@ Txt:  len := Format-PDeb;
       inc(L,length(tmp[tmpN]));
       inc(tmpN);
     end else
-    if Format^<>#0 then begin // no more available Args -> add all remaining text
-      PDeb := Format;
-      repeat inc(Format) until (Format^=#0);
+    if F^<>#0 then begin // no more available Args -> add all remaining text
+      FDeb := F;
+      repeat inc(F) until (F^=#0);
       goto Txt;
     end;
   end;
@@ -15971,19 +16003,19 @@ Txt:  len := Format-PDeb;
     raise ESynException.CreateUTF8(
       'Too many parameters for FormatUTF8(): %>%',[tmpN,SizeOf(inlin)shl 3]);
   SetLength(result,L);
-  Format := pointer(result);
+  F := pointer(result);
   for i := 0 to tmpN-1 do
   if tmp[i]<>'' then begin
     if i in inlin then begin
-      PWord(Format)^ := ord(':')+ord('(')shl 8;
-      inc(Format,2);
+      PWord(F)^ := ord(':')+ord('(')shl 8;
+      inc(F,2);
     end;
     L := PInteger(PtrInt(tmp[i])-sizeof(integer))^;
-    move(pointer(tmp[i])^,Format^,L);
-    inc(Format,L);
+    move(pointer(tmp[i])^,F^,L);
+    inc(F,L);
     if i in inlin then begin
-      PWord(Format)^ := ord(')')+ord(':')shl 8;
-      inc(Format,2);
+      PWord(F)^ := ord(')')+ord(':')shl 8;
+      inc(F,2);
     end;
   end;
 end;
@@ -18271,16 +18303,16 @@ end;
 /// find the Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
-var PDeb: PUTF8Char;
+var PBeg: PUTF8Char;
     L: integer;
 begin
   while (P<>nil) and (P^<>'[') do begin
-    PDeb := GetNextLineBegin(P,P); // since PDeb=P, we have PDeb<>nil
-    if PDeb^=' ' then repeat inc(PDeb) until PDeb^<>' ';   // trim left ' '
-    if IdemPChar(PDeb,UpperName) then begin
-      inc(PDeb,StrLen(PUTF8Char(UpperName)));
-      L := 0; while PDeb[L]>=' ' do inc(L); // get line length
-      SetString(result,PDeb,L);
+    PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
+    if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
+    if IdemPChar(PBeg,UpperName) then begin
+      inc(PBeg,StrLen(PUTF8Char(UpperName)));
+      L := 0; while PBeg[L]>=' ' do inc(L); // get line length
+      SetString(result,PBeg,L);
       exit;
     end;
   end;
@@ -18288,13 +18320,13 @@ begin
 end;
 
 function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
-var PDeb: PUTF8Char;
+var PBeg: PUTF8Char;
 begin
   result := true;
   while (P<>nil) and (P^<>'[') do begin
-    PDeb := GetNextLineBegin(P,P); // since PDeb=P, we have PDeb<>nil
-    if PDeb^=' ' then repeat inc(PDeb) until PDeb^<>' ';   // trim left ' '
-    if IdemPChar(PDeb,UpperName) then
+    PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
+    if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
+    if IdemPChar(PBeg,UpperName) then
       exit;
   end;
   result := false;
@@ -18302,18 +18334,18 @@ end;
 
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
   const UpperValues: array of RawUTF8): boolean;
-var PDeb: PUTF8Char;
+var PBeg: PUTF8Char;
     i: integer;
 begin
   result := true;
   if high(UpperValues)>=0 then
     while (P<>nil) and (P^<>'[') do begin
-      PDeb := GetNextLineBegin(P,P); // since PDeb=P, we have PDeb<>nil
-      if PDeb^=' ' then repeat inc(PDeb) until PDeb^<>' ';   // trim left ' '
-      if IdemPChar(PDeb,pointer(UpperName)) then begin
-        inc(PDeb,length(UpperName));
+      PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
+      if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
+      if IdemPChar(PBeg,pointer(UpperName)) then begin
+        inc(PBeg,length(UpperName));
         for i := 0 to high(UpperValues) do
-          if IdemPChar(PDeb,pointer(UpperValues[i])) then
+          if IdemPChar(PBeg,pointer(UpperValues[i])) then
             exit; // found one value
         break;
       end;
@@ -18327,14 +18359,14 @@ begin
 end;
 
 function GetSectionContent(SectionFirstLine: PUTF8Char): RawUTF8;
-var PDeb: PUTF8Char;
+var PBeg: PUTF8Char;
 begin
-  PDeb := SectionFirstLine;
+  PBeg := SectionFirstLine;
   while (SectionFirstLine<>nil) and (SectionFirstLine^<>'[') do
     GetNextLineBegin(SectionFirstLine,SectionFirstLine);
   if SectionFirstLine=nil then
-    result := PDeb else
-    SetString(result,PDeb,SectionFirstLine-PDeb);
+    result := PBeg else
+    SetString(result,PBeg,SectionFirstLine-PBeg);
 end;
 
 function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8; overload;
@@ -18458,7 +18490,7 @@ end;
 procedure UpdateIniEntry(var Content: RawUTF8; const Section,Name,Value: RawUTF8);
 const CRLF = #13#10;
 var P: PUTF8Char;
-    PDeb: PUTF8Char;
+    PBeg: PUTF8Char;
     SectionFound: boolean;
     i, UpperNameLength: PtrInt;
     V: RawUTF8;
@@ -18478,17 +18510,17 @@ begin
   if FindSectionFirstLine(P,UpperSection) then begin 
 Sec:SectionFound := true;
     while (P<>nil) and (P^<>'[') do begin
-      PDeb := GetNextLineBegin(P,P); // since PDeb=P, we have PDeb<>nil
-      while PDeb^=' ' do inc(PDeb);   // trim left ' '
-      if IdemPChar(PDeb,UpperName) then begin
+      PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
+      while PBeg^=' ' do inc(PBeg);   // trim left ' '
+      if IdemPChar(PBeg,UpperName) then begin
         // update Name=Value entry
-        inc(PDeb,UpperNameLength);
-        i := (PDeb-pointer(Content))+1;
-        if (i=length(Value)) and CompareMem(PDeb,pointer(Value),i) then
+        inc(PBeg,UpperNameLength);
+        i := (PBeg-pointer(Content))+1;
+        if (i=length(Value)) and CompareMem(PBeg,pointer(Value),i) then
           exit; // new Value is identical to the old one -> no change
-        if P=nil then // avoid last line (P-PDeb) calculation error
+        if P=nil then // avoid last line (P-PBeg) calculation error
           SetLength(Content,i-1) else
-          delete(Content,i,P-PDeb); // delete old Value
+          delete(Content,i,P-PBeg); // delete old Value
         insert(V,Content,i); // set new value
         exit;
       end;
@@ -20732,19 +20764,19 @@ begin
 end;
 
 function FindIniNameValueW(P: PWideChar; UpperName: PUTF8Char): string;
-var PDeb: PWideChar;
+var PBeg: PWideChar;
     L: PtrInt;
 begin
   while (P<>nil) and (P^<>'[') do begin
-    PDeb := P;
+    PBeg := P;
     while not (cardinal(P^) in [0,10,13]) do inc(P);
     while cardinal(P^) in [10,13] do inc(P);
     if P^=#0 then P := nil;
-    if PDeb^=' ' then repeat inc(PDeb) until PDeb^<>' ';   // trim left ' '
-    if IdemPCharW(PDeb,UpperName) then begin
-      inc(PDeb,StrLen(UpperName));
-      L := 0; while PDeb[L]>=' ' do inc(L); // get line length
-      SetString(result,PDeb,L);
+    if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
+    if IdemPCharW(PBeg,UpperName) then begin
+      inc(PBeg,StrLen(UpperName));
+      L := 0; while PBeg[L]>=' ' do inc(L); // get line length
+      SetString(result,PBeg,L);
       exit;
     end;
   end;
@@ -30146,13 +30178,13 @@ begin
   _Json(JSON,result,JSON_OPTIONS[true]);
 end;
 
-function _JsonFmt(Format: PUTF8Char; const Args,Params: array of const;
+function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions): variant;
 begin
   _Json(FormatUTF8(Format,Args,Params,true),result,Options);
 end;
 
-function _JsonFastFmt(Format: PUTF8Char; const Args,Params: array of const): variant;
+function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
 begin
   _Json(FormatUTF8(Format,Args,Params,true),result,JSON_OPTIONS[true]);
 end;
@@ -32185,7 +32217,7 @@ begin
 end;
 
 function TDynArrayHashed.AddUniqueName(const aName: RawUTF8;
-  ExceptionMsg: PUTF8Char; const ExceptionArgs: array of const): pointer;
+  const ExceptionMsg: RawUTF8; const ExceptionArgs: array of const): pointer;
 var ndx: integer;
     added: boolean;
 begin
@@ -32195,7 +32227,7 @@ begin
     result := PAnsiChar(fValue^)+cardinal(ndx)*ElemSize;
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
-    if ExceptionMsg=nil then
+    if ExceptionMsg='' then
       raise ESynException.CreateUTF8('Duplicated "%" name',[aName]) else
       raise ESynException.CreateUTF8(ExceptionMsg,ExceptionArgs);
 end;
@@ -33787,17 +33819,23 @@ begin // code below must match TDynArray.LoadFromJSON
 end;
 
 {$ifndef DELPHI5OROLDER}
-procedure TTextWriter.Add(Format: PWinAnsiChar; const Values: array of const;
+procedure TTextWriter.Add(const Format: RawUTF8; const Values: array of const;
   Escape: TTextWriterKind=twNone);
 var ValuesIndex: integer;
+    F: PUTF8Char;
 label write;
 begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
-  if Format=nil then
+  if Format='' then
     exit;
+  if (Format='%') and (high(Values)>=0) then begin
+    Add(Values[0],Escape);
+    exit;
+  end;
   ValuesIndex := 0;
+  F := pointer(Format);
   repeat
     repeat
-      case ord(Format^) of
+      case ord(F^) of
       0: exit;
       13: AddCR;
       ord('%'): break;
@@ -33805,7 +33843,7 @@ begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
       164: AddCR; // ¤ -> add CR,LF
       167: if B^=',' then dec(B); // §
       ord('|'): begin
-        inc(Format); // |% -> %
+        inc(F); // |% -> %
         goto write;
       end;
       ord('$'),163,181: // $,£,µ
@@ -33814,51 +33852,17 @@ begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
       else begin
 write:  if B>=BEnd then
           Flush;
-        B[1] := Format^;
+        B[1] := F^;
         inc(B);
       end;
       end;
-      inc(Format);
+      inc(F);
     until false;
     // add next value as text
     if ValuesIndex<=high(Values) then // missing value will display nothing
-    case ord(Format^) of
+    case ord(F^) of
     ord('%'):
-       with Values[ValuesIndex] do
-       case Vtype of
-         vtInteger:      Add(VInteger);
-         vtBoolean:      AddU(byte(VBoolean));
-         vtChar:         Add(@VChar,1,Escape);
-         vtExtended:     Add(VExtended^);
-         vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
-         vtPointer:      AddPointer(PtrUInt(VPointer));
-         vtPChar:        Add(PUTF8Char(VPChar),Escape);
-         vtObject:       WriteObject(VObject,[woFullExpand]);
-         vtClass:
-           if VClass<>nil then
-             AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
-         vtWideChar:
-           AddW(@VWideChar,1,Escape);
-         vtPWideChar:
-           AddW(pointer(VPWideChar),StrLenW(VPWideChar),Escape);
-         vtAnsiString:
-           Add(VAnsiString,Escape); // expect RawUTF8
-         vtCurrency:
-           AddCurr64(VInt64^);
-         vtWideString:
-           if VWideString<>nil then
-             AddW(VWideString,length(WideString(VWideString)),Escape);
-         vtInt64:
-           Add(VInt64^);
-{$ifndef NOVARIANTS}
-         vtVariant:
-           AddVariantJSON(VVariant^,Escape);
-{$endif}
-{$ifdef UNICODE}
-         vtUnicodeString:
-           if VUnicodeString<>nil then // convert to UTF-8
-             AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
-{$endif} end;
+      Add(Values[ValuesIndex],Escape);
     {$ifdef OLDTEXTWRITERFORMAT}
     ord('$'): with Values[ValuesIndex] do
            if Vtype=vtInteger then Add2(VInteger);
@@ -33868,7 +33872,7 @@ write:  if B>=BEnd then
            if Vtype=vtInteger then Add3(VInteger);
     {$endif}
     end;
-    inc(Format);
+    inc(F);
     inc(ValuesIndex);
   until false;
 end;
@@ -34509,8 +34513,47 @@ begin
   end;
 end;
 
+procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind);
+begin
+  with V do
+  case Vtype of
+  vtInteger:      Add(VInteger);
+  vtBoolean:      AddU(byte(VBoolean));
+  vtChar:         Add(@VChar,1,Escape);
+  vtExtended:     Add(VExtended^);
+  vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
+  vtPointer:      AddPointer(PtrUInt(VPointer));
+  vtPChar:        Add(PUTF8Char(VPChar),Escape);
+  vtObject:       WriteObject(VObject,[woFullExpand]);
+  vtClass:
+   if VClass<>nil then
+     AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
+  vtWideChar:
+   AddW(@VWideChar,1,Escape);
+  vtPWideChar:
+   AddW(pointer(VPWideChar),StrLenW(VPWideChar),Escape);
+  vtAnsiString:
+   Add(VAnsiString,Escape); // expect RawUTF8
+  vtCurrency:
+   AddCurr64(VInt64^);
+  vtWideString:
+   if VWideString<>nil then
+     AddW(VWideString,length(WideString(VWideString)),Escape);
+  vtInt64:
+   Add(VInt64^);
+  {$ifndef NOVARIANTS}
+  vtVariant:
+   AddVariantJSON(VVariant^,Escape);
+  {$endif}
+  {$ifdef UNICODE}
+  vtUnicodeString:
+   if VUnicodeString<>nil then // convert to UTF-8
+     AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
+  {$endif} end;
+end;
+
 {$ifndef NOVARIANTS}
-procedure TTextWriter.AddJSON(Format: PUTF8Char; const Args,Params: array of const);
+procedure TTextWriter.AddJSON(const Format: RawUTF8; const Args,Params: array of const);
 begin
   AddVariantJSON(_JsonFastFmt(Format,Args,Params),twJSONEscape);
 end;
@@ -35073,7 +35116,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function JSONEncode(Format: PUTF8Char; const Args,Params: array of const): RawUTF8; overload;
+function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8; overload;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
@@ -37584,7 +37627,7 @@ end;
 procedure TRawUTF8List.SetTextPtr(P: PUTF8Char; const Delimiter: RawUTF8);
 var DelimLen: PtrInt;
     DelimFirst: AnsiChar;
-    PDeb, DelimNext: PUTF8Char;
+    PBeg, DelimNext: PUTF8Char;
     Line: RawUTF8;
 begin
   DelimLen := length(Delimiter);
@@ -37594,13 +37637,13 @@ begin
     DelimFirst := Delimiter[1];
     DelimNext := PUTF8Char(pointer(Delimiter))+1;
     repeat
-      PDeb := P;
+      PBeg := P;
       while P^<>#0 do begin
         if (P^=DelimFirst) and CompareMem(P+1,DelimNext,DelimLen-1) then
           break;
         inc(P);
       end;
-      SetString(Line,PDeb,P-PDeb);
+      SetString(Line,PBeg,P-PBeg);
       AddObject(Line,nil);
       if P^=#0 then
         break;
@@ -42024,7 +42067,7 @@ end;
 
 { ESynException }
 
-constructor ESynException.CreateUTF8(Format: PUTF8Char; const Args: array of const);
+constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
 begin
   Create(UTF8ToString(FormatUTF8(Format,Args)));
 end;
@@ -42561,12 +42604,13 @@ end;
 function IsDebuggerPresent: BOOL; stdcall; external kernel32; // since XP
 {$endif}
 
-procedure SetCurrentThreadName(Format: PUTF8Char; const Args: array of const);
+procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 begin
   SetThreadName(GetCurrentThreadId,Format,Args);
 end;
 
-procedure SetThreadName(ThreadID: cardinal; Format: PUTF8Char; const Args: array of const);
+procedure SetThreadName(ThreadID: cardinal; const Format: RawUTF8;
+  const Args: array of const);
 var name: RawByteString;
 {$ifndef ISDELPHIXE2}
 {$ifdef MSWINDOWS}
