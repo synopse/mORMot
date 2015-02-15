@@ -2514,7 +2514,9 @@ var
 {$STACKFRAMES ON}
 function TSynLog._Release: Integer;
 {$ifndef CPU64}
+{$ifndef PUREPASCAL}
 var aStackFrame: PtrInt;
+{$endif}
 {$endif}
 begin
   if fFamily.Level*[sllEnter,sllLeave]<>[] then begin
@@ -2535,11 +2537,15 @@ begin
               Caller := 0; // no stack trace yet under Linux64
               {$endif}
               {$else}
+              {$ifdef PUREPASCAL}
+              Caller := 0; // e.g. ARM Linux
+              {$else}
               asm
                 mov eax,[ebp+16] // +4->_IntfClear +16->initial caller
                 mov aStackFrame,eax
               end;
               Caller := aStackFrame-5;
+              {$endif}
               {$endif}
             end;
             DoEnterLeave(sllLeave);
@@ -2566,7 +2572,8 @@ begin
   if RtlCaptureStackBackTraceRetrieved=btUntested then begin
     if OSVersion<wXP then
       RtlCaptureStackBackTraceRetrieved := btFailed else begin
-     @RtlCaptureStackBackTrace := GetProcAddress(GetModuleHandle(kernel32),'RtlCaptureStackBackTrace');
+     @RtlCaptureStackBackTrace := GetProcAddress(
+       GetModuleHandle(kernel32),'RtlCaptureStackBackTrace');
      if @RtlCaptureStackBackTrace=nil then
        RtlCaptureStackBackTraceRetrieved := btFailed else
        RtlCaptureStackBackTraceRetrieved := btOK;
@@ -2688,11 +2695,15 @@ begin
       aStackFrame := 0; // No stack trace yet under Linux64
       {$endif}
       {$else}
+      {$ifdef PUREPASCAL}
+      aStackFrame := 0; // e.g. ARM Linux
+      {$else}
       asm
         mov eax,[ebp+4]  // retrieve caller EIP from push ebp; mov ebp,esp
         sub eax,5        // ignore call TSynLog.Enter op codes
         mov aStackFrame,eax
       end;
+      {$endif}
       {$endif}
       with Recursion[RecursionCount] do begin
         Instance := aInstance;
@@ -2904,11 +2915,15 @@ begin
     aCaller := 0; // no stack trace yet under Linux64
     {$endif}
     {$else}
+    {$ifdef PUREPASCAL}
+    aCaller := 0; // e.g. ARM Linux
+    {$else}
     asm
       mov eax,[ebp+4]  // retrieve caller EIP from push ebp; mov ebp,esp
       sub eax,5        // ignore call TSynLog.Enter op codes
       mov aCaller,eax
     end;
+    {$endif}
     {$endif}
     TSynMapFile.Log(fWriter,aCaller,false);
   finally
