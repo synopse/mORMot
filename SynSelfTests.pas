@@ -6009,6 +6009,15 @@ begin
   Check(V.result.data.Value(0)='D1');
   Check(V.result.data.Value('1000')='D1');
   Check(V.result.data.Value('1001')='D2');
+  V := _Obj(['Z',10,'name','John','year',1972,'a',1],[]);
+  j := VariantSaveJSON(V);
+  Check(j='{"Z":10,"name":"John","year":1972,"a":1}');
+  TDocVariantData(V).SortByName;
+  j := VariantSaveJSON(V);
+  Check(j='{"a":1,"name":"John","year":1972,"Z":10}');
+  TDocVariantData(V).SortByName(@StrComp);
+  j := VariantSaveJSON(V);
+  Check(j='{"Z":10,"a":1,"name":"John","year":1972}');
 end;
 
 {$endif LVCL}

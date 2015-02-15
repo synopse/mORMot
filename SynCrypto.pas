@@ -814,6 +814,11 @@ function  AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByte
 // a triming TAESFullHeader at the beginning
 procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream; const Password: RawByteString; Encrypt: boolean); overload;
 
+const
+  SHA1DIGESTSTRLEN = sizeof(TSHA1Digest)*2;
+  SHA256DIGESTSTRLEN = sizeof(TSHA256Digest)*2;
+  MD5DIGESTSTRLEN = sizeof(TMD5Digest)*2;
+
 /// compute the hexadecimal representation of a SHA1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 
@@ -4307,7 +4312,7 @@ end;
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 var P: PAnsiChar;
     I: Integer;
-begin
+begin              
   SetLength(result,sizeof(D)*2);
   P := pointer(result);
   for I := 0 to sizeof(D)-1 do begin

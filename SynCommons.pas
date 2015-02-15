@@ -10560,6 +10560,11 @@ type
     // and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
     function SearchItemByValue(const aValue: Variant): integer;
+    /// sort the document object values by name
+    // - do nothing if the document is not a dvObject
+    // - will follow case-insensitive order (@StrIComp) by default, but you
+    // can specify @StrComp as comparer function for case-sensitive ordering
+    procedure SortByName(Compare: TUTF8Compare=nil);
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -18772,14 +18777,15 @@ begin
       exit else
       DeleteFile(Target);
   try
-    SourceF := TFileStream.Create(Source, fmOpenRead);
+    SourceF := TFileStream.Create(Source,fmOpenRead);
     try
-      DestF := TFileStream.Create(Target, fmCreate);
+      DestF := TFileStream.Create(Target,fmCreate);
       try
         DestF.CopyFrom(SourceF, SourceF.Size);
       finally
         DestF.Free;
       end;
+      FileSetDateFrom(Target,SourceF.Handle);                  
     finally
       SourceF.Free;
     end;
@@ -18836,8 +18842,8 @@ end;
 function DirectoryExists(const Directory: string): boolean;
 var Code: Integer;
 begin
-  Code := GetFileAttributes(PChar(Directory));
-  Result := (Code <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+  Code := GetFileAttributes(pointer(Directory));
+  result := (Code<>-1) and (FILE_ATTRIBUTE_DIRECTORY and Code<>0);
 end;
 
 function GetModuleName(Module: HMODULE): TFileName;
@@ -18848,11 +18854,11 @@ end;
 
 function TryEncodeTime(Hour, Min, Sec, MSec: Word; var Time: TDateTime): Boolean;
 begin
-  result := false;
-  if (Hour < 24) and (Min < 60) and (Sec < 60) and (MSec < 1000) then begin
-    Time := (Hour * 3600000 + Min * 60000 + Sec * 1000 + MSec) / MSecsPerDay;
+  if (Hour<24) and (Min<60) and (Sec<60) and (MSec<1000) then begin
+    Time := (Hour*3600000+Min*60000+Sec*1000+MSec)/MSecsPerDay;
     result := true;
-  end;
+  end else
+    result := false;
 end;
 
 function ExcludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
@@ -19534,7 +19540,7 @@ begin
 end;
 
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
-  var Dest: TIntegerDynArray);  
+  var Dest: TIntegerDynArray);
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
@@ -29496,6 +29502,52 @@ begin
   result := -1;
 end;
 
+procedure Exchg(P1,P2: PAnsiChar; count: integer);
+var c: AnsiChar;
+begin
+  while count>0 do begin
+    dec(count);
+    c := P1[count];
+    P1[count] := P2[count];
+    P2[count] := c;
+  end;
+end;
+
+procedure QuickSortDocVariant(names: PPointerArray; values: PVariantArray;
+  L, R: PtrInt; Compare: TUTF8Compare);
+var I, J, P: PtrInt;
+    pivot, Tmp: pointer;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := names[P];
+      while Compare(names[I],pivot)<0 do Inc(I);
+      while Compare(names[J],pivot)>0 do Dec(J);
+      if I <= J then begin
+        Tmp := names[J]; names[J] := names[I]; names[I] := Tmp;
+        Exchg(@values[I],@values[J],sizeof(TVarData));
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortDocVariant(names,values,L,J,Compare);
+    L := I;
+  until I >= R;
+end;
+
+procedure TDocVariantData.SortByName(Compare: TUTF8Compare=nil);
+begin
+  if (VKind<>dvObject) or (VCount=0) then
+    exit;
+  if not Assigned(Compare) then
+    Compare := @StrIComp;
+  QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
+end;
+
 function TDocVariantData.Delete(Index: integer): boolean;
 begin
   if cardinal(Index)>=cardinal(VCount) then
@@ -30530,17 +30582,6 @@ begin
     result := 0; // avoid GPF if void
 end;
 
-procedure Exchg(P1,P2: PAnsiChar; max: integer);
-var c: AnsiChar;
-    i: integer;
-begin
-  for i := 0 to max do begin
-    c := P1[i];
-    P1[i] := P2[i];
-    P2[i] := c;
-  end;
-end;
-
 procedure TDynArray.Reverse;
 var i, siz, n, tmp: integer;
     P1, P2: PAnsiChar;
@@ -30589,7 +30630,7 @@ begin
       // generic version
       P2 := P1+n*siz;
       for i := 1 to n shr 1 do begin
-        Exchg(P1,P2,siz-1);
+        Exchg(P1,P2,siz);
         inc(P1,siz);
         dec(P2,siz);
       end;
@@ -31452,7 +31493,7 @@ begin
             PPointer(JP)^ := tmp;
           end else
             // generic exchange of row element data
-            Exchg(IP,JP,ElemSize-1);
+            Exchg(IP,JP,ElemSize);
         if P = I then P := J else
         if P = J then P := I;
         Inc(I); Dec(J);

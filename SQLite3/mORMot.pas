@@ -4604,6 +4604,7 @@ type
     {$endif}
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
+    // - you could call e.g. InHeader['remoteip'] to retrieve the caller IP
     property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - the supplied cookie name is case-insensitive
@@ -28651,6 +28652,8 @@ procedure TSQLRestServer.ServiceMethodRegister(aMethodName: RawUTF8;
   const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean);
 begin
   aMethodName := trim(aMethodName);
+  if aMethodName='' then
+    raise EServiceException.CreateUTF8('%.ServiceMethodRegister('''')',[self]);
   if Model.GetTableIndex(aMethodName)>=0 then
     raise EServiceException.CreateUTF8('Published method name %.% '+
       'conflicts with a Table in the Model!',[self,aMethodName]);
@@ -28726,7 +28729,7 @@ begin
         if (RI<>nil) then
           // $METHODINFO would also include public methods -> check signature
           if (RI^.CallingConvention<>ccRegister) or (RI^.ReturnType<>nil) then
-             SignatureError else
+            SignatureError else
           case RI^.Version of
           1: ; // older Delphi revision do not have much information
           2,3: if RI^.ParamCount<>2 then // self+Ctxt
