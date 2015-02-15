@@ -2428,7 +2428,7 @@ type
     /// intialize the cache
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
-    function Prepare(const GenericSQL: RawUTF8): PSQLRequest;
+    function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil): PSQLRequest;
     // used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
   end;
@@ -3625,7 +3625,7 @@ begin
       result := sqlite3.changes(DB);
       {$ifdef WITHLOG}
       if fLog<>nil then
-        fLog.Add.Log(sllDB,'LastChangeCount=%',result,self);
+        fLog.Add.Log(sllDB,'% LastChangeCount=%',[FileNameWithoutPath,result],self);
       {$endif}
     finally
       UnLock;
@@ -3725,8 +3725,7 @@ begin
       if result<>'' then begin
         {$ifdef WITHLOG}
         if fLog<>nil then begin
-          fLog.Add.Log(sllSQL,aSQL,self,2048);
-          fLog.Add.Log(sllCache,'from cache',self);
+          fLog.Add.Log(sllSQL,'from cache % %',[FileNameWithoutPath,aSQL],self);
           fLog.Add.Log(sllResult,result,self,fLogResultMaximumSize);
         end;
         {$endif}
@@ -3819,7 +3818,8 @@ begin
      (fBackupBackgroundInProcess<>nil) then
     exit;
   {$ifdef WITHLOG}
-  fLog.Add.Log(sllDB,self);
+  fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
+    [BackupFileName,FileNameWithoutPath],self);
   {$endif}
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
@@ -3864,7 +3864,7 @@ begin
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  fLog.Enter.Log(sllDB,self);
+  fLog.Enter.Log(sllDB,'closing "%"',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.Create('DBClose called with no sqlite3 global');
@@ -3904,7 +3904,7 @@ begin
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
     if Log<>nil then
-      Log.Log(sllError,'open ("%") failed with error % (%): %',
+      Log.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
@@ -3960,7 +3960,7 @@ begin
   if not fIsMemory then
     CacheSize := 10000;
   {$ifdef WITHLOG}
-  Log.Log(sllDB,self);
+  Log.Log(sllDB,'"%" database file opened',[FileName],self);
   {$endif}
 end;
 
@@ -4058,10 +4058,10 @@ begin
   if InternalState<>nil then
     inc(InternalState^);
   if fCache.Reset then
-  {$ifdef WITHLOG}
+   {$ifdef WITHLOG}
     if fLog<>nil then
-      fLog.Add.Log(sllCache,'cache flushed',self);
-  {$endif}
+      fLog.Add.Log(sllCache,'% cache flushed',[FileNameWithoutPath],self);
+    {$endif}
 end;
 
 procedure TSQLDataBase.RegisterSQLFunction(aFunction: TSQLDataBaseSQLFunction);
@@ -4078,7 +4078,8 @@ begin
     end;
   {$ifdef WITHLOG}
   if fLog<>nil then
-    fLog.Add.Log(sllDB,'RegisterSQLFunction '+aFunction.FunctionName,self);
+    fLog.Add.Log(sllDB,'% RegisterSQLFunction("%") %',
+      [FileNameWithoutPath,aFunction.FunctionName],self);
   {$endif}
   fSQLFunctions.Add(aFunction);
   if DB<>0 then
@@ -4748,14 +4749,9 @@ end;
 
 function TSQLDataBaseSQLFunction.CreateFunction(DB: TSQLite3DB): Integer;
 begin
-  if self<>nil then begin
+  if self<>nil then 
     result := sqlite3.create_function(DB,pointer(fSQLName),
-      FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil);
-    {$ifdef WITHLOGSQLFUNCTION}
-    if (result<>SQLITE_OK) and (fLog<>nil) then
-      fLog.Add.Log(sllError,'register SQL function failed: '+FunctionName,self);
-    {$endif}
-  end else
+      FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil) else
     result := SQLITE_ERROR;
 end;
 
@@ -4811,18 +4807,25 @@ begin
   DB := aDB;
 end;
 
-function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8): PSQLRequest;
+function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8;
+  WasPrepared: PBoolean): PSQLRequest;
 var added: boolean;
     ndx: integer;
+    Timer: TPrecisionTimer;
 begin
   ndx := Caches.FindHashedForAdding(GenericSQL,added);
   with Cache[ndx] do begin
     if added then begin
+      Timer.Start;
       StatementSQL := GenericSQL;
       Statement.Prepare(DB,GenericSQL);
+      if WasPrepared<>nil then
+        WasPrepared^ := true;
     end else begin
       //Statement.BindReset; // slow down the process, and is not mandatory
       Statement.Reset;
+      if WasPrepared<>nil then
+        WasPrepared^ := false;
     end;
     result := @Statement;
   end;

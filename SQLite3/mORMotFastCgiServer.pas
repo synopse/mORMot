@@ -604,7 +604,8 @@ begin
     exit;
   end;
   // if we reached here, exe was not called as a FastCGI process
-  raise Exception.CreateFmt('%s not called as a FastCGI process',[paramstr(0)]);
+  raise ESynException.CreateUTF8('%.Create: % not called as a FastCGI process',
+    [Self,ExeVersion.ProgramFileName]);
 {$else}
   not implemented yet: please use libfcgi.so version, which seems stable & fast
   under Linux

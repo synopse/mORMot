@@ -911,10 +911,7 @@ begin
     CreateSaveToFile;
   Color(ccLightCyan);
   Writeln(fSaveToFile,#13#10'   ',Ident,#13#10'  ',StringOfChar('-',length(Ident)+2));
-{$ifdef MSWINDOWS}
   RunTimer.Start;
-  ExeVersionRetrieve;
-{$endif}
   C := nil;
   try
     // 1. register all test cases
@@ -971,11 +968,9 @@ begin
   end;
   Color(ccLightCyan);
   result := (fFailed.Count=0);
-{$ifdef MSWINDOWS}
   Elapsed := #13#10#13#10'Time elapsed for all tests: '+RunTimer.Stop;
   if Exeversion.Version.Major<>0 then
     Version := #13#10'Software version tested: '+RawUTF8(Exeversion.Version.Detailed);
-{$endif}
   Writeln(fSaveToFile,#13#10,Version,CustomVersions,
     #13#10'Generated with: ',GetDelphiCompilerVersion,' compiler', Elapsed,
     #13#10'Tests performed at ',DateTimeToStr(Now));

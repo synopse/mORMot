@@ -8571,11 +8571,12 @@ const
      ord('-'),ord('.'),ord('_'),ord('~')];
 
 
-{$ifdef MSWINDOWS}
-
 {$M+} // to have existing RTTI for published properties
 type
   /// used to retrieve version information from any EXE
+  // - under Linux, all version numbers are set to 0 by default
+  // - you should not have to use this class directly, but via the
+  // ExeVersion global variable
   TFileVersion = class
   protected
     fDetailed: string;
@@ -8590,21 +8591,25 @@ type
     /// executable release build number
     Build: Integer;
     /// build year of this exe file
-    BuildYear: integer;
+    BuildYear: word;
     /// version info of the exe file as '3.1'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
     Main: string;
     /// retrieve application version from exe file name
-    // - DefaultVersion is used if no information Version was included into
+    // - DefaultVersion32 is used if no information Version was included into
     // the executable resources (on compilation time)
-    // - to retrieve version information from current executable, just call
-    // ExeVersionRetrieve function, then use ExeVersion global variable
-    constructor Create(const FileName: TFileName; DefaultVersion: integer);
+    // - you should not have to use this constructor, but rather access the
+    // ExeVersion global variable
+    constructor Create(const aFileName: TFileName;
+      aMajor,aMinor,aRelease: integer);
     /// retrieve the version as a 32 bits integer with Major.Minor.Release
+    // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
+    // - under Linux, always return '0.0.0.0' if no custom version number
+    // has been defined
     property Detailed: string read fDetailed write fDetailed;
     /// build date and time of this exe file
     property BuildDateTime: TDateTime read fBuildDateTime write fBuildDateTime;
@@ -8625,14 +8630,16 @@ const
   MSecsPerDay   = SecsPerDay * MSecsPerSec;
   UnixDateDelta = 25569;
 
-{/ GetFileVersion returns the most significant 32 bits of a file's binary
-  version number
-  - Typically, this includes the major and minor version placed
-  together in one 32-bit integer
-  - It generally does not include the release or build numbers
-  - It returns Cardinal(-1) if it failed }
+/// GetFileVersion returns the most significant 32 bits of a file's binary
+// version number
+// - typically, this includes the major and minor version placed
+// together in one 32-bit integer
+// - generally does not include the release or build numbers
+// - returns Cardinal(-1) in case of failure 
 function GetFileVersion(const FileName: TFileName): cardinal;
 {$endif}
+
+{$ifdef MSWINDOWS}
 
 type
   /// the recognized Windows versions
@@ -8677,35 +8684,6 @@ var
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
 
-  /// global information about the current executable and computer
-  // - call ExeVersionRetrieve before using it (it is done by mORMot.pas unit)
-  ExeVersion: record
-    /// the main executable name, without any path nor extension
-    ProgramName: RawUTF8;
-    /// the main executable details, as used e.g. by TSynLog
-    // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-03-29 11:09:06)'
-    ProgramFullSpec: RawUTF8;
-    /// the main executable file name (including full path)
-    // - same as paramstr(0)
-    ProgramFileName: TFileName;
-    /// the main executable full path (excluding .exe file name)
-    // - same as ExtractFilePath(paramstr(0))
-    ProgramFilePath: TFileName;
-    /// the full path of the running executable or library
-    // - for an executable, same as paramstr(0) 
-    // - for a library, will contain the whole .dll file name 
-    InstanceFileName: TFileName;
-    /// the current executable version
-    Version: TFileVersion;
-    /// the current computer host name
-    Host: RawUTF8;
-    /// the current computer user name
-    User: RawUTF8;
-  end;
-
-/// initialize ExeVersion global variable, if not already done
-procedure ExeVersionRetrieve(DefaultVersion: integer=0);
-
 {/ this function can be used to create a GDI compatible window, able to
   receive Windows Messages for fast local communication
   - will return 0 on failure (window name already existing e.g.), or
@@ -8749,6 +8727,41 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
+
+var
+  /// global information about the current executable and computer
+  // - this structure is initialized in this unit's initialization block below
+  // - you can call SetExecutableVersion() with a custom version, if needed 
+  ExeVersion: record
+    /// the main executable name, without any path nor extension
+    // - e.g. 'Test' for 'c:\pathto\Test.exe'
+    ProgramName: RawUTF8;
+    /// the main executable details, as used e.g. by TSynLog
+    // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-03-29 11:09:06)'
+    ProgramFullSpec: RawUTF8;
+    /// the main executable file name (including full path)
+    // - same as paramstr(0)
+    ProgramFileName: TFileName;
+    /// the main executable full path (excluding .exe file name)
+    // - same as ExtractFilePath(paramstr(0))
+    ProgramFilePath: TFileName;
+    /// the full path of the running executable or library
+    // - for an executable, same as paramstr(0)
+    // - for a library, will contain the whole .dll file name
+    InstanceFileName: TFileName;
+    /// the current executable version
+    Version: TFileVersion;
+    /// the current computer host name
+    Host: RawUTF8;
+    /// the current computer user name
+    User: RawUTF8;
+  end;
+
+/// initialize ExeVersion global variable, supplying a custom version number
+// - by default, the version numbers will be retrieved at startup from the
+// executable itself (if it was included at build time)
+// - but you can use this function to set any custom version numbers
+procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
 
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
@@ -8813,7 +8826,7 @@ var
   // - used to avoid any memory leak with e.g. 'class var RecordProps', i.e.
   // some singleton or static objects
   // - to be used, e.g. as:
-  // !  Version := TFileVersion.Create(InstanceFileName,DefaultVersion);
+  // !  Version := TFileVersion.Create(InstanceFileName,DefaultVersion32);
   // !  GarbageCollector.Add(Version);
   GarbageCollector: TObjectList;
 
@@ -13739,6 +13752,17 @@ end;
 
 // some minimal RTTI const and types
 
+procedure Exchg(P1,P2: PAnsiChar; count: integer);
+var c: AnsiChar;
+begin
+  while count>0 do begin
+    dec(count);
+    c := P1[count];
+    P1[count] := P2[count];
+    P2[count] := c;
+  end;
+end;
+
 {$ifdef FPC}
 
 type
@@ -15178,23 +15202,20 @@ end;
 {$endif}
 
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
-var c: AnsiChar;
-    i: integer;
+var i,j,n: integer;
 begin
-  result := '';
-  if Source='' then
-    exit;
-  SetLength(result,length(Source));
-  i := 0;
-  repeat
-    c := PUTF8Char(pointer(Source))[i];
-    if c=#0 then
-      exit;
-    if c=OldChar then
-      c := NewChar;
-    PUTF8Char(pointer(result))[i] := c;
-    inc(i);
-  until false;
+  if (OldChar<>NewChar) and (Source<>'') then begin
+    n := length(Source);
+    for i := 0 to n-1 do
+      if PAnsiChar(pointer(Source))[i]=OldChar then begin
+        SetString(result,PAnsiChar(pointer(Source)),n);
+        for j := i to n-1 do
+          if PAnsiChar(pointer(Source))[j]=OldChar then
+            PAnsiChar(pointer(result))[j] := NewChar;
+        exit;
+      end;
+  end;
+  result := Source;
 end;
 
 function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
@@ -24332,22 +24353,107 @@ begin
     result := false;
 end;
 
-procedure ExeVersionRetrieve(DefaultVersion: integer);
-const EXE_FMT: PUTF8Char = '% % (%)';
-var Tmp: array[byte] of AnsiChar;
-    TmpSize: cardinal;
-    i: integer;
+
+{$else}
+
+const
+  _SC_PAGE_SIZE = $1000;
+
+{$endif MSWINDOWS}
+
+{ TFileVersion }
+
+constructor TFileVersion.Create(const aFileName: TFileName;
+  aMajor,aMinor,aRelease: integer);
+var M,D: word;
+{$ifdef MSWINDOWS}
+    Size, Size2: DWord;
+    Pt: Pointer;
+    Info: ^TVSFixedFileInfo;
+    FileTime: TFILETIME;
+    SystemTime: TSYSTEMTIME;
+    tmp: TFileName;
+{$endif}
 begin
+  Major := aMajor;
+  Minor := aMinor;
+  Release := aRelease;
+  {$ifdef MSWINDOWS}
+  if aFileName<>'' then begin
+    // GetFileVersionInfo modifies the filename parameter data while parsing.
+    // Copy the string const into a local variable to create a writeable copy.
+    SetString(tmp,PChar(aFileName),length(aFileName));
+    Size := GetFileVersionInfoSize(pointer(tmp), Size2);
+    if Size>0 then begin
+      GetMem(Pt, Size);
+      try
+        GetFileVersionInfo(pointer(aFileName), 0, Size, Pt);
+        VerQueryValue(Pt, '\', pointer(Info), Size2);
+        with Info^ do begin
+          if Version32=0 then begin
+            Major := dwFileVersionMS shr 16;
+            Minor := word(dwFileVersionMS);
+            Release := dwFileVersionLS shr 16;
+          end;
+          Build := word(dwFileVersionLS);
+          BuildYear := 2010;
+          if (dwFileDateLS<>0) and (dwFileDateMS<>0) then begin
+            FileTime.dwLowDateTime:= dwFileDateLS; // built date from version info
+            FileTime.dwHighDateTime:= dwFileDateMS;
+            FileTimeToSystemTime(FileTime, SystemTime);
+            fBuildDateTime := EncodeDate(
+              SystemTime.wYear,SystemTime.wMonth,SystemTime.wDay);
+          end;
+        end;
+      finally
+        Freemem(Pt);
+      end;
+    end;
+  end;
+  {$endif}
+  Main := IntToString(Major)+'.'+IntToString(Minor);
+  fDetailed := Main+ '.'+IntToString(Release)+'.'+IntToString(Build);
+  if fBuildDateTime=0 then  // get build date from file age
+    fBuildDateTime := FileAgeToDateTime(aFileName);
+  if fBuildDateTime<>0 then
+    DecodeDate(fBuildDateTime,BuildYear,M,D);
+end;
+
+function TFileVersion.Version32: integer;
+begin
+  result := Major shl 16+Minor shl 8+Release;
+end;
+
+procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
+var setVersion,i: integer;
+{$ifdef MSWINDOWS}
+    Tmp: array[byte] of AnsiChar;
+    TmpSize: cardinal;
+{$else}
+{$endif}
+begin
+  setVersion := aMajor shl 16+aMinor shl 8+aRelease;
+  with ExeVersion do
+  if Version<>nil then
+    if Version.Version32=setVersion then
+      exit else
+      FreeAndNil(Version); // allow version number forcing
   with ExeVersion do
   if Version=nil then begin
+    {$ifdef MSWINDOWS}
     ProgramFileName := paramstr(0);
+    {$else}
+    ProgramFileName := GetModuleName(hInstance);
+    if ProgramFileName='' then
+      ProgramFileName := ExpandFileName(paramstr(0));
+    {$endif}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then
       InstanceFileName := GetModuleName(HInstance) else
       InstanceFileName := ProgramFileName;
-    Version := TFileVersion.Create(InstanceFileName,DefaultVersion);
+    Version := TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease);
     GarbageCollector.Add(Version);
-    ProgramFullSpec := FormatUTF8(EXE_FMT,
+    ProgramFullSpec := FormatUTF8('% % (%)',
       [ProgramFileName,Version.Detailed,DateTimeToIso8601(Version.BuildDateTime,True,' ')]);
     ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
     i := length(ProgramName);
@@ -24357,76 +24463,25 @@ begin
         break;
       end else
       dec(i);
+    {$ifdef MSWINDOWS}
     TmpSize := sizeof(Tmp);
     GetComputerNameA(Tmp,TmpSize);
     Host := Tmp;
     TmpSize := sizeof(Tmp);
     GetUserNameA(Tmp,TmpSize);
     User := Tmp;
+    {$else}
+    Host := GetHostName;
+    {$ifdef KYLIX3}
+    User := LibC.getpwuid(LibC.getuid)^.pw_name;
+    {$endif}
+    {$endif}
+    if Host='' then
+      Host := 'unknown';
+    if User='' then
+      User := 'unknown';
   end;
 end;
-
-
-{ TFileVersion }
-
-constructor TFileVersion.Create(const FileName: TFileName;
-  DefaultVersion: integer);
-var Size, Size2: DWord;
-    Pt: Pointer;
-    Info: ^TVSFixedFileInfo;
-    FileTime: TFILETIME;
-    SystemTime: TSYSTEMTIME;
-    tmp: TFileName;
-begin
-  Major := DefaultVersion;
-  if FileName='' then
-    exit;
-  // GetFileVersionInfo modifies the filename parameter data while parsing.
-  // Copy the string const into a local variable to create a writeable copy.
-  SetString(tmp,PChar(FileName),length(FileName));
-  Size := GetFileVersionInfoSize(pointer(tmp), Size2);
-  if Size>0 then begin
-    GetMem(Pt, Size);
-    try
-      GetFileVersionInfo(pointer(FileName), 0, Size, Pt);
-      VerQueryValue(Pt, '\', pointer(Info), Size2);
-      with Info^ do begin
-        Major := dwFileVersionMS shr 16;
-        Minor := word(dwFileVersionMS);
-        Release := dwFileVersionLS shr 16;
-        Build := word(dwFileVersionLS);
-        BuildYear := 2010;
-        if (dwFileDateLS<>0) and (dwFileDateMS<>0) then begin
-          FileTime.dwLowDateTime:= dwFileDateLS; // built date from version info
-          FileTime.dwHighDateTime:= dwFileDateMS;
-          FileTimeToSystemTime(FileTime, SystemTime);
-          fBuildDateTime := EncodeDate(
-            SystemTime.wYear,SystemTime.wMonth,SystemTime.wDay);
-          BuildYear := SystemTime.wYear;
-        end;
-      end;
-    finally
-      Freemem(Pt);
-    end;
-  end;
-  Main := IntToString(Major)+'.'+IntToString(Minor);
-  fDetailed := Main+ '.'+IntToString(Release)+'.'+IntToString(Build);
-  if fBuildDateTime=0 then // get build date from file age
-    fBuildDateTime := FileAgeToDateTime(FileName);
-end;
-
-function TFileVersion.Version32: integer;
-begin
-  result := Major shl 16+Minor shl 8+Release;
-end;
-
-{$else}
-
-const
-  _SC_PAGE_SIZE = $1000;
-
-{$endif MSWINDOWS}
-
 
 
 procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
@@ -29500,17 +29555,6 @@ begin
       if VValue[result]=aValue then // rely on Variants.pas comparison
         exit;
   result := -1;
-end;
-
-procedure Exchg(P1,P2: PAnsiChar; count: integer);
-var c: AnsiChar;
-begin
-  while count>0 do begin
-    dec(count);
-    c := P1[count];
-    P1[count] := P2[count];
-    P2[count] := c;
-  end;
 end;
 
 procedure QuickSortDocVariant(names: PPointerArray; values: PVariantArray;
@@ -43203,6 +43247,7 @@ initialization
   {$ifdef MSWINDOWS}
   RetrieveSystemInfo;
   {$endif MSWINDOWS}
+  SetExecutableVersion(0,0,0);
   // some type definition assertions
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);

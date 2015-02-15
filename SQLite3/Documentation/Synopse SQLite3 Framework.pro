@@ -1624,7 +1624,7 @@ You may also trans-type your {\f1\fs20 variant} instance into a {\f1\fs20 TDocVa
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
 By definition, trans-typing via a {\f1\fs20 TDocVariantData record} is slightly faster than using late-binding.
-But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} function, which works even for members returned as {\f1\fs20 varByRef} via late binding:
+But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 DocVariantDataSafe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
 ! if DocVariantType.IsOfType(V1) then
 ! with TDocVariantData(V1) do             // direct transtyping
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
@@ -1639,6 +1639,7 @@ But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 T
 !  // will write to the console:
 !  //  one=1
 !  //  two=2.5
+In practice, {\f1\fs20 DocVariantDataSafe(aVariant)^} may be preferred, since {\f1\fs20 DocVariantData(aVariant)^} would raise an {\f1\fs20 EDocVariant} exception if {\f1\fs20 aVariant} is not a {\f1\fs20 TDocVariant}, but {\f1\fs20 DocVariantDataSafe(aVariant)^} would return a "fake" void {\f1\fs20 DocVariant} instance, in which {\f1\fs20 Count=0} and {\f1\fs20 Kind=dbUndefined}.
 You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack, if you do not need any {\f1\fs20 variant}-oriented access to the object, but just some local storage:
 !var Doc1,Doc2: TDocVariantData;
 ! ...

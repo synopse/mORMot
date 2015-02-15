@@ -33,6 +33,7 @@ program Project01;
 uses
   Forms,
   SysUtils,
+  SynCommons,
   mORMot,
   Unit1 in 'Unit1.pas' {Form1},
   SampleData in 'SampleData.pas';
@@ -44,6 +45,6 @@ begin
   Application.CreateForm(TForm1, Form1);
   Form1.Caption := ' Sample 01 - In Memory ORM';
   Form1.Database := TSQLRestStorageInMemory.Create(TSQLSampleRecord,nil,
-    ChangeFileExt(paramstr(0),'.db'));
+    ChangeFileExt(ExeVersion.ProgramFileName,'.db'));
   Application.Run;
 end.

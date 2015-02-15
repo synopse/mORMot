@@ -256,7 +256,7 @@ var
 //  fn: AnsiString;
   uString: SynUnicode;
 begin
-  scriptDir := ExtractFilePath(ParamStr(0)) + 'js';
+  scriptDir := ExeVersion.ProgramFilePath + 'js';
   Check(DirectoryExists(scriptDir), scriptDir + ' dose not exist');
   if CheckFailed(IsAnsiCompatible(PChar(scriptDir)), ' Path to test directory must be Ansi Compatible') then Exit;
 
@@ -1827,7 +1827,7 @@ var
   i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
-  mustacheFN := ExtractFilePath(ParamStr(0)) + 'js\mustache.js';
+  mustacheFN := ExeVersion.ProgramFilePath + 'js\mustache.js';
   mSource := AnyTextFileToSynUnicode(mustacheFN);
   if mSource='' then begin
     mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
@@ -1900,7 +1900,7 @@ var
   resultFromFortunes, rendered: RawUTF8; // n frtune test here must be resultFromFortunes of database query
 begin
   engine := FManager.ThreadSafeEngine;
-  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\precompiledMustache.js');
+  mSource := AnyTextFileToSynUnicode(ExeVersion.ProgramFilePath + 'js\precompiledMustache.js');
   if mSource='' then
     exit;
   CheckFailed(mSource <> '', 'exist js\precompiledMustache.js');

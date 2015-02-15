@@ -74,7 +74,7 @@ end;
 
 constructor TFileServer.Create;
 begin
-  inherited Create(CreateFileModel(self),ChangeFileExt(paramstr(0),'.db3'));
+  inherited Create(CreateFileModel(self),ChangeFileExt(ExeVersion.ProgramFileName,'.db3'));
   CreateMissingTables(ExeVersion.Version.Version32);
   Server := TSQLHttpServer.Create(SERVER_HTTP_PORT,self,'+',useHttpApiRegisteringURI);
   AddAuditTrail(feServerStarted);

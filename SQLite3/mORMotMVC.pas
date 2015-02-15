@@ -707,7 +707,7 @@ begin
   // get views
   fViewTemplateFileTimestampMonitor := aParameters.FileTimestampMonitorAfterSeconds;
   if aParameters.Folder='' then
-    fViewTemplateFolder := ExtractFilePath(ParamStr(0))+'Views\' else
+    fViewTemplateFolder := ExeVersion.ProgramFilePath+'Views'+PathDelim else
     fViewTemplateFolder := IncludeTrailingPathDelimiter(aParameters.Folder);
   if not DirectoryExists(fViewTemplateFolder) then
     CreateDir(fViewTemplateFolder);
@@ -1597,8 +1597,8 @@ begin
     if static=#0 then begin
       if PosEx('..',rawFormat)>0 then // avoid injection
         static := '' else begin
-        staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/','\'));
-        static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+'\'+staticFileName);
+        staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
+        static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+PathDelim+staticFileName);
         if static<>'' then
           static := GetMimeContentType(nil,0,staticFileName)+#0+static;
       end;

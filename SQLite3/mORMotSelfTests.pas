@@ -192,7 +192,7 @@ begin
   if false then // "if not false then" will create around 550 MB of log file
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
-    //DestinationPath := ExtractFilePath(paramstr(0))+'logs'; folder should exist
+    //DestinationPath := ExeVersion.ProgramFilePath+'logs'; folder should exist
     PerThreadLog := ptIdentifiedInOnFile;
     //HighResolutionTimeStamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs

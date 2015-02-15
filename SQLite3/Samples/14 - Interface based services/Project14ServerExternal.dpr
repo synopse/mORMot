@@ -33,7 +33,7 @@ var
   aProps: TSQLDBSQLite3ConnectionProperties;
 begin
   aProps := TSQLDBSQLite3ConnectionProperties.Create(
-    StringToUtf8(ChangeFileExt(paramstr(0),'.db')),'','','');
+    StringToUtf8(ChangeFileExt(ExeVersion.ProgramFileName,'.db')),'','','');
   try
     aModel := TSQLModel.Create([TSQLAuthGroup,TSQLAuthUser],ROOT_NAME);
     VirtualTableExternalRegisterAll(aModel,aProps);

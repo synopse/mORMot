@@ -94,12 +94,12 @@ begin
   mmoResult.Lines.Text :=
     Format('Rendered %d times in %s (%d/sec):'#13#10#13#10'%s',
       [n,Timer.Stop,Timer.PerSec(n),result]);
-  FileFromString(Result,ChangeFileExt(paramstr(0),'.html'));
+  FileFromString(Result,ChangeFileExt(ExeVersion.ProgramFileName,'.html'));
 end;
 
 procedure TMainForm.btnOpenBrowserClick(Sender: TObject);
 begin
-  ShellExecute(0,'open',Pointer(ChangeFileExt(paramstr(0),'.html')),nil,nil,SW_SHOWNORMAL);
+  ShellExecute(0,'open',Pointer(ChangeFileExt(ExeVersion.ProgramFileName,'.html')),nil,nil,SW_SHOWNORMAL);
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
@@ -115,7 +115,7 @@ var mustacheFN: TFileName;
 begin
   fEngineManager := TSMEngineManager.Create;
   fEngine := fEngineManager.ThreadSafeEngine;
-  mustacheFN := ExtractFilePath(ParamStr(0)) + 'js\mustache.js';
+  mustacheFN := ExeVersion.ProgramFilePath + 'js\mustache.js';
   mSource := AnyTextFileToSynUnicode(mustacheFN);
   if mSource='' then begin
     mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');

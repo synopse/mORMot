@@ -1699,7 +1699,7 @@ begin
     end;
   end;
   if fHandle=0 then begin
-    fLibraryPath := ExtractFilePath(paramstr(0))+'OracleInstantClient\oci.dll';
+    fLibraryPath := ExeVersion.ProgramFilePath+'OracleInstantClient\oci.dll';
     fHandle := SafeLoadLibrary(fLibraryPath);
   end;
   if fHandle=0 then

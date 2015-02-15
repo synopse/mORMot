@@ -88,7 +88,7 @@ begin
       AddLineToFooter(false);
       AddPagesToFooterAt(sPageN,RightMarginPos);
       RestoreSavedLayout;
-      AddTextToHeader(ExtractFileName(paramstr(0)));
+      AddTextToHeader(ExeVersion.ProgramName);
       AddTextToFooter(DateTimeToStr(Now));
       AddLineToHeader(false);
       Font.Size := 12;
@@ -182,7 +182,7 @@ begin
       LineTo(500,500);
       Stroke;
     end; }
-    FN := ChangeFileExt(paramstr(0),'.pdf');
+    FN := ChangeFileExt(ExeVersion.ProgramFileName,'.pdf');
     SaveToFile(FN);
     ShellExecute(Handle,nil,pointer(FN),nil,nil,SW_SHOWNORMAL);
   finally

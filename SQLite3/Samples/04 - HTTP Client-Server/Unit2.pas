@@ -42,7 +42,7 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   Model := CreateSampleModel;
-  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'),true);
+  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(ExeVersion.ProgramFileName,'.db3'),true);
   DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',HTTP_DEFAULT_MODE);
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries

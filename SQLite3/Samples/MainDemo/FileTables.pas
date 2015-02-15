@@ -203,7 +203,6 @@ begin
     TypeInfo(TFileAction),TypeInfo(TFileEvent));
 end;
 
-
 initialization
-  ExeVersionRetrieve(3);
+  SetExecutableVersion(3,0,0);
 end.

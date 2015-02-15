@@ -909,7 +909,7 @@ var P: PPointer;
 {$endif}
 begin
   if aEmbedded then begin
-    fLibName := ExtractFilePath(paramstr(0));
+    fLibName := ExeVersion.ProgramFilePath;
     if FileExists(LibName+FBLIBNAME[true]) then
       fLibName := LibName+FBLIBNAME[true] else
       fLibName := LibName+'Firebird\'+FBLIBNAME[true];

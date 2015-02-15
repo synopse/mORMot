@@ -92,7 +92,7 @@ procedure TMainForm.FormShow(Sender: TObject);
 begin
   PTypeInfo(TypeInfo(TRemoteSQLEngine))^.EnumBaseType^.AddCaptionStrings(cbbEngine.Items);
   fSettings := TProjectSettings.Create;
-  fSettingsFileName := ChangeFileExt(paramstr(0),'.settings');
+  fSettingsFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
   JSONFileToObject(fSettingsFileName,fSettings);
   cbbEngine.ItemIndex := ord(fSettings.fEngine);
   lbledtServer.Text := UTF8ToString(fSettings.fServerName);

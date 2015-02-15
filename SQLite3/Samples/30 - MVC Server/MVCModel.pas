@@ -472,10 +472,11 @@ begin
       if P^=#0 then
         break;
       inc(P);
+      H := P; // makes compiler happy
       if IdemPChar(P,'HREF=') then
-        H := P+5 else
+        inc(H,5) else
       if IdemPChar(P,'SRC=') then
-        H := P+4 else
+        inc(H,4) else
         continue;
       if H^='"' then inc(H);
       AddNoJSONEscape(B,H-B);
@@ -497,10 +498,11 @@ begin
         if IdemPChar(P+1,'PUBLIC/') then begin
           if PublicFolder<>'' then begin
             GetUrl(P+8);
-            FN := PublicFolder+UTF8ToString(StringReplaceChars(url,'/','\'));
+            FN := PublicFolder+UTF8ToString(StringReplaceChars(url,'/',PathDelim));
             EnsureDirectoryExists(ExtractFilePath(FN));
             if not FileExists(FN) then
-              FileFromString(TWinHTTP.Get(aDotClearRoot+'/public/'+url),FN);
+              FileFromString({$ifdef MSWINDOWS}TWinHTTP.Get{$else}HttpGet{$endif}(
+                aDotClearRoot+'/public/'+url),FN);
             AddShort('.static');
           end else
             AddString(aDotClearRoot);
@@ -515,7 +517,7 @@ begin
 end;
 begin
   if aStaticFolder<>'' then begin
-    PublicFolder := IncludeTrailingPathDelimiter(aStaticFolder)+'public\';
+    PublicFolder := IncludeTrailingPathDelimiter(aStaticFolder)+'public'+PathDelim;
     EnsureDirectoryExists(PublicFolder);
   end;
   TAutoFree.Several([
@@ -587,3 +589,4 @@ end;
 
 
 end.
+

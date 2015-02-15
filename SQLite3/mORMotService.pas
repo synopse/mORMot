@@ -656,7 +656,7 @@ begin
   fStatusRec.dwWin32ExitCode := NO_ERROR;
   {$ifndef NOMORMOTKERNEL}
   SQLite3Log.Add.Log(sllInfo,'% (%) running as "%"',
-    [ServiceName,aDisplayName,ParamStr(0)],self);
+    [ServiceName,aDisplayName,ExeVersion.ProgramFullSpec],self);
   {$endif}
 end;
 
@@ -778,12 +778,12 @@ end;
 function TService.Install(const Params: string): boolean;
 var schService: SC_HANDLE;
     schSCManager: SC_HANDLE;
-    ServicePath: String;
+    ServicePath: TFileName;
 begin
   result := false;
   if installed then
     exit;
-  ServicePath := paramstr(0);
+  ServicePath := ExeVersion.ProgramFileName;
   if Params<>'' then
     ServicePath := ServicePath+' '+Params;
   schSCManager := OpenSCManager(nil, nil, SC_MANAGER_ALL_ACCESS);

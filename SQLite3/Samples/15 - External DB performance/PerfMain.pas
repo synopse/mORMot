@@ -152,7 +152,7 @@ type
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  Ini := StringFromFile(ChangeFileExt(paramstr(0),'.ini'));
+  Ini := StringFromFile(ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
   OraTNSName.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','TNSName'));
   OraUser.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','User'));
   OraPass.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','Password'));
@@ -167,7 +167,6 @@ var T,U,P: RawUTF8;
     props: TSQLDBSQLite3ConnectionProperties;
     server: TSQLDBServerAbstract;
 begin
-  ExeVersionRetrieve;
   //SynDBLog.Family.Level := LOG_VERBOSE;  // for debugging
   T := StringToUTF8(OraTNSName.Text);
   U := StringToUTF8(OraUser.Text);
@@ -175,7 +174,7 @@ begin
   UpdateIniEntry(Ini,'Oracle','TNSName',T);
   UpdateIniEntry(Ini,'Oracle','User',U);
   UpdateIniEntry(Ini,'Oracle','Password',P);
-  FileFromString(Ini,ChangeFileExt(paramstr(0),'.ini'));
+  FileFromString(Ini,ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
   LogMemo.Clear;
 {  FreeAndNil(sqlite3); sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll'); }
   // if false then
@@ -409,7 +408,7 @@ begin
   finally
     Label3.Caption := '';
     T := ObjectToJSON(Stats,[woHumanReadable]);
-    FileFromString(T,ChangeFileExt(paramstr(0),'.stats'));
+    FileFromString(T,ChangeFileExt(ExeVersion.ProgramFileName,'.stats'));
     FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
     SaveStats;
   end;
@@ -905,8 +904,8 @@ begin
     txt := txt+Int32ToUtf8(Stat[i].ReadAllDirectRate)+',';
   PicEnd(Cat1);
 
-  FileFromString(Doc,ChangeFileExt(paramstr(0),'.txt'));
-  FileFromString('<html><body>'#13#10+s,ChangeFileExt(paramstr(0),'.htm'));
+  FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+  FileFromString('<html><body>'#13#10+s,ChangeFileExt(ExeVersion.ProgramFileName,'.htm'));
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
@@ -925,7 +924,7 @@ end;
 
 procedure TMainForm.btnReportClick(Sender: TObject);
 begin
-  ShellExecute(0,'open',pointer(ChangeFileExt(paramstr(0),'.htm')),'','',SW_SHOWMAXIMIZED);
+  ShellExecute(0,'open',pointer(ChangeFileExt(ExeVersion.ProgramFileName,'.htm')),'','',SW_SHOWMAXIMIZED);
 end;
 
 end.

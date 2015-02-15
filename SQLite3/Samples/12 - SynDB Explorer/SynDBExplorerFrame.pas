@@ -437,7 +437,7 @@ constructor TDBExplorerFrame.Create(aOwner: TComponent);
 begin
   inherited Create(aOwner);
   fHint := THintWindowDelayed.Create(self);
-  fSQLLogFile := ChangeFileExt(paramstr(0),'.history');
+  fSQLLogFile := ChangeFileExt(ExeVersion.ProgramFileName,'.history');
   PagesLeft.ActivePageIndex := 0;
 end;
 
@@ -504,7 +504,6 @@ begin
           TSQLRibbon(nil).AddToReport(Rep,fGrid.Table,[]);
           Rep.EndDoc;
           Rep.Caption := GetFileNameWithoutExt(ExtractFileName(FileName));
-          ExeVersionRetrieve;
           Rep.ExportPDFAuthor := U2S(ExeVersion.User);
           Rep.ExportPDFApplication := Form.Caption;
           Rep.ExportPDFSubject := BtnResultToFile.Hint;

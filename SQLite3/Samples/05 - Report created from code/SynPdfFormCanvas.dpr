@@ -6,6 +6,7 @@ uses
   SysUtils,
   Math,
   DateUtils,
+  SynCommons,
   SynPDF;
 
 const
@@ -54,7 +55,7 @@ begin
   obPDF.Canvas.DrawXObject(8.0*PDFFactor,15.0*PDFFactor,2.0,2.0,'FORMOBJECT');
   obPDF.Canvas.DrawXObject(2.0*PDFFactor,20.0*PDFFactor,0.5,1.0,'FORMOBJECT');
 
-  obPDF.SaveToFile(ChangeFileExt(ParamStr(0),'.pdf'));
+  obPDF.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
 
   FreeAndNil(obPDF);
 end.

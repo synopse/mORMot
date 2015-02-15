@@ -205,7 +205,7 @@ begin
     end;
   end else begin
     Conns := TSQLRestStorageInMemory.Create(
-      TSQLConnection,nil,ChangeFileExt(paramstr(0),'.config'),false);
+      TSQLConnection,nil,ChangeFileExt(ExeVersion.ProgramFileName,'.config'),false);
     try
       Conns.ExpandedJSON := true; // for better human reading and modification
       Task.Title := MainCaption;

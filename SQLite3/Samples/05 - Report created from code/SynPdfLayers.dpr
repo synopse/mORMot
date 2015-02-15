@@ -6,6 +6,7 @@ uses
   SysUtils,
   Math,
   DateUtils,
+  SynCommons,
   SynPDF;
 
 const
@@ -125,7 +126,7 @@ begin
   obPDF.Canvas.TextOut(10.0*PDFFactor,2.0*PDFFactor,'Text visible in Main Layer 3');
   obPDF.Canvas.EndMarkedContent;
 
-  obPDF.SaveToFile(ChangeFileExt(ParamStr(0),'.pdf'));
+  obPDF.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
 
   FreeAndNil(obPDF);
 end.

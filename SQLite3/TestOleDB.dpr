@@ -60,7 +60,7 @@ begin
       Query := Conn.NewStatement;
       try
         Query.Execute('select * from Sales.Customer where AccountNumber like ?',true,['AW000001%']);
-        F := TFileStream.Create(ChangeFileExt(paramstr(0),'.json'),fmCreate);
+        F := TFileStream.Create(ChangeFileExt(ExeVersion.ProgramFileName,'.json'),fmCreate);
         try
           Query.FetchAllToJSON(F,false);
         finally

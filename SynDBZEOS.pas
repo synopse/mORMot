@@ -676,7 +676,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   if aLibraryLocation<>'' then begin
     result := result+'?LibLocation=';
     if aLibraryLocationAppendExePath then
-      result := result+StringToUTF8(ExtractFilePath(ParamStr(0)));
+      result := result+StringToUTF8(ExeVersion.ProgramFilePath);
     result := result+StringToUTF8(aLibraryLocation);
   end;
 end;

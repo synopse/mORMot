@@ -781,7 +781,7 @@ var hier: TClassDynArray;
 begin
   {$ifdef KYLIX3} hier := nil; {$endif to make compiler happy}
   if DestinationSourceCodeFile='' then
-    DestinationSourceCodeFile := ExtractFilePath(paramstr(0))+'ddsqlrecord.inc';
+    DestinationSourceCodeFile := ExeVersion.ProgramFilePath+'ddsqlrecord.inc';
   for a := 0 to high(aAggregate) do begin
     hier := ClassHierarchyWithField(aAggregate[a]);
     code := code+#13#10'type';

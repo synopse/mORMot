@@ -29211,8 +29211,9 @@ begin
   end;
   Props := Model.TableProps[TableIndex].Props;
   for i := 0 to high(FieldNames) do
-    if Props.Fields.IndexByName(FieldNames[i])<0 then
-      exit; // wrong field name
+    if not IsRowID(pointer(FieldNames[i])) then
+      if (Props.Fields.IndexByName(FieldNames[i])<0) then
+        exit; // wrong field name
   if Unique then
     SQL := 'UNIQUE ' else
     SQL := '';
@@ -30369,7 +30370,7 @@ function TSQLRestServerURIContext.GetResourceFileName: TFileName;
 begin
   if (URIBlobFieldName='') or (PosEx('..',URIBlobFieldName)>0) then
     result := '' else // for security, disallow .. in the supplied file path
-    result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/','\'));
+    result := UTF8ToString(StringReplaceAll(URIBlobFieldName,'/',PathDelim));
 end;
 
 procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
@@ -30441,7 +30442,7 @@ begin
     fileName := DefaultFileName else
     if PosEx('..',URIBlobFieldName)>0 then
       fileName := '' else
-      fileName := UTF8ToString(StringReplaceChars(URIBlobFieldName,'/','\'));
+      fileName := UTF8ToString(StringReplaceChars(URIBlobFieldName,'/',PathDelim));
   if fileName<>'' then
     fileName := IncludeTrailingPathDelimiter(FolderName)+fileName;
   ReturnFile(fileName,Handle304NotModified,'','',Error404Redirect);
@@ -37771,7 +37772,7 @@ function TSQLVirtualTableModule.FileName(const aTableName: RawUTF8): TFileName;
 begin
   result := UTF8ToString(aTableName)+'.'+FileExtension;;
   if fFilePath='' then
-    result := ExtractFilePath(paramstr(0))+result else
+    result := ExeVersion.ProgramFilePath+result else
     result := IncludeTrailingPathDelimiter(fFilePath)+result;
 end;
 
@@ -43165,9 +43166,6 @@ initialization
 {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
 {$endif}
-  {$ifdef MSWINDOWS}
-  ExeVersionRetrieve; // the sooner the better
-  {$endif}
   SetCurrentThreadName('Main thread',[]);
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');

@@ -1079,7 +1079,7 @@ begin
   if not dlgSaveList.Execute then
     exit;
   fLog.SaveToFile('temp~.log',
-    StringToUTF8(paramstr(0))+' 0.0.0.0 ('+NowToString+')'#13+
+    StringToUTF8(ExeVersion.ProgramFileName)+' 0.0.0.0 ('+NowToString+')'#13+
     'Host=Remote User=Unknown CPU=Unknown OS=0.0=0.0.0 Wow64=0 Freq=1'#13+
     'LogView '+SYNOPSE_FRAMEWORK_VERSION+' Remote '+NowToString+#13#13);
   if dlgSaveList.FilterIndex=3 then

@@ -913,7 +913,7 @@ var download: RawByteString;
 begin // overriden method should have been set fFileName+fZipFileName+fDownloadURI
   fRunConsoleOccurenceNumber := 0;
   fMemoryAtStart := MemoryUsed;
-  fFileName := ExtractFilePath(ParamStr(0))+fFileName;
+  fFileName := ExeVersion.ProgramFilePath+fFileName;
   if not FileExists(fFileName) then begin
     download := TWinINet.Get(fDownloadURI);
     if not CheckFailed(download<>'') then begin
@@ -1371,7 +1371,7 @@ procedure TTestTableContent.DownloadFilesIfNecessary;
 var i: integer;
 begin
   fMemoryAtStart := MemoryUsed;
-  fFileName := ExtractFilePath(paramstr(0));
+  fFileName := ExeVersion.ProgramFilePath;
   i := pos('\Samples\',fFileName);
   if i>0 then begin
     Setlength(fFileName,i);

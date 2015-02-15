@@ -24,7 +24,7 @@ var aModel: TSQLModel;
 begin
   aModel := CreateModel;
   try
-    aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'));
+    aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(ExeVersion.ProgramFileName,'.db'));
     try
       aServer.DB.Synchronous := smNormal;
       aServer.DB.LockingMode := lmExclusive;

@@ -393,7 +393,7 @@ type
     procedure InMemoryCompression;
     /// .gzip archive handling
     procedure GZIPFormat;
-    {$ifdef MSWINDOWS}
+    {$ifndef LINUX}
     /// .zip archive handling
     procedure ZIPFormat;
     {$endif}
@@ -3092,7 +3092,7 @@ begin
     Check(T.AddField('ansi',tftWinAnsi,[])<>nil);
     Check(T.AddField('currency',tftCurrency)<>nil);
     Test;
-    FN := ChangeFileExt(paramstr(0),'.syntable');
+    FN := ChangeFileExt(ExeVersion.ProgramFileName,'.syntable');
     DeleteFile(FN);
     W := TFileBufferWriter.Create(FN); // manual storage of TSynTable header
     try
@@ -4026,12 +4026,10 @@ type
     class function FVReader2(P: PUTF8Char; var aValue;
       out aValid: Boolean): PUTF8Char;
     class procedure FVWriter2(const aWriter: TTextWriter; const aValue);
-    {$ifdef MSWINDOWS}
     class function FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
       var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
     class procedure FVClassWriter(const aSerializer: TJSONSerializer;
       aValue: TObject; aOptions: TTextWriterWriteObjectOptions);
-    {$endif}
   published
     property Ints: TIntegerDynArray read fInts write fInts;
     property TimeLog: TTimeLogDynArray read fTimeLog write fTimeLog;
@@ -4094,8 +4092,6 @@ begin
     'Build',V.Build,'Main',V.Main,'Detailed',V.Detailed]);
 end;
 
-{$ifdef MSWINDOWS}
-
 class function TCollTstDynArray.FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
   var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
 var V: TFileVersion absolute aValue;
@@ -4120,8 +4116,6 @@ begin
   aSerializer.AddJSONEscape(['Major',V.Major,'Minor',V.Minor,'Release',V.Release,
     'Build',V.Build,'Main',V.Main,'BuildDateTime',DateTimeToIso8601Text(V.BuildDateTime)]);
 end;
-
-{$endif MSWINDOWS}
 
 
 { TCollTests }
@@ -4436,15 +4430,14 @@ begin
     CA.Free;
   end;
 end;
-{$ifdef MSWINDOWS}
 procedure TFileVersionTest(Full: boolean);
 var V,F: TFileVersion;
     J: RawUTF8;
     i: integer;
     Valid: boolean;
 begin
-  V := TFileVersion.Create('',0);
-  F := TFileVersion.Create('',0);
+  V := TFileVersion.Create('',0,0,0);
+  F := TFileVersion.Create('',0,0,0);
   try
     for i := 1 to 1000 do begin
       if Full then begin
@@ -4473,7 +4466,6 @@ begin
     V.Free;
   end;
 end;
-{$endif}
 {$endif}
 {$endif}
 procedure ABCD;
@@ -5164,14 +5156,12 @@ begin
     TCollTstDynArray.FVReader2,TCollTstDynArray.FVWriter2);
   TCollTstDynArrayTest;
   // (custom) class serialization
-  {$ifdef MSWINDOWS}
   TFileVersionTest(false);
   TJSONSerializer.RegisterCustomSerializer(TFileVersion,
     TCollTstDynArray.FVClassReader,TCollTstDynArray.FVClassWriter);
   TFileVersionTest(true);
   TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
   TFileVersionTest(false);
-  {$endif MSWINDOWS}
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   // test TJSONRecordTextDefinition parsing
@@ -6963,15 +6953,16 @@ begin
   tmp := RawByteString(Ident);
   for comp := 0 to 9 do
     Check(UnCompressString(CompressString(tmp,False,comp))=tmp);
-  Data := StringFromFile(ParamStr(0));
+  Data := StringFromFile(ExeVersion.ProgramFileName);
   Check(UnCompressString(CompressString(Data,False,6))=Data);
 end;
 
 
-{$ifdef MSWINDOWS}
+{$ifndef LINUX} // TZipRead not defined yet (use low-level file mapping WinAPI)
 
 procedure TTestCompression.ZipFormat;
 var FN: TFileName;
+    ExeName: string;
     S: TRawByteStringStream;
 procedure Test(Z: TZipRead; aCount: integer);
 var i: integer;
@@ -6991,7 +6982,7 @@ begin
     tmp := UnZip(i);
     Check(tmp<>'');
     Check(crc32(0,pointer(tmp),length(tmp))=crc);
-    i := NameToIndex(ExtractFileName(paramstr(0)));
+    i := NameToIndex(ExeName);
     Check(i=2);
     Check(UnZip(i)=Data);
     Check(Entry[i].infoLocal^.zcrc32=crc32(0,pointer(Data),length(Data)));
@@ -7019,8 +7010,8 @@ begin
     AddDeflated('rep2\ident.gz',M.Memory,M.Position);
     Check(Count=2);
     if Z is TZipWrite then
-      TZipWrite(Z).AddDeflated(ParamStr(0)) else
-      Z.AddDeflated(ExtractFileName(paramstr(0)),pointer(Data),length(Data));
+      TZipWrite(Z).AddDeflated(ExeVersion.ProgramFileName) else
+      Z.AddDeflated(ExeName,pointer(Data),length(Data));
     Check(Count=3,'direct zip file');
     AddStored('rep2\ident2.gz',M.Memory,M.Position);
     Check(Count=4);
@@ -7029,7 +7020,8 @@ begin
   end;
 end;
 begin
-  FN := ChangeFileExt(paramstr(0),'.zip');
+  ExeName := ExtractFileName(ExeVersion.ProgramFileName);
+  FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
   Prepare(TZipWrite.Create(FN));
   Test(TZipRead.Create(FN),4);
   S := TRawByteStringStream.Create;
@@ -7051,7 +7043,7 @@ begin
   DeleteFile(FN);
 end;
 
-{$endif MSWINDOWS}
+{$endif LINUX}
 
 procedure TTestCompression._SynLZO;
 var s,t: AnsiString;
@@ -7150,7 +7142,7 @@ begin
   Check(Base64Encode(Value)=Value64);
   Check(BinToBase64(Value)=Value64);
   Check(IsBase64(Value64));
-  tmp := StringFromFile(paramstr(0));
+  tmp := StringFromFile(ExeVersion.ProgramFileName);
   b64 := Base64Encode(tmp);
   Check(IsBase64(b64));
   Check(Base64Decode(b64)=tmp);
@@ -7424,7 +7416,7 @@ begin
         dec(y,9+i);
       end;
       SaveToStream(MS,FIXED_DATE);
-      //MS.SaveToFile(ChangeFileExt(paramstr(0),'.pdf'));
+      //MS.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
       Check(Hash32(MS.Memory,MS.Position)=Hash[embed]);
       if not embed then begin
         if CharSet<>ANSI_CHARSET then
@@ -7589,7 +7581,7 @@ begin
       SaveToStream(MS,FIXED_DATE);
       // force constant Arial,Bold and Tahoma FontBBox
       SetString(s,PAnsiChar(MS.Memory),MS.Position);
-      MS.SaveToFile(ChangeFileExt(paramstr(0),'.pdf'));
+      MS.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
       if (GetACP<>1252) {$ifdef CPU64}or true{$endif} then
         Check(length(s)>6500) else begin
         i := PosEx('/FontBBox[',s);
@@ -10969,7 +10961,8 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
+  fThreadIDAtCreation :=
+    {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
 end;
 
 function TServicePerThread.GetCurrentThreadID: cardinal;
@@ -11062,9 +11055,7 @@ begin
     Str2[2] := 'GHIJK';
     fillchar(Rec1,sizeof(Rec1),0);
     Rec1.Features := [vtTransaction,vtSavePoint];
-    {$ifdef MSWINDOWS}
     Rec1.FileExtension := ExeVersion.ProgramFileName;
-    {$endif}
     Rec2.ID := i1;
     Rec2.TimeStamp64 := c;
     Rec2.JSON := 'abc';
@@ -11075,9 +11066,7 @@ begin
     Check(Str2[2]='GHIJK');
     Check(Str2[3]='one,two,three');
     Check(Rec1.Features=[vtTransaction,vtSavePoint]);
-    {$ifdef MSWINDOWS}
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
-    {$endif}
     Check(Rec2.ID=i1+1);
     Check(Rec2.TimeStamp64=c-1);
     Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));

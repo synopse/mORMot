@@ -848,7 +848,7 @@ var i: integer;
 begin
   if length(Path)=0 then begin
     SetLength(SearchPath,1);
-    SearchPath[0] := ExtractFilePath(paramstr(0)); // use .exe path
+    SearchPath[0] := ExeVersion.ProgramFilePath; // use .exe path
   end else begin
     SetLength(SearchPath,length(Path));
     for i := 0 to high(Path) do

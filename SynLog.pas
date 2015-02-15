@@ -2333,10 +2333,10 @@ begin
              not CreateDir(ArchivePath+'log') then
             break;
           DecodeDate(aTime,Y,M,D);
-          PCardinal(@tmp)^ := ord('l')+ord('o') shl 8+ord('g') shl 16+ord('\') shl 24;
+          PCardinal(@tmp)^ := ord('l')+ord('o') shl 8+ord('g') shl 16+ord(PathDelim) shl 24;
           YearToPChar(Y,@tmp[4]);
           PWord(@tmp[8])^ := TwoDigitLookupW[M];
-          PWord(@tmp[10])^ := ord('\');
+          PWord(@tmp[10])^ := ord(PathDelim);
           aPath := ArchivePath+Ansi7ToString(tmp,11);
         end;
         OnArchive(aOldLogFileName,aPath);
@@ -2941,14 +2941,13 @@ end;
 
 procedure TSynLog.LogFileHeader;
 var WithinEvents: boolean;
-{$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS}
     Env: PAnsiChar;
     P: PUTF8Char;
     L: Integer;
-{$else}
-    ExecutableName: string;
+    {$else}
     uts: UtsName;
-{$endif}
+    {$endif}
 procedure NewLine;
 begin
   if WithinEvents then begin
@@ -2965,9 +2964,6 @@ begin
   end else
     if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
       fFamily.HighResolutionTimeStamp := false;
-  {$ifdef MSWINDOWS}
-  ExeVersionRetrieve;
-  {$endif}
   if InstanceMapFile=nil then
     GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   WithinEvents := fWriter.WrittenBytes>0;
@@ -2978,24 +2974,41 @@ begin
     fWriter.AddChars('=',50);
     NewLine;
   end;
-  {$ifdef MSWINDOWS}
-  with ExeVersion, SystemInfo, OSVersionInfo, fWriter do begin
+  with ExeVersion, fWriter do begin
     AddString(ProgramFullSpec);
     NewLine;
     AddShort('Host=');  AddString(Host);
     AddShort(' User='); AddString(User);
-    AddShort(' CPU=');  Add(dwNumberOfProcessors); Add('*');
-    Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
-    Add(wProcessorRevision);
-    AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
-    Add('='); Add(dwMajorVersion); Add('.'); Add(dwMinorVersion); Add('.');
-    Add(dwBuildNumber);
-    AddShort(' Wow64='); Add(integer(IsWow64));
+    {$ifdef MSWINDOWS}
+    with SystemInfo, OSVersionInfo do begin
+      AddShort(' CPU=');  Add(dwNumberOfProcessors); Add('*');
+      Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
+      Add(wProcessorRevision);
+      AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
+      Add('='); Add(dwMajorVersion); Add('.'); Add(dwMinorVersion); Add('.');
+      Add(dwBuildNumber);
+      AddShort(' Wow64='); Add(integer(IsWow64));
+    end;
+    {$else}
+    {$ifdef KYLIX3}
+    AddShort(' CPU=');
+    Add(LibC.get_nprocs); Add('/'); Add(LibC.get_nprocs_conf);
+    AddShort(' OS=');
+    uname(uts);
+    {$else}
+    AddShort(' CPU=unknown OS=');
+    FPUname(uts);
+    {$endif}
+    AddNoJSONEscape(@uts.sysname); Add('-'); AddNoJSONEscape(@uts.release);
+    AddReplace(@uts.version,' ','-');
+    AddShort(' Wow64=0');
+    {$endif}
     AddShort(' Freq='); Add(fFrequencyTimeStamp);
     if IsLibrary then begin
       AddShort(' Instance=');
       AddNoJSONEscapeString(InstanceFileName);
     end;
+    {$ifdef MSWINDOWS}
     NewLine;
     AddShort('Environment variables=');
     Env := GetEnvironmentStringsA;
@@ -3010,36 +3023,6 @@ begin
     end;
     FreeEnvironmentStringsA(Env);
     CancelLastChar; // trim last #9
-    {$else}
-  with fWriter do begin
-    ExecutableName := GetModuleName(hInstance);
-    if ExecutableName='' then
-      ExecutableName := paramstr(0);
-    if ExecutableName='' then
-      AddShort('nomodulename') else
-      AddNoJSONEscapeString(ExecutableName);
-    AddShort(' unknown (');
-    if ExecutableName='' then
-      AddDateTime(now) else
-      AddDateTime(FileAgeToDateTime(ExecutableName));
-    Add(')');
-    NewLine;
-    AddShort('Host='); AddString(GetHostName);
-    AddShort(' User=');
-    {$ifdef KYLIX3}
-    AddNoJSONEscape(LibC.getpwuid(LibC.getuid)^.pw_name);
-    AddShort(' CPU=');
-    Add(LibC.get_nprocs); Add('/'); Add(LibC.get_nprocs_conf);
-    AddShort(' OS=');
-    uname(uts);
-    {$else}
-    AddShort('unknown CPU=unknown OS=');
-    FPUname(uts);
-    {$endif}
-    AddNoJSONEscape(@uts.sysname); Add('-'); AddNoJSONEscape(@uts.release);
-    AddReplace(@uts.version,' ','-');
-    AddShort(' Wow64=0 Freq=');
-    Add(fFrequencyTimeStamp);
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
@@ -3261,14 +3244,9 @@ var timeNow,hourRotate,timeBeforeRotate: TDateTime;
 begin
   fFileName := fFamily.fCustomFileName;
   if fFileName='' then begin
-    {$ifdef MSWINDOWS}
-    ExeVersionRetrieve;
     fFileName := UTF8ToString(ExeVersion.ProgramName);
     if fFamily.IncludeComputerNameInFileName then
       fFileName := fFileName+' ('+UTF8ToString(ExeVersion.Host)+')';
-    {$else}
-    fFileName := GetFileNameWithoutExt(ExtractFileName(ParamStr(0)));
-    {$endif}
   end;
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount>0 then begin

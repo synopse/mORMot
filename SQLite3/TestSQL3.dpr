@@ -176,7 +176,7 @@ begin
   {$endif}
   SQLite3ConsoleTests;
   {$ifdef COMPUTEFPCINTERFACES}
-  ChDir(ExtractFilePath(ParamStr(0)));
+  ChDir(ExeVersion.ProgramFilePath);
   ComputeFPCInterfacesUnit(
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');

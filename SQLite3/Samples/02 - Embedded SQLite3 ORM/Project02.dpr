@@ -34,6 +34,7 @@ program Project02;
 uses
   Forms,
   SysUtils,
+  SynCommons,
   mORMot,
   mORMotSQLite3, SynSQLite3Static,
   Unit1 in '..\01 - In Memory ORM\Unit1.pas' {Form1},
@@ -46,7 +47,7 @@ begin
   Application.CreateForm(TForm1, Form1);
   Form1.Caption := ' Sample 02 - Embedded SQLite3 ORM';
   Form1.Database := TSQLRestServerDB.Create(Form1.Model,
-    ChangeFileExt(paramstr(0),'.db3'));
+    ChangeFileExt(ExeVersion.ProgramFileName,'.db3'));
   TSQLRestServerDB(Form1.Database).CreateMissingTables;
   Application.Run;
 end.

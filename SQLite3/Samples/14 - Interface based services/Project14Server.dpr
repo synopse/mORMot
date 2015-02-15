@@ -28,7 +28,7 @@ begin
   end;
   aModel := TSQLModel.Create([],ROOT_NAME);
   try
-    with TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'),true) do
+    with TSQLRestServerDB.Create(aModel,ChangeFileExt(ExeVersion.ProgramFileName,'.db'),true) do
     try
       CreateMissingTables; // we need AuthGroup and AuthUser tables
       ServiceDefine(TServiceCalculator,[ICalculator],sicShared);

@@ -1316,15 +1316,6 @@ begin
   SetCurrentLanguage(LanguageAbrToIndex(value));
 end;
 
-function ProgramName: AnsiString;
-var i: integer;
-begin
-  result := AnsiString(ExtractFileName(paramstr(0)));
-  i := Pos(RawUTF8('.'),RawUTF8(result));
-  if i>0 then
-    Setlength(result,i-1);
-end;
-
 {$ifdef USEFORMCREATEHOOK}
 
 function i18nAddLanguageItems(MsgPath: TFileName; List: TStrings): integer;
@@ -1333,7 +1324,7 @@ var SR: TSearchRec;
     Exists: set of TLanguages;
 begin
   if MsgPath='' then
-    MsgPath := ExtractFilePath(paramstr(0));
+    MsgPath := ExeVersion.ProgramFilePath;
   result := -1; // no language selection if no language available
   fillchar(Exists,sizeof(Exists),0);
   include(Exists,lngEnglish); // English is always present (default built in EXE)
@@ -1515,7 +1506,7 @@ end;
 class function TLanguageFile.FileName(aLanguageLocale: TLanguages): TFileName;
 begin
   if aLanguageLocale<>LANGUAGE_NONE then
-    result :=  ExtractFilePath(paramstr(0))+
+    result :=  ExeVersion.ProgramFilePath+
       Ansi7ToString(LanguageAbr[aLanguageLocale])+'.msg' else
     result := '';
 end;
@@ -2432,7 +2423,7 @@ begin
   CB_Enum.Init(TypeInfo(TWinAnsiDynArray),CB_EnumStrings,nil,nil,Hash32Str,@CB_EnumStringsCount);
   ClassList := TList.Create;
   try
-    assign(F,ChangeFileExt(paramstr(0),'.messages'));
+    assign(F,ChangeFileExt(ExeVersion.ProgramFileName,'.messages'));
     SetLength(buf,65536);
     settextbuf(F,buf[1],length(buf));
     Rewrite(F);

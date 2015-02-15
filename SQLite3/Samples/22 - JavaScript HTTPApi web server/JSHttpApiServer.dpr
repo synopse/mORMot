@@ -57,7 +57,6 @@ type
 
 constructor TTestServer.Create(const Path: TFileName);
 begin
-  ExeVersionRetrieve; 
   fServer := THttpApiServer.Create(false);
   fSMManager := TSMEngineManager.Create;
   fSMManager.OnNewEngine := DoOnNewEngine;
@@ -255,7 +254,7 @@ begin
 end;
 
 begin
-  with TTestServer.Create(ExtractFilePath(ParamStr(0))) do
+  with TTestServer.Create(ExeVersion.ProgramFilePath) do
   try
     write('Server is now running on http://localhost:888/root'#13#10#13#10+
       'Press [Enter] to quit');

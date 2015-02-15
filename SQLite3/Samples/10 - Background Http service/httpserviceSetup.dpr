@@ -24,7 +24,7 @@ begin
   TSQLLog.Family.Level := LOG_VERBOSE;
   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
   try
-    CheckParameters(ExtractFilePath(paramstr(0))+'HttpService.exe',
+    CheckParameters(ExeVersion.ProgramFilePath+'HttpService.exe',
       HTTPSERVICEDISPLAYNAME);
   finally
     Free;
