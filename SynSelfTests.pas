@@ -4964,7 +4964,7 @@ begin
     J := ObjectToJSON(O,[woStoreClassName]);
     Check(J='{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woHumanReadable]);
-    Check(J='{'#$D#$A'  "Name": "",'#$D#$A'  "Enum": "Idle",'#$D#$A'  "Sets": []'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "Idle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PTypeInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
     for E := low(E) to high(E) do begin
       O.fName := Int32ToUTF8(ord(E));
@@ -4979,7 +4979,7 @@ begin
       Check(O.Sets=O2.Sets);
       J := ObjectToJSON(O,[woHumanReadable]);
       U := FormatUTF8(
-        '{'#$D#$A'  "NAME": "%",'#$D#$A'  "ENUM": "%",'#$D#$A'  "SETS": ["IDLE"',
+        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["IDLE"',
         [ord(E),UpperCaseU(GetEnumNameTrimed(E))]);
       Check(IdemPChar(pointer(J),pointer(U)));
       JSONToObject(O2,pointer(J),valid);
@@ -4987,12 +4987,13 @@ begin
       Check(O.Name=O2.Name);
       Check(O.Enum=O2.Enum);
       Check(O.Sets=O2.Sets);
+      Check(ObjectEquals(O,O2));
     end;
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
-    Check(J='{'#$D#$A'  "Name": "3",'#$D#$A'  "Enum": "Destroying",'#$D#$A'  "Sets": ["*"]'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A'  "Name": "3",'#$D#$A'  "Enum": "Destroying", // Idle,Started,Finished,Destroying'+
-      #$D#$A'  "Sets": ["*"] // Idle,Started,Finished,Destroying'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // Idle,Started,Finished,Destroying'+
+      #$D#$A#9'"Sets": ["*"] // Idle,Started,Finished,Destroying'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -5002,6 +5003,7 @@ begin
     Check(O.Name=O2.Name);
     Check(O.Enum=O2.Enum);
     Check(O.Sets=O2.Sets);
+    Check(ObjectEquals(O,O2));
   finally
     O2.Free;
     O.Free;
@@ -5032,9 +5034,9 @@ begin
      U := ObjectToJSON(C2);
      Check(Hash32(U)=$36B02F0E);
      J := ObjectToJSON(Coll,[woHumanReadable]);
-     Check(Hash32(J)=$A7204D8A);
+     Check(Hash32(J)=$9FAFF11F);
      Check(JSONReformat(J,jsonCompact)=U);
-     Check(JSONReformat('{ "empty": {} }')='{'#$D#$A'  "empty": {'#$D#$A'    }'#$D#$A'}');
+     Check(JSONReformat('{ "empty": {} }')='{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
      U := ObjectToJSON(Coll,[woStoreClassName]);
      Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
        '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+
@@ -5332,7 +5334,7 @@ begin
     __TTestCustomJSON2).Options := [soWriteHumanReadable];
   fillchar(Trans,sizeof(Trans),0);
   U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
-  Check(U='{'#$D#$A'  "Transactions": []'#$D#$A'}');
+  Check(U='{'#$D#$A#9'"Transactions": []'#$D#$A'}');
   for i := 1 to 10 do begin
     U := '{"transactions":[{"TRTYPE":"INCOME","TRDATE":"2013-12-09 02:30:04","TRAA":"1.23",'+
      '"TRCAT1":{"TITYPE":"C1","TIID":"1","TICID":"","TIDSC30":"description1","TIORDER":"0","TIDEL":"false"},'+
@@ -5346,7 +5348,7 @@ begin
     Check(Trans.Transactions[0].TRACID.TIDEL='false');
     Check(Trans.Transactions[0].TRRMK='Remark');
     U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
-    Check(Hash32(U)=$14BD461A);
+    Check(Hash32(U)=$CC7167FC);
   end;
   FileFromString(U,'transactions.json');
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2Title),'');

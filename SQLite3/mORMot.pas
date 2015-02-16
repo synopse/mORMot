@@ -756,7 +756,8 @@ unit mORMot;
       TCollection/TCollectionItem pair and allow JSON serialization of any
       "plain" collection - may be a good alternative to TInterfacedCollection
     - new JSONSerializer.RegisterObjArrayForJSON() method for automatic JSON
-      serialization of T*ObjArray dynamic array storage 
+      serialization of T*ObjArray dynamic array storage
+    - introducing ObjectEquals() global function for fast by value comparison
     - sets including all enumerate values will be written in JSON as "*"
       with woHumanReadable option (and recognized as such e.g. by JSONToObject);
       see also the new TJSONSerializer.AddTypedJSONWithOptions() method
@@ -1788,6 +1789,10 @@ procedure SetDefaultValuesObject(Value: TPersistent);
 function ObjectToJSON(Value: TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
+/// persist a class instance into a JSON file
+procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions=[woHumanReadable]);
+
 /// will serialize any TObject into its expanded UTF-8 JSON representation
 // - includes debugger-friendly information, similar to TSynLog, i.e.
 // class name and sets/enumerates as text
@@ -1806,8 +1811,15 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextName: RawUTF8='context'): variant; overload;
 
 /// will serialize any TObject into a TDocVariant document
-// - just a wrapper around _JsonFast(ObjectToJSONDebug()) 
+// - just a wrapper around _JsonFast(ObjectToJSONDebug())
 function ObjectToVariantDebug(Value: TObject): variant; overload;
+
+/// is able to compare two objects by value
+// - both instances may or may not be of the same class, but properties
+// should match
+// - will use direct RTTI access of property values, or TSQLRecord.SameValues()
+// if available to make the comparison as fast and accurate as possible
+function ObjectEquals(Value1,Value2: TObject): boolean;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -1895,10 +1907,6 @@ function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar; var ObjectInstance; Nex
 function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
 
-/// persist a class instance into a JSON file
-procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
-  Options: TTextWriterWriteObjectOptions=[woHumanReadable]);
-
 
 
 { ************ some RTTI and SQL mapping routines }
@@ -1935,6 +1943,13 @@ const
   // maps record or object types
   tkRecordTypes = [tkRecord];
 {$endif}
+  // maps long string types
+  tkStringTypes =
+    [tkLString,tkWString{$ifdef UNICODE},tkUString{$endif}{$ifdef FPC},tkAString{$endif}];
+  // maps 1, 8, 16, 32 and 64 bit ordinal types
+  tkOrdinalTypes =
+    [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
+     {$ifdef FPC},tkBool,tkQWord{$endif}];
 
 type
   /// specify ordinal (tkInteger and tkEnumeration) storage size and sign
@@ -2363,6 +2378,8 @@ type
     // - this method use direct copy of the low-level binary content, and is
     // therefore faster than a SetValue(Dest,GetValue(Source)) call
     procedure CopyValue(Source, Dest: TObject);
+    /// compare two published properties
+    function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return true if this property is a BLOB (TSQLRawBlob)
     function IsBlob: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2393,7 +2410,8 @@ type
     // and will return '' if it's not the case
     // - it will convert the property content into RawUTF8, for RawUnicode,
     // WinAnsiString, TSQLRawBlob and generic Delphi 6-2007 string property
-    function GetLongStrValue(Instance: TObject): RawUTF8;
+    // - WideString and UnicodeString properties will also be UTF-8 converted
+    procedure GetLongStrValue(Instance: TObject; var result: RawUTF8);
     /// low-level getter of the long string property content of a given instance
     // - just a wrapper around low-level GetLongStrProp() function
     // - call GetLongStrValue() method if you want a conversion into RawUTF8
@@ -2409,6 +2427,7 @@ type
     // - this method will check if the corresponding property is a Long String
     // - it will convert the property content into RawUTF8, for RawUnicode,
     // WinAnsiString, TSQLRawBlob and generic Delphi 6-2007 string property
+    // - will set WideString and UnicodeString properties from UTF-8 content
     procedure SetLongStrValue(Instance: TObject; const Value: RawUTF8);
     /// low-level setter of the string property value of a given instance
     // - uses the generic string type: to be used within the VCL
@@ -2433,7 +2452,13 @@ type
     /// low-level getter of a dynamic array wrapper
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
-    function GetDynArray(Instance: TObject): TDynArray;
+    function GetDynArray(Instance: TObject): TDynArray; overload;
+    /// low-level getter of a dynamic array wrapper
+    // - this method will NOT check if the property is a dynamic array: caller
+    // must have already checked that PropType^^.Kind=tkDynArray
+    procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
+    /// return TRUE if this dynamic array has been registered as a T*ObjArray
+    function DynArrayIsObjArray: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the the property has no getter but direct field read
     function GetterIsField: boolean;
@@ -3020,7 +3045,9 @@ type
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
     fIsObjArray: boolean;
-    function GetDynArray(Instance: TObject): TDynArray;
+    function GetDynArray(Instance: TObject): TDynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
       {$ifdef HASINLINE}inline;{$endif}
     function GetDynArrayElemType: PTypeInfo;
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
@@ -17031,10 +17058,6 @@ type
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
 
-  TObjArraySerializerList = class(TObjectList)
-    function IsObjArray(aDynArray: PTypeInfo): boolean;
-  end;
-
 procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
 begin
   aWriter.WriteObject(TObject(aValue));
@@ -17050,17 +17073,16 @@ begin
 end;
 
 var
-  ObjArraySerializers: TObjArraySerializerList;
+  ObjArraySerializers: TObjectList;
+  ObjArrayTypes: TPointerDynArray;
 
-function TObjArraySerializerList.IsObjArray(aDynArray: PTypeInfo): boolean;
-var i: integer;
+function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := true;
-  if self<>nil then
-    for i := 0 to Count-1 do
-      if TObjArraySerializer(List[i]).DynArray=aDynArray then
-        exit;
-  result := false;
+  if ObjArraySerializers=nil then
+    result := false else
+    result := FastFindPtrIntSorted(pointer(ObjArrayTypes),
+      ObjArraySerializers.Count-1,PtrInt(aDynArrayTypeInfo))>=0;
 end;
 
 
@@ -17070,13 +17092,17 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
   aPropIndex: integer; aSQLFieldType: TSQLFieldType);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  fIsObjArray := ObjArraySerializers.IsObjArray(
-    aPropInfo^.PropType{$ifndef FPC}^{$endif})
+  fIsObjArray := aPropInfo^.DynArrayIsObjArray;
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
 begin
-  result.Init(fPropType,GetFieldAddr(Instance)^);
+  fPropInfo^.GetDynArray(Instance,result);
+end;
+
+procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
+begin
+  fPropInfo^.GetDynArray(Instance,result);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
@@ -17092,15 +17118,11 @@ procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 var SourceArray,DestArray: TDynArray;
 begin
-  SourceArray.Init(fPropType,GetFieldAddr(Source)^);
-  with TSQLPropInfoRTTIDynArray(DestInfo) do
-    DestArray.Init(fPropType,GetFieldAddr(Dest)^);
+  GetDynArray(Source,SourceArray);
+  TSQLPropInfoRTTIDynArray(DestInfo).GetDynArray(Dest,DestArray);
   if fIsObjArray or TSQLPropInfoRTTIDynArray(DestInfo).fIsObjArray or
-     (SourceArray.ArrayType<>DestArray.ArrayType) then begin
-    if TSQLPropInfoRTTIDynArray(DestInfo).fIsObjArray then
-      ObjArrayClear(DestArray.Value^);
-    DestArray.LoadFromJSON(pointer(SourceArray.SaveToJSON));
-  end else
+     (SourceArray.ArrayType<>DestArray.ArrayType) then
+    DestArray.LoadFromJSON(pointer(SourceArray.SaveToJSON)) else
     DestArray.Copy(SourceArray);
 end;
 
@@ -17164,7 +17186,6 @@ var tmp: RawByteString; // LoadFromJSON() may change the input buffer
 begin
   with GetDynArray(Instance) do
   if fIsObjArray then begin
-    ObjArrayClear(Value^);
     tmp := FromVarString(PByte(P));
     LoadFromJSON(pointer(tmp));
     result := P;
@@ -17177,7 +17198,7 @@ procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
 var blob: RawByteString;
     wrapper: TDynArray;
 begin
-  wrapper.Init(fPropType,GetFieldAddr(Instance)^);
+  GetDynArray(Instance,wrapper);
   if fIsObjArray then begin
     ObjArrayClear(wrapper.Value^);
     wrapper.LoadFromJSON(Value);
@@ -21243,7 +21264,7 @@ var P: PPropInfo;
     i, V: integer;
     VT: shortstring; // for str()
     Obj: TObject;
-    WS: WideString;
+    tmp: RawUTF8;
     {$ifndef NOVARIANTS}
     VV: Variant;
     {$endif}
@@ -21263,20 +21284,15 @@ begin
           if V<>P^.Default then
             Add('%%=%'#13,[SubCompName,P^.Name,V]);
         end;
-        {$ifdef FPC}tkAString,{$endif} tkLString:
-          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetLongStrValue(Value)]);
+        {$ifdef FPC}tkAString,{$endif} tkLString, tkWString
+        {$ifdef UNICODE},tkUString{$endif}: begin
+          P^.GetLongStrValue(Value,tmp);
+          Add('%%=%'#13,[SubCompName,P^.Name,tmp]);
+        end;
         tkFloat: begin
           VT[0] := AnsiChar(ExtendedToString(VT,P^.GetFloatProp(Value),DOUBLE_PRECISION));
           Add('%%=%'#13,[SubCompName,P^.Name,VT]);
         end;
-        tkWString: begin
-          P^.GetWideStrProp(Value,WS);
-          Add('%%=%'#13,[SubCompName,P^.Name,WS]);
-        end;
-        {$ifdef UNICODE}
-        tkUString: // write converted to UTF-8
-          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetUnicodeStrProp(Value)]);
-        {$endif}
         tkDynArray: begin
           Add('%%=%'#13,[SubCompName,P^.Name]);
           AddDynArrayJSON(P^.GetDynArray(Value));
@@ -21450,13 +21466,26 @@ begin
   result.Init(PropType{$ifndef FPC}^{$endif},GetFieldAddr(Instance)^);
 end;
 
-function TPropInfo.GetLongStrValue(Instance: TObject): RawUTF8;
+procedure TPropInfo.GetDynArray(Instance: TObject; var result: TDynArray);
+begin
+  result.Init(PropType{$ifndef FPC}^{$endif},GetFieldAddr(Instance)^);
+end;
+
+function TPropInfo.DynArrayIsObjArray: boolean;
+begin
+  if PropType^.Kind=tkDynArray then
+    result := SynCommons.DynArrayIsObjArray(PropType{$ifndef FPC}^{$endif}) else
+    result := false;
+end;
+
+procedure TPropInfo.GetLongStrValue(Instance: TObject; var result: RawUTF8);
 var tmp: RawByteString;
+    tmpWS: WideString;
     cp: integer;
 begin
-  result := '';
-  if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  {$ifdef FPC}tkAString,{$endif} tkLString: begin
     GetLongStrProp(Instance,tmp);
     if tmp<>'' then begin
       cp := PropType^.AnsiStringCodePage;
@@ -21467,6 +21496,17 @@ begin
       end;
     end;
   end;
+  {$ifdef UNICODE}
+  tkUString:
+    StringToUTF8(GetUnicodeStrProp(Instance),result);
+  {$endif}
+  tkWString: begin
+    GetWideStrProp(Instance,tmpWS);
+    RawUnicodeToUtf8(pointer(tmpWS),length(tmpWS),result);
+  end;
+  else result := '';
+  end
+  else result := '';
 end;
 
 procedure TPropInfo.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
@@ -21481,8 +21521,9 @@ procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
 var tmp: RawByteString;
     cp: integer;
 begin
-  if (Instance<>nil) and (@self<>nil) and
-     (PropType^.Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) then begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  {$ifdef FPC}tkAString,{$endif}tkLString: begin
     if Value<>'' then begin
       cp := PropType^.AnsiStringCodePage;
       case cp of
@@ -21493,15 +21534,25 @@ begin
     end;
     SetLongStrProp(Instance,tmp);
   end;
+  {$ifdef UNICODE}
+  tkUString:
+    SetUnicodeStrProp(Instance,UTF8ToString(Value));
+  {$endif}
+  tkWString:
+    SetWideStrProp(Instance,UTF8ToWideString(Value));
+  end;
 end;
 
 function TPropInfo.GetGenericStringValue(Instance: TObject): string;
+var tmp: RawUTF8;
 begin
   if (Instance=nil) or (@self=nil) then
     result := '' else
     case PropType^.Kind of
-      {$ifdef FPC}tkAString,{$endif} tkLString:
-        result := UTF8ToString(GetLongStrValue(Instance));
+      {$ifdef FPC}tkAString,{$endif} tkLString, tkWString: begin
+        GetLongStrValue(Instance,tmp);
+        result := UTF8ToString(tmp);
+      end;
 {$ifdef UNICODE}
       tkUString:
         result := GetUnicodeStrProp(Instance);
@@ -21513,7 +21564,7 @@ procedure TPropInfo.SetGenericStringValue(Instance: TObject; const Value: string
 begin
   if (Instance<>nil) and (@self<>nil) then
     case PropType^.Kind of
-      {$ifdef FPC}tkAString,{$endif}tkLString:
+      {$ifdef FPC}tkAString,{$endif}tkLString, tkWString:
          SetLongStrValue(Instance,StringToUtf8(Value));
 {$ifdef UNICODE}
        tkUString:
@@ -21554,6 +21605,90 @@ begin
       SetOrdProp(Instance,Value);
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
       SetInt64Prop(Instance,Value);
+  end;
+end;
+
+function TPropInfo.SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
+{$ifndef NOVARIANTS}
+function CompareVariants: boolean;
+var VS,VD: Variant;
+begin
+  GetVariantProp(Source,VS);
+  DestInfo^.GetVariantProp(Dest,VD);
+  result := VS=VD; // rely on Variants.pas comparison
+end;
+{$endif}
+var kS,kD: TTypeKind;
+    uS,uD: pointer; // avoid try...finally for temporary strings
+    daS,daD: TDynArray;
+    i: integer;
+begin
+  if Source=Dest then begin
+    result := true;
+    exit;
+  end;
+  result := false;
+  if (Source=nil) or (Dest=nil) or (@self=nil) or (DestInfo=nil) then
+    exit;
+  kS := PropType^.Kind;
+  kD := DestInfo^.PropType^.Kind;
+  if KS in tkStringTypes then
+    if KD in tkStringTypes then begin
+      uS := nil;
+      uD := nil;
+      try
+        GetLongStrValue(Source,RawUTF8(uS));
+        DestInfo^.GetLongStrValue(Dest,RawUTF8(uD));
+        result := RawUTF8(uS)=RawUTF8(uD);
+      finally
+        RawUTF8(uS) := '';
+        RawUTF8(uD) := '';
+      end;
+    end else
+      exit else
+  if KS in tkOrdinalTypes then
+    if KD in tkOrdinalTypes then
+      result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
+      exit else
+  if KS=KD then
+    case KS of
+    tkClass:
+      result := ObjectEquals(GetObjProp(Source),DestInfo^.GetObjProp(Dest));
+    tkFloat: begin
+      if DestInfo^.PropType^.FloatType=PropType^.FloatType then
+      case PropType^.FloatType of
+      ftCurr: begin
+        if GetterIsField and SetterIsField then
+          result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
+          result := GetCurrencyProp(Source)=DestInfo^.GetCurrencyProp(Dest);
+        exit;
+      end;
+      ftDoub: begin
+        if GetterIsField and SetterIsField then
+          result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
+          result := SynCommons.SameValue(GetDoubleProp(Source),DestInfo^.GetDoubleProp(Dest));
+        exit;
+      end;
+      end;
+      result := SynCommons.SameValue(GetFloatProp(Source),DestInfo^.GetFloatProp(Dest));
+    end;
+    tkDynArray: begin
+      GetDynArray(Source,daS);
+      DestInfo^.GetDynArray(Dest,daD);
+      if daS.Count=daD.Count then
+        if InternalIsObjArray(PropType{$ifndef FPC}^{$endif}) and
+           ((DestInfo=@self) or DestInfo^.DynArrayIsObjArray) then begin
+          for i := 0 to daS.Count-1 do
+            if not ObjectEquals(PObjectArray(daS.Value)[i],PObjectArray(daD.Value)[i]) then
+              exit;
+          result := true;
+        end else
+          result := daD.Equals(daS);
+    end;
+    {$ifndef NOVARIANTS}
+    tkVariant:
+      result := CompareVariants;
+    {$endif}
   end;
 end;
 
@@ -35142,10 +35277,8 @@ procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: Ra
   const SubCompName: RawUTF8=''); overload;
 var P: PPropInfo;
     i, V: integer;
-{$ifdef UNICODE}
-    VV: RawUTF8;
-{$endif}
     Obj: TObject;
+    tmp: RawUTF8;
 begin
   if Value=nil then
     exit;
@@ -35160,15 +35293,11 @@ begin
         UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
           Int32ToUtf8(V));
       end;
-      {$ifdef FPC}tkAString,{$endif} tkLString:
-        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
-          P^.GetLongStrValue(Value));
-      {$ifdef UNICODE}
-      tkUString: begin
-        VV := UnicodeStringToUtf8(P^.GetUnicodeStrProp(Value));
-        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),VV);
-      end;
-      {$endif}
+      {$ifdef UNICODE}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
+      tkLString, tkWString: begin
+        P^.GetLongStrValue(Value,tmp);
+        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),tmp);
+        end;
       tkClass:
       if Section='' then begin // recursive call works only as plain object
         Obj := P^.GetObjProp(Value);
@@ -35202,6 +35331,35 @@ begin
     SetText(result);
   finally
     Free;
+  end;
+end;
+
+function ObjectEquals(Value1,Value2: TObject): boolean;
+var i: integer;
+    C1,C2: TClass;
+    P1,P2: PPropInfo;
+begin
+  if (Value1=nil) or (Value2=nil) then
+    result := Value1=Value2 else
+  if Value1.InheritsFrom(TSQLRecord) and Value1.InheritsFrom(TSQLRecord) then
+    result := TSQLRecord(Value1).SameValues(TSQLRecord(Value2)) else begin
+    result := false;
+    C1 := Value1.ClassType;
+    C2 := Value2.ClassType;
+    repeat
+      for i := 1 to InternalClassPropInfo(C1,P1) do begin
+        if C2<>C1 then begin
+          P2 := ClassFieldPropWithParents(C2,P1^.Name);
+          if (P2=nil) or not P1^.SameValue(Value1,P2,Value2) then
+            exit;
+        end else
+          if not P1^.SameValue(Value1,P1,Value2) then
+            exit;
+        P1 := P1^.Next;
+      end;
+      C1 := C1.ClassParent;
+    until C1=nil;
+    result := true;
   end;
 end;
 
@@ -35484,22 +35642,31 @@ end;
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
   aItem: TClass);
 var serializer: TObjArraySerializer;
+    n: integer;
 begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>sizeof(TObject)) then
     raise EModelException.CreateUTF8(
       'Invalid %.RegisterObjArrayForJSON(TypeInfo(%),%)',[self,aDynArray^.Name,aItem]);
+  if InternalIsObjArray(aDynArray) then
+    exit; // ignore duplicates
   serializer := TObjArraySerializer.Create;
   serializer.DynArray := aDynArray;
   serializer.ItemClass := aItem;
   serializer.ClassInstance := ClassToTClassInstanceCreate(aItem
     {$ifndef LVCL},serializer.CollectionItemClass{$endif});
   if ObjArraySerializers=nil then begin
-    ObjArraySerializers := TObjArraySerializerList.Create(true);
+    ObjArraySerializers := TObjectList.Create(true);
     GarbageCollector.Add(ObjArraySerializers);
   end;
+  n := length(ObjArrayTypes);
+  if ObjArraySerializers.Count>=n then
+    SetLength(ObjArrayTypes,n+256);
+  ObjArrayTypes[ObjArraySerializers.Count] := aDynArray;
+  QuickSortPtrInt(Pointer(ObjArrayTypes),0,ObjArraySerializers.Count);
   ObjArraySerializers.Add(serializer);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
+  assert(InternalIsObjArray(aDynArray));
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
@@ -37536,6 +37703,7 @@ var P: PPropInfo;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
     WS: WideString;
+    tmp: RawByteString;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     {$endif}
@@ -37699,7 +37867,8 @@ begin
         {$ifdef FPC}tkAString,{$endif} tkLString: begin
           HR(P);
           Add('"');
-          AddJSONEscape(pointer(P^.GetLongStrValue(Value)));
+          P^.GetLongStrProp(Value,tmp);
+          AddAnyAnsiString(tmp,twJSONEscape,P^.PropType^.AnsiStringCodePage);
           Add('"');
         end;
         tkFloat: begin
@@ -40153,7 +40322,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       include(ArgsUsed,ValueType);
       if ValueType in [smvRawUTF8..smvWideString] then
         Include(ValueKindAsm,vIsString);
-      if (ValueType=smvDynArray) and ObjArraySerializers.IsObjArray(TypeInfo) then
+      if (ValueType=smvDynArray) and InternalIsObjArray(TypeInfo) then
         Include(ValueKindAsm,vIsObjArray);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
           {$ifdef FPC},smvDynArray{$endif}]) or
@@ -42517,7 +42686,7 @@ begin
       tkClass:
         P^.GetObjProp(self).Free;
       tkDynArray:
-        if ObjArraySerializers.IsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
+        if InternalIsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
           ObjArrayClear(P^.GetFieldAddr(self)^);
       end;
       P := P^.Next;
@@ -43256,6 +43425,7 @@ initialization
 {$endif}
   SetCurrentThreadName('Main thread',[]);
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
+  SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
 end.
 

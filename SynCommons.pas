@@ -1034,6 +1034,9 @@ type
   PointerArray = array [0..MaxInt div SizeOf(pointer)-1] of Pointer;
   PPointerArray = ^PointerArray;
 
+  TObjectArray = array [0..MaxInt div SizeOf(TObject)-1] of TObject;
+  PObjectArray = ^TObjectArray;
+
   TPtrIntArray = array[0..MaxInt div SizeOf(PtrInt)-1] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
 
@@ -3302,6 +3305,14 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
 // - return -1 if Value was not found
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
+/// sort a PtrInt array, low values first
+procedure QuickSortPtrInt(ID: PPtrIntArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast binary search of a PtrInt value in a sorted array
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// retrieve the index where to insert an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
@@ -3574,9 +3585,10 @@ type
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): integer;
     function GetArrayTypeName: RawUTF8;
+    function IsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
-    /// faster equivalency of System.DynArraySetLength() function
+    /// faster than System.DynArraySetLength() function + handle T*ObjArray
     procedure InternalSetLength(NewLength: PtrUInt);
   public
     /// initialize the wrapper with a one-dimension dynamic array
@@ -3644,9 +3656,11 @@ type
     // and must be a reference to a variable (you can't write Insert(10,i+10) e.g.)
     procedure Insert(Index: Integer; const Elem);
     /// delete the whole dynamic array content
+    // - this method will recognize T*ObjArray types and free all instances 
     procedure Clear;
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
+    // - this method will recognize T*ObjArray types and free all instances 
     procedure Delete(aIndex: Integer);
     /// returns a pointer to an element of the array
     // - returns nil if aIndex is out of range
@@ -3787,21 +3801,26 @@ type
     // of bytes returned by the SaveToLength method
     // - return a pointer at the end of the data written in Dest, nil in case
     // of an invalid input buffer
+    // - this method will raise an ESynException for T*ObjArray types
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload;
     /// compute the number of bytes needed to save a dynamic array content
+    // - this method will raise an ESynException for T*ObjArray types
     function SaveToLength: integer;
     /// save the dynamic array content into a RawByteString
+    // - this method will raise an ESynException for T*ObjArray types
     function SaveTo: RawByteString; overload;
-    /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
-    function SaveToJSON: RawUTF8;
     /// load the dynamic array content from a memory buffer
     // - return nil if the Source buffer is incorrect (invalid type or internal
     // checksum e.g.)
     // - in case of success, return the memory buffer pointer just after the
     // read content
+    // - this method will raise an ESynException for T*ObjArray types
     // - return a pointer at the end of the data read from Source, nil on error
     function LoadFrom(Source: PAnsiChar): PAnsiChar;
+    /// serialize the dynamic array content as JSON
+    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    // - this method will therefore recognize T*ObjArray types
+    function SaveToJSON: RawUTF8;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -3816,6 +3835,8 @@ type
     // ! '[1,2,3,4]' or '["\uFFF0base64encodedbinary"]'
     // - return a pointer at the end of the data read from P, nil in case
     // of an invalid input buffer
+    // - this method will recognize T*ObjArray types, and will first free
+    // any existing instance before unserializing, to avoid memory leak
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
@@ -3825,6 +3846,7 @@ type
     /// compare the content of the two arrays, returning TRUE if both match
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
+    // - warning: this method won't compare T*ObjArray kind of arrays
     function Equals(const B: TDynArray): boolean;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
@@ -3864,6 +3886,8 @@ type
 
     /// retrieve or set the number of elements of the dynamic array
     // - same as length(DynArray) or SetLenght(DynArray)
+    // - this property will recognize T*ObjArray types, so will free any stored
+    // instance if the array is sized down
     property Count: integer read GetCount write SetCount;
     /// the internal buffer capacity
     // - if no external Count pointer was set with Init, is the same as Count
@@ -3871,6 +3895,8 @@ type
     // property before a massive use of the Add() method e.g.
     // - if no external Count pointer is set, set a value to this property
     // will affect the Count value, i.e. Add() will append after this count
+    // - this property will recognize T*ObjArray types, so will free any stored
+    // instance if the array is sized down
     property Capacity: integer read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
@@ -4795,7 +4821,11 @@ function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntege
 function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
   Value: PUTF8Char; ValueLen: integer; CaseSensitive: boolean): integer;
 
+var
+  /// mORMot.pas will registry here its T*ObjArray serialization process
+  DynArrayIsObjArray: function(aDynArrayTypeInfo: Pointer): boolean;
 
+  
 { ****************** text buffer and JSON functions and classes ********* }
 
 const
@@ -7754,7 +7784,14 @@ procedure YearToPChar(Y: Word; P: PUTF8Char);
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
+function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean; overload;
+
+/// compare to floating point values, with IEEE 754 double precision
+// - use this function instead of raw = operator
+// - the precision is calculated from the A and B value range
+// - faster equivalent than SameValue() in Math unit
+// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
+function SameValue(const A, B: Extended; DoublePrec: double = 1E-12): Boolean; overload;
 
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
@@ -18003,6 +18040,20 @@ begin // faster than the Math unit version
     Result := Abs(A-B)<=AbsA;
 end;
 
+function SameValue(const A, B: Extended; DoublePrec: double = 1E-12): Boolean; overload;
+var AbsA,AbsB: Extended;
+begin // faster than the Math unit version
+  AbsA := Abs(A);
+  AbsB := Abs(B);
+  if AbsA<AbsB then
+    AbsA := AbsA*DoublePrec else
+    AbsA := AbsB*DoublePrec; // AbsA := Min(Abs(A),Abs(B))*DoublePrec
+  // AbsA is the allowed Epsilon value
+  if AbsA<DoublePrec then
+    Result := Abs(A-B)<=DoublePrec else
+    Result := Abs(A-B)<=AbsA;
+end;
+
 /// return the index of Value in Values[], -1 if not found
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer;
@@ -19570,6 +19621,24 @@ begin
       QuickSortInt64(ID,L,J);
     L := I;
   until I >= R;
+end;
+
+procedure QuickSortPtrInt(ID: PPtrIntArray; L, R: PtrInt);
+begin
+  {$ifdef CPU64}
+  QuickSortInt64(PInt64Array(ID),L,R);
+  {$else}
+  QuickSortInteger(PIntegerArray(ID),L,R);
+  {$endif}
+end;
+
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
+begin
+  {$ifdef CPU64}
+  result := FastFindInt64Sorted(PInt64Array(P),R,Value);
+  {$else}
+  result := FastFindIntegerSorted(PIntegerArray(P),R,Value);
+  {$endif}
 end;
 
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
@@ -30595,7 +30664,9 @@ begin
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
   if ElemType<>nil then
-    _Finalize(P,ElemType);
+    _Finalize(P,ElemType) else
+    if IsObjArray then
+      FreeAndNil(PObject(P)^);
   if n>aIndex then begin
     len := cardinal(n-aIndex)*ElemSize;
     move(P[ElemSize],P[0],len);
@@ -30750,12 +30821,15 @@ begin
   result := Dest;
   // store dynamic array elements content
   P := fValue^;
-  if ElemType=nil then begin
-    // binary types: store as once
-    n := n*integer(ElemSize);
-    move(P^,Dest^,n);
-    inc(Dest,n);
-  end else
+  if ElemType=nil then
+    if IsObjArray then
+      raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
+        [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
+      // binary types: store as once
+      n := n*integer(ElemSize);
+      move(P^,Dest^,n);
+      inc(Dest,n);
+    end else
     case PTypeKind(ElemType)^ of
     tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}: begin
       for i := 1 to n do begin
@@ -30833,7 +30907,10 @@ begin
   if n=0 then
     exit;
   if ElemType=nil then
-    inc(result,integer(ElemSize)*n) else begin
+    if IsObjArray then
+      raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
+        [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else
+      inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of
     tkLString, tkWString:
@@ -31160,7 +31237,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
        (LoadFrom(pointer(Base64ToBin(Val+3)))=nil) then
       exit; // invalid content
   end else begin
-    Count := n; // fast allocation of the whole dynamic array memory at once
+    if IsObjArray then
+      for i := 0 to Count-1 do // force release any previous instance
+        FreeAndNil(PObjectArray(fValue^)[i]);
+    SetCount(n); // fast allocation of the whole dynamic array memory at once
     case T of
     {$ifndef NOVARIANTS}
     djVariant:
@@ -31309,7 +31389,10 @@ begin
   inc(Source,sizeof(cardinal));
   // retrieve dynamic array elements content
   P := fValue^;
-  if ElemType=nil then begin
+  if ElemType=nil then
+  if IsObjArray then 
+    raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
+      [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
     // binary type was stored as once
     n := n*integer(ElemSize);
     move(Source^,P^,n);
@@ -31867,19 +31950,31 @@ asm
 end;
 {$endif}
 
+function TDynArray.IsObjArray: boolean;
+begin
+  result := Assigned(DynArrayIsObjArray) and (fElemSize=sizeof(pointer)) and
+    (fElemType=nil) and DynArrayIsObjArray(fTypeInfo);
+end;
+
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
 var p: PDynArrayRec;
     pa: PAnsiChar absolute p;
     OldLength, NeededSize, minLength: PtrUInt;
     pp: pointer;
+    i: integer;
 begin // this method is faster than default System.DynArraySetLength() function
   // check that new array length is not just a hidden finalize
   if NewLength=0 then begin
-    {$ifndef NOVARIANTS}
-    if ArrayType=TypeInfo(TVariantDynArray) then
-      VariantDynArrayClear(TVariantDynArray(fValue^)) else
-    {$endif}
-      _DynArrayClear(fValue^,ArrayType);
+    {$ifndef NOVARIANTS} // faster clear of custom variant uniformous array
+    if ArrayType=TypeInfo(TVariantDynArray) then begin
+      VariantDynArrayClear(TVariantDynArray(fValue^));
+      exit;
+    end;
+    {$endif} 
+    if IsObjArray then
+      for i := 0 to Count-1 do
+        PObjectArray(fValue^)[i].Free;
+    _DynArrayClear(fValue^,ArrayType);
     exit;
   end;
   // retrieve old length
@@ -31892,12 +31987,16 @@ begin // this method is faster than default System.DynArraySetLength() function
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength*ElemSize+Sizeof(TDynArrayRec);
   if NeededSize>1024*1024*512 then // max allowed memory block is 512MB
-    raise ERangeError.CreateFmt('TDynArray SetLength(%d,%d) size concern',
-      [PShortString(@PDynArrayTypeInfo(ArrayType)^.NameLen)^,NewLength]);
+    raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
+      [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^,NewLength]);
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
-    if (NewLength<OldLength) and (ElemType<>nil) then
-      _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength);
+    if NewLength<OldLength then
+      if ElemType<>nil then
+        _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength) else
+        if IsObjArray then
+          for i := NewLength to OldLength-1 do
+            PObjectArray(fValue^)[i].Free; 
     ReallocMem(p,neededSize);
   end else begin
     InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
