@@ -5,38 +5,48 @@ interface
 
 {$I Synopse.inc}
 
+// standard slow-as-hell JSON library as part of the Delphi RTL
+{$define USEDBXJSON}
+
 // download from https://code.google.com/p/superobject
 {.$define USESUPEROBJECT}
 
-{$ifdef ISDELPHI2010}
-  {$define USEENHANCEDRTTIFORRECORDS}
-  // download from https://code.google.com/p/x-superobject
-  {.$define USEXSUPEROBJECT}
-  // download from http://sourceforge.net/projects/qdac3
-  {.$define USEQDAC}
-{$endif}
+// download from https://code.google.com/p/x-superobject
+{.$define USEXSUPEROBJECT}
+
+// download from http://sourceforge.net/projects/qdac3
+{.$define USEQDAC}
+
+// download from https://code.google.com/p/dwscript
+{.$define USEDWSJSON}
+
+// download from https://github.com/ahausladen/JsonDataObjects
+{.$define USEJDO}
+
 
 {$ifdef USEXSUPEROBJECT}
   {$undef USESUPEROBJECT} // both libraries are exclusive! :(
 {$endif}
-
 {$ifdef CPU64}
   {$undef USESUPEROBJECT}   // SuperObject  just explodes under Win64 :(
   {$undef USEXSUPEROBJECT}  // XSuperObject just explodes under Win64 :(
 {$endif}
-
-{$ifdef ISDELPHI2010}
-  // download from https://code.google.com/p/dwscript
-  {.$define USEDWSJSON}
-  // download from https://github.com/ahausladen/JsonDataObjects
-  {.$define USEJDO}
+{$ifndef ISDELPHI2010}      // libraries not available before Delphi 2010
+  {$undef USEXSUPEROBJECT}
+  {$undef USEQDAC}
+  {$undef USEDWSJSON}
+  {$undef USEJDO}
 {$endif}
-
-{$ifdef ISDELPHIXE} // Delphi 2010 DBXJSON is just buggy and not workable
-  {.$define USEDBXJSON}
+{$ifndef ISDELPHIXE}
+  {$undef USEDBXJSON}  // Delphi 2010 DBXJSON is just buggy and not workable
 {$endif}
 
 {$define TESTBSON}
+
+{$ifdef ISDELPHI2010}
+  // undefine to test our text-based RTTI
+  {$define USEENHANCEDRTTIFORRECORDS}
+{$endif}
 
 uses
   {$I SynDprUses.inc} // link FastMM4 for older versions of Delphi
@@ -216,7 +226,7 @@ type
     {$ifdef USEJDO}
     procedure JsonDataObjectsRead;
     {$endif}
-    {$ifdef USEQDACFIXED} // QDAC is not able to parse "" as key :(
+    {$ifdef USEQDAC}
     procedure QDACRead;
     {$endif}
   end;
@@ -226,10 +236,12 @@ type
   published
     procedure DownloadFilesIfNecessary; override;
     procedure SynopseParse;
+    procedure SynopseTableCached;
+    procedure SynopseTableIndex;
+    procedure SynopseTableLoop;
+    procedure SynopseTableVariant;
     procedure SynopseORMLoop;
     procedure SynopseORMList;
-    procedure SynopseTableDirect;
-    procedure SynopseTableVariant;
     procedure SynopseDocVariant;
     procedure SynopseLateBinding;
     procedure SynopseCrossORM;
@@ -239,7 +251,7 @@ type
     procedure SynopseToBSON;
     {$endif}
     {$ifdef USESUPEROBJECT}
-    procedure SuperObjectProperties;
+    procedure SuperObjectProps;
     procedure SuperObjectRecord;
     {$endif}
     {$ifdef USEDWSJSON}
@@ -1407,12 +1419,10 @@ begin
 end;
 {$endif}
 
-{$ifdef USEQDACFIXED}
+{$ifdef USEQDAC}
 procedure TTestDepthContent.QDACRead;
 var obj: TQJson;
 begin
-  fRunConsole := fRunConsole+'QDAC is not able to parse "" as key';
-  exit;
   obj := TQJson.Create;
   obj.LoadFromFile(fFileName);
   check(obj.ItemByPath('a.obj.key').AsString='wrong value');
@@ -1539,7 +1549,52 @@ begin
   list.Free;
 end;
 
-procedure TTestTableContent.SynopseTableDirect;
+procedure TTestTableContent.SynopseTableIndex;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+    i: Integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  for i := 1 to list.RowCount do begin
+    Check(list.Get(i,'FirstName')<>nil);
+    Check(list.Get(i,'LastName')<>nil);
+    Check(list.GetAsInteger(i,'YearOfBirth')<10000);
+    Check((list.GetAsInteger(i,'YearOfDeath')>1400)and(list.GetAsInteger(i,'YearOfDeath')<2000));
+    Check((list.GetAsInteger(i,'RowID')>11011) or (list.Get(i,'Data')<>nil));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableCached;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+    i,FirstName,LastName,YearOfBirth,YearOfDeath,Data: Integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  FirstName := list.FieldIndex('FirstName');
+  LastName := list.FieldIndex('LastName');
+  YearOfBirth := list.FieldIndex('YearOfBirth');
+  YearOfDeath := list.FieldIndex('YearOfDeath');
+  Data := list.FieldIndex('Data');
+  for i := 1 to list.RowCount do begin
+    Check(list.Get(i,FirstName)<>nil);
+    Check(list.Get(i,LastName)<>nil);
+    Check(list.GetAsInteger(i,YearOfBirth)<10000);
+    Check((list.GetAsInteger(i,YearOfDeath)>1400)and(list.GetAsInteger(i,YearOfDeath)<2000));
+    Check((list.GetAsInteger(i,list.FieldIndexID)>11011) or (list.Get(i,Data)<>nil));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableLoop;
 var json: RawUTF8;
     list: TSQLTableJSON;
 begin
@@ -1547,11 +1602,11 @@ begin
   Owner.TestTimer.Start;
   list := TSQLTableJSON.Create('',pointer(json),length(json));
   while list.Step do begin
-    Check(list.Field('FirstName')<>'');
-    Check(list.Field('LastName')<>'');
-    Check(list.Field('YearOfBirth')<10000);
-    Check((list.Field('YearOfDeath')>1400)and(list.Field('YearOfDeath')<2000));
-    Check((list.Field('RowID')>11011) or (list.Field('Data')<>null));
+    Check(list.FieldBuffer('FirstName')<>nil);
+    Check(list.FieldBuffer('LastName')<>nil);
+    Check(list.FieldAsInteger('YearOfBirth')<10000);
+    Check((list.FieldAsInteger('YearOfDeath')>1400)and(list.FieldAsInteger('YearOfDeath')<2000));
+    Check((list.FieldAsInteger('RowID')>11011) or (list.FieldBuffer('Data')<>nil));
   end;
   fRunConsoleOccurenceNumber := list.RowCount;
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
@@ -1752,7 +1807,7 @@ begin
 end;
 
 {$ifdef USESUPEROBJECT}
-procedure TTestTableContent.SuperObjectProperties;
+procedure TTestTableContent.SuperObjectProps;
 var f: TStream;
     obj: ISuperObject;
     ndx: integer;
