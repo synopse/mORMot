@@ -1008,7 +1008,10 @@ unit mORMot;
       to allow numerical or date/time format for a given column [749dfbdb6a]
     - added optional CustomCompare: TUTF8Compare param to TSQLTable.SortFields()
       to allow any kind of custom ordering - feature request [c6804d48a4]
-    - speed up of TSQLTable.FieldIndex() method (using binary search)
+    - speed up of TSQLTable.FieldIndex() TSQLTable.FieldIndexExisting() methods
+      (using binary search)
+    - added overloaded TSQLTable.FieldIndex() and TSQLTable.FieldIndexExisting()
+      methods, to set several local field index integer variables at once
     - added TSQLTable.ToObjectList() and ToObjectList<T: TSQLRecord>() methods
     - added TSQLTable.Step() FieldBuffer() Field() FieldAsInteger() FieldAsFloat()
       methods, handling a cursor at TSQLTable/TSQLTableJSON level, with optional
@@ -6294,8 +6297,30 @@ type
     function FieldIndex(const FieldName: RawUTF8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the Field index of a FieldName
-    // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found 
-    function FieldIndexExisting(const FieldName: RawUTF8): integer; 
+    // - raise an ESQLTableException if not found, index (0..FieldCount-1) if found
+    function FieldIndexExisting(const FieldName: RawUTF8): integer; overload;
+    /// get the Field indexes of several Field names
+    // - could be used to speed-up field access in a TSQLTable loop, avoiding
+    // a FieldIndex(aFieldName) lookup for each value 
+    // - return -1 in FieldIndexes[]^ if not found, index (0..FieldCount-1) if found
+    procedure FieldIndex(const FieldNames: array of RawUTF8;
+      const FieldIndexes: array of PInteger); overload;
+    /// get the Field indexes of several Field names
+    // - raise an ESQLTableException if not found
+    // - set FieldIndexes[]^ to the index (0..FieldCount-1) if found
+    // - could be used to speed-up field access in a TSQLTable loop, avoiding
+    // a FieldIndex(aFieldName) lookup for each value, as such:
+    //! list := TSQLTableJSON.Create('',pointer(json),length(json));
+    //! list.FieldIndexExisting(
+    //!   ['FirstName','LastName','YearOfBirth','YearOfDeath','RowID','Data'],
+    //!   [@FirstName,@LastName,@YearOfBirth,@YearOfDeath,@RowID,@Data]);
+    //! for i := 1 to list.RowCount do begin
+    //!   Check(list.Get(i,FirstName)<>nil);
+    //!   Check(list.Get(i,LastName)<>nil);
+    //!   Check(list.GetAsInteger(i,YearOfBirth)<10000);
+    procedure FieldIndexExisting(const FieldNames: array of RawUTF8;
+      const FieldIndexes: array of PInteger); overload;
+
     /// get the Field content (encoded as UTF-8 text) from a property name
     // - return nil if not found 
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
@@ -17983,6 +18008,36 @@ begin
   result := FieldIndex(Pointer(FieldName));
   if result<0 then
     raise ESQLTableException.CreateUTF8('%.FieldIndexExisting("%")',[self,FieldName]);
+end;
+
+procedure TSQLTable.FieldIndex(const FieldNames: array of RawUTF8;
+  const FieldIndexes: array of PInteger);
+var i: integer;
+begin
+  if high(FieldNames)<0 then
+    exit;
+  if high(FieldNames)<>high(FieldIndexes) then
+    raise ESQLTableException.CreateUTF8('%.FieldIndex() argument count',[self]);
+  for i := 0 to high(FieldNames) do
+    if FieldIndexes[i]=nil then
+      raise ESQLTableException.CreateUTF8(
+        '%.FieldIndex() FieldIndexes["%"]=nil',[self,FieldNames[i]]) else
+      FieldIndexes[i]^ := FieldIndex(pointer(FieldNames[i]));
+end;
+
+procedure TSQLTable.FieldIndexExisting(const FieldNames: array of RawUTF8;
+  const FieldIndexes: array of PInteger);
+var i: integer;
+begin
+  if high(FieldNames)<0 then
+    exit;
+  if high(FieldNames)<>high(FieldIndexes) then
+    raise ESQLTableException.CreateUTF8('%.FieldIndexExisting() argument count',[self]);
+  for i := 0 to high(FieldNames) do
+    if FieldIndexes[i]=nil then
+      raise ESQLTableException.CreateUTF8(
+        '%.FieldIndexExisting() FieldIndexes["%"]=nil',[self,FieldNames[i]]) else
+      FieldIndexes[i]^ := FieldIndexExisting(FieldNames[i]);
 end;
 
 function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;

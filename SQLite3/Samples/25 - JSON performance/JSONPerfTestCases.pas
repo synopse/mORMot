@@ -1572,22 +1572,20 @@ end;
 procedure TTestTableContent.SynopseTableCached;
 var json: RawUTF8;
     list: TSQLTableJSON;
-    i,FirstName,LastName,YearOfBirth,YearOfDeath,Data: Integer;
+    i,FirstName,LastName,YearOfBirth,YearOfDeath,RowID,Data: Integer;
 begin
   json := StringFromFile(fFileName);
   Owner.TestTimer.Start;
   list := TSQLTableJSON.Create('',pointer(json),length(json));
-  FirstName := list.FieldIndex('FirstName');
-  LastName := list.FieldIndex('LastName');
-  YearOfBirth := list.FieldIndex('YearOfBirth');
-  YearOfDeath := list.FieldIndex('YearOfDeath');
-  Data := list.FieldIndex('Data');
+  list.FieldIndexExisting(
+    ['FirstName','LastName','YearOfBirth','YearOfDeath','RowID','Data'],
+    [@FirstName,@LastName,@YearOfBirth,@YearOfDeath,@RowID,@Data]);
   for i := 1 to list.RowCount do begin
     Check(list.Get(i,FirstName)<>nil);
     Check(list.Get(i,LastName)<>nil);
     Check(list.GetAsInteger(i,YearOfBirth)<10000);
     Check((list.GetAsInteger(i,YearOfDeath)>1400)and(list.GetAsInteger(i,YearOfDeath)<2000));
-    Check((list.GetAsInteger(i,list.FieldIndexID)>11011) or (list.Get(i,Data)<>nil));
+    Check((list.GetAsInteger(i,RowID)>11011) or (list.Get(i,Data)<>nil));
   end;
   fRunConsoleOccurenceNumber := list.RowCount;
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
