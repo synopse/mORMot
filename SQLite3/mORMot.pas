@@ -8380,9 +8380,6 @@ type
     fDependencies: array of TInterfacedObject;
     // IoC resolution protected methods
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean;
-    procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
-    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
-    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// this method will resolve all interface published properties
     procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
   public
@@ -8411,6 +8408,14 @@ type
     /// register a dependency resolver class to this instance list
     // - the resolver may be a TServiceContainer or a TInterfaceStub
     procedure AddResolver(aResolver: TInterfaceResolver);
+    /// can be used to perform an IoC for a given interface
+    procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
+    /// can be used to perform several IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
+    /// can be used to perform several IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TGUID and pointers 
+    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to CreateInjected()
     destructor Destroy; override;
@@ -30620,10 +30625,6 @@ begin
   if ErrorMessage='' then
     StatusCodeToErrorMsg(Status,ErrorMsg) else
     ErrorMsg := ErrorMessage;
-  {$ifdef WITHLOG}
-  Log.Log(sllServer,'% % ERROR=% %',
-    [Call.Method,URIWithoutSignature,Call.OutStatus,ErrorMsg]);
-  {$endif}
   with TTextWriter.CreateOwnedStream do
   try
     AddShort('{'#13#10'"errorCode":');
@@ -30641,6 +30642,9 @@ begin
   finally
     Free;
   end;
+  {$ifdef WITHLOG}
+  Log.Log(sllError,Call.OutBody,Server);
+  {$endif}
 end;
 
 

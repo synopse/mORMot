@@ -147,7 +147,7 @@ type
     function GetLastErrorInfo: variant;
   end;
 
-{ ----- Services Interfaces }
+{ ----- Services / Daemon Interfaces }
 
 type
   /// generic interface, to be used so that you may retrieve a running state
@@ -243,6 +243,8 @@ type
   published
     /// the last error, as an enumerate
     property LastError: TCQRSResult read GetLastError;
+    /// the last error extended information, as a string or TDocVariant
+    property LastErrorInfo: variant read GetLastErrorInfo;
     /// the action currently processing
     property Action: TCQRSQueryAction read fAction;
     /// current step of the TCQRSQueryObject state machine
@@ -540,6 +542,88 @@ type
     property Rest: TSQLRest read FRest;
   end;
 
+
+{ ----- Services / Daemon Implementation }
+
+type
+  TDDDMonitoredDaemon = class;
+
+  /// the current state of a process thread
+  TDDDMonitoredDaemonProcessState = (
+    dpsPending, dpsProcessing, dpsProcessed, dpsFailed);
+
+  /// abstract process thread class with monitoring abilities
+  TDDDMonitoredDaemonProcess = class(TThread)
+  protected
+    fDaemon: TDDDMonitoredDaemon;
+    fIndex: integer;
+    fProcessing: boolean;
+    fTimer: TPrecisionTimer;
+    fCount, fInternalErrors: Cardinal;
+    fLastInternalError: variant;
+    fSize: Int64;
+    fAdditionalStatistics: TInt64DynArray;
+    fPending: TSQLRecord;
+    procedure Execute; override;
+  protected
+    // create fPending + save fPending.State to "processing"
+    // returns fPending.ID=0 if no more pending task
+    procedure ExecuteRetrievePendingAndSetProcessing; virtual; abstract;
+    // should save fPending.State to "processed" or "failed"
+    // and inc(fSize,bytesProcessed)
+    procedure ExecuteProcessAndSetResult; virtual; abstract;
+    // is called when there is no more pending task
+    procedure ExecuteIdle; virtual; abstract;
+  public
+    /// initialize the process thread for a given Service/Daemon instance
+    constructor Create(aDaemon: TDDDMonitoredDaemon; aIndexInDaemon: integer); virtual;
+    /// returns the monitoring statistics for this process thread
+    function ComputeDetails: variant; virtual;
+  end;
+
+  /// used to determine which actual thread class will implement the process
+  TDDDMonitoredDaemonProcessClass = class of TDDDMonitoredDaemonProcess;
+
+  /// abstract class using several process threads and with monitoring abilities
+  // - able to implement any DDD Daemon/Service, with proper statistics gathering
+  // - each TDDDMonitoredDaemon could
+  TDDDMonitoredDaemon = class(TCQRSQueryObjectRest,IMonitoredDaemon)
+  protected
+    fProcess: array of TDDDMonitoredDaemonProcess;
+    fProcessClass: TDDDMonitoredDaemonProcessClass;
+    fProcessLock: IAutoLocker;
+    fProcessTimer: TPrecisionTimer;
+    fProcessThreadCount: integer;
+    fProcessIdleDelay: integer;
+    fAdditionalStatisticsName: TRawUTF8DynArray;
+  public
+    /// abstract constructor, which should not be called by itself
+    constructor Create(aRest: TSQLRest); overload; override;
+    /// you should override this constructor to set the actual process
+    // - i.e. set the additional statistic names and define the fProcessClass
+    // protected property
+    constructor Create(aRest: TSQLRest; aProcessThreadCount: integer;
+      const aAdditionalStatisticsName: array of RawUTF8); reintroduce; overload;
+    /// finalize the Daemon
+    destructor Destroy; override;
+    /// monitor the Daemon/Service by returning some information as a TDocVariant
+    // - its Status.stats sub object will contain global processing statistics,
+    // and Status.threadstats similar information, detailled by running thread
+    function RetrieveState(out Status: variant): TCQRSResult; virtual;
+    /// launch all processing threads
+    // - any previous running threads are first stopped
+    function Start: TCQRSResult; virtual;
+    /// finalize all processing threads
+    // - and returns updated statistics as a TDocVariant
+    function Stop(out Information: variant): TCQRSResult; virtual;
+  published
+    /// how many process threads should be created by this Daemon/Service
+    property ProcessThreadCount: integer read fProcessThreadCount;
+    /// how many milliseconds each process thread should wait before checking
+    // for pending tasks
+    // - default value is 50 ms, which seems good enough in practice 
+    property ProcessIdleDelay: integer read fProcessIdleDelay write fProcessIdleDelay;
+  end;
 
 
 { *********** Application Layer Implementation }
@@ -1383,6 +1467,199 @@ constructor TCQRSQueryObjectRest.CreateInjected(aRest: TSQLRest;
 begin
   Create(aRest);
   inherited CreateInjected(aStubsByGUID,aOtherResolvers,aDependencies);
+end;
+
+
+{ TDDDMonitoredDaemonProcess }
+
+function TDDDMonitoredDaemonProcess.ComputeDetails: variant;
+var i: integer;
+    throughput: Int64;
+begin
+  throughput := fTimer.PerSec(fSize);
+  result := _ObjFast(['index',fIndex,
+   'time',fTimer.Stop, 'timeUS',fTimer.TimeInMicroSec,
+   'size',KB(fSize), 'sizeBytes',fSize,
+   'throughput',KB(throughput), 'throughputBytes',throughput,
+   'count',fCount, 'persec',fTimer.PerSec(fCount),
+   'errors',fInternalErrors, 'lasterror',fLastInternalError]);
+  for i := 0 to high(fAdditionalStatistics) do
+    _ObjAddProps([fDaemon.fAdditionalStatisticsName[i],fAdditionalStatistics[i]],result);
+end;
+
+constructor TDDDMonitoredDaemonProcess.Create(aDaemon: TDDDMonitoredDaemon;
+  aIndexInDaemon: integer);
+begin
+  fTimer.Start;
+  fDaemon := aDaemon;
+  fIndex := aIndexInDaemon;
+  SetLength(fAdditionalStatistics,length(fDaemon.fAdditionalStatisticsName));
+  inherited Create(False);
+end;
+
+procedure TDDDMonitoredDaemonProcess.Execute;
+begin
+  fDaemon.Rest.BeginCurrentThread(self);
+  try
+    repeat
+      sleep(fDaemon.ProcessIdleDelay);
+      try
+        repeat
+          if Terminated then
+            exit;
+          fPending := nil;
+          fProcessing := true;
+          try
+            fTimer.Resume;
+            try
+              fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
+              try
+                ExecuteRetrievePendingAndSetProcessing;
+              finally
+                fDaemon.fProcessLock.Leave;
+              end;
+              if fPending.ID=0 then
+                break; // no more pending tasks
+              inc(fCount);
+              ExecuteProcessAndSetResult;
+            finally
+              fTimer.Pause;
+              FreeAndNil(fPending);
+              fProcessing := false;
+            end;
+          except
+            on E: Exception do begin
+              inc(fInternalErrors);
+              fLastInternalError := ObjectToVariantDebug(E);
+              break; // force close the connection on error
+            end;
+          end;
+        until false;
+      finally
+        ExecuteIdle;
+      end;
+    until false;
+  finally
+    fDaemon.Rest.EndCurrentThread(self);
+  end;
+end;
+
+
+{ TDDDMonitoredDaemon }
+
+constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest);
+begin
+  inherited;
+  fProcessIdleDelay := 50;
+  fProcessLock := TAutoLocker.Create;
+  fProcessTimer.Start;
+  if fProcessThreadCount<1 then
+    fProcessThreadCount := 1 else
+  if fProcessThreadCount>20 then
+    fProcessThreadCount := 20;
+end;
+
+constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest;
+  aProcessThreadCount: integer; const aAdditionalStatisticsName: array of RawUTF8);
+begin
+  fProcessThreadCount := aProcessThreadCount;
+  fAdditionalStatisticsName := TRawUTF8DynArrayFrom(aAdditionalStatisticsName);
+  Create(aRest);
+end;
+
+destructor TDDDMonitoredDaemon.Destroy;
+var dummy: variant;
+begin
+  Stop(dummy);
+  inherited;
+end;
+
+function TDDDMonitoredDaemon.RetrieveState(
+  out Status: variant): TCQRSResult;
+var i,a,working,totcount: integer;
+    totsize,throughput: Int64;
+    totadditional: TInt64DynArray;
+    tottime: TPrecisionTimer;
+    stats: variant;
+    pool: TDocVariantData;
+begin
+  ORMBegin(qaNone,result);
+  working := 0;
+  totsize := 0;
+  totcount := 0;
+  SetLength(totadditional,length(fAdditionalStatisticsName));
+  tottime.Init;
+  pool.InitArray([],JSON_OPTIONS[true]);
+  for i := 0 to High(fProcess) do
+  with fProcess[i] do begin
+    pool.AddItem(ComputeDetails); // call fTimer.Stop to set TimeInMicroSec
+    if fProcessing then
+      inc(working);
+    inc(totsize,fSize);
+    inc(totcount,fCount);
+    tottime.TimeInMicroSec := tottime.TimeInMicroSec+fTimer.TimeInMicroSec;
+    for a := 0 to high(fAdditionalStatistics) do
+      inc(totadditional[a],fAdditionalStatistics[a]);
+  end;
+  throughput := tottime.PerSec(totsize);
+  Status := ObjectToVariantDebug(self);
+  stats := _ObjFast(['working',working, 'uptime',fProcessTimer.Stop,
+    'processtime',tottime.Time, 'size',KB(totsize), 'sizeBytes',totsize,
+    'count',totcount, 'persec',tottime.PerSec(totcount),
+    'throughput',KB(throughput), 'throughputBytes',throughput]);
+  for a := 0 to high(fAdditionalStatisticsName) do
+    _ObjAddProps([fAdditionalStatisticsName[a],totadditional[a]],stats);
+  _ObjAddProps(['stats',stats, 'threadstats',variant(pool)],Status);
+  ORMResult(cqrsSuccess);
+end;
+
+function TDDDMonitoredDaemon.Start: TCQRSResult;
+var i: integer;
+    Log: ISynLog;
+    dummy: variant;
+begin
+  Log := Rest.LogClass.Enter(self);
+  if fProcessClass=nil then
+    raise EDDDException.CreateUTF8('%.Start with no fProcessClass',[self]);
+  Stop(dummy); // ignore any error when stopping
+  fProcessTimer.Resume;
+  Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount]);
+  ORMBegin(qaNone,result,cqrsSuccess);
+  SetLength(fProcess,fProcessThreadCount);
+  for i := 0 to fProcessThreadCount-1 do
+    fProcess[i] := fProcessClass.Create(self,i);
+end;
+
+function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
+var i: integer;
+    allfinished: boolean;
+    Log: ISynLog;
+begin
+  fProcessTimer.Pause;
+  ORMBegin(qaNone,result);
+  try
+    if fProcess<>nil then begin
+      Log := Rest.LogClass.Enter(self);
+      for i := 0 to high(fProcess) do
+        fProcess[i].Terminate;
+      repeat
+        sleep(10);
+        allfinished := true;
+        for i := 0 to high(fProcess) do
+          if fProcess[i].fProcessing then begin
+            allfinished := false;
+            break;
+          end;
+      until allfinished;
+      RetrieveState(Information);
+      Log.Log(sllTrace,'Stopped %',[Information],self);
+      ObjArrayClear(fProcess);
+    end;
+    result := cqrsSuccess;
+  except
+    on E: Exception do
+      ORMResult(E);
+  end;
 end;
 
 end.

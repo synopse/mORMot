@@ -10994,7 +10994,7 @@ type
     /// return the time elapsed, with appened time resolution (us,ms,s)
     function Time: RawUTF8;
     /// compute the per second count
-    function PerSec(const Count: Int64): cardinal;
+    function PerSec(const Count: Int64): Int64;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
     function ByCount(Count: cardinal): RawUTF8;
     /// Int64 representation of time after counter stopped
@@ -36859,7 +36859,7 @@ begin
     result := MicroSecToString(iTime div Count);
 end;
 
-function TPrecisionTimer.PerSec(const Count: Int64): cardinal;
+function TPrecisionTimer.PerSec(const Count: Int64): Int64;
 begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
