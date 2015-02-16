@@ -552,6 +552,9 @@ type
   TDDDMonitoredDaemonProcessState = (
     dpsPending, dpsProcessing, dpsProcessed, dpsFailed);
 
+  // TODO: monitoring statistics should be done in mORMot.pas, so that
+  // could be shared e.g. with TSQLRestServer for ORM or SOA information
+
   /// abstract process thread class with monitoring abilities
   TDDDMonitoredDaemonProcess = class(TThread)
   protected
@@ -1521,7 +1524,7 @@ begin
               if fPending.ID=0 then
                 break; // no more pending tasks
               inc(fCount);
-              ExecuteProcessAndSetResult;
+              ExecuteProcessAndSetResult; // always set, even if Terminated
             finally
               fTimer.Pause;
               FreeAndNil(fPending);
@@ -1531,7 +1534,7 @@ begin
             on E: Exception do begin
               inc(fInternalErrors);
               fLastInternalError := ObjectToVariantDebug(E);
-              break; // force close the connection on error
+              break; // will call ExecuteIdle then go to idle state
             end;
           end;
         until false;
@@ -1643,7 +1646,7 @@ begin
       for i := 0 to high(fProcess) do
         fProcess[i].Terminate;
       repeat
-        sleep(10);
+        sleep(5);
         allfinished := true;
         for i := 0 to high(fProcess) do
           if fProcess[i].fProcessing then begin

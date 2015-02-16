@@ -110,13 +110,16 @@ type
   public
     /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);
+    /// returns TRUE if both Country instances have the same content
+    // - slightly faster than global function ObjectEquals(self,another)
+    function Equals(another: TCountry): boolean; reintroduce;
     /// internal enumerate corresponding to this country
     property Identifier: TCountryIdentifier read GetIdentifier write SetIdentifier;
     /// the ISO 3166-1 alpha-2 codes of this country
     property Alpha2: TCountryIsoAlpha2 read GetIsoAlpha2 write SetIsoAlpha2;
     /// the ISO 3166-1 alpha-3 codes of this countr
     property Alpha3: TCountryIsoAlpha3 read GetIsoAlpha3 write SetIsoAlpha3;
-    /// plain English text of this country, e.g. 'France' or 'United States' 
+    /// plain English text of this country, e.g. 'France' or 'United States'
     property English: RawUTF8 read GetEnglish;
   published
     /// the stored and transmitted value is this ISO 3166-1 numeric 3-digit code
@@ -146,6 +149,7 @@ type
     fCode: TPostalCode;
     fCountry: TCountry;
   public
+    function Equals(another: TAddress): boolean; reintroduce;
   published
     property Street1: TStreet read fStreet1 write fStreet1;
     property Street2: TStreet read fStreet2 write fStreet2;
@@ -172,6 +176,8 @@ type
     fFirst: TFirstName;
     fMiddle: TMiddleName;
     fLast: TLastName;
+  public
+    function Equals(another: TPersonFullName): boolean; reintroduce;
   published
     property First: TFirstName read fFirst write fFirst;
     property Middle: TMiddleName read fMiddle write fMiddle;
@@ -183,6 +189,7 @@ type
   protected
     fDate: TDateTime;
   public
+    function Equals(another: TPersonBirthDate): boolean; reintroduce;
     function Age: integer; overload;
     function Age(FromDate: TDateTime): integer; overload;
   published
@@ -194,6 +201,8 @@ type
   protected
     fBirthDate: TPersonBirthDate;
     fName: TPersonFullName;
+  public
+    function Equals(another: TPerson): boolean; reintroduce;
   published
     property Name: TPersonFullName read fName;
     property Birth: TPersonBirthDate read fBirthDate;
@@ -211,6 +220,7 @@ type
     fPhone2: TPhoneNumber;
     fEmail: TEmailAddress;
   public
+    function Equals(another: TPersonContactable): boolean; reintroduce;
     /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);
   published
@@ -520,6 +530,36 @@ begin
   end;
 end;
 
+function TCountry.Equals(another: TCountry): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := another.fIso=fIso;
+end;
+
+
+{ TAddress }
+
+function TAddress.Equals(another: TAddress): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := (another.Street1=Street1) and (another.Street2=Street2) and
+      (another.CityArea=CityArea) and (another.City=City) and
+      (another.Region=Region) and another.Country.Equals(Country);
+end;
+
+
+{ TPersonFullName }
+
+function TPersonFullName.Equals(another: TPersonFullName): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := (First=another.First) and (Last=another.Last) and
+      (Middle=another.Middle);
+end;
+
 { TPersonBirthDate }
 
 function TPersonBirthDate.Age: integer;
@@ -538,11 +578,37 @@ begin
     if MF<MD then
       dec(result) else
       if (MF=MD) and (DF<DD) then
-        dec(result); 
+        dec(result);
   end;
 end;
 
+function TPersonBirthDate.Equals(another: TPersonBirthDate): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := Date=another.Date;
+end;
+
+
+{ TPerson }
+
+function TPerson.Equals(another: TPerson): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := Name.Equals(another.Name) and Birth.Equals(another.Birth);
+end;
+
+
 { TPersonContactable }
+
+function TPersonContactable.Equals(another: TPersonContactable): boolean;
+begin
+  if (self=nil) or (another=nil) then
+    result := another=self else
+    result := inherited Equals(Self) and Address.Equals(another.Address) and
+      (Phone1=another.Phone1) and (Phone2=another.Phone2) and (Email=another.Email);
+end;
 
 class procedure TPersonContactable.RegressionTests(test: TSynTestCase);
 var p: TPersonContactable;
