@@ -637,7 +637,8 @@ unit SynCommons;
   - added TTextWriter.Add(const Values: array of const) method
   - added JSONToXML() JSONBufferToXML() and TTextWriter.JSONBufferToXML()
     for direct and fast conversion of any JSON into the corresponding <XML>
-  - added JSONReformat() JSONBufferReformat() and TTextWriter.AddJSONReformat()
+  - added JSONReformat() JSONBufferReformat() JSONReformatToFile()
+    JSONBufferReformatToFile() and TTextWriter.AddJSONReformat()
     for fast conversion into more readable, compact or extended layout 
   - fixed potential GPF issue in TMemoryMapText.LoadFromMap()
   - added TMemoryMapText.AddInMemoryLine method to allow runtime appending of
@@ -7069,6 +7070,17 @@ procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
 function JSONReformat(const JSON: RawUTF8;
   Format: TTextWriterJSONFormat=jsonHumanReadable): RawUTF8;
 
+/// formats and indents a JSON array or document as a file
+// - just a wrapper around TTextWriter.AddJSONReformat() method
+// - WARNING: the JSON buffer is decoded in-place, so P^ WILL BE modified
+function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
+  Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
+
+/// formats and indents a JSON array or document as a file
+// - just a wrapper around TTextWriter.AddJSONReformat, making a private
+// of the supplied JSON buffer (so that JSON content  would stay untouched)
+function JSONReformatToFile(const JSON: RawUTF8; const Dest: TFileName;
+  Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
 
 
 const
@@ -33206,18 +33218,18 @@ begin
 end;
 
 procedure TTextWriter.AddCRAndIndent;
-var nspaces: cardinal;
+var ntabs: cardinal;
 begin
-  if (B^=' ') and (B>fTempBuf) and (B[-1]=' ') then
+  if B^=#9 then
     exit; // we most probably just added an indentation level
-  nspaces := fHumanReadableLevel*2;
-  if nspaces>=cardinal(fTempBufSize) then
+  ntabs := fHumanReadableLevel;
+  if ntabs>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
-  if B+nspaces+1>=BEnd then
+  if B+ntabs+1>=BEnd then
     Flush;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
-  fillchar(B[3],nspaces,32); // indentation
-  inc(B,nspaces+2);
+  fillchar(B[3],ntabs,9); // indentation using tabs
+  inc(B,ntabs+2);
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: integer);
@@ -36019,7 +36031,7 @@ procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
   Format: TTextWriterJSONFormat);
 begin
   if P<>nil then
-    with TTextWriter.CreateOwnedStream do
+    with TTextWriter.CreateOwnedStream(65536) do
     try
       AddJSONReformat(P,Format,nil);
       SetText(result);
@@ -36035,7 +36047,8 @@ begin
   n := length(JSON);
   SetString(tmp,PAnsiChar(pointer(JSON)),n); // make local copy
   if n<4096 then
-    n := 4096; // minimal rough estimation of the output buffer size
+    n := 4096 else // minimal rough estimation of the output buffer size
+    inc(n,n shr 4);
   with TTextWriter.CreateOwnedStream(n) do
   try
     AddJSONReformat(pointer(tmp),Format,nil);
@@ -36043,6 +36056,38 @@ begin
   finally
     Free;
   end;
+end;
+
+function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
+  Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
+var F: TFileStream;
+begin
+  try
+    F := TFileStream.Create(Dest,fmCreate);
+    try
+      with TTextWriter.Create(F,256*1024) do
+      try
+        AddJSONReformat(P,Format,nil);
+        Flush;
+      finally
+        Free;
+      end;
+      result := true;
+    finally
+      F.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function JSONReformatToFile(const JSON: RawUTF8; const Dest: TFileName;
+  Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
+  result := JSONBufferReformatToFile(pointer(tmp),Dest,Format);
 end;
 
 
