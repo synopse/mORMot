@@ -18057,11 +18057,11 @@ begin
   if fIDColumn<>nil then begin
     n := length(fIDColumn);
     SetLength(oldIDColumn,n);
-    move(fIDColumn[0],oldIDColumn[0],n*4);
+    move(fIDColumn[0],oldIDColumn[0],n*sizeof(PUTF8Char));
   end;
   i := (RowCount+1)*FieldCount;
   SetLength(oldResults,i);
-  move(fResults[0],oldResults[0],i*4);
+  move(fResults[0],oldResults[0],i*sizeof(PUTF8Char));
   // put marked IDs first
   n := 1; // copy row data (first row=0 i.e. idents is left as it is)
   R := @fResults[FieldCount];
@@ -18070,7 +18070,7 @@ begin
     if GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
-      move(oldResults[j],R^,FieldCount*4);
+      move(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
       inc(n);
       inc(R,FieldCount);
     end;
@@ -18083,7 +18083,7 @@ begin
     if not GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
-      move(oldResults[j],R^,FieldCount*4);
+      move(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
       inc(n);
       inc(R,FieldCount);
     end;
