@@ -6070,8 +6070,11 @@ type
     /// free associated memory and owned records
     destructor Destroy; override;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
-    // - points to memory buffer allocated by Init()
+    // - if Row and Fields are correct, returns a pointer to the UTF-8 buffer,
+    // or nil if the corresponding JSON was null or ""  
+    // - if Row and Fields are not correct, returns nil 
     function Get(Row,Field: integer): PUTF8Char; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUTF8 text
     function GetU(Row,Field: integer): RawUTF8; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -6320,10 +6323,10 @@ type
     //!   Check(list.GetAsInteger(i,YearOfBirth)<10000);
     procedure FieldIndexExisting(const FieldNames: array of RawUTF8;
       const FieldIndexes: array of PInteger); overload;
-
     /// get the Field content (encoded as UTF-8 text) from a property name
-    // - return nil if not found 
+    // - return nil if not found
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
+      {$ifdef HASINLINE}inline;{$endif}
     /// sort result Rows, according to a specific field
     // - default is sorting by ascending order (Asc=true)
     // - you can specify a Row index to be updated during the sort in PCurrentRow
@@ -18244,7 +18247,7 @@ begin
   assert(length(AllID)=length(IDs));
   QuickSortInteger(@AllID[0],0,high(AllID));
   QuickSortInteger(@IDs[0],0,high(IDs));
-  assert(comparemem(@AllID[0],@IDs[0],length(AllID)*4)); }
+  assert(comparemem(@AllID[0],@IDs[0],length(AllID)*sizeof(TID))); }
 end;
 
 function TSQLTable.RowFromID(aID: TID): integer;
@@ -18283,7 +18286,7 @@ begin
     exit; // out of range
   if Assigned(fIDColumn) then
     if Row<RowCount then
-      move(fIDColumn[Row+1],fIDColumn[Row],(RowCount-Row)*4);
+      move(fIDColumn[Row+1],fIDColumn[Row],(RowCount-Row)*sizeof(PUTF8Char));
   if Row<RowCount then begin
     Row := Row*FieldCount; // convert row index into position in fResults[]
     move(fResults[Row+FieldCount],fResults[Row],(RowCount*FieldCount-Row)*sizeof(pointer));
@@ -18526,11 +18529,10 @@ begin
 end;
 
 function TSQLTable.Get(Row, Field: integer): PUTF8Char;
-const PCharNil: integer = 0;
 begin
   if (self=nil) or (fResults=nil) or (cardinal(Row)>cardinal(RowCount)) or
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
-    result := @PCharNil else
+    result := nil else
     result := fResults[Row*FieldCount+Field];
 end;
 
@@ -19974,7 +19976,7 @@ var R,F,n: integer;
 begin
   SetLength(aResult,FieldCount);
   if FromDisplay and (length(fFieldLengthMean)=FieldCount) then begin
-    move(fFieldLengthMean[0],aResult[0],FieldCount*4);
+    move(fFieldLengthMean[0],aResult[0],FieldCount*sizeof(integer));
     result := fFieldLengthMeanSum;
     exit;
   end;

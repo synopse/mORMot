@@ -30662,7 +30662,7 @@ begin
     end;
     4: begin
       // optimized version for TIntegerDynArray + TRawUTF8DynArray and such
-      P2 := P1+n*4;
+      P2 := P1+n*sizeof(Integer);
       for i := 1 to n shr 1 do begin
         tmp := PInteger(P1)^;
         PInteger(P1)^ := PInteger(P2)^;
@@ -30673,9 +30673,9 @@ begin
     end;
     8: begin
       // optimized version for TInt64DynArray + TDoubleDynArray and such
-      P2 := P1+n*8;
+      P2 := P1+n*sizeof(Int64);
       for i := 1 to n shr 1 do begin
-        i64:= PInt64(P1)^;
+        i64 := PInt64(P1)^;
         PInt64(P1)^ := PInt64(P2)^;
         PInt64(P2)^ := i64;
         inc(P1,8);
@@ -31244,7 +31244,7 @@ begin
     exit; // invalid Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (Hash32(@Hash[1],Count*4)=Hash[0]) then
+  if (Count<>0) and (Hash32(@Hash[1],Count*sizeof(Integer))=Hash[0]) then
     result := @Hash[1]; // returns valid Source content
 end;
 

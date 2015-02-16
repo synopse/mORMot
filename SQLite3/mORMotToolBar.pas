@@ -2931,7 +2931,7 @@ begin
   with Page[P].TableToGrid do begin
     if length(ColWidths)=Table.FieldCount then begin
       SetLength(ColWidth,Table.FieldCount);
-      move(ColWidths[0],ColWidth[0],Table.FieldCount*4);
+      move(ColWidths[0],ColWidth[0],Table.FieldCount*sizeof(integer));
     end else
       Table.CalculateFieldLengthMean(ColWidth,true); // FromDisplay=true
     result.AddColumns(ColWidth);
@@ -3030,7 +3030,7 @@ begin
     aClient := Client;
   if length(ColWidths)=Table.FieldCount then begin
     SetLength(ColWidth,Table.FieldCount);
-    move(ColWidths[0],ColWidth[0],Table.FieldCount*4);
+    move(ColWidths[0],ColWidth[0],Table.FieldCount*sizeof(integer));
   end else
     Table.CalculateFieldLengthMean(ColWidth,true); // FromDisplay=true
   aReport.AddColumns(ColWidth);
