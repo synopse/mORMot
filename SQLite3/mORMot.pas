@@ -1010,8 +1010,9 @@ unit mORMot;
       to allow any kind of custom ordering - feature request [c6804d48a4]
     - speed up of TSQLTable.FieldIndex() method (using binary search)
     - added TSQLTable.ToObjectList() and ToObjectList<T: TSQLRecord>() methods
-    - added TSQLTable.Step(), FieldBuffer() and Field() methods, handling a
-      cursor at TSQLTable level, with optional late-binding column access
+    - added TSQLTable.Step() FieldBuffer() Field() FieldAsInteger() FieldAsFloat()
+      methods, handling a cursor at TSQLTable/TSQLTableJSON level, with optional
+      late-binding column access
     - added TSQLTable.GetSynUnicode() method
     - added TSQLTable.ToDocVariant() and TSQLRest.RetrieveDocVariantArray()
       overloaded methods, which can be used e.g. to process directly some data
@@ -6529,12 +6530,24 @@ type
     function FieldBuffer(const FieldName: RawUTF8): PUTF8Char; overload;
     /// read-only access to a particular field value, as Integer
     // - raise an ESQLTableException if called outside valid Step() sequence
-    // - similar to GetInteger() method, but for the current Step
+    // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(FieldIndex: Integer): Int64; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Integer
     // - raise an ESQLTableException if called outside valid Step() sequence
-    // - similar to Get() method, but for the current Step
+    // - similar to GetAsInteger() method, but for the current Step
     function FieldAsInteger(const FieldName: RawUTF8): Int64; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as floating-point value
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetAsFloat() method, but for the current Step
+    function FieldAsFloat(FieldIndex: Integer): extended; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as floating-point value
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetAsFloat() method, but for the current Step
+    function FieldAsFloat(const FieldName: RawUTF8): extended; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
     // - raise an ESQLTableException if called outside valid Step() sequence
@@ -6550,12 +6563,16 @@ type
     property QueryTables: TSQLRecordClassDynArray read fQueryTables;
     /// contains the associated SQL statement on Query
     property QuerySQL: RawUTF8 read fQuerySQL;
-    {/ read-only access to the number of data Row in this table
-     - first row contains field name
-     - then 1..RowCount rows contain the data itself }
+    /// read-only access to the number of data Row in this table
+    // - first row contains field name
+    // - then 1..RowCount rows contain the data itself 
     property RowCount: integer read fRowCount;
-    {/ read-only access to the number of fields for each Row in this table }
+    /// read-only access to the number of fields for each Row in this table
     property FieldCount: integer read fFieldCount;
+    /// read-only access to the ID/RowID field index
+    // - do not use this property if the ID column has been hidden, but
+    // use IDColumnHiddenValue() method instead
+    property FieldIndexID: integer read fFieldIndexID;
     /// read-only acccess to the current Row number, after a Step() call
     // - contains 0 if accessed outside valid Step() sequence call
     // - contains 1..RowCount after a valid Step() iteration
@@ -19835,6 +19852,16 @@ end;
 function TSQLTable.FieldAsInteger(const FieldName: RawUTF8): Int64;
 begin
   SetInt64(FieldBuffer(FieldName),result);
+end;
+
+function TSQLTable.FieldAsFloat(FieldIndex: Integer): extended;
+begin
+  result := GetExtended(FieldBuffer(FieldIndex));
+end;
+
+function TSQLTable.FieldAsFloat(const FieldName: RawUTF8): extended;
+begin
+  result := GetExtended(FieldBuffer(FieldName));
 end;
 
 {$ifndef NOVARIANTS}

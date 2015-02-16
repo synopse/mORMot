@@ -6563,7 +6563,7 @@ Abilities will depend on the protocol used. For instance, HTTP may sounds slower
 Here are some general information about available communication layers:
 |%18%20%20%25%18
 | |\b In-process|Windows Messages|Named pipes|HTTP\b0
-|Unit|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMotHttp Server/Client}
+|Unit|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMotHttpServer.pas}{\f1\fs20 mORMotHttpClient.pas}
 |Speed|****|***|**|*
 |Scaling|****|*|*|***
 |Hosting|In-process|Local|Local|Remote
