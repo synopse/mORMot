@@ -1152,9 +1152,6 @@ unit mORMot;
 {.$define PUREPASCAL}  // define for debugg, not on production
 {.$define USETYPEINFO} // define for debugg, not on production
 
-{$define WITHSTATPROCESS}
-// if defined, the server statistics will contain precise working time process 
-
 {$ifdef MSWINDOWS}
 
   {.$define ANONYMOUSNAMEDPIPE}
@@ -1820,7 +1817,10 @@ function ObjectToVariantDebug(Value: TObject): variant; overload;
 // should match
 // - will use direct RTTI access of property values, or TSQLRecord.SameValues()
 // if available to make the comparison as fast and accurate as possible
-function ObjectEquals(Value1,Value2: TObject): boolean;
+// - if you want only to compare the plain fields with no getter function,
+// e.g. if they are just some conversion of the same information, you can
+// set ignoreGetterFields=TRUE
+function ObjectEquals(Value1,Value2: TObject; ignoreGetterFields: boolean=false): boolean;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -2198,7 +2198,10 @@ type
     function ClassSQLFieldType: TSQLFieldType;
        {$ifdef HASINLINE}inline;{$endif}
     /// get the number of published properties in this class
-    function ClassFieldCount: integer;
+    // - you can count the plain fields without any getter function, if you
+    // do need only the published properties corresponding to some value
+    // actually stored, and ignore e.g. any textual conversion 
+    function ClassFieldCount(onlyWithoutGetter: boolean): integer;
     /// for ordinal types, get the storage size and sign
     function OrdType: TOrdType;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2762,6 +2765,14 @@ type
   /// type of a TSQLPropInfo class
   TSQLPropInfoClass = class of TSQLPropInfo;
 
+  /// define how the published properties RTTI is to be interpreted
+  // - i.e. how TSQLPropInfoList.Create() and TSQLPropInfoRTTI.CreateFrom()
+  // would handle the incoming RTTI
+  TSQLPropInfoListOptions = set of (
+    pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
+    pilSubClassesFlattening, pilIgnoreIfGetter,
+    pilSingleHierarchyLevel);
+
   /// parent information about a published property retrieved from RTTI
   TSQLPropInfoRTTI = class(TSQLPropInfo)
   protected
@@ -2774,8 +2785,7 @@ type
     // of the specified property RTTI
     // - it will raise an EORMException in case of an unhandled type
     class function CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
-      aRaiseEORMExceptionIfNotHandled: boolean;
-      const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
+      aOptions: TSQLPropInfoListOptions; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
@@ -3324,11 +3334,6 @@ type
   /// dynamic array of ORM fields information for published properties
   TSQLPropInfoObjArray = array of TSQLPropInfo;
 
-  /// how TSQLPropInfoList.Create() would handle the incoming RTTI
-  TSQLPropInfoListOptions = set of (
-    pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
-    pilSubClassesFlattening, pilSingleHierarchyLevel);
-
   /// handle a read-only list of fields information for published properties
   // - is mainly used by our ORM for TSQLRecord RTTI, but may be used for
   // any TPersistent
@@ -3531,7 +3536,8 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
 
 /// retrieve the total number of properties for a class, including its parents
-function ClassFieldCountWithParents(ClassType: TClass): integer;
+function ClassFieldCountWithParents(ClassType: TClass;
+  onlyWithoutGetter: boolean=false): integer;
 
 /// retrieve all class hierachy types which have some published properties  
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
@@ -3723,14 +3729,14 @@ type
     destructor Destroy; override;
   end;
 
-  /// a generic value object able to handle any process statistic
+  /// a generic value object able to handle any task / process statistic
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
   TSynMonitor = class(TSynAutoCreateFields)
   protected
-    fTimer: TPrecisionTimer;
+    fProcessTimer: TPrecisionTimer;
     fProcessing: boolean;
-    fCount: QWord;
+    fTaskCount: QWord;
     fInternalErrors: cardinal;
     fLastInternalError: variant;
     fTime: TSynMonitorTime;
@@ -3738,15 +3744,19 @@ type
     fMinimalTime: TSynMonitorTime;
     fMaximalTime: TSynMonitorTime;
     fPerSec: QWord;
-    fSize: TSynMonitorSize;
-    fThroughput: TSynMonitorThroughput;
+    fTaskStatus: (taskNotStarted,taskStarted);
+    fMultiThreaded: boolean;
+    fLock: TRTLCriticalSection;
     procedure FillPerSecProperties; virtual;
+    procedure FillFromProcessTimer; virtual;
   public
+    /// finalize the instance
+    destructor Destroy; override;
     /// should be called when the process starts, to resume the internal timer
     procedure ProcessStart; virtual;
-    /// should be called when the process has finished performing its data
-    // - will update the Count and Size properties
-    procedure Processed(const aProcessedDataSize: QWord); virtual;
+    /// should be called each time a pending task is processed
+    // - will increase the TaskCount property
+    procedure ProcessDoTask; virtual;
     /// should be called when an error occurred
     // - typical use is with ObjectToVariantDebug(E,...) kind of information
     procedure ProcessError(const info: variant); virtual;
@@ -3754,31 +3764,82 @@ type
     procedure ProcessEnd; virtual;
     /// could be used to manage information average or sums
     procedure Sum(another: TSynMonitor); virtual;
+    /// returns a JSON content with all published properties information
+    function ComputeDetailsJSON: RawUTF8; virtual;
     /// returns a TDocVariant with all published properties information
-    function ComputeDetails: variant;
+    function ComputeDetails: variant; 
+    /// used to allow thread safe timing
+    // - by default, the internal TPrecisionTimer is not thread safe: you can
+    // use this method to update the timing from many threads
+    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
+    // methods are disallowed, and the global fTimer won't be used any more
+    // - will return the processing time, converted into micro seconds, ready
+    // to be logged if needed
+    function FromExternalQueryPerformanceCounters(const Start,Stop: Int64): QWord;
   published
     /// indicates if this thread is currently working on some process
     property Processing: boolean read fProcessing;
-    /// how many times the process did occur
-    property Count: QWord read fCount;
+    /// how many times the task was performed
+    property TaskCount: QWord read fTaskCount;
     /// the whole time spend during all working process
     property Time: TSynMonitorTime read fTime;
-    /// the time spend during the last working process
+    /// the time spend during the last task processing
     property LastTime: TSynMonitorTime read fLastTime;
     /// the lowest time spent during any working process
     property MinimalTime: TSynMonitorTime read fMinimalTime;
     /// the highest time spent during any working process
     property MaximalTime: TSynMonitorTime read fMaximalTime;
-    /// average of how many process did occur per second
+    /// average of how many tasks did occur per second
     property PerSec: QWord read fPerSec;
-    /// how many data has been hanlded during all working process, returned as text
-    property Size: TSynMonitorSize read fSize;
-    /// data processing bandwith, returned as B/KB/MB per second text
-    property Throughput: TSynMonitorThroughput read fThroughput;
     /// how many errors did occur during the processing
     property Errors: cardinal read fInternalErrors;
     /// information about the last error which occured during the processing
     property LastError: variant read fLastInternalError;
+  end;
+
+  /// handle generic process statistic with a processing data size and bandwitdh
+  TSynMonitorWithSize = class(TSynMonitor)
+  protected
+    fSize: TSynMonitorSize;
+    fThroughput: TSynMonitorThroughput;
+    procedure FillPerSecProperties; override;
+  public
+    /// increase the internal size counter
+    procedure AddSize(const Bytes: QWord); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// increase the internal size counter
+    procedure AddSize(Bytes: integer); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); override;
+  published
+    /// how many data has been hanlded during all working process
+    property Size: TSynMonitorSize read fSize;
+    /// data processing bandwith, returned as B/KB/MB per second 
+    property Throughput: TSynMonitorThroughput read fThroughput;
+  end;
+
+  /// handle generic process statistic with a incoming and outgoing processing
+  // data size and bandwitdh
+  TSynMonitorInputOutput = class(TSynMonitor)
+  protected
+    fInput: TSynMonitorSize;
+    fOutput: TSynMonitorSize;
+    fInputThroughput: TSynMonitorThroughput;
+    fOutputThroughput: TSynMonitorThroughput;
+    procedure FillPerSecProperties; override;
+  public
+    /// increase the internal size counters
+    procedure AddSize(const Incoming, Outgoing: QWord);
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); override;
+  published
+    /// how many data has been received
+    property Input: TSynMonitorSize read fInput;
+    /// how many data has been sent back
+    property Output: TSynMonitorSize read fOutput;
+    /// incoming data processing bandwith, returned as B/KB/MB per second
+    property InputThroughput: TSynMonitorThroughput read fInputThroughput;
+    /// outgoing data processing bandwith, returned as B/KB/MB per second
+    property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
   end;
 
   /// used to store the class of process statistic instances
@@ -3871,6 +3932,8 @@ function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 type
   /// the available HTTP methods transmitted between client and server
   // - some custom verbs are available in addition to standard REST commands
+  // - for basic CRUD operations, we considered Create=mPOST, Read=mGET,
+  // Update=mPUT and Delete=mDELETE  
   TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
                    mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE);
 
@@ -4464,6 +4527,7 @@ type
     // to retrieve the incoming message body content type
     // - or to retrieve the remote IP
     // ! FindIniNameValue(pointer(Call.InHead),'REMOTEIP: ')
+    // - but consider also using TSQLRestServerURIContext.InHeader['remoteip']
     InHead: RawUTF8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
@@ -11333,87 +11397,6 @@ type
     SendTotalRowsCountFmt: RawUTF8;
   end;
 
-  /// used for statistics update in TSQLRestServer.URI()
-  TSQLRestServerStats = class(TSynPersistent)
-  private
-    /// used to determine if something changed
-    fLastIncomingBytes: QWord;
-    /// current count of connected clients
-    fClientsCurrent,
-    /// max count of connected clients
-    fClientsMax,
-    /// count of invalid request
-    fInvalid,
-    /// count of valid responses (returned status code 200/HTML_SUCCESS or 201/HTML_CREATED)
-    fResponses,
-    /// count of requests which modified the data
-    fModified,
-    /// size of data requests processed in bytes (without the transfert protocol overhead)
-    fIncomingBytes,
-    /// size of data responses generated in bytes (without the transfert protocol overhead)
-    fOutcomingBytes,
-    /// count of the remote service calls
-    fServices,
-    /// count of files transmitted via STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
-    fOutcomingFiles: QWord;
-    /// current thread counts
-    fCurrentThreadCount: integer;
-    /// how many concurrent requests are processed in TSQLRestServer.URI()
-    fCurrentRequestCount: integer;
-    {$ifdef WITHSTATPROCESS}
-    /// time used to process the requests, with appended unit ('0.13 ms' e.g.)
-    function GetProcessTimeString: RawUTF8;
-    {$endif}
-  public
-    {$ifdef WITHSTATPROCESS}
-    /// high-resolution performance counter of the time used to process the requests
-    // - this value depend on the high-resolution performance counter frequency
-    // - use ProcessTime property below to get the time in seconds
-    ProcessTimeCounter: Int64;
-    {$endif}
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientConnect;
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientDisconnect;
-    /// get a standard message to be displayed with the above statistics
-    // - return the published properties of this class as a JSON object
-    function DebugMessage: RawUTF8;
-    /// percent (0..100) of request which modified the data
-    function ModifPercent: cardinal;
-    /// return true if IncomingBytes value changed since last call
-    function Changed: boolean;
-  published
-    /// current count of connected clients
-    property ClientsCurrent: QWord read fClientsCurrent;
-    /// max count of connected clients
-    property ClientsMax: QWord read fClientsMax;
-    /// count of invalid request
-    property Invalid: QWord read fInvalid;
-    /// count of valid responses (returned status code 200/HTML_SUCCESS or 201/HTML_CREATED)
-    property Responses: QWord read fResponses;
-    /// count of requests which modified the data
-    property Modified: QWord read fModified;
-    /// size of data requests processed in bytes (without the transfert protocol overhead)
-    property IncomingBytes: QWord read fIncomingBytes;
-    /// size of data responses generated in bytes (without the transfert protocol overhead)
-    property OutcomingBytes: QWord read fOutcomingBytes;
-    /// count of files transmitted directly (not part of OutcomingBytes)
-    // - i.e. when the service uses STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
-    // as content type to let the HTTP server directly serve the file content
-    property OutcomingFiles: QWord read fOutcomingFiles;
-    /// count of the remote service calls
-    property ServiceCalls: QWord read fServices;
-    /// number of current declared thread counts
-    // - as registered by BeginCurrentThread/EndCurrentThread
-    property CurrentThreadCount: integer read fCurrentThreadCount;
-    /// how many concurrent requests are processed in TSQLRestServer.URI()
-    property CurrentRequestCount: integer read fCurrentRequestCount;
-    {$ifdef WITHSTATPROCESS}
-    /// the global time spent in the server process
-    property ProcessTime: RawUTF8 read GetProcessTimeString;
-    {$endif}
-  end;
-
   TAuthSession = class;
 
   ///  used to define how to trigger Events on record update
@@ -12189,6 +12172,60 @@ type
     enable Server-Side ModelRoot/[TableName/[TableID/]]MethodName requests
       -> see TSQLRestServerCallBack }
 
+  /// used for high-level statistics in TSQLRestServer.URI()
+  TSQLRestServerMonitor = class(TSynMonitorInputOutput)
+  protected
+    fCurrentRequestCount: integer;
+    fCurrentThreadCount: integer;
+    fClientsCurrent: QWord;
+    fOutcomingFiles: QWord;
+    fClientsMax: QWord;
+    fServiceInterface: QWord;
+    fSuccess: QWord;
+    fServiceMethod: QWord;
+    fCreated: QWord;
+    fRead: QWord;
+    fUpdated: QWord;
+    fDeleted: QWord;
+  public
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientConnect;
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientDisconnect;
+    /// update the Created/Read/Updated/Deleted properties
+    procedure NotifyORM(aMethod: TSQLURIMethod);
+  published
+    /// current count of connected clients
+    property ClientsCurrent: QWord read fClientsCurrent;
+    /// max count of connected clients
+    property ClientsMax: QWord read fClientsMax;
+    /// number of valid responses
+    // - i.e. which returned status code 200/HTML_SUCCESS or 201/HTML_CREATED
+    // - any invalid request will increase the TSynMonitor.Errors property
+    property Success: QWord read fSuccess;
+    /// count of the remote method-based service calls
+    property ServiceMethod: QWord read fServiceMethod;
+    /// count of the remote interface-based service calls
+    property ServiceInterface: QWord read fServiceInterface;
+    /// count of files transmitted directly (not part of Output size property)
+    // - i.e. when the service uses STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
+    // as content type to let the HTTP server directly serve the file content
+    property OutcomingFiles: QWord read fOutcomingFiles;
+    /// number of current declared thread counts
+    // - as registered by BeginCurrentThread/EndCurrentThread
+    property CurrentThreadCount: integer read fCurrentThreadCount;
+    /// how many concurrent requests are processed in TSQLRestServer.URI()
+    property CurrentRequestCount: integer read fCurrentRequestCount;
+    /// how many Create / Add ORM operations did take place
+    property Created: QWord read fCreated;
+    /// how many Read / Get ORM operations did take place
+    property Read: QWord read fRead;
+    /// how many Update ORM operations did take place
+    property Updated: QWord read fUpdated;
+    /// how many Delete ORM operations did take place
+    property Deleted: QWord read fDeleted;
+  end;
+
   /// a generic REpresentational State Transfer (REST) server
   // - descendent must implement the protected EngineList() Retrieve() Add()
   // Update() Delete() methods
@@ -12234,7 +12271,7 @@ type
 {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
-    fStats: TSQLRestServerStats;
+    fStats: TSQLRestServerMonitor;
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
@@ -12833,7 +12870,7 @@ type
     // TSQLAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean read fHandleAuthentication;
     /// access to the Server statistics
-    property Stats: TSQLRestServerStats read fStats;
+    property Stats: TSQLRestServerMonitor read fStats;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
@@ -15195,15 +15232,26 @@ begin
   result := 0;
 end;
 
-function ClassFieldCountWithParents(ClassType: TClass): integer;
+function ClassFieldCountWithParents(ClassType: TClass;
+  onlyWithoutGetter: boolean): integer;
 var CP: PClassProp;
+    P: PPropInfo;
+    i: integer;
 begin
   result := 0;
   while ClassType<>nil do begin
     CP := InternalClassProp(ClassType);
     if CP=nil then
       break; // no RTTI information (e.g. reached TObject level)
-    inc(result,CP^.PropCount);
+    if onlyWithoutGetter then begin
+      P := AlignToPtr(@CP^.PropList);
+      for i := 1 to CP^.PropCount do begin
+        if P^.GetterIsField then
+          inc(result);
+        P := P^.Next;
+      end;
+    end else
+      inc(result,CP^.PropCount);
     ClassType := ClassType.ClassParent;
   end;
 end;
@@ -15643,7 +15691,7 @@ end;
 { TSQLPropInfoRTTI }
 
 class function TSQLPropInfoRTTI.CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
-  aRaiseEORMExceptionIfNotHandled: boolean; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
+  aOptions: TSQLPropInfoListOptions; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
 var aSQLFieldType: TSQLFieldType;
     aType: PTypeInfo;
     C: TSQLPropInfoRTTIClass;
@@ -15656,7 +15704,8 @@ begin // Address.Street1 -> Address_Street1
   for i := max downto 0 do
     result.fNameUnflattened :=
       ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'.'+result.fNameUnflattened;
-  if (max>=0) and (aFlattenedProps[max]^.PropType^.ClassFieldCount=1) then begin
+  if (max>=0) and (aFlattenedProps[max]^.PropType^.
+     ClassFieldCount(pilIgnoreIfGetter in aOptions)=1) then begin
     // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
     result.fName := ShortStringToAnsi7String(aFlattenedProps[max]^.Name);
     dec(max);
@@ -15735,7 +15784,7 @@ begin
     if aFlattenedProps<>nil then
       FlattenedPropNameSet;
   end else
-    if not aRaiseEORMExceptionIfNotHandled then
+    if not (pilRaiseEORMExceptionIfNotHandled in aOptions) then
       result := nil else
       raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
         [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
@@ -17882,8 +17931,9 @@ begin
       InternalAddParentsFirst(P^.PropType^.ClassType^.ClassType,aFlattenedProps);
       SetLength(aFlattenedProps,prev);
     end else
-      Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
-        pilRaiseEORMExceptionIfNotHandled in fOptions,aFlattenedProps));
+      if (pilIgnoreIfGetter in fOptions) and not P^.GetterIsField then
+        continue else
+        Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,aFlattenedProps));
     P := P^.Next;
   end;
 end;
@@ -17897,8 +17947,7 @@ begin
   if not (pilSingleHierarchyLevel in fOptions) then
     InternalAddParentsFirst(aClassType.ClassParent);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
-    Add(TSQLPropInfoRTTI.CreateFrom(P,Count,
-      pilRaiseEORMExceptionIfNotHandled in fOptions,nil));
+    Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,nil));
     P := P^.Next;
   end;
 end;
@@ -18054,32 +18103,72 @@ end;
 
 { TSynMonitor }
 
-procedure TSynMonitor.ProcessStart;
+destructor TSynMonitor.Destroy;
 begin
-  fTimer.Resume;
+  if fMultiThreaded then
+    DeleteCriticalSection(fLock);
+  inherited;
 end;
 
-procedure TSynMonitor.Processed(const aProcessedDataSize: QWord);
+procedure TSynMonitor.ProcessStart;
 begin
-  inc(fCount);
-  fSize.Bytes := fSize.Bytes+aProcessedDataSize;
+  if fProcessing then
+    raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
+  if fMultiThreaded then
+    raise ESynException.CreateUTF8('Multi-threaded %.ProcessStart',[self]);
+  fProcessTimer.Resume;
+  fTaskStatus := taskNotStarted;
+  fProcessing := true;
+end;
+
+procedure TSynMonitor.ProcessDoTask;
+begin
+  inc(fTaskCount);
+  fTaskStatus := taskStarted;
 end;
 
 procedure TSynMonitor.ProcessEnd;
 begin
-  fTimer.Pause;
-  fTimer.ComputeTime;
-  fTime.MicroSec := fTimer.TimeInMicroSec;
-  fLastTime.MicroSec := fTimer.LastTimeInMicroSec;
-  if (fMinimalTime.MicroSec=0) or
-     (fLastTime.MicroSec<fMinimalTime.MicroSec) then
-    fMinimalTime.MicroSec := fLastTime.MicroSec;
-  if fLastTime.MicroSec>fMaximalTime.MicroSec then
-    fMaximalTime.MicroSec := fLastTime.MicroSec;
-  FillPerSecProperties;
+  fProcessTimer.Pause;
+  fProcessTimer.ComputeTime;
+  FillFromProcessTimer;
 end;
 
-procedure TSynMonitor.ProcessError(const info: variant); 
+procedure TSynMonitor.FillFromProcessTimer;
+begin
+  fTime.MicroSec := fProcessTimer.TimeInMicroSec;
+  if fTaskStatus=taskStarted then begin
+    fLastTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
+    if (fMinimalTime.MicroSec=0) or
+       (fLastTime.MicroSec<fMinimalTime.MicroSec) then
+      fMinimalTime.MicroSec := fLastTime.MicroSec;
+    if fLastTime.MicroSec>fMaximalTime.MicroSec then
+      fMaximalTime.MicroSec := fLastTime.MicroSec;
+    fTaskStatus := taskNotStarted;
+  end;
+  FillPerSecProperties;
+  fProcessing := false;
+end;
+
+function TSynMonitor.FromExternalQueryPerformanceCounters(const Start,Stop: Int64): QWord;
+begin
+  if not fMultiThreaded then begin
+    fMultiThreaded := true;
+    InitializeCriticalSection(fLock);
+  end;
+  EnterCriticalSection(fLock);
+  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+    fProcessTimer.FromExternalQueryPerformanceCounters(Start,Stop);
+    FillFromProcessTimer;
+    result := fProcessTimer.LastTimeInMicroSec;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.ProcessError(const info: variant);
 begin
   inc(fInternalErrors);
   fLastInternalError := info;
@@ -18087,8 +18176,7 @@ end;
 
 procedure TSynMonitor.FillPerSecProperties;
 begin
-  fPerSec := fTime.PerSecond(fCount);
-  fThroughput.BytesPerSec := fTime.PerSecond(fSize.Bytes);
+  fPerSec := fTime.PerSecond(fTaskCount);
 end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
@@ -18101,15 +18189,78 @@ begin
     fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
   if another.fMaximalTime.MicroSec>fMaximalTime.MicroSec then
     fMaximalTime.MicroSec := another.fMaximalTime.MicroSec;
-  inc(fCount,another.Count);
+  inc(fTaskCount,another.fTaskCount);
+  if another.Processing then
+    fProcessing := true; // if any thread is active, whole daemon is active
   inc(fInternalErrors,another.Errors);
-  fSize.Bytes := fSize.Bytes+another.Size.Bytes;
+end;
+
+function TSynMonitor.ComputeDetailsJSON: RawUTF8;
+begin
+  if fMultiThreaded then
+    EnterCriticalSection(fLock); // how knows? the safer the better
+  try
+    FillPerSecProperties; // may not have been calculated after Sum()
+    result := ObjectToJSON(self);
+  finally
+    if fMultiThreaded then
+      LeaveCriticalSection(fLock);
+  end;
 end;
 
 function TSynMonitor.ComputeDetails: variant;
 begin
-  FillPerSecProperties; // may not have been calculated after Sum()
-  result := ObjectToVariant(self);
+  result := _JsonFast(ComputeDetailsJSON);
+end;
+
+
+{ TSynMonitorWithSize}
+
+procedure TSynMonitorWithSize.FillPerSecProperties;
+begin
+  inherited;
+  fThroughput.BytesPerSec := fTime.PerSecond(fSize.Bytes);
+end;
+
+procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
+begin
+  fSize.Bytes := fSize.Bytes+Bytes;
+end;
+
+procedure TSynMonitorWithSize.AddSize(Bytes: integer);
+begin
+  fSize.Bytes := fSize.Bytes+Bytes;
+end;
+
+procedure TSynMonitorWithSize.Sum(another: TSynMonitor);
+begin
+  inherited;
+  if another.InheritsFrom(TSynMonitorWithSize) then
+    AddSize(TSynMonitorWithSize(another).Size.Bytes);
+end;
+
+{ TSynMonitorInputOutput }
+
+procedure TSynMonitorInputOutput.FillPerSecProperties;
+begin
+  inherited;
+  fInputThroughput.BytesPerSec := fTime.PerSecond(fInput.Bytes);
+  fOutputThroughput.BytesPerSec := fTime.PerSecond(fOutput.Bytes);
+end;
+
+procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
+begin
+  fInput.Bytes := fInput.Bytes+Incoming;
+  fOutput.Bytes := fOutput.Bytes+Outgoing;
+end;
+
+procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
+begin
+  inherited;
+  if another.InheritsFrom(TSynMonitorWithSize) then begin
+    fInput.Bytes := fInput.Bytes+TSynMonitorInputOutput(another).Input.Bytes;
+    fOutput.Bytes := fOutput.Bytes+TSynMonitorInputOutput(another).Output.Bytes;
+  end;
 end;
 
 
@@ -21782,9 +21933,15 @@ begin
   DestInfo^.GetVariantProp(Dest,VD);
   result := VS=VD; // rely on Variants.pas comparison
 end;
+function CompareStrings: Boolean;
+var US,UD: RawUTF8;
+begin
+  GetLongStrValue(Source,US);
+  DestInfo^.GetLongStrValue(Dest,UD);
+  result := US=UD;
+end;
 {$endif}
 var kS,kD: TTypeKind;
-    uS,uD: pointer; // avoid try...finally for temporary strings
     daS,daD: TDynArray;
     i: integer;
 begin
@@ -21798,18 +21955,8 @@ begin
   kS := PropType^.Kind;
   kD := DestInfo^.PropType^.Kind;
   if KS in tkStringTypes then
-    if KD in tkStringTypes then begin
-      uS := nil;
-      uD := nil;
-      try
-        GetLongStrValue(Source,RawUTF8(uS));
-        DestInfo^.GetLongStrValue(Dest,RawUTF8(uD));
-        result := RawUTF8(uS)=RawUTF8(uD);
-      finally
-        RawUTF8(uS) := '';
-        RawUTF8(uD) := '';
-      end;
-    end else
+    if KD in tkStringTypes then
+      result := CompareStrings else
       exit else
   if KS in tkOrdinalTypes then
     if KD in tkOrdinalTypes then
@@ -21823,26 +21970,26 @@ begin
       if DestInfo^.PropType^.FloatType=PropType^.FloatType then
       case PropType^.FloatType of
       ftCurr: begin
-        if GetterIsField and SetterIsField then
+        if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
           result := GetCurrencyProp(Source)=DestInfo^.GetCurrencyProp(Dest);
         exit;
       end;
       ftDoub: begin
-        if GetterIsField and SetterIsField then
+        if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
           result := SynCommons.SameValue(GetDoubleProp(Source),DestInfo^.GetDoubleProp(Dest));
         exit;
       end;
       end;
-      result := SynCommons.SameValue(GetFloatProp(Source),DestInfo^.GetFloatProp(Dest));
+      result := SynCommons.SameValueFloat(GetFloatProp(Source),DestInfo^.GetFloatProp(Dest));
     end;
     tkDynArray: begin
       GetDynArray(Source,daS);
       DestInfo^.GetDynArray(Dest,daD);
       if daS.Count=daD.Count then
         if InternalIsObjArray(PropType{$ifndef FPC}^{$endif}) and
-           ((DestInfo=@self) or DestInfo^.DynArrayIsObjArray) then begin
+           ((@self=DestInfo) or DestInfo^.DynArrayIsObjArray) then begin
           for i := 0 to daS.Count-1 do
             if not ObjectEquals(PObjectArray(daS.Value)[i],PObjectArray(daD.Value)[i]) then
               exit;
@@ -22680,9 +22827,9 @@ asm // very fast code
 {$endif}
 end;
 
-function TTypeInfo.ClassFieldCount: integer;
+function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
 begin
-  result := ClassFieldCountWithParents(ClassType^.ClassType);
+  result := ClassFieldCountWithParents(ClassType^.ClassType,onlyWithoutGetter);
 end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
@@ -29170,7 +29317,7 @@ begin
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
-  fStats := TSQLRestServerStats.Create;
+  fStats := TSQLRestServerMonitor.Create;
   fPrivateGarbageCollector.Add(fStats);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   fSessionCounter := GetTickCount; // force almost-random session ID
@@ -30071,7 +30218,7 @@ begin
     Server.InternalLog(Name,sllServiceCall);
     CallBack(self);
   end;
-  inc(Server.fStats.fServices);
+  inc(Server.fStats.fServiceMethod);
 end;
 
 type
@@ -30128,7 +30275,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
     if ForceServiceResultAsXMLObjectNameSpace='' then
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
-    inc(Server.fStats.fServices);
+    inc(Server.fStats.fServiceInterface);
     case ServiceMethodIndex of
     ord(imFree):
       // "method":"_free_" to release sicClientDriven..sicPerGroup
@@ -30239,7 +30386,8 @@ begin
             if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
               Call.OutStatus := HTML_SUCCESS;  // 200 OK
               if not SQLisSelect then
-                inc(Server.fStats.fModified);
+                Method := TSQLURIMethod(IdemPCharArray(pointer(SQL),
+                  ['INSERT','UPDATE','DELETE'])+2); // -1+2 -> mGET=1
             end;
           end;
         end;
@@ -30373,6 +30521,8 @@ begin
           Call.OutStatus := HTML_NOTFOUND;
       end;
     end;
+    if Call.OutStatus=HTML_SUCCESS then
+      Server.fStats.NotifyORM(Method);
   end;
   mUNLOCK: begin
     // ModelRoot/TableName/TableID to unlock a member
@@ -30419,7 +30569,6 @@ begin
          (not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0,'[','{'])) and
          Server.EngineExecute(Call.InBody) then begin
         Call.OutStatus := HTML_SUCCESS; // 200 OK
-        inc(Server.fStats.fModified);
       end;
     end else begin
       // ModelRoot/TableName with possible JSON SentData: create a new member
@@ -30429,7 +30578,6 @@ begin
         Call.OutStatus := HTML_CREATED; // 201 Created
         Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
         Server.fCache.Notify(TableIndex,TableID,Call.InBody,soInsert);
-        inc(Server.fStats.fModified);
       end;
     end;
   mPUT: // PUT=UPDATE
@@ -30448,10 +30596,8 @@ begin
           if OK then
             Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
         end;
-        if OK then begin
+        if OK then
           Call.OutStatus := HTML_SUCCESS; // 200 OK
-          inc(Server.fStats.fModified);
-        end;
       end else
       Call.OutStatus := HTML_NOTMODIFIED;
     end else
@@ -30465,10 +30611,8 @@ begin
       until Parameters=nil;
       if (SQLSelect<>'') and (SQLDir<>'') and (SQLSort<>'') and (SQLWhere<>'') then
         if TableEngine.EngineUpdateField(TableIndex,
-             SQLSelect,SQLDir,SQLSort,SQLWhere) then begin
+             SQLSelect,SQLDir,SQLSort,SQLWhere) then
           Call.OutStatus := HTML_SUCCESS; // 200 OK
-          inc(Server.fStats.fModified);
-        end;
     end;
   mDELETE:
     if TableID>0 then
@@ -30479,7 +30623,6 @@ begin
            Server.AfterDeleteForceCoherency(Table,TableID) then begin
           Call.OutStatus := HTML_SUCCESS; // 200 OK
           Server.fCache.NotifyDeletion(TableIndex,TableID);
-          inc(Server.fStats.fModified);
         end;
       end else
     if Parameters<>nil then begin
@@ -30488,10 +30631,8 @@ begin
         if UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters) then begin
           SQLWhere := trim(SQLWhere);
           if SQLWhere<>'' then begin
-            if Server.Delete(Table,SQLWhere) then begin
+            if Server.Delete(Table,SQLWhere) then 
               Call.OutStatus := HTML_SUCCESS; // 200 OK
-              inc(Server.fStats.fModified);
-            end;
           end;
           break;
         end;
@@ -30539,6 +30680,8 @@ begin
     Call.OutStatus := HTML_SUCCESS; // 200 OK
   end;
   end;
+  if Call.OutStatus in [HTML_SUCCESS,HTML_CREATED] then
+    Server.fStats.NotifyORM(Method);
 end;
 
 procedure TSQLRestServerURIContext.FillInput;
@@ -30943,7 +31086,7 @@ begin
     Free;
   end;
   {$ifdef WITHLOG}
-  Log.Log(sllError,Call.OutBody,Server);
+  Log.Log(sllDebug,Call.OutBody,Server);
   {$endif}
 end;
 
@@ -31171,14 +31314,9 @@ end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);
 var Ctxt: TSQLRestServerURIContext;
-{$ifdef WITHSTATPROCESS}
     timeStart,timeEnd: Int64;
 begin
   QueryPerformanceCounter(timeStart);
-{$else}
-begin
-{$endif}
-  inc(fStats.fIncomingBytes,length(Call.url)+length(call.method)+length(call.InHead)+length(call.InBody)+12);
   InterlockedIncrement(fStats.fCurrentRequestCount);
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
@@ -31226,18 +31364,21 @@ begin
     end;
     // 4. returns expected result to the client and update Server statistics
     if (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) or
-       (Call.OutStatus=HTML_NOTMODIFIED) then begin
-      inc(fStats.fResponses);
+       (Call.OutStatus=HTML_NOTMODIFIED) or
+       (Call.OutStatus=HTML_TEMPORARYREDIRECT) then begin
+      inc(fStats.fSuccess);
       if (Call.OutBody<>'') and
          (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
          IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
         inc(fStats.fOutcomingFiles);
     end else begin
-      inc(fStats.fInvalid);
+      fStats.ProcessError(Call.OutStatus);
       if Call.OutBody='' then // if no custom error message, compute it now as JSON
         Ctxt.Error(Ctxt.CustomErrorMsg,Call.OutStatus);
     end;
-    inc(fStats.fOutcomingBytes,length(Call.OutHead)+length(Call.OutBody)+16);
+    fStats.AddSize(
+      length(Call.url)+length(call.method)+length(call.InHead)+length(call.InBody)+12,
+      length(Call.OutHead)+length(Call.OutBody)+16);
     if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
        TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
@@ -31248,16 +31389,12 @@ begin
       Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
         '; Path=/'+Model.Root);
   finally
-    {$ifdef WITHSTATPROCESS}
     QueryPerformanceCounter(timeEnd);
-    timeEnd := timeEnd-timeStart;
-    inc(fStats.ProcessTimeCounter,timeEnd);
-    {$endif}
+    timeEnd := fStats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
     {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllServer,'% % % % -> % with outlen=% in % us',
-      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,
-       Ctxt.URIWithoutSignature,Call.OutStatus,length(Call.OutBody),
-       (timeEnd*Int64(1000*1000))div fFrequencyTimeStamp],self);
+    Ctxt.Log.Log(sllServer,'% % % %/% -> % with outlen=% in % us',
+      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,
+       Ctxt.URI,Call.OutStatus,length(Call.OutBody),timeEnd],self);
     {$endif}
     InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
@@ -31266,7 +31403,7 @@ end;
 
 procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
 begin
-  Ctxt.Returns(Stats.DebugMessage); // transmitted as JSON object
+  Ctxt.Returns(Stats.ComputeDetailsJSON); 
 end;
 
 procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
@@ -32988,56 +33125,33 @@ begin
 {$endif}
 end;
 
-
 {$endif MSWINDOWS}
 
 
-{ TSQLRestServerStats }
+{ TSQLRestServerMonitor }
 
-function TSQLRestServerStats.Changed: boolean;
-begin
-  result := fLastIncomingBytes<>IncomingBytes;
-  if result then
-    fLastIncomingBytes := IncomingBytes;
-end;
-
-procedure TSQLRestServerStats.ClientConnect;
+procedure TSQLRestServerMonitor.ClientConnect;
 begin
   inc(fClientsCurrent);
   if fClientsCurrent>fClientsMax then
     fClientsMax := fClientsCurrent;
-  inc(fIncomingBytes,4); // change IncomingBytes to trigger message update
 end;
 
-procedure TSQLRestServerStats.ClientDisconnect;
+procedure TSQLRestServerMonitor.ClientDisconnect;
 begin
   if fClientsCurrent>0 then
     dec(fClientsCurrent);
-  inc(fIncomingBytes,4); // change IncomingBytes to trigger message update
 end;
 
-function TSQLRestServerStats.DebugMessage: RawUTF8;
+procedure TSQLRestServerMonitor.NotifyORM(aMethod: TSQLURIMethod);
 begin
-  result := ObjectToJSON(self,[woHumanReadable]);
+  case aMethod of
+  mGET,mLOCK: inc(fRead);
+  mPOST:      inc(fCreated);
+  mPUT:       inc(fUpdated);
+  mDELETE:    inc(fDeleted);
+  end;
 end;
-
-function TSQLRestServerStats.ModifPercent: cardinal;
-begin
-  if Responses=0 then
-    result := 0 else
-    result := (Modified*100)div Responses;
-end;
-
-{$ifdef WITHSTATPROCESS}
-function TSQLRestServerStats.GetProcessTimeString: RawUTF8;
-var Freq: Int64;
-begin
-  QueryPerformanceFrequency(Freq); // performance-counter frequency in counts per second
-  if (self=nil) or (Freq=0) then
-    result := '0' else
-    result := MicroSecToString((ProcessTimeCounter*(1000*1000))div Freq);
-end;
-{$endif}
 
 
 { TSQLRestStorageRecordBased }
@@ -35499,7 +35613,7 @@ begin
   end;
 end;
 
-function ObjectEquals(Value1,Value2: TObject): boolean;
+function ObjectEquals(Value1,Value2: TObject; ignoreGetterFields: boolean): boolean;
 var i: integer;
     C1,C2: TClass;
     P1,P2: PPropInfo;
@@ -35513,13 +35627,14 @@ begin
     C2 := Value2.ClassType;
     repeat
       for i := 1 to InternalClassPropInfo(C1,P1) do begin
-        if C2<>C1 then begin
-          P2 := ClassFieldPropWithParents(C2,P1^.Name);
-          if (P2=nil) or not P1^.SameValue(Value1,P2,Value2) then
-            exit;
-        end else
-          if not P1^.SameValue(Value1,P1,Value2) then
-            exit;
+        if (not ignoreGetterFields) or P1^.GetterIsField then  
+          if C2<>C1 then begin
+            P2 := ClassFieldPropWithParents(C2,P1^.Name);
+            if (P2=nil) or not P1^.SameValue(Value1,P2,Value2) then
+              exit;
+          end else
+            if not P1^.SameValue(Value1,P1,Value2) then
+              exit;
         P1 := P1^.Next;
       end;
       C1 := C1.ClassParent;
@@ -36013,7 +36128,7 @@ end;
 type
   TJSONObject =
     (oNone, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
-     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oCustom);
+     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oSynMonitor, oCustom);
 
 function JSONObject(aClassType: TClass; out aCustomIndex: integer;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
@@ -36024,6 +36139,8 @@ begin
     if aClassType<>TList then
     if aClassType<>TObjectList then
     if aClassType<>TPersistent then
+    if aClassType<>TSynPersistent then
+    if aClassType<>TSynMonitor then
     if aClassType<>TSQLRecordMany then
     if aClassType<>TSQLRecord then
     if aClassType<>TStrings then
@@ -36055,6 +36172,8 @@ begin
       result := oStrings else
       result := oSQLRecord else
       result := oSQLMany else
+      result := oSynMonitor else
+      result := oPersistent else
       result := oPersistent else
       result := oObjectList else
       result := oList;
@@ -37911,11 +38030,15 @@ begin
     AddShort('null'); // return void object
     exit;
   end;
-  if woFullExpand in Options then begin
-    Add('{');
-    AddInstanceName(Value,':');
-  end;
   IsObj := JSONObject(aClassType,IsObjCustomIndex,[cpWrite]);
+  if woFullExpand in Options then
+    if IsObj=oSynMonitor then begin // nested values do not need extended information
+      exclude(Options,woFullExpand);
+      include(Options,woEnumSetsAsText);
+     end else begin
+      Add('{');
+      AddInstanceName(Value,':');
+    end;
   case IsObj of
   // handle custom class serialization
   oCustom:
@@ -38020,7 +38143,8 @@ begin
             if {$ifdef FPC}(Kind=tkBool){$else}
                (Kind=tkEnumeration) and (P^.PropType^=TypeInfo(boolean)){$endif} then
               AddString(JSON_BOOLEAN[boolean(V)]) else
-              if (woFullExpand in Options) or (woHumanReadable in Options) then
+              if (woFullExpand in Options) or (woHumanReadable in Options) or
+                 (woEnumSetsAsText in Options) then
               case Kind of
               tkEnumeration:
               with P^.PropType^.EnumBaseType^ do begin
@@ -38878,7 +39002,7 @@ begin
   result := true;
   case Method of
   mPOST:   // POST=ADD=INSERT
-    if Table<>nil then  // ExecuteORMWrite will check reSQL access right  
+    if Table<>nil then  // ExecuteORMWrite will check reSQL access right
       result := (TableID<0) and (TableIndex in POST);
   mPUT:    // PUT=UPDATE
     result := (Table<>nil) and
@@ -39440,7 +39564,7 @@ begin
   InDataEnc := Ctxt.InputUTF8['Data'];
   if InDataEnc='' then begin
     // client is browser and used HTTP headers to send auth data
-    InDataEnc := FindIniNameValue(PUTF8Char(Ctxt.Call.InHead), SECPKGNAMEHTTPAUTHORIZATION);
+    InDataEnc := FindIniNameValue(pointer(Ctxt.Call.InHead),SECPKGNAMEHTTPAUTHORIZATION);
     if InDataEnc = '' then begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
@@ -40276,7 +40400,7 @@ begin
     if (ClassFieldCountWithParents(ClassType)>0) or
        (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-          oSQLRecord,oSQLMany,oPersistent,oCustom]) then
+          oSQLRecord,oSQLMany,oPersistent,oSynMonitor,oCustom]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
   {$ifdef FPC}tkObject,{$endif} tkRecord:
     // Base64 encoding of our RecordLoad / RecordSave binary format

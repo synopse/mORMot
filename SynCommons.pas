@@ -5409,10 +5409,13 @@ type
   // - woHumanReadableEnumSetAsComment will add a comment at the end of the
   // line, containing all available values of the enumaration or set, e.g:
   // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
+  // - woEnumSetsAsText will store sets and enumerables as text (is also
+  // included in woFullExpand or woHumanReadable)
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment);
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
+    woEnumSetsAsText);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -11072,6 +11075,12 @@ type
     // member, then call fTimeElapsed.ProfileCurrentMethod at the beginning of
     // all process expecting some timing, then log/save fTimeElapsed.Stop content
     function ProfileCurrentMethod: IUnknown;
+    /// low-level method to force values settings to allow thread safe timing
+    // - by default, this timer is not thread safe: you can use this method to
+    // set the timing values from manually computed performance counters
+    // - the caller should also use a mutex to prevent from race conditions
+    // - warning: Start, Stop, Pause and Resume methods are then disallowed
+    procedure FromExternalQueryPerformanceCounters(aStart,aStop: Int64);
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -11493,6 +11502,21 @@ function IntToThousandString(Value: integer; const ThousandSep: RawUTF8=','): Ra
 // - returns 'Delphi 2007' or 'Delphi 2010' e.g.
 function GetDelphiCompilerVersion: RawUTF8;
 
+/// returns TRUE if the supplied mutex has been initialized
+// - will check if the supplied mutex is void (i.e. all filled with 0 bytes)
+function IsInitializedCriticalSection(const CS: TRTLCriticalSection): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// on need initialization of a mutex, then enter the lock
+// - if the supplied mutex has been initialized, do nothing
+// - if the supplied mutex is void (i.e. all filled with 0), initialize it
+procedure InitializeCriticalSectionIfNeededAndEnter(var CS: TRTLCriticalSection);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// on need finalization of a mutex
+// - if the supplied mutex has been initialized, delete it
+// - if the supplied mutex is void (i.e. all filled with 0), do nothing
+procedure DeleteCriticalSectionIfNeeded(var CS: TRTLCriticalSection);
 
 /// compress a data content using the SynLZ algorithm from one stream into another
 // - returns the number of bytes written to Dest
@@ -21964,7 +21988,11 @@ begin
        (PCardinalArray(P)^[2]<>0) or (PCardinalArray(P)^[3]<>0) then
       exit else
       inc(PtrUInt(P),16);
-  for i := 1 to Length and 15 do
+  for i := 1 to (Length shr 2)and 3 do // 4 bytes (1 DWORD) by loop
+    if PCardinal(P)^<>0 then
+      exit else
+      inc(PtrUInt(P),4);
+  for i := 1 to Length and 3 do // remaining content
     if PByte(P)^<>0 then
       exit else
       inc(PtrUInt(P));
@@ -37080,6 +37108,24 @@ begin
     result := TwoDigitToString(Micro div (10*1000))+'s';
 end;
 
+function IsInitializedCriticalSection(const CS: TRTLCriticalSection): Boolean;
+begin
+  result := not IsZero(@CS,sizeof(CS));
+end;
+
+procedure InitializeCriticalSectionIfNeededAndEnter(var CS: TRTLCriticalSection);
+begin
+  if IsZero(@CS,sizeof(CS)) then
+    InitializeCriticalSection(CS);
+  EnterCriticalSection(CS);
+end;
+
+procedure DeleteCriticalSectionIfNeeded(var CS: TRTLCriticalSection);
+begin
+  if not IsZero(@CS,sizeof(CS)) then
+    DeleteCriticalSection(CS);
+end;
+
 
 { TPrecisionTimer }
 
@@ -37115,15 +37161,32 @@ end;
 procedure TPrecisionTimer.ComputeTime;
 begin
   QueryPerformanceCounter(iStop);
-  if iFreq=0 then
+  if iFreq=0 then begin
     QueryPerformanceFrequency(iFreq);
+    if iFreq=0 then begin
+      iTime := 0;
+      iLastTime := 0;
+      exit;
+    end;
+  end;
+  iTime := ((iStop-iStart)*QWord(1000*1000))div iFreq;
+  iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
+end;
+
+procedure TPrecisionTimer.FromExternalQueryPerformanceCounters(aStart,aStop: Int64);
+begin // very close to ComputeTime
+  iLastTime := 0;
   if iFreq=0 then begin
     iTime := 0;
-    iLastTime := 0;
-  end else begin
-    iTime := ((iStop-iStart)*QWord(1000*1000))div iFreq;
-    iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
+    QueryPerformanceFrequency(iFreq);
+    if iFreq=0 then
+      exit;
   end;
+  aStop := aStop-aStart;
+  if aStop<0 then
+    exit;
+  iLastTime := (aStop*QWord(1000*1000))div iFreq;
+  inc(iTime,iLastTime);
 end;
 
 function TPrecisionTimer.Stop: RawUTF8;

@@ -479,11 +479,12 @@ begin
 end;
 
 class procedure TCountry.RegressionTests(test: TSynTestCase);
-var c: TCountry;
+var c,c2: TCountry;
     i: TCountryIdentifier;
     t: RawUTF8;
 begin
   c := TCountry.Create;
+  c2 := TCountry.Create;
   with test do
   try
     c.Alpha2 := ' fR ';
@@ -524,8 +525,14 @@ begin
       c.Alpha3 := t;
       Check(c.Identifier=i);
       Check(c.Iso=COUNTRY_ISONUM[i]);
+      CopyObject(c,c2);
+      Check(c2.Iso=COUNTRY_ISONUM[i]);
+      Check(c2.Alpha3=c.Alpha3);
+      Check(ObjectEquals(c,c2,false));
+      Check(ObjectEquals(c,c2,true));
     end;
   finally
+    c2.Free;
     c.Free;
   end;
 end;

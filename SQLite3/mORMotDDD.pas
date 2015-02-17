@@ -560,9 +560,8 @@ type
   protected
     fDaemon: TDDDMonitoredDaemon;
     fIndex: integer;
-    fProcessing: boolean;
     fProcessIdleDelay: cardinal;
-    fMonitoring: TSynMonitor;
+    fMonitoring: TSynMonitorWithSize;
     fPending: TSQLRecord;
     procedure Execute; override;
     procedure OnException(E: Exception); virtual;
@@ -813,7 +812,8 @@ begin
   fPropsMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
-  fAggregateRTTI := TSQLPropInfoList.Create(fAggregate,[pilAllowIDFields,pilSubClassesFlattening]);
+  fAggregateRTTI := TSQLPropInfoList.Create(fAggregate,
+    [pilAllowIDFields,pilSubClassesFlattening,pilIgnoreIfGetter]);
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
@@ -880,7 +880,8 @@ begin
       aggname := RawUTF8(hier[i].ClassName);
       recname := 'TSQLRecord'+copy(aggname,2,100);
       map := TSQLPropInfoList.Create(hier[i],
-        [pilAllowIDFields,pilSubClassesFlattening,pilSingleHierarchyLevel]);
+        [pilSingleHierarchyLevel,pilAllowIDFields,
+         pilSubClassesFlattening,pilIgnoreIfGetter]);
       try
         code := FormatUTF8('%'#13#10+
           '  /// ORM class corresponding to % DDD aggregate'#13#10+
@@ -1480,8 +1481,8 @@ constructor TDDDMonitoredDaemonProcess.Create(aDaemon: TDDDMonitoredDaemon;
 begin
   fDaemon := aDaemon;
   if fDaemon.fProcessMonitoringClass=nil then
-    fMonitoring := TSynMonitor.Create else
-    fMonitoring := fDaemon.fProcessMonitoringClass.Create;
+    fMonitoring := TSynMonitorWithSize.Create else
+    fMonitoring := fDaemon.fProcessMonitoringClass.Create as TSynMonitorWithSize;
   fProcessIdleDelay := fDaemon.ProcessIdleDelay;
   fIndex := aIndexInDaemon;
   inherited Create(False);
@@ -1505,7 +1506,6 @@ begin
             if Terminated then
               exit;
             fPending := nil;
-            fProcessing := true;
             try
               fMonitoring.ProcessStart;
               try
@@ -1517,11 +1517,11 @@ begin
                 end;
                 if fPending.ID=0 then
                   break; // no more pending tasks
+                fMonitoring.ProcessDoTask;
                 ExecuteProcessAndSetResult; // always set, even if Terminated
               finally
                 fMonitoring.ProcessEnd;
                 FreeAndNil(fPending);
-                fProcessing := false;
               end;
             except
               on E: Exception do begin
@@ -1589,14 +1589,15 @@ begin
   working := 0;
   if fMonitoringClass=nil then
     if fProcessMonitoringClass=nil then
-      stats := TSynMonitor.Create else
+      stats := TSynMonitorWithSize.Create else
       stats := fProcessMonitoringClass.Create else
     stats := fMonitoringClass.Create; 
   try
     pool.InitArray([],JSON_OPTIONS[true]);
     for i := 0 to High(fProcess) do
     with fProcess[i] do begin
-      inc(working);
+      if fMonitoring.Processing then
+        inc(working);
       pool.AddItem(fMonitoring.ComputeDetails);
       stats.Sum(fMonitoring);
     end;
@@ -1648,7 +1649,7 @@ begin
         sleep(5);
         allfinished := true;
         for i := 0 to high(fProcess) do
-          if fProcess[i].fProcessing then begin
+          if fProcess[i].fMonitoring.Processing then begin
             allfinished := false;
             break;
           end;
