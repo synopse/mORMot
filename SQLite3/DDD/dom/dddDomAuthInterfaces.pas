@@ -69,7 +69,7 @@ type
   TAuthInfoName = RawUTF8;
 
   /// DDD entity used to store authentication information
-  TAuthInfo = class(TPersistent)
+  TAuthInfo = class(TSynPersistent)
   protected
     fLogonName: TAuthInfoName;
   published

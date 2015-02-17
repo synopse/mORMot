@@ -270,7 +270,7 @@ type
   /// store reference of several factories, each with one mapping definition
   TDDDRepositoryRestFactoryObjArray = array of TDDDRepositoryRestFactory;
 
-  /// home repository of several TPersistent factories using REST storage
+  /// home repository of several DDD Entity factories using REST storage
   // - this shared class will be can to manage a service-wide repositories,
   // i.e. will handle all actual I*Query/I*Command implementation classes
   // accross a set of TSQLRest instances
@@ -281,32 +281,34 @@ type
   public
     /// finalize all factories
     destructor Destroy; override;
-    /// register DDD's TPersistent repository over an ORM's TSQLRecord
+    /// register one DDD Entity repository over an ORM's TSQLRecord
     // - will raise an exception if the aggregate has already been defined
     function AddFactory(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+      aAggregate: TClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestFactory;
-    /// retrieve the registered definition of a given TPersistent in Factory[]
+    /// retrieve the registered definition of a given DDD Entity in Factory[]
     // - returns -1 if the TPersistence class is unknown
     function GetFactoryIndex(const aInterface: TGUID): integer;
-    /// retrieve the registered Factory definition of a given TPersistent
+    /// retrieve the registered Factory definition of a given DDD Entity
     // - raise an EDDDRepository exception if the TPersistence class is unknown
     function GetFactory(const aInterface: TGUID): TDDDRepositoryRestFactory;
-    /// read-only access to all defined persistent factories
+    /// read-only access to all defined DDD Entity factories
     property Factory: TDDDRepositoryRestFactoryObjArray read fFactory;
   end;
 
-  /// implement DDD's TPersistent factory over one ORM's TSQLRecord
+  /// implement a DDD Entity factory over one ORM's TSQLRecord
   // - it will centralize some helper classes and optimized class mapping
+  // - the Entity class may be defined as any TPersistent or TSynPersistent, with
+  // an obvious preference for TSynPersistent and TSynAutoCreateFields classes
   TDDDRepositoryRestFactory = class(TInterfaceResolverForSingleInterface)
   protected
     fOwner: TDDDRepositoryRestManager;
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
-    fAggregate: TPersistentClass;
-    fAggregateHasCustomCreate: boolean;
+    fAggregate: TClass;
+    fAggregateCreate: TClassInstanceCreate;
     fTable: TSQLRecordClass;
     fAggregateRTTI: TSQLPropInfoList;
     // stored in fGarbageCollector, following fAggregateProp[]
@@ -325,11 +327,11 @@ type
     function GetTableName: string;
     // override those methods to customize the data marshalling
     procedure AggregatePropToTable(
-      aAggregate: TPersistent; aAggregateProp: TSQLPropInfo;
+      aAggregate: TObject; aAggregateProp: TSQLPropInfo;
       aRecord: TSQLRecord; aRecordProp: TSQLPropInfo); virtual;
     procedure TablePropToAggregate(
       aRecord: TSQLRecord; aRecordProp: TSQLPropInfo;
-      aAggregate: TPersistent; aAggregateProp: TSQLPropInfo); virtual;
+      aAggregate: TObject; aAggregateProp: TSQLPropInfo); virtual;
     function CreateInstance: TInterfacedObject; override;
   public
     /// will compute the ORM TSQLRecord* source code type definitions
@@ -356,7 +358,7 @@ type
     // !  Props.SetCustomCollation('Field','BINARY');
     // !  Props.AddFilterOrValidate('Email',TSynValidateEmail.Create);
     // !end;
-    class procedure ComputeSQLRecord(const aAggregate: array of TPersistentClass;
+    class procedure ComputeSQLRecord(const aAggregate: array of TClass;
       DestinationSourceCodeFile: TFileName='');
     /// initialize the DDD Aggregate factory using a mORMot ORM class
     // - by default, field names should match on both sides - but you can
@@ -364,7 +366,7 @@ type
     // - any missing or unexpected field on any side will just be ignored
     constructor Create(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+      aAggregate: TClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       const TableAggregatePairs: array of RawUTF8;
       aOwner: TDDDRepositoryRestManager=nil); reintroduce; overload;
     /// initialize the DDD Aggregate factory using a mORMot ORM class
@@ -372,7 +374,7 @@ type
     // - any missing or unexpected field on any side will just be ignored
     constructor Create(
       const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-      aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+      aAggregate: TClass; aRest: TSQLRest; aTable: TSQLRecordClass;
       aOwner: TDDDRepositoryRestManager=nil); reintroduce; overload;
     /// finalize the factory
     destructor Destroy; override;
@@ -402,32 +404,33 @@ type
     procedure AddFilterOrValidate(const aFieldNames: array of RawUTF8;
       aFilterOrValidate: TSynFilterOrValidate; aFieldNameFlattened: boolean=false); virtual;
     /// clear all properties of a given DDD Aggregate
-    procedure AggregateClear(aAggregate: TPersistent);
+    procedure AggregateClear(aAggregate: TObject);
     /// create a new DDD Aggregate instance
-    function AggregateCreate: TPersistent;
+    function AggregateCreate: TObject;
     /// perform filtering and validation on a supplied DDD Aggregate
     // - all logic defined by AddFilterOrValidate() will be processed
-    function AggregateFilterAndValidate(aAggregate: TPersistent;
+    function AggregateFilterAndValidate(aAggregate: TObject;
       aInvalidFieldIndex: PInteger=nil): RawUTF8; virtual;
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
     // TSQLRecord fields, so that it would be compatible with ORM's JSON
-    procedure AggregateToJSON(aAggregate: TPersistent; W: TJSONSerializer;
+    procedure AggregateToJSON(aAggregate: TObject; W: TJSONSerializer;
       ORMMappedFields: boolean; aID: TID); overload;
     /// serialize a DDD Aggregate as JSON RawUTF8
-    function AggregateToJSON(aAggregate: TPersistent; ORMMappedFields: boolean;
+    function AggregateToJSON(aAggregate: TObject; ORMMappedFields: boolean;
       aID: TID): RawUTF8; overload;
     /// convert a DDD Aggregate into an ORM TSQLRecord instance
-    procedure AggregateToTable(aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
+    procedure AggregateToTable(aAggregate: TObject; aID: TID; aDest: TSQLRecord);
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
-    procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TPersistent);
+    procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TObject);
     /// the home repository owning this factory
     property Owner: TDDDRepositoryRestManager read fOwner;
-    /// the DDD's TPersistent handled by this factory
-    property Aggregate: TPersistentClass read fAggregate;
+    /// the DDD's Entity class handled by this factory
+    // - may be any TPersistent, but very likely a TSynAutoCreateFields class
+    property Aggregate: TClass read fAggregate;
     /// the ORM's TSQLRecord used for actual storage
     property Table: TSQLRecordClass read fTable;
-    /// the mapped DDD's TPersistent published properties RTTI
+    /// the mapped DDD's Entity class published properties RTTI
     property Props: TSQLPropInfoList read fAggregateRTTI;
     /// access to the Aggregate / ORM field mapping
     property FieldMapping: TSQLRecordPropertiesMapping read fPropsMapping;
@@ -438,7 +441,7 @@ type
     property Rest: TSQLRest read fRest;
     /// the class name which will implement each repository instance 
     property ImplementationClass: string read GetImplementationName;
-    /// the DDD's TPersistent class name handled by this factory
+    /// the DDD's Entity class name handled by this factory
     property AggregateClass: string read GetAggregateName;
     /// the ORM's TSQLRecord class name used for actual storage
     property TableClass: string read GetTableName;
@@ -454,11 +457,11 @@ type
     // one-by-one retrieval in local ORM: TSQLRecord
     function ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
-    function ORMGetAggregate(aAggregate: TPersistent): TCQRSResult;
+    function ORMGetAggregate(aAggregate: TObject): TCQRSResult;
     // list retrieval - using cursor-like access via ORM.FillOne
     function ORMSelectAll(ORMWhereClauseFmt: PUTF8Char;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
-    function ORMGetNextAggregate(aAggregate: TPersistent; aRewind: boolean=false): TCQRSResult;
+    function ORMGetNextAggregate(aAggregate: TObject; aRewind: boolean=false): TCQRSResult;
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
     function ORMSelectCount(ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
       out aResultCount: integer; ForcedBadRequest: boolean=false): TCQRSResult;
@@ -498,10 +501,10 @@ type
     // call DDD's + ORM's FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
-      aAggregate: TPersistent); virtual;
+      aAggregate: TObject); virtual;
     /// minimal implementation using AggregateToTable() conversion
-    function ORMAdd(aAggregate: TPersistent): TCQRSResult; virtual;
-    function ORMUpdate(aAggregate: TPersistent): TCQRSResult; virtual;
+    function ORMAdd(aAggregate: TObject): TCQRSResult; virtual;
+    function ORMUpdate(aAggregate: TObject): TCQRSResult; virtual;
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit; virtual;
@@ -552,22 +555,15 @@ type
   TDDDMonitoredDaemonProcessState = (
     dpsPending, dpsProcessing, dpsProcessed, dpsFailed);
 
-  // TODO: monitoring statistics should be done in mORMot.pas, so that
-  // could be shared e.g. with TSQLRestServer for ORM or SOA information
-
   /// abstract process thread class with monitoring abilities
   TDDDMonitoredDaemonProcess = class(TThread)
   protected
     fDaemon: TDDDMonitoredDaemon;
     fIndex: integer;
     fProcessing: boolean;
-    fTimer: TPrecisionTimer;
-    fCount, fInternalErrors: Cardinal;
-    fLastInternalError: variant;
-    fSize: Int64;
-    fAdditionalStatistics: TInt64DynArray;
+    fProcessIdleDelay: cardinal;
+    fMonitoring: TSynMonitor;
     fPending: TSQLRecord;
-    fProcessIdleDelay: integer;
     procedure Execute; override;
     procedure OnException(E: Exception); virtual;
   protected
@@ -575,15 +571,20 @@ type
     // returns fPending.ID=0 if no more pending task
     procedure ExecuteRetrievePendingAndSetProcessing; virtual; abstract;
     // should save fPending.State to "processed" or "failed"
-    // and inc(fSize,bytesProcessed)
+    // and finally call fMonitoring.Processed(bytesProcessed)
     procedure ExecuteProcessAndSetResult; virtual; abstract;
     // is called when there is no more pending task
     procedure ExecuteIdle; virtual; abstract;
   public
     /// initialize the process thread for a given Service/Daemon instance
     constructor Create(aDaemon: TDDDMonitoredDaemon; aIndexInDaemon: integer); virtual;
-    /// returns the monitoring statistics for this process thread
-    function ComputeDetails: variant; virtual;
+    /// finalize the process thread
+    destructor Destroy; override;
+    /// milliseconds delay defined before getting the next pending tasks
+    // - equals TDDDMonitoredDaemon.ProcessIdleDelay, unless a fatal exception
+    // occurred during TDDDMonitoredDaemonProcess.ExecuteIdle method: in this
+    // case, the delay has been increased to 500 ms
+    property IdleDelay: cardinal read fProcessIdleDelay;
   end;
 
   /// used to determine which actual thread class will implement the process
@@ -596,20 +597,19 @@ type
   protected
     fProcess: array of TDDDMonitoredDaemonProcess;
     fProcessClass: TDDDMonitoredDaemonProcessClass;
+    fProcessMonitoringClass: TSynMonitorClass;
     fProcessLock: IAutoLocker;
     fProcessTimer: TPrecisionTimer;
     fProcessThreadCount: integer;
     fProcessIdleDelay: integer;
-    fAdditionalStatisticsName: TRawUTF8DynArray;
+    fMonitoringClass: TSynMonitorClass;
     function GetStatus: variant; virtual;
   public
     /// abstract constructor, which should not be called by itself
     constructor Create(aRest: TSQLRest); overload; override;
     /// you should override this constructor to set the actual process
-    // - i.e. set the additional statistic names and define the fProcessClass
-    // protected property
-    constructor Create(aRest: TSQLRest; aProcessThreadCount: integer;
-      const aAdditionalStatisticsName: array of RawUTF8); reintroduce; overload;
+    // - i.e. define the fProcessClass protected property
+    constructor Create(aRest: TSQLRest; aProcessThreadCount: integer); reintroduce; overload;
     /// finalize the Daemon
     destructor Destroy; override;
     /// monitor the Daemon/Service by returning some information as a TDocVariant
@@ -793,7 +793,7 @@ end;
 
 constructor TDDDRepositoryRestFactory.Create(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-  aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+  aAggregate: TClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8; aOwner: TDDDRepositoryRestManager);
 begin
   fInterface := TInterfaceFactory.Get(aInterface);
@@ -806,7 +806,7 @@ begin
   fImplementation := aImplementation;
   fRest := aRest;
   fAggregate := aAggregate;
-  fAggregateHasCustomCreate := fAggregate.InheritsFrom(TPersistentWithCustomCreate);
+  fAggregateCreate := ClassToTClassInstanceCreate(fAggregate);
   fTable := aTable;
   if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
@@ -821,7 +821,7 @@ begin
 end;
 
 constructor TDDDRepositoryRestFactory.Create(const aInterface: TGUID;
-  aImplementation: TDDDRepositoryRestClass; aAggregate: TPersistentClass;
+  aImplementation: TDDDRepositoryRestClass; aAggregate: TClass;
   aRest: TSQLRest; aTable: TSQLRecordClass;
   aOwner: TDDDRepositoryRestManager);
 begin
@@ -837,7 +837,7 @@ begin
 end;
 
 class procedure TDDDRepositoryRestFactory.ComputeSQLRecord(
-  const aAggregate: array of TPersistentClass; DestinationSourceCodeFile: TFileName);
+  const aAggregate: array of TClass; DestinationSourceCodeFile: TFileName);
 const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     // values left to '' will use the RTTI type
     '',                 // sftUnknown
@@ -945,7 +945,7 @@ begin
   for i := 0 to fAggregateRTTI.Count-1 do begin
     fAggregateProp[i] := fAggregateRTTI.List[i] as TSQLPropInfoRTTI;
     ndx := fPropsMapping.ExternalToInternalIndex(fAggregateProp[i].Name);
-    if ndx<0 then // ID/RowID or TPersistent property not defined in TSQLRecord
+    if ndx<0 then // ID/RowID or TSynPersistent property not defined in TSQLRecord
       fAggregateToTable[i] := nil else begin
       fAggregateToTable[i] := ORMProps[ndx];
       EnsureCompatible(fAggregateProp[i],fAggregateToTable[i]);
@@ -955,7 +955,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.AggregatePropToTable(
-  aAggregate: TPersistent; aAggregateProp: TSQLPropInfo;
+  aAggregate: TObject; aAggregateProp: TSQLPropInfo;
   aRecord: TSQLRecord; aRecordProp: TSQLPropInfo);
 begin
   if aRecordProp<>nil then
@@ -963,7 +963,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.TablePropToAggregate(
-  aRecord: TSQLRecord; aRecordProp: TSQLPropInfo; aAggregate: TPersistent;
+  aRecord: TSQLRecord; aRecordProp: TSQLPropInfo; aAggregate: TObject;
   aAggregateProp: TSQLPropInfo);
 begin
   if aRecordProp=nil then
@@ -977,7 +977,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateClear(
-  aAggregate: TPersistent);
+  aAggregate: TObject);
 var i: integer;
 begin
   if aAggregate<>nil then
@@ -986,14 +986,12 @@ begin
         SetValue(Flattened(aAggregate),nil,false);
 end;
 
-function TDDDRepositoryRestFactory.AggregateCreate: TPersistent;
+function TDDDRepositoryRestFactory.AggregateCreate: TObject;
 begin
-  if fAggregateHasCustomCreate then
-    result := TPersistentWithCustomCreateClass(fAggregate).Create else
-    result := fAggregate.Create;
+  result := ClassInstanceCreate(fAggregate,fAggregateCreate);
 end;
 
-procedure TDDDRepositoryRestFactory.AggregateToJSON(aAggregate: TPersistent;
+procedure TDDDRepositoryRestFactory.AggregateToJSON(aAggregate: TObject;
   W: TJSONSerializer; ORMMappedFields: boolean; aID: TID);
 var i: integer;
 begin
@@ -1024,7 +1022,7 @@ begin
 end;
 
 function TDDDRepositoryRestFactory.AggregateToJSON(
-  aAggregate: TPersistent; ORMMappedFields: boolean; aID: TID): RawUTF8;
+  aAggregate: TObject; ORMMappedFields: boolean; aID: TID): RawUTF8;
 var W: TJSONSerializer;
 begin
   if aAggregate=nil then begin
@@ -1041,7 +1039,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateToTable(
-  aAggregate: TPersistent; aID: TID; aDest: TSQLRecord);
+  aAggregate: TObject; aID: TID; aDest: TSQLRecord);
 var i: integer;
 begin
   if fPropsMapping.MappingVersion<>fPropsMappingVersion then
@@ -1057,7 +1055,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateFromTable(
-  aSource: TSQLRecord; aAggregate: TPersistent);
+  aSource: TSQLRecord; aAggregate: TObject);
 var i: integer;
 begin
   if fPropsMapping.MappingVersion<>fPropsMappingVersion then
@@ -1120,7 +1118,7 @@ begin
 end;
 
 function TDDDRepositoryRestFactory.AggregateFilterAndValidate(
-  aAggregate: TPersistent; aInvalidFieldIndex: PInteger): RawUTF8;
+  aAggregate: TObject; aInvalidFieldIndex: PInteger): RawUTF8;
 var f,i: integer;
     Value: TRawUTF8DynArray; // avoid twice retrieval
     Old: RawUTF8;
@@ -1170,7 +1168,7 @@ end;
 
 function TDDDRepositoryRestManager.AddFactory(
   const aInterface: TGUID; aImplementation: TDDDRepositoryRestClass;
-  aAggregate: TPersistentClass; aRest: TSQLRest; aTable: TSQLRecordClass;
+  aAggregate: TClass; aRest: TSQLRest; aTable: TSQLRecordClass;
   const TableAggregatePairs: array of RawUTF8): TDDDRepositoryRestFactory;
 begin
   if GetFactoryIndex(aInterface)>=0 then
@@ -1288,7 +1286,7 @@ begin
 end;
 
 function TDDDRepositoryRestQuery.ORMGetAggregate(
-  aAggregate: TPersistent): TCQRSResult;
+  aAggregate: TObject): TCQRSResult;
 begin
   if ORMBegin(qaGet,result) then begin
     Factory.AggregateFromTable(ORM,aAggregate);
@@ -1297,7 +1295,7 @@ begin
 end;
 
 function TDDDRepositoryRestQuery.ORMGetNextAggregate(
-  aAggregate: TPersistent; aRewind: boolean): TCQRSResult;
+  aAggregate: TObject; aRewind: boolean): TCQRSResult;
 begin
   if ORMBegin(qaGet,result) then
     if (aRewind and ORM.FillRewind) or
@@ -1310,7 +1308,7 @@ end;
 
 function TDDDRepositoryRestQuery.ORMGetAllAggregates(
   var aAggregateObjArray): TCQRSResult;
-var res: TPersistentDynArray absolute aAggregateObjArray;
+var res: TObjectDynArray absolute aAggregateObjArray;
     i: integer;
 begin
   if ORMBegin(qaGet,result) then begin
@@ -1329,7 +1327,6 @@ begin
     end;
   end;
 end;
-
 
 
 { TDDDRepositoryRestCommand }
@@ -1371,7 +1368,7 @@ begin
       end;
 end;
 
-function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TPersistent): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
 begin
   if ORMBegin(qaCommandDirect,result) then begin
     Factory.AggregateToTable(aAggregate,0,ORM);
@@ -1379,7 +1376,7 @@ begin
   end;
 end;
 
-function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TPersistent): TCQRSResult;
+function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
 begin
   if ORMBegin(qaCommandOnSelect,result) then begin
     Factory.AggregateToTable(aAggregate,ORM.ID,ORM);
@@ -1395,7 +1392,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
-  aCommand: TSQLOccasion; aAggregate: TPersistent);
+  aCommand: TSQLOccasion; aAggregate: TObject);
 var msg: RawUTF8;
     ndx: integer;
 begin
@@ -1478,31 +1475,22 @@ end;
 
 { TDDDMonitoredDaemonProcess }
 
-function TDDDMonitoredDaemonProcess.ComputeDetails: variant;
-var i: integer;
-    throughput: Int64;
-begin
-  throughput := fTimer.PerSec(fSize);
-  result := _ObjFast(['index',fIndex,
-   'time',fTimer.Stop, 'timeUS',fTimer.TimeInMicroSec,
-   'size',KB(fSize), 'sizeBytes',fSize,
-   'throughput',KB(throughput), 'throughputBytes',throughput,
-   'count',fCount, 'persec',fTimer.PerSec(fCount),
-   'errors',fInternalErrors, 'lasterror',fLastInternalError,
-   'idledelay',fProcessIdleDelay]);
-  for i := 0 to high(fAdditionalStatistics) do
-    _ObjAddProps([fDaemon.fAdditionalStatisticsName[i],fAdditionalStatistics[i]],result);
-end;
-
 constructor TDDDMonitoredDaemonProcess.Create(aDaemon: TDDDMonitoredDaemon;
   aIndexInDaemon: integer);
 begin
-  fTimer.Start;
   fDaemon := aDaemon;
+  if fDaemon.fProcessMonitoringClass=nil then
+    fMonitoring := TSynMonitor.Create else
+    fMonitoring := fDaemon.fProcessMonitoringClass.Create;
   fProcessIdleDelay := fDaemon.ProcessIdleDelay;
   fIndex := aIndexInDaemon;
-  SetLength(fAdditionalStatistics,length(fDaemon.fAdditionalStatisticsName));
   inherited Create(False);
+end;
+
+destructor TDDDMonitoredDaemonProcess.Destroy;
+begin
+  fMonitoring.Free;
+  inherited;
 end;
 
 procedure TDDDMonitoredDaemonProcess.Execute;
@@ -1519,7 +1507,7 @@ begin
             fPending := nil;
             fProcessing := true;
             try
-              fTimer.Resume;
+              fMonitoring.ProcessStart;
               try
                 fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
                 try
@@ -1529,10 +1517,9 @@ begin
                 end;
                 if fPending.ID=0 then
                   break; // no more pending tasks
-                inc(fCount);
                 ExecuteProcessAndSetResult; // always set, even if Terminated
               finally
-                fTimer.Pause;
+                fMonitoring.ProcessEnd;
                 FreeAndNil(fPending);
                 fProcessing := false;
               end;
@@ -1561,9 +1548,8 @@ end;
 
 procedure TDDDMonitoredDaemonProcess.OnException(E: Exception);
 begin
-  inc(fInternalErrors);
-  fLastInternalError := ObjectToVariantDebug(E,
-    '{threadindex:?,daemon:?}',[fIndex,fDaemon.GetStatus]);
+  fMonitoring.ProcessError(ObjectToVariantDebug(
+    E,'{threadindex:?,daemon:?}',[fIndex,fDaemon.GetStatus]));
 end;
 
 
@@ -1582,10 +1568,9 @@ begin
 end;
 
 constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest;
-  aProcessThreadCount: integer; const aAdditionalStatisticsName: array of RawUTF8);
+  aProcessThreadCount: integer);
 begin
   fProcessThreadCount := aProcessThreadCount;
-  fAdditionalStatisticsName := TRawUTF8DynArrayFrom(aAdditionalStatisticsName);
   Create(aRest);
 end;
 
@@ -1597,39 +1582,30 @@ begin
 end;
 
 function TDDDMonitoredDaemon.GetStatus: variant;
-var i,a,working,totcount: integer;
-    totsize,throughput: Int64;
-    totadditional: TInt64DynArray;
-    tottime: TPrecisionTimer;
-    stats: variant;
+var i,working: integer;
+    stats: TSynMonitor;
     pool: TDocVariantData;
 begin
   working := 0;
-  totsize := 0;
-  totcount := 0;
-  SetLength(totadditional,length(fAdditionalStatisticsName));
-  tottime.Init;
-  pool.InitArray([],JSON_OPTIONS[true]);
-  for i := 0 to High(fProcess) do
-  with fProcess[i] do begin
-    pool.AddItem(ComputeDetails); // call fTimer.Stop to set TimeInMicroSec
-    if fProcessing then
+  if fMonitoringClass=nil then
+    if fProcessMonitoringClass=nil then
+      stats := TSynMonitor.Create else
+      stats := fProcessMonitoringClass.Create else
+    stats := fMonitoringClass.Create; 
+  try
+    pool.InitArray([],JSON_OPTIONS[true]);
+    for i := 0 to High(fProcess) do
+    with fProcess[i] do begin
       inc(working);
-    inc(totsize,fSize);
-    inc(totcount,fCount);
-    tottime.TimeInMicroSec := tottime.TimeInMicroSec+fTimer.TimeInMicroSec;
-    for a := 0 to high(fAdditionalStatistics) do
-      inc(totadditional[a],fAdditionalStatistics[a]);
+      pool.AddItem(fMonitoring.ComputeDetails);
+      stats.Sum(fMonitoring);
+    end;
+    result := ObjectToVariantDebug(self);
+    _ObjAddProps(['working',working, 'stats',stats.ComputeDetails,
+      'threadstats',variant(pool)],result);
+  finally
+    stats.Free;
   end;
-  throughput := tottime.PerSec(totsize);
-  result := ObjectToVariantDebug(self);
-  stats := _ObjFast(['working',working, 'uptime',fProcessTimer.Stop,
-    'processtime',tottime.Time, 'size',KB(totsize), 'sizeBytes',totsize,
-    'count',totcount, 'persec',tottime.PerSec(totcount),
-    'throughput',KB(throughput), 'throughputBytes',throughput]);
-  for a := 0 to high(fAdditionalStatisticsName) do
-    _ObjAddProps([fAdditionalStatisticsName[a],totadditional[a]],stats);
-  _ObjAddProps(['stats',stats, 'threadstats',variant(pool)],result);
 end;
 
 function TDDDMonitoredDaemon.RetrieveState(
@@ -1687,5 +1663,8 @@ begin
       ORMResult(E);
   end;
 end;
+
+
+
 
 end.

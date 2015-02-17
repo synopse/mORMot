@@ -93,7 +93,7 @@ type
   /// Country object
   // - includes conversion methods for ISO 3166-1 alpha-2/alpha-3/numeric codes
   // as explained in http://en.wikipedia.org/wiki/ISO_3166-1
-  TCountry = class(TPersistent)
+  TCountry = class(TSynPersistent)
   protected
     fIso: TCountryIsoNumeric;
     fCache: record
@@ -139,7 +139,7 @@ type
   /// Address object
   // - we tried to follow a simple but worldwide layout - see
   // http://en.wikipedia.org/wiki/Address_%28geography%29#Address_format
-  TAddress = class(TPersistentAutoCreateFields)
+  TAddress = class(TSynAutoCreateFields)
   protected
     fStreet1: TStreet;
     fStreet2: TStreet;
@@ -171,7 +171,7 @@ type
   TMiddleName = type RawUTF8;
 
   /// Person full name
-  TPersonFullName = class(TPersistent)
+  TPersonFullName = class(TSynPersistent)
   protected
     fFirst: TFirstName;
     fMiddle: TMiddleName;
@@ -185,7 +185,7 @@ type
   end;
 
   /// Person birth date
-  TPersonBirthDate = class(TPersistent)
+  TPersonBirthDate = class(TSynPersistent)
   protected
     fDate: TDateTime;
   public
@@ -197,7 +197,7 @@ type
   end;
   
   /// Person object
-  TPerson = class(TPersistentAutoCreateFields)
+  TPerson = class(TSynAutoCreateFields)
   protected
     fBirthDate: TPersonBirthDate;
     fName: TPersonFullName;
