@@ -2631,6 +2631,7 @@ function IdemPCharAndGetNextLine(var source: PUTF8Char; search: PAnsiChar): bool
 /// return line begin from source array of chars, and go to next line
 // - next will contain the beginning of next line, or nil if source if ended
 function GetNextLineBegin(source: PUTF8Char; out next: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the line length from source array of chars
 // - end counting at either #0, #13 or #10
@@ -7821,14 +7822,14 @@ procedure YearToPChar(Y: Word; P: PUTF8Char);
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean; overload;
+function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean; 
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Extended; DoublePrec: double = 1E-12): Boolean; overload;
+function SameValueFloat(const A, B: Extended; DoublePrec: Extended = 1E-12): Boolean;
 
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
@@ -11951,6 +11952,7 @@ begin
     {$else}
     raise ESynException.CreateUTF8('%.UnicodeBufferToAnsi() not supported yet for CP=%',
       [self,CodePage]);
+    // under Delphi, we may use System.LocaleCharsFromUnicode() wrapper
     {$endif KYLIX3}
     {$endif FPC}
     {$endif MSWINDOWS}
@@ -12134,7 +12136,6 @@ begin
   end;
 end;
 
-{$ifndef FPC}
 const
   /// used for fast WinAnsi to Unicode conversion
   // - this table contain all the unicode characters corresponding to
@@ -12147,7 +12148,7 @@ const
     (8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
      141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
      353, 8250, 339, 157, 382, 376);
-{$endif}
+
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var i: integer;
     A256: array[0..256] of AnsiChar;
@@ -12160,15 +12161,12 @@ begin
       [ClassName,fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide,256);
-  {$ifndef FPC}
   if aCodePage=CODEPAGE_US then begin // do not trust the Windows API :(
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
     for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
       fAnsiToWide[i] := WinAnsiUnicodeChars[i];
-  end else
-  {$endif}
-  begin // from Operating System returned values
+  end else begin // from Operating System returned values
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     fillchar(U256,sizeof(U256),0);
@@ -18133,7 +18131,7 @@ begin // faster than the Math unit version
     Result := Abs(A-B)<=AbsA;
 end;
 
-function SameValue(const A, B: Extended; DoublePrec: double = 1E-12): Boolean; overload;
+function SameValueFloat(const A, B: Extended; DoublePrec: Extended = 1E-12): Boolean; 
 var AbsA,AbsB: Extended;
 begin // faster than the Math unit version
   AbsA := Abs(A);
@@ -18482,22 +18480,40 @@ asm // eax=source edx=search
 end;
 {$endif}
 
-/// find the Value of UpperName in P, till end of current section
-// - expect UpperName as 'NAME='
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 var PBeg: PUTF8Char;
-    L: integer;
-begin
-  while (P<>nil) and (P^<>'[') do begin
-    PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
-    if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
-    if IdemPChar(PBeg,UpperName) then begin
-      inc(PBeg,StrLen(PUTF8Char(UpperName)));
-      L := 0; while PBeg[L]>=' ' do inc(L); // get line length
-      SetString(result,PBeg,L);
-      exit;
+    i: integer;
+begin // expect UpperName as 'NAME='
+  PBeg := nil;
+  if (P<>nil) and (P^<>'[') and (UpperName<>nil) then
+  repeat
+    if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
+    if NormToUpperAnsi7[P[0]]=UpperName[0] then
+      PBeg := P;
+    repeat
+      if P^>#13 then
+        inc(P) else
+      if P^ in [#0,#10,#13] then
+        break else
+        inc(P);
+    until false;
+    if PBeg<>nil then begin
+      i := 1;
+      repeat
+        if UpperName[i]<>#0 then
+          if NormToUpperAnsi7[PBeg[i]]<>UpperName[i] then
+            break else
+            inc(i) else begin
+          inc(PBeg,i);
+          SetString(result,PBeg,P-PBeg);
+          exit;
+        end;
+      until false;
+      PBeg := nil;
     end;
-  end;
+    if P^=#13 then inc(P);
+    if P^=#10 then inc(P);
+  until P^ in [#0,'['];
   result := '';
 end;
 
