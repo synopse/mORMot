@@ -883,9 +883,9 @@ unit mORMot;
       TJSONToObjectOptions optional parameter in JSONToObject() / ObjectToJSON()
       functions and WriteObject() method - including TDocVariant or TBSONVariant
     - fixed TPersistent process in TJSONWriter.WriteObject - thanks Jordi!
-    - introducing TPersistentAutoCreateFields and TCollectionItemAutoCreateFields
-      classes, with automatic initialization and finalization of their nested
-      published properties (ideal for DDD value objects)
+    - introducing TSynAutoCreateFields, TPersistentAutoCreateFields and
+      TCollectionItemAutoCreateFields classes, with automatic initialization and
+      finalization of their nested published properties (e.g. for DDD objects)
     - JSONToObject() is now able to unserialize a nested record - see [5e49b3096a]
     - added TTypeInfo.ClassCreate() method to create a TObject instance from RTTI
     - TEnumType.GetEnumNameValue() will now recognize both 'sllWarning' and
@@ -1065,13 +1065,8 @@ unit mORMot;
     - fix potential GDI handle resource leak in TSQLRestClientURIMessage.Create
     - introducing TSQLRestClientURIMessage.DoNotProcessMessages property
     - TSQLRestClientURINamedPipe.InternalCheckOpen/InternalURI refactoring
-    - added TInterfacedObjectWithCustomCreate kind of class, making easy to
-      use virtual constructors for TSQLRestServer.ServiceRegister()
     - allow TSQLRestServer.ServiceRegister() to register an existing instance
       of a class for a shared service - feature request [6e8b2ff3e9]
-    - added TPersistentWithCustomCreate kind of class, allowing to use virtual
-      constructors for TPersistent kind of objects (to be used e.g. with
-      internal JSON serialization and interface-based services) 
     - allow TSQLRestServer.ExportServerMessage to be started in conjunction
       with other protocols (like named pipes)
     - added STATICFILE_CONTENT_TYPE[_HEADER] as aliases to HTTP_RESP_STATICFILE
@@ -1802,6 +1797,10 @@ procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 function ObjectToJSONDebug(Value: TObject): RawUTF8;
 
 /// will serialize any TObject into a TDocVariant document
+// - just a wrapper around _JsonFast(ObjectToJSON())
+function ObjectToVariant(Value: TObject): variant; 
+
+/// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
 // "Context":"..." text message
 // - if the supplied context format matches '{....}' then it will be added
@@ -1810,7 +1809,7 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8='context'): variant; overload;
 
-/// will serialize any TObject into a TDocVariant document
+/// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug())
 function ObjectToVariantDebug(Value: TObject): variant; overload;
 
@@ -3580,12 +3579,18 @@ type
   /// the class kind as handled by ClassInstanceCreate() functions
   TClassInstanceCreate = (
     cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
-    cicTInterfacedCollection,cicTCollection,cicTObject);
+    cicTSynPersistent,cicTInterfacedCollection,cicTCollection,cicTObject);
 
 /// compute the class kind of a given class
 // - as handled by ClassInstanceCreate() functions
 function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
-  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate;
+  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate; overload;
+
+{$ifndef LVCL}
+/// compute the class kind of a given class
+// - as handled by ClassInstanceCreate() functions
+function ClassToTClassInstanceCreate(aClass: TClass): TClassInstanceCreate; overload;
+{$endif}
 
 /// create an instance of the given class, from its kind as previously
 // recognized by ClassToTClassInstanceCreate()
@@ -3594,6 +3599,13 @@ function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
 function ClassInstanceCreate(aClass: TClass;
   aClassInstanceCreate: TClassInstanceCreate{$ifndef LVCL};
   aCollectionItemClass: TCollectionItemClass{$endif}): TObject; overload;
+
+{$ifndef LVCL}
+/// create an instance of the given class, from its kind as previously
+// recognized by ClassToTClassInstanceCreate()
+function ClassInstanceCreate(aClass: TClass;
+  aClassInstanceCreate: TClassInstanceCreate): TObject; overload;
+{$endif}
 
 /// retrieve a method RTTI information for a specific class
 function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString): PMethodInfo;
@@ -3617,20 +3629,98 @@ function GetEnumCaption(aTypeInfo: PTypeInfo; const aIndex): string;
 function GetEnumNameTrimed(aTypeInfo: PTypeInfo; const aIndex): RawUTF8;
 
 
-{$ifdef MSWINDOWS}
-{$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
+{ ************ cross-cutting classes and types }
+
 type
-  TSecurityAttributes = packed record
-    nLength: DWORD;
-    lpSecurityDescriptor: Pointer;
-    bInheritHandle: BOOL;
+  {$ifndef LVCL}
+  /// any TCollection used between client and server shall inherit from this class
+  // - you should override the GetClass virtual method to provide the
+  // expected collection item class to be used on server side
+  // - another possibility is to register a TCollection/TCollectionItem pair
+  // via a call to TJSONSerializer.RegisterCollectionForJSON()
+  TInterfacedCollection = class(TCollection)
+  protected
+    /// you shall override this abstract method
+    class function GetClass: TCollectionItemClass; virtual; abstract;
+  public
+    /// this constructor which will call GetClass to initialize the collection
+    constructor Create; reintroduce; virtual;
   end;
 
-const
-  SECURITY_DESCRIPTOR_REVISION = 1;
-  SECURITY_DESCRIPTOR_MIN_LENGTH = 20;
-{$endif ISDELPHIXE}
-{$endif MSWINDOWS}
+  /// the class of TInterfacedCollection kind
+  TInterfacedCollectionClass = class of TInterfacedCollection;
+
+  /// abstract TCollectionItem class, which will instantiate all its nested
+  // TPersistent class published properties, then release them when freed
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects
+  // - note that non published properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance matching its parent type
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TCollectionItemAutoCreateFields = class(TCollectionItem)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent class published properties
+    constructor Create(Collection: TCollection); override;
+    /// this overriden constructor will release all its nested
+    // TPersistent class published properties
+    destructor Destroy; override;
+  end;
+
+  {$endif LVCL}
+
+  /// the class of TInterfacedObject kind
+  TInterfacedObjectClass = class of TInterfacedObject;
+
+  /// abstract TPersistent class, which will instantiate all its nested TPersistent
+  // class published properties, then release them (and any T*ObjArray) when freed
+  // - TSynAutoCreateFields is to be preferred in most cases, due to its lower overhead
+  // - note that non published (e.g. public) properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance matching its parent type
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent class published properties
+    constructor Create; override;
+    /// this overriden constructor will release all its nested
+    // TPersistent class and T*ObjArray published properties
+    destructor Destroy; override;
+  end;
+
+  /// our own empowered TPersistentAutoCreateFields-like parent class
+  // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
+  // due a giant lock introduced to manage property name fixup resolution
+  // (which we won't use outside the VCL)
+  // - abstract class able with a virtual constructor, RTTI for published
+  // properties, and automatic memory management of all nested class
+  // published properties
+  // - will also release any T*ObjArray dynamic array storage of persistents,
+  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
+  // - this class is a perfect parent for any class storing data by value, e.g.
+  // DDD Value Objects, Entities or Aggregates
+  // - note that non published (e.g. public) properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance matching its parent type
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TSynAutoCreateFields = class(TSynPersistent)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    constructor Create; override;
+    /// this overriden constructor will release all its nested persistent
+    // classes and T*ObjArray published properties
+    destructor Destroy; override;
+  end;
+
 
 const
   /// HTML Status Code for "Continue"
@@ -3723,6 +3813,20 @@ type
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
 
+{$ifdef MSWINDOWS}
+{$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
+type
+  TSecurityAttributes = packed record
+    nLength: DWORD;
+    lpSecurityDescriptor: Pointer;
+    bInheritHandle: BOOL;
+  end;
+const
+  SECURITY_DESCRIPTOR_REVISION = 1;
+  SECURITY_DESCRIPTOR_MIN_LENGTH = 20;
+{$endif ISDELPHIXE}
+{$endif MSWINDOWS}
+
 
 { ************ main ORM / SOA classes and types }
 
@@ -3742,7 +3846,7 @@ const
   /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
   AS_UNIQUE = false;
 
-  
+
 type
   TSQLModel = class;
   TSQLModelRecordProperties = class;
@@ -8285,71 +8389,6 @@ type
 
   PServiceCustomAnswer = ^TServiceCustomAnswer;
 
-  {$ifndef LVCL}
-  /// any TCollection used between client and server shall inherit from this class
-  // - you should override the GetClass virtual method to provide the
-  // expected collection item class to be used on server side
-  // - another possibility is to register a TCollection/TCollectionItem pair
-  // via a call to TJSONSerializer.RegisterCollectionForJSON()
-  TInterfacedCollection = class(TCollection)
-  protected
-    /// you shall override this abstract method
-    class function GetClass: TCollectionItemClass; virtual; abstract;
-  public
-    /// this constructor which will call GetClass to initialize the collection
-    constructor Create; reintroduce; virtual;
-  end;
-
-  /// the class of TInterfacedCollection kind
-  TInterfacedCollectionClass = class of TInterfacedCollection;
-
-  /// abstract TCollectionItem class, which will instantiate all its nested
-  // TPersistent class published properties, then release them when freed
-  // - could be used for gathering of TCollectionItem properties, e.g. for
-  // Domain objects in DDD, especially for list of value objects
-  // - note that non published properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
-  // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
-  TCollectionItemAutoCreateFields = class(TCollectionItem)
-  public
-    /// this overriden constructor will instantiate all its nested
-    // TPersistent class published properties
-    constructor Create(Collection: TCollection); override;
-    /// this overriden constructor will release all its nested
-    // TPersistent class published properties
-    destructor Destroy; override;
-  end;
-
-  {$endif LVCL}
-
-  /// the class of TInterfacedObject kind
-  TInterfacedObjectClass = class of TInterfacedObject;
-
-  /// abstract TPersistent class, which will instantiate all its nested TPersistent
-  // class published properties, then release them when freed
-  // - will also release any T*ObjArray dynamic array storage of persistents,
-  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
-  // - could be used for gathering of TPersistent properties, e.g. for
-  // Domain objects in DDD, especially for Value Objects, Aggregates or Entities
-  // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
-  // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
-  TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
-  public
-    /// this overriden constructor will instantiate all its nested
-    // TPersistent class published properties
-    constructor Create; override;
-    /// this overriden constructor will release all its nested
-    // TPersistent class and T*ObjArray published properties
-    destructor Destroy; override;
-  end;
-
   {$M+}
   /// abstract factory class allowing to call interface resolution in cascade
   // - you can inherit from this class to chain the TryResolve() calls so
@@ -10176,7 +10215,7 @@ type
     // - this default implementation will trigger an EORMException
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
- protected // these abstract methods must be overriden by real database engine
+   protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
     // - returns '' on error, or JSON data, even with no result rows
@@ -11231,7 +11270,7 @@ type
   end;
 
   /// used for statistics update in TSQLRestServer.URI()
-  TSQLRestServerStats = class(TPersistent)
+  TSQLRestServerStats = class(TSynPersistent)
   private
     /// used to determine if something changed
     fLastIncomingBytes: QWord;
@@ -15189,61 +15228,6 @@ begin
 end;
 
 
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
-begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-  case Code of
-    HTML_CONTINUE:            result := 'Continue';
-    HTML_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
-    HTML_SUCCESS:             result := 'OK';
-    HTML_CREATED:             result := 'Created';
-    HTML_ACCEPTED:            result := 'Accepted';
-    HTML_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
-    HTML_NOCONTENT:           result := 'No Content';
-    HTML_MULTIPLECHOICES:     result := 'Multiple Choices';
-    HTML_MOVEDPERMANENTLY:    result := 'Moved Permanently';
-    HTML_FOUND:               result := 'Found';
-    HTML_SEEOTHER:            result := 'See Other';
-    HTML_NOTMODIFIED:         result := 'Not Modified';
-    HTML_USEPROXY:            result := 'Use Proxy';
-    HTML_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
-    HTML_BADREQUEST:          result := 'Bad Request';
-    HTML_UNAUTHORIZED:        result := 'Unauthorized';
-    HTML_FORBIDDEN:           result := 'Forbidden';
-    HTML_NOTFOUND:            result := 'Not Found';
-    HTML_NOTALLOWED:          result := 'Method Not Allowed';
-    HTML_NOTACCEPTABLE:       result := 'Not Acceptable';
-    HTML_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
-    HTML_TIMEOUT:             result := 'Request Timeout';
-    HTML_SERVERERROR:         result := 'Internal Server Error';
-    HTML_BADGATEWAY:          result := 'Bad Gateway';
-    HTML_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
-    HTML_UNAVAILABLE:         result := 'Service Unavailable';
-    HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
-    else                      result := 'Invalid Request';
-  end;
-end;
-
-function StatusCodeToErrorMsg(Code: integer): RawUTF8;
-begin
-  StatusCodeToErrorMsg(Code,result);
-  result := FormatUTF8('HTTP Error % - %',[Code,result]);
-end;
-
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
-const NAME: array[mGET..high(TSQLURIMethod)] of string[7] = ( // sorted by occurence
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
-var URIMethodUp: string[7];
-begin
-  if Length(method)<7 then begin
-    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
-    for result := low(NAME) to high(NAME) do
-      if URIMethodUp=NAME[result] then
-        exit;
-  end;
-  result := mNone;
-end;
-
-
 type // those classes will be used to register globally some classes for JSON
   TJSONSerializerRegisteredClassAbstract = class(TList)
   protected
@@ -17081,8 +17065,8 @@ function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
 begin
   if ObjArraySerializers=nil then
     result := false else
-    result := FastFindPtrIntSorted(pointer(ObjArrayTypes),
-      ObjArraySerializers.Count-1,PtrInt(aDynArrayTypeInfo))>=0;
+    result := FastFindPointerSorted(pointer(ObjArrayTypes),
+      ObjArraySerializers.Count-1,aDynArrayTypeInfo)>=0;
 end;
 
 
@@ -18002,6 +17986,63 @@ begin
   raise EORMException.CreateUTF8(
     '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %',[self,aName,fTable]);
 end;
+
+
+
+procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
+begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+  case Code of
+    HTML_CONTINUE:            result := 'Continue';
+    HTML_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
+    HTML_SUCCESS:             result := 'OK';
+    HTML_CREATED:             result := 'Created';
+    HTML_ACCEPTED:            result := 'Accepted';
+    HTML_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
+    HTML_NOCONTENT:           result := 'No Content';
+    HTML_MULTIPLECHOICES:     result := 'Multiple Choices';
+    HTML_MOVEDPERMANENTLY:    result := 'Moved Permanently';
+    HTML_FOUND:               result := 'Found';
+    HTML_SEEOTHER:            result := 'See Other';
+    HTML_NOTMODIFIED:         result := 'Not Modified';
+    HTML_USEPROXY:            result := 'Use Proxy';
+    HTML_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
+    HTML_BADREQUEST:          result := 'Bad Request';
+    HTML_UNAUTHORIZED:        result := 'Unauthorized';
+    HTML_FORBIDDEN:           result := 'Forbidden';
+    HTML_NOTFOUND:            result := 'Not Found';
+    HTML_NOTALLOWED:          result := 'Method Not Allowed';
+    HTML_NOTACCEPTABLE:       result := 'Not Acceptable';
+    HTML_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
+    HTML_TIMEOUT:             result := 'Request Timeout';
+    HTML_SERVERERROR:         result := 'Internal Server Error';
+    HTML_BADGATEWAY:          result := 'Bad Gateway';
+    HTML_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
+    HTML_UNAVAILABLE:         result := 'Service Unavailable';
+    HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
+    else                      result := 'Invalid Request';
+  end;
+end;
+
+function StatusCodeToErrorMsg(Code: integer): RawUTF8;
+begin
+  StatusCodeToErrorMsg(Code,result);
+  result := FormatUTF8('HTTP Error % - %',[Code,result]);
+end;
+
+function StringToMethod(const method: RawUTF8): TSQLURIMethod;
+const NAME: array[mGET..high(TSQLURIMethod)] of string[7] = ( // sorted by occurence
+  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+var URIMethodUp: string[7];
+begin
+  if Length(method)<7 then begin
+    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
+    for result := low(NAME) to high(NAME) do
+      if URIMethodUp=NAME[result] then
+        exit;
+  end;
+  result := mNone;
+end;
+
 
 
 { TSQLTable }
@@ -35373,6 +35414,11 @@ begin
       [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]);
 end;
 
+function ObjectToVariant(Value: TObject): variant; 
+begin
+  result := _JsonFast(ObjectToJSON(Value));
+end;
+
 function ObjectToVariantDebug(Value: TObject): variant;
 begin
   result := _JsonFast(ObjectToJSONDebug(Value));
@@ -35662,11 +35708,12 @@ begin
   if ObjArraySerializers.Count>=n then
     SetLength(ObjArrayTypes,n+256);
   ObjArrayTypes[ObjArraySerializers.Count] := aDynArray;
-  QuickSortPtrInt(Pointer(ObjArrayTypes),0,ObjArraySerializers.Count);
+  QuickSortPointer(Pointer(ObjArrayTypes),0,ObjArraySerializers.Count);
   ObjArraySerializers.Add(serializer);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
-  assert(InternalIsObjArray(aDynArray));
+  if not InternalIsObjArray(aDynArray) then
+    EModelException.CreateUTF8('% ObjArray?',[self]);
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
@@ -35687,6 +35734,22 @@ begin
         aDynArrayClassPairs[i*2].VPointer,aDynArrayClassPairs[i*2+1].VClass);
 end;
 
+{$ifndef LVCL}
+function ClassToTClassInstanceCreate(aClass: TClass): TClassInstanceCreate;
+var dummy: TCollectionItemClass;
+begin
+  result := ClassToTClassInstanceCreate(aClass,dummy);
+end;
+
+function ClassInstanceCreate(aClass: TClass;
+  aClassInstanceCreate: TClassInstanceCreate): TObject;
+var dummy: TCollectionItemClass;
+begin
+  dummy := nil; // makes compiler happy
+  result := ClassInstanceCreate(aClass,aClassInstanceCreate,dummy);
+end;
+{$endif}
+
 function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
   out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate;
 var C: TClass;
@@ -35697,6 +35760,7 @@ begin
     if C<>TSQLRecord then
     if C<>TObjectList then
     if C<>TPersistentWithCustomCreate then
+    if C<>TSynPersistent then
   {$ifndef LVCL}
     if C<>TInterfacedCollection then
     if C<>TCollection then
@@ -35730,6 +35794,9 @@ begin
       exit;
     end else
   {$endif} begin
+      result := cicTSynPersistent;
+      exit;
+    end else begin
       result := cicTPersistentWithCustomCreate;
       exit;
     end else begin
@@ -35754,6 +35821,8 @@ begin
       result := TObjectList.Create;
     cicTPersistentWithCustomCreate:
       result := TPersistentWithCustomCreateClass(aClass).Create;
+    cicTSynPersistent:
+      result := TSynPersistentClass(aClass).Create;
     {$ifndef LVCL}
     cicTInterfacedCollection:
       result := TInterfacedCollectionClass(aClass).Create;
@@ -42652,9 +42721,10 @@ begin
   end;
 end;
 
+
 { TPersistentAutoCreateFields }
 
-procedure AutoCreateFields(self: TPersistent);
+procedure AutoCreateFields(self: TObject);
 var i: integer;
     CT: TClass;
     P: PPropInfo;
@@ -42668,13 +42738,23 @@ begin
             'so should not have any "write" defined',[self,P^.Name]) else
           PObject(P^.GetterAddr(self))^ :=
             ClassInstanceCreate(P^.PropType^.ClassType^.ClassType);
+      {$ifdef HASINLINE}
       P := P^.Next;
+      {$else}
+      P := @P^.Name[ord(P^.Name[0])+1];
+      {$endif}
     end;
+    {$ifdef FPC}
     CT := CT.ClassParent;
-  until CT=TPersistent;
+    {$else}
+    if PPointer(PtrInt(CT)+vmtParent)^=nil then
+      break else
+      CT := PPointer(PPointer(PtrInt(CT)+vmtParent)^)^;
+    {$endif}
+  until CT=TObject;
 end;
 
-procedure AutoDestroyFields(self: TPersistent);
+procedure AutoDestroyFields(self: TObject);
 var i: integer;
     CT: TClass;
     P: PPropInfo;
@@ -42689,10 +42769,20 @@ begin
         if InternalIsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
           ObjArrayClear(P^.GetFieldAddr(self)^);
       end;
+      {$ifdef HASINLINE}
       P := P^.Next;
+      {$else}
+      P := @P^.Name[ord(P^.Name[0])+1];
+      {$endif}
     end;
+    {$ifdef FPC}
     CT := CT.ClassParent;
-  until CT=TPersistent;
+    {$else}
+    if PPointer(PtrInt(CT)+vmtParent)^=nil then
+      break else
+      CT := PPointer(PPointer(PtrInt(CT)+vmtParent)^)^;
+    {$endif}
+  until CT=nil;
 end;
 
 constructor TPersistentAutoCreateFields.Create;
@@ -42706,6 +42796,22 @@ begin
   AutoDestroyFields(self);
   inherited Destroy;
 end;
+
+
+{ TSynAutoCreateFields }
+
+constructor TSynAutoCreateFields.Create;
+begin
+  inherited;
+  AutoCreateFields(self);
+end;
+
+destructor TSynAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
 
 {$ifndef LVCL}
 
