@@ -11034,10 +11034,12 @@ type
   // to alllocate a local timer instance on the stack
   TPrecisionTimer = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    iStart,iStop,iResume: Int64;
+    iStart,iStop,iResume,iLast: Int64;
     iFreq: Int64;
     /// contains the time elapsed in micro seconds between Start and Stop
-    iTime: Int64;
+    iTime: QWord;
+    /// contains the time elapsed in micro seconds between Resume and Pause
+    iLastTime: QWord;
   public
     /// initialize the timer
     // - not necessary if created on the heap (e.g. as class member)
@@ -11045,7 +11047,11 @@ type
     procedure Init;
     /// start the high resolution timer
     procedure Start;
-    /// stop the timer, returning the time elapsed, with appened time resolution (us,ms,s)
+    /// stop the timer, setting the Time elapsed since last Start
+    procedure ComputeTime;
+    /// stop the timer, returning the time elapsed as text with time resolution
+    // (us,ms,s)
+    // - is just a wrapper around ComputeTime + GetTime
     function Stop: RawUTF8;
     /// stop the timer, ready to continue its time measurement via Resume
     procedure Pause;
@@ -11065,15 +11071,24 @@ type
     // member, then call fTimeElapsed.ProfileCurrentMethod at the beginning of
     // all process expecting some timing, then log/save fTimeElapsed.Stop content
     function ProfileCurrentMethod: IUnknown;
-    /// return the time elapsed, with appened time resolution (us,ms,s)
-    function Time: RawUTF8;
     /// compute the per second count
-    function PerSec(const Count: Int64): Int64;
+    function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
-    function ByCount(Count: cardinal): RawUTF8;
-    /// Int64 representation of time after counter stopped
+    function ByCount(Count: QWord): RawUTF8;
+    /// textual representation of time after counter stopped
+    // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: Int64 read iTime write iTime;
+    function Time: RawUTF8;
+    /// time elapsed in micro seconds after counter stopped
+    // - not to be used in normal code, but e.g. for custom performance analysis
+    property TimeInMicroSec: QWord read iTime write iTime;
+    /// textual representation of last process timing after counter stopped
+    // - with appened time resolution (us,ms,s)
+    // - not to be used in normal code, but e.g. for custom performance analysis
+    function LastTime: RawUTF8;
+    /// timing in micro seconds of the last process
+    // - not to be used in normal code, but e.g. for custom performance analysis
+    property LastTimeInMicroSec: QWord read iLastTime write iLastTime;
   end;
 
   /// interface to a reference counted high resolution timer instance
@@ -11121,6 +11136,47 @@ type
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
     function ByCount(Count: cardinal): RawUTF8;
   end;
+
+  {$M+}
+  /// able to serialize any timing as raw micro-seconds number or text
+  TSynMonitorTime = class
+  protected
+    fMicroSeconds: QWord;
+    function GetAsText: RawUTF8;
+  public
+    /// compute a number per second, of the current value
+    function PerSecond(const aValue: QWord): QWord;
+  published
+    /// micro seconds time elapsed, as raw number
+    property MicroSec: QWord read fMicroSeconds write fMicroSeconds;
+    /// micro seconds time elapsed, as '... us-ns-ms-s' text
+    property Text: RawUTF8 read GetAsText;
+  end;
+
+  /// able to serialize any size as bytes number
+  TSynMonitorSize = class
+  protected
+    fBytes: QWord;
+    function GetAsText: RawUTF8;
+  published
+    /// number of bytes, as raw number
+    property Bytes: QWord read fBytes write fBytes;
+    /// number of bytes, as '... B-KB-MB-GB' text
+    property Text: RawUTF8 read GetAsText;
+  end;
+
+  /// able to serialize any bandwith as bytes count per second
+  TSynMonitorThroughput = class
+  protected
+    fBytesPerSec: QWord;
+    function GetAsText: RawUTF8;
+  published
+    /// number of bytes per second, as raw number
+    property BytesPerSec: QWord read fBytesPerSec write fBytesPerSec;
+    /// number of bytes per second, as '... B-KB-MB-GB/s' text
+    property Text: RawUTF8 read GetAsText;
+  end;
+  {$M-}
 
 
 {$ifdef MSWINDOWS}
@@ -11425,7 +11481,7 @@ function KB(bytes: Int64): RawUTF8;
 /// convert a micro seconds elapsed time into a human readable value
 // - append us, ms or s symbol
 // - for us and ms, add two fractional digits
-function MicroSecToString(Micro: Int64): RawUTF8;
+function MicroSecToString(Micro: QWord): RawUTF8;
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
@@ -36986,7 +37042,7 @@ begin
     insert(ThousandSep,Result,Len-i*3);
 end;
 
-function MicroSecToString(Micro: Int64): RawUTF8;
+function MicroSecToString(Micro: QWord): RawUTF8;
 function TwoDigitToString(value: cardinal): RawUTF8;
 var L: integer;
 begin
@@ -37011,18 +37067,18 @@ end;
 
 { TPrecisionTimer }
 
-function TPrecisionTimer.ByCount(Count: cardinal): RawUTF8;
+function TPrecisionTimer.ByCount(Count: QWord): RawUTF8;
 begin
   if Count=0 then
     result := '0' else // avoid div per 0 exception
     result := MicroSecToString(iTime div Count);
 end;
 
-function TPrecisionTimer.PerSec(const Count: Int64): Int64;
+function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Count*Int64(1000*1000)) div iTime;
+    result := (Count*QWord(1000*1000)) div iTime;
 end;
 
 procedure TPrecisionTimer.Init;
@@ -37033,20 +37089,31 @@ end;
 procedure TPrecisionTimer.Start;
 begin
   iResume := 0;
-  if QueryPerformanceFrequency(iFreq) then
-    QueryPerformanceCounter(iStart) else
+  if QueryPerformanceFrequency(iFreq) then begin
+    QueryPerformanceCounter(iStart);
+    iLast := iStart;
+  end else
     iFreq := 0;
 end;
 
-function TPrecisionTimer.Stop: RawUTF8;
+procedure TPrecisionTimer.ComputeTime;
 begin
   QueryPerformanceCounter(iStop);
   if iFreq=0 then
     QueryPerformanceFrequency(iFreq);
-  if iFreq=0 then
-    iTime := 0 else
-    iTime := ((iStop-iStart)*Int64(1000*1000))div iFreq;
-  result := MicroSecToString(iTime);
+  if iFreq=0 then begin
+    iTime := 0;
+    iLastTime := 0;
+  end else begin
+    iTime := ((iStop-iStart)*QWord(1000*1000))div iFreq;
+    iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
+  end;
+end;
+
+function TPrecisionTimer.Stop: RawUTF8;
+begin
+  ComputeTime;
+  result := Time;
 end;
 
 procedure TPrecisionTimer.Pause;
@@ -37058,6 +37125,7 @@ end;
 procedure TPrecisionTimer.Resume;
 begin
   QueryPerformanceCounter(iStart);
+  iLast := iStart;
   dec(iStart,iResume);
   iResume := 0;
 end;
@@ -37066,6 +37134,12 @@ function TPrecisionTimer.Time: RawUTF8;
 begin
   result := MicroSecToString(iTime);
 end;
+
+function TPrecisionTimer.LastTime: RawUTF8;
+begin
+  result := MicroSecToString(iLastTime);
+end;
+
 
 type
   /// a class used internaly by TPrecisionTimer.ProfileMethod
@@ -37136,6 +37210,36 @@ begin
   inherited;
   fTimer.Start;
 end;
+
+{ TSynMonitorTime }
+
+function TSynMonitorTime.GetAsText: RawUTF8;
+begin
+  result := MicroSecToString(fMicroSeconds);
+end;
+
+function TSynMonitorTime.PerSecond(const aValue: QWord): QWord;
+begin
+  if Int64(fMicroSeconds)<=0 then // avoid negative or div per 0
+    result := 0 else
+    result := (aValue*QWord(1000*1000)) div fMicroSeconds;
+end;
+
+
+{ TSynMonitorSize }
+
+function TSynMonitorSize.GetAsText: RawUTF8;
+begin
+  result := KB(fBytes);
+end;
+
+{ TSynMonitorThroughput }
+
+function TSynMonitorThroughput.GetAsText: RawUTF8;
+begin
+  result := KB(fBytesPerSec)+'/s';
+end;
+
 
 {$ifdef MSWINDOWS}
 {$ifndef DELPHI5OROLDER}

@@ -1132,6 +1132,8 @@ unit mORMot;
       after server restart
     - stronger client-generated nonce for TSQLRestServerAuthenticationDefault
     - ORM/SOA threads will display a friendly name in the IDE for [6acfd0a3d3] 
+    - new TSynMonitor class, for easy statistics gathering of any process:
+      will be shared by framework's ORM, SOA and DDD implementation
     - introducing TSQLRestServerKind enumeration to identify the kind of
       TSQLRestServer instance running (SQlite3/static/virtual) for a table
     - TSQLRestServer.SessionGetUser method is now made public (e.g. when
@@ -3720,6 +3722,68 @@ type
     // classes and T*ObjArray published properties
     destructor Destroy; override;
   end;
+
+  /// a generic value object able to handle any process statistic
+  // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
+  // process is to be monitored
+  TSynMonitor = class(TSynAutoCreateFields)
+  protected
+    fTimer: TPrecisionTimer;
+    fProcessing: boolean;
+    fCount: QWord;
+    fInternalErrors: cardinal;
+    fLastInternalError: variant;
+    fTime: TSynMonitorTime;
+    fLastTime: TSynMonitorTime;
+    fMinimalTime: TSynMonitorTime;
+    fMaximalTime: TSynMonitorTime;
+    fPerSec: QWord;
+    fSize: TSynMonitorSize;
+    fThroughput: TSynMonitorThroughput;
+    procedure FillPerSecProperties; virtual;
+  public
+    /// should be called when the process starts, to resume the internal timer
+    procedure ProcessStart; virtual;
+    /// should be called when the process has finished performing its data
+    // - will update the Count and Size properties
+    procedure Processed(const aProcessedDataSize: QWord); virtual;
+    /// should be called when an error occurred
+    // - typical use is with ObjectToVariantDebug(E,...) kind of information
+    procedure ProcessError(const info: variant); virtual;
+    /// should be called when the process stops, to pause the internal timer
+    procedure ProcessEnd; virtual;
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); virtual;
+    /// returns a TDocVariant with all published properties information
+    function ComputeDetails: variant;
+  published
+    /// indicates if this thread is currently working on some process
+    property Processing: boolean read fProcessing;
+    /// how many times the process did occur
+    property Count: QWord read fCount;
+    /// the whole time spend during all working process
+    property Time: TSynMonitorTime read fTime;
+    /// the time spend during the last working process
+    property LastTime: TSynMonitorTime read fLastTime;
+    /// the lowest time spent during any working process
+    property MinimalTime: TSynMonitorTime read fMinimalTime;
+    /// the highest time spent during any working process
+    property MaximalTime: TSynMonitorTime read fMaximalTime;
+    /// average of how many process did occur per second
+    property PerSec: QWord read fPerSec;
+    /// how many data has been hanlded during all working process, returned as text
+    property Size: TSynMonitorSize read fSize;
+    /// data processing bandwith, returned as B/KB/MB per second text
+    property Throughput: TSynMonitorThroughput read fThroughput;
+    /// how many errors did occur during the processing
+    property Errors: cardinal read fInternalErrors;
+    /// information about the last error which occured during the processing
+    property LastError: variant read fLastInternalError;
+  end;
+
+  /// used to store the class of process statistic instances
+  TSynMonitorClass = class of TSynMonitor;
+
 
 
 const
@@ -17987,6 +18051,66 @@ begin
     '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %',[self,aName,fTable]);
 end;
 
+
+{ TSynMonitor }
+
+procedure TSynMonitor.ProcessStart;
+begin
+  fTimer.Resume;
+end;
+
+procedure TSynMonitor.Processed(const aProcessedDataSize: QWord);
+begin
+  inc(fCount);
+  fSize.Bytes := fSize.Bytes+aProcessedDataSize;
+end;
+
+procedure TSynMonitor.ProcessEnd;
+begin
+  fTimer.Pause;
+  fTimer.ComputeTime;
+  fTime.MicroSec := fTimer.TimeInMicroSec;
+  fLastTime.MicroSec := fTimer.LastTimeInMicroSec;
+  if (fMinimalTime.MicroSec=0) or
+     (fLastTime.MicroSec<fMinimalTime.MicroSec) then
+    fMinimalTime.MicroSec := fLastTime.MicroSec;
+  if fLastTime.MicroSec>fMaximalTime.MicroSec then
+    fMaximalTime.MicroSec := fLastTime.MicroSec;
+  FillPerSecProperties;
+end;
+
+procedure TSynMonitor.ProcessError(const info: variant); 
+begin
+  inc(fInternalErrors);
+  fLastInternalError := info;
+end;
+
+procedure TSynMonitor.FillPerSecProperties;
+begin
+  fPerSec := fTime.PerSecond(fCount);
+  fThroughput.BytesPerSec := fTime.PerSecond(fSize.Bytes);
+end;
+
+procedure TSynMonitor.Sum(another: TSynMonitor);
+begin
+  if another=nil then
+    exit;
+  fTime.MicroSec := fTime.MicroSec+another.fTime.MicroSec;
+  if (fMinimalTime.MicroSec=0) or
+     (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
+    fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
+  if another.fMaximalTime.MicroSec>fMaximalTime.MicroSec then
+    fMaximalTime.MicroSec := another.fMaximalTime.MicroSec;
+  inc(fCount,another.Count);
+  inc(fInternalErrors,another.Errors);
+  fSize.Bytes := fSize.Bytes+another.Size.Bytes;
+end;
+
+function TSynMonitor.ComputeDetails: variant;
+begin
+  FillPerSecProperties; // may not have been calculated after Sum()
+  result := ObjectToVariant(self);
+end;
 
 
 procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
