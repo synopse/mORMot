@@ -567,7 +567,9 @@ type
     fSize: Int64;
     fAdditionalStatistics: TInt64DynArray;
     fPending: TSQLRecord;
+    fProcessIdleDelay: integer;
     procedure Execute; override;
+    procedure OnException(E: Exception); virtual;
   protected
     // create fPending + save fPending.State to "processing"
     // returns fPending.ID=0 if no more pending task
@@ -599,6 +601,7 @@ type
     fProcessThreadCount: integer;
     fProcessIdleDelay: integer;
     fAdditionalStatisticsName: TRawUTF8DynArray;
+    function GetStatus: variant; virtual;
   public
     /// abstract constructor, which should not be called by itself
     constructor Create(aRest: TSQLRest); overload; override;
@@ -612,7 +615,7 @@ type
     /// monitor the Daemon/Service by returning some information as a TDocVariant
     // - its Status.stats sub object will contain global processing statistics,
     // and Status.threadstats similar information, detailled by running thread
-    function RetrieveState(out Status: variant): TCQRSResult; virtual;
+    function RetrieveState(out Status: variant): TCQRSResult; 
     /// launch all processing threads
     // - any previous running threads are first stopped
     function Start: TCQRSResult; virtual;
@@ -814,7 +817,7 @@ begin
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
-  Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self]);
+  Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self],self);
 end;
 
 constructor TDDDRepositoryRestFactory.Create(const aInterface: TGUID;
@@ -827,7 +830,7 @@ end;
 
 destructor TDDDRepositoryRestFactory.Destroy;
 begin
-  Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self]);
+  Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self],self);
   fAggregateRTTI.Free;
   ObjArrayClear(fGarbageCollector);
   inherited;
@@ -1176,7 +1179,7 @@ begin
   result := TDDDRepositoryRestFactory.Create(
     aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs,self);
   ObjArrayAdd(fFactory,result);
-  aRest.LogClass.Add.Log(sllDDDInfo,'Added factory % to %',[result,self]);
+  aRest.LogClass.Add.Log(sllDDDInfo,'Added factory % to %',[result,self],self);
 end;
 
 destructor TDDDRepositoryRestManager.Destroy;
@@ -1226,7 +1229,7 @@ begin
   inherited AfterInternalORMResult;
   if (fLastError<>cqrsSuccess) and
      (sllDDDError in Factory.Rest.LogFamily.Level) then
-    Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext]);
+    Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext],self);
 end;
 
 function TDDDRepositoryRestQuery.ORMBegin(aAction: TCQRSQueryAction;
@@ -1485,7 +1488,8 @@ begin
    'size',KB(fSize), 'sizeBytes',fSize,
    'throughput',KB(throughput), 'throughputBytes',throughput,
    'count',fCount, 'persec',fTimer.PerSec(fCount),
-   'errors',fInternalErrors, 'lasterror',fLastInternalError]);
+   'errors',fInternalErrors, 'lasterror',fLastInternalError,
+   'idledelay',fProcessIdleDelay]);
   for i := 0 to high(fAdditionalStatistics) do
     _ObjAddProps([fDaemon.fAdditionalStatisticsName[i],fAdditionalStatistics[i]],result);
 end;
@@ -1495,6 +1499,7 @@ constructor TDDDMonitoredDaemonProcess.Create(aDaemon: TDDDMonitoredDaemon;
 begin
   fTimer.Start;
   fDaemon := aDaemon;
+  fProcessIdleDelay := fDaemon.ProcessIdleDelay;
   fIndex := aIndexInDaemon;
   SetLength(fAdditionalStatistics,length(fDaemon.fAdditionalStatisticsName));
   inherited Create(False);
@@ -1505,46 +1510,60 @@ begin
   fDaemon.Rest.BeginCurrentThread(self);
   try
     repeat
-      sleep(fDaemon.ProcessIdleDelay);
+      sleep(fProcessIdleDelay);
       try
-        repeat
-          if Terminated then
-            exit;
-          fPending := nil;
-          fProcessing := true;
-          try
-            fTimer.Resume;
+        try
+          repeat
+            if Terminated then
+              exit;
+            fPending := nil;
+            fProcessing := true;
             try
-              fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
+              fTimer.Resume;
               try
-                ExecuteRetrievePendingAndSetProcessing;
+                fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
+                try
+                  ExecuteRetrievePendingAndSetProcessing;
+                finally
+                  fDaemon.fProcessLock.Leave;
+                end;
+                if fPending.ID=0 then
+                  break; // no more pending tasks
+                inc(fCount);
+                ExecuteProcessAndSetResult; // always set, even if Terminated
               finally
-                fDaemon.fProcessLock.Leave;
+                fTimer.Pause;
+                FreeAndNil(fPending);
+                fProcessing := false;
               end;
-              if fPending.ID=0 then
-                break; // no more pending tasks
-              inc(fCount);
-              ExecuteProcessAndSetResult; // always set, even if Terminated
-            finally
-              fTimer.Pause;
-              FreeAndNil(fPending);
-              fProcessing := false;
+            except
+              on E: Exception do begin
+                OnException(E);
+                break; // will call ExecuteIdle then go to idle state
+              end;
             end;
-          except
-            on E: Exception do begin
-              inc(fInternalErrors);
-              fLastInternalError := ObjectToVariantDebug(E);
-              break; // will call ExecuteIdle then go to idle state
-            end;
-          end;
-        until false;
-      finally
-        ExecuteIdle;
+          until false;
+        finally
+          ExecuteIdle;
+        end;
+      except
+        on E: Exception do begin
+          OnException(E); // exception during ExecuteIdle should not happen
+          if fProcessIdleDelay<500 then
+            fProcessIdleDelay := 500; // avoid CPU+resource burning 
+        end;
       end;
     until false;
   finally
     fDaemon.Rest.EndCurrentThread(self);
   end;
+end;
+
+procedure TDDDMonitoredDaemonProcess.OnException(E: Exception);
+begin
+  inc(fInternalErrors);
+  fLastInternalError := ObjectToVariantDebug(E,
+    '{threadindex:?,daemon:?}',[fIndex,fDaemon.GetStatus]);
 end;
 
 
@@ -1577,8 +1596,7 @@ begin
   inherited;
 end;
 
-function TDDDMonitoredDaemon.RetrieveState(
-  out Status: variant): TCQRSResult;
+function TDDDMonitoredDaemon.GetStatus: variant;
 var i,a,working,totcount: integer;
     totsize,throughput: Int64;
     totadditional: TInt64DynArray;
@@ -1586,7 +1604,6 @@ var i,a,working,totcount: integer;
     stats: variant;
     pool: TDocVariantData;
 begin
-  ORMBegin(qaNone,result);
   working := 0;
   totsize := 0;
   totcount := 0;
@@ -1605,15 +1622,21 @@ begin
       inc(totadditional[a],fAdditionalStatistics[a]);
   end;
   throughput := tottime.PerSec(totsize);
-  Status := ObjectToVariantDebug(self);
+  result := ObjectToVariantDebug(self);
   stats := _ObjFast(['working',working, 'uptime',fProcessTimer.Stop,
     'processtime',tottime.Time, 'size',KB(totsize), 'sizeBytes',totsize,
     'count',totcount, 'persec',tottime.PerSec(totcount),
     'throughput',KB(throughput), 'throughputBytes',throughput]);
   for a := 0 to high(fAdditionalStatisticsName) do
     _ObjAddProps([fAdditionalStatisticsName[a],totadditional[a]],stats);
-  _ObjAddProps(['stats',stats, 'threadstats',variant(pool)],Status);
-  ORMResult(cqrsSuccess);
+  _ObjAddProps(['stats',stats, 'threadstats',variant(pool)],result);
+end;
+
+function TDDDMonitoredDaemon.RetrieveState(
+  out Status: variant): TCQRSResult;
+begin
+  ORMBegin(qaNone,result,cqrsSuccess);
+  Status := GetStatus;
 end;
 
 function TDDDMonitoredDaemon.Start: TCQRSResult;
@@ -1626,7 +1649,7 @@ begin
     raise EDDDException.CreateUTF8('%.Start with no fProcessClass',[self]);
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
-  Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount]);
+  Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount],self);
   ORMBegin(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
@@ -1654,11 +1677,11 @@ begin
             break;
           end;
       until allfinished;
-      RetrieveState(Information);
+      Information := GetStatus;
       Log.Log(sllTrace,'Stopped %',[Information],self);
       ObjArrayClear(fProcess);
     end;
-    result := cqrsSuccess;
+    ORMResult(cqrsSuccess);
   except
     on E: Exception do
       ORMResult(E);
