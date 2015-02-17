@@ -422,6 +422,10 @@ unit SynCommons;
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - introducing T*ObjArray dynamic array storage via ObjArrayAdd/ObjArrayFind/
     ObjArrayDelete/ObjArraySort and ObjArrayClear functions
+  - added TPersistentWithCustomCreate, TInterfacedObjectWithCustomCreate and
+    TSynPersistent abstract classes, allowing to define virtual constructors for
+    TPersistent kind of objects (used e.g. with internal JSON serialization,
+    for interface-based services, or for DDD objects)
   - introducing TSynAuthentication class for simple generic authentication
   - added TDynArrayHashed.HashElement property
   - new TDynArrayHashed.AddUniqueName() method
@@ -3306,11 +3310,19 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
 /// sort a PtrInt array, low values first
-procedure QuickSortPtrInt(ID: PPtrIntArray; L, R: PtrInt);
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast binary search of a PtrInt value in a sorted array
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// sort a pointer array, low values first
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast binary search of a Pointer value in a sorted array
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where to insert an integer value in a sorted integer array
@@ -4248,7 +4260,8 @@ type
   TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
   public
     /// this virtual constructor will be called at instance creation
-    // - this actual implementation won't do anything
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
     constructor Create; virtual;
   end;
 
@@ -4260,14 +4273,38 @@ type
   TPersistentWithCustomCreate = class(TPersistent)
   public
     /// this virtual constructor will be called at instance creation
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
+    constructor Create; virtual;
+  end;
+
+  /// our own empowered TPersistent-like parent class
+  // - TPersistent has an unexpected speed overhead due a giant lock introduced
+  // to manage property name fixup resolution (which we won't use outside the VCL)
+  // - this class has a virtual constructor, so is a preferred alternative
+  // to both TPersistent and TPersistentWithCustomCreate classes
+  TSynPersistent = class(TObject)
+  public
+    /// this virtual constructor will be called at instance creation
+    // - this constructor does nothing, but is declared as virtual so that
+    // inherited classes may safely override this default void implementation
     constructor Create; virtual;
   end;
   {$M-}
 
+  /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
+  // - could be used to create instances using its virtual constructor
   TInterfacedObjectWithCustomCreateClass = class of TInterfacedObjectWithCustomCreate;
-  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
-  
 
+  /// used to determine the exact class type of a TPersistentWithCustomCreateClass
+  // - could be used to create instances using its virtual constructor
+  TPersistentWithCustomCreateClass = class of TPersistentWithCustomCreate;
+
+  /// used to determine the exact class type of a TSynPersistent
+  // - could be used to create instances using its virtual constructor
+  TSynPersistentClass = class of TSynPersistent;
+
+  
   /// store one Name/Value pair, as used by TSynNameValue class
   TSynNameValueItem = record
     /// the name of the Name/Value pair
@@ -19623,12 +19660,12 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortPtrInt(ID: PPtrIntArray; L, R: PtrInt);
+procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
 begin
   {$ifdef CPU64}
-  QuickSortInt64(PInt64Array(ID),L,R);
+  QuickSortInt64(PInt64Array(P),L,R);
   {$else}
-  QuickSortInteger(PIntegerArray(ID),L,R);
+  QuickSortInteger(PIntegerArray(P),L,R);
   {$endif}
 end;
 
@@ -19638,6 +19675,24 @@ begin
   result := FastFindInt64Sorted(PInt64Array(P),R,Value);
   {$else}
   result := FastFindIntegerSorted(PIntegerArray(P),R,Value);
+  {$endif}
+end;
+
+procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
+begin
+  {$ifdef CPU64}
+  QuickSortInt64(PInt64Array(P),L,R);
+  {$else}
+  QuickSortInteger(PIntegerArray(P),L,R);
+  {$endif}
+end;
+
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt; overload;
+begin
+  {$ifdef CPU64}
+  result := FastFindInt64Sorted(PInt64Array(P),R,Int64(Value));
+  {$else}
+  result := FastFindIntegerSorted(PIntegerArray(P),R,integer(Value));
   {$endif}
 end;
 
@@ -33104,6 +33159,11 @@ constructor TPersistentWithCustomCreate.Create;
 begin // nothing to do by default - overridden constructor may add custom code
 end;
 
+{ TSynPersistent }
+
+constructor TSynPersistent.Create;
+begin // nothing to do by default - overridden constructor may add custom code
+end;
 
 
 { ****************** text buffer and JSON functions and classes ********* }
