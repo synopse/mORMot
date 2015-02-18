@@ -3182,6 +3182,7 @@ type
     Name: RawUTF8;
     FileName: RawUTF8;
     ContentType: RawUTF8;
+    Encoding: RawUTF8;
     Content: RawByteString;
   end;
   /// used by MultiPartFormDataDecode() to return all its data items
@@ -24322,7 +24323,7 @@ end;
 
 function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
   var MultiPart: TMultiPartDynArray): boolean;
-var boundary,encoding: RawUTF8;
+var boundary: RawUTF8;
     i,j: integer;
     P: PUTF8Char;
     part: TMultiPart;
@@ -24340,30 +24341,31 @@ begin
       exit; // reached the end
     P := PUTF8Char(Pointer(Body))+i-1;
     Finalize(part);
-    encoding := '';
     repeat
-      if IdemPCharAndGetNextItem(P,'CONTENT-DISPOSITION: FORM-DATA; NAME="',
-         part.Name,'"') then
+      if IdemPCharAndGetNextItem(P,
+         'CONTENT-DISPOSITION: FORM-DATA; NAME="',part.Name,'"') then
         IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else
       if IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) or
-         IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',encoding) then;
+         IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',part.Encoding) then;
       GetNextLineBegin(P,P);
       if P=nil then
         exit;
-   until PWord(P)^=13+10 shl 8;
-   i := P-PUTF8Char(Pointer(Body))+3; // i = just after header
-   j := PosEx(Body,boundary,i);
-   if j=0 then
-     exit;
-   part.Content := copy(Body,i,j-i);
-   if (encoding<>'7bit') and (encoding<>'8bit') and (encoding<>'binary') then
-     if encoding='base64' then
-       part.Content := Base64ToBin(part.Content) else
-       exit; // unknown encoding - e.g. "quoted-printable"
-   SetLength(MultiPart,length(MultiPart)+1);
-   MultiPart[high(MultiPart)] := part;
-   result := true;
-   i := j;
+    until PWord(P)^=13+10 shl 8;
+    i := P-PUTF8Char(Pointer(Body))+3; // i = just after header
+    j := PosEx(Body,boundary,i);
+    if j=0 then
+      exit;
+    part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
+    {$ifdef UNICODE}
+    if part.ContentType='' then
+      SetCodePage(part.Content,CP_UTF8) else // ensure raw field value is UTF-8
+    {$endif}
+    if part.Encoding='base64' then // "quoted-printable" not yet handled here
+      part.Content := Base64ToBin(part.Content);
+    SetLength(MultiPart,length(MultiPart)+1);
+    MultiPart[high(MultiPart)] := part;
+    result := true;
+    i := j;
   until false;
 end;
 

@@ -794,6 +794,7 @@ unit mORMot;
     - added TSQLRestServerURIContext.Input*OrVoid[] properties
     - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID,
       SessionUserName and ResourceFileName properties
+    - added TSQLRestServerURIContext.InputAsMultiPart() method
     - added TSQLRestServerURIContext.Redirect() method for HTTP 301 commands
     - added TSQLRestServer.ServiceMethodRegister() low-level method
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
@@ -4865,6 +4866,9 @@ type
     // - returns Unassigned if no parameter was defined
     property InputAsTDocVariant: variant read GetInputAsTDocVariant;
     {$endif}
+    /// decode any multipart/form-data POST request input
+    // - returns TRUE and set MultiPart array as expected, on success 
+    function InputAsMultiPart(var MultiPart: TMultiPartDynArray): Boolean;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - you could call e.g. InHeader['remoteip'] to retrieve the caller IP
@@ -30017,7 +30021,8 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1] else
     if Method=mPost then begin
-      fInputPostContentType := FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
+      fInputPostContentType := FindIniNameValue(
+        pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
       if IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
         Parameters := pointer(Call^.InBody);
     end; 
@@ -30791,26 +30796,10 @@ begin
   GetVariantFromJSON(pointer(GetInputUTF8OrVoid(ParamName)),false,Result);
 end;
 
-function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
-  var Names,ContentTypes: TRawUTF8DynArray; var Values: TRawByteStringDynArray): boolean;
-var boundary: RawUTF8;
-    i: integer;
-begin
-  result := false;
-  i := PosEx('boundary=',MimeType);
-  if i=0 then
-    exit;
-  boundary := '--'+trim(copy(MimeType,i+9,200));
-  // to be done
-  raise ECommunicationException.Create('multipart/form-data not implemented yet');
-end;
-
 function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
 var i: integer;
     v: variant;
-    Names,ContentTypes: TRawUTF8DynArray;
-    Values: TRawByteStringDynArray;
-//    Variants: TVariantDynArray;
+    MultiPart: TMultiPartDynArray;
 begin
   VarClear(result);
   FillInput;
@@ -30823,14 +30812,25 @@ begin
       end;
     end;
   end else
-  if (Method=mPOST) and
-     IdemPChar(pointer(fInputPostContentType),'MULTIPART/FORM-DATA') and
-     MultiPartFormDataDecode(fInputPostContentType,Call^.InBody,Names,ContentTypes,Values) then begin
-    //TDocVariantData(result).InitObjectFromVariants(Names,Variants);
-  end;
+  if InputAsMultiPart(MultiPart) then
+    with TDocVariantData(result) do begin
+      Init(JSON_OPTIONS[true]);
+      for i := 0 to high(MultiPart) do
+        with MultiPart[i] do begin
+          RawUTF8ToVariant(Content,v);
+          AddValue(Name,v);
+        end;
+    end;
 end;
 
 {$endif NOVARIANTS}
+
+function TSQLRestServerURIContext.InputAsMultiPart(var MultiPart: TMultiPartDynArray): Boolean;
+begin
+  result := (Method=mPOST) and
+     IdemPChar(pointer(fInputPostContentType),'MULTIPART/FORM-DATA') and
+     MultiPartFormDataDecode(fInputPostContentType,Call^.InBody,MultiPart);
+end;
 
 function TSQLRestServerURIContext.GetInHeader(const HeaderName: RawUTF8): RawUTF8;
 var up: array[byte] of AnsiChar;
