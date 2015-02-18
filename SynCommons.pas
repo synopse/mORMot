@@ -411,6 +411,7 @@ unit SynCommons;
     default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
   - added QuotedStrJSON() function
   - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
+  - added MultiPartFormDataDecode() to decode multipart/form-data POST requests 
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
   - FastCode-based x86 asm Move() procedure will handle source=dest
@@ -2625,8 +2626,15 @@ procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
 // - 'VACUUM' statement also returns true, since doesn't change the data content
 function isSelect(P: PUTF8Char): boolean;
 
-/// return true if IdemPChar(source,search), and go to the next line of source
-function IdemPCharAndGetNextLine(var source: PUTF8Char; search: PAnsiChar): boolean;
+/// return true if IdemPChar(source,searchUp), and go to the next line of source
+function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
+
+/// return true if IdemPChar(source,searchUp), and retrieve the value item
+// - typical use may be:
+// ! if IdemPCharAndGetNextItem(P,
+// !   'CONTENT-DISPOSITION: FORM-DATA; NAME="',Name,'"') then ...
+function IdemPCharAndGetNextItem(var source: PUTF8Char; const searchUp: RawUTF8;
+  var Item: RawUTF8; Sep: AnsiChar=#13): boolean;
 
 /// return line begin from source array of chars, and go to next line
 // - next will contain the beginning of next line, or nil if source if ended
@@ -2650,7 +2658,7 @@ function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8;
 function GetNextItemString(var P: PChar; Sep: Char= ','): string;
 
 /// return next string delimited with #13#10 from P, nil if no more
-// - this function returns RawUnicode string type
+// - this function returns a RawUnicode string type
 function GetNextStringLineToRawUnicode(var P: PChar): RawUnicode;
 
 /// append some text lines with the supplied Values[]
@@ -3167,6 +3175,22 @@ function IsContentCompressed(Content: Pointer; Len: integer): boolean;
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
+
+type
+  /// used by MultiPartFormDataDecode() to return one item of its data
+  TMultiPart = record
+    Name: RawUTF8;
+    FileName: RawUTF8;
+    ContentType: RawUTF8;
+    Content: RawByteString;
+  end;
+  /// used by MultiPartFormDataDecode() to return all its data items
+  TMultiPartDynArray = array of TMultiPart;
+
+/// decode multipart/form-data POST request content
+// - following RFC1867
+function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
@@ -21085,13 +21109,12 @@ end;
 
 {$endif}
 
-
-function IdemPCharAndGetNextLine(var source: PUTF8Char; search: PAnsiChar): boolean;
+function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
 {$ifdef PUREPASCAL}
 begin
   if source=nil then
     result := false else begin
-    result := IdemPChar(source,search);
+    result := IdemPChar(source,searchUp);
     while source^ in ANSICHARNOT01310 do inc(source);
     while source^ in [#13,#10] do inc(source);
     if source^=#0 then
@@ -21099,7 +21122,7 @@ begin
   end;
 end;
 {$else}
-asm // eax=source edx=search
+asm // eax=source edx=searchUp
     push eax       // save source var
     mov eax,[eax]  // eax=source
     or eax,eax
@@ -21130,6 +21153,19 @@ asm // eax=source edx=search
 @z: pop edx       // ignore source var, result := false
 end;
 {$endif}
+
+function IdemPCharAndGetNextItem(var source: PUTF8Char; const searchUp: RawUTF8;
+  var Item: RawUTF8; Sep: AnsiChar): boolean;
+begin
+  if source=nil then
+    result := false else begin
+    result := IdemPChar(source,Pointer(searchUp));
+    if result then begin
+      inc(source,Length(searchUp));
+      Item := GetNextItem(source,Sep);
+    end;
+  end;
+end;
 
 function GetNextLineBegin(source: PUTF8Char; out next: PUTF8Char): PUTF8Char;
 begin
@@ -24282,6 +24318,53 @@ begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
     ['TEXT/','APPLICATION/JSON','APPLICATION/XML',
      'APPLICATION/X-JAVASCRIPT','IMAGE/SVG+XML']);
+end;
+
+function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+var boundary,encoding: RawUTF8;
+    i,j: integer;
+    P: PUTF8Char;
+    part: TMultiPart;
+begin
+  result := false;
+  i := PosEx('boundary=',MimeType);
+  if i=0 then
+    exit;
+  boundary := '--'+trim(copy(MimeType,i+9,200))+#13#10;
+  i := PosEx(boundary,Body);
+  if i<>0 then
+  repeat
+    inc(i,length(boundary));
+    if i=length(body) then
+      exit; // reached the end
+    P := PUTF8Char(Pointer(Body))+i-1;
+    Finalize(part);
+    encoding := '';
+    repeat
+      if IdemPCharAndGetNextItem(P,'CONTENT-DISPOSITION: FORM-DATA; NAME="',
+         part.Name,'"') then
+        IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else
+      if IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) or
+         IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',encoding) then;
+      GetNextLineBegin(P,P);
+      if P=nil then
+        exit;
+   until PWord(P)^=13+10 shl 8;
+   i := P-PUTF8Char(Pointer(Body))+3; // i = just after header
+   j := PosEx(Body,boundary,i);
+   if j=0 then
+     exit;
+   part.Content := copy(Body,i,j-i);
+   if (encoding<>'7bit') and (encoding<>'8bit') and (encoding<>'binary') then
+     if encoding='base64' then
+       part.Content := Base64ToBin(part.Content) else
+       exit; // unknown encoding - e.g. "quoted-printable"
+   SetLength(MultiPart,length(MultiPart)+1);
+   MultiPart[high(MultiPart)] := part;
+   result := true;
+   i := j;
+  until false;
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
