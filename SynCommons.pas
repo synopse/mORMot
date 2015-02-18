@@ -24353,7 +24353,7 @@ begin
         exit;
     until PWord(P)^=13+10 shl 8;
     i := P-PUTF8Char(Pointer(Body))+3; // i = just after header
-    j := PosEx(Body,boundary,i);
+    j := PosEx(boundary,Body,i);
     if j=0 then
       exit;
     part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
@@ -37717,23 +37717,23 @@ begin
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef LINUX}  'Kylix 3'   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    'Delphi'
-    {$if     defined(VER140)}+' 6'
-    {$elseif defined(VER150)}+' 7'
-    {$elseif defined(VER160)}+' 8'
-    {$elseif defined(VER170)}+' 2005'
-    {$elseif defined(VER185)}+' 2007'
-    {$elseif defined(VER180)}+' 2006'
-    {$elseif defined(VER200)}+' 2009'
-    {$elseif defined(VER210)}+' 2010'
-    {$elseif defined(VER220)}+' XE'
-    {$elseif defined(VER230)}+' XE2'
-    {$elseif defined(VER240)}+' XE3'
-    {$elseif defined(VER250)}+' XE4'
-    {$elseif defined(VER260)}+' XE5'
-    {$elseif defined(VER270)}+' XE6'
-    {$elseif defined(VER280)}+' XE7'
-    {$elseif defined(VER290)}+' XE8'
+    {$if     defined(VER140)}'Delphi 6'
+    {$elseif defined(VER150)}'Delphi 7'
+    {$elseif defined(VER160)}'Delphi 8'
+    {$elseif defined(VER170)}'Delphi 2005'
+    {$elseif defined(VER185)}'Delphi 2007'
+    {$elseif defined(VER180)}'Delphi 2006'
+    {$elseif defined(VER200)}'Delphi 2009'
+    {$elseif defined(VER210)}'Delphi 2010'
+    {$elseif defined(VER220)}'Delphi XE'
+    {$elseif defined(VER230)}'Delphi XE2'
+    {$elseif defined(VER240)}'Delphi XE3'
+    {$elseif defined(VER250)}'Delphi XE4'
+    {$elseif defined(VER260)}'Delphi XE5'
+    {$elseif defined(VER265)}'AppMethod 1'
+    {$elseif defined(VER270)}'Delphi XE6'
+    {$elseif defined(VER280)}'Delphi XE7'
+    {$elseif defined(VER290)}'Delphi XE8'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
   {$endif LINUX}
