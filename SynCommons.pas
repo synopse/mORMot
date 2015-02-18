@@ -11181,6 +11181,7 @@ type
   public
     /// compute a number per second, of the current value
     function PerSecond(const aValue: QWord): QWord;
+      {$ifdef HASINLINE}inline;{$endif}
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: QWord read fMicroSeconds write fMicroSeconds;
@@ -20513,7 +20514,7 @@ const
 asm   // -> EAX Pointer to string
       //    EDX Pointer to code result
       // <- FST(0)  Result
-  push  ebx              {Save Used Registers}
+  push  ebx             {Save Used Registers}
   push  esi
   push  edi
   mov   esi,eax         {String Pointer}
@@ -20522,8 +20523,8 @@ asm   // -> EAX Pointer to string
   push  eax             {Allocate Local Storage for Loading FPU}
   test  esi,esi
   jz    @@Nil           {Nil String}
-@@Trim:
-  movzx ebx,byte ptr [esi]       {Strip Leading Spaces}
+@@Trim:                 {Strip Leading Spaces}
+  movzx ebx,byte ptr [esi]
   inc   esi
   cmp   bl,' '
   je    @@Trim
@@ -20541,64 +20542,64 @@ asm   // -> EAX Pointer to string
   xor   edi,edi         {Zero Exponent Value}
 @@DigitLoop:
   sub   bl,'0'
-  cmp   bl, 9
+  cmp   bl,9
   ja    @@Fraction      {Non-Digit}
   mov   cl,1            {Set Digit Found Flag}
   mov   [esp],ebx       {Store for FPU Use}
-  fmul  st(0), st(1)    {Multply by 10}
+  fmul  st(0),st(1)     {Multply by 10}
   fiadd dword ptr [esp] {Add Next Digit}
-  movzx ebx,byte ptr [esi]       {Get Next Char}
+  movzx ebx,byte ptr [esi]   {Get Next Char}
   inc   esi
   test  bl,bl           {End Reached?}
-  jnz   @@DigitLoop     {No, Get Next Digit}
-  jmp   @@Finish        {Yes, Finished}
+  jnz   @@DigitLoop     {No,Get Next Digit}
+  jmp   @@Finish        {Yes,Finished}
 @@CheckSign:
   cmp   bl,'-'
   je    @@Minus
   cmp   bl,'+'
   je    @@SignSet
 @@GetFirstDigit:
-  test  bl, bl
+  test  bl,bl
   jz    @@Error         {No Digits Found}
   jmp   @@FirstDigit
 @@Minus:
   mov   ch,1            {Set Sign Flag}
 @@SignSet:
-  movzx ebx,byte ptr [esi]       {Get Next Char}
+  movzx ebx,byte ptr [esi]  {Get Next Char}
   inc   esi
   jmp   @@GetFirstDigit
 @@Fraction:
   cmp   bl,'.'-'0'
   jne   @@Exponent      {No Decimal Point}
-  movzx ebx,byte ptr [esi]       {Get Next Char}
-  test  bl, bl
+  movzx ebx,byte ptr [esi]   {Get Next Char}
+  test  bl,bl
   jz    @@DotEnd        {String Ends with '.'}
   inc   esi
 @@FractionLoop:
   sub   bl,'0'
-  cmp   bl, 9
-  ja    @@Exponent       {Non-Digit}
+  cmp   bl,9
+  ja    @@Exponent      {Non-Digit}
   mov   [esp],ebx
-  dec   eax              {-(Number of Decimal Places)}
-  fmul  st(0), st(1)     {Multply by 10}
-  fiadd dword ptr [esp]  {Add Next Digit}
-  movzx ebx,byte ptr [esi]        {Get Next Char}
+  dec   eax             {-(Number of Decimal Places)}
+  fmul  st(0),st(1)     {Multply by 10}
+  fiadd dword ptr [esp] {Add Next Digit}
+  movzx ebx,byte ptr [esi]   {Get Next Char}
   inc   esi
-  test  bl,bl            {End Reached?}
-  jnz   @@FractionLoop   {No, Get Next Digit}
-  jmp   @@Finish         {Yes, Finished (No Exponent)}
+  test  bl,bl           {End Reached?}
+  jnz   @@FractionLoop  {No,Get Next Digit}
+  jmp   @@Finish        {Yes,Finished (No Exponent)}
 @@DotEnd:
-  test  cl,cl            {Any Digits Found before '.'?}
-  jnz   @@Finish         {Yes, Valid}
-  jmp   @@Error          {No, Invalid}
+  test  cl,cl           {Any Digits Found before '.'?}
+  jnz   @@Finish        {Yes,Valid}
+  jmp   @@Error         {No,Invalid}
 @@Exponent:
-  or    bl, $20
+  or    bl,$20
   cmp   bl,'e'-'0'
-  jne   @@Error          {Not 'e' or 'E'}
+  jne   @@Error         {Not 'e' or 'E'}
 @@GetExponent:
-  movzx ebx,byte ptr [esi]        {Get Next Char}
+  movzx ebx,byte ptr [esi]  {Get Next Char}
   inc   esi
-  mov   cl, 0            {Clear Exponent Sign Flag}
+  mov   cl,0            {Clear Exponent Sign Flag}
   cmp   bl,'-'
   je    @@MinusExp
   cmp   bl,'+'
@@ -20607,56 +20608,56 @@ asm   // -> EAX Pointer to string
 @@MinusExp:
   mov   cl,1            {Set Exponent Sign Flag}
 @@ExpSignSet:
-  movzx ebx,byte ptr [esi]       {Get Next Char}
+  movzx ebx,byte ptr [esi]   {Get Next Char}
   inc   esi
 @@ExpLoop:
   sub   bl,'0'
-  cmp   bl, 9
+  cmp   bl,9
   ja    @@Error         {Non-Digit}
   lea   edi,[edi+edi*4] {Multiply by 10}
   add   edi,edi
   add   edi,ebx         {Add Next Digit}
-  movzx ebx,byte ptr [esi]       {Get Next Char}
+  movzx ebx,byte ptr [esi]   {Get Next Char}
   inc   esi
-  test  bl, bl           {End Reached?}
-  jnz   @@ExpLoop        {No, Get Next Digit}
+  test  bl,bl           {End Reached?}
+  jnz   @@ExpLoop       {No,Get Next Digit}
 @@EndExp:
-  test  cl, cl           {Positive Exponent?}
-  jz    @@Finish         {Yes, Keep Exponent Value}
-  neg   edi              {No, Negate Exponent Value}
+  test  cl,cl           {Positive Exponent?}
+  jz    @@Finish        {Yes,Keep Exponent Value}
+  neg   edi             {No,Negate Exponent Value}
 @@Finish:
   add   eax,edi         {Exponent Value - Number of Decimal Places}
   mov   [edx],ebx       {Result Code = 0}
   jz    @@PowerDone     {No call to _Pow10 Needed}
   mov   edi,ecx         {Save Decimal Sign Flag}
-  call  System.@Pow10          {Raise to Power of 10}
+  call  System.@Pow10   {Raise to Power of 10}
   mov   ecx,edi         {Restore Decimal Sign Flag}
 @@PowerDone:
-  test  ch, ch           {Decimal Sign Flag Set?}
-  jnz   @@Negate         {Yes, Negate Value}
+  test  ch,ch           {Decimal Sign Flag Set?}
+  jnz   @@Negate        {Yes,Negate Value}
 @@Success:
-  add   esp, 8           {Dump Local Storage and String Pointer}
+  add   esp,8           {Dump Local Storage and String Pointer}
 @@Exit:
-  ffree st(1)            {Remove Ten Value from FPU}
-  pop   edi              {Restore Used Registers}
+  ffree st(1)           {Remove Ten Value from FPU}
+  pop   edi             {Restore Used Registers}
   pop   esi
   pop   ebx
-  ret                    {Finished}
+  ret                   {Finished}
 @@Negate:
-  fchs                   {Negate Result in FPU}
+  fchs                  {Negate Result in FPU}
   jmp   @@Success
 @@Nil:
-  inc   esi              {Force Result Code = 1}
-  fldz                   {Result Value = 0}
+  inc   esi             {Force Result Code = 1}
+  fldz                  {Result Value = 0}
 @@Error:
-  pop   ebx              {Dump Local Storage}
-  pop   eax              {String Pointer}
-  sub   esi,eax          {Error Offset}
-  mov   [edx],esi        {Set Result Code}
-  test  ch, ch           {Decimal Sign Flag Set?}
-  jz    @@Exit           {No, exit}
-  fchs                   {Yes. Negate Result in FPU}
-  jmp   @@Exit           {Exit Setting Result Code}
+  pop   ebx             {Dump Local Storage}
+  pop   eax             {String Pointer}
+  sub   esi,eax         {Error Offset}
+  mov   [edx],esi       {Set Result Code}
+  test  ch,ch           {Decimal Sign Flag Set?}
+  jz    @@Exit          {No,exit}
+  fchs                  {Yes. Negate Result in FPU}
+  jmp   @@Exit          {Exit Setting Result Code}
 end;
 {$endif}
 {$endif}

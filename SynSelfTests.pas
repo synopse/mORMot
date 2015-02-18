@@ -11269,6 +11269,7 @@ procedure TTestServiceOrientedArchitecture.ClientTest(aRouting: TSQLRestServerUR
 var Inst: TTestServiceInstances;
     O: TObject;
     sign: RawUTF8;
+    stat: TSynMonitorInputOutput;
 begin
   fillchar(Inst,sizeof(Inst),0);
   GlobalInterfaceTestMode := itmClient;
@@ -11337,6 +11338,8 @@ begin
   Inst.CN.Imaginary;
   Test(Inst);
   SetOptions(false,[]);
+  stat := (fClient.Server.Services['Calculator'] as TServiceFactoryServer).Stat['ToText'];
+  Check(stat.TaskCount>0);
 end;
 
 procedure TTestServiceOrientedArchitecture.DirectCall;
@@ -11655,7 +11658,8 @@ begin
   fClient.Server.ServicesRouting := TSQLRestRoutingREST; // back to default
   GlobalInterfaceTestMode := itmHttp;
   HTTPServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fClient.Server],'+',
-    {$ifdef ONLYUSEHTTPSOCKET}useHttpSocket{$else}useHttpApiRegisteringURI{$endif},16,secNone);
+    {$ifdef ONLYUSEHTTPSOCKET}useHttpSocket{$else}useHttpApiRegisteringURI{$endif},
+    8,secNone);
   try
     fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
@@ -11723,7 +11727,12 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.Cleanup;
+var stats: RawUTF8;
 begin
+  if fClient<>nil then begin
+    fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true],stats);
+    FileFromString(JSONReformat(stats),'stats.json');
+  end;
   FreeAndNil(fClient);
   FreeAndNil(fModel);
 end;
