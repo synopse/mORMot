@@ -12885,7 +12885,7 @@ Follow these steps:
 The framework source code tree will compile and is tested for the following platforms:
 - {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
 - Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
-- Preliminary @*Linux@ platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
+- Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
@@ -13056,7 +13056,7 @@ You should better use the latest SVN trunk version of the FPC 2.7.1 / 3.1.1 comp
 If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug has not been fixed in 2.6.4 branch.
 We recommend using the @*fpcup@ tool, as published at @http://wiki.freepascal.org/fpcup \line To compile the latest svn version of the trunk, just write:
 $fpcup.exe --fpcURL="trunk" --lazURL="trunk"
-Then ensure you set the static {\i SQlite3} .o files for Windows or Linux in the right folder, as stated about the @113@.
+Then ensure you set the static {\i SQlite3} .o files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@.
 :  Creating the missing RTTI for interfaces
 Sadly, we have to face some unresolved FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774
 As a result, SOA, mock/stub and MVC features would not working directly.\line We propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
@@ -13116,7 +13116,7 @@ For instance a minimal FPC project to run the regression tests may be:
 !begin
 !  SQLite3ConsoleTests;
 !end.
-In your user code, ensure you do not directly link to the {\f1\fs20 Windows} unit, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}. You could find in {\f1\fs20 SynFPCTypInfo.pas} and {\f1\fs20 SynFPCLinux.pas} some low-level functions dedicated to FPC and Linux compilation, to be used with legacy units - your new code should better rely on higher level functions and classes.
+In your user code, ensure you do not directly link to the {\f1\fs20 Windows} unit, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}. You could find in {\f1\fs20 SynFPCTypInfo.pas} and {\f1\fs20 SynFPCLinux.pas} some low-level functions dedicated to FPC and {\i Linux} compilation, to be used with legacy units - your new code should better rely on higher level functions and classes.
 If you rely on {\i mORMot} classes and types, e.g. use {\f1\fs20 RawUTF8} for all your {\f1\fs20 string} process in the business logic, and do not use Delphi-specific features (like generics, or new syntax sugar), it would be very easy to let your application compile with FPC.
 In practice, we use Delphi as our main IDE, then switch to Lazarus under a small integrated {\i Linux VirtualBox}, running a low resource {\i XFCE} desktop. We defined the {\i Windows} folder containing the source as a {\i VirtualBox} shared folder, so that we are able to compile, debug and test the {\i Linux} version of any executable in native {\i Linux}, on the same computer, from the very same sources. We found out that {\i Lazarus} debugging was pretty smooth on {\i Linux} - GDB is smoother on {\i Linux} than {\i Windows}, by the way. Then switching from {\i Delphi/Windows} to {\i Lazarus/Linux} is direct and natural, especially when the {\i VirtualBox} "Integrated Desktop" feature is enabled.
 :142  Linux installation tips
@@ -13151,9 +13151,9 @@ $ svn cleanup
 $ svn update
 - On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
 If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
-For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on Linux, please execute:
+For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on {\i Linux}, please execute:
 $ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
-Also not that in order to execute the regression tests, you would need to download some files from the command line:
+Also note that in order to execute the regression tests, you would need to download some files from the command line (since {\f1\fs20 SynCrtSock.pas} does not support {\f1\fs20 https} download yet under {\i Linux}):
 $ wget https://api.github.com/users/zendframework/repos
 $ mv repos zendframework.json
 $ wget https://raw.githubusercontent.com/mustache/spec/master/specs/interpolation.json
@@ -13169,9 +13169,9 @@ $   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
 $   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
 $   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
 $   /lib/ld-linux.so.2 (0xb774d000)
-
+There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a cloud-based solution, or a self-hosted office server, software requirements are pretty low.
 : CrossKylix support
-The framework source code can also be cross-compiled under Delphi into a @*Linux@ executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for Linux) compiler into the Delphi Windows IDE.
+The framework source code can also be cross-compiled under Delphi into a {\i @*Linux@} executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for {\i Linux}) compiler into the Delphi Windows IDE.
 {\i CrossKylix} has indeed several known drawbacks:
 - It is a dead project, but an alive product. It still works!
 - You can not buy it any more. {\i Kylix} 3 was shipped with Delphi 7.
@@ -13186,8 +13186,8 @@ We added {\i CrossKylix} support for several reasons:
 - Resulting executables, for {\i mORMot} purpose, are faster than FPC - timing based on the regression tests.
 - If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
 - There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code would be the same than Delphi and FPC.
-- There is a Linux compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
-Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for Linux, directly from your {\i Delphi} IDE. Then you need an actual Linux system to test it - please check the @142@.
+- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
+Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for {\i Linux}, directly from your {\i Delphi} IDE. Then you need an actual {\i Linux} system to test it - please check the @142@.
 A minimal console application which would compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
 !program Test;
 !
@@ -13201,7 +13201,7 @@ A minimal console application which would compile for both {\i Delphi} and {\i C
 !  SQLite3ConsoleTests;
 !end.
 Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, you should never use the {\f1\fs20 Windows} unit in your server code, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}.
-We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your Linux.
+We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your {\i Linux}.
 On a 32 bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
 $ sudo apt-get install sqlite3
 For a 64 bit system, you need to download and install manually packages for both modes:
