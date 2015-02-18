@@ -1019,6 +1019,8 @@ type
     procedure ClientSideREST;
     /// test the client-side in RESTful mode with method results as JSON objects
     procedure ClientSideRESTResultAsObject;
+    /// test the client-side in RESTful mode with full session statistics
+    procedure ClientSideRESTSessionsStats;
     /// test the client-side implementation of optExecLockedPerInterface
     procedure ClientSideRESTLocked;
     {$ifndef LVCL}
@@ -11640,6 +11642,17 @@ begin
   ClientTest(TSQLRestRoutingREST,false);
 end;
 
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats;
+var stats: RawUTF8;
+begin
+  fClient.Server.StatLevels := [mlMethods,mlInterfaces,mlSessions];
+  ClientTest(TSQLRestRoutingREST,false);
+  fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
+    'withsessions',true],stats);
+  FileFromString(JSONReformat(stats),'statsSessions.json');
+  fClient.Server.StatLevels := [mlMethods,mlInterfaces];
+end;
+
 procedure TTestServiceOrientedArchitecture.ClientSideJSONRPC;
 begin
   ClientTest(TSQLRestRoutingJSON_RPC,false);
@@ -11730,7 +11743,8 @@ procedure TTestServiceOrientedArchitecture.Cleanup;
 var stats: RawUTF8;
 begin
   if fClient<>nil then begin
-    fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true],stats);
+    fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
+      'withsessions',true],stats);
     FileFromString(JSONReformat(stats),'stats.json');
   end;
   FreeAndNil(fClient);

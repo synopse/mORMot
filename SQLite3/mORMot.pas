@@ -3749,9 +3749,9 @@ type
     fAverageTime: TSynMonitorTime;
     fMaximalTime: TSynMonitorTime;
     fPerSec: QWord;
+    fLock: TRTLCriticalSection;
     fTaskStatus: (taskNotStarted,taskStarted);
     fMultiThreaded: boolean;
-    fLock: TRTLCriticalSection;
     procedure FillPerSecProperties; virtual;
     procedure FillFromProcessTimer; virtual;
   public
@@ -3767,15 +3767,17 @@ type
     procedure ProcessError(const info: variant); virtual;
     /// should be called when an error occurred
     // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
-    procedure ProcessErrorNumber(info: integer); 
+    procedure ProcessErrorNumber(info: integer);
     /// should be called when the process stops, to pause the internal timer
     procedure ProcessEnd; virtual;
     /// could be used to manage information average or sums
     procedure Sum(another: TSynMonitor); virtual;
     /// returns a JSON content with all published properties information
-    function ComputeDetailsJSON: RawUTF8; virtual;
+    function ComputeDetailsJSON: RawUTF8; 
+    /// appends a JSON content with all published properties information
+    procedure ComputeDetailsTo(W: TTextWriter); virtual;
     /// returns a TDocVariant with all published properties information
-    function ComputeDetails: variant; 
+    function ComputeDetails: variant;
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
@@ -3784,11 +3786,13 @@ type
     // - will return the processing time, converted into micro seconds, ready
     // to be logged if needed
     function FromExternalQueryPerformanceCounters(const Start,Stop: Int64): QWord;
+    /// create Count instances of this actual class in the supplied ObjArr[]
+    class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
   published
     /// indicates if this thread is currently working on some process
     property Processing: boolean read fProcessing write fProcessing;
     /// how many times the task was performed
-    property TaskCount: QWord read fTaskCount;
+    property TaskCount: QWord read fTaskCount write fTaskCount;
     /// the whole time spend during all working process
     property Time: TSynMonitorTime read fTime;
     /// the time spend during the last task processing
@@ -3853,12 +3857,10 @@ type
   end;
 
   /// a list of incoming/outgoing data process statistics
-  TSynMonitorInputOutputDynArray = array of TSynMonitorInputOutput;
+  TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
 
   /// used to store the class of process statistic instances
   TSynMonitorClass = class of TSynMonitor;
-
-
 
 const
   /// HTML Status Code for "Continue"
@@ -4591,6 +4593,7 @@ type
   PServiceRunningContext = ^TServiceRunningContext;
 
   TSQLRestServerURIContext = class;
+  TAuthSession = class;
 
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
@@ -4654,6 +4657,8 @@ type
     fInputCookieLastName: RawUTF8;
     fInputCookieLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
+    fAuthSession: TAuthSession;
+    fServiceListInterfaceMethodIndex: integer;
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
     procedure FillInput;
@@ -8443,6 +8448,10 @@ type
     // false for booleans, [] for dynamic arrays, a void record serialized
     // as expected (including customized serialization) and null for objects
     DefaultResult: RawUTF8;
+    /// the fully qualified dotted method name, including the interface name
+    // - as used by TServiceContainerInterfaceMethod.InterfaceDotMethodName
+    // - match the URI fullpath name, e.g. 'Calculator.Add'
+    InterfaceDotMethodName: RawUTF8;
     /// describe expected method arguments
     // - Args[0] always is smvSelf
     // - if method is a function, an additional smdResult argument is appended
@@ -9654,7 +9663,7 @@ type
     fInstanceCurrentID: TID;
     fInstanceTimeOut: cardinal;
     fInstanceLock: TRTLCriticalSection;
-    fStats: TSynMonitorInputOutputDynArray;
+    fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
     fImplementationClassKind: (ickBlank, ickWithCustomCreate, ickInjectable);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
@@ -9853,7 +9862,7 @@ type
     /// direct access to per-method detailed process statistics
     // - this Stats[] array follows Interface.Methods[] order
     // - see Stat[] property to retrieve information about a method by name
-    property Stats: TSynMonitorInputOutputDynArray read fStats;
+    property Stats: TSynMonitorInputOutputObjArray read fStats;
     /// retrieve detailed statistics about a method use
     // - will return a reference to the actual item in Stats[]: caller should
     // not free the returned instance
@@ -11429,8 +11438,6 @@ type
     SendTotalRowsCountFmt: RawUTF8;
   end;
 
-  TAuthSession = class;
-
   ///  used to define how to trigger Events on record update
   // - see TSQLRestServer.OnUpdateEvent property and InternalUpdateEvent() method
   // - returns true on success, false if an error occured (but action must continue)
@@ -11666,13 +11673,13 @@ type
   /// class of the table containing the Users registered for authentication
   TSQLAuthUserClass = class of TSQLAuthUser;
 
-  {/ class used to maintain in-memory sessions
-    - this is not a TSQLRecord table so won't be remotely accessible, for
-      performance and security reasons
-    - the User field is a true instance, copy of the corresponding database
-      content (for better speed)
-    - you can inherit from this class, to add custom session process }
-  TAuthSession = class
+  /// class used to maintain in-memory sessions
+  // - this is not a TSQLRecord table so won't be remotely accessible, for
+  // performance and security reasons
+  // - the User field is a true instance, copy of the corresponding database
+  // content (for better speed)
+  // - you can inherit from this class, to add custom session process 
+  TAuthSession = class(TSynPersistent)
   protected
     fUser: TSQLAuthUser;
     fLastAccess64: Int64;
@@ -11688,20 +11695,21 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimeStamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
+    fMethods: TSynMonitorInputOutputObjArray;
+    fInterfaces: TSynMonitorInputOutputObjArray;
+    function GetUserName: RawUTF8;
     procedure SaveTo(W: TFileBufferWriter); virtual;
     procedure ComputeProtectedValues; virtual;
     constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer); virtual;
-  public   
+  public
     /// initialize a session instance with the supplied TSQLAuthUser instance
     // - this aUser instance will be handled by the class until Destroy
     // - raise an exception on any error
     // - on success, will also retrieve the aUser.Data BLOB field content
-    constructor Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser); virtual;
+    constructor Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser); reintroduce; virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
   public
-    /// the session ID number, as text
-    property ID: RawUTF8 read fID;
     /// the session ID number, as numerical value
     // - never equals to 1 (CONST_AUTHENTICATION_NOT_USED, i.e. authentication
     // mode is not enabled), nor 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED,
@@ -11716,16 +11724,31 @@ type
     /// copy of the associated user access rights
     // - extracted from User.TSQLAuthGroup.SQLAccessRights
     property AccessRights: TSQLAccessRights read fAccessRights;
-    /// the number of milliseconds a session is kept alive
-    // - extracted from User.TSQLAuthGroup.SessionTimeout
-    // - allow direct comparison with GetTickCount64() API call
-    property TimeoutMS: cardinal read fTimeOutMS;
     /// the hexadecimal private key as returned to the connected client
     // as 'SessionID+PrivateKey'
     property PrivateKey: RawUTF8 read fPrivateKey;
     /// the transmitted HTTP headers, if any
     // - can contain e.g. 'RemoteIp: 127.0.0.1' or 'User-Agent: Mozilla/4.0'
     property SentHeaders: RawUTF8 read fSentHeaders;
+    /// per-session statistics about method-based services
+    // - Methods[] follows TSQLRestServer.fPublishedMethod[] array
+    // - is initialized and maintained only if mlSessions is defined in
+    // TSQLRestServer.StatLevels property
+    property Methods: TSynMonitorInputOutputObjArray read fMethods;
+    /// per-session statistics about interface-based services
+    // - Interfaces[] follows TSQLRestServer.Services.fListInterfaceMethod[] array
+    // - is initialized and maintained only if mlSessions is defined in
+    // TSQLRestServer.StatLevels property
+    property Interfaces: TSynMonitorInputOutputObjArray read fInterfaces;
+  published
+    /// the session ID number, as text
+    property ID: RawUTF8 read fID;
+    /// the associated User Name, as in User.LogonName
+    property UserName: RawUTF8 read GetUserName;
+    /// the number of milliseconds a session is kept alive
+    // - extracted from User.TSQLAuthGroup.SessionTimeout
+    // - allow direct comparison with GetTickCount64() API call
+    property TimeoutMS: cardinal read fTimeOutMS;
     /// the remote IP, if any
     // - is extracted from SentHeaders properties
     property RemoteIP: RawUTF8 read fRemoteIP;
@@ -12199,10 +12222,10 @@ type
   // - as expected by TSQLRestServer.TrackChanges() method 
   TSQLRecordHistoryClass = class of TSQLRecordHistory;
 
-  { we need the RTTI information to be compiled for the published methods
-    of this TSQLRestServer class and its children (like TPersistent), to
-    enable Server-Side ModelRoot/[TableName/[TableID/]]MethodName requests
-      -> see TSQLRestServerCallBack }
+  /// how TSQLRestServer should maintain its statistical information
+  // - used by TSQLRestServer.StatLevels property
+  TSQLRestServerMonitorLevels = set of (
+    mlMethods, mlInterfaces, mlSessions);
 
   /// used for high-level statistics in TSQLRestServer.URI()
   TSQLRestServerMonitor = class(TSynMonitorInputOutput)
@@ -12304,6 +12327,7 @@ type
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
     fStats: TSQLRestServerMonitor;
+    fStatLevels: TSQLRestServerMonitorLevels;
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
@@ -12908,7 +12932,15 @@ type
     // TSQLAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean read fHandleAuthentication;
     /// read-only access to the high-level Server statistics
+    // - see ServiceMethodStat[] for information about method-based services,
+    // or TServiceFactoryServer.Stats / Stat[] for interface-based services
+    // - statistics are available remotely as JSON from the Stat() method
     property Stats: TSQLRestServerMonitor read fStats;
+    /// which level of detailed information is gathered
+    // - by default, contains [mlMethods,mlInterfaces]
+    // - you can add mlSessions to maintain per-session statistics: this would
+    // lead into a higher memory consumption
+    property StatLevels: TSQLRestServerMonitorLevels read fStatLevels write fStatLevels;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
@@ -18178,10 +18210,10 @@ begin
   if fTaskStatus=taskStarted then begin
     fLastTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
     if (fMinimalTime.MicroSec=0) or
-       (fLastTime.MicroSec<fMinimalTime.MicroSec) then
-      fMinimalTime.MicroSec := fLastTime.MicroSec;
-    if fLastTime.MicroSec>fMaximalTime.MicroSec then
-      fMaximalTime.MicroSec := fLastTime.MicroSec;
+       (fProcessTimer.LastTimeInMicroSec<fMinimalTime.MicroSec) then
+      fMinimalTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
+    if fProcessTimer.LastTimeInMicroSec>fMaximalTime.MicroSec then
+      fMaximalTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
     fTaskStatus := taskNotStarted;
   end;
   FillPerSecProperties;
@@ -18204,6 +18236,15 @@ begin
   finally
     LeaveCriticalSection(fLock);
   end;
+end;
+
+class procedure TSynMonitor.InitializeObjArray(var ObjArr; Count: integer);
+var i: integer;
+begin
+  ObjArrayClear(ObjArr);
+  SetLength(TPointerDynArray(ObjArr),Count);
+  for i := 0 to Count-1 do
+    TPointerDynArray(ObjArr)[i] := Create;
 end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
@@ -18236,6 +18277,8 @@ procedure TSynMonitor.Sum(another: TSynMonitor);
 begin
   if another=nil then
     exit;
+  if another.fMultiThreaded then
+    EnterCriticalSection(another.fLock); // thread safe access
   fTime.MicroSec := fTime.MicroSec+another.fTime.MicroSec;
   if (fMinimalTime.MicroSec=0) or
      (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
@@ -18246,18 +18289,32 @@ begin
   if another.Processing then
     fProcessing := true; // if any thread is active, whole daemon is active
   inc(fInternalErrors,another.Errors);
+  if another.fMultiThreaded then
+    LeaveCriticalSection(another.fLock);
 end;
 
-function TSynMonitor.ComputeDetailsJSON: RawUTF8;
+procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
   if fMultiThreaded then
     EnterCriticalSection(fLock); // how knows? the safer the better
   try
     FillPerSecProperties; // may not have been calculated after Sum()
-    result := ObjectToJSON(self);
+    W.WriteObject(self);
   finally
     if fMultiThreaded then
       LeaveCriticalSection(fLock);
+  end;
+end;
+
+function TSynMonitor.ComputeDetailsJSON: RawUTF8;
+var W: TTextWriter;
+begin
+  W := TJSONSerializer.CreateOwnedStream;
+  try
+    ComputeDetailsTo(W);
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
@@ -18313,8 +18370,8 @@ end;
 
 procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
 begin
-  inherited;
-  if another.InheritsFrom(TSynMonitorWithSize) then begin
+  inherited Sum(another);
+  if another.InheritsFrom(TSynMonitorInputOutput) then begin
     fInput.Bytes := fInput.Bytes+TSynMonitorInputOutput(another).Input.Bytes;
     fOutput.Bytes := fOutput.Bytes+TSynMonitorInputOutput(another).Output.Bytes;
   end;
@@ -29264,7 +29321,6 @@ begin
       'Duplicated published method name %.%',[self,aMethodName]))^ do begin
     CallBack := aEvent;
     ByPassAuthentication := aByPassAuthentication;
-    Stats := TSynMonitorInputOutput.Create;
   end;
 end;
 
@@ -29364,6 +29420,7 @@ constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: 
 var t,n: integer;
 begin
   // specific server initialization
+  fStatLevels := [mlMethods,mlInterfaces];
   fVirtualTableDirect := true; // faster direct Static call by default
   fSessions := TObjectListLocked.Create; // needed by AuthenticationRegister() below
   fModel := aModel;
@@ -30302,19 +30359,42 @@ begin
     length(Call.OutHead)+length(Call.OutBody)+16);
 end;
 
+procedure StatsFromContext(Stats: TSynMonitorInputOutput;
+  const Call: TSQLRestURIParams; timeStart,timeEnd: Int64);
+begin
+  StatsAddSizeForCall(Stats,Call);
+  if not StatusCodeIsSuccess(Call.OutStatus) then
+    Stats.ProcessErrorNumber(Call.OutStatus);
+  Stats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
+end;
+
 procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
 var timeStart,timeEnd: Int64;
+    sessionstat: TSynMonitorInputOutput;
 begin
   with Server.fPublishedMethod[MethodIndex] do begin
-    QueryPerformanceCounter(timeStart);
-    Stats.Processing := true;
+    if mlMethods in Server.StatLevels then begin
+      QueryPerformanceCounter(timeStart);
+      if Stats=nil then
+        Stats := TSynMonitorInputOutput.Create;
+      Stats.Processing := true;
+    end;
     Server.InternalLog(Name,sllServiceCall);
     CallBack(self);
-    StatsAddSizeForCall(Stats,Call^);
-    if not StatusCodeIsSuccess(Call.OutStatus) then
-      Stats.ProcessErrorNumber(Call.OutStatus);
-    QueryPerformanceCounter(timeEnd);
-    Stats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
+    if Stats<>nil then begin
+      QueryPerformanceCounter(timeEnd);
+      StatsFromContext(Stats,Call^,timeStart,timeEnd);
+      if (mlSessions in Server.StatLevels) and (fAuthSession<>nil) then begin
+        if fAuthSession.Methods=nil then
+          SetLength(fAuthSession.fMethods,length(Server.fPublishedMethod));
+        sessionstat := fAuthSession.fMethods[MethodIndex];
+        if sessionstat=nil then begin
+          sessionstat := TSynMonitorInputOutput.Create;
+          fAuthSession.fMethods[MethodIndex] := sessionstat;
+        end;
+        StatsFromContext(sessionstat,Call^,timeStart,timeEnd);
+      end;
+    end;
   end;
   inc(Server.fStats.fServiceMethod);
 end;
@@ -30913,6 +30993,8 @@ begin
         with MultiPart[i] do begin
           RawUTF8ToVariant(Content,v);
           AddValue(Name,v);
+          RawUTF8ToVariant(FileName,v);
+          AddValue(Name+'-filename',v);
         end;
     end;
 end;
@@ -31196,6 +31278,7 @@ begin
       with Server.Services.fListInterfaceMethod[i] do begin
         Service := TServiceFactoryServer(InterfaceService);
         ServiceMethodIndex := InterfaceMethodIndex;
+        fServiceListInterfaceMethodIndex := i;
       end else
       if URIBlobFieldName<>'' then begin
         // check URI as '/Model/Interface/Method[/ClientDrivenID]''
@@ -31206,6 +31289,7 @@ begin
           if ServiceMethodIndex<0 then
             Service := nil else begin
             inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
+            fServiceListInterfaceMethodIndex := -1;
           end;
         end;
       end;
@@ -31491,61 +31575,79 @@ begin
 end;
 
 procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
-var json: RawUTF8;
-    methods,interfaces: Boolean;
-    s,i: integer;
+var s,i: integer;
     W: TTextWriter;
 begin
-  json := Stats.ComputeDetailsJSON;
-  methods := Ctxt.InputExists['withmethods'];
-  interfaces := Ctxt.InputExists['withinterfaces'];
-  if methods or interfaces then begin
-    W := TTextWriter.CreateOwnedStream;
-    try
-      W.AddString(json);
-      W.CancelLastChar; // last '}'
-      if methods then begin
-        W.AddShort(',"methods":[');
-        for i := 0 to high(fPublishedMethod) do
-          with fPublishedMethod[i] do begin
-            W.Add('{','"');
-            W.AddJSONEscape(pointer(Name));
-            W.Add('"',':');
-            W.AddString(Stats.ComputeDetailsJSON);
-            W.Add('}',',');
-          end;
-        W.CancelLastComma;
-        W.Add(']',',');
-      end;
-      if interfaces then begin
-        W.CancelLastComma;
-        W.AddShort(',"interfaces":[');
-        for s := 0 to fServices.Count-1 do
-        with fServices.Index(s) as TServiceFactoryServer do begin
-          W.Add('{','"');
-          W.AddJSONEscape(pointer(fInterfaceURI));
-          W.AddShort('":[');
-          for i := 0 to fInterface.MethodsCount-1 do begin
-            W.Add('{','"');
-            W.AddJSONEscape(pointer(fInterface.fMethods[i].URI));
-            W.Add('"',':');
-            W.AddString(fStats[i].ComputeDetailsJSON);
-            W.Add('}',',');
-          end;
-          W.CancelLastComma;
-          W.AddShort(']},');
+  W := TJSONSerializer.CreateOwnedStream;
+  try
+    Stats.ComputeDetailsTo(W);
+    W.CancelLastChar; // last '}'
+    if Ctxt.InputExists['withmethods'] then begin
+      W.AddShort(',"methods":[');
+      for i := 0 to high(fPublishedMethod) do
+        with fPublishedMethod[i] do
+        if Stats<>nil then begin
+          W.Add('{"%":',[Name]);
+          Stats.ComputeDetailsTo(W);
+          W.Add('}',',');
         end;
-        W.CancelLastComma;
-        W.Add(']',',');
+      W.CancelLastComma;
+      W.Add(']',',');
+    end;
+    if Ctxt.InputExists['withinterfaces'] then begin
+      W.CancelLastComma;
+      W.AddShort(',"interfaces":[');
+      for s := 0 to fServices.Count-1 do
+      with fServices.Index(s) as TServiceFactoryServer do
+        for i := 0 to fInterface.MethodsCount-1 do
+        if fStats[i]<>nil then begin
+          W.Add('{"%":',[fInterface.fMethods[i].InterfaceDotMethodName]);
+          fStats[i].ComputeDetailsTo(W);
+          W.Add('}',',');
+        end;
+      W.CancelLastComma;
+      W.Add(']',',');
+    end;
+    if Ctxt.InputExists['withsessions'] and (fSessions<>nil) then begin
+      W.CancelLastComma;
+      W.AddShort(',"sessions":[');
+      fSessions.Lock;
+      try
+        for s := 0 to fSessions.Count-1 do begin
+          W.WriteObject(fSessions.List[s]);
+          W.CancelLastChar; // trailing '}'
+          with TAuthSession(fSessions.List[s]) do begin
+            W.AddShort(',"methods":[');
+            for i := 0 to high(fMethods) do
+              if fMethods[i]<>nil then begin
+                W.Add('{"%":',[fPublishedMethod[i].Name]);
+                fMethods[i].ComputeDetailsTo(W);
+                W.Add('}',',');
+              end;
+            W.CancelLastComma;
+            W.AddShort('],"interfaces":[');
+            for i := 0 to high(fInterfaces) do
+              if fInterfaces[i]<>nil then begin
+                W.Add('{"%":',[Services.fListInterfaceMethod[i].InterfaceDotMethodName]);
+                fInterfaces[i].ComputeDetailsTo(W);
+                W.Add('}',',');
+              end;
+            W.CancelLastComma;
+            W.AddShort(']},');
+          end;
+        end;
+      finally
+        fSessions.UnLock;
       end;
       W.CancelLastComma;
-      W.Add('}');
-      W.SetText(json);
-    finally
-      W.Free;
+      W.Add(']',',');
     end;
+    W.CancelLastComma;
+    W.Add('}');
+    Ctxt.Returns(W.Text);
+  finally
+    W.Free;
   end;
-  Ctxt.Returns(json); 
 end;
 
 procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
@@ -31681,6 +31783,7 @@ begin // caller shall be locked via fSessions.Lock
       result := TAuthSession(fSessions.List[i]);
       if result.IDCardinal=Ctxt.Session then begin
         result.fLastAccess64 := Tix64; // refresh session access timestamp
+        Ctxt.fAuthSession := result;
         Ctxt.SessionUser := result.User.fID;
         Ctxt.SessionGroup := result.User.GroupRights.fID;
         Ctxt.SessionUserName := result.User.LogonName;
@@ -39034,7 +39137,16 @@ begin
     User.GroupRights.Free;
     fUser.Free;
   end;
+  ObjArrayClear(fMethods);
+  ObjArrayClear(fInterfaces);
   inherited;
+end;
+
+function TAuthSession.GetUserName: RawUTF8;
+begin
+  if User=nil then
+    result := '' else
+    result := User.LogonName;
 end;
 
 const TAUTHSESSION_MAGIC = 1;
@@ -39049,7 +39161,7 @@ begin
   fUser.GroupRights.GetBinaryValues(W);
   W.Write(fPrivateKey);
   W.Write(fSentHeaders);
-end;
+end; // TODO: persist fMethods[] fInterfaces[] stats? or integrate them before? 
 
 constructor TAuthSession.CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
 var PB: PByte absolute P;
@@ -40696,6 +40808,9 @@ begin
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
+    InterfaceDotMethodName := InterfaceName+'.'+URI;
+    if InterfaceDotMethodName[1] in ['I','i'] then
+      delete(InterfaceDotMethodName,1,1); // as in TServiceFactory.Create
     ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
     ArgsInLast := -2;
@@ -42277,7 +42392,7 @@ begin
   fInterfaceURI := aInterface^.Name;
   fInterfaceMangledURI := BinToBase64URI(@fInterface.fInterfaceIID,sizeof(TGUID));
   if fInterfaceURI[1] in ['I','i'] then
-    Delete(fInterfaceURI,1,1);
+    delete(fInterfaceURI,1,1);
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
     raise EServiceException.CreateUTF8('%.Create: "%" interface name '+
       'is already used by a SQL table name',[self,fInterfaceURI]);
@@ -42511,7 +42626,6 @@ constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer; aInterface
   aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUTF8;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
-var i: Integer;
 begin
   // extract RTTI from the interface
   if aInstanceCreation<>sicPerThread then
@@ -42554,10 +42668,7 @@ begin
       fInstanceTimeOut := aTimeOutSec*1000;
     end;
   end;
-  // initialize statistics
   SetLength(fStats,fInterface.MethodsCount);
-  for i := 0 to fInterface.MethodsCount-1 do
-    fStats[i] := TSynMonitorInputOutput.Create;
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -42780,8 +42891,10 @@ var Inst: TServiceFactoryServerInstance;
     dolock: boolean;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
+    ndx: integer;
 begin
-  QueryPerformanceCounter(timeStart);
+  if mlInterfaces in TSQLRestServer(Rest).StatLevels then
+    QueryPerformanceCounter(timeStart);
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
   Inst.Instance := nil;
@@ -42798,7 +42911,7 @@ begin
       case InstanceCreation of
       sicClientDriven:
         Inst.InstanceID := Ctxt.ServiceInstanceID;
-      sicPerThread: 
+      sicPerThread:
         Inst.InstanceID := GetCurrentThreadId;
       else
         if Ctxt.Session>CONST_AUTHENTICATION_NOT_USED then
@@ -42823,8 +42936,15 @@ begin
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
-  stats := fStats[Ctxt.ServiceMethodIndex];
-  stats.Processing := true;
+  if mlInterfaces in TSQLRestServer(Rest).StatLevels then begin
+    stats := fStats[Ctxt.ServiceMethodIndex];
+    if stats=nil then begin
+      stats := TSynMonitorInputOutput.Create;
+      fStats[Ctxt.ServiceMethodIndex] := stats;
+    end;
+    stats.Processing := true;
+  end else
+    stats := nil;
   try
     if Inst.Instance.ClassType=fImplementationClass then
       entry := fImplementationClassInterfaceEntry else begin
@@ -42834,7 +42954,7 @@ begin
     end;
     if optExecInPerInterfaceThread in fExecution[Ctxt.ServiceMethodIndex].Options then
       if fBackgroundThread=nil then
-        fBackgroundThread := RestServer.CreateBackgroundThread(
+        fBackgroundThread := TSQLRestServer(Rest).CreateBackgroundThread(
           '% %',[self,fInterface.fInterfaceTypeInfo^.Name]);
     WR := TJSONSerializer.CreateOwnedStream;
     try
@@ -42871,11 +42991,27 @@ begin
   finally
     if InstanceCreation=sicSingle then
       Inst.SafeFreeInstance(self); // always release single shot instance
-    StatsAddSizeForCall(stats,Ctxt.Call^);
-    if not StatusCodeIsSuccess(Ctxt.Call.OutStatus) then
-      stats.ProcessErrorNumber(Ctxt.Call.OutStatus);
-    QueryPerformanceCounter(timeEnd);
-    stats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
+    if stats<>nil then begin
+      QueryPerformanceCounter(timeEnd);
+      StatsFromContext(stats,Ctxt.Call^,timeStart,timeEnd);
+      if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
+        if Ctxt.fAuthSession.fInterfaces=nil then
+          SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+        ndx := Ctxt.fServiceListInterfaceMethodIndex;
+        if ndx<0 then
+          ndx := Rest.Services.fListInterfaceMethods.FindHashed(
+            fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
+        if ndx>=0 then
+        with Ctxt.fAuthSession do begin
+          stats := fInterfaces[ndx];
+          if stats=nil then begin
+            stats := TSynMonitorInputOutput.Create;
+            fInterfaces[ndx] := stats;
+          end;
+          StatsFromContext(stats,Ctxt.Call^,timeStart,timeEnd);
+        end;
+      end;
+    end;
   end;
 end;
 
