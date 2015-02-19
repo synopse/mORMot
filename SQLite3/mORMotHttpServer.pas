@@ -146,6 +146,7 @@ unit mORMotHttpServer;
       - ensure TSQLHttpServer.AddServer() will handle useHttpApiRegisteringURI
       - added TSQLHttpServer.RootRedirectToURI() method for root URI redirection
       - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
+      - allow TSQLHttpServer.Create() without any associated TSQLRestServer
 
 }
 
@@ -457,16 +458,16 @@ begin
     exit;
   fLog.Enter(self);
   try
-    for i := 0 to high(fDBServers) do
-      if (fDBServers[i].Server.Model.Root=aServer.Model.Root) and
+    n := length(fDBServers);
+    for i := 0 to n-1 do
+      if (fDBServers[i].Server.Model.URIMatch(aServer.Model.Root)) and
          (fDBServers[i].Security=aHttpServerSecurity) then
-        exit; // register only once per URI Root address
+        exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
     if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
        fHttpServerKind=useHttpApiRegisteringURI,false)<>'' then
       exit;
     {$endif}
-    n := length(fDBServers);
     SetLength(fDBServers,n+1);
     with fDBServers[n] do begin
       Server := aServer;
@@ -478,7 +479,7 @@ begin
     result := true;
   finally
     fLog.Add.Log(sllDebug,'%.AddServer(%,Root=%,Port=%)=%',
-      [self,aServer,aServer.Model.Root,fPort,JSON_BOOLEAN[Result]]);
+      [self,aServer,aServer.Model.Root,fPort,JSON_BOOLEAN[Result]],self);
   end;
 end;
 
@@ -497,7 +498,7 @@ begin
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPort,
            fDBServers[i].Security=secSSL,fDomainName)<>NO_ERROR then
-          fLog.Add.Log(sllLastError,'RemoveUrl(%)',[aServer.Model.Root]);
+          fLog.Add.Log(sllLastError,'%.RemoveUrl(%)',[self,aServer.Model.Root],self);
       {$endif}
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
@@ -505,7 +506,8 @@ begin
       result := true; // don't break here: may appear with another Security  
     end;
   finally
-    fLog.Add.Log(sllDebug,'result=% for Root=%',[JSON_BOOLEAN[Result],aServer.Model.Root]);
+    fLog.Add.Log(sllDebug,'%.RemoveServer(Root=%)=%',
+      [self,aServer.Model.Root,JSON_BOOLEAN[Result]],self);
   end;
 end;
 
@@ -532,32 +534,32 @@ begin
   fLog.Enter(self);
   {$endif}
   inherited Create;
+  SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
   fDomainName := aDomainName;
   fPort := aPort;
   fHttpServerKind := aHttpServerKind;
-  if high(aServers)<0 then
-    ErrMsg := 'No TSQLRestServer' else
-  for i := 0 to high(aServers) do
-    if (aServers[i]=nil) or (aServers[i].Model=nil) then
-      ErrMsg := 'Invalid TSQLRestServer';
-  if ErrMsg='' then
+  if high(aServers)>=0 then begin
     for i := 0 to high(aServers) do
-    with aServers[i].Model do begin
-      ServersRoot := ServersRoot+' '+Root;
-      for j := i+1 to high(aServers) do
-        if aServers[j].Model.URIMatch(Root) then
-          ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
+      if (aServers[i]=nil) or (aServers[i].Model=nil) then
+        ErrMsg := 'Invalid TSQLRestServer';
+    if ErrMsg='' then
+      for i := 0 to high(aServers) do
+      with aServers[i].Model do begin
+        ServersRoot := ServersRoot+' '+Root;
+        for j := i+1 to high(aServers) do
+          if aServers[j].Model.URIMatch(Root) then
+            ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
+      end;
+    if ErrMsg<>'' then
+       raise EModelException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
+    SetLength(fDBServers,length(aServers));
+    for i := 0 to high(aServers) do
+    with fDBServers[i] do begin
+      Server := aServers[i];
+      RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
+      Security := aHttpServerSecurity;
     end;
-  if ErrMsg<>'' then
-     raise EModelException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
-  SetAccessControlAllowOrigin(''); // deny CORS by default
-  SetLength(fDBServers,length(aServers));
-  for i := 0 to high(aServers) do
-  with fDBServers[i] do begin
-    Server := aServers[i];
-    RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
-    Security := aHttpServerSecurity;
   end;
   {$ifndef USETCPPREFIX}
   {$ifndef ONLYUSEHTTPSOCKET}
@@ -686,7 +688,7 @@ begin
     exit;
   https := aSecurity=secSSL;
   fLog.Add.Log(sllInfo,'http.sys registration of http%://%:%/%',
-    [HTTPS_TEXT[https],aDomainName,fPort,aRoot]);
+    [HTTPS_TEXT[https],aDomainName,fPort,aRoot],self);
   // try to register the URL to http.sys
   err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPort,https,aDomainName,aRegisterURI);
   if err=NO_ERROR then
@@ -697,7 +699,7 @@ begin
     if aRegisterURI then
       result := result+' (administrator rights needed)' else
       result := result+' (you need to register the URI )';
-  fLog.Add.Log(sllLastError,result);
+  fLog.Add.Log(sllLastError,result,self);
   if aRaiseExceptionOnError then
     raise ECommunicationException.CreateUTF8('%: %',[self,result]);
   {$endif}
