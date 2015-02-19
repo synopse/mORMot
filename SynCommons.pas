@@ -7234,7 +7234,7 @@ type
   TSynFilterOrValidate = class;
 
   TSynFilterOrValidateObjArray = array of TSynFilterOrValidate;
-
+  TSynFilterOrValidateObjArrayArray = array of TSynFilterOrValidateObjArray;
 
   /// will define a filter or a validation process to be applied to
   // a database Record content (typicaly a TSQLRecord)
@@ -28713,7 +28713,7 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 begin
   if TVarData(Value).VType=varString then
     Dest := RawByteString(TVarData(Value).VAny) else
-    Dest := Value; // generic conversion, if not from RawByteStringToVariant()
+    Dest := RawByteString(Value); // if not from RawByteStringToVariant()
 end;
 
 function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;

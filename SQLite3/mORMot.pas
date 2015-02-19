@@ -3101,6 +3101,8 @@ type
     property DynArrayIsObjArray: boolean read fIsObjArray;
   end;
 
+  TSQLPropInfoRTTIDynArrayObjArray = array of TSQLPropInfoRTTIDynArray;
+
 {$ifndef NOVARIANTS}
   /// information about a variant published property
   TSQLPropInfoRTTIVariant = class(TSQLPropInfoRTTI)
@@ -3994,13 +3996,14 @@ const
 
 
 type
-  TSQLModel = class;
-  TSQLModelRecordProperties = class;
   TSQLTable = class;
 
 {$M+} { we need the RTTI information to be compiled for the published
         properties of these classes and their children (like TPersistent),
         to enable ORM - must be defined at the forward definition level }
+  TSQLRecordProperties = class;
+  TSQLModel = class;
+  TSQLModelRecordProperties = class;
   TSQLRecord = class;      // published properties = ORM fields/columns
   TSQLRecordMany = class;
   TSQLAuthUser = class;
@@ -4135,6 +4138,8 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
 
+  TSQLPropInfoRTTIIDObjArray = array of TSQLPropInfoRTTIID;
+
   /// information about a TSQLRecord class TStrings/TRawUTF8List/TCollection
   // property
   // - kind sftObject e.g. for TStrings TRawUTF8List TCollection TObjectList instances
@@ -4165,6 +4170,8 @@ type
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
   end;
+
+  TSQLPropInfoRTTIManyObjArray = array of TSQLPropInfoRTTIMany;
 
   /// class-refrence type (metaclass) for a TSynFilter or a TSynValidate
   TSynFilterOrValidateClass = class of TSynFilterOrValidate;
@@ -4197,9 +4204,31 @@ type
   // and allows faster access to most wanted RTTI properties
   TSQLRecordProperties = class
   protected
-    fSQLFillPrepareMany: RawUTF8;
+    fTable: TSQLRecordClass;
+    fClassType: PClassType;
+    fClassProp: PClassProp;
+    fHasNotSimpleFields: boolean;
+    fHasTypeFields: TSQLFieldTypes;
+    fFields: TSQLPropInfoList;
+    fSimpleFields: TSQLPropInfoObjArray;
+    fSQLTableName: RawUTF8;
+    fCopiableFields: TSQLPropInfoObjArray;
+    fManyFields: TSQLPropInfoRTTIManyObjArray;
+    fJoinedFields: TSQLPropInfoRTTIIDObjArray;
+    fJoinedFieldsTable: TSQLRecordClassDynArray;
+    fDynArrayFields: TSQLPropInfoRTTIDynArrayObjArray;
+    fDynArrayFieldsHasObjArray: boolean;
+    fBlobCustomFields: TSQLPropInfoObjArray;
+    fBlobFields: TSQLPropInfoRTTIObjArray;
+    fFilters: TSynFilterOrValidateObjArrayArray;
     fRecordManySourceProp: TSQLPropInfoRTTIInstance;
     fRecordManyDestProp: TSQLPropInfoRTTIInstance;
+    fSQLTableNameUpperWithDot: RawUTF8;
+    fSQLFillPrepareMany: RawUTF8;
+    fSQLTableSimpleFieldsNoRowID: RawUTF8;
+    fSQLTableUpdateBlobFields: RawUTF8;
+    fSQLTableRetrieveBlobFields: RawUTF8;
+    fSQLTableRetrieveAllFields: RawUTF8;
     fWeakZeroClass: TObject;
     /// the associated TSQLModel instances
     // - e.g. allow O(1) search of a TSQLRecordClass in a model
@@ -4218,112 +4247,6 @@ type
     procedure InternalRegisterModel(aModel: TSQLModel;
       aTableIndex: integer; aProperties: TSQLModelRecordProperties);
   public
-    /// the TSQLRecord class
-    Table: TSQLRecordClass;
-    {/ the Table name in the database, associated with this TSQLRecord class
-     - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
-     - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first }
-    SQLTableName: RawUTF8;
-    {/ the Table name in the database in uppercase with a final '.'
-     - e.g. 'TEST.' for TSQLRecordTest class
-     - can be used with IdemPChar() for fast check of a table name }
-    SQLTableNameUpperWithDot: RawUTF8;
-    /// fast access to the RTTI properties attribute
-    ClassType: PClassType;
-    /// fast access to the RTTI properties attribute
-    ClassProp: PClassProp;
-    /// if this class has any BLOB or TSQLRecodMany fields
-    // - i.e. some fields to be ignored
-    HasNotSimpleFields: boolean;
-    /// set of field types appearing in this record
-    HasTypeFields: TSQLFieldTypes;
-    /// list all fields, as retrieved from RTTI
-    Fields: TSQLPropInfoList;
-    /// list all "simple" fields of this TSQLRecord
-    // - by default, the TSQLRawBlob and TSQLRecordMany fields are not included
-    // into this set: they must be read specificaly (in order to spare
-    // bandwidth for BLOBs)
-    // - dynamic arrays belong to simple fields: they are sent with other
-    // properties content
-    // - match inverted NOT_SIMPLE_FIELDS mask
-    SimpleFields: TSQLPropInfoObjArray;
-    /// list all fields which can be copied from one TSQLRecord instance to another
-    // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
-    CopiableFields: TSQLPropInfoObjArray;
-    /// list all TSQLRecordMany fields of this TSQLRecord
-    ManyFields: array of TSQLPropInfoRTTIMany;
-    /// list all TSQLRecord fields of this TSQLRecord
-    // - ready to be used by TSQLTableJSON.CreateFromTables()
-    // - i.e. the class itself then, all fields of type sftID (excluding sftMany)
-    JoinedFields: array of TSQLPropInfoRTTIID;
-    /// wrapper of all nest TSQLRecord class of this TSQLRecord
-    // - ready to be used by TSQLTableJSON.CreateFromTables()
-    // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
-    // TSQLRecord published properties (of type sftID, ergo excluding sftMany)
-    // - equals nil if there is no nested TSQLRecord property (i.e. JoinedFields=nil)
-    JoinedFieldsTable: TSQLRecordClassDynArray;
-    /// list of all sftBlobDynArray fields of this TSQLRecord
-    DynArrayFields: array of TSQLPropInfoRTTIDynArray;
-    /// TRUE if any of the sftBlobDynArray fields of this TSQLRecord is a T*ObjArray
-    DynArrayFieldsHasObjArray: boolean;
-    /// list of all sftBlobCustom fields of this TSQLRecord
-    // - have been defined e.g. as TSQLPropInfoCustom custom definition 
-    BlobCustomFields: TSQLPropInfoObjArray;
-    /// list all BLOB fields of this TSQLRecord
-    // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
-    // sftBlobRecord)
-    BlobFields: TSQLPropInfoRTTIObjArray;
-    /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
-    FieldBits: array[TSQLFieldType] of TSQLFieldBits;
-    /// bit set to 1 for indicating TModTime and TCreateTime fields
-    // of this TSQLRecord
-    // - i.e. sftModTime and sftCreateTime fields
-    ModCreateTimeFieldsBits: TSQLFieldBits;
-    /// bit set to 1 for indicating fields to export, i.e. "simple" fields
-    // - this array will handle special cases, like the TCreateTime fields
-    // which shall not be included in soUpdate but soInsert and soSelect e.g.
-    SimpleFieldsBits: array[TSQLOccasion] of TSQLFieldBits;
-    /// number of fields to export, i.e. "simple" fields
-    // - this array will handle special cases, like the TCreateTime fields
-    // which shall not be included in soUpdate but soInsert and soSelect e.g.
-    SimpleFieldsCount: array[TSQLOccasion] of integer;
-    /// bit set to 1 for an unique field
-    // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
-    // in its property definition
-    IsUniqueFieldsBits: TSQLFieldBits;
-    /// contains the main field index (e.g. mostly 'Name')
-    // - the [boolean] is for [ReturnFirstIfNoUnique] version
-    // - contains -1 if no field matches
-    MainField: array[boolean] of integer;
-    /// returns 'COL1,COL2' with all COL* set to simple field names 
-    // - same value as SQLTableSimpleFields[false,false]
-    // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TSQLModelRecordProperties
-    // - used e.g. by TSQLRecord.GetSQLValues 
-    SQLTableSimpleFieldsNoRowID: RawUTF8;
-    /// returns 'COL1=?,COL2=?' with all BLOB columns names
-    // - used e.g. by TSQLRestServerDB.UpdateBlobFields()
-    SQLTableUpdateBlobFields: RawUTF8;
-    /// returns 'COL1,COL2' with all BLOB columns names
-    // - used e.g. by TSQLRestServerDB.RetrieveBlobFields()
-    SQLTableRetrieveBlobFields: RawUTF8;
-    /// returns 'COL1,COL2' with all COL* set to all field names, including
-    // RowID and BLOBs 
-    // - this won't change depending on the ORM settings: so it can be safely
-    // computed here and not in TSQLModelRecordProperties
-    // - used e.g. by TSQLRest.InternalListJSON()
-    SQLTableRetrieveAllFields: RawUTF8;
-    /// all TSynFilter or TSynValidate instances registered per each field
-    // - since validation and filtering are used within some CPU-consuming
-    // part of the framework (like UI edition), both filters and validation
-    // rules are grouped in the same list - for TSynTableFieldProperties there
-    // are separated Filters[] and Validates[] arrays, for better performance
-    Filters: array of TSynFilterOrValidateObjArray;
-    /// for a TSQLRecordMany class, points to the Source property RTTI
-    property RecordManySourceProp: TSQLPropInfoRTTIInstance read fRecordManySourceProp;
-    /// for a TSQLRecordMany class, points to the Dest property RTTI
-    property RecordManyDestProp: TSQLPropInfoRTTIInstance read fRecordManyDestProp;
-
     /// initialize the properties content
     constructor Create(aTable: TSQLRecordClass);
     /// release associated used memory
@@ -4520,6 +4443,114 @@ type
     procedure RegisterCustomPropertyFromTypeName(aTable: TClass;
       const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
       aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+
+    /// fast access to the RTTI properties attribute
+    property TableClassType: PClassType read fClassType;
+    /// fast access to the RTTI properties attribute
+    property TableClassProp: PClassProp read fClassProp;
+    /// if this class has any BLOB or TSQLRecodMany fields
+    // - i.e. some fields to be ignored
+    property HasNotSimpleFields: boolean read fHasNotSimpleFields;
+    /// set of field types appearing in this record
+    property HasTypeFields: TSQLFieldTypes read fHasTypeFields;
+    /// list all fields, as retrieved from RTTI
+    property Fields: TSQLPropInfoList read fFields;
+    /// list all "simple" fields of this TSQLRecord
+    // - by default, the TSQLRawBlob and TSQLRecordMany fields are not included
+    // into this set: they must be read specificaly (in order to spare
+    // bandwidth for BLOBs)
+    // - dynamic arrays belong to simple fields: they are sent with other
+    // properties content
+    // - match inverted NOT_SIMPLE_FIELDS mask
+    property SimpleFields: TSQLPropInfoObjArray read fSimpleFields;
+    /// list all fields which can be copied from one TSQLRecord instance to another
+    // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
+    property CopiableFields: TSQLPropInfoObjArray read fCopiableFields;
+    /// list all TSQLRecordMany fields of this TSQLRecord
+    property ManyFields: TSQLPropInfoRTTIManyObjArray read fManyFields;
+    /// list all TSQLRecord fields of this TSQLRecord
+    // - ready to be used by TSQLTableJSON.CreateFromTables()
+    // - i.e. the class itself then, all fields of type sftID (excluding sftMany)
+    property JoinedFields: TSQLPropInfoRTTIIDObjArray read fJoinedFields;
+    /// wrapper of all nest TSQLRecord class of this TSQLRecord
+    // - ready to be used by TSQLTableJSON.CreateFromTables()
+    // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
+    // TSQLRecord published properties (of type sftID, ergo excluding sftMany)
+    // - equals nil if there is no nested TSQLRecord property (i.e. JoinedFields=nil)
+    property JoinedFieldsTable: TSQLRecordClassDynArray read fJoinedFieldsTable;
+    /// list of all sftBlobDynArray fields of this TSQLRecord
+    property DynArrayFields: TSQLPropInfoRTTIDynArrayObjArray read fDynArrayFields;
+    /// TRUE if any of the sftBlobDynArray fields of this TSQLRecord is a T*ObjArray
+    property DynArrayFieldsHasObjArray: boolean read fDynArrayFieldsHasObjArray;
+    /// list of all sftBlobCustom fields of this TSQLRecord
+    // - have been defined e.g. as TSQLPropInfoCustom custom definition
+    property BlobCustomFields: TSQLPropInfoObjArray read fBlobCustomFields;
+    /// list all BLOB fields of this TSQLRecord
+    // - i.e. generic sftBlob fields (not sftBlobDynArray, sftBlobCustom nor
+    // sftBlobRecord)
+    property BlobFields: TSQLPropInfoRTTIObjArray read fBlobFields;
+    /// all TSynFilter or TSynValidate instances registered per each field
+    // - since validation and filtering are used within some CPU-consuming
+    // part of the framework (like UI edition), both filters and validation
+    // rules are grouped in the same list - for TSynTableFieldProperties there
+    // are separated Filters[] and Validates[] arrays, for better performance
+    property Filters: TSynFilterOrValidateObjArrayArray read fFilters;
+    /// for a TSQLRecordMany class, points to the Source property RTTI
+    property RecordManySourceProp: TSQLPropInfoRTTIInstance read fRecordManySourceProp;
+    /// for a TSQLRecordMany class, points to the Dest property RTTI
+    property RecordManyDestProp: TSQLPropInfoRTTIInstance read fRecordManyDestProp;
+    /// the Table name in the database in uppercase with a final '.'
+    // - e.g. 'TEST.' for TSQLRecordTest class
+    // - can be used with IdemPChar() for fast check of a table name
+    property SQLTableNameUpperWithDot: RawUTF8 read fSQLTableNameUpperWithDot;
+    /// returns 'COL1,COL2' with all COL* set to simple field names
+    // - same value as SQLTableSimpleFields[false,false]
+    // - this won't change depending on the ORM settings: so it can be safely
+    // computed here and not in TSQLModelRecordProperties
+    // - used e.g. by TSQLRecord.GetSQLValues
+    property SQLTableSimpleFieldsNoRowID: RawUTF8 read fSQLTableSimpleFieldsNoRowID;
+    /// returns 'COL1=?,COL2=?' with all BLOB columns names
+    // - used e.g. by TSQLRestServerDB.UpdateBlobFields()
+    property SQLTableUpdateBlobFields: RawUTF8 read fSQLTableUpdateBlobFields;
+    /// returns 'COL1,COL2' with all BLOB columns names
+    // - used e.g. by TSQLRestServerDB.RetrieveBlobFields()
+    property SQLTableRetrieveBlobFields: RawUTF8 read fSQLTableRetrieveBlobFields;
+  public
+    /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
+    FieldBits: array[TSQLFieldType] of TSQLFieldBits;
+    /// bit set to 1 for indicating TModTime and TCreateTime fields
+    // of this TSQLRecord
+    // - i.e. sftModTime and sftCreateTime fields
+    ModCreateTimeFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for indicating fields to export, i.e. "simple" fields
+    // - this array will handle special cases, like the TCreateTime fields
+    // which shall not be included in soUpdate but soInsert and soSelect e.g.
+    SimpleFieldsBits: array[TSQLOccasion] of TSQLFieldBits;
+    /// number of fields to export, i.e. "simple" fields
+    // - this array will handle special cases, like the TCreateTime fields
+    // which shall not be included in soUpdate but soInsert and soSelect e.g.
+    SimpleFieldsCount: array[TSQLOccasion] of integer;
+    /// bit set to 1 for an unique field
+    // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
+    // in its property definition
+    IsUniqueFieldsBits: TSQLFieldBits;
+    /// contains the main field index (e.g. mostly 'Name')
+    // - the [boolean] is for [ReturnFirstIfNoUnique] version
+    // - contains -1 if no field matches
+    MainField: array[boolean] of integer;
+  published
+    /// the TSQLRecord class
+    property Table: TSQLRecordClass read fTable;
+    /// the Table name in the database, associated with this TSQLRecord class
+    // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
+    property SQLTableName: RawUTF8 read fSQLTableName;
+    /// returns 'COL1,COL2' with all COL* set to all field names, including
+    // RowID and BLOBs
+    // - this won't change depending on the ORM settings: so it can be safely
+    // computed here and not in TSQLModelRecordProperties
+    // - used e.g. by TSQLRest.InternalListJSON()
+    property SQLTableRetrieveAllFields: RawUTF8 read fSQLTableRetrieveAllFields;
   end;
 
   TServiceFactoryServer = class;
@@ -7419,7 +7450,7 @@ type
 
   /// dynamic array of TSQLModelRecordProperties
   // - used by TSQLModel to store the non-shared information of all its tables
-  TSQLModelRecordPropertiesDynArray = array of TSQLModelRecordProperties;
+  TSQLModelRecordPropertiesObjArray = array of TSQLModelRecordProperties;
 
   /// ORM properties associated to a TSQLRecord within a given model
   // - "stable" / common properties derivated from RTTI are shared in the
@@ -7473,11 +7504,12 @@ type
     procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
       const ContentTableFieldNames: array of RawUTF8); overload;
 
+    /// the table index of this TSQLRecord in the associated Model
+    property TableIndex: Integer read fTableIndex;
+  published
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
     property Props: TSQLRecordProperties read fProps;
-    /// the table index of this TSQLRecord in the associated Model
-    property TableIndex: Integer read fTableIndex;
     /// define if is a normal table (rSQLite3), an FTS3/FTS4/R-Tree virtual
     // table or a custom TSQLVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
@@ -7494,7 +7526,7 @@ type
   // tables may not exist in the main SQLite3 database, but in-memory or external
   // - don't modify the order of Tables inside this Model, if you publish
   // some TRecordReference property in any of your tables
-  TSQLModel = class(TObject)
+  TSQLModel = class
   private
     fTables: TSQLRecordClassDynArray;
     fRoot: RawUTF8;
@@ -7502,7 +7534,7 @@ type
     fTablesMax: integer;
     fActions: PEnumType;
     fEvents: PEnumType;
-    fTableProps: TSQLModelRecordPropertiesDynArray;
+    fTableProps: TSQLModelRecordPropertiesObjArray;
     fCustomCollationForAllRawUTF8: RawUTF8;
     /// contains the caller of CreateOwnedStream()
     fRestOwner: TSQLRest;
@@ -7694,9 +7726,6 @@ type
     // - to be used to release locked records if the client crashed
     // - default value is 30 minutes, which seems correct for common usage
     procedure PurgeOlderThan(MinutesFromNow: cardinal=30);
-
-    /// the Root URI path of this Database Model
-    property Root: RawUTF8 read fRoot;
     /// get the classes list (TSQLRecord descendent) of all available tables
     property Tables: TSQLRecordClassDynArray read fTables;
     /// get a class from a table name
@@ -7710,10 +7739,6 @@ type
     // - raise an EModelException if aClass is not declared within this model
     // - returns the corresponding TableProps[] item if the class is known
     property Props[aClass: TSQLRecordClass]: TSQLModelRecordProperties read GetTableProps;
-    /// the associated ORM information about all handled TSQLRecord class properties
-    // - this TableProps[] array will map the Tables[] array, and will allow
-    // fast direct access to the Tables[].RecordProps values
-    property TableProps: TSQLModelRecordPropertiesDynArray read fTableProps;
     /// the maximum index of TableProps[] class properties array
     property TablesMax: integer read fTablesMax;
     // performed with this model
@@ -7731,6 +7756,13 @@ type
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TSQLLocks entry by table
     property Locks: TSQLLocksDynArray read fLocks;
+  published
+    /// the Root URI path of this Database Model
+    property Root: RawUTF8 read fRoot;
+    /// the associated ORM information about all handled TSQLRecord class properties
+    // - this TableProps[] array will map the Tables[] array, and will allow
+    // fast direct access to the Tables[].RecordProps values
+    property TableProps: TSQLModelRecordPropertiesObjArray read fTableProps;
   end;
 
   PRecordRef = ^RecordRef;
@@ -12312,7 +12344,6 @@ type
     fSessions: TObjectListLocked;
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
-    fSessionAuthentications: IObjectDynArray; // must be defined before the array
     fSessionAuthentication: TSQLRestServerAuthenticationDynArray;
 {$ifdef MSWINDOWS}
     /// thread initialized by ExportServerNamedPipe() to response to client through a pipe
@@ -29421,7 +29452,6 @@ begin
   fSQLAuthUserClass := TSQLAuthUser;
   fSQLAuthGroupClass := TSQLAuthGroup;
   fSessionClass := TAuthSession;
-  fSessionAuthentications := TObjectDynArrayWrapper.Create(fSessionAuthentication);
   if aHandleUserAuthentication then
     // default mORMot authentication schemes
     AuthenticationRegister([TSQLRestServerAuthenticationDefault
@@ -29493,6 +29523,7 @@ begin
   for i := 0 to high(fPublishedMethod) do
     fPublishedMethod[i].Stats.Free;
   FreeAndNil(fSessions);
+  ObjArrayClear(fSessionAuthentication);
   inherited Destroy; // calls fServices.Free which will update fStats
 end;
 
@@ -29911,7 +29942,7 @@ end;
 
 function TSQLRestServer.GetAuthenticationSchemesCount: integer;
 begin
-  result := fSessionAuthentications.Count;
+  result := length(fSessionAuthentication);
 end;
 
 function TSQLRestServer.AuthenticationRegister(
@@ -29923,14 +29954,14 @@ begin
     exit;
   fSessions.Lock;
   try
-    for i := 0 to fSessionAuthentications.Count-1 do
+    for i := 0 to high(fSessionAuthentication) do
       if fSessionAuthentication[i].ClassType=aMethod then begin
         result := fSessionAuthentication[i];
         exit; // method already there
       end;
     // create and initialize new authentication instance
     result := aMethod.Create(self);
-    fSessionAuthentications.Add(result); // will be owned by fSessionAuthentications
+    ObjArrayAdd(fSessionAuthentication,result); // will be owned by fSessionAuthentications
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
     fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
@@ -29959,10 +29990,10 @@ begin
     exit;
   fSessions.Lock;
   try
-    for i := 0 to fSessionAuthentications.Count-1 do
+    for i := 0 to high(fSessionAuthentication) do
       if fSessionAuthentication[i].ClassType=aMethod then begin
-        fSessionAuthentications.Delete(i);
-        fHandleAuthentication := (fSessionAuthentications.Count>0);
+        ObjArrayDelete(fSessionAuthentication,i);
+        fHandleAuthentication := (fSessionAuthentication<>nil);
         break;
       end;
   finally
@@ -30215,7 +30246,7 @@ begin
     try
       aSession := nil;
       if Server.fSessionAuthentication<>nil then
-        for i := 0 to Server.fSessionAuthentications.Count-1 do begin
+        for i := 0 to length(Server.fSessionAuthentication)-1 do begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
@@ -31735,7 +31766,7 @@ begin
     exit;
   fSessions.Lock;
   try
-    for i := 0 to fSessionAuthentications.Count-1 do
+    for i := 0 to length(fSessionAuthentication)-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
         exit;
   finally
@@ -37634,19 +37665,19 @@ begin
   TJSONSerializer.RegisterClassForJSON(aTable);
   // initialize internal structures
   fModelMax := -1;
-  Table := aTable;
-  SQLTableName := GetDisplayNameFromClass(aTable);
-  SQLTableNameUpperWithDot := SynCommons.UpperCase(SQLTableName)+'.';
+  fTable := aTable;
+  fSQLTableName := GetDisplayNameFromClass(aTable);
+  fSQLTableNameUpperWithDot := SynCommons.UpperCase(SQLTableName)+'.';
   isTSQLRecordMany := aTable.InheritsFrom(TSQLRecordMany);
   // add properties to internal Fields list
-  ClassType := PTypeInfo(aTable.ClassInfo)^.ClassType;
-  ClassProp := InternalClassProp(aTable);
-  assert(ClassProp<>nil);
+  fClassType := PTypeInfo(aTable.ClassInfo)^.ClassType;
+  fClassProp := InternalClassProp(aTable);
+  assert(fClassProp<>nil);
   nProps := ClassFieldCountWithParents(aTable);
   if nProps>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8('% has too many fields: %>=%',
       [Table,nProps,MAX_SQLFIELDS]);
-  Fields := TSQLPropInfoList.Create(aTable,[pilRaiseEORMExceptionIfNotHandled]);
+  fFields := TSQLPropInfoList.Create(aTable,[pilRaiseEORMExceptionIfNotHandled]);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8(
@@ -37654,14 +37685,14 @@ begin
       [Table,self,Fields.Count,MAX_SQLFIELDS]);
   SetLength(Fields.fList,Fields.Count);
   // generate some internal lookup information
-  SQLTableRetrieveAllFields := 'ID';
-  SetLength(ManyFields,MAX_SQLFIELDS);
-  SetLength(SimpleFields,MAX_SQLFIELDS);
-  SetLength(JoinedFields,MAX_SQLFIELDS);
-  SetLength(CopiableFields,MAX_SQLFIELDS);
-  SetLength(DynArrayFields,MAX_SQLFIELDS);
-  SetLength(BlobCustomFields,MAX_SQLFIELDS);
-  SetLength(BlobFields,MAX_SQLFIELDS);
+  fSQLTableRetrieveAllFields := 'ID';
+  SetLength(fManyFields,MAX_SQLFIELDS);
+  SetLength(fSimpleFields,MAX_SQLFIELDS);
+  SetLength(fJoinedFields,MAX_SQLFIELDS);
+  SetLength(fCopiableFields,MAX_SQLFIELDS);
+  SetLength(fDynArrayFields,MAX_SQLFIELDS);
+  SetLength(fBlobCustomFields,MAX_SQLFIELDS);
+  SetLength(fBlobFields,MAX_SQLFIELDS);
   MainField[false] := -1;
   MainField[true] := -1;
   nMany := 0;
@@ -37689,7 +37720,7 @@ begin
       AddFilterOrValidate(i,TSynValidateUniqueField.Create);
     end;
     // get corresponding properties content
-    include(HasTypeFields,F.SQLFieldType);
+    include(fHasTypeFields,F.SQLFieldType);
     include(FieldBits[F.SQLFieldType],i);
     case F.SQLFieldType of
       sftUnknown: ;
@@ -37704,9 +37735,9 @@ begin
       sftBlob: begin
         BlobFields[nBlob] := F as TSQLPropInfoRTTI;
         inc(nBlob);
-        SQLTableUpdateBlobFields := SQLTableUpdateBlobFields+F.Name+'=?,';
-        SQLTableRetrieveBlobFields := SQLTableRetrieveBlobFields+F.Name+',';
-        SQLTableRetrieveAllFields := SQLTableRetrieveAllFields+','+F.Name;
+        fSQLTableUpdateBlobFields := fSQLTableUpdateBlobFields+F.Name+'=?,';
+        fSQLTableRetrieveBlobFields := fSQLTableRetrieveBlobFields+F.Name+',';
+        fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
@@ -37731,7 +37762,7 @@ begin
               [DynArrayIndex,Table,Name,Table,DynArrayFields[j].Name]);
         DynArrayFields[nDynArray] := TSQLPropInfoRTTIDynArray(F);
         if TSQLPropInfoRTTIDynArray(F).fIsObjArray then
-          DynArrayFieldsHasObjArray := true;
+          fDynArrayFieldsHasObjArray := true;
         inc(nDynArray);
         goto Simple;
       end;
@@ -37749,39 +37780,39 @@ begin
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         include(SimpleFieldsBits[soSelect],i);
-        SQLTableSimpleFieldsNoRowID := SQLTableSimpleFieldsNoRowID+F.Name+',';
-        SQLTableRetrieveAllFields := SQLTableRetrieveAllFields+','+F.Name;
+        fSQLTableSimpleFieldsNoRowID := fSQLTableSimpleFieldsNoRowID+F.Name+',';
+        fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
     end;
   end;
-  if SQLTableSimpleFieldsNoRowID<>'' then
-    SetLength(SQLTableSimpleFieldsNoRowID,length(SQLTableSimpleFieldsNoRowID)-1);
-  if SQLTableUpdateBlobFields<>'' then
-    SetLength(SQLTableUpdateBlobFields,length(SQLTableUpdateBlobFields)-1);
-  if SQLTableRetrieveBlobFields<>'' then
-    SetLength(SQLTableRetrieveBlobFields,length(SQLTableRetrieveBlobFields)-1);
-  SetLength(ManyFields,nMany);
-  SetLength(SimpleFields,nSimple);
-  SetLength(JoinedFields,nSQLRecord);
+  if fSQLTableSimpleFieldsNoRowID<>'' then
+    SetLength(fSQLTableSimpleFieldsNoRowID,length(fSQLTableSimpleFieldsNoRowID)-1);
+  if fSQLTableUpdateBlobFields<>'' then
+    SetLength(fSQLTableUpdateBlobFields,length(fSQLTableUpdateBlobFields)-1);
+  if fSQLTableRetrieveBlobFields<>'' then
+    SetLength(fSQLTableRetrieveBlobFields,length(fSQLTableRetrieveBlobFields)-1);
+  SetLength(fManyFields,nMany);
+  SetLength(fSimpleFields,nSimple);
+  SetLength(fJoinedFields,nSQLRecord);
   if nSQLRecord>0 then begin
-    SetLength(JoinedFieldsTable,nSQLRecord+1);
-    JoinedFieldsTable[0] := aTable;
+    SetLength(fJoinedFieldsTable,nSQLRecord+1);
+    fJoinedFieldsTable[0] := aTable;
     for i := 0 to nSQLRecord-1 do
-      JoinedFieldsTable[i+1] := TSQLRecordClass(JoinedFields[i].ObjectClass);
+      fJoinedFieldsTable[i+1] := TSQLRecordClass(JoinedFields[i].ObjectClass);
   end;
-  SetLength(CopiableFields,nCopiableFields);
-  SetLength(DynArrayFields,nDynArray);
-  SetLength(BlobCustomFields,nBlobCustom);
-  SetLength(BlobFields,nBlob);
+  SetLength(fCopiableFields,nCopiableFields);
+  SetLength(fDynArrayFields,nDynArray);
+  SetLength(fBlobCustomFields,nBlobCustom);
+  SetLength(fBlobFields,nBlob);
   SimpleFieldsBits[soInsert] := SimpleFieldsBits[soSelect];
   SimpleFieldsBits[soUpdate] := SimpleFieldsBits[soSelect];
   SimpleFieldsBits[soDelete] := SimpleFieldsBits[soSelect];
   SimpleFieldsCount[soInsert] := nSimple;
   SimpleFieldsCount[soUpdate] := nSimple;
   SimpleFieldsCount[soDelete] := nSimple;
-  HasNotSimpleFields := nSimple<>Fields.Count;
+  fHasNotSimpleFields := nSimple<>Fields.Count;
   for i := 0 to Fields.Count-1 do
     if Fields.List[i].SQLFieldType=sftCreateTime then begin
       exclude(SimpleFieldsBits[soUpdate],i);
@@ -37985,7 +38016,7 @@ begin
     (aFilter=nil) then
     result := false else begin
     if Filters=nil then
-      SetLength(Filters,Fields.Count);
+      SetLength(fFilters,Fields.Count);
     aFilter.AddOnce(Filters[aFieldIndex]);
     result := true;
   end;
@@ -44080,6 +44111,8 @@ initialization
 {$endif}
   SetCurrentThreadName('Main thread',[]);
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
+  TJSONSerializer.RegisterObjArrayForJSON(
+    [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
 end.

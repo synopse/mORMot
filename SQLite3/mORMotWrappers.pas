@@ -340,7 +340,7 @@ begin
          NULL_OR_COMMA[t<fServer.Model.TablesMax]],
         [Props.SQLTableName,Props.Table.ClassName,
          Props.Table.ClassParent.ClassName,Variant(fields),
-         Props.ClassType^.UnitName]);
+         Props.TableClassType^.UnitName]);
     if hasRecord then
       rec.hasRecords := true;
     fORM.AddItem(rec);
