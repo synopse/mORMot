@@ -343,7 +343,7 @@ unit SynCommons;
   - new UTF8UpperCopy() and UTF8UpperCopy255() optimized functions
   - new GotoNextNotSpace() and GotoEndOfQuotedString() functions
   - new TMemoryMap.Map() method expecting a file name as parameter
-  - new TRawUTF8List.LoadFromFile() method
+  - new TRawUTF8List.LoadFromFile method
   - new DateToSQL(), DateTimeToSQL() and Iso8601ToSQL() functions, returning
     a string with a JSON_SQLDATE_MAGIC prefix and proper UTF-8/ISO-8601 encoding
     to be inlined as ? bound parameter in any SQL query (allow binding of
@@ -463,7 +463,7 @@ unit SynCommons;
   - added optional internal buffer size for TTextWriter.CreateOwnedStream()
   - added new constructor TTextWriter.CreateOwnedFileStream()
   - added TTextWriter.LastChar and TTextWriter.AddStrings() methods
-  - added TTextWriter.ForceContent, SaveToStream and SaveToFile methods
+  - added TTextWriter.ForceContent method
   - added faster TTextWriter.SetText() method in conjuction to Text function
   - added TTextWriter.Add(const guid: TGUID) overloaded method
   - TTextWriter.Add(Format..) will now ignore any character afer |, i.e. |$ = $
@@ -502,6 +502,7 @@ unit SynCommons;
   - added overloaded function FindRawUTF8() using array of RawUTF8 parameter
   - added TPropNameList record/object to maintain a stack-based list of names
   - speeed enhancement for TRawUTF8List.Add()
+  - new TRawUTF8List.SaveToStream and SaveToFile methods
   - added optional aOwnObjects parameter to TRawUTF8List.Create() constructor
   - new TRawUTF8List.GetObjectByName() method
   - refactoring of CaseSensitive property for TRawUTF8List / TRawUTF8ListHashed

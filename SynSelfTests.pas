@@ -1364,6 +1364,16 @@ begin
       Check(L.IndexOf(s)=i-1);
       Check(TSynFilterOrValidate(L.Objects[i-1]).Parameters=s);
     end;
+    L.SaveToFile('utf8list.txt');
+    L.Clear;
+    Check(L.Count=0);
+    L.LoadFromFile('utf8list.txt');
+    Check(L.Count=MAX);
+    for i := 1 to MAX do begin
+      Int32ToUTF8(i,s);
+      Check(L.IndexOf(s)=i-1);
+    end;
+    DeleteFile('utf8list.txt');
   finally
     L.Free;
   end;
