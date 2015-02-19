@@ -528,7 +528,8 @@ unit SynCommons;
   - added VariantToUTF8() overloaded functions for fast conversion
   - added VariantToInteger()/VariantToIntegerDef()/VariantToInt64() functions
     for direct process of numerical variants (e.g. array indexes)
-  - new RawUTF8ToVariant() and VarRecToVariant() procedures
+  - new RawUTF8ToVariant() and VarRecToVariant() functions
+  - new RawByteStringToVariant() and VariantToRawByteString() functions
   - added VariantDynArrayToJSON/JSONToVariantDynArray/ValuesToVariantDynArray()
   - added VariantDynArrayClear() function (faster e.g. for array of TDocVariant)
   - added VariantToInlineValue() and VarRecToInlineValue() functions
@@ -10190,6 +10191,19 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 // EVariantTypeCastError
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word); overload;
+
+/// convert a raw binary buffer into a variant RawByteString varString
+// - you can then use VariantToRawByteString() to retrieve the binary content 
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
+
+/// convert a RawByteString content into a variant varString
+// - you can then use VariantToRawByteString() to retrieve the binary content 
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant); overload;
+
+/// convert back a RawByteString from a variant
+// - the supplied variant should have been created via a RawByteStringToVariant()
+// function call 
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that cardinal values should be type-casted to Int64() (otherwise
@@ -28670,7 +28684,38 @@ begin
       [ExpectedValueType]);
   end;
 end;
-  
+
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
+begin
+  with TVarData(Value) do begin
+    if not (VType in VTYPE_STATIC) then
+      VarClear(Value);
+    VType := varString;
+    VAny := nil; // avoid GPF below when assigning a string variable to VAny
+    if (Data<>nil) and (DataLen>0) then
+      SetString(RawByteString(VAny),PAnsiChar(Data),DataLen);
+  end;
+end;
+
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
+begin
+  with TVarData(Value) do begin
+    if not (VType in VTYPE_STATIC) then
+      VarClear(Value);
+    VType := varString;
+    VAny := nil; // avoid GPF below when assigning a string variable to VAny
+    if Data<>'' then
+      RawByteString(VAny) := Data;
+  end;
+end;           
+
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
+begin
+  if TVarData(Value).VType=varString then
+    Dest := RawByteString(TVarData(Value).VAny) else
+    Dest := Value; // generic conversion, if not from RawByteStringToVariant()
+end;
+
 function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
   procedure ComplexType;
   begin
