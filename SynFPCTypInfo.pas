@@ -78,9 +78,7 @@ type
 function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
-//procedure getMethodList(aClass:TClass);
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
-
 
 
 implementation
@@ -105,56 +103,48 @@ begin
   Count := 0;
   Result := -1;
 
-  if TypeInfo^.Kind=tkBool then
-    begin
+  if TypeInfo^.Kind=tkBool then begin
     if CompareText(BooleanIdents[false],Name)=0 then
       result := 0 else
     if CompareText(BooleanIdents[true],Name)=0 then
       result := 1;
-    end
- else
-   begin
-     PS := @PT^.NameList;
-     while (Result=-1) and (PByte(PS)^<>0) do begin
-         if ShortCompareText(PS^, sName) = 0 then
-           Result := Count+PT^.MinValue;
-         PS := PShortString(pointer(PS)+PByte(PS)^+1);
-         Inc(Count);
-       end;
-   end;
+  end else
+  begin
+    PS := @PT^.NameList;
+    while (Result=-1) and (PByte(PS)^<>0) do begin
+        if ShortCompareText(PS^, sName) = 0 then
+          Result := Count+PT^.MinValue;
+        PS := PShortString(pointer(PS)+PByte(PS)^+1);
+        Inc(Count);
+      end;
+  end;
 end;
 
-function GetFPCEnumName(TypeInfo: PTypeInfo;Value: Integer): PShortString;
+function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString;
 const NULL_SHORTSTRING: string[1] = '';
 Var PS: PShortString;
     PT: PTypeData;
 begin
   PT := GetFPCTypeData(TypeInfo);
-  if TypeInfo^.Kind=tkBool then
-    begin
-      case Value of
-        0,1:
-          Result := @BooleanIdents[Boolean(Value)];
-        else
-          Result := @NULL_SHORTSTRING;
-      end;
-    end
- else
-   begin
-     PS := @PT^.NameList;
-     dec(Value,PT^.MinValue);
-     While Value>0 Do
-       begin
-         PS := PShortString(pointer(PS)+PByte(PS)^+1);
-         Dec(Value);
-       end;
-     Result := PS;
-   end;
+  if TypeInfo^.Kind=tkBool then begin
+    case Value of
+      0,1: Result := @BooleanIdents[Boolean(Value)];
+      else Result := @NULL_SHORTSTRING;
+    end;
+  end else begin
+    PS := @PT^.NameList;
+    dec(Value,PT^.MinValue);
+    while Value>0 do begin
+      PS := PShortString(pointer(PS)+PByte(PS)^+1);
+      Dec(Value);
+    end;
+    Result := PS;
+  end;
 end;
 
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
 begin
-  result := AlignToPtr(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^);
+  result := PTypeData(aligntoptr(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -162,8 +152,7 @@ end;
 function GetFPCAlignPtr(P: pointer): pointer;
 type
   PLocalTypeInfo = ^TLocalTypeInfo;
-  TLocalTypeInfo =
-  record
+  TLocalTypeInfo = record
     kind: TTypeKind;
     NameLen: Byte;
   end;
@@ -209,7 +198,7 @@ end;
 
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
-  result := TYPINFO.GetPropInfo(AClass,PropName);
+  result := typinfo.GetPropInfo(AClass,PropName);
 end;
 
 end.

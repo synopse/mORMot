@@ -243,12 +243,12 @@
     {$define HASINTERFACERTTI} // interface RTTI (not FPC)
     {$ifdef LINUX}
       {$if RTLVersion = 14.5}
+        {$define KYLIX3}
+        {$define FPC_OR_KYLIX}
         // Kylix 3 will be handled just like Delphi 7
         {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
-        {$define KYLIX3}
-        {$define FPC_OR_KYLIX}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
       {$else}
       Kylix1/2 are unsupported
@@ -360,6 +360,20 @@
 {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
   {$WARN SYMBOL_PLATFORM OFF}
   {$WARN UNIT_PLATFORM OFF}
+{$endif}
+
+// see http://synopse.info/fossil/tktview?name=6593f0fbd1
+{$ifndef WITHUXTHEME}
+  {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
+{$endif}
+{$ifdef LVCL}
+  {$define EXTENDEDTOSTRING_USESTR} // no FloatToText implemented in LVCL
+{$endif}
+{$ifdef FPC}
+  {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
+{$endif}
+{$ifdef CPU64}
+  {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
 {$endif}
 
 // global conditional to use SQLite3 with fastcall calling convention

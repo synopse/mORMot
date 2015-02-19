@@ -1954,15 +1954,29 @@ const
   // - can be used as parameter for ExtendedToString/ExtendedToStr
   DOUBLE_PRECISION = 15;
 
+type
+  {$ifdef CPUARM}
+  // ARM does not support 80bit extended -> 64bit double is enough for us 
+  TSynExtended = double;
+  {$else}
+  {$ifdef CPU64}
+  TSynExtended = double;
+  {$else}
+  /// the floating-point type to be used for best precision and speed
+  // - will allow to fallback to double e.g. on x64 and ARM CPUs
+  TSynExtended = extended;
+  {$endif}
+  {$endif}
+
 /// convert a floating-point value to its numerical text equivalency
 // - returns the count of chars stored into S (S[0] is not set)
-function ExtendedToString(var S: ShortString; Value: Extended; Precision: integer): integer;
+function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
 
 /// convert a floating-point value to its numerical text equivalency
-function ExtendedToStr(Value: Extended; Precision: integer): RawUTF8; overload;
+function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overload;
 
 /// convert a floating-point value to its numerical text equivalency
-procedure ExtendedToStr(Value: Extended; Precision: integer; var result: RawUTF8); overload;
+procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: RawUTF8); overload;
 
 /// convert a floating-point value to its numerical text equivalency
 function DoubleToStr(Value: Double): RawUTF8;
@@ -2141,11 +2155,11 @@ function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
-function GetExtended(P: PUTF8Char; out err: integer): extended; overload;
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
 
 /// get the extended floating point value stored in P^
 // - this overloaded version returns 0 as a result if the content of P is invalid
-function GetExtended(P: PUTF8Char): extended; overload;
+function GetExtended(P: PUTF8Char): TSynExtended; overload;
 
 /// get the WideChar stored in P^ (decode UTF-8 if necessary)
 // - any surrogate (UCS4>$ffff) will be returned as '?'
@@ -2189,7 +2203,8 @@ function UrlDecodeValue(U: PUTF8Char; Upper: PAnsiChar; var Value: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer;
+  Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // cardinal numerical value
@@ -2197,7 +2212,8 @@ function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer; Nex
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal;
+  Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // Int64 numerical value
@@ -2205,7 +2221,8 @@ function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal; N
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64;
+  Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // floating-point value
@@ -2213,7 +2230,17 @@ function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64; Next: P
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar;var Value: Extended; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar; var Value: TSynExtended;
+  Next: PPUTF8Char=nil): boolean;
+
+/// decode a specified parameter compatible with URI encoding into its original
+// floating-point value
+// - UrlDecodeDouble('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
+// will return Next^='where=...' and P=20.45
+// - if Upper is not found, Value is not modified, and result is FALSE
+// - if Upper is found, Value is modified with the supplied content, and result is TRUE
+function UrlDecodeDouble(U: PUTF8Char; Upper: PAnsiChar; var Value: double;
+  Next: PPUTF8Char=nil): boolean;
 
 /// returns TRUE if all supplied parameters do exist in the URI encoded text
 // - CSVNames parameter shall provide as a CSV list of names 
@@ -7874,7 +7901,7 @@ function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
 // - the precision is calculated from the A and B value range
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValueFloat(const A, B: Extended; DoublePrec: Extended = 1E-12): Boolean;
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
 
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
@@ -11664,10 +11691,11 @@ implementation
 
 {$ifdef FPC}
 uses
-  SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
-  , SynFPCLinux,BaseUnix, Unix, dynlibs
-  {$endif} ;
+  SynFPCLinux, BaseUnix, Unix, dynlibs,
+  SysCall,
+  {$endif}
+  SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
 {$endif}
 
 
@@ -14303,7 +14331,7 @@ begin
   result := nil;
   if (aDynArrayTypeInfo<>nil) and (Typ^.kind=tkDynArray) then begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := GetFPCAlignPtr(Typ);
+    Typ := GetFPCAlignPtr(Typ);
     {$else}
     inc(PtrUInt(Typ),Typ^.NameLen);
     {$endif}
@@ -15979,41 +16007,16 @@ begin
   SetRawUTF8(result,P,@tmp[15]-P);
 end;
 
-{.$define EXTENDEDTOSTRING_USESTR}
-// see http://synopse.info/fossil/tktview?name=6593f0fbd1
-
-{$ifndef WITHUXTHEME}
-  {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
-{$endif}
-
-{$ifdef LVCL}
-  {$define EXTENDEDTOSTRING_USESTR} // no FloatToText implemented in LVCL
-{$endif}
-
-{$ifdef FPC}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText alls str() in FPC
-{$endif}
-
-{$ifdef CPU64}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
-{$endif}
-
 {$ifndef EXTENDEDTOSTRING_USESTR}
-var
-  // standard FormatSettings (US)
-  SettingsUS: TFormatSettings;
+var // standard FormatSettings (US)
+    SettingsUS: TFormatSettings;
 {$endif}
 
-function ExtendedToString(var S: ShortString; Value: Extended; Precision: integer): integer;
+function ExtendedToString(var S: ShortString; Value: TSynExtended;
+  Precision: integer): integer;
 {$ifdef EXTENDEDTOSTRING_USESTR}
 var i,prec: integer;
-{$else}
-{$ifdef UNICODE}
-var i: integer;
-{$endif}
-{$endif}
 begin
-{$ifdef EXTENDEDTOSTRING_USESTR}
   str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
   // using str() here avoid FloatToStrF() usage -> LVCL is enough
   result := length(S);
@@ -16062,6 +16065,10 @@ begin
     end;
   end;
 {$else}
+{$ifdef UNICODE}
+var i: integer;
+{$endif}
+begin
   // use ffGeneral: see http://synopse.info/forum/viewtopic.php?pid=442#p442
   result := FloatToText(PChar(@S[1]), Value, fvExtended, ffGeneral,
     Precision, 0, SettingsUS);
@@ -16072,13 +16079,14 @@ begin
 {$endif EXTENDEDTOSTRING_USESTR}
 end;
 
-function ExtendedToStr(Value: Extended; Precision: integer): RawUTF8;
+function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8;
 var tmp: ShortString;
 begin
   SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
 end;
 
-procedure ExtendedToStr(Value: Extended; Precision: integer; var result: RawUTF8);
+procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
+  var result: RawUTF8);
 var tmp: ShortString;
 begin
   SetRawUTF8(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
@@ -18197,7 +18205,7 @@ asm
 end;
 {$endif}
 
-function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
+function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var AbsA,AbsB: double;
 begin // faster than the Math unit version
   AbsA := Abs(A);
@@ -18211,8 +18219,8 @@ begin // faster than the Math unit version
     Result := Abs(A-B)<=AbsA;
 end;
 
-function SameValueFloat(const A, B: Extended; DoublePrec: Extended = 1E-12): Boolean; 
-var AbsA,AbsB: Extended;
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): Boolean; 
+var AbsA,AbsB: TSynExtended;
 begin // faster than the Math unit version
   AbsA := Abs(A);
   AbsB := Abs(B);
@@ -20426,7 +20434,7 @@ end;
 {$endif}
 {$endif}
 
-function GetExtended(P: PUTF8Char): extended;
+function GetExtended(P: PUTF8Char): TSynExtended;
 var err: integer;
 begin
   result := GetExtended(P,err);
@@ -20434,34 +20442,34 @@ begin
     result := 0;
 end;
 
-function GetExtended(P: PUTF8Char; out err: integer): extended;
-{$ifdef FPC}
-begin
-  val(string(P),result,err);
-end;
-{$else}
-{$ifdef ENHANCEDRTL}
-begin
-  val(PAnsiChar(P),result,err);
-end;
-{$else}
 {$ifdef PUREPASCAL}
-// faster ValExt_JOH_PAS_8_a implementation by John O'Harrow
-function IntPower(const Exponent: Integer): Extended;
+  {$define GETEXTENDEDPASCAL}
+{$endif}
+{$ifdef FPC}
+  {$define GETEXTENDEDPASCAL}
+{$endif}
+
+function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+{$ifdef GETEXTENDEDPASCAL}
+// adapted from ValExt_JOH_PAS_8_a implementation by John O'Harrow
+const POW10: array[0..29] of TSynExtended = (
+  1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,1E11,1E12,1E13,1E14,1E15,
+  1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,1E26,1E27,1E28,1E29);
+function IntPower(Exponent: Integer): TSynExtended;
 var Y: Integer;
     LBase: Int64;
 begin
   Y := Abs(Exponent);
   LBase := 10;
   result := 1.0;
-  while Y>0 do begin
+  repeat
     while not Odd(Y) do begin
       Y := Y shr 1;
       LBase := LBase*LBase
     end;
     dec(Y);
     result := result*LBase
-  end;
+  until Y=0;
   if Exponent<0 then
     result := 1.0/result;
 end;
@@ -20478,15 +20486,15 @@ begin
   Neg := False;
   NegExp := False;
   Valid := False;
-  while (P+err)^=' ' do
+  while P[err]=' ' do
     inc(err);
-  Ch := (P+err)^;
+  Ch := P[err];
   if Ch in ['+','-'] then begin
     inc(err);
     Neg := (Ch='-');
   end;
   while true do begin
-    Ch := (P+err)^;
+    Ch := P[err];
     inc(err);
     if not (Ch in ['0'..'9']) then
       break;
@@ -20496,51 +20504,178 @@ begin
   Digits := 0;
   if Ch='.' then begin
     while true do begin
-        Ch := (P+err)^;
-        inc(err);
-        if not (Ch in ['0'..'9']) then begin
-          if not valid then // Starts with '.'
-            if Ch=#0 then
-              dec(err); // P='.'
-          break;
-        end;
-        result := (result*10)+Ord(Ch)-Ord('0');
-        dec(Digits);
-        Valid := true;
+      Ch := P[err];
+      inc(err);
+      if not (Ch in ['0'..'9']) then begin
+        if not valid then // starts with '.'
+          if Ch=#0 then
+            dec(err); // P='.'
+        break;
       end;
+      result := (result*10)+Ord(Ch)-Ord('0');
+      dec(Digits);
+      Valid := true;
+    end;
     end;
   ExpValue := 0;
-  if (Ord(Ch) or $20)=ord('e') then begin // Ch in ['E','e']
-      Valid := false;
-      Ch := (P+err)^;
-      if Ch in ['+','-'] then begin
-        inc(err);
-        NegExp := (Ch='-');
-      end;
-      while true do begin
-        Ch := (P+err)^;
-        inc(err);
-        if not (Ch in ['0'..'9']) then
-          break;
-        ExpValue := (ExpValue*10)+Ord(Ch)-Ord('0');
-        Valid := true;
-      end;
-     if NegExp then
-       ExpValue := -ExpValue;
+  if Ch in ['E','e'] then begin
+    Valid := false;
+    Ch := P[err];
+    if Ch in ['+','-'] then begin
+      inc(err);
+      NegExp := (Ch='-');
     end;
-  Digits := Digits+ExpValue;
-  if Digits<>0 then
-    result := result*IntPower(Digits);
+    while true do begin
+      Ch := P[err];
+      inc(err);
+      if not (Ch in ['0'..'9']) then
+        break;
+      ExpValue := (ExpValue*10)+Ord(Ch)-Ord('0');
+      Valid := true;
+    end;
+   if NegExp then
+     ExpValue := -ExpValue;
+  end;
+  inc(Digits,ExpValue);
+  case Digits of
+  -high(POW10)..-1: result := result/POW10[-Digits];
+  0: ;
+  1..high(POW10):   result := result*POW10[Digits];
+  else              result := result*IntPower(Digits);
+  end;
   if Neg then
     result := -result;
   if Valid and (ch=#0) then
     err := 0;
 end;
 {$else}
-const
-  Ten: Double = 10.0;
 // faster ValExt_JOH_IA32_8_a implementation by John O'Harrow
 // also avoid val() conversion into UnicodeString for Delphi 2009+
+procedure _Pow10;
+asm // in: FST(0)=val, EAX=Power  out:  FST(0)=val * 10**Power
+  test  eax, eax
+  jle   @@CheckNeg
+  cmp   eax, 5120
+  jge   @@Infinity                     {Power Too High, Return Infinity}
+  mov   edx, eax
+  and   edx, $1F                       {Lower 5 Bits}
+  lea   edx, [edx+edx*4]
+  fld   tbyte ptr @@Tab0[edx*2]
+  fmulp
+  shr   eax, 5                         {Shift Out Lower 5 Bits}
+  jz    @@PosDone                      {Finished if 0}
+  mov   edx, eax
+  and   edx, $0F                       {Next Lower 4 Bits}
+  jz    @@ThirdMul
+  lea   edx, [edx+edx*4]
+  fld   tbyte ptr @@Tab1[edx*2-10]
+  fmulp
+@@ThirdMul:
+  shr   eax, 4                         {Shift Out Next Lower 4 Bits}
+  jz    @@PosDone                      {Finished if 0}
+  lea   eax, [eax+eax*4]
+  fld   tbyte ptr @@Tab2[eax*2-10]
+  fmulp
+@@PosDone:
+  ret
+@@Infinity:
+  fstp  st(0)                          {Replace Result with Infinity}
+  fld   tbyte ptr @@Inf
+  ret
+@@CheckNeg:
+  je    @@NegDone                      {Finished if Power = 0}
+  neg   eax
+  cmp   eax, 5120
+  jge   @@Zero                         {Power Too Low, Return Zero}
+  mov   edx, eax
+  and   edx, $1F                       {Lower 5 Bits}
+  lea   edx, [edx+edx*4]
+  fld   tbyte ptr @@Tab0[edx*2]
+  fdivp
+  shr   eax, 5                         {Shift Out Lower 5 Bits}
+  jz    @@NegDone                      {Finished if 0}
+  mov   edx, eax
+  and   edx, $0F                       {Next Lower 4 Bits}
+  jz    @@ThirdDiv
+  lea   edx, [edx+edx*4]
+  fld   tbyte ptr @@Tab1[edx*2-10]
+  fdivp
+@@ThirdDiv:
+  shr   eax, 4                         {Shift Out Next Lower 4 Bits}
+  jz    @@NegDone                      {Finished if 0}
+  lea   eax, [eax+eax*4]
+  fld   tbyte ptr @@Tab2[eax*2-10]
+  fdivp
+@@NegDone:
+  ret
+@@Zero:
+  fstp  st(0)                          {Replace Result with Zero}
+  fldz
+  ret
+@@Inf:
+  dw    $0000,$0000,$0000,$8000,$7FFF  {Infinity}
+@@Tab0:
+  dw    $0000,$0000,$0000,$8000,$3FFF  {10**0}
+  dw    $0000,$0000,$0000,$A000,$4002  {10**1}
+  dw    $0000,$0000,$0000,$C800,$4005  {10**2}
+  dw    $0000,$0000,$0000,$FA00,$4008  {10**3}
+  dw    $0000,$0000,$0000,$9C40,$400C  {10**4}
+  dw    $0000,$0000,$0000,$C350,$400F  {10**5}
+  dw    $0000,$0000,$0000,$F424,$4012  {10**6}
+  dw    $0000,$0000,$8000,$9896,$4016  {10**7}
+  dw    $0000,$0000,$2000,$BEBC,$4019  {10**8}
+  dw    $0000,$0000,$2800,$EE6B,$401C  {10**9}
+  dw    $0000,$0000,$F900,$9502,$4020  {10**10}
+  dw    $0000,$0000,$B740,$BA43,$4023  {10**11}
+  dw    $0000,$0000,$A510,$E8D4,$4026  {10**12}
+  dw    $0000,$0000,$E72A,$9184,$402A  {10**13}
+  dw    $0000,$8000,$20F4,$B5E6,$402D  {10**14}
+  dw    $0000,$A000,$A931,$E35F,$4030  {10**15}
+  dw    $0000,$0400,$C9BF,$8E1B,$4034  {10**16}
+  dw    $0000,$C500,$BC2E,$B1A2,$4037  {10**17}
+  dw    $0000,$7640,$6B3A,$DE0B,$403A  {10**18}
+  dw    $0000,$89E8,$2304,$8AC7,$403E  {10**19}
+  dw    $0000,$AC62,$EBC5,$AD78,$4041  {10**20}
+  dw    $8000,$177A,$26B7,$D8D7,$4044  {10**21}
+  dw    $9000,$6EAC,$7832,$8786,$4048  {10**22}
+  dw    $B400,$0A57,$163F,$A968,$404B  {10**23}
+  dw    $A100,$CCED,$1BCE,$D3C2,$404E  {10**24}
+  dw    $84A0,$4014,$5161,$8459,$4052  {10**25}
+  dw    $A5C8,$9019,$A5B9,$A56F,$4055  {10**26}
+  dw    $0F3A,$F420,$8F27,$CECB,$4058  {10**27}
+  dw    $0984,$F894,$3978,$813F,$405C  {10**28}
+  dw    $0BE5,$36B9,$07D7,$A18F,$405F  {10**29}
+  dw    $4EDF,$0467,$C9CD,$C9F2,$4062  {10**30}
+  dw    $2296,$4581,$7C40,$FC6F,$4065  {10**31}
+@@Tab1:
+  dw    $B59E,$2B70,$ADA8,$9DC5,$4069  {10**32}
+  dw    $A6D5,$FFCF,$1F49,$C278,$40D3  {10**64}
+  dw    $14A3,$C59B,$AB16,$EFB3,$413D  {10**96}
+  dw    $8CE0,$80E9,$47C9,$93BA,$41A8  {10**128}
+  dw    $17AA,$7FE6,$A12B,$B616,$4212  {10**160}
+  dw    $556B,$3927,$F78D,$E070,$427C  {10**192}
+  dw    $C930,$E33C,$96FF,$8A52,$42E7  {10**224}
+  dw    $DE8E,$9DF9,$EBFB,$AA7E,$4351  {10**256}
+  dw    $2F8C,$5C6A,$FC19,$D226,$43BB  {10**288}
+  dw    $E376,$F2CC,$2F29,$8184,$4426  {10**320}
+  dw    $0AD2,$DB90,$2700,$9FA4,$4490  {10**352}
+  dw    $AA17,$AEF8,$E310,$C4C5,$44FA  {10**384}
+  dw    $9C59,$E9B0,$9C07,$F28A,$4564  {10**416}
+  dw    $F3D4,$EBF7,$4AE1,$957A,$45CF  {10**448}
+  dw    $A262,$0795,$D8DC,$B83E,$4639  {10**480}
+@@Tab2:
+  dw    $91C7,$A60E,$A0AE,$E319,$46A3  {10**512}
+  dw    $0C17,$8175,$7586,$C976,$4D48  {10**1024}
+  dw    $A7E4,$3993,$353B,$B2B8,$53ED  {10**1536}
+  dw    $5DE5,$C53D,$3B5D,$9E8B,$5A92  {10**2048}
+  dw    $F0A6,$20A1,$54C0,$8CA5,$6137  {10**2560}
+  dw    $5A8B,$D88B,$5D25,$F989,$67DB  {10**3072}
+  dw    $F3F8,$BF27,$C8A2,$DD5D,$6E80  {10**3584}
+  dw    $979B,$8A20,$5202,$C460,$7525  {10**4096}
+  dw    $59F0,$6ED5,$1162,$AE35,$7BCA  {10**4608}
+end;
+const
+  Ten: Double = 10.0;
 asm   // -> EAX Pointer to string
       //    EDX Pointer to code result
       // <- FST(0)  Result
@@ -20559,11 +20694,7 @@ asm   // -> EAX Pointer to string
   cmp   bl,' '
   je    @@Trim
   xor   ecx,ecx         {Clear Sign Flag}
-{$IFDEF PIC}
-  call  GetGOT
-  fld   qword [eax.Ten] {Load 10 into FPU} {$ELSE}
   fld   qword [Ten]     {Load 10 into FPU}
-{$ENDIF}
   xor   eax,eax         {Zero Number of Decimal Places}
   fldz                  {Zero Result in FPU}
   cmp   bl,'0'
@@ -20660,7 +20791,7 @@ asm   // -> EAX Pointer to string
   mov   [edx],ebx       {Result Code = 0}
   jz    @@PowerDone     {No call to _Pow10 Needed}
   mov   edi,ecx         {Save Decimal Sign Flag}
-  call  System.@Pow10   {Raise to Power of 10}
+  call  _Pow10          {Raise to Power of 10}
   mov   ecx,edi         {Restore Decimal Sign Flag}
 @@PowerDone:
   test  ch,ch           {Decimal Sign Flag Set?}
@@ -20689,8 +20820,6 @@ asm   // -> EAX Pointer to string
   fchs                  {Yes. Negate Result in FPU}
   jmp   @@Exit          {Exit Setting Result Code}
 end;
-{$endif}
-{$endif}
 {$endif}
 
 function GetUTF8Char(P: PUTF8Char): cardinal;
@@ -21989,7 +22118,8 @@ begin
 end;
 
 
-function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;
+  var Value: Int64; Next: PPUTF8Char=nil): boolean;
 var tmp: RawUTF8;
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
@@ -21997,13 +22127,30 @@ begin
     SetInt64(pointer(tmp),Value);
 end;
 
-function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar;var Value: Extended; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar;
+  var Value: TSynExtended; Next: PPUTF8Char=nil): boolean;
 var tmp: RawUTF8;
     err: integer;
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
-  if result then
+  if result then begin
     Value := GetExtended(pointer(tmp),err);
+    if err<>0 then
+      result := false;
+  end;
+end;
+
+function UrlDecodeDouble(U: PUTF8Char; Upper: PAnsiChar; var Value: double;
+  Next: PPUTF8Char=nil): boolean;
+var tmp: RawUTF8;
+    err: integer;
+begin
+  result := UrlDecodeValue(U, Upper, tmp, Next);
+  if result then begin
+    Value := GetExtended(pointer(tmp),err);
+    if err<>0 then
+      result := false;
+  end;
 end;
 
 function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
@@ -22797,13 +22944,18 @@ begin
       result := false;
 end;
 
+{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+type
+  unaligned = Double;
+{$endif}
+
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 var i: integer;
     B: cardinal;
     Y,M,D, H,MI,SS: cardinal;
 // we expect 'YYYYMMDDThhmmss' format but we handle also 'YYYY-MM-DDThh:mm:ss'
 begin
-  result := 0;
+  unaligned(result) := 0;
   if P=nil then
     exit;
   if L=0 then
@@ -22839,7 +22991,7 @@ begin
     if Y>9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
     with Div100(Y) do
-      result := (146097*YDiv100) shr 2 + (1461*YMod100) shr 2 +
+      unaligned(result) := (146097*YDiv100) shr 2 + (1461*YMod100) shr 2 +
             (153*M+2) div 5+D-693900;
     if (L<15) or not(P[8] in [' ','T']) then
       exit;
@@ -24865,13 +25017,15 @@ begin
   AlignedAddr := PtrInt(Old) and not (PageSize - 1);
   while PtrInt(Old) + Size >= AlignedAddr + PageSize do
     Inc(PageSize,_SC_PAGE_SIZE);
-  {$ifndef FPC}
+  {$ifdef FPC}
+  Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
+  {$else}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
   {$endif}
     try
       for i := 0 to Size-1 do    // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
-    except
+    except                             
     end;
 end;
 {$endif}
@@ -28101,12 +28255,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptRawUTF8:   PRawUTF8(Data)^ := PropValue;
       ptString:    UTF8DecodeToString(PropValue,StrLen(PropValue),PString(Data)^);
       ptSynUnicode:UTF8ToSynUnicode(PropValue,StrLen(PropValue),PSynUnicode(Data)^);
-      {$ifdef FPC}
-      ptDateTime:  Iso8601ToDateTimePUTF8CharVar(PropValue,0,{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PDateTime(Data)^));
-      // see http://wiki.freepascal.org/Windows_CE_Development_Notes#What_is_misaligned_data_access.3F
-      {$else}
       ptDateTime:  Iso8601ToDateTimePUTF8CharVar(PropValue,0,PDateTime(Data)^);
-      {$endif}
       ptTimeLog:   PInt64(Data)^ := Iso8601ToTimeLogPUTF8Char(PropValue,0);
       ptWideString:UTF8ToWideString(PropValue,StrLen(PropValue),PWideString(Data)^);
       ptWord:      PWord(Data)^ := GetCardinal(PropValue);
@@ -28206,7 +28355,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptByte:      aWriter.AddU(PByte(Value)^);
     ptCardinal:  aWriter.AddU(PCardinal(Value)^);
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
-    ptDouble:    aWriter.Add(PDouble(Value)^);
+    ptDouble:    aWriter.Add(unaligned(PDouble(Value)^));
     ptInt64,ptID:aWriter.Add(PInt64(Value)^);
     ptInteger:   aWriter.Add(PInteger(Value)^);
     ptSingle:    aWriter.Add(PSingle(Value)^);
@@ -28225,12 +28374,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
       ptSynUnicode,
       ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
-      {$ifdef FPC}
-      ptDateTime:      aWriter.AddDateTime({$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}unaligned{$endif}(PDateTime(Value)^));
-      // see http://wiki.freepascal.org/Windows_CE_Development_Notes#What_is_misaligned_data_access.3F
-      {$else}
-      ptDateTime:      aWriter.AddDateTime(PDateTime(Value)^);
-      {$endif}
+      ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^));
       ptTimeLog:       aWriter.AddTimeLog(PInt64(Value));
       ptGUID:          aWriter.Add(PGUID(Value)^);
       end;

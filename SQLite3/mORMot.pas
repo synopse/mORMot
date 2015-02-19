@@ -2322,7 +2322,7 @@ type
      {$ifdef HASINLINE}inline;{$endif}
     function GetFloatProp(Instance: TObject): double;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    procedure SetFloatProp(Instance: TObject; Value: Extended);
+    procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {$ifndef NOVARIANTS}
     procedure GetVariantProp(Instance: TObject; var result: Variant);
@@ -2409,10 +2409,10 @@ type
     /// low-level getter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
     // - return 0 on any error
-    function GetExtendedValue(Instance: TObject): Extended;
+    function GetExtendedValue(Instance: TObject): TSynExtended;
     /// low-level setter of the floating-point property value of a given instance
     // - this method will check if the corresponding property is floating-point
-    procedure SetExtendedValue(Instance: TObject; const Value: Extended);
+    procedure SetExtendedValue(Instance: TObject; const Value: TSynExtended);
     /// low-level getter of the long string property value of a given instance
     // - this method will check if the corresponding property is a Long String,
     // and will return '' if it's not the case
@@ -5159,7 +5159,7 @@ type
   // set the corresponding error message and error code number
   // - a typical implementation may be:
   // ! procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
-  // ! var a,b: Extended;
+  // ! var a,b: TSynExtended;
   // ! begin
   // !   if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
   // !     while Ctxt.Parameters<>nil do begin
@@ -6453,10 +6453,10 @@ type
     function GetAsInt64(Row: integer; const FieldName: RawUTF8): Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
-    function GetAsFloat(Row,Field: integer): extended; overload;
+    function GetAsFloat(Row,Field: integer): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
-    function GetAsFloat(Row: integer; const FieldName: RawUTF8): extended; overload;
+    function GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as TDateTime value
     // - explicit sftDateTime will be converted from ISO-8601 text
@@ -6886,12 +6886,12 @@ type
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
-    function FieldAsFloat(FieldIndex: Integer): extended; overload;
+    function FieldAsFloat(FieldIndex: Integer): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
-    function FieldAsFloat(const FieldName: RawUTF8): extended; overload;
+    function FieldAsFloat(const FieldName: RawUTF8): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
@@ -15178,6 +15178,7 @@ type
   end;
   /// no Rtti alignment under Delphi
   AlignToPtr = pointer;
+  UnalignToDouble = Double;
 
 const
   NO_INDEX = Integer($80000000);
@@ -16266,7 +16267,7 @@ begin
 end;
 
 procedure TSQLPropInfoRTTIDouble.NormalizeValue(var Value: RawUTF8);
-var VFloat: Extended;
+var VFloat: TSynExtended;
     err: integer;
 begin
   VFloat := GetExtended(pointer(Value),err);
@@ -16316,11 +16317,16 @@ begin
   W.Write(@V,SizeOf(V));
 end;
 
+{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+type
+  unaligned = Double;
+{$endif}
+
 function TSQLPropInfoRTTIDouble.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 begin
   if P=nil then
     result := nil else begin
-    fPropInfo.SetDoubleProp(Instance,PDouble(P)^);
+    fPropInfo.SetDoubleProp(Instance,unaligned(PDouble(P)^));
     result := P+sizeof(double);
   end;
 end;
@@ -19078,12 +19084,12 @@ begin
   SetInt64(Get(Row,FieldIndex(FieldName)),result);
 end;
 
-function TSQLTable.GetAsFloat(Row,Field: integer): extended;
+function TSQLTable.GetAsFloat(Row,Field: integer): TSynExtended;
 begin
   result := GetExtended(Get(Row,Field));
 end;
 
-function TSQLTable.GetAsFloat(Row: integer; const FieldName: RawUTF8): extended;
+function TSQLTable.GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended;
 begin
   result := GetExtended(Get(Row,FieldIndex(FieldName)));
 end;
@@ -19774,7 +19780,7 @@ begin
 end;
 
 function UTF8CompareDouble(P1,P2: PUTF8Char): PtrInt;
-var V1,V2: extended;
+var V1,V2: TSynExtended;
     Err: integer;
 label er;
 begin
@@ -20405,12 +20411,12 @@ begin
   SetInt64(FieldBuffer(FieldName),result);
 end;
 
-function TSQLTable.FieldAsFloat(FieldIndex: Integer): extended;
+function TSQLTable.FieldAsFloat(FieldIndex: Integer): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldIndex));
 end;
 
-function TSQLTable.FieldAsFloat(const FieldName: RawUTF8): extended;
+function TSQLTable.FieldAsFloat(const FieldName: RawUTF8): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldName));
 end;
@@ -21916,14 +21922,14 @@ begin
     result := 0;
 end;
 
-function TPropInfo.GetExtendedValue(Instance: TObject): Extended;
+function TPropInfo.GetExtendedValue(Instance: TObject): TSynExtended;
 begin
   if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) then
      result := GetFloatProp(Instance) else
      result := 0;
 end;
 
-procedure TPropInfo.SetExtendedValue(Instance: TObject; const Value: Extended);
+procedure TPropInfo.SetExtendedValue(Instance: TObject; const Value: TSynExtended);
 begin
   if (Instance<>nil) and (@self<>nil) and (PropType^.Kind=tkFloat) then
     SetFloatProp(Instance,Value);
@@ -22445,7 +22451,7 @@ begin
   result := TypInfo.GetFloatProp(Instance,@self);
 end;
 
-procedure TPropInfo.SetFloatProp(Instance: TObject; Value: Extended);
+procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
 begin
   TypInfo.SetFloatProp(Instance,@self,value);
 end;
@@ -22832,7 +22838,7 @@ begin // faster code by AB
   end;
 end;
 
-procedure TPropInfo.SetFloatProp(Instance: TObject; Value: Extended);
+procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
 type // procedure(Instance: TObject) trick does not work with CPU64 :(
   TSingleSetProc = procedure(const Value: Single) of object;
   TDoubleSetProc = procedure(const Value: Double) of object;
@@ -23186,11 +23192,23 @@ begin
 end;
 
 function TTypeInfo.SetEnumType: PEnumType;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var p: pointer;
+begin
+  if (@self=nil) or (Kind<>tkSet) then
+    result := nil else begin
+    p := AlignToPtr(@Name[ord(Name[0])+1]);
+    inc(p,sizeof(TOrdType));
+    p := AlignToPtr(p);
+    result := PPTypeInfo(PPointer(p)^)^.EnumBaseType;
+  end;
+{$else}
 begin
   if (@self=nil) or (Kind<>tkSet) then
     result := nil else
-    result := PPTypeInfo(PPointer(PtrUInt(AlignToPtr(@Name[ord(Name[0])+1]))+
-      sizeof(TOrdType))^)^.EnumBaseType;
+    result := PPTypeInfo(PPointer(PtrUInt(@Name[ord(Name[0])+1])+sizeof(TOrdType))^)^.
+      EnumBaseType;
+{$endif}
 end;
 
 function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
@@ -25070,13 +25088,7 @@ begin // private sub function makes the code faster in most case
       raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
     // register to the internal garbage collection (avoid memory leak)
-    // ALF //
-    // Does not work under ARM ... I do not know why !!
-    {$ifdef CPUARM}
-    {$WARNING 'This code (GarbageCollectorFreeAndNil(PVMT^,result);) does not work on ARM.'}
-    {$else}
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
-    {$endif}
     // overriden method may use RecordProps -> do it after the VMT is set
     aTable.InternalDefineModel(result);
   end;
@@ -36482,7 +36494,7 @@ var P: PPropInfo;
     ValueClass, ItemClass: TClass;
     V: PtrInt;
     ndx,err: integer;
-    E: extended;
+    E: TSynExtended;
     V64: Int64;
     PropName: PUTF8Char;
     PropValue: PUTF8Char;
@@ -36937,7 +36949,7 @@ procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8
 var P: PPropInfo;
     i, V, err: integer;
     V64: Int64;
-    E: extended;
+    E: TSynExtended;
     Obj: TObject;
     UpperName: array[byte] of AnsiChar;
     U: RawUTF8;

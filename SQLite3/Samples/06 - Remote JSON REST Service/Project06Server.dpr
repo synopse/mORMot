@@ -18,12 +18,12 @@ type
 { TServiceServer }
 
 procedure TServiceServer.Sum(Ctxt: TSQLRestServerURIContext);
-var a,b: Extended;
+var a,b: double;
 begin
   if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
     while Ctxt.Parameters<>nil do begin
-      UrlDecodeExtended(Ctxt.Parameters,'A=',a);
-      UrlDecodeExtended(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
+      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
+      UrlDecodeDouble(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
     end;
     Ctxt.Results([a+b]);
   end else

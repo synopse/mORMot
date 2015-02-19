@@ -1032,7 +1032,7 @@ type
     /// test the client-side implementation using TSQLRestServerAuthenticationNone
     procedure ClientSideRESTWeakAuthentication;
     /// test the client-side implementation using TSQLRestServerAuthenticationHttpBasic
-    procedure ClientSideHttpBasicAuthentication;
+    procedure ClientSideRESTBasicAuthentication;
     /// test the custom record JSON serialization
     procedure ClientSideRESTCustomRecordLayout;
     /// test the client-side implementation in JSON-RPC mode
@@ -1151,7 +1151,7 @@ procedure TTestLowLevelCommon.Curr64;
 var tmp: string[63];
     i, err: Integer;
     V1: currency;
-    V2: extended;
+    V2: TSynExtended;
     i64: Int64;
     v: RawUTF8;
 begin
@@ -1876,7 +1876,11 @@ begin
       Check(A=i);
       Check(B=byte(i+1));
       CheckSame(C,i*2.2);
+      {$ifdef CPUARM}
+      CheckSame(D,i*3.25);
+      {$else}
       Check(D=i*3.25);
+      {$endif}
     end;
     R.A := i;
     R.B := i+1;
@@ -1899,7 +1903,11 @@ begin
       Check(A=i);
       Check(B=byte(i+1));
       CheckSame(C,i*2.2);
+      {$ifdef CPUARM}
+      CheckSame(D,i*3.25);
+      {$else}
       Check(D=i*3.25);
+      {$endif}
     end;
   // validate packed record with strings inside
   AFP.Init(TypeInfo(TFVs),AF);
@@ -2383,31 +2391,6 @@ begin
     crc := (crc xor ord(buf[i]))*16777619;
   result := crc;
 end;
-
-
-{.$define EXTENDEDTOSTRING_USESTR}
-
-{$ifndef WITHUXTHEME}
-  {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
-{$endif}
-
-{$ifdef DELPHI5OROLDER}
-  {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
-{$endif}
-
-{$ifdef LVCL}
-  {$define EXTENDEDTOSTRING_USESTR} // no FloatToText() implemented in LVCL
-{$endif}
-
-{$ifdef FPC}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText() maps str() in FPC
-{$endif}
-
-{$ifdef CPU64}
-  {$define EXTENDEDTOSTRING_USESTR} // FloatToText() slower in x64
-{$endif}
-
-
 
 function crc32cpas(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
@@ -10639,12 +10622,12 @@ begin
 end;
 
 procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
-var a,b: Extended;
+var a,b: double;
 begin
   if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
     while Ctxt.Parameters<>nil do begin
-      UrlDecodeExtended(Ctxt.Parameters,'A=',a);
-      UrlDecodeExtended(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
+      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
+      UrlDecodeDouble(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
     end;
     Ctxt.Results([a+b]);
   end else
@@ -11742,7 +11725,7 @@ begin
   fClient.Server.AuthenticationUnregister(TSQLRestServerAuthenticationNone);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideHttpBasicAuthentication;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuthentication;
 begin
   fClient.SessionClose;
   fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationHttpBasic);

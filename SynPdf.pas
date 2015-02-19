@@ -722,14 +722,14 @@ type
     function Add(Value, DigitCount: Integer): TPdfWrite; overload;
     /// add a floating point numerical value to the buffer
     // - up to 2 decimals are written
-    function Add(Value: Extended): TPdfWrite; overload;
+    function Add(Value: TSynExtended): TPdfWrite; overload;
     /// add a floating point numerical value to the buffer
     // - up to 2 decimals are written, together with a trailing space
-    function AddWithSpace(Value: Extended): TPdfWrite; overload;
+    function AddWithSpace(Value: TSynExtended): TPdfWrite; overload;
     /// add a floating point numerical value to the buffer
     // - this version handles a variable number of decimals, together with
     // a trailing space - this is used by ConcatToCTM e.g. or enhanced precision
-    function AddWithSpace(Value: Extended; Decimals: cardinal): TPdfWrite; overload;
+    function AddWithSpace(Value: TSynExtended; Decimals: cardinal): TPdfWrite; overload;
     /// direct raw write of some data
     // - no conversion is made
     function Add(Text: PAnsiChar; Len: integer): TPdfWrite; overload;
@@ -4227,7 +4227,7 @@ begin
   result := self;
 end;
 
-function TPdfWrite.Add(Value: Extended): TPdfWrite;
+function TPdfWrite.Add(Value: TSynExtended): TPdfWrite;
 var Buffer: ShortString;
     L: integer;
 begin
@@ -4424,7 +4424,7 @@ begin // add e.g. '2010-06-16T15:06:59'
   result := Add(DateTimeToIso8601(DateTime,true,'T'));
 end;               
 
-function TPdfWrite.AddWithSpace(Value: Extended): TPdfWrite;
+function TPdfWrite.AddWithSpace(Value: TSynExtended): TPdfWrite;
 var Buffer: ShortString;
     L: integer;
 begin
@@ -4457,7 +4457,7 @@ begin
   result := self;
 end;
 
-function TPdfWrite.AddWithSpace(Value: Extended; Decimals: cardinal): TPdfWrite;
+function TPdfWrite.AddWithSpace(Value: TSynExtended; Decimals: cardinal): TPdfWrite;
 var Buffer: ShortString;
     L: integer;
 begin

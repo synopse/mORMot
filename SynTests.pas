@@ -912,16 +912,14 @@ begin
   Color(ccLightCyan);
   Writeln(fSaveToFile,#13#10'   ',Ident,#13#10'  ',StringOfChar('-',length(Ident)+2));
   RunTimer.Start;
-  C := nil;
   try
     // 1. register all test cases
     fTestCase.Clear;
     for m := 0 to Count-1 do begin
-      C := pointer(m);
       fCurrentMethod := m;
       fCurrentMethodIndex := fTestCase.Count;
       // published methods will call AddCase() to register tests in fTestCase[]
-       TSynTestEvent(TestMethod[m])();
+      TSynTestEvent(TestMethod[m])();
     end;
     // 2. launch the tests
     Randomize;
@@ -941,7 +939,8 @@ begin
       C.fAssertions := 0; // reset assertions count
       C.fAssertionsFailed := 0;
       TotalTimer.Start;
-      for t := 0 to C.Count-1 do begin
+      for t := 0 to C.Count-1 do
+      try
         C.fAssertionsBeforeRun := C.fAssertions;
         C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
         C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
@@ -952,6 +951,14 @@ begin
         TSynTestEvent(C.TestMethod[t])(); // run tests + Check() and TestFailed()
         ILog := nil; // will trigger logging leave method e.g.
         DuringRun(i,t);
+      except
+        on E: Exception do begin
+          Color(ccLightRed);
+          fFailed.AddObject(E.ClassName+': '+E.Message,C);
+          writeln(fSaveToFile,'! ',C.fTests[t].TestNameUTF8,#13#10'! Exception ',
+            E.ClassName,' raised with messsage:'#13#10'!  ',E.Message);
+          Color(ccLightGray);
+        end;
       end;
       C.CleanUp; // should be done before Destroy call
       inc(fAssertions,C.fAssertions); // compute global assertions count
@@ -961,7 +968,7 @@ begin
     on E: Exception do begin
       // assume any exception not intercepted above is a failure
       Color(ccLightRed);
-      fFailed.AddObject(E.ClassName+': '+E.Message,C);
+      fFailed.AddObject(E.ClassName+': '+E.Message,nil);
       writeln(fSaveToFile,#13#10'! Exception ',E.ClassName,
         ' raised with messsage:'#13#10'!  ',E.Message);
     end;

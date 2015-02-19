@@ -2734,19 +2734,13 @@ begin // private sub function makes the code faster in most case
     result := nil else begin
     // create the properties information from RTTI
     result := TSynLogFamily.Create(self);
-    // store the TSynLogFamily  instance into AutoTable unused VMT entry
+    // store the TSynLogFamily instance into "AutoTable" unused VMT entry
     PVMT := pointer(PtrInt(self)+vmtAutoTable);
     if PPointer(PVMT)^<>nil then
       raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
     PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
     // register to the internal garbage collection (avoid memory leak)
-    // ALF //
-    // Does not work under ARM ... I do not know why !!
-    {$ifdef CPUARM}
-    {$WARNING 'This code (GarbageCollectorFreeAndNil(PVMT^,result);) does not work on ARM.'}
-    {$else}
     GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
-    {$endif}
   end;
 end;
 

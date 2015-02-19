@@ -7836,11 +7836,11 @@ This Client-Server protocol uses JSON here, as encoded server-side via {\f1\fs20
 We have used above the {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
 Here is how we may implement the fastest possible parameters parsing:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
-!var a,b: Extended;
+!var a,b: double;
 !  if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
 !    while Ctxt.Parameters<>nil do begin
-!      UrlDecodeExtended(Ctxt.Parameters,'A=',a);
-!      UrlDecodeExtended(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
+!      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
+!      UrlDecodeDouble(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
 !    end;
 !    Ctxt.Results([a+b]);
 !  end else
@@ -7849,7 +7849,7 @@ Here is how we may implement the fastest possible parameters parsing:
 The only not obvious part of this code is the parameters marshaling, i.e. how the values are retrieved from the incoming {\f1\fs20 Ctxt.Parameters} text buffer, then converted into native local variables.
 On the Server side, typical implementation steps are therefore:
 - Use the {\f1\fs20 UrlDecodeNeedParameters} function to check that all expected parameters were supplied by the caller in {\f1\fs20 Ctxt.Parameters};
-- Call {\f1\fs20 UrlDecodeInteger / UrlDecodeInt64 / UrlDecodeExtended / UrlDecodeValue / UrlDecodeObject} functions (all defined in {\f1\fs20 SynCommons.pas}) to retrieve each individual parameter from standard JSON content;
+- Call {\f1\fs20 UrlDecodeInteger / UrlDecodeInt64 / UrlDecodeDouble / UrlDecodeExtended / UrlDecodeValue / UrlDecodeObject} functions (all defined in {\f1\fs20 SynCommons.pas}) to retrieve each individual parameter from standard JSON content;
 - Implement the service (here it is just the {\f1\fs20 a+b} expression);
 - Then return the result calling {\f1\fs20 Ctxt.Results()} method or {\f1\fs20 Ctxt.Error()} in case of any error.
 The powerful {\f1\fs20 UrlDecodeObject} function (defined in {\f1\fs20 mORMot.pas}) can be used to un-serialize most class instance from its textual JSON representation ({\f1\fs20 @*TPersistent@, @*TSQLRecord@, TStringList}...).
