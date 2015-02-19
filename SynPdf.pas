@@ -2353,6 +2353,7 @@ type
     fFontFile2: TPdfStream;
     fUnicodeFont: TPdfFontTrueType;
     fWinAnsiFont: TPdfFontTrueType;
+    fIsSymbolFont: Boolean;
     // below are some bigger structures
     fLogFont: TLogFontW;
     fM: TTextMetric;
@@ -4746,14 +4747,20 @@ end;
 procedure TPdfWrite.AddUnicodeHexTextNoUniScribe(PW: PWideChar;
   TTF: TPdfFontTrueType; NextLine: boolean; Canvas: TPdfCanvas);
 var Ansi: integer;
+    isSymbolFont: Boolean;
 begin
+  if TTF<>nil then begin
+    if TTF.UnicodeFont<>nil then
+      isSymbolFont := TTF.UnicodeFont.fIsSymbolFont else
+      isSymbolFont := TTF.fIsSymbolFont;
+    TTF := TTF.WinAnsiFont; // we expect the WinAnsi font in the code below
+  end else
+    isSymbolFont := false;
   Ansi := WideCharToWinAnsi(cardinal(PW^));
-  if TTF<>nil then
-    TTF := TTF.WinAnsiFont else // we expect the WinAnsi font in the code below
-    if Ansi<0 then
-      Ansi := ord('?'); // WinAnsi only font shows ? glyph for unicode chars
+  if (TTF=nil) and (Ansi<0) then
+    Ansi := ord('?'); // WinAnsi only font shows ? glyph for unicode chars
   while Ansi<>0 do begin
-    if Ansi>0 then begin
+    if (Ansi>0) and (not isSymbolFont) then begin
       // add WinAnsi-encoded chars as such
       if (TTF<>nil) and (Canvas.FPage.Font<>TTF) then
         Canvas.SetPDFFont(TTF,Canvas.FPage.FontSize);
@@ -7607,6 +7614,7 @@ const
 
 function TPdfFontTrueType.FindOrAddUsedWideChar(aWideChar: WideChar): integer;
 var n, i: integer;
+    aSymbolAnsiChar: AnsiChar;
 begin
   self := WinAnsiFont;
   result := fUsedWideChar.Add(ord(aWideChar));
@@ -7625,6 +7633,12 @@ begin
     CreateAssociatedUnicodeFont;
   // update fUsedWide[result] for current glyph
   i := UnicodeFont.fUsedWideChar.IndexOf(ord(aWideChar));
+  if (i<0) and fIsSymbolFont then begin
+    TSynAnsiConvert.Engine(fDoc.CodePage).UnicodeBufferToAnsi(
+      @aSymbolAnsiChar,@aWideChar,1);
+    aWideChar := WideChar($f000+ord(aSymbolAnsiChar));
+    i := UnicodeFont.fUsedWideChar.IndexOf(ord(aWideChar));
+  end;
   if i<0 then // if this glyph doesn't exist in this font -> set to zero
     i := 0 else
     i := UnicodeFont.fUsedWide[i].int;
@@ -8230,9 +8244,12 @@ begin
   for i := 0 to Header^.numberSubtables-1 do
     with SubTable^[i] do
       if platformID=TTFCFP_MS_PLATFORMID then
-        if platformSpecificID=TTFCFP_SYMBOL_CHAR_SET then
-          off := offset else
+        if platformSpecificID=TTFCFP_SYMBOL_CHAR_SET then begin
+          aUnicodeTTF.fIsSymbolFont := true;
+          off := offset;
+        end else
         if platformSpecificID=TTFCFP_UNICODE_CHAR_SET then begin
+          aUnicodeTTF.fIsSymbolFont := false;
           off := offset;
           break; // prefered specific ID
         end;
