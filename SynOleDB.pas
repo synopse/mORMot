@@ -576,11 +576,11 @@ type
     /// get all table names
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// convert a textual column data type, as retrieved e.g. from SQLGetField,
     // into our internal primitive types
     function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSQLDBFieldType; override;
@@ -2222,7 +2222,7 @@ begin
   end;
 end;
 
-procedure TOleDBConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TOleDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var Rows: IRowset;
     count, schemaCol, nameCol: integer;
     schema, tablename: RawUTF8;
@@ -2259,7 +2259,7 @@ begin
 end;
 
 procedure TOleDBConnectionProperties.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 var Owner, Table, Column: RawUTF8;
     Rows: IRowset;
     n, i: integer;

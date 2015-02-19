@@ -146,12 +146,12 @@ type
     /// get all table names
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will also check if the columns are indexed
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined (e.g. for dDB2)
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
@@ -1756,7 +1756,7 @@ begin
 end;
 
 procedure TODBCConnectionProperties.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 var Schema, Table: RawUTF8;
     F: TSQLDBColumnDefine;
     i,n,DataType: integer;
@@ -1830,7 +1830,7 @@ begin
   end;
 end;
 
-procedure TODBCConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TODBCConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var n: integer;
     schema, tablename: RawUTF8;
 begin

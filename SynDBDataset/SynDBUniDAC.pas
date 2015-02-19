@@ -123,13 +123,13 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
 
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
@@ -247,7 +247,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetFields(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 var meta: TDAMetaData;
     n: integer;
     F: TSQLDBColumnDefine;
@@ -296,7 +296,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetIndexes(
-  const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray);
+  const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
 var meta, indexs: TDAMetaData;
     F: TSQLDBIndexDefine;
     FA: TDynArray;
@@ -349,7 +349,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetTableNames(
-  var Tables: TRawUTF8DynArray);
+  out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;

@@ -210,14 +210,14 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use ZDBC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use ZDBC metadata to retrieve the information
     // - PostgreSQL note: it was reported that some table names expects to be
     // quoted for this DB engine - and ZDBC won't do it for yourself - please
     // ensure you specify the correct quoted table name e.g. when you register
     // the external PostgreSQL table via function VirtualTableExternalRegister()
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// access to the database metadata, as retrieved by ZEOS
     // - returns TRUE if metadata interface has been retrieved
     function GetDatabaseMetadata(out meta: IZDatabaseMetadata): boolean;
@@ -573,7 +573,7 @@ begin
   end;
 end;
 
-procedure TSQLDBZEOSConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TSQLDBZEOSConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var meta: IZDatabaseMetadata;
     res: IZResultSet;
     TableTypes: Types.TStringDynArray;
@@ -592,7 +592,7 @@ begin
 end;
 
 procedure TSQLDBZEOSConnectionProperties.GetFields(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 var meta: IZDatabaseMetadata;
     res: IZResultSet;
     n, i: integer;
