@@ -1335,18 +1335,18 @@ type
     // - used e.g. by GetFieldDefinitions
     // - will call ColumnTypeNativeToDB protected virtual method to guess the
     // each mORMot TSQLDBFieldType
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); virtual;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); virtual;
     /// retrieve the advanced indexed information of a specified Table
     //  - this default implementation will use protected SQLGetIndex virtual
     // method to retrieve the index names and properties
     // - currently only MS SQL and Oracle are supported
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); virtual;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); virtual;
     /// get all field/column definition for a specified Table as text
     // - call the GetFields method and retrieve the column field name and
     // type as 'Name [Type Length Precision Scale]'
     // - if WithForeignKeys is set, will add external foreign keys as '% tablename'
     procedure GetFieldDefinitions(const aTableName: RawUTF8;
-      var Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
+      out Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
     /// get one field/column definition as text
     // - return column type as 'Name [Type Length Precision Scale]'
     class function GetFieldDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
@@ -1363,7 +1363,7 @@ type
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); virtual;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); virtual;
     /// retrieve a foreign key for a specified table and column
     // - first time it is called, it will retrieve all foreign keys from the
     // remote database using virtual protected GetForeignKeys method into
@@ -2530,14 +2530,14 @@ type
     function NewConnection: TSQLDBConnection; override;
     /// retrieve the column/field layout of a specified table
     // - calls Process(cGetFields,aTableName,Fields)
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - calls Process(cGetIndexes,aTableName,Indexes)
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // - calls Process(cGetTableNames,self,Tables)
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// determine if the SQL statement can be cached
     // - always returns false, to force a new fake statement to be created
     function IsCachable(P: PUTF8Char): boolean; override;
@@ -4843,7 +4843,7 @@ begin
 end;
 
 procedure TSQLDBConnectionProperties.GetFieldDefinitions(const aTableName: RawUTF8;
-  var Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
+  out Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
 var F: TSQLDBColumnDefineDynArray;
     Ref: RawUTF8;
     i: integer;
@@ -4861,13 +4861,12 @@ begin
 end;
 
 procedure TSQLDBConnectionProperties.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 var SQL: RawUTF8;
     n,i: integer;
     F: TSQLDBColumnDefine;
     FA: TDynArray;
 begin
-  SetLength(Fields,0);
   FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
   fillchar(F,sizeof(F),0);
@@ -4922,14 +4921,13 @@ begin
 end;
 
 procedure TSQLDBConnectionProperties.GetIndexes(const aTableName: RawUTF8;
-  var Indexes: TSQLDBIndexDefineDynArray);
+  out Indexes: TSQLDBIndexDefineDynArray);
 var SQL: RawUTF8;
     n: integer;
     F: TSQLDBIndexDefine;
     FA: TDynArray;
 begin
   SQL := SQLGetIndex(aTableName);
-  SetLength(Indexes,0);
   if SQL='' then
     exit;
   FA.Init(TypeInfo(TSQLDBIndexDefineDynArray),Indexes,@n);
@@ -4948,11 +4946,10 @@ begin
   SetLength(Indexes,n);
 end;
 
-procedure TSQLDBConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TSQLDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var SQL: RawUTF8;
     count: integer;
 begin
-  SetLength(Tables,0);
   SQL := SQLGetTableNames;
   if SQL<>'' then
   try
@@ -7404,18 +7401,18 @@ begin
 end;
 
 procedure TSQLDBProxyConnectionPropertiesAbstract.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 begin
   Process(cGetFields,aTableName,Fields);
 end;
 
 procedure TSQLDBProxyConnectionPropertiesAbstract.GetIndexes(const aTableName: RawUTF8;
-  var Indexes: TSQLDBIndexDefineDynArray);
+  out Indexes: TSQLDBIndexDefineDynArray);
 begin
   Process(cGetIndexes,aTableName,Indexes);
 end;
 
-procedure TSQLDBProxyConnectionPropertiesAbstract.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TSQLDBProxyConnectionPropertiesAbstract.GetTableNames(out Tables: TRawUTF8DynArray);
 begin
   Process(cGetTableNames,self,Tables);
 end;

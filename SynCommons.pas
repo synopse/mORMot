@@ -32920,13 +32920,13 @@ begin
   end;
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  SetLength(fHashs,0);
+  fHashs := nil;
 end;
 
 procedure TDynArrayHashed.HashInit;
 var cap, PO2: integer;
 begin
-  SetLength(fHashs,0); // any previous hash is invalid
+  fHashs := nil; // any previous hash is invalid
   // find nearest power of two for new fHashs[] size
   cap := Capacity+Capacity shr 3+64; // Capacity is faster than Count
   PO2 := 256;       
@@ -33309,7 +33309,7 @@ end;
 
 procedure TObjectHash.Invalidate;
 begin
-  SetLength(fHashs,0); // force HashInit call on next Find()
+  fHashs := nil; // force HashInit call on next Find()
 end;
 
 function TObjectHash.JustAdded: boolean;
@@ -33330,7 +33330,7 @@ begin
     exit;
   end;
   if n+32+n shr 3>length(fHashs) then begin
-    SetLength(fHashs,0);
+    fHashs := nil;
     HashInit(n); // re-compute fHashs up to Count-1 if not enough void positions
   end;
   H := Hash(O);
@@ -38196,12 +38196,12 @@ var i: integer;
 begin
   if self<>nil then begin
     if Value<=0 then begin
-      SetLength(fList,0);
+      fList := nil;
       if fObjects<>nil then begin
         if fObjectsOwned then
           for i := 0 to fCount-1 do
             fObjects[i].Free;
-        SetLength(fObjects,0);
+        fObjects := nil;
       end;
       fCount := 0;
     end else begin

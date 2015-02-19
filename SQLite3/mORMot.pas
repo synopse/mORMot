@@ -10571,7 +10571,7 @@ type
     // - call internaly ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8; var Data: TRawUTF8DynArray): boolean; overload;
+      const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
     /// get the integer value of an unique field with a Where Clause
     // - example of use: OneFieldValue(TSQLRecordPeople,'ID','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
@@ -10680,7 +10680,7 @@ type
     // IDs[] array - e.g. it will return [] if no matching record was found
     // - returns TRUE if any matching ID was found (i.e. if length(IDs)>0) }
     function MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
-      var IDs: TIDDynArray): boolean;
+      out IDs: TIDDynArray): boolean;
   public // here are REST basic direct calls (works with Server or Client)
     /// get a member from a SQL statement
     // - implements REST GET collection
@@ -13079,13 +13079,13 @@ type
     // - this default implementation will call the overloaded SearchField()
     // value after conversion of the FieldValue into RawUTF8
     function SearchField(const FieldName: RawUTF8; FieldValue: Int64;
-      var ResultID: TIDDynArray): boolean; overload; virtual;
+      out ResultID: TIDDynArray): boolean; overload; virtual;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIDDynArray): boolean; overload; virtual; abstract;
+      out ResultID: TIDDynArray): boolean; overload; virtual; abstract;
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
@@ -13344,7 +13344,7 @@ type
     // - store the results into the ResultID dynamic array
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIDDynArray): boolean; override;
+      out ResultID: TIDDynArray): boolean; override;
     /// read-only access to the number of TSQLRecord values
     property Count: integer read GetCount;
     /// read-only access to the TSQLRecord values, storing the data
@@ -18044,8 +18044,7 @@ begin
     SetLength(fList,result+result shr 3+32);
   inc(fCount);
   fList[result] := aItem;
-  if fOrderedByName<>nil then
-    SetLength(fOrderedByName,0);
+  fOrderedByName := nil; // force recompute sorted name array
 end;
 
 function TSQLPropInfoList.GetItem(aIndex: integer): TSQLPropInfo;
@@ -23727,7 +23726,7 @@ begin
     fDestID^ := 0;
     fSourceID^ := 0;
   end;
-  SetLength(fTableMapRecordManyInstances,0);
+  fTableMapRecordManyInstances := nil;
   FillChar(fTableMapFields,sizeof(fTableMapFields),0);
   // free any previous fTable if necessary
   if Table<>nil then
@@ -26629,11 +26628,10 @@ begin
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
-  WhereClause: RawUTF8; var Data: TRawUTF8DynArray): boolean;
+  WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean;
 var i: integer;
     T: TSQLTableJSON;
 begin
-  SetLength(Data,0);
   result := false;
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
@@ -27598,10 +27596,9 @@ begin
 end;
 
 function TSQLRest.MainFieldIDs(Table: TSQLRecordClass; const Values: array of RawUTF8;
-  var IDs: TIDDynArray): boolean;
+  out IDs: TIDDynArray): boolean;
 var aMainField, id: TID;
 begin
-  SetLength(IDs,0);
   if (self<>nil) and (high(Values)>=0) and (Table<>nil) then
     if high(Values)=0 then begin // handle special case of one Values[] item
       id := MainFieldID(Table,Values[0]);
@@ -34641,13 +34638,12 @@ begin
 end;
 
 function TSQLRestStorageInMemory.SearchField(const FieldName, FieldValue: RawUTF8;
-  var ResultID: TIDDynArray): boolean;
+  out ResultID: TIDDynArray): boolean;
 var n, WhereField: integer;
     {$ifndef CPU64}i: integer;{$endif}
     Where: TList;
 begin
   result := false;
-  SetLength(ResultID,0);
   if (self=nil) or (fValue.Count=0) then
     exit;
   if IsRowID(pointer(FieldName)) then
@@ -34862,7 +34858,7 @@ begin
 end;
 
 function TSQLRestStorage.SearchField(const FieldName: RawUTF8;
-  FieldValue: Int64; var ResultID: TIDDynArray): boolean;
+  FieldValue: Int64; out ResultID: TIDDynArray): boolean;
 begin
   result := SearchField(FieldName,Int64ToUTF8(FieldValue),ResultID);
 end;
@@ -36708,14 +36704,13 @@ begin
       if Kind=tkVariant then 
         P^.SetVariantProp(Value,null) else
       {$endif} begin
-        // nested null object
+        // nested null object -> FreeAndNil(Value.Item)
         if (IsObj in [oSQLRecord,oSQLMany]) or (Kind<>tkClass) then
-          exit; // null expects a plain TPersistent
-        V := P^.GetOrdProp(Value);
-        if V<>0 then begin
-          // null -> FreeAndNil(Obj)
-          TObject(V).Free;
+          exit; // null expects a plain TSynPersistent/TPersistent
+        Item := P^.GetObjProp(Value);
+        if Item<>nil then begin
           P^.SetOrdProp(Value,0);
+          Item.Free;
         end;
       end;
       inc(From,4);
@@ -38636,7 +38631,7 @@ begin
         if aTableIndex<cardinal(length(fStaticVirtualTable)) then begin
           fStaticVirtualTable[aTableIndex] := nil;
           if IsZero(fStaticVirtualTable,length(fStaticVirtualTable)*sizeof(pointer)) then
-            SetLength(fStaticVirtualTable,0);
+            fStaticVirtualTable := nil;
         end;
       end;
     fStatic.Free;

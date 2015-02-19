@@ -233,7 +233,7 @@ type
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
-      const FieldValue: array of const; var ResultID: TIDDynArray): boolean;
+      const FieldValue: array of const; out ResultID: TIDDynArray): boolean;
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete 
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with external DB (syntax are too much specific)
@@ -280,12 +280,12 @@ type
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
     function SearchField(const FieldName: RawUTF8; FieldValue: Int64;
-      var ResultID: TIDDynArray): boolean; overload; override;
+      out ResultID: TIDDynArray): boolean; overload; override;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
     function SearchField(const FieldName, FieldValue: RawUTF8;
-      var ResultID: TIDDynArray): boolean; overload; override;
+      out ResultID: TIDDynArray): boolean; overload; override;
     /// overridden method for direct external database engine call
     function TableRowCount(Table: TSQLRecordClass): Int64; override;
     /// overridden method for direct external database engine call
@@ -1082,8 +1082,8 @@ begin
     if (fBatchMethod=mPost) and (fBatchCount>1) then
       // -1 since fBatchFirstAddedID := EngineLockedNextID did already a +1
       inc(fEngineLockedLastID,fBatchCount-1);
-    SetLength(fBatchValues,0);
-    SetLength(fBatchIDs,0);
+    fBatchValues := nil;
+    fBatchIDs := nil;
     fBatchCount := 0;
     fBatchCapacity := 0;
     fBatchMethod := mNone;
@@ -1520,7 +1520,7 @@ end;
 
 function TSQLRestStorageExternal.EngineSearchField(
   const FieldName: ShortString; const FieldValue: array of const;
-  var ResultID: TIDDynArray): boolean;
+  out ResultID: TIDDynArray): boolean;
 var n: Integer;
     Rows: ISQLDBRows;
 begin
@@ -1535,13 +1535,13 @@ begin
 end;
 
 function TSQLRestStorageExternal.SearchField(const FieldName: RawUTF8;
-  FieldValue: Int64; var ResultID: TIDDynArray): boolean;
+  FieldValue: Int64; out ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;
 
 function TSQLRestStorageExternal.SearchField(const FieldName, FieldValue: RawUTF8;
-  var ResultID: TIDDynArray): boolean;
+  out ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName,[FieldValue],ResultID);
 end;

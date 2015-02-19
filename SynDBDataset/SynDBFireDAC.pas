@@ -127,13 +127,13 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
 
     /// allow to set the options specific to a FireDAC driver
     // - by default, ServerName, DatabaseName, UserID and Password are set by
@@ -290,7 +290,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetTableNames(
-  var Tables: TRawUTF8DynArray);
+  out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -306,7 +306,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetFields(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 var meta: TADMetaInfoQuery;
     n: integer;
     F: TSQLDBColumnDefine;
@@ -340,7 +340,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetIndexes(
-  const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray);
+  const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
 var kind: boolean;
     meta, indexs: TADMetaInfoQuery;
     TableName: string;
@@ -353,7 +353,6 @@ const
   CHILD:  array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKeyFields,mkIndexFields);
 begin
   TableName := UTF8ToString(UpperCase(aTableName));
-  SetLength(Indexes,0);
   FA.Init(TypeInfo(TSQLDBIndexDefineDynArray),Indexes,@n);
   fillchar(F,sizeof(F),0);
   meta := TADMetaInfoQuery.Create(nil);
