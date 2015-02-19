@@ -457,8 +457,8 @@ unit SynCommons;
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
   - TDynArray will now recognize TVariantDynArray or variant fields 
   - code refactoring of TTextWriter to simplify flushing mechanism, and
-    allow internal buffer auto-grow if it was found out to be too small
-    (with corresponding boolean property FlushShouldNotAutoResize)
+    allow internal buffer auto-grow if it was found out to be too small (see
+    FlushToStream / FlushFinal methods and FlushToStreamNoAutoResize property)
   - fixed ticket [5bd9df5979] about TTextWriter.CancelAll issue
   - added optional internal buffer size for TTextWriter.CreateOwnedStream()
   - added new constructor TTextWriter.CreateOwnedFileStream()
@@ -5474,7 +5474,7 @@ type
     B, BEnd: PUTF8Char;
     fStream: TStream;
     fInitialStreamPosition: cardinal;
-    fStreamIsOwned, fFlushShouldNotAutoResize: boolean;
+    fStreamIsOwned, fFlushToStreamNoAutoResize: boolean;
     fTotalFileSize: cardinal;
     // internal temporary buffer
     fTempBufSize: Integer;
@@ -5501,7 +5501,8 @@ type
     // - default internal buffer size if 4096 (enough for most JSON objects)
     constructor CreateOwnedStream(aBufSize: integer=4096);
     /// the data will be written to an external file
-    // - you should call explicitly Flush to write any pending data to the file
+    // - you should call explicitly FlushFinal or FlushToStream to write
+    // any pending data to the file
     constructor CreateOwnedFileStream(const aFileName: TFileName; aBufSize: integer=8192);
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
@@ -5520,11 +5521,21 @@ type
     procedure SetText(var result: RawUTF8);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUTF8);
-    /// write pending data to the Stream
+    /// write pending data to the Stream, with automatic buffer resizal
+    // - you should not have to call FlushToStream in most cases, but FlushFinal
+    // at the end of the process, just before using the resulting Stream
+    // - FlushToStream may be used to force immediate writing of the internal
+    // memory buffer to the destination Stream
+    // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
+    // do not want the automatic memory buffer resizal to take place
+    procedure FlushToStream; virtual;
+    /// write pending data to the Stream, without automatic buffer resizal
     // - will append the internal memory buffer to the Stream
-    // - if you don't call Flush, some pending characters may be not yet
-    // copied to the Stream: you should call it before using the Stream property
-    procedure Flush; virtual;
+    // - in short, FlushToStream may be called during the adding process, and
+    // FlushFinal at the end of the process, just before using the resulting Stream  
+    // - if you don't call FlushToStream or FlushFinal, some pending characters
+    // may not be copied to the Stream: you should call it before using the Stream 
+    procedure FlushFinal;
     /// add a callback to echo each line written by this class
     // - this class expects AddEndOfLine to mark the end of each line
     procedure EchoAdd(const aEcho: TOnTextWriterEcho);
@@ -6008,20 +6019,20 @@ type
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk 
     property TextLength: cardinal read GetLength;
-    /// if a call to Flush should try to resize the internal buffer if it sounds
-    // too small
-    // - set to FALSE by default, you may set TRUE if you make an ending Flush
-    // without any more potential content adding
-    property FlushShouldNotAutoResize: boolean
-      read fFlushShouldNotAutoResize write fFlushShouldNotAutoResize;
+    /// if a call to FlushToStream should try to resize the internal memory
+    // buffer when it appears undersized
+    // - set to FALSE by default, to increase performance, as expected
+    // - FlushFinal will set it to TRUE before calling a last FlushToStream
+    property FlushToStreamNoAutoResize: boolean
+      read fFlushToStreamNoAutoResize write fFlushToStreamNoAutoResize;
     /// define how AddEndOfLine method stores its line feed characters 
     // - by default (FALSE), it will append a CR (#13) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
     property EndOfLineCRLF: boolean read fEndOfLineCRLF write fEndOfLineCRLF;
     /// the internal TStream used for storage
-    // - you should call the Flush method before using this TStream content,
-    // to flush all pending characters to the stream
+    // - you should call the FlushFinal (or FlushToStream) methods before using
+    // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified when calling the
     // TTextWriter constructor, it can be forced via this property, before
     // any writting
@@ -28889,8 +28900,7 @@ begin // will avoid most memory allocations, except for one 2KB internal buffer
     with DefaultTextWriterJSONClass.Create(Fake,2048) do
     try
       AddVariantJSON(Value,Escape);
-      FlushShouldNotAutoResize := true;
-      Flush;
+      FlushFinal;
       result := fTotalFileSize;
     finally
       Free;
@@ -33362,7 +33372,7 @@ var tmp: array[0..23] of AnsiChar;
     Len: integer;
 begin
   if B+16>=BEnd then
-    Flush;
+    FlushToStream;
   P := StrInt32(@tmp[23],value);
   Len := @tmp[23]-P;
   move(P[0],B[1],Len);
@@ -33375,7 +33385,7 @@ var tmp: array[0..31] of AnsiChar;
     Len: integer;
 begin
   if B+31>=BEnd then
-    Flush;
+    FlushToStream;
   P := StrCurr64(@tmp[31],Value);
   Len := @tmp[31]-P;
   if Len>4 then
@@ -33399,7 +33409,7 @@ end;
 procedure TTextWriter.AddTimeLog(Value: PInt64);
 begin
   if B+31>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B,PTimeLogBits(Value)^.Text(B+1,true,'T'));
 end;
 
@@ -33408,7 +33418,7 @@ begin
   if (Value^=0) and (QuoteChar=#0) then
     exit;
   if B+21>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B);
   if QuoteChar<>#0 then
     B^ := QuoteChar else
@@ -33436,7 +33446,7 @@ begin
   if Value=0 then
     exit;
   if B+19>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B);
   if trunc(Value)<>0 then begin
     DateToIso8601PChar(Value,B,true);
@@ -33455,7 +33465,7 @@ var tmp: array[0..15] of AnsiChar;
     Len: integer;
 begin
   if B+16>=BEnd then
-    Flush;
+    FlushToStream;
   P := StrUInt32(@tmp[15],Value);
   Len := @tmp[15]-P;
   move(P[0],B[1],Len);
@@ -33477,7 +33487,7 @@ var tmp: array[0..23] of AnsiChar;
     Len: integer;
 begin
   if B+24>=BEnd then
-    Flush;
+    FlushToStream;
   P := StrInt64(@tmp[23],Value);
   Len := @tmp[23]-P;
   move(P[0],B[1],Len);
@@ -33492,7 +33502,7 @@ begin
   if (L=0) or (L>30) then
     Add('0') else begin
     if B+31>=BEnd then
-      Flush;
+      FlushToStream;
     inc(B);
     if PWord(P)^=ord('-')+ord('.')shl 8 then begin
       PWord(B)^ := ord('-')+ord('0')shl 8; // '-.3' -> '-0.3'
@@ -33512,7 +33522,7 @@ end;
 procedure TTextWriter.Add(c: AnsiChar);
 begin
   if B>=BEnd then
-    Flush;
+    FlushToStream;
   B[1] := c;
   inc(B);
 end;
@@ -33520,7 +33530,7 @@ end;
 procedure TTextWriter.Add(c1, c2: AnsiChar);
 begin
   if B+1>=BEnd then
-    Flush;
+    FlushToStream;
   B[1] := c1;
   B[2] := c2;
   inc(B,2);
@@ -33529,7 +33539,7 @@ end;
 procedure TTextWriter.Add(const guid: TGUID);
 begin
   if B+36>=BEnd then
-    Flush;
+    FlushToStream;
   GUIDToText(B+1,@guid);
   inc(B,36);
 end;
@@ -33537,7 +33547,7 @@ end;
 procedure TTextWriter.AddCR;
 begin
   if B+1>=BEnd then
-    Flush;
+    FlushToStream;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
   inc(B,2);
 end;
@@ -33546,7 +33556,7 @@ procedure TTextWriter.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
 var i: integer;
 begin
   if B+1>=BEnd then
-    Flush;
+    FlushToStream;
   if fEndOfLineCRLF then begin
     pWord(B+1)^ := 13+10 shl 8; // CR + LF
     inc(B,2);
@@ -33571,7 +33581,7 @@ begin
   if ntabs>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
   if B+ntabs+1>=BEnd then
-    Flush;
+    FlushToStream;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
   fillchar(B[3],ntabs,9); // indentation using tabs
   inc(B,ntabs+2);
@@ -33582,7 +33592,7 @@ begin
   if cardinal(aCount-1)>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
   if B+aCount>=BEnd then
-    Flush;
+    FlushToStream;
   fillchar(B[1],aCount,ord(aChar));
   inc(B,aCount);
 end;
@@ -33590,7 +33600,7 @@ end;
 procedure TTextWriter.Add2(Value: integer);
 begin
   if B+3>=BEnd then
-    Flush;
+    FlushToStream;
   if cardinal(Value)>99 then
     pCardinal(B+1)^ := $3030+ord(',')shl 16 else     // '00,' if overflow
     pCardinal(B+1)^ := TwoDigitLookupW[Value]+ord(',')shl 16;
@@ -33600,7 +33610,7 @@ end;
 procedure TTextWriter.Add4(Value: integer);
 begin
   if B+5>=BEnd then
-    Flush;
+    FlushToStream;
   if cardinal(Value)>9999 then
     pCardinal(B+1)^ := $30303030 else // '0000,' if overflow
     YearToPChar(Value,B+1);
@@ -33616,7 +33626,7 @@ procedure TTextWriter.AddCurrentLogTime;
 var Ticks: cardinal;
 begin
   if B+17>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B);
   Ticks := GetTickCount; // this call is very fast (just one integer mul)
   if GlobalClock<>Ticks then begin // typically in range of 10-16 ms
@@ -33646,7 +33656,7 @@ begin
 end;
 begin // 00.000.000
   if B+17>=BEnd then
-    Flush;
+    FlushToStream;
   B[3] := '.';
   B[7] := '.';
   inc(B);
@@ -33660,7 +33670,7 @@ end;
 procedure TTextWriter.Add3(Value: integer);
 begin
   if B+4>=BEnd then
-    Flush;
+    FlushToStream;
   if cardinal(Value)>999 then
     pCardinal(B+1)^ := $303030 else // '0000,' if overflow
     pCardinal(B+1)^ := TwoDigitLookupW[Value div 10]+
@@ -34303,7 +34313,7 @@ begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
       {$endif}
       else begin
 write:  if B>=BEnd then
-          Flush;
+          FlushToStream;
         B[1] := F^;
         inc(B);
       end;
@@ -34332,7 +34342,7 @@ end;
 procedure TTextWriter.AddLine(const Text: shortstring);
 begin
   if B+ord(Text[0])+2>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B);
   move(Text[1],B[0],ord(Text[0]));
   inc(B,ord(Text[0]));
@@ -34346,7 +34356,7 @@ var C: PUTF8Char;
 {$endif}
 begin
   if B+sizeof(P)*2>=BEnd then
-    Flush;
+    FlushToStream;
 {$ifdef CPU64}
   BinToHexDisplay(@P,PAnsiChar(B+1),sizeof(P));
 {$else}
@@ -34368,7 +34378,7 @@ begin
   if cardinal(BinBytes*2-1)>=cardinal(fTempBufSize) then
     exit;
   if B+BinBytes*2>=BEnd then
-    Flush;
+    FlushToStream;
   BinToHexDisplay(Bin,PAnsiChar(B+1),BinBytes);
   inc(B,BinBytes*2);
 end;
@@ -34379,7 +34389,7 @@ begin
   if BinBytes<=0 then
     exit;
   if B>=BEnd then
-    Flush;
+    FlushToStream;
   inc(B);
   repeat
     // guess biggest size to be added into buf^ at once
@@ -34405,7 +34415,7 @@ var BMax: PUTF8Char;
 begin
   BMax := BEnd-3;
   if B>=BMax then begin
-    Flush;
+    FlushToStream;
     BMax := BEnd-3;
   end;
   B[1] := Quote;
@@ -34436,7 +34446,7 @@ begin
           inc(Text);
         end;
       end else begin
-        Flush;
+        FlushToStream;
         BMax := BEnd-2;
       end;
     until false;
@@ -34619,7 +34629,7 @@ end;
 procedure TTextWriter.AddByteToHex(Value: byte);
 begin
   if B+1>=BEnd then
-    Flush;
+    FlushToStream;
   B[1] := HexChars[Value shr 4];
   B[2] := HexChars[Value and $f];
   inc(B,2);
@@ -34628,7 +34638,7 @@ end;
 procedure TTextWriter.AddInt18ToChars3(Value: cardinal);
 begin
   if B+3>=BEnd then
-    Flush;
+    FlushToStream;
   PCardinal(B+1)^ := ((Value shr 12) and $3f)+
                      ((Value shr 6) and $3f)shl 8+
                      (Value and $3f)shl 16+$202020;
@@ -34652,7 +34662,7 @@ begin
     Len := StrLen(PUTF8Char(P));
   if Len>0 then begin // no JSONify:
     if B+8>=BEnd then
-      Flush;
+      FlushToStream;
     inc(B); // allow CancelLastChar
     case Len of
       1: B^ := PAnsiChar(P)^;
@@ -34698,7 +34708,7 @@ begin
   if WideCharCount=0 then
     repeat
       if B>=BMax then begin
-        Flush;
+        FlushToStream;
         BMax := BEnd-7;
       end;
       if WideChar^=0 then
@@ -34713,7 +34723,7 @@ begin
     PEnd := PtrUInt(WideChar)+PtrUInt(WideCharCount)*sizeof(WideChar^);
     repeat
       if B>=BMax then begin
-        Flush;
+        FlushToStream;
         BMax := BEnd-7;
       end;
       if WideChar^=0 then
@@ -34802,7 +34812,7 @@ begin
   if P<>nil then
     while P^<>#0 do begin
       if B>=BEnd then
-        Flush;
+        FlushToStream;
       if P^<' ' then
         B[1] := ' ' else
         B[1] := P^;
@@ -34817,7 +34827,7 @@ begin
   if P<>nil then
     for i := 0 to Len-1 do begin
       if B>=BEnd then
-        Flush;
+        FlushToStream;
       if P[i]<' ' then
         B[1] := ' ' else
         B[1] := P[i];
@@ -34834,7 +34844,7 @@ begin
     PEnd := PtrUInt(P)+PtrUInt(Len)*sizeof(WideChar);
   while PtrUInt(P)<PEnd do begin
     if B+7>=BEnd then
-      Flush;
+      FlushToStream;
     // escape chars, so that all content will stay on the same text line
     case P^ of
       0: break;
@@ -35088,7 +35098,7 @@ begin
   if ord(PropName[0])=0 then
     exit;
   if B+ord(PropName[0])+3>=BEnd then
-    Flush;
+    FlushToStream;
   B[1] := '"';
   move(PropName[1],B[2],ord(PropName[0]));
   inc(B,ord(PropName[0])+2);
@@ -35104,7 +35114,7 @@ end;
 procedure TTextWriter.AddFieldName(FieldName: PUTF8Char; FieldNameLen: integer);
 begin
   if B+FieldNameLen+3>=BEnd then
-    Flush;
+    FlushToStream;
   B[1] := '"';
   move(FieldName^,B[2],FieldNameLen);
   inc(B,FieldNameLen+2);
@@ -35146,7 +35156,7 @@ begin
   if ord(Text[0])=0 then
     exit;
   if B+ord(Text[0])>=BEnd then
-    Flush;
+    FlushToStream;
   move(Text[1],B[1],ord(Text[0]));
   inc(B,ord(Text[0]));
 end;
@@ -35174,7 +35184,7 @@ begin
   L := PInteger(PtrInt(Text)-sizeof(integer))^;
   if L<fTempBufSize then begin
     if B+L>=BEnd then
-      Flush;
+      FlushToStream;
     move(pointer(Text)^,B[1],L);
     inc(B,L);
   end else
@@ -35212,7 +35222,7 @@ begin
     for i := 1 to count do
       AddString(Text) else begin
     if B+L*count>BEnd then
-      Flush;
+      FlushToStream;
     for i := 1 to count do begin
       move(pointer(Text)^,B[1],L);
       inc(B,L);
@@ -35292,7 +35302,7 @@ procedure TTextWriter.SetStream(aStream: TStream);
 begin
   if fStream<>nil then
     if fStreamIsOwned then
-      fStream.Free;
+      FreeAndNil(fStream);
   if aStream<>nil then begin
     fStream := aStream;
     fInitialStreamPosition := fStream.Seek(0,soFromCurrent);
@@ -35300,14 +35310,14 @@ begin
   end;
 end;
 
-procedure TTextWriter.Flush;
+procedure TTextWriter.FlushToStream;
 begin
   if fEchos<>nil then begin
     EchoFlush;
     fEchoStart := 0;
   end;
   inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
-  if (not fFlushShouldNotAutoResize) and (fTempBufSize<49152) and
+  if (not fFlushToStreamNoAutoResize) and (fTempBufSize<49152) and
      (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
     FreeMem(fTempBuf); // with big content (256KB) comes bigger buffer (64KB)
     fTempBufSize := 65536;
@@ -35338,11 +35348,16 @@ begin
   fTotalFileSize := fInitialStreamPosition+cardinal(length(text));
 end;
 
+procedure TTextWriter.FlushFinal;
+begin
+  fFlushToStreamNoAutoResize := true;
+  FlushToStream;
+end;
+
 procedure TTextWriter.SetText(var result: RawUTF8);
 var Len: cardinal;
 begin
-  fFlushShouldNotAutoResize := true;
-  Flush;
+  FlushFinal;
   Len := fTotalFileSize-fInitialStreamPosition;
   if Len=0 then
     result := '' else
@@ -35391,7 +35406,7 @@ begin
       inc(P,n*3);
     end else begin
       // bigger than available space in Buf -> do it per chunk
-      Flush;
+      FlushToStream;
       while Len>0 do begin // length(buf) const -> so is ((length(buf)-4)shr2 )*3
         n := ((fTempBufSize-4)shr 2)*3;
         if Len<n then
@@ -35526,8 +35541,7 @@ begin
     Add('}');
   end;
   Add(#10);
-  FlushShouldNotAutoResize := true;
-  Flush;
+  FlushFinal;
 end;
 
 procedure TJSONWriter.TrimFirstRow;
@@ -35537,7 +35551,7 @@ begin
      fExpand or (fStartDataPosition=0) then
     exit;
   // go to begin of first row
-  Flush; // we need the data to be in fStream memory
+  FlushToStream; // we need the data to be in fStream memory
   // PBegin^=val11 in { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
   PBegin := TMemoryStream(fStream).Memory;
   PEnd := PBegin+fStream.Position;
@@ -36413,7 +36427,7 @@ begin
       with TTextWriter.Create(F,256*1024) do
       try
         AddJSONReformat(P,Format,nil);
-        Flush;
+        FlushFinal;
       finally
         Free;
       end;
@@ -37715,9 +37729,9 @@ begin
   {$ifdef VER100} 'Delphi 3'{$endif}
   {$ifdef VER120} 'Delphi 4'{$endif}
   {$ifdef VER130} 'Delphi 5'{$endif}
-  {$ifdef LINUX}  'Kylix 3'   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$if     defined(VER140)}'Delphi 6'
+    {$elseif defined(KYLIX3)}'Kylix 3'
     {$elseif defined(VER150)}'Delphi 7'
     {$elseif defined(VER160)}'Delphi 8'
     {$elseif defined(VER170)}'Delphi 2005'
@@ -37736,7 +37750,6 @@ begin
     {$elseif defined(VER290)}'Delphi XE8'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
-  {$endif LINUX}
 {$endif}
 {$ifdef CPU64}
   +' 64 bit'
@@ -42699,7 +42712,7 @@ begin
       W.AddString(fAppendedLines[i]);
       W.Add(#13);
     end;
-    W.Flush;
+    W.FlushFinal;
   finally
     W.Free;
   end;
