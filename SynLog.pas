@@ -1761,7 +1761,7 @@ begin
       break;
     until false;
     SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
-    SynLog.fWriter.Flush; // we expect exceptions to be available on disk
+    SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
   finally
     LeaveCriticalSection(SynLog.fThreadLock);
   end;
@@ -2606,7 +2606,7 @@ begin
     exit;
   EnterCriticalSection(fThreadLock);
   try
-    fWriter.Flush;
+    fWriter.FlushFinal;
     FreeAndNil(fWriterStream);
     FreeAndNil(fWriter);
   finally
@@ -2634,7 +2634,7 @@ begin
     exit;
   EnterCriticalSection(fThreadLock);
   try
-    fWriter.Flush;
+    fWriter.FlushToStream;
     {$ifdef MSWINDOWS}
     if ForceDiskWrite and fWriterStream.InheritsFrom(TFileStream) then
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
@@ -3046,7 +3046,7 @@ begin
     if WithinEvents then
       AddEndOfLine(sllNone) else
       Add(#13,#13);
-    Flush;
+    FlushToStream;
     EchoReset; // header is not to be sent to console
   end;
   QueryPerformanceCounter(fStartTimeStamp);
@@ -3136,7 +3136,7 @@ var currentMaxSynLZ: cardinal;
     i: integer;
     FN: array of TFileName;
 begin
-  fWriter.Flush;
+  fWriter.FlushFinal;
   FreeAndNil(fWriter);
   FreeAndNil(fWriterStream);
   currentMaxSynLZ := 0;

@@ -19443,8 +19443,7 @@ begin
           W.Add(CommaSep);
         inc(U); // points to next value
       end;
-    W.FlushShouldNotAutoResize := true;
-    W.Flush;
+    W.FlushFinal;
   finally
     W.Free;
   end;
@@ -19523,8 +19522,7 @@ begin
       W.AddShort('</rs:data>');
     end;
     W.AddShort('</xml>');
-    W.FlushShouldNotAutoResize := true;
-    W.Flush;
+    W.FlushFinal;
   finally
     W.Free;
   end;
@@ -24190,8 +24188,7 @@ begin
     // end the JSON object
     if not JSON.Expand then
       JSON.AddNoJSONEscape(PAnsiChar(']}'),2);
-    JSON.FlushShouldNotAutoResize := true;
-    JSON.Flush;
+    JSON.FlushFinal;
   finally
     JSON.Free;
   end;
@@ -35502,7 +35499,7 @@ begin
   fLogTableStorage := THeapMemoryStream.Create;
   fLogTableWriter := OneLog.RecordProps.CreateJSONWriter(
     fLogTableStorage,false,true,ALL_ACCESS_RIGHTS,0);
-  fLogTableWriter.Flush;
+  fLogTableWriter.FlushToStream;
   P := pointer(aJSON);
   if not CompareMem(fLogTableStorage.Memory,P,fLogTableStorage.Position) or
      not IsNotExpandedBuffer(P,P+length(aJSON),FieldCount,fLogTableRowCount) or
@@ -35541,7 +35538,7 @@ function TSQLRecordLog.LogCurrentPosition: integer;
 begin
   if not Assigned(fLogTableStorage) then
     result := 0 else begin
-    fLogTableWriter.Flush;
+    fLogTableWriter.FlushToStream;
     result := fLogTableStorage.Position;
   end;
 end;
@@ -35557,7 +35554,7 @@ var JSONStart: RawUTF8;
 begin
   if not Assigned(fLogTableStorage) or (StartPosition<0) then
     result := '' else begin
-    fLogTableWriter.Flush;
+    fLogTableWriter.FlushToStream;
     Data := fLogTableStorage.Memory;
     SetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
     // format as valid not expanded JSON table content:

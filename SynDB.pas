@@ -6436,7 +6436,7 @@ begin
       end;
       inc(result);
     end;
-    W.Flush;
+    W.FlushFinal;
   finally
     W.Free;
   end;

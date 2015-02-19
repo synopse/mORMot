@@ -463,7 +463,7 @@ unit SynCommons;
   - added optional internal buffer size for TTextWriter.CreateOwnedStream()
   - added new constructor TTextWriter.CreateOwnedFileStream()
   - added TTextWriter.LastChar and TTextWriter.AddStrings() methods
-  - added TTextWriter.ForceContent() method
+  - added TTextWriter.ForceContent, SaveToStream and SaveToFile methods
   - added faster TTextWriter.SetText() method in conjuction to Text function
   - added TTextWriter.Add(const guid: TGUID) overloaded method
   - TTextWriter.Add(Format..) will now ignore any character afer |, i.e. |$ = $
@@ -6345,6 +6345,10 @@ type
     // - will ignore any trailing UTF-8 BOM in the file content, but will not
     // expect one either
     procedure LoadFromFile(const FileName: TFileName);
+    /// write all lines into the supplied stream
+    procedure SaveToStream(Dest: TStream; const Delimiter: RawUTF8=#13#10);
+    /// write all lines into a new file
+    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUTF8=#13#10);
     /// return the count of stored RawUTF8
     property Count: PtrInt read GetCount;
     /// set or retrive the current memory capacity of the RawUTF8 list
@@ -38064,6 +38068,39 @@ begin
     Move(pointer(Delimiter)^,P^,DelimLen);
     inc(P,DelimLen);
   until false;
+end;
+
+procedure TRawUTF8List.SaveToStream(Dest: TStream; const Delimiter: RawUTF8);
+var W: TTextWriter;
+    i: integer;
+begin
+  if (self=nil) or (fCount=0) then
+    exit;
+  W := TTextWriter.Create(Dest,8192); // faster with a 8KB intermediate buffer
+  try
+    i := 0;
+    repeat
+      W.AddString(fList[i]);
+      inc(i);
+      if i>=fCount then
+        Break;
+      W.AddString(Delimiter);
+    until false;
+    W.FlushFinal;
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TRawUTF8List.SaveToFile(const FileName: TFileName; const Delimiter: RawUTF8);
+var FS: TFileStream;
+begin
+  FS := TFileStream.Create(FileName,fmCreate);
+  try
+    SaveToStream(FS,Delimiter);
+  finally
+    FS.Free;
+  end;
 end;
 
 function TRawUTF8List.GetTextCRLF: RawUTF8;

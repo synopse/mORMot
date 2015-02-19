@@ -6012,6 +6012,9 @@ begin
   TDocVariantData(V).SortByName(@StrComp);
   j := VariantSaveJSON(V);
   Check(j='{"Z":10,"a":1,"name":"John","year":1972}');
+  V := _JsonFast('{"Database":"\u201d\u00c9\u00c3\u00b6\u00b1\u00a2\u00a7\u00ad\u00a5\u00a4"}');
+  j := V.Database;
+  Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
 end;
 
 {$endif LVCL}
