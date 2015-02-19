@@ -24374,8 +24374,8 @@ begin
       exit;
     part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
     {$ifdef UNICODE}
-    if part.ContentType='' then
-      SetCodePage(part.Content,CP_UTF8) else // ensure raw field value is UTF-8
+    if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then
+      SetCodePage(part.Content,CP_UTF8,false) else // ensure raw field value is UTF-8
     {$endif}
     if part.Encoding='base64' then // "quoted-printable" not yet handled here
       part.Content := Base64ToBin(part.Content);
@@ -28634,7 +28634,13 @@ begin
       VarClear(Value);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    RawUTF8(VAny) := Txt;
+    if Txt='' then
+      exit;
+    {$ifdef UNICODE}
+    if PWord(PByte(Txt)-12)^=CP_RAWBYTESTRING then
+      PWord(PByte(Txt)-12)^ := CP_UTF8; // force explicit UTF-8 
+    {$endif}
+    RawByteString(VAny) := Txt;
   end;
 end;
 
@@ -28644,10 +28650,16 @@ begin
   if not (Value.VType in VTYPE_STATIC) then
     VarClear(variant(Value));
   Value.VType := ExpectedValueType;
-  Value.VAny := nil;
+  Value.VAny := nil; // avoid GPF below
+  if Txt<>'' then
   case ExpectedValueType of
-    varString:
-      RawUTF8(Value.VAny) := Txt;
+    varString: begin
+      {$ifdef UNICODE}
+      if PWord(PByte(Txt)-12)^=CP_RAWBYTESTRING then
+        PWord(PByte(Txt)-12)^ := CP_UTF8; // force explicit UTF-8
+      {$endif}
+      RawByteString(Value.VAny) := Txt;
+    end;
     varOleStr:
       UTF8ToWideString(Txt,WideString(Value.VAny));
     {$ifdef HASVARUSTRING}
@@ -28963,7 +28975,7 @@ begin
     vtAnsiString: begin
       VType := varString;
       VAny := nil;
-      RawUTF8(VAny) := RawUTF8(V.VAnsiString);
+      RawByteString(VAny) := RawByteString(V.VAnsiString);
     end;
     vtString, {$ifdef UNICODE}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString: begin
