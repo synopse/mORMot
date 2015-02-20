@@ -1454,7 +1454,7 @@ var W: TFileBufferWriter;
     MS: TMemoryStream;
 begin
   MS := THeapMemoryStream.Create;
-  W := TFileBufferWriter.Create(MS,1 shl 20); // 1 MB should be enough
+  W := TFileBufferWriter.Create(MS,5 shl 20); // 5 MB should be enough
   try
     WriteSymbol(W,fSymbols);
     WriteSymbol(W,fUnits{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif});
