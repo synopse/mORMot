@@ -7633,7 +7633,7 @@ begin
     CreateAssociatedUnicodeFont;
   // update fUsedWide[result] for current glyph
   i := UnicodeFont.fUsedWideChar.IndexOf(ord(aWideChar));
-  if (i<0) and fIsSymbolFont then begin
+  if (i<0) and UnicodeFont.fIsSymbolFont then begin
     TSynAnsiConvert.Engine(fDoc.CodePage).UnicodeBufferToAnsi(
       @aSymbolAnsiChar,@aWideChar,1);
     aWideChar := WideChar($f000+ord(aSymbolAnsiChar));
