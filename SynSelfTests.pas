@@ -8322,8 +8322,7 @@ begin
     TSQLModel.Create([TSQLRecordPeople],'root'),
     DataBase.DB,TSQLRestServerTest);
   ClientTest;
-  Client.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
-    'withsessions',true,'withsqlite3',true],stats);
+  Client.CallBackGet('stat',['withall',true],stats);
   FileFromString(JSONReformat(stats),'statsClientServer.json');
   FreeAndNil(Client);
 end;
@@ -11649,12 +11648,11 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats;
 var stats: RawUTF8;
 begin
-  fClient.Server.StatLevels := [mlMethods,mlInterfaces,mlSessions];
+  fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS+[mlSessions];
   ClientTest(TSQLRestRoutingREST,false);
-  fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
-    'withsessions',true],stats);
+  fClient.CallBackGet('stat',['withall',true],stats);
   FileFromString(JSONReformat(stats),'statsSessions.json');
-  fClient.Server.StatLevels := [mlMethods,mlInterfaces];
+  fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS;
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideJSONRPC;
@@ -11747,8 +11745,8 @@ procedure TTestServiceOrientedArchitecture.Cleanup;
 var stats: RawUTF8;
 begin
   if fClient<>nil then begin
-    fClient.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
-      'withsessions',true],stats);
+    fClient.CallBackGet('stat',['withtables',true,'withsqlite3',true,
+      'withmethods',true,'withinterfaces',true,'withsessions',true],stats);
     FileFromString(JSONReformat(stats),'stats.json');
   end;
   FreeAndNil(fClient);

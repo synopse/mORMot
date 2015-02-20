@@ -3756,6 +3756,7 @@ type
     fMultiThreaded: boolean;
     procedure FillPerSecProperties; virtual;
     procedure FillFromProcessTimer; virtual;
+    procedure WriteDetailsTo(W: TTextWriter); virtual;
   public
     /// finalize the instance
     destructor Destroy; override;
@@ -3857,6 +3858,12 @@ type
     /// outgoing data processing bandwith, returned as B/KB/MB per second
     property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
   end;
+
+  /// a list of simple process statistics
+  TSynMonitorObjArray = array of TSynMonitor;
+
+  /// a list of data process statistics
+  TSynMonitorWithSizeObjArray = array of TSynMonitorWithSize;
 
   /// a list of incoming/outgoing data process statistics
   TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
@@ -4658,7 +4665,7 @@ type
   // - execORMWrite for ORM writes i.e. Add Update Delete TransactionBegin
   // Commit Rollback methods
   TSQLRestServerURIContextCommand = (
-    execSOAByMethod, execSOAByInterface, execORMGet, execORMWrite);
+    execNone, execSOAByMethod, execSOAByInterface, execORMGet, execORMWrite);
 
   /// class used to define the Client-Server expected routing
   // - most of the internal methods are declared as virtual, so it allows any
@@ -4757,10 +4764,10 @@ type
     /// handle POST/PUT/DELETE/BEGIN/END/ABORT verbs for ORM/CRUD process
     // - execution of this method is protected by a critical section
     procedure ExecuteORMWrite; virtual;
-    /// launch the corresponding Execute* method in the execution mode
+    /// launch the Execute* method  in the execution mode
     // set by Server.AcquireExecutionMode/AcquireExecutionLockedTimeOut
     // - this is the main process point from TSQLRestServer.URI()
-    procedure Execute(Command: TSQLRestServerURIContextCommand);
+    procedure ExecuteCommand;
   public
     /// the associated TSQLRestServer instance which executes its URI method
     Server: TSQLRestServer;
@@ -4792,6 +4799,8 @@ type
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
     TableID: TID;
+    /// the current execution command
+    Command: TSQLRestServerURIContextCommand;
     /// the index of the callback published method within the internal class list
     MethodIndex: integer;
     /// the service identified by an interface-based URI
@@ -11730,6 +11739,8 @@ type
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
     function GetUserName: RawUTF8;
+    function GetUserID: TID;
+    function GetGroupID: TID;
     procedure SaveTo(W: TFileBufferWriter); virtual;
     procedure ComputeProtectedValues; virtual;
     constructor CreateFrom(var P: PAnsiChar; Server: TSQLRestServer); virtual;
@@ -11777,6 +11788,10 @@ type
     property ID: RawUTF8 read fID;
     /// the associated User Name, as in User.LogonName
     property UserName: RawUTF8 read GetUserName;
+    /// the associated User ID, as in User.ID
+    property UserID: TID read GetUserID;
+    /// the associated Group ID, as in User.GroupRights.ID
+    property GroupID: TID read GetGroupID;
     /// the number of milliseconds a session is kept alive
     // - extracted from User.TSQLAuthGroup.SessionTimeout
     // - allow direct comparison with GetTickCount64() API call
@@ -12257,7 +12272,7 @@ type
   /// how TSQLRestServer should maintain its statistical information
   // - used by TSQLRestServer.StatLevels property
   TSQLRestServerMonitorLevels = set of (
-    mlMethods, mlInterfaces, mlSessions);
+    mlTables, mlMethods, mlInterfaces, mlSessions, mlSQLite3);
 
   /// used for high-level statistics in TSQLRestServer.URI()
   TSQLRestServerMonitor = class(TSynMonitorInputOutput)
@@ -12274,13 +12289,21 @@ type
     fRead: QWord;
     fUpdated: QWord;
     fDeleted: QWord;
+    fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
   public
+    /// initialize the instance
+    constructor Create(aServer: TSQLRestServer); reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
     /// update ClientsCurrent and ClientsMax
     procedure ClientConnect;
     /// update ClientsCurrent and ClientsMax
     procedure ClientDisconnect;
     /// update the Created/Read/Updated/Deleted properties
     procedure NotifyORM(aMethod: TSQLURIMethod);
+    /// update the per-table statistics
+    procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
+       const CounterDiff: Int64);
   published
     /// current count of connected clients
     property ClientsCurrent: integer read fClientsCurrent;
@@ -12969,9 +12992,10 @@ type
     // - statistics are available remotely as JSON from the Stat() method
     property Stats: TSQLRestServerMonitor read fStats;
     /// which level of detailed information is gathered
-    // - by default, contains [mlMethods,mlInterfaces]
+    // - by default, contains SERVERDEFAULTMONITORLEVELS, i.e.
+    // ! [mlTables,mlMethods,mlInterfaces,mlSQLite3]
     // - you can add mlSessions to maintain per-session statistics: this would
-    // lead into a higher memory consumption
+    // lead into a slightly higher memory consumption, for each session
     property StatLevels: TSQLRestServerMonitorLevels read fStatLevels write fStatLevels;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
@@ -12997,39 +13021,39 @@ type
     // - since all sessions data remain in memory, ensure they are not taking
     // too much resource (memory or process time)
     property SessionClass: TAuthSessionClass read fSessionClass write fSessionClass;
-  published
-    /// this method will be accessible from ModelRoot/Stat URI, and
-    // will retrieve some statistics as a JSON object
-    // - method parameters signature matches TSQLRestServerCallBack type
+  published { standard method-based services }
+    /// REST service accessible from ModelRoot/Stat URI
+    // - returns the current execution statistics of this server, as a JSON object
     // - by default, will return the high-level information of this server
-    // - you can define withmethods, withinterfaces, withsessions or withsqlite3
-    // additional parameters to return detailed information about method-based
-    // services, interface-based services, per session statistics, or prepared
-    // SQLite3 SQL statement timing (for a TSQLRestServerDB instance), e.g.
-    // ! Client.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
-    // !   'withsessions',true,'withsqlite3',true],stats);
+    // - you can define withtables, withmethods, withinterfaces, withsessions or
+    // withsqlite3 additional parameters to return detailed information about
+    // method-based services, interface-based services, per session statistics,
+    // or prepared SQLite3 SQL statement timing (for a TSQLRestServerDB instance)
+    // ! Client.CallBackGet('stat',['withtables',true,'withmethods',true,
+    // !   'withinterfaces',true,'withsessions',true,'withsqlite3',true],stats);
+    // - defining a 'withall' parameter will retrieve all available statistics
+    // - note that TSQLRestServer.StatLevels property will enable statistics
+    // gathering for tables, methods, interfaces, sqlite3 or sessions 
     procedure Stat(Ctxt: TSQLRestServerURIContext);
-    /// this method will be accessible from ModelRoot/Auth URI, and
-    // will be called by the client for authentication and session management
-    // - method parameters signature matches TSQLRestServerCallBack type
+    /// REST service accessible from ModelRoot/Auth URI
+    // - called by the clients for authentication and session management
     // - this global callback method is thread-safe
     procedure Auth(Ctxt: TSQLRestServerURIContext);
-    /// this method will be accessible from the ModelRoot/TimeStamp URI, and
-    // will return the server time stamp TTimeLog/Int64 value as UTF-8 text
-    // - method parameters signature matches TSQLRestServerCallBack type
+    /// REST service accessible from the ModelRoot/TimeStamp URI
+    // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
     procedure TimeStamp(Ctxt: TSQLRestServerURIContext);
-    /// this method will be accessible from the ModelRoot/CacheFlush URI, and
-    // will flush the server cache
-    // - this method shall be called by the clients when the Server cache could
-    // be not refreshed
+    /// REST service accessible from the ModelRoot/CacheFlush URI
+    // - it will flush the server result cache
+    // - this method shall be called by the clients when the Server cache may be
+    // not consistent any more (e.g. after a direct write to an external database)
     // - ModelRoot/CacheFlush URI will flush the whole Server cache, for all tables
     // - ModelRoot/CacheFlush/TableName URI will flush the specified table cache
     // - ModelRoot/CacheFlush/TableName/TableID URI will flush the content of the
     // specified record
-    // - method parameters signature matches TSQLRestServerCallBack type
     procedure CacheFlush(Ctxt: TSQLRestServerURIContext);
-    /// this method will be accessible from the ModelRoot/Batch URI, and
-    // will execute a set of RESTful commands
+    /// REST service accessible from the ModelRoot/Batch URI
+    // - will execute a set of RESTful commands, in a single step, with optional
+    // automatic SQL transaction generation 
     // - expect input as JSON commands:
     // & '{"Table":["cmd":values,...]}'
     // or for multiple tables:
@@ -15009,6 +15033,11 @@ const
   // and TSQLRecord.InitializeTable methods
   INITIALIZETABLE_NOINDEX: TSQLInitializeTableOptions =
     [itoNoIndex4ID..itoNoIndex4RecordReference];
+
+  /// default value of TSQLRestServer.StatLevels property
+  // - i.e. gather all statistics, but mlSessions
+  SERVERDEFAULTMONITORLEVELS: TSQLRestServerMonitorLevels =
+    [mlTables,mlMethods,mlInterfaces,mlSQLite3];
 
 
 /// create a TRecordReference with the corresponding parameters
@@ -18337,13 +18366,18 @@ begin
     LeaveCriticalSection(another.fLock);
 end;
 
+procedure TSynMonitor.WriteDetailsTo(W: TTextWriter); 
+begin
+  W.WriteObject(self);
+end;
+
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
   if fMultiThreaded then
     EnterCriticalSection(fLock); // how knows? the safer the better
   try
     FillPerSecProperties; // may not have been calculated after Sum()
-    W.WriteObject(self);
+    WriteDetailsTo(W);
   finally
     if fMultiThreaded then
       LeaveCriticalSection(fLock);
@@ -29465,7 +29499,7 @@ constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: 
 var t,n: integer;
 begin
   // specific server initialization
-  fStatLevels := [mlMethods,mlInterfaces];
+  fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fVirtualTableDirect := true; // faster direct Static call by default
   fSessions := TObjectListLocked.Create; // needed by AuthenticationRegister() below
   fModel := aModel;
@@ -29486,7 +29520,7 @@ begin
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
-  fStats := TSQLRestServerMonitor.Create;
+  fStats := TSQLRestServerMonitor.Create(self);
   fPrivateGarbageCollector.Add(fStats);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   fSessionCounter := GetTickCount; // force almost-random session ID
@@ -30301,7 +30335,7 @@ begin
   Call.OutStatus := HTML_FORBIDDEN;
 end;
 
-procedure TSQLRestServerURIContext.Execute(Command: TSQLRestServerURIContextCommand);
+procedure TSQLRestServerURIContext.ExecuteCommand;
 procedure TimeOut;
 begin
   {$ifdef WITHLOG}
@@ -31536,6 +31570,8 @@ begin
 end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);
+const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
+  ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
 begin
@@ -31572,14 +31608,15 @@ begin
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
-          Ctxt.Execute(execSOAByMethod) else
+          Ctxt.Command := execSOAByMethod else
         if Ctxt.Service<>nil then
-          Ctxt.Execute(execSOAByInterface) else
+          Ctxt.Command := execSOAByInterface else
         if Ctxt.Method in [mLOCK,mGET,mUNLOCK,mSTATE] then
           // handle read methods
-          Ctxt.Execute(execORMGet) else
+          Ctxt.Command := execORMGet else
           // write methods (mPOST, mPUT, mDELETE...)
-          Ctxt.Execute(execORMWrite);
+          Ctxt.Command := execORMWrite;
+        Ctxt.ExecuteCommand;
       except
         on E: Exception do // return 500 internal server error
           Ctxt.Error(E,'',[],HTML_SERVERERROR);
@@ -31610,23 +31647,52 @@ begin
   finally
     QueryPerformanceCounter(timeEnd);
     dec(timeEnd,timeStart);
-    timeEnd := fStats.FromExternalQueryPerformanceCounters(timeEnd);
+    timeStart := fStats.FromExternalQueryPerformanceCounters(timeEnd);
     {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllServer,'% % % %/% -> % with outlen=% in % us',
-      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,
-       Ctxt.URI,Call.OutStatus,length(Call.OutBody),timeEnd],self);
+    Ctxt.Log.Log(sllServer,'% % % %/% %-> % with outlen=% in % us',
+      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
+      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),timeStart],self);
     {$endif}
+    if mlTables in StatLevels then 
+      case Ctxt.Command of
+      execORMGet:
+        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.OutBody),false,timeEnd);
+      execORMWrite:
+        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,timeEnd);
+      end;
     InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
   end;
 end;
 
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
+const READWRITE: array[boolean] of string[9] = ('{"read":','{"write":');
 var s,i: integer;
+    withall,rw: boolean;
 begin
   Stats.ComputeDetailsTo(W);
   W.CancelLastChar; // last '}'
-  if Ctxt.InputExists['withmethods'] then begin
+  withall := Ctxt.InputExists['withall'];
+  if withall or Ctxt.InputExists['withtables'] then begin
+    W.AddShort(',"tables":[');
+    for i := 0 to fModel.TablesMax do begin
+      W.Add('{"%":[',[fModel.TableProps[i].Props.SQLTableName]);
+      for rw := False to True do
+        if (i<Length(Stats.fPerTable[rw])) and
+           (Stats.fPerTable[rw,i]<>nil) and
+           (Stats.fPerTable[rw,i].TaskCount<>0) then begin
+          W.AddShort(READWRITE[rw]);
+          Stats.fPerTable[rw,i].ComputeDetailsTo(W);
+          W.Add('}',',');
+        end;
+      W.CancelLastComma;
+      W.AddShort(']},');
+    end;
+    W.CancelLastComma;
+    W.Add(']',',');
+  end;
+  if withall or Ctxt.InputExists['withmethods'] then begin
+    W.CancelLastComma;
     W.AddShort(',"methods":[');
     for i := 0 to high(fPublishedMethod) do
       with fPublishedMethod[i] do
@@ -31638,7 +31704,7 @@ begin
     W.CancelLastComma;
     W.Add(']',',');
   end;
-  if Ctxt.InputExists['withinterfaces'] then begin
+  if withall or Ctxt.InputExists['withinterfaces'] then begin
     W.CancelLastComma;
     W.AddShort(',"interfaces":[');
     for s := 0 to fServices.Count-1 do
@@ -31652,7 +31718,8 @@ begin
     W.CancelLastComma;
     W.Add(']',',');
   end;
-  if Ctxt.InputExists['withsessions'] and (fSessions<>nil) then begin
+  if (withall or Ctxt.InputExists['withsessions']) and
+     (fSessions<>nil) then begin
     W.CancelLastComma;
     W.AddShort(',"sessions":[');
     fSessions.Lock;
@@ -33427,6 +33494,20 @@ end;
 
 { TSQLRestServerMonitor }
 
+constructor TSQLRestServerMonitor.Create(aServer: TSQLRestServer);
+begin
+  inherited Create;
+  SetLength(fPerTable[false],length(aServer.Model.Tables));
+  SetLength(fPerTable[true],length(aServer.Model.Tables));
+end;
+
+destructor TSQLRestServerMonitor.Destroy;
+begin
+  ObjArrayClear(fPerTable[false]);
+  ObjArrayClear(fPerTable[true]);
+  inherited;
+end;
+
 procedure TSQLRestServerMonitor.ClientConnect;
 begin
   inc(fClientsCurrent);
@@ -33447,6 +33528,23 @@ begin
   mPOST:      inc(fCreated);
   mPUT:       inc(fUpdated);
   mDELETE:    inc(fDeleted);
+  end;
+end;
+
+procedure TSQLRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
+  Write: boolean; const CounterDiff: Int64);
+var n: integer;
+begin
+  if TableIndex<0 then
+    exit;
+  n := length(fPerTable[Write]);
+  if TableIndex>=n then // tables may have been added after Create()
+    SetLength(fPerTable[Write],TableIndex+1);
+  if fPerTable[Write,TableIndex]=nil then
+    fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;
+  with fPerTable[Write,TableIndex] do begin
+    FromExternalQueryPerformanceCounters(CounterDiff);
+    AddSize(DataSize);
   end;
 end;
 
@@ -39199,6 +39297,20 @@ begin
     result := User.LogonName;
 end;
 
+function TAuthSession.GetUserID: TID;
+begin
+  if User=nil then
+    result := 0 else
+    result := User.fID;
+end;
+
+function TAuthSession.GetGroupID: TID;
+begin
+  if User=nil then
+    result := 0 else
+    result := User.GroupRights.ID;
+end;
+
 const TAUTHSESSION_MAGIC = 1;
 
 procedure TAuthSession.SaveTo(W: TFileBufferWriter);
@@ -44144,6 +44256,7 @@ initialization
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
 end.
+
 
 
 

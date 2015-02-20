@@ -368,8 +368,11 @@ type
     // - expect sftBlob, sftBlobDynArray and sftBlobRecord properties
     // to be encoded as ':("\uFFF0base64encodedbinary"):'
     procedure GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean);
-    /// free a static prepared statement on success or from except on E: Exception block 
+    /// free a static prepared statement on success or from except on E: Exception block
     procedure GetAndPrepareStatementRelease(E: Exception=nil; const Msg: RawUTF8='');
+    /// create or retrieve from the cache a TSQLRequest instance in fStatement
+    // - called e.g. by GetAndPrepareStatement()
+    procedure PrepareStatement(Cached: boolean);
     /// reset the cache if necessary
     procedure SetNoAJAXJSON(const Value: boolean); override;
     {$ifdef WITHLOG}
@@ -668,33 +671,47 @@ end;
 
 { TSQLRestServerDB }
 
+procedure TSQLRestServerDB.PrepareStatement(Cached: boolean);
+var wasPrepared: boolean;
+    timer: PPPrecisionTimer;
+begin
+  fStaticStatementTimer.Start;
+  if not Cached then begin
+    fStaticStatement.Prepare(DB.DB,fStatementGenericSQL);
+    fStatementGenericSQL := '';
+    fStatement := @fStaticStatement;
+    fStatementTimer := @fStaticStatementTimer;
+    exit;
+  end;
+  if mlSQLite3 in StatLevels then
+    timer := @fStatementTimer else
+    timer := nil;
+  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer);
+  {$ifdef WITHLOG}
+  if wasPrepared then
+    fLogClass.Add.Log(sllDB,'prepared % % %',
+      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],self);
+  {$endif}
+  if timer=nil then begin
+    fStaticStatementTimer.Start;
+    fStatementTimer := @fStaticStatementTimer;
+  end;
+end;
+
 procedure TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
   ForceCacheStatement: boolean);
 var i, maxParam,sqlite3param: integer;
     Types: TSQLParamTypeDynArray;
     Nulls: TSQLFieldBits;
     Values: TRawUTF8DynArray;
-    wasPrepared: boolean;
 begin
-  fStaticStatementTimer.Start;
+  // prepare statement
   fStatementSQL := SQL;
   fStatementGenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
-  if (maxParam=0) and not ForceCacheStatement then begin
-    // SQL code with no valid :(...): internal parameters
-    fStatementGenericSQL := '';
-    fStaticStatement.Prepare(DB.DB,SQL);
-    fStatement := @fStaticStatement;
-    fStatementTimer := @fStaticStatementTimer;
-    exit;
-  end;
-  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,@fStatementTimer);
-  if wasPrepared then begin
-    {$ifdef WITHLOG}
-    fLogClass.Add.Log(sllDB,'prepared % % %',
-      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],self);
-    {$endif}
-  end;
+  PrepareStatement(ForceCacheStatement or (maxParam<>0));
   // bind parameters
+  if maxParam=0 then
+    exit;
   sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
   if sqlite3param<>maxParam then
     raise EORMException.CreateUTF8(
@@ -1115,7 +1132,7 @@ var i: integer;
     stat,last,average: TSynMonitorTime;
 begin
   inherited InternalStat(Ctxt,W);
-  if Ctxt.InputExists['withsqlite3'] then begin
+  if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then begin
     W.CancelLastChar; // last '}'
     W.AddShort(',"sqlite3":[');
     stat := TSynMonitorTime.Create;
@@ -1737,13 +1754,7 @@ begin
           if rowCount>1 then
             SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
           fStatementGenericSQL := SQL; // full log on error
-          if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
-            fStatement := fStatementCache.Prepare(SQL,nil,@fStatementTimer) else begin
-            fStaticStatement.Prepare(DB.DB,SQL);
-            fStatement := @fStaticStatement;
-            fStaticStatementTimer.Start;
-            fStatementTimer := @fStaticStatementTimer;
-          end;
+          PrepareStatement(valuesCount+fieldCount>MAX_PARAMS);
           prop := 0;
           for f := 0 to valuesCount-1 do begin
             if GetBit(ValuesNull[0],f) then
