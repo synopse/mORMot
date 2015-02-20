@@ -11111,8 +11111,11 @@ var
 { ******************* cross-cutting classes and functions ***** }
 
 type
-  /// pointer to ta high resolution timer object/record
+  /// pointer to a high resolution timer object/record
   PPrecisionTimer = ^TPrecisionTimer;
+
+  /// indirect reference to a pointer to a high resolution timer object/record
+  PPPrecisionTimer = ^PPrecisionTimer;
 
   /// high resolution timer (for accurate speed statistics)
   // - WARNING: this record MUST be aligned to 32 bit, otherwise iFreq=0 -
@@ -11126,6 +11129,7 @@ type
     iTime: QWord;
     /// contains the time elapsed in micro seconds between Resume and Pause
     iLastTime: QWord;
+    fPauseCount: cardinal;
   public
     /// initialize the timer
     // - not necessary if created on the heap (e.g. as class member)
@@ -11162,7 +11166,7 @@ type
     // set the timing values from manually computed performance counters
     // - the caller should also use a mutex to prevent from race conditions
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
-    procedure FromExternalQueryPerformanceCounters(aStart,aStop: Int64);
+    procedure FromExternalQueryPerformanceCounters(const CounterDiff: Int64);
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -11181,6 +11185,8 @@ type
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
     property LastTimeInMicroSec: QWord read iLastTime write iLastTime;
+    /// how many times the Pause method was called
+    property PauseCount: cardinal read fPauseCount;
   end;
 
   /// interface to a reference counted high resolution timer instance
@@ -35096,7 +35102,7 @@ begin
   case VType of
     vtPointer: AddShort('null');
     vtString, vtAnsiString,{$ifdef UNICODE}vtUnicodeString,{$endif}
-    vtPChar, vtChar, vtWideChar, vtWideString: begin
+    vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       Add('"');
       case VType of
         vtString:     AddJSONEscape(@VString^[1],ord(VString^[0]));
@@ -35109,6 +35115,8 @@ begin
         vtChar:       AddJSONEscape(@VChar,1);
         vtWideChar:   AddJSONEscapeW(@VWideChar,1);
         vtWideString: AddJSONEscapeW(VWideString);
+        vtClass: if VClass<>nil then
+                   AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
       end;
       Add('"');
     end;
@@ -35117,6 +35125,7 @@ begin
     vtInt64:    Add(VInt64^);
     vtExtended: Add(VExtended^);
     vtCurrency: AddCurr64(VInt64^);
+    vtObject:   WriteObject(VObject);
     {$ifndef NOVARIANTS}
     vtVariant:  AddVariantJSON(VVariant^,twJSONEscape);
     {$endif}
@@ -36106,10 +36115,10 @@ var Name: PUTF8Char;
     wasString: boolean;
     EndOfObject: AnsiChar;
 begin  // should match GotoNextJSONObjectOrArray()
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   result := nil;
   if P=nil then
     exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   Name := P; // put here to make some versions of Delphi compiler happy
   case P^ of
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
@@ -37399,12 +37408,9 @@ end;
 
 procedure TPrecisionTimer.Start;
 begin
-  iResume := 0;
-  if QueryPerformanceFrequency(iFreq) then begin
-    QueryPerformanceCounter(iStart);
-    iLast := iStart;
-  end else
-    iFreq := 0;
+  FillChar(self,sizeof(self),0);
+  QueryPerformanceCounter(iStart);
+  iLast := iStart;
 end;
 
 procedure TPrecisionTimer.ComputeTime;
@@ -37422,7 +37428,7 @@ begin
   iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
 end;
 
-procedure TPrecisionTimer.FromExternalQueryPerformanceCounters(aStart,aStop: Int64);
+procedure TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: Int64);
 begin // very close to ComputeTime
   iLastTime := 0;
   if iFreq=0 then begin
@@ -37431,10 +37437,9 @@ begin // very close to ComputeTime
     if iFreq=0 then
       exit;
   end;
-  aStop := aStop-aStart;
-  if aStop<0 then
+  if CounterDiff<=0 then
     exit;
-  iLastTime := (aStop*QWord(1000*1000))div iFreq;
+  iLastTime := (CounterDiff*QWord(1000*1000))div iFreq;
   inc(iTime,iLastTime);
 end;
 
@@ -37448,6 +37453,7 @@ procedure TPrecisionTimer.Pause;
 begin
   QueryPerformanceCounter(iResume);
   dec(iResume,iStart);
+  inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.Resume;

@@ -2403,6 +2403,8 @@ type
     StatementSQL: RawUTF8;
     /// associated prepared statement, ready to be executed after binding
     Statement: TSQLRequest;
+    /// used to monitor execution time
+    Timer: TPrecisionTimer;
   end;
   /// used to store all prepared statement
   TSQLStatementCacheDynArray = array of TSQLStatementCache;
@@ -2428,7 +2430,8 @@ type
     /// intialize the cache
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
-    function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil): PSQLRequest;
+    function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil;
+      ExecutionTimer: PPPrecisionTimer=nil): PSQLRequest;
     // used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
   end;
@@ -4808,15 +4811,13 @@ begin
 end;
 
 function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8;
-  WasPrepared: PBoolean): PSQLRequest;
+  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer): PSQLRequest;
 var added: boolean;
     ndx: integer;
-    Timer: TPrecisionTimer;
 begin
   ndx := Caches.FindHashedForAdding(GenericSQL,added);
   with Cache[ndx] do begin
     if added then begin
-      Timer.Start;
       StatementSQL := GenericSQL;
       Statement.Prepare(DB,GenericSQL);
       if WasPrepared<>nil then
@@ -4826,6 +4827,10 @@ begin
       Statement.Reset;
       if WasPrepared<>nil then
         WasPrepared^ := false;
+    end;
+    if ExecutionTimer<>nil then begin
+      Timer.Resume;
+      ExecutionTimer^ := @Timer;
     end;
     result := @Statement;
   end;

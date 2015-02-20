@@ -3745,7 +3745,7 @@ type
     fTaskCount: QWord;
     fInternalErrors: cardinal;
     fLastInternalError: variant;
-    fTime: TSynMonitorTime;
+    fTotalTime: TSynMonitorTime;
     fLastTime: TSynMonitorTime;
     fMinimalTime: TSynMonitorTime;
     fAverageTime: TSynMonitorTime;
@@ -3787,7 +3787,7 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - will return the processing time, converted into micro seconds, ready
     // to be logged if needed
-    function FromExternalQueryPerformanceCounters(const Start,Stop: Int64): QWord;
+    function FromExternalQueryPerformanceCounters(const CounterDiff: Int64): QWord;
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
   published
@@ -3796,7 +3796,7 @@ type
     /// how many times the task was performed
     property TaskCount: QWord read fTaskCount write fTaskCount;
     /// the whole time spend during all working process
-    property Time: TSynMonitorTime read fTime;
+    property TotalTime: TSynMonitorTime read fTotalTime;
     /// the time spend during the last task processing
     property LastTime: TSynMonitorTime read fLastTime;
     /// the lowest time spent during any working process
@@ -12370,6 +12370,7 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
+    procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
     function CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
     function GetAuthenticationSchemesCount: integer;
@@ -13000,6 +13001,13 @@ type
     /// this method will be accessible from ModelRoot/Stat URI, and
     // will retrieve some statistics as a JSON object
     // - method parameters signature matches TSQLRestServerCallBack type
+    // - by default, will return the high-level information of this server
+    // - you can define withmethods, withinterfaces, withsessions or withsqlite3
+    // additional parameters to return detailed information about method-based
+    // services, interface-based services, per session statistics, or prepared
+    // SQLite3 SQL statement timing (for a TSQLRestServerDB instance), e.g.
+    // ! Client.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
+    // !   'withsessions',true,'withsqlite3',true],stats);
     procedure Stat(Ctxt: TSQLRestServerURIContext);
     /// this method will be accessible from ModelRoot/Auth URI, and
     // will be called by the client for authentication and session management
@@ -13007,7 +13015,7 @@ type
     // - this global callback method is thread-safe
     procedure Auth(Ctxt: TSQLRestServerURIContext);
     /// this method will be accessible from the ModelRoot/TimeStamp URI, and
-    // will return the server time stamp TTimeLog/Int64 value as RawUTF8
+    // will return the server time stamp TTimeLog/Int64 value as UTF-8 text
     // - method parameters signature matches TSQLRestServerCallBack type
     procedure TimeStamp(Ctxt: TSQLRestServerURIContext);
     /// this method will be accessible from the ModelRoot/CacheFlush URI, and
@@ -18242,7 +18250,7 @@ end;
 
 procedure TSynMonitor.FillFromProcessTimer;
 begin
-  fTime.MicroSec := fProcessTimer.TimeInMicroSec;
+  fTotalTime.MicroSec := fProcessTimer.TimeInMicroSec;
   if fTaskStatus=taskStarted then begin
     fLastTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
     if (fMinimalTime.MicroSec=0) or
@@ -18256,7 +18264,7 @@ begin
   fProcessing := false;
 end;
 
-function TSynMonitor.FromExternalQueryPerformanceCounters(const Start,Stop: Int64): QWord;
+function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: Int64): QWord;
 begin
   if not fMultiThreaded then begin
     fMultiThreaded := true;
@@ -18266,7 +18274,7 @@ begin
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
-    fProcessTimer.FromExternalQueryPerformanceCounters(Start,Stop);
+    fProcessTimer.FromExternalQueryPerformanceCounters(CounterDiff);
     FillFromProcessTimer;
     result := fProcessTimer.LastTimeInMicroSec;
   finally
@@ -18305,8 +18313,8 @@ procedure TSynMonitor.FillPerSecProperties;
 begin
   if fTaskCount=0 then
     exit; // avoid division per zero
-  fPerSec := fTime.PerSecond(fTaskCount);
-  fAverageTime.MicroSec := Round(fTime.MicroSec/fTaskCount);
+  fPerSec := fTotalTime.PerSecond(fTaskCount);
+  fAverageTime.MicroSec := Round(fTotalTime.MicroSec/fTaskCount);
 end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
@@ -18315,7 +18323,7 @@ begin
     exit;
   if another.fMultiThreaded then
     EnterCriticalSection(another.fLock); // thread safe access
-  fTime.MicroSec := fTime.MicroSec+another.fTime.MicroSec;
+  fTotalTime.MicroSec := fTotalTime.MicroSec+another.fTotalTime.MicroSec;
   if (fMinimalTime.MicroSec=0) or
      (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
     fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
@@ -18365,7 +18373,7 @@ end;
 procedure TSynMonitorWithSize.FillPerSecProperties;
 begin
   inherited;
-  fThroughput.BytesPerSec := fTime.PerSecond(fSize.Bytes);
+  fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
 end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
@@ -18390,8 +18398,8 @@ end;
 procedure TSynMonitorInputOutput.FillPerSecProperties;
 begin
   inherited;
-  fInputThroughput.BytesPerSec := fTime.PerSecond(fInput.Bytes);
-  fOutputThroughput.BytesPerSec := fTime.PerSecond(fOutput.Bytes);
+  fInputThroughput.BytesPerSec := fTotalTime.PerSecond(fInput.Bytes);
+  fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
 end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
@@ -30397,12 +30405,12 @@ begin
 end;
 
 procedure StatsFromContext(Stats: TSynMonitorInputOutput;
-  const Call: TSQLRestURIParams; timeStart,timeEnd: Int64);
+  const Call: TSQLRestURIParams; const CounterDiff: Int64);
 begin
   StatsAddSizeForCall(Stats,Call);
   if not StatusCodeIsSuccess(Call.OutStatus) then
     Stats.ProcessErrorNumber(Call.OutStatus);
-  Stats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
+  Stats.FromExternalQueryPerformanceCounters(CounterDiff);
 end;
 
 procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
@@ -30420,7 +30428,8 @@ begin
     CallBack(self);
     if Stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
-      StatsFromContext(Stats,Call^,timeStart,timeEnd);
+      dec(timeEnd,timeStart);
+      StatsFromContext(Stats,Call^,timeEnd);
       if (mlSessions in Server.StatLevels) and (fAuthSession<>nil) then begin
         if fAuthSession.Methods=nil then
           SetLength(fAuthSession.fMethods,length(Server.fPublishedMethod));
@@ -30429,7 +30438,7 @@ begin
           sessionstat := TSynMonitorInputOutput.Create;
           fAuthSession.fMethods[MethodIndex] := sessionstat;
         end;
-        StatsFromContext(sessionstat,Call^,timeStart,timeEnd);
+        StatsFromContext(sessionstat,Call^,timeEnd);
       end;
     end;
   end;
@@ -31600,7 +31609,8 @@ begin
         '; Path=/'+Model.Root);
   finally
     QueryPerformanceCounter(timeEnd);
-    timeEnd := fStats.FromExternalQueryPerformanceCounters(timeStart,timeEnd);
+    dec(timeEnd,timeStart);
+    timeEnd := fStats.FromExternalQueryPerformanceCounters(timeEnd);
     {$ifdef WITHLOG}
     Ctxt.Log.Log(sllServer,'% % % %/% -> % with outlen=% in % us',
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,
@@ -31611,76 +31621,81 @@ begin
   end;
 end;
 
-procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
+procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 var s,i: integer;
-    W: TTextWriter;
+begin
+  Stats.ComputeDetailsTo(W);
+  W.CancelLastChar; // last '}'
+  if Ctxt.InputExists['withmethods'] then begin
+    W.AddShort(',"methods":[');
+    for i := 0 to high(fPublishedMethod) do
+      with fPublishedMethod[i] do
+      if Stats<>nil then begin
+        W.Add('{"%":',[Name]);
+        Stats.ComputeDetailsTo(W);
+        W.Add('}',',');
+      end;
+    W.CancelLastComma;
+    W.Add(']',',');
+  end;
+  if Ctxt.InputExists['withinterfaces'] then begin
+    W.CancelLastComma;
+    W.AddShort(',"interfaces":[');
+    for s := 0 to fServices.Count-1 do
+    with fServices.Index(s) as TServiceFactoryServer do
+      for i := 0 to fInterface.MethodsCount-1 do
+      if fStats[i]<>nil then begin
+        W.Add('{"%":',[fInterface.fMethods[i].InterfaceDotMethodName]);
+        fStats[i].ComputeDetailsTo(W);
+        W.Add('}',',');
+      end;
+    W.CancelLastComma;
+    W.Add(']',',');
+  end;
+  if Ctxt.InputExists['withsessions'] and (fSessions<>nil) then begin
+    W.CancelLastComma;
+    W.AddShort(',"sessions":[');
+    fSessions.Lock;
+    try
+      for s := 0 to fSessions.Count-1 do begin
+        W.WriteObject(fSessions.List[s]);
+        W.CancelLastChar; // trailing '}'
+        with TAuthSession(fSessions.List[s]) do begin
+          W.AddShort(',"methods":[');
+          for i := 0 to high(fMethods) do
+            if fMethods[i]<>nil then begin
+              W.Add('{"%":',[fPublishedMethod[i].Name]);
+              fMethods[i].ComputeDetailsTo(W);
+              W.Add('}',',');
+            end;
+          W.CancelLastComma;
+          W.AddShort('],"interfaces":[');
+          for i := 0 to high(fInterfaces) do
+            if fInterfaces[i]<>nil then begin
+              W.Add('{"%":',[Services.fListInterfaceMethod[i].InterfaceDotMethodName]);
+              fInterfaces[i].ComputeDetailsTo(W);
+              W.Add('}',',');
+            end;
+          W.CancelLastComma;
+          W.AddShort(']},');
+        end;
+      end;
+    finally
+      fSessions.UnLock;
+    end;
+    W.CancelLastComma;
+    W.Add(']',',');
+  end;
+  W.CancelLastComma;
+  W.Add('}');
+end;
+
+procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
+var W: TTextWriter;
 begin
   W := TJSONSerializer.CreateOwnedStream;
   try
-    Stats.ComputeDetailsTo(W);
-    W.CancelLastChar; // last '}'
-    if Ctxt.InputExists['withmethods'] then begin
-      W.AddShort(',"methods":[');
-      for i := 0 to high(fPublishedMethod) do
-        with fPublishedMethod[i] do
-        if Stats<>nil then begin
-          W.Add('{"%":',[Name]);
-          Stats.ComputeDetailsTo(W);
-          W.Add('}',',');
-        end;
-      W.CancelLastComma;
-      W.Add(']',',');
-    end;
-    if Ctxt.InputExists['withinterfaces'] then begin
-      W.CancelLastComma;
-      W.AddShort(',"interfaces":[');
-      for s := 0 to fServices.Count-1 do
-      with fServices.Index(s) as TServiceFactoryServer do
-        for i := 0 to fInterface.MethodsCount-1 do
-        if fStats[i]<>nil then begin
-          W.Add('{"%":',[fInterface.fMethods[i].InterfaceDotMethodName]);
-          fStats[i].ComputeDetailsTo(W);
-          W.Add('}',',');
-        end;
-      W.CancelLastComma;
-      W.Add(']',',');
-    end;
-    if Ctxt.InputExists['withsessions'] and (fSessions<>nil) then begin
-      W.CancelLastComma;
-      W.AddShort(',"sessions":[');
-      fSessions.Lock;
-      try
-        for s := 0 to fSessions.Count-1 do begin
-          W.WriteObject(fSessions.List[s]);
-          W.CancelLastChar; // trailing '}'
-          with TAuthSession(fSessions.List[s]) do begin
-            W.AddShort(',"methods":[');
-            for i := 0 to high(fMethods) do
-              if fMethods[i]<>nil then begin
-                W.Add('{"%":',[fPublishedMethod[i].Name]);
-                fMethods[i].ComputeDetailsTo(W);
-                W.Add('}',',');
-              end;
-            W.CancelLastComma;
-            W.AddShort('],"interfaces":[');
-            for i := 0 to high(fInterfaces) do
-              if fInterfaces[i]<>nil then begin
-                W.Add('{"%":',[Services.fListInterfaceMethod[i].InterfaceDotMethodName]);
-                fInterfaces[i].ComputeDetailsTo(W);
-                W.Add('}',',');
-              end;
-            W.CancelLastComma;
-            W.AddShort(']},');
-          end;
-        end;
-      finally
-        fSessions.UnLock;
-      end;
-      W.CancelLastComma;
-      W.Add(']',',');
-    end;
-    W.CancelLastComma;
-    W.Add('}');
+    InternalStat(Ctxt,W);
     Ctxt.Returns(W.Text);
   finally
     W.Free;
@@ -31705,7 +31720,7 @@ end;
 procedure TSQLRestServer.Batch(Ctxt: TSQLRestServerURIContext);
 var Results: TInt64DynArray;
     i: integer;
-begin 
+begin
   if not (Ctxt.Method in [mPUT,mPOST]) then begin
     Ctxt.Error('PUT/POST only');
     exit;
@@ -35963,8 +35978,8 @@ var A, n: PtrInt;
   begin
     result := true;
     if P<>nil then begin
-      repeat
-        if not (P^ in ['a'..'z','A'..'Z']) then
+      repeat // cf. rfc3986 2.3. Unreserved Characters
+        if not (P^ in ['a'..'z','A'..'Z','0'..'9','_','.','~']) then
           exit else
           inc(P);
       until P^=#0;
@@ -43028,7 +43043,8 @@ begin
       Inst.SafeFreeInstance(self); // always release single shot instance
     if stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
-      StatsFromContext(stats,Ctxt.Call^,timeStart,timeEnd);
+      dec(timeEnd,timeStart);
+      StatsFromContext(stats,Ctxt.Call^,timeEnd);
       if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
         if Ctxt.fAuthSession.fInterfaces=nil then
           SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
@@ -43043,7 +43059,7 @@ begin
             stats := TSynMonitorInputOutput.Create;
             fInterfaces[ndx] := stats;
           end;
-          StatsFromContext(stats,Ctxt.Call^,timeStart,timeEnd);
+          StatsFromContext(stats,Ctxt.Call^,timeEnd);
         end;
       end;
     end;

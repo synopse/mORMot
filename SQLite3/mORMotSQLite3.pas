@@ -335,7 +335,8 @@ type
     /// used during GetAndPrepareStatement() execution (run in global lock)
     fStatement: PSQLRequest;
     fStaticStatement: TSQLRequest;
-    fStatementTimer: TPrecisionTimer;
+    fStatementTimer: PPrecisionTimer;
+    fStaticStatementTimer: TPrecisionTimer;
     fStatementSQL: RawUTF8;
     fStatementGenericSQL: RawUTF8;
     fStatementLastException: RawUTF8;
@@ -390,6 +391,7 @@ type
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); override;
     /// execute one SQL statement
     // - intercept any DB exception and return false on error, true on success
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
@@ -674,7 +676,7 @@ var i, maxParam,sqlite3param: integer;
     Values: TRawUTF8DynArray;
     wasPrepared: boolean;
 begin
-  fStatementTimer.Start;
+  fStaticStatementTimer.Start;
   fStatementSQL := SQL;
   fStatementGenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
   if (maxParam=0) and not ForceCacheStatement then begin
@@ -682,15 +684,15 @@ begin
     fStatementGenericSQL := '';
     fStaticStatement.Prepare(DB.DB,SQL);
     fStatement := @fStaticStatement;
+    fStatementTimer := @fStaticStatementTimer;
     exit;
   end;
-  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared);
+  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,@fStatementTimer);
   if wasPrepared then begin
     {$ifdef WITHLOG}
     fLogClass.Add.Log(sllDB,'prepared % % %',
-      [fStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],self);
+      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],self);
     {$endif}
-    fStatementTimer.Start;
   end;
   // bind parameters
   sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
@@ -712,10 +714,12 @@ end;
 
 procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
 begin
+  fStatementTimer^.Pause;
+  fStatementTimer^.ComputeTime;
   {$ifdef WITHLOG}
   with fLogFamily.SynLog do
-  if E=nil then
-    Log(sllSQL,'% % %',[fStatementTimer.Stop,Msg,fStatementSQL],self) else
+  if E=nil then 
+    Log(sllSQL,'% % %',[fStatementTimer^.Time,Msg,fStatementSQL],self) else
     Log(sllError,'% for % // %',[E,fStatementSQL,fStatementGenericSQL],self);
   {$endif}
   if fStatement=@fStaticStatement then
@@ -1104,6 +1108,40 @@ end;
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   result := InternalExecute(aSQL,false);
+end;
+
+procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
+var i: integer;
+    stat,last,average: TSynMonitorTime;
+begin
+  inherited InternalStat(Ctxt,W);
+  if Ctxt.InputExists['withsqlite3'] then begin
+    W.CancelLastChar; // last '}'
+    W.AddShort(',"sqlite3":[');
+    stat := TSynMonitorTime.Create;
+    last := TSynMonitorTime.Create;
+    average := TSynMonitorTime.Create;
+    try
+      with fStatementCache do
+      for i := 0 to Count-1 do
+      with Cache[i] do begin
+        stat.MicroSec := Timer.TimeInMicroSec;
+        last.MicroSec := Timer.LastTimeInMicroSec;
+        if Timer.PauseCount=0 then // avoid division per zero
+          average.MicroSec := 0 else
+          average.MicroSec := Round(Timer.TimeInMicroSec/Timer.PauseCount);
+        W.AddJSONEscape(['SQL',StatementSQL,'TaskCount',Timer.PauseCount,
+          'TotalTime',stat,'AverageTime',average,'LastTime',last]);
+        W.Add(',');
+      end;
+    finally
+      average.Free;
+      last.Free;
+      stat.Free;
+    end;
+    W.CancelLastComma;
+    W.Add(']','}');
+  end;
 end;
 
 function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
@@ -1699,11 +1737,12 @@ begin
           if rowCount>1 then
             SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
           fStatementGenericSQL := SQL; // full log on error
-          fStatementTimer.Start;
           if valuesCount+fieldCount>MAX_PARAMS then // worth caching?
-            fStatement := fStatementCache.Prepare(SQL) else begin
+            fStatement := fStatementCache.Prepare(SQL,nil,@fStatementTimer) else begin
             fStaticStatement.Prepare(DB.DB,SQL);
             fStatement := @fStaticStatement;
+            fStaticStatementTimer.Start;
+            fStatementTimer := @fStaticStatementTimer;
           end;
           prop := 0;
           for f := 0 to valuesCount-1 do begin

@@ -553,7 +553,7 @@ type
     Model: TSQLModel;
     DataBase: TSQLRestServerDB;
     Server: TSQLHttpServer;
-    Client: TSQLRestClient;
+    Client: TSQLRestClientURI;
     /// perform the tests of the current Client instance
     procedure ClientTest;
     /// release used instances (e.g. http server) and memory
@@ -8041,7 +8041,7 @@ end;
 
 procedure TTestClientServerAccess.CleanUp;
 begin
-  FreeAndNil(Client);
+  FreeAndNil(Client); // should already be nil
   Server.Shutdown;
   FreeAndNil(Server);
   FreeAndNil(DataBase);
@@ -8316,11 +8316,15 @@ end;
 {$endif}
 
 procedure TTestClientServerAccess.DirectInProcessAccess;
+var stats: RawUTF8;
 begin
   Client := TSQLRestClientDB.Create(Model,
     TSQLModel.Create([TSQLRecordPeople],'root'),
     DataBase.DB,TSQLRestServerTest);
   ClientTest;
+  Client.CallBackGet('stat',['withmethods',true,'withinterfaces',true,
+    'withsessions',true,'withsqlite3',true],stats);
+  FileFromString(JSONReformat(stats),'statsClientServer.json');
   FreeAndNil(Client);
 end;
 
