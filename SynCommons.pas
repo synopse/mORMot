@@ -39450,11 +39450,16 @@ end;
 function TFileBufferWriter.WriteDirectStart(maxSize: integer;
   const TooBigMessage: RawUTF8): PByte;
 begin
-  if fPos+maxSize>fBufLen then
+  inc(maxSize,fPos);
+  if maxSize>fBufLen then
     fTotalWritten := Flush;
-  if fPos+maxSize>fBufLen then 
-    raise ESynException.CreateUTF8(
-      '%.WriteDirectStart: too big %',[self,TooBigMessage]);
+  if maxSize>fBufLen then begin
+    if maxSize>100 shl 20 then
+      raise ESynException.CreateUTF8('%.WriteDirectStart: too big % - '+
+        'expected up to 100 MB block',[self,TooBigMessage]);
+    fBufLen := maxSize+1024;
+    SetString(fBuf,nil,fBufLen);
+  end;
   result := @PByteArray(fBuf)^[fPos];
 end;
 

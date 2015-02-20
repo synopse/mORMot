@@ -1437,7 +1437,7 @@ begin
   S := A.Value^;
   Diff := S^.Start;
   W.WriteVarUInt32(Diff);
-  P := W.WriteDirectStart(n*5,A.ArrayTypeName); // 1 MB should be enough
+  P := W.WriteDirectStart(n*5,A.ArrayTypeName);
   Beg := PtrUInt(P);
   for i := 1 to n-1 do begin
     inc(PtrUInt(S),A.ElemSize);
@@ -1454,7 +1454,7 @@ var W: TFileBufferWriter;
     MS: TMemoryStream;
 begin
   MS := THeapMemoryStream.Create;
-  W := TFileBufferWriter.Create(MS,5 shl 20); // 5 MB should be enough
+  W := TFileBufferWriter.Create(MS,1 shl 20); // 1 MB should be enough at first
   try
     WriteSymbol(W,fSymbols);
     WriteSymbol(W,fUnits{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif});
