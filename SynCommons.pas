@@ -20460,10 +20460,10 @@ end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 // adapted from ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
+{$ifdef GETEXTENDEDPASCAL}
 const POW10: array[0..31] of TSynExtended = (
   1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,1E11,1E12,1E13,1E14,1E15,1E16,
   1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,1E26,1E27,1E28,1E29,1E30,1E31);
-{$ifdef GETEXTENDEDPASCAL}
 function IntPower(Exponent: Integer): TSynExtended;
 var Y: Cardinal;
     LBase: Int64;
@@ -20507,7 +20507,7 @@ begin
     inc(err);
     if not (Ch in ['0'..'9']) then
       break;
-    result := (result*10)+Ord(Ch)-Ord('0');
+    result := (result*10.0)+Ord(Ch)-Ord('0');
     Valid := True;
   end;
   Digits := 0;
@@ -20521,7 +20521,7 @@ begin
             dec(err); // P='.'
         break;
       end;
-      result := (result*10)+Ord(Ch)-Ord('0');
+      result := (result*10.0)+Ord(Ch)-Ord('0');
       dec(Digits);
       Valid := true;
     end;
@@ -20558,75 +20558,7 @@ begin
     err := 0;
 end;
 {$else}
-  POW10B: array[0..14] of extended = (
-    1E32,1E64,1E96,1E128,1E160,1E192,1E224,1E256,
-    1E288,1E320,1E352,1E384,1E416,1E448,1E480);
-  Pow10C: array[0..8] of extended = (
-    1E512,1E1024,1E1536,1E2048,1E2560,1E3072,1E3584,1E4096,1E4608);
-  Ten: Double = 10.0;
-procedure _Pow10;
-asm // in: st(0)=val, eax=power  out:  st(0)=val*10**power
-  test  eax,eax
-  jle   @@CheckNeg
-  cmp   eax,5120
-  jge   @@Infinity                     {Power Too High,Return Infinity}
-  mov   edx,eax
-  and   edx,$1F                        {Lower 5 Bits}
-  lea   edx,[edx+edx*4]
-  fld   tbyte ptr [POW10+edx*2]
-  fmulp
-  shr   eax,5                          {Shift Out Lower 5 Bits}
-  jz    @@PosDone                      {Finished if 0}
-  mov   edx,eax
-  and   edx,$0F                        {Next Lower 4 Bits}
-  jz    @@ThirdMul
-  lea   edx,[edx+edx*4]
-  fld   tbyte ptr [POW10B+edx*2-10]
-  fmulp
-@@ThirdMul:
-  shr   eax,4                          {Shift Out Next Lower 4 Bits}
-  jz    @@PosDone                      {Finished if 0}
-  lea   eax,[eax+eax*4]
-  fld   tbyte ptr [Pow10C+eax*2-10]
-  fmulp
-@@PosDone:
-  ret
-@@Infinity:
-  fstp  st(0)                          {Replace Result with Infinity}
-  fld   tbyte ptr @@Inf
-  ret
-@@Inf:
-  dw    $0000,$0000,$0000,$8000,$7FFF  {Infinity}
-@@CheckNeg:
-  je    @@NegDone                      {Finished if Power = 0}
-  neg   eax
-  cmp   eax,5120
-  jge   @@Zero                         {Power Too Low,Return Zero}
-  mov   edx,eax
-  and   edx,$1F                        {Lower 5 Bits}
-  lea   edx,[edx+edx*4]
-  fld   tbyte ptr [POW10+edx*2]
-  fdivp
-  shr   eax,5                          {Shift Out Lower 5 Bits}
-  jz    @@NegDone                      {Finished if 0}
-  mov   edx,eax
-  and   edx,$0F                        {Next Lower 4 Bits}
-  jz    @@ThirdDiv
-  lea   edx,[edx+edx*4]
-  fld   tbyte ptr [POW10B+edx*2-10]
-  fdivp
-@@ThirdDiv:
-  shr   eax,4                          {Shift Out Next Lower 4 Bits}
-  jz    @@NegDone                      {Finished if 0}
-  lea   eax,[eax+eax*4]
-  fld   tbyte ptr [Pow10C+eax*2-10]
-  fdivp
-@@NegDone:
-  ret
-@@Zero:
-  fstp  st(0)                          {Replace Result with Zero}
-  fldz
-end;
+const Ten: double = 10.0;
 asm  // in: eax=text, edx=@err  out: st(0)=result
   push  ebx             {Save Used Registers}
   push  esi
@@ -20740,7 +20672,7 @@ asm  // in: eax=text, edx=@err  out: st(0)=result
   mov   [edx],ebx       {Result Code = 0}
   jz    @@PowerDone     {No call to _Pow10 Needed}
   mov   edi,ecx         {Save Decimal Sign Flag}
-  call  _Pow10          {Raise to Power of 10}
+  call  System.@Pow10   {Raise to Power of 10}
   mov   ecx,edi         {Restore Decimal Sign Flag}
 @@PowerDone:
   test  ch,ch           {Decimal Sign Flag Set?}

@@ -2505,8 +2505,19 @@ begin
   Int64ToUtf8(-9223372036854775808,s);
   Check(s='-9223372036854775808');
   {$endif}
+  d := GetExtended('1234');
+  CheckSame(d,1234);
+  d := GetExtended('1234.1');
+  CheckSame(d,1234.1);
+  d := GetExtended('1234.1234567890123456789');
+  CheckSame(d,1234.1234567890123456789);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
+  GetExtended('40640.5028a819444',err);
+  Check(err>0);
+  d := GetExtended('40640.5028819444',err);
+  Check(err=0);
+  CheckSame(d,40640.5028819444);
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');
@@ -2549,7 +2560,6 @@ begin
   Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
   s := Int64ToUTF8(242161819595454762);
   Check(s='242161819595454762');
-
 {$ifndef LVCL}
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
   DecimalSeparator := '.';
