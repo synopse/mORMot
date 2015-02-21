@@ -39,6 +39,7 @@ unit SynPdf;
    Sinisa (sinisav)
    Pierre le Riche
    MChaos
+   Marsh
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -269,6 +270,7 @@ unit SynPdf;
   - added PDF Group Content methods for creating layered content - thanks
     Harald for the patch! see SynPdfLayers.dpr in sample 05
   - added TPdfFormWithCanvas class - thanks Harald! see SynPdfFormCanvas.dpr
+  - EMR_INTERSECTCLIPRECT fix supplied by Marsh - thanks for the patch!
 
 }
 
@@ -6805,7 +6807,7 @@ end;
 procedure TPdfCanvas.Eoclip;
 begin
   if FContents<>nil then
-    FContents.Writer.Add('W*'#10);
+    FContents.Writer.Add('w*'#10);
 end;
 
 
@@ -9132,8 +9134,13 @@ begin
     E.SetMetaRgn;
   EMR_EXTSELECTCLIPRGN:
     E.ExtSelectClipRgn(@PEMRExtSelectClipRgn(R)^.RgnData[0],PEMRExtSelectClipRgn(R)^.iMode);
-  EMR_INTERSECTCLIPRECT:
-    ClipRgn := E.IntersectClipRect(E.Canvas.BoxI(PEMRIntersectClipRect(R)^.rclClip,true), ClipRgn);
+  EMR_INTERSECTCLIPRECT: begin
+    ClipRgn := e.IntersectClipRect(e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true),ClipRgn);
+    e.Canvas.Clip;
+    with e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true) do
+      e.Canvas.Rectangle(Left,Top,Width,Height);
+    e.Canvas.EoClip;
+  end;
   EMR_SETMAPMODE:
     MappingMode := PEMRSetMapMode(R)^.iMode;
   EMR_BEGINPATH: begin

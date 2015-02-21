@@ -7277,15 +7277,15 @@ begin
     end;
   end;
   if A.UsesAESNI then
-    fRunConsole := fRunConsole+'using AES-NI instruction set';
+    fRunConsole := fRunConsole+' using AES-NI instruction set';
 end;
 
 procedure TTestCryptographicRoutines._CompressShaAes;
 var s1,s2: RawByteString;
-    key,i: integer;
+    keysize,i: integer;
 begin
-  for key := 0 to 10 do begin
-    CompressShaAesSetKey(RandomString(key),RandomString(key));
+  for keysize := 0 to 10 do begin
+    CompressShaAesSetKey(RandomString(keysize),RandomString(keysize));
     for i := 0 to 50 do begin
       s1 := RandomString(i*3);
       s2 := s1;
