@@ -15611,7 +15611,11 @@ const
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
      ftInt64,     // sftTimeLog
+     {$ifdef CPUARM}
+     ftDouble,
+     {$else}
      ftCurrency,  // sftCurrency
+     {$endif}
      ftUTF8,      // sftObject
 {$ifndef NOVARIANTS}
      ftUTF8,      // sftVariant
@@ -15644,12 +15648,16 @@ begin
   case aValue.VType of
     ftInt64:
       SetInt64(pointer(temp),aValue.VInt64);
+    {$ifdef CPUARM}
+    ftCurrency,
+    {$else}
+    ftCurrency:
+      aValue.VInt64 := StrToCurr64(pointer(temp));
+    {$endif}
     ftDouble:
       aValue.VDouble := GetExtended(pointer(temp));
     ftDate:
       aValue.VDateTime := Iso8601ToDateTime(temp);
-    ftCurrency:
-      aValue.VInt64 := StrToCurr64(pointer(temp));
     ftBlob: begin
       temp := BlobToTSQLRawBlob(temp);
       aValue.VBlob := pointer(temp);
@@ -15667,10 +15675,14 @@ begin
   case aValue.VType of
     ftInt64:
       SetValueVar(Instance,Int64ToUtf8(aValue.VInt64),false);
-    ftDouble:
-      SetValueVar(Instance,DoubleToStr(aValue.VDouble),false);
+    {$ifdef CPUARM}
+    ftCurrency,
+    {$else}
     ftCurrency:
       SetValueVar(Instance,Curr64ToStr(aValue.VInt64),false);
+    {$endif}
+    ftDouble:
+      SetValueVar(Instance,DoubleToStr(aValue.VDouble),false);
     ftDate:
       SetValueVar(Instance,DateTimeToIso8601Text(aValue.VDateTime),true);
     ftBlob:
@@ -15698,7 +15710,8 @@ const
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
+    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,
+                            {$ifdef CPUARM}varDouble,{$else}varCurrency,{$endif}
  // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID
@@ -15710,8 +15723,12 @@ begin
     VarClear(variant(result));
   result.VType := SQL_ELEMENTTYPES[fieldType];
   case fieldType of
+  {$ifdef CPUARM}
+  sftCurrency,
+  {$else}
   sftCurrency:
     result.VInt64 := StrToCurr64(Value);
+  {$endif}
   sftFloat: begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
@@ -15869,7 +15886,11 @@ begin
     sftTimeLog, sftModTime, sftCreateTime: // specific class for further use
       C := TSQLPropInfoRTTITimeLog;
     sftCurrency:
+    {$ifdef CPUARM}
+      C := TSQLPropInfoRTTIDouble;
+    {$else}
       C := TSQLPropInfoRTTICurrency;
+    {$endif}
     sftDateTime:
       C := TSQLPropInfoRTTIDateTime;
     sftID: // = TSQLRecord(aID)
@@ -16375,9 +16396,13 @@ function TSQLPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject; const aValue: 
 var V: double;
 begin
   case aValue.VType of
+  {$ifdef CPUARM}
+  ftCurrency,
+  {$else}
+  ftCurrency:       V := aValue.VCurrency;
+  {$endif}
   ftDouble, ftDate: V := aValue.VDouble;
   ftInt64:          V := aValue.VInt64;
-  ftCurrency:       V := aValue.VCurrency;
   else begin
     result := inherited SetFieldSQLVar(Instance,aValue);
     exit;
@@ -19044,7 +19069,12 @@ begin
              (f in fFieldParsedAsString) then
             FieldType := sftUTF8Text else // force string value not to be a number
           if FieldType=sftInteger then
-            FieldType := sftCurrency; // we only checked the first field... best guess...
+            // we only checked the first field -> best guess...
+            {$ifdef CPUARM}
+            FieldType := sftDouble;
+            {$else}
+            FieldType := sftCurrency;
+            {$endif}
           break; // get first non null field content
         end;
       end;
@@ -22176,12 +22206,14 @@ begin
     tkFloat: begin
       if DestInfo^.PropType^.FloatType=PropType^.FloatType then
       case PropType^.FloatType of
+      {$ifndef CPUARM}
       ftCurr: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
           result := GetCurrencyProp(Source)=DestInfo^.GetCurrencyProp(Dest);
         exit;
       end;
+      {$endif}
       ftDoub: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
@@ -22257,9 +22289,11 @@ obj:    S := GetObjProp(Source);
       // works also with TID, TTimeLog, Double and Currency
 i64:  SetInt64Prop(Dest,GetInt64Prop(Source));
     tkFloat:
+    {$ifndef CPUARM}
     if (PropType^.FloatType in [ftDoub,ftCurr]) and
        GetterIsField and SetterIsField then
       goto I64 else
+    {$endif}
       SetFloatProp(Dest,GetFloatProp(Source));
     {$ifdef FPC}tkAString,{$endif}
     tkLString: begin
@@ -23175,10 +23209,12 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
     tkFloat:
+      {$ifndef CPUARM}
       if @self=TypeInfo(Currency) then begin
         result := sftCurrency;
         exit;
       end else
+      {$endif}
       if @self=TypeInfo(TDateTime) then begin
         result := sftDateTime;
         exit;
@@ -40801,8 +40837,12 @@ begin
     if P=TypeInfo(TDateTime) then
       result := smvDateTime else
     case P^.FloatType of
-      ftDoub: result := smvDouble;
+      {$ifdef CPUARM}
+      ftCurr,
+      {$else}
       ftCurr: result := smvCurrency;
+      {$endif}
+      ftDoub: result := smvDouble;
     end;
   {$ifdef FPC}tkAString,{$endif} tkLString:
     if P=TypeInfo(RawJSON) then

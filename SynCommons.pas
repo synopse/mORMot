@@ -7229,6 +7229,8 @@ const
   ptPtrInt  = {$ifdef CPU64}ptInt64{$else}ptInteger{$endif};
   /// map a PtrUInt type to the TJSONCustomParserRTTIType set
   ptPtrUInt = {$ifdef CPU64}ptInt64{$else}ptCardinal{$endif};
+  /// map the CPU native type for currency 
+  ptCurrencyOrDouble = {$ifdef CPUARM}ptDouble{$else}ptCurrency{$endif};
   /// which TJSONCustomParserRTTIType types are not simple types
   // - ptTimeLog is complex, since could be also TCreateTime or TModTime
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
@@ -27833,7 +27835,7 @@ begin
     case TFloatType(Typ^) of
     ftSingle: result := ptSingle;
     ftDoub:   result := ptDouble;
-    ftCurr:   result := ptCurrency;
+    ftCurr:   result := ptCurrencyOrDouble;
     // ftExtended, ftComp: not implemented yet
     end;
   end;
@@ -28133,7 +28135,11 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
                      PBoolean(Data)^ := GetInteger(PropValue)<>0;
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
+      {$ifdef CPUARM}
+      ptCurrency,
+      {$else}
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
+      {$endif}
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
       ptInt64,ptID:PInt64(Data)^ := GetInt64(PropValue);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
@@ -28240,7 +28246,11 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptBoolean:   aWriter.AddString(JSON_BOOLEAN[PBoolean(Value)^]);
     ptByte:      aWriter.AddU(PByte(Value)^);
     ptCardinal:  aWriter.AddU(PCardinal(Value)^);
+    {$ifdef CPUARM}
+    ptCurrency,
+    {$else}
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
+    {$endif}
     ptDouble:    aWriter.Add(unaligned(PDouble(Value)^));
     ptInt64,ptID:aWriter.Add(PInt64(Value)^);
     ptInteger:   aWriter.Add(PInteger(Value)^);
