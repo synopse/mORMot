@@ -955,8 +955,11 @@ begin
         on E: Exception do begin
           Color(ccLightRed);
           fFailed.AddObject(E.ClassName+': '+E.Message,C);
-          writeln(fSaveToFile,'! ',C.fTests[t].TestNameUTF8,#13#10'! Exception ',
-            E.ClassName,' raised with messsage:'#13#10'!  ',E.Message);
+          write(fSaveToFile,'! ',C.fTests[t].TestNameUTF8);
+          if E.InheritsFrom(EControlC) then
+            raise; // Control-C should just abort whole test
+          writeln(fSaveToFile,#13#10'! Exception ',E.ClassName,
+            ' raised with messsage:'#13#10'!  ',E.Message);
           Color(ccLightGray);
         end;
       end;
