@@ -777,7 +777,7 @@ type
     {$endif}
     {$ifndef ONLYUSEHTTPSOCKET}
     /// test via TSQLHttpClientWinHTTP instances over http.sys (HTTP API) server
-    procedure WinHttp_HttpApi;
+    procedure WindowsAPI;
     {$endif}
     /// test via TSQLHttpClientWinSock instances over OS's socket API server
     // - this test won't work within the Delphi IDE debugger
@@ -1025,7 +1025,7 @@ type
     procedure ClientSideRESTLocked;
     {$ifndef LVCL}
     /// test the client-side implementation of opt*InMainThread option
-    procedure ClientSideRESTSynchronized;
+    procedure ClientSideRESTMainThread;
     /// test the client-side implementation of opt*InPerInterfaceThread option
     procedure ClientSideRESTBackgroundThread;
     {$endif}
@@ -11799,7 +11799,7 @@ begin
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRestSynchronized;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
 begin
   with TTestThread.Create(true) do
   try
@@ -12465,7 +12465,7 @@ end;
 {$endif}
 
 {$ifndef ONLYUSEHTTPSOCKET}
-procedure TTestMultiThreadProcess.WinHttp_HttpApi;
+procedure TTestMultiThreadProcess.WindowsAPI;
 begin
   Test(TSQLHttpClientWinHTTP,useHttpApi);
 end;

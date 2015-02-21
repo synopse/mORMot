@@ -1803,6 +1803,7 @@ function StringToAnsi7(const Text: string): RawByteString;
 
 /// convert any generic VCL Text into WinAnsi (Win-1252) 8 bit encoded String
 function StringToWinAnsi(const Text: string): WinAnsiString;
+  {$ifdef UNICODE}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
 // - only supported token is %, which will be inlined in the resulting string
@@ -11782,12 +11783,12 @@ begin
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars=0 then
     result := Dest else begin
-    {$ifdef ISDELPHIXE} // use cross-platform wrapper for MultiByteToWideChar()
-    result := Dest+UnicodeFromLocaleChars(
-      fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
-    {$else}
     {$ifdef MSWINDOWS}
     result := Dest+MultiByteToWideChar(
+      fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
+    {$else}
+    {$ifdef ISDELPHIXE} // use cross-platform wrapper for MultiByteToWideChar()
+    result := Dest+UnicodeFromLocaleChars(
       fCodePage,MB_PRECOMPOSED,Source,SourceChars,Dest,SourceChars);
     {$else}
     {$ifdef FPC}
@@ -11811,8 +11812,8 @@ begin
       [self,CodePage]);
     {$endif KYLIX3}
     {$endif FPC}
-    {$endif MSWINDOWS}
     {$endif ISDELPHIXE}
+    {$endif MSWINDOWS}
   end;
   result^ := #0;
 end;
@@ -12042,9 +12043,13 @@ begin
     until (SourceChars=0) or (ord(Source^)>=128);
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars=0 then
-    result := Dest else
+    result := Dest else begin
     {$ifdef MSWINDOWS}
     result := Dest+WideCharToMultiByte(
+      fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
+    {$else}
+    {$ifdef ISDELPHIXE} // use cross-platform wrapper for WideCharToMultiByte()
+    result := Dest+System.LocaleCharsFromUnicode(
       fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
     {$else}
     {$ifdef FPC}
@@ -12063,13 +12068,13 @@ begin
     finally
       LibC.iconv_close(ic);
     end else
-    {$else}
+    {$else} 
     raise ESynException.CreateUTF8('%.UnicodeBufferToAnsi() not supported yet for CP=%',
-      [self,CodePage]);
-    // under Delphi, we may use System.LocaleCharsFromUnicode() wrapper
-    {$endif KYLIX3}
+      [self,CodePage]);    {$endif KYLIX3}
     {$endif FPC}
+    {$endif ISDELPHIXE}
     {$endif MSWINDOWS}
+  end;
 end;
 
 function TSynAnsiConvert.UTF8BufferToAnsi(Dest: PAnsiChar;
@@ -12103,9 +12108,9 @@ begin
       SetString(result,A,Utf8BufferToAnsi(A,Source,SourceChars)-A);
       FreeMem(A);
     end;
-{$ifdef UNICODE}
+    {$ifdef UNICODE}
     PWord(PtrInt(result)-12)^ := fCodePage; // force set code page
-{$endif}
+    {$endif}
   end;
 end;
 
@@ -12126,9 +12131,9 @@ begin
       SetString(result,A,UnicodeBufferToAnsi(A,Source,SourceChars)-A);
       FreeMem(A);
     end;
-{$ifdef UNICODE}
+    {$ifdef UNICODE}
     PWord(PtrInt(result)-12)^ := fCodePage; // force set code page
-{$endif}
+    {$endif}
   end;
 end;
 
