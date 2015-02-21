@@ -10520,12 +10520,7 @@ type
     /// release internal used instances
     // - e.g. release associated TSQLModel or TServiceContainer
     destructor Destroy; override;
-    /// the Database Model associated with this REST Client or Server
-    property Model: TSQLModel read fModel;
     {$ifdef WITHLOG}
-    /// the logging class used for this instance
-    // - is set by default to SQLite3Log, but could be set to a custom class
-    property LogClass: TSynLogClass read GetLogClass write SetLogClass;
     /// the logging family used for this instance
     // - is set by default to SQLite3Log.Family, but could be set to something
     // else by setting a custom class to the LogClass property
@@ -11360,6 +11355,14 @@ type
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
       read fRoutingClass write SetRoutingClass;
+  published
+    /// the Database Model associated with this REST Client or Server
+    property Model: TSQLModel read fModel;
+    {$ifdef WITHLOG}
+    /// the logging class used for this instance
+    // - is set by default to SQLite3Log, but could be set to a custom class
+    property LogClass: TSynLogClass read GetLogClass write SetLogClass;
+    {$endif}
   public
     /// the custom queries parameters for User Interface Query action
     QueryCustom: array of TSQLQueryCustom;
@@ -18423,8 +18426,12 @@ end;
 procedure TSynMonitorWithSize.Sum(another: TSynMonitor);
 begin
   inherited;
+  if fMultiThreaded then
+    EnterCriticalSection(fLock); 
   if another.InheritsFrom(TSynMonitorWithSize) then
     AddSize(TSynMonitorWithSize(another).Size.Bytes);
+  if fMultiThreaded then
+    LeaveCriticalSection(fLock);
 end;
 
 { TSynMonitorInputOutput }
@@ -18439,11 +18446,11 @@ end;
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
   if fMultiThreaded then
-    EnterCriticalSection(fLock); 
+    EnterCriticalSection(fLock);
   fInput.Bytes := fInput.Bytes+Incoming;
   fOutput.Bytes := fOutput.Bytes+Outgoing;
   if fMultiThreaded then
-    LeaveCriticalSection(fLock); 
+    LeaveCriticalSection(fLock);
 end;
 
 procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
