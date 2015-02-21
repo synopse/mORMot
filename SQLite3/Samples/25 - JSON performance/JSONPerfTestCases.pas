@@ -880,7 +880,8 @@ begin
   doc := obj as JsonDataObjects.TJsonObject;
   Owner.TestTimer.Start;
   for i := 1 to SAMPLE_JSON_1_COUNT do begin
-    StringToUTF8(doc.ToJSON,json);
+    StringToUTF8(doc.ToJSON,json); // 91 ms
+    //json := doc.ToUtf8JSON; // 107 ms
     check(Hash32(json)=$293BAAA1);
   end;
   obj.Free;
