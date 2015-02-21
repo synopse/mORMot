@@ -172,6 +172,7 @@ unit mORMoti18n;
     - fixed EXTRACTALLRESOURCES process for multi-platform Delphi versions
     - fixed Win64 compilation and execution issues (Delphi XE2+)
     - fixed Unicode issue in function i18nLanguageToRegistry()
+    - added aForceEnglishIfNoMsgFile optional parameter for SetCurrentLanguage()
 
 *)
 
@@ -369,10 +370,18 @@ resourcestring
 {$else} { only called once in Initialization.LangInit: }
 
 /// resets all translation and locale-specific variables via SetThreadLocale()
-procedure SetCurrentLanguage(aLanguage: TLanguages); overload;
+// - by default, if the supplied language does not have a corrrespondig .msg
+// local file, it will fallback to lngEnlish for the whole application
+// - you may set aForceEnglishIfNoMsgFile=false to change the application
+// localization code, even if there is no matching .msg file 
+procedure SetCurrentLanguage(aLanguage: TLanguages; aForceEnglishIfNoMsgFile: boolean=true); overload;
 
 /// resets all translation and locale-specific variables via SetThreadLocale()
-procedure SetCurrentLanguage(const value: RawUTF8); overload;
+// - by default, if the supplied language does not have a corrrespondig .msg
+// local file, it will fallback to lngEnlish for the whole application
+// - you may set aForceEnglishIfNoMsgFile=false to change the application
+// localization code, even if there is no matching .msg file 
+procedure SetCurrentLanguage(const value: RawUTF8; aForceEnglishIfNoMsgFile: boolean=true); overload;
 {$endif}
 {$endif}
 
@@ -452,6 +461,8 @@ var
 
 
 type
+  TCustomFormDynArray = array of TCustomForm;
+
   {{ class to load and handle translation files (fr.msg, de.msg, ja.msg.. e.g.)
    - This standard .msg text file contains all the program resources translated
     into any language.
@@ -529,7 +540,7 @@ type
 {$endif}
 {$ifndef USEFORMCREATEHOOK}
     /// list of TForm sent to FormTranslate([....])
-    AlreadyTranslated: TIntegerDynArray;
+    AlreadyTranslated: TCustomFormDynArray;
 {$else}
     /// set a language ID to change the UI into the registry
     // - TComboBox(Sender).Items.Objects[TComboBox(Sender).ItemIndex] is the
@@ -690,8 +701,8 @@ uses
   Controls, ExtCtrls, Graphics;
 
 var
-  // to use FastFindIntegerIndex() in LanguageAbrToIndex():
-  LanguageAbrInteger: array[TLanguages] of integer; // copy of LanguageAbr[]
+  // to speed up search in LanguageAbrToIndex():
+  LanguageAbrWord: array[TLanguages] of word; // copy of LanguageAbr[]
 
 const
   LANG_MACEDONIAN = $2f;
@@ -719,11 +730,19 @@ begin
   end; // leave Sort order to $0 = default
 end;
 
+var LastLCID: integer;
+    LastLCIDLanguage: TLanguages = LANGUAGE_NONE;
+
 function LCIDToLanguage(LCID: integer): TLanguages;
 // compares sPriLang[] values with sysLocale.PriLangID to set current language
 // return LanguageUS if this LCID is not known
 var b: byte;
+    lng: TLanguages;
 begin
+  if LCID=LastLCID then begin
+    result := LastLCIDLanguage;
+    exit;
+  end;
   b := LCID and 255;
   case b of
     $1A: // ambigious PriLangID -> get it by full LCID
@@ -733,12 +752,16 @@ begin
       else          result := lngSerbian; // by default - don't call UN again
     end; // case SysLocale
   else begin
-    for result := low(result) to high(result) do
-      if b=sPriLang[result] then
-        exit;
     result := lngEnglish;
+    for lng := low(lng) to high(lng) do
+      if b=sPriLang[lng] then begin
+        result := lng;
+        break;
+      end;
   end;
   end;
+  LastLCID := LCID;
+  LastLCIDLanguage := Result;
 end;
 
 
@@ -750,11 +773,16 @@ begin
     result := LANGUAGE_NONE;
 end;
 
-function LanguageAbrToIndex(p: pAnsiChar): TLanguages; overload;
+function LanguageAbrToIndex(P: PAnsiChar): TLanguages; overload;
+var ndx: integer;
 begin
-  result := TLanguages(IntegerScanIndex(
-    @LanguageAbrInteger[low(TLanguages)], ord(high(TLanguages))+1,
-    NormToLowerByte[ord(p[0])]+NormToLowerByte[ord(p[1])] shl 8));
+  if P=nil then
+    ndx := -1 else
+    ndx := WordScanIndex(@LanguageAbrWord,Length(LanguageAbrWord),
+      NormToLowerByte[ord(P[0])]+NormToLowerByte[ord(P[1])] shl 8);
+  if ndx<0 then
+    result := LANGUAGE_NONE else
+    result := TLanguages(ndx);
 end;
 
 
@@ -1227,12 +1255,13 @@ begin
 end;
 
 {$ifndef NOI18N}
-procedure SetCurrentLanguage(aLanguage: TLanguages); overload;
+procedure SetCurrentLanguage(aLanguage: TLanguages; aForceEnglishIfNoMsgFile: boolean); overload;
 {$ifndef USEFORMCREATEHOOK}
 var i: integer;
-    Already: array of TCustomForm; // to re-translate all forms
+    Already: TCustomFormDynArray; // to re-translate all forms
 {$endif USEFORMCREATEHOOK}
 var c: AnsiChar;
+    LanguageForLanguageFile: TLanguages;
 begin
   // 1. not already set to this value?
   if CurrentLanguage.Index=aLanguage then
@@ -1243,12 +1272,16 @@ begin
     raise Exception.Create('lang unit: language must be set only once');
 {$endif USEFORMCREATEHOOK}
 
-  // 2. file must exists if not English
-  if aLanguage<>lngEnglish then
-    if not FileExists(TLanguageFile.FileName(aLanguage)) then
-      if CurrentLanguage.Index=lngEnglish then
-        exit else
-        aLanguage := lngEnglish; // if .msg not available -> force english
+  // 2. handle missing .msg file
+  LanguageForLanguageFile := aLanguage;
+  if LanguageForLanguageFile<>lngEnglish then
+    if not FileExists(TLanguageFile.FileName(LanguageForLanguageFile)) then begin
+      if aForceEnglishIfNoMsgFile then
+        if CurrentLanguage.Index=lngEnglish then
+          exit else
+          aLanguage := lngEnglish;
+      LanguageForLanguageFile := lngEnglish; // no .msg -> no translation 
+    end;
 
   // 3. reset all Locale settings + AnsiCompare*() functions
   with CurrentLanguage do begin
@@ -1286,16 +1319,16 @@ begin
 
   // 4. create Language object from exe directory if not english
 {$ifdef USEFORMCREATEHOOK}
-  if aLanguage<>lngEnglish then
-    Language := TLanguageFile.Create(aLanguage); // Language created only once
+  FreeAndNil(Language);
+  if LanguageForLanguageFile<>lngEnglish then
+    Language := TLanguageFile.Create(LanguageForLanguageFile);
 {$else}
   if Language<>nil then begin // save AlreadyTranslated[] forms for translation
-    SetLength(Already,length(Language.AlreadyTranslated));
-    move(Language.AlreadyTranslated[0],Already[0],length(Language.AlreadyTranslated)*4);
+    Already := Language.AlreadyTranslated;
     FreeAndNil(Language);
   end;
-  if aLanguage<>lngEnglish then
-    Language := TLanguageFile.Create(aLanguage);
+  if LanguageForLanguageFile<>lngEnglish then
+    Language := TLanguageFile.Create(LanguageForLanguageFile);
   for i := 0 to high(Already) do // translate available forms again
   try
     Language.FormTranslateOne(Already[i]);
@@ -1311,9 +1344,9 @@ begin
 {$endif}
 end;
 
-procedure SetCurrentLanguage(const value: RawUTF8); overload;
+procedure SetCurrentLanguage(const value: RawUTF8; aForceEnglishIfNoMsgFile: boolean); overload;
 begin
-  SetCurrentLanguage(LanguageAbrToIndex(value));
+  SetCurrentLanguage(LanguageAbrToIndex(value),aForceEnglishIfNoMsgFile);
 end;
 
 {$ifdef USEFORMCREATEHOOK}
@@ -1454,7 +1487,7 @@ var i: TLanguages;
 begin
   // LanguageAbrInteger[]: to use fast IntegerScanIndex() in LanguageAbrToIndex()
   for i := low(i) to high(i) do
-    LanguageAbrInteger[i] := PWord(pointer(LanguageAbr[i]))^;
+    LanguageAbrWord[i] := PWord(pointer(LanguageAbr[i]))^;
   assert(LanguageAbrToIndex('En')=lngEnglish);
   assert(LanguageAbrToIndex('fR')=lngFrench);
   assert(LanguageAbrToIndex('xx')=LANGUAGE_NONE);
@@ -1464,11 +1497,11 @@ begin
   i := i18nRegistryToLanguage; // from \Software\CompanyName\i18n\paramstr(0)
 //i := LanguageAbrToIndex('FR'); // DEBUG: load FR.MSG
   if i<>LANGUAGE_NONE then
-    SetCurrentLanguage(i) else
+    SetCurrentLanguage(i,false) else
 {$endif}
 {$endif}
 {$ifndef LVCL} // LVCL doesn't have any SysLocale defined
-    SetCurrentLanguage(LCIDToLanguage(SysLocale.DefaultLCID));
+    SetCurrentLanguage(LCIDToLanguage(SysLocale.DefaultLCID),false);
 {$endif}
   // LCID_US = $0409 US English = international settings
   hKernel32 := GetModuleHandle('kernel32');
@@ -1515,8 +1548,9 @@ end;
 procedure TLanguageFile.FormTranslate(Forms: array of TCustomForm);
 var f: integer;
 begin
+  SetLength(AlreadyTranslated,length(Forms));
   for f := 0 to high(Forms) do begin
-    AddInteger(AlreadyTranslated,PtrInt(Forms[f]),true);
+    AlreadyTranslated[f] := Forms[f];
     FormTranslateOne(Forms[f]);
   end;
 end;
@@ -1865,9 +1899,7 @@ var result: string;
 begin
   result := FindMessage(Hash32(
     // resourcestring are expected to be in English, that is WinAnsi encoded
-    // before being hashed
-    {$ifdef UNICODE}WinAnsiConvert.UnicodeBufferToAnsi(pointer(English),length(English))
-    {$else}English{$endif}));
+    {$ifdef UNICODE}StringToWinAnsi{$endif}(English)));
   if result<>'' then
     English := result;
 end;
@@ -1887,27 +1919,28 @@ begin
       exit;
   end;
   {$ifdef UNICODE}
-  result := WinAnsiToUnicodeString(pointer(English),length(English)); {$else}
-  result := CurrentAnsiConvert.AnsiToAnsi(WinAnsiConvert,pointer(English),length(English));
+  result := WinAnsiToUnicodeString(English);
+  {$else}
+  result := CurrentAnsiConvert.AnsiToAnsi(WinAnsiConvert,English);
   {$endif}
 end;
 
 function S2U(const Text: string): RawUTF8;
 begin
-{$ifdef UNICODE}
-  result := RawUnicodeToUtf8(PWideChar(pointer(Text)),length(Text));
-{$else}
+  {$ifdef UNICODE}
+  RawUnicodeToUtf8(PWideChar(pointer(Text)),length(Text),result);
+  {$else}
   result := CurrentAnsiConvert.AnsiBufferToRawUTF8(pointer(Text),length(Text));
-{$endif}
+  {$endif}
 end;
 
 function U2S(const Text: RawUTF8): string;
 begin
-{$ifdef UNICODE}
-  result := UTF8DecodeToUnicodeString(pointer(Text),length(Text));
-{$else}
+  {$ifdef UNICODE}
+  UTF8DecodeToUnicodeString(pointer(Text),length(Text),result);
+  {$else}
   result := CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text),length(Text));
-{$endif}
+  {$endif}
 end;
 
 function Iso2S(Iso: TTimeLog): string;
