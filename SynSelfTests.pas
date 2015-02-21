@@ -777,11 +777,11 @@ type
     {$endif}
     {$ifndef ONLYUSEHTTPSOCKET}
     /// test via TSQLHttpClientWinHTTP instances over http.sys (HTTP API) server
-    procedure _TSQLHttpClientWinHTTP_HTTPAPI;
+    procedure WinHttp_HttpApi;
     {$endif}
     /// test via TSQLHttpClientWinSock instances over OS's socket API server
     // - this test won't work within the Delphi IDE debugger
-    procedure _TSQLHttpClientWinSock_WinSock;
+    procedure SocketAPI;
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amLocked
     procedure Locked;
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amUnlocked
@@ -7276,6 +7276,8 @@ begin
       AES.outStreamCreated.Free;
     end;
   end;
+  if A.UsesAESNI then
+    fRunConsole := fRunConsole+'using AES-NI instruction set';
 end;
 
 procedure TTestCryptographicRoutines._CompressShaAes;
@@ -7346,6 +7348,7 @@ begin
 end;
 
 procedure TTestCryptographicRoutines._SHA256;
+procedure DoTest;
 procedure SingleTest(const s: AnsiString; const TDig: TSHA256Digest);
 var SHA: TSHA256;
   Digest: TSHA256Digest;
@@ -7354,23 +7357,13 @@ begin
   // 1. Hash complete AnsiString
   SHA.Full(pointer(s),length(s),Digest);
   Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
-  // 2. one update call for all chars
+  // 2. one update call for each char
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
   Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
-  // 3. test consistency with Padlock engine down results
-{$ifdef USEPADLOCK}
-  if not padlock_available then exit;
-  padlock_available := false;  // force PadLock engine down
-  SHA.Full(pointer(s),length(s),Digest);
-  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
-{$ifdef PADLOCKDEBUG} write('=padlock '); {$endif}
-  padlock_available := true;
-{$endif}
 end;
-var Digest: TSHA256Digest;
 const
   D1: TSHA256Digest =
     ($ba,$78,$16,$bf,$8f,$01,$cf,$ea,$41,$41,$40,$de,$5d,$ae,$22,$23,
@@ -7381,12 +7374,31 @@ const
   D3: TSHA256Digest =
     ($94,$E4,$A9,$D9,$05,$31,$23,$1D,$BE,$D8,$7E,$D2,$E4,$F3,$5E,$4A,
      $0B,$F4,$B3,$BC,$CE,$EB,$17,$16,$D5,$77,$B1,$E0,$8B,$A9,$BA,$A3);
+var Digest: TSHA256Digest;
 begin
-//  result := true; exit;
-  SingleTest('abc', D1);
-  SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
+  SingleTest('abc',D1);
+  SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
   Check(Comparemem(@Digest,@D3,sizeof(Digest)));
+end;
+begin
+  DoTest;
+  {$ifdef USEPADLOCK}
+  if padlock_available then begin
+    fRunConsole := fRunConsole+' using Padlock';
+    padlock_available := false;  // force PadLock engine down
+    DoTest;
+    padlock_available := true;
+  end;
+  {$endif}
+  {$ifdef CPU64}
+  if cfSSE41 in CpuFeatures then begin
+    fRunConsole := fRunConsole+' using SSE4 instruction set';
+    Exclude(CpuFeatures,cfSSE41);
+    DoTest;
+    Include(CpuFeatures,cfSSE41);
+  end
+  {$endif}
 end;
 
 
@@ -12453,18 +12465,16 @@ end;
 {$endif}
 
 {$ifndef ONLYUSEHTTPSOCKET}
-procedure TTestMultiThreadProcess._TSQLHttpClientWinHTTP_HTTPAPI;
+procedure TTestMultiThreadProcess.WinHttp_HttpApi;
 begin
   Test(TSQLHttpClientWinHTTP,useHttpApi);
 end;
 {$endif}
 
-procedure TTestMultiThreadProcess._TSQLHttpClientWinSock_WinSock;
+procedure TTestMultiThreadProcess.SocketAPI;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
-  {$ifdef FPC}
-  exit;
-  {$else}
+  {$ifndef FPC}
   if DebugHook=0 then
   {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);

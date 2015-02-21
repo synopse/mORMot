@@ -37817,8 +37817,8 @@ begin
   {$ifdef VER120} 'Delphi 4'{$endif}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$if     defined(VER140)}'Delphi 6'
-    {$elseif defined(KYLIX3)}'Kylix 3'
+    {$if     defined(KYLIX3)}'Kylix 3'
+    {$elseif defined(VER140)}'Delphi 6'
     {$elseif defined(VER150)}'Delphi 7'
     {$elseif defined(VER160)}'Delphi 8'
     {$elseif defined(VER170)}'Delphi 2005'
@@ -39451,14 +39451,15 @@ function TFileBufferWriter.WriteDirectStart(maxSize: integer;
   const TooBigMessage: RawUTF8): PByte;
 begin
   inc(maxSize,fPos);
-  if maxSize>fBufLen then
-    fTotalWritten := Flush;
   if maxSize>fBufLen then begin
-    if maxSize>100 shl 20 then
-      raise ESynException.CreateUTF8('%.WriteDirectStart: too big % - '+
-        'expected up to 100 MB block',[self,TooBigMessage]);
-    fBufLen := maxSize+1024;
-    SetString(fBuf,nil,fBufLen);
+    fTotalWritten := Flush;
+    if maxSize>fBufLen then begin
+      if maxSize>100 shl 20 then
+        raise ESynException.CreateUTF8('%.WriteDirectStart: too big % - '+
+          'we allow up to 100 MB block',[self,TooBigMessage]);
+      fBufLen := maxSize+1024;
+      SetString(fBuf,nil,fBufLen);
+    end;
   end;
   result := @PByteArray(fBuf)^[fPos];
 end;
