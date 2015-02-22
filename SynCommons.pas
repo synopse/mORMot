@@ -431,6 +431,7 @@ unit SynCommons;
   - added TDynArrayHashed.HashElement property
   - new TDynArrayHashed.AddUniqueName() method
   - introduced TSingleDynArray, recognized as such in JSON serialization
+  - fixed "single" floating-point values JSON serialization
   - added WordScanIndex() and swap32() functions
   - speed improvement of IdemPropNameU() function, with new overload function
   - now FileSize() function won't raise any exception if the file does not exist
@@ -5604,6 +5605,10 @@ type
     procedure Add(const guid: TGUID); overload;
     /// append a floating-point Value as a String
     procedure Add(Value: double); overload;
+    /// append a floating-point Value as a String
+    procedure Add(Value: single); overload;
+    /// append a floating-point Value as a String
+    procedure Add(Value: Extended; precision: integer); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     procedure AddFloatStr(P: PUTF8Char);
@@ -33574,12 +33579,28 @@ begin
   inc(B,Len);
 end;
 
+procedure TTextWriter.Add(Value: Extended; precision: integer);
+var S: ShortString;
+begin
+  if Value=0 then
+    Add('0') else
+    AddNoJSONEscape(@S[1],ExtendedToString(S,Value,precision));
+end;
+
 procedure TTextWriter.Add(Value: double);
 var S: ShortString;
 begin
   if Value=0 then
     Add('0') else
     AddNoJSONEscape(@S[1],ExtendedToString(S,Value,DOUBLE_PRECISION));
+end;
+
+procedure TTextWriter.Add(Value: single);
+var S: ShortString;
+begin
+  if Value=0 then
+    Add('0') else
+    AddNoJSONEscape(@S[1],ExtendedToString(S,Value,SINGLE_PRECISION));
 end;
 
 {$ifndef CPU64}
