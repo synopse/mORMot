@@ -6032,6 +6032,14 @@ begin
   vd := 1.234567;
   v1.Add(vd);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
+  v2 := _obj(['id',1]);
+  v1.Add(v2);
+  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
+  v1.Add('abc');
+  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
+  RawUTF8ToVariant('def',v2);
+  v1.Add(v2);
+  Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
 end;
 
 {$endif LVCL}

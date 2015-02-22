@@ -14711,6 +14711,8 @@ begin
   else
   if SetVariantUnRefSimpleValue(V,tmp) then
     VariantToUTF8(Variant(tmp),result,wasString) else
+  if VType=varVariant or varByRef then // complex varByRef
+    VariantToUTF8(PVariant(VPointer)^,result,wasString) else
   if VType=varByRef or varOleStr then begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PWideString(VAny)^),length(PWideString(VAny)^),result);
@@ -28760,10 +28762,12 @@ begin
   if TVarData(Source).VType and varByRef<>0 then begin
     typ := TVarData(Source).VType and not varByRef;
     case typ of
-    varVariant: begin
-      Dest := PVarData(TVarData(Source).VPointer)^;
-      result := true;
-    end;
+    varVariant:
+      if PVarData(TVarData(Source).VPointer)^.VType<=varNativeString then begin
+        Dest := PVarData(TVarData(Source).VPointer)^;
+        result := true;
+      end else
+        result := False;
     varNull..varDate,varBoolean,varShortInt..varWord64: begin
       Dest.VType := typ;
       Dest.VInt64 :=  PInt64(TVarData(Source).VAny)^;
@@ -28808,10 +28812,12 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 begin
   if not(TVarData(Dest).VType in VTYPE_STATIC) then
     VarClear(Dest);
-  if TVarData(Source).VType in VTYPE_STATIC then 
+  if TVarData(Source).VType in VTYPE_STATIC then
     TVarData(Dest) := TVarData(Source) else
   if not SetVariantUnRefSimpleValue(Source,TVarData(Dest)) then
-    Dest := Source;
+    if TVarData(Source).VType=varVariant or varByRef then
+      Dest := PVariant(TVarData(Source).VPointer)^ else
+      Dest := Source;
 end;
 
 procedure ZeroFill(var Value: TVarData);
@@ -28923,7 +28929,11 @@ function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
 var LenBytes: integer;
     tmp: TVarData;
 begin
-  with TVarData(Value) do begin
+  with TVarData(Value) do
+    if VType=varVariant or varByRef then begin
+      result := VariantSave(PVariant(VPointer)^,Dest);
+      exit;
+    end else begin
     PWord(Dest)^ := VType;
     inc(Dest,sizeof(VType));
     case VType of
@@ -28973,6 +28983,8 @@ function VariantSaveLength(const Value: variant): integer;
 var tmp: TVarData;
 begin
   with TVarData(Value) do
+  if VType=varVariant or varByRef then
+    result := VariantSaveLength(PVariant(VPointer)^) else
   case VType of
   varShortInt, varByte:
     result := sizeof(VByte)+sizeof(VType);
