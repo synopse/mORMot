@@ -9945,6 +9945,13 @@ const
   VTYPE_STATIC: set of varEmpty..varWord64 =
     [varEmpty..varDate,varBoolean,varShortInt..varWord64];
 
+/// same as Dest := TVarData(Source) for simple values
+// - will return TRUE for all simple values after varByRef unreference, and
+// copying the unreferenced Source value into Dest raw storage 
+// - will return FALSE for not varByRef values, or complex values (e.g. string)
+function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 {$ifndef NOVARIANTS}
 
 type
@@ -10116,6 +10123,10 @@ procedure SetVariantNull(var Value: variant);
 // ! V.arr.Add(3);   // will work, since V.arr will be returned by reference
 // ! writeln(V);     // will write '{"arr":[1,2,3]}'
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
+
+/// same as Dest := Source, but copying by value
+// - will unreference any varByRef content
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 
 /// same as FillChar(Value,sizeof(TVarData),0)
 // - so can be used for TVarData or Variant
@@ -14506,6 +14517,7 @@ end;
 { note: those VariantToInteger*() functions are expected to be there }
 
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
+var tmp: TVarData;
 begin
   with TVarData(V) do
   case VType of
@@ -14538,8 +14550,8 @@ begin
       exit;
     end;
   else
-    if VType=varVariant or varByRef then begin
-      result := VariantToInteger(PVariant(VPointer)^,Value);
+    if SetVariantUnRefSimpleValue(V,tmp) then begin
+      result := VariantToInteger(variant(tmp),Value);
       exit;
     end else begin
       result := false;
@@ -14550,13 +14562,13 @@ begin
 end;
 
 function VariantToDouble(const V: Variant; var Value: double): boolean;
-var i64: Int64;
+var tmp: TVarData;
 begin
   with TVarData(V) do
   if VType=varVariant or varByRef then
     result := VariantToDouble(PVariant(VPointer)^,Value) else
-  if VariantToInt64(V,i64) then begin
-    Value := i64;
+  if VariantToInt64(V,tmp.VInt64) then begin
+    Value := tmp.VInt64;
     result := true;
   end else
   case VType of
@@ -14572,11 +14584,14 @@ begin
     Value := VCurrency;
     result := true;
   end else
-    result := false;
+    if SetVariantUnRefSimpleValue(V,tmp) then
+      result := VariantToDouble(variant(tmp),Value) else
+      result := false;
   end;
 end;
 
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
+var tmp: TVarData;
 begin
   with TVarData(V) do
   case VType of
@@ -14594,8 +14609,8 @@ begin
   varWord64,
   varInt64:    Value := VInt64;
   else
-    if VType=varVariant or varByRef then begin
-      result := VariantToInt64(PVariant(VPointer)^,Value);
+    if SetVariantUnRefSimpleValue(V,tmp) then begin
+      result := VariantToInt64(variant(tmp),Value);
       exit;
     end else begin
       result := false;
@@ -14629,6 +14644,7 @@ end;
 
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
+var tmp: TVarData;
 begin
   wasString := false;
   with TVarData(V) do
@@ -14683,8 +14699,8 @@ begin
     RawUnicodeToUtf8(VAny,length(WideString(VAny)),result);
   end;
   else
-  if VType=varByRef or varVariant then
-    VariantToUTF8(PVariant(VPointer)^,result,wasString) else
+  if SetVariantUnRefSimpleValue(V,tmp) then
+    VariantToUTF8(Variant(tmp),result,wasString) else
   if VType=varByRef or varOleStr then begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PWideString(VAny)^),length(PWideString(VAny)^),result);
@@ -28726,9 +28742,31 @@ end;
 {$endif ISDELPHI2010}
 
 
-{$ifndef NOVARIANTS}
-
 { ************ variant-based process, including JSON/BSON document content }
+
+function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
+var typ: word;
+begin
+  if TVarData(Source).VType and varByRef<>0 then begin
+    typ := TVarData(Source).VType and not varByRef;
+    case typ of
+    varVariant: begin
+      Dest := PVarData(TVarData(Source).VPointer)^;
+      result := true;
+    end;
+    varNull..varDate,varBoolean,varShortInt..varWord64: begin
+      Dest.VType := typ;
+      Dest.VInt64 :=  PInt64(TVarData(Source).VAny)^;
+      result := true;
+    end;
+    else
+      result := false;
+    end;
+  end else
+    result := false;
+end;
+
+{$ifndef NOVARIANTS}
 
 /// internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSONInPlace()
@@ -28754,6 +28792,16 @@ begin
     TVarData(Dest).VType := varVariant or varByRef;
     TVarData(Dest).VPointer := @Source;
   end;
+end;
+
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+begin
+  if not(TVarData(Dest).VType in VTYPE_STATIC) then
+    VarClear(Dest);
+  if TVarData(Source).VType in VTYPE_STATIC then 
+    TVarData(Dest) := TVarData(Source) else
+  if not SetVariantUnRefSimpleValue(Source,TVarData(Dest)) then
+    Dest := Source;
 end;
 
 procedure ZeroFill(var Value: TVarData);
@@ -28863,12 +28911,9 @@ function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
     end;
   end;
 var LenBytes: integer;
+    tmp: TVarData;
 begin
-  with TVarData(Value) do
-  if VType=varByRef or varVariant then begin
-    result := VariantSave(PVariant(VPointer)^,Dest);
-    exit;
-  end else begin
+  with TVarData(Value) do begin
     PWord(Dest)^ := VType;
     inc(Dest,sizeof(VType));
     case VType of
@@ -28903,18 +28948,21 @@ begin
         inc(Dest,LenBytes);
       end;
     end;
-    else // complex types are stored as JSON
-      ComplexType;
+    else
+      if SetVariantUnRefSimpleValue(Value,tmp) then begin
+        result := VariantSave(variant(tmp),Dest-sizeof(VType));
+        exit;
+      end else // complex types are stored as JSON
+        ComplexType;
     end;
   end;
   result := Dest;
 end;
 
 function VariantSaveLength(const Value: variant): integer;
+var tmp: TVarData;
 begin
   with TVarData(Value) do
-  if VType=varByRef or varVariant then
-    result := VariantSaveLength(PVariant(VPointer)^) else
   case VType of
   varShortInt, varByte:
     result := sizeof(VByte)+sizeof(VType);
@@ -28937,12 +28985,14 @@ begin
         +sizeof(VType);
     {$endif}
   else
-  try // complex types will be stored as JSON
-    result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+sizeof(VType);
-  except
-    on Exception do
-      result := 0; // notify invalid/unhandled variant content
-  end;
+    if SetVariantUnRefSimpleValue(Value,tmp) then
+      result := VariantSaveLength(variant(tmp)) else
+      try // complex types will be stored as JSON
+        result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+sizeof(VType);
+      except
+        on Exception do
+          result := 0; // notify invalid/unhandled variant content
+      end;
   end;
 end;
 
@@ -29262,10 +29312,7 @@ begin
     WS := Value.VPointer else
   if Value.VType=varOleStr then
     WS := @Value.VPointer else
-  if ((Value.VType and varByRef)<>0) and
-     ((Value.VType and not varByRef) in VTYPE_STATIC) then begin
-    ValueSet.VType := Value.VType and not varByRef;
-    ValueSet.VInt64 := PInt64(Value.VPointer)^;
+  if SetVariantUnRefSimpleValue(variant(Value),ValueSet) then begin
     IntSet(V,ValueSet,PropName);
     result := true;
     exit;
@@ -29737,6 +29784,7 @@ begin
 end;
 
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+var tmp: TVarData;
 begin
   with TVarData(V) do
   case VType of
@@ -29758,8 +29806,8 @@ begin
       result := ftBlob else
       result := ftUTF8;
   else
-  if VType=varVariant or varByRef then
-    result := VariantTypeToSQLDBFieldType(PVariant(VPointer)^) else
+  if SetVariantUnRefSimpleValue(V,tmp) then
+    result := VariantTypeToSQLDBFieldType(variant(tmp)) else
     result := ftUTF8;
   end;
 end;
@@ -30015,9 +30063,7 @@ begin
       SetLength(VName,len);
     VName[VCount] := aName;
   end;
-  if TVarData(aValue).VType=varVariant or varByRef then
-    VValue[VCount] := PVariant(TVarData(aValue).VPointer)^ else
-    VValue[VCount] := aValue;
+  SetVariantByValue(aValue,VValue[VCount]);
   inc(VCount);
 end;
 
@@ -30380,7 +30426,7 @@ begin
       ndx := GetValueIndex(Name);
       if ndx<0 then
         InternalAddValue(Name,aValue) else
-        VValue[ndx]:= aValue;
+        SetVariantByValue(aValue,VValue[ndx]);
     end else
       SetValueOrRaiseException(VariantToIntegerDef(aNameOrIndex,-1),aValue);
   end;
@@ -30449,7 +30495,7 @@ begin
   ndx := Data.GetValueIndex(aName);
   if ndx<0 then
     Data.InternalAddValue(aName,Variant(Value)) else
-    Data.VValue[ndx] := Variant(Value);
+    SetVariantByValue(variant(Value),Data.VValue[ndx]);
 end;
 
 function TDocVariant.IterateCount(const V: TVarData): integer;
@@ -44018,4 +44064,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

@@ -5870,6 +5870,8 @@ var Doc,Doc2: TDocVariantData;
     i: integer;
     V,V1,V2: variant;
     s,j: RawUTF8;
+    vd: double;
+    vs: single;
 begin
   {$ifdef FPC}
   exit; // bypass the tests by now, until FPC variant supports is fixed
@@ -6022,6 +6024,13 @@ begin
   j := V.Database;
   {$endif}
   Check((j<>'')and(j[1]=#$E2)and(j[2]=#$80)and(j[3]=#$9D));
+  v1 := _Arr([]);
+  vs := 1.23456;
+  v1.Add(vs);
+  Check(VariantSaveJSON(v1)='[1.23456]');
+  vd := 1.234567;
+  v1.Add(vd);
+  Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
 end;
 
 {$endif LVCL}
