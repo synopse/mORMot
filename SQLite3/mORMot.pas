@@ -1111,6 +1111,11 @@ unit mORMot;
     - added TSQLRecordProperties.SetCustomCollationForAllRawUTF8() +
       SetCustomCollation() methods, and TSQLModel.SetCustomCollationForAllRawUTF8()
       to implement ticket [bfdc198e70]
+    - introducing TSQLRecordProperties.SetMaxLengthValidatorForTextFields() and
+      SetMaxLengthFilterForTextFields() methods, and also corresponding
+      TSQLModel.SetMaxLength[Validator/Filter]ForAllTextFields() methods
+      so that text column lengths may be checked or truncated before sending
+      to an external database expecting a maximum length
     - fixed issue in TSQLRecordProperties.SetSimpleFieldsExpandedJSONWriter()
       when the record contains some TCreateTime published field type
     - added TSQLTable.GetAsInt64() method (proposal [3bea5d89c6])
@@ -4341,6 +4346,26 @@ type
     // - to be set in overridden class procedure InternalRegisterCustomProperties()
     // so that it will be common to all database models, for both client and server
     procedure SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
+    /// allow to validate length of all text published properties of this table
+    // - the "index" attribute of the RawUTF8/string published properties could
+    // be used to specify a maximum length for external VARCHAR() columns
+    // - SQLite3 will just ignore this "index" information, but it could be
+    // handy to be able to validate the value length before sending to the DB
+    // - this method will create TSynValidateText corresponding to the maximum
+    // field size specified by the "index" attribute, to validate before write
+    // - will expect the "index" value to be in UTF-16 codepoints, unless
+    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
+    procedure SetMaxLengthValidatorForTextFields(IndexIsUTF8Length: boolean=false);
+    /// allow to filter the length of all text published properties of this table
+    // - the "index" attribute of the RawUTF8/string published properties could
+    // be used to specify a maximum length for external VARCHAR() columns
+    // - SQLite3 will just ignore this "index" information, but it could be
+    // handy to be able to filter the value length before sending to the DB
+    // - this method will create TSynFilterTruncate corresponding to the maximum
+    // field size specified by the "index" attribute, to filter before write
+    // - will expect the "index" value to be in UTF-16 codepoints, unless
+    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
+    procedure SetMaxLengthFilterForTextFields(IndexIsUTF8Length: boolean=false);
     /// return the UTF-8 encoded SQL statement source to alter the table for
     //  adding the specified field
     function SQLAddField(FieldIndex: integer): RawUTF8;
@@ -7668,7 +7693,29 @@ type
     // - shall be set on both Client and Server sides, otherwise some issues
     // may occur
     procedure SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
-    
+    /// allow to validate length of all text published properties of all tables
+    // of this model
+    // - the "index" attribute of the RawUTF8/string published properties could
+    // be used to specify a maximum length for external VARCHAR() columns
+    // - SQLite3 will just ignore this "index" information, but it could be
+    // handy to be able to validate the value length before sending to the DB
+    // - this method will create TSynValidateText corresponding to the maximum
+    // field size specified by the "index" attribute, to validate before write
+    // - will expect the "index" value to be in UTF-16 codepoints, unless
+    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
+    procedure SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean=false);
+    /// allow to filter the length of all text published properties of all tables
+    // of this model
+    // - the "index" attribute of the RawUTF8/string published properties could
+    // be used to specify a maximum length for external VARCHAR() columns
+    // - SQLite3 will just ignore this "index" information, but it could be
+    // handy to be able to filter the value length before sending to the DB
+    // - this method will create TSynFilterTruncate corresponding to the maximum
+    // field size specified by the "index" attribute, to validate before write
+    // - will expect the "index" value to be in UTF-16 codepoints, unless
+    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
+    procedure SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean=false);
+
     /// assign an enumeration type to the possible actions to be performed
     // with this model
     // - call with the TypeInfo() pointer result of an enumeration type
@@ -26181,6 +26228,22 @@ begin
     fTableProps[i].fProps.SetCustomCollationForAllRawUTF8(aCollationName);
 end;
 
+procedure TSQLModel.SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean);
+var i: integer;
+begin
+  if self<>nil then
+    for i := 0 to high(fTableProps) do
+      fTableProps[i].fProps.SetMaxLengthValidatorForTextFields(IndexIsUTF8Length);
+end;
+
+procedure TSQLModel.SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean);
+var i: integer;
+begin
+  if self<>nil then
+    for i := 0 to high(fTableProps) do
+      fTableProps[i].fProps.SetMaxLengthFilterForTextFields(IndexIsUTF8Length);
+end;
+
 function TSQLModel.NewRecord(const SQLTableName: RawUTF8): TSQLRecord;
 var aClass: TSQLRecordClass;
 begin
@@ -38083,6 +38146,28 @@ begin
   for i := 0 to Fields.Count-1 do
     if Fields.List[i].SQLFieldType=sftUTF8Text then
       fCustomCollation[i] := aCollationName;
+end;
+
+procedure TSQLRecordProperties.SetMaxLengthValidatorForTextFields(IndexIsUTF8Length: boolean);
+var i: integer;
+begin
+  if self<>nil then
+  for i := 0 to Fields.Count-1 do
+    with Fields.List[i] do
+    if (SQLFieldType in TEXT_FIELDS) and (cardinal(FieldWidth-1)<262144) then
+      AddFilterOrValidate(i,TSynValidateText.CreateUTF8('{maxLength:%,UTF8Length:%}',
+        [FieldWidth,IndexIsUTF8Length],[]));
+end;
+
+procedure TSQLRecordProperties.SetMaxLengthFilterForTextFields(IndexIsUTF8Length: boolean);
+var i: integer;
+begin
+  if self<>nil then
+  for i := 0 to Fields.Count-1 do
+    with Fields.List[i] do
+    if (SQLFieldType in TEXT_FIELDS) and (cardinal(FieldWidth-1)<262144) then
+      AddFilterOrValidate(i,TSynFilterTruncate.CreateUTF8('{maxLength:%,UTF8Length:%}',
+        [FieldWidth,IndexIsUTF8Length],[]));
 end;
 
 function TSQLRecordProperties.SQLAddField(FieldIndex: integer): RawUTF8;

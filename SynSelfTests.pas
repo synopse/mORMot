@@ -3270,21 +3270,22 @@ var i: cardinal;
     V: RawUTF8;
     Msg: string;
     ok: boolean;
+    valid: TSynValidateText;
 begin
-  with TSynValidateText.Create(Params) do
+  valid := TSynValidateText.Create(Params);
   try
-    Check(MinLength=aMin);
-    Check(MaxLength=aMax);
+    Check(valid.MinLength=aMin);
+    Check(valid.MaxLength=aMax);
     for i := 0 to 100 do begin
       V := RandomUTF8(i);
       Check(Utf8ToUnicodeLength(pointer(V))=i,'Unicode glyph=Ansi char=i');
       Msg := '';
       ok := (i>=aMin)and(i<=aMax);
-      Check(Process(0,V,Msg)=ok,Msg);
+      Check(valid.Process(0,V,Msg)=ok,Msg);
       Check(Msg=''=ok,Msg);
     end;
   finally
-    Free;
+    valid.Free;
   end;
 end;
 var Msg: string;

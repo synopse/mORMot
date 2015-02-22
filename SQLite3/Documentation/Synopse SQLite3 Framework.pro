@@ -1894,9 +1894,9 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |%
 \page
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
-- If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
+- If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. a SQL index will be created and uniqueness of the value will be checked at insert/update);
 - For a dynamic array field, the {\f1\fs20 index} number can be used for the {\f1\fs20 TSQLRecord. DynArray(DynArrayFieldIndex)} method to create a {\f1\fs20 TDynArray} wrapper mapping the dynamic array data;
-- For a {\f1\fs20 RawUTF8 / string / WideString / WinAnsiString} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
+- For a {\f1\fs20 RawUTF8 / string / WideString / WinAnsiString} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @145@, the {\f1\fs20 @*index@} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ or {\i @*PostgreSQL@} does not have any such size expectations).
 For instance, the following {\f1\fs20 class} definition will create an index for its {\f1\fs20 SerialNumber} property (up to 30 characters long if stored in an external database), and will expect a link to a model of diaper ({\f1\fs20 TSQLDiaperModel}) and the baby which used it ({\f1\fs20 TSQLBaby}). An {\f1\fs20 ID} / {\f1\fs20 RowID} column will be always available (from {\f1\fs20 TSQLRecord}), so in this case, you would be able to make a fast lookup for a particular diaper from either its internal {\i mORmot} ID, or its official unique serial number:
 !/// table used for the Diaper queries
 !TSQLDiaper = class(TSQLRecord)
@@ -2045,7 +2045,7 @@ Since {\i Delphi} XE5, you can define and work directly with published record pr
 !  published
 !    property GUID: TGUID read fGUID write fGUID index 38;
 !  end;
-The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.
+The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.\line We specified an {\f1\fs20 @*index@ 38} attribute to state that this column will contain up to 38 characters, when stored on an external database - see @145@.
 Published properties of {\i records} are handled by our code, but {\i Delphi} doesn't create the corresponding @*RTTI@ for such properties before {\i Delphi} XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of {\i Delphi}, or {\i @*FreePascal@}.
 You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
 If you want to work with such properties before {\i Delphi} XE5, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
@@ -2578,7 +2578,7 @@ We could have used normal access to {\f1\fs20 VVA} and {\f1\fs20 FV} {\i dynamic
 !     VA.Ints[high(VA.Ints)] := n;
 But the {\f1\fs20 DynArray} method is used instead, to allow direct access to the {\i dynamic array} via a {\f1\fs20 TDynArray} wrapper. Those two lines behave therefore the same as this code:
 !      VA.DynArray('Ints').Add(n);
-Note that the {\f1\fs20 DynArray} method can be used via two overloaded set of parameters: either the field name ({\f1\fs20 'Ints'}), or an {\f1\fs20 index} value, as was defined in the class definition. So we could have written:
+Note that the {\f1\fs20 DynArray} method can be used via two overloaded set of parameters: either the field name ({\f1\fs20 'Ints'}), or an {\f1\fs20 @*index@} value, as was defined in the class definition. So we could have written:
 !      VA.DynArray(1).Add(n);
 since the {\f1\fs20 Ints} published property has been defined as such:
 !    property Ints: TIntegerDynArray
@@ -2983,6 +2983,7 @@ Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and
 \TSynFilterTrim\TSynFilter
 \TSynFilterLowerCaseU\TSynFilter
 \TSynFilterLowerCase\TSynFilter
+\TSynFilterTruncate\TSynFilter
 \TSynFilter\TSynFilterOrValidate
 rankdir=LR;
 \
@@ -3011,6 +3012,12 @@ As an alternative, you can override the following method:
 !  AddFilterNotVoidText(['Logon','HashedPassword']);
 !end;
 It does make sense to define this behavior within the {\f1\fs20 TSQLRecord} definition, so that it would be shared by all models.
+If you want to perform some text field length validation or filter at ORM level, you may use {\f1\fs20 TSQLRecordProperties}'s {\f1\fs20 SetMaxLengthValidatorForTextFields()} or {\f1\fs20 SetMaxLengthFilterForTextFields()} method, or at model level:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLMyRecord1,TSQLMyRecord2]);
+!  result.SetMaxLengthValidatorForAllTextFields(true); // "index n" is in UTF-8 bytes
+!end;
 In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
 For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
 !procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
@@ -3292,7 +3299,7 @@ Another possibility to access your high-level type, is to use either custom {\i 
 : One ORM to rule them all
 Just before entering deeper into the {\i mORMot} material in the following pages (Database layer, Client-Server, Services), you may find out that this implementation may sounds restricted.
 Some common (and founded) criticisms are the following (quoting from our forum):
-- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing {\i Delphi} constructs like "{\f1\fs20 index n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
+- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing {\i Delphi} constructs like "{\f1\fs20 @*index@ n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
 - "You have to inherit from {\f1\fs20 TSQLRecord}, and can't persist any plain class";
 - "There is no way to easily map an existing complex database".
 Those concerns are pretty understandable. Our {\i mORMot} framework is not meant to fit any purpose, but it is worth understanding why it has been implemented as such, and why it may be quite unique within the family of ORMs - which almost all are following the {\i Hibernate} way of doing.
@@ -5149,7 +5156,7 @@ When working with any @13@, you have mainly two possibilities:
 - Start from scratch, i.e. write your classes and let the ORM create all the database structure, which will reflect directly the object properties - it is also named "@*code-first@";
 - Use an existing database, and then define in your model how your classes map the existing database structure - this is the "@*database-first@" option.
 Our {\i mORMot} framework implements both paths, even if, like for other ORMs, code-first sounds like a more straight option.
-:  Code-first ORM
+:145  Code-first ORM
 An {\i external} record can be defined as such, as expected by {\i mORMot}'s @*ORM@:
 !type
 !  TSQLRecordPeopleExt = class(TSQLRecord)
@@ -5171,11 +5178,12 @@ An {\i external} record can be defined as such, as expected by {\i mORMot}'s @*O
 !    property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
 !  end;
 As you can see, there is no difference with an {\i internal} ORM class: it inherits from {\f1\fs20 @*TSQLRecord@}, but you may want it to inherit from {\f1\fs20 TSQLRecordMany} to use @58@ for instance.
-The only difference is this {\f1\fs20 index 40} attribute in the definition of {\f1\fs20 FirstName} and {\f1\fs20 LastName} @*published properties@: this will define the length (in {\f1\fs20 WideChar}) to be used when creating the external field for TEXT column. See above e.g.:
+The only difference is this {\f1\fs20 @**index@ 40} attribute in the definition of {\f1\fs20 FirstName} and {\f1\fs20 LastName} @*published properties@: this will define the length (in {\i UTF-16} {\f1\fs20 WideChar} or {\i UTF-8} bytes) to be used when creating the external field for TEXT column. See above e.g.:
 !    property FirstName: RawUTF8
 !!      index 40
 !      read fFirstName write fFirstName;
-In fact, {\i @*SQLite3@} does not care about textual field length, but almost all other database engines expect a maximum length to be specified when defining a {\f1\fs20 VARCHAR} column in a table. If you do not specify any length in your field definition (i.e. if there is no {\f1\fs20 index ???} attribute), the ORM will create a column with an unlimited length (e.g. {\f1\fs20 varchar(max)} for {\i @*MS SQL@ Server}). In this case, code will work, but performance and disk usage may be highly degraded, since access via a CLOB is known to be notably slower.
+In fact, {\i @*SQLite3@} does not care about textual field length, but almost all other database engines expect a maximum length to be specified when defining a {\f1\fs20 VARCHAR} column in a table. If you do not specify any length in your field definition (i.e. if there is no {\f1\fs20 index ???} attribute), the ORM will create a column with an unlimited length (e.g. {\f1\fs20 varchar(max)} for {\i @*MS SQL@ Server}). In this case, code will work, but performance and disk usage may be highly degraded, since access via a CLOB is known to be notably slower. The only exceptions to this performance penalty are {\i SQlite3} and {\i PostgreSQL}, for which the size unlimited {\f1\fs20 TEXT} columns are as fast to process than {\f1\fs20 varchar(#)}.
+By default, no check will be performed by the ORM to ensure that the field length is compliant with the column size expectation in the external database. You can use {\f1\fs20 TSQLRecordProperties}'s {\f1\fs20 SetMaxLengthValidatorForTextFields()} or {\f1\fs20 SetMaxLengthFilterForTextFields()} method to create a validation or filter rule to be performed before sending the data to the external database - see @56@.
 Here is an extract of the regression test corresponding to external databases:
 !var RExt: TSQLRecordPeopleExt;
 !  (...)
@@ -5798,7 +5806,7 @@ You can add documents with the standard CRUD methods of the ORM, as usual:
 !  finally
 !    R.Free;
 !  end;
-As we already saw, the framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 index 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
+As we already saw, the framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 @*index@ 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
 The usual {\f1\fs20 Retrieve} / {\f1\fs20 Delete} / {\f1\fs20 Update} methods are available:
 !  R := TSQLORM.Create;
 !  try
@@ -10948,7 +10956,7 @@ As you can discover:
 - We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
 - {\f1\fs20 Article} tags are stored as a dynamic array of integer within the record, and not in a separated pivot table: it would make the database smaller, and queries faster (since we avoid a JOIN);
 - Some properties are defined (and stored) twice, e.g. {\f1\fs20 TSQLContent} defines one {\f1\fs20 AuthorName} field in addition to the {\f1\fs20 Author} ID field, as a convenient direct access to the author name, therefore avoiding a JOINed query at each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
-- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b index 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @27@;
+- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b @*index@ 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @145@;
 - Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterNotVoidText()} method, which would be applied before an article is stored in the controller's code (in {\f1\fs20 TBlogApplication. ArticleCommit});
 - The whole application would run without writing any SQL, but just high-level ORM methods;
 - Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG);
@@ -10956,7 +10964,7 @@ As you can discover:
 Foreign keys and indexes are managed as such:
 - The {\f1\fs20 TSQLRecord.ID} @*primary key@ of any ORM class will be indexed;
 - For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
-- An index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a list of publication months in the main BLOG page, and link to the corresponding articles.\line The following code will take care of it:
+- A SQL index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a list of publication months in the main BLOG page, and link to the corresponding articles.\line The following code will take care of it:
 !class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
 !  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 !begin

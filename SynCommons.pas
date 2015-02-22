@@ -7308,7 +7308,12 @@ type
       aFreeIfAlreadyThere: boolean=true): TSynFilterOrValidate;
   public
     /// initialize the filter or validation instance
-    constructor Create(const aParameters: RawUTF8='');
+    // - most of the time, optional parameters may be specified as JSON,
+    // possibly with the extended MongoDB syntax
+    constructor Create(const aParameters: RawUTF8=''); overload; virtual;
+    /// initialize the filter or validation instance
+    /// - this overloaded constructor will allow to easily set the parameters
+    constructor CreateUTF8(const Format: RawUTF8; const Args, Params: array of const); overload; 
     /// the optional associated parameters, supplied as JSON-encoded
     property Parameters: RawUTF8 read fParameters write SetParameters;
   end;
@@ -7427,6 +7432,8 @@ type
       var ErrorMsg: string): boolean; override;
   end;
 
+  TSynValidateTextProps = array[0..15] of cardinal;
+
 {$M+} // to have existing RTTI for published properties
   /// text validation to be applied to any Record field content
   // - default MinLength value is 1, MaxLength is maxInt: so a blank
@@ -7435,10 +7442,14 @@ type
   // MinUpperCount allow you to specify the minimal count of respectively
   // alphabetical [a-zA-Z], digit [0-9], punctuation [_!;.,/:?%$="#@(){}+-*],
   // lower case or upper case characters
+  // - expects optional JSON parameters of the allowed text length range as
+  // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
+  // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1}
   TSynValidateText = class(TSynValidate)
   private
     /// used to store all associated validation properties by index
-    fProps: array[0..15] of cardinal;
+    fProps: TSynValidateTextProps;
+    fUTF8Length: boolean;
   protected
     /// use sInvalidTextChar resourcestring to create a translated error message
     procedure SetErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer;
@@ -7446,26 +7457,18 @@ type
     /// decode "MinLength", "MaxLength", and other parameters into fProps[]
     procedure SetParameters(Value: RawUTF8); override;
   public
-    /// initialize the validation instance
-    // - expects optional JSON parameters of the allowed text length range as
-    // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
-    // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1}
-    // - you can use MongoDB enhanced syntax e.g. '{MinLength:5,MaxLength:10}'
-    constructor Create(const aParameters: RawUTF8=''); virtual;
     /// perform the text length validation action to the specified value
     function Process(aFieldIndex: integer; const Value: RawUTF8;
       var ErrorMsg: string): boolean; override;
   published
     /// Minimal length value allowed for the text content
-    // - the length is calculated with UTF-16 Unicode codepoints, not with
-    // UTF-8 encoded bytes count - MinLength may not match the UCS4 glyphs
-    // number, in case of UTF-16 surrogates
+    // - the length is calculated with UTF-16 Unicode codepoints, unless
+    // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
     // - default is 1, i.e. a void text will not pass the validation
     property MinLength: cardinal read fProps[0] write fProps[0];
     /// Maximal length value allowed for the text content
-    // - the length is calculated with UTF-16 Unicode codepoints, not with
-    // UTF-8 encoded bytes count - MaxLength may not match the UCS4 glyphs
-    // number, in case of UTF-16 surrogates
+    // - the length is calculated with UTF-16 Unicode codepoints, unless
+    // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
     // - default is maxInt, i.e. no maximum length is set
     property MaxLength: cardinal read fProps[1] write fProps[1];
     /// Minimal alphabetical character [a-zA-Z] count
@@ -7510,12 +7513,19 @@ type
     /// Maximal space count allowed on the Right side
     // - default is maxInt, i.e. any Right space allowed
     property MaxRightTrimCount: cardinal read fProps[9] write fProps[9];
+    /// defines if lengths parameters expects UTF-8 or UTF-16 codepoints number
+    // - with default FALSE, the length is calculated with UTF-16 Unicode
+    // codepoints - MaxLength may not match the UCS4 glyphs number, in case of
+    // UTF-16 surrogates
+    // - you can set this property to TRUE so that the UTF-8 byte count would
+    // be used for truncation againts the MaxLength parameter
+    property UTF8Length: boolean read fUTF8Length write fUTF8Length;
   end;
 {$M-}
 
   /// strong password validation for a Record field content (typicaly a TSQLRecord)
   // - the following parameters are set by default to
-  // $ '{"MinLength":5,"MaxLength":10,"MinAlphaCount":1,"MinDigitCount":1,
+  // $ '{"MinLength":5,"MaxLength":20,"MinAlphaCount":1,"MinDigitCount":1,
   // $ "MinPunctCount":1,"MinLowerCount":1,"MinUpperCount":1,"MaxSpaceCount":0}'
   // - you can specify some JSON encoded parameters to change this default
   // values, which will validate the text field only if it contains from 5 to 10
@@ -7597,7 +7607,7 @@ type
   protected
     fMaxLength: cardinal;
     fUTF8Length: boolean;
-    /// decode the MaxLength: parameter
+    /// decode the MaxLength: and UTF8Length: parameters
     procedure SetParameters(Value: RawUTF8); override;
   public
     /// perform the length truncation of the specified value
@@ -37014,6 +37024,12 @@ begin
   SetParameters(aParameters); // should parse the JSON-encoded parameters
 end;
 
+constructor TSynFilterOrValidate.CreateUTF8(const Format: RawUTF8;
+  const Args, Params: array of const);
+begin
+  Create(FormatUTF8(Format,Args,Params,true));
+end;
+
 procedure TSynFilterOrValidate.SetParameters(Value: RawUTF8);
 begin
   fParameters := Value;
@@ -37196,21 +37212,6 @@ end;
 
 { TSynValidateText }
 
-constructor TSynValidateText.Create(const aParameters: RawUTF8);
-begin
-  MinLength := 1;
-  MaxLength := maxInt;
-  MaxSpaceCount := maxInt;
-  MaxLeftTrimCount := maxInt;
-  MaxRightTrimCount := maxInt;
-  MaxAlphaCount := maxInt;
-  MaxDigitCount := maxInt;
-  MaxPunctCount := maxInt;
-  MaxLowerCount := maxInt;
-  MaxUpperCount := maxInt;
-  inherited Create(aParameters);
-end;
-
 procedure TSynValidateText.SetErrorMsg(fPropsIndex, InvalidTextIndex,
   MainIndex: integer; var result: string);
 var P: PChar;
@@ -37229,8 +37230,10 @@ var i, L: cardinal;
     Min: array[2..7] of cardinal;
 begin
   result := false;
-  L := Utf8ToUnicodeLength(pointer(Value));
-  if L<MinLength then 
+  if fUTF8Length then
+    L := length(Value) else
+    L := Utf8ToUnicodeLength(pointer(Value));
+  if L<MinLength then
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
@@ -37290,8 +37293,12 @@ end;
 procedure TSynValidateText.SetParameters(Value: RawUTF8);
 var V: TPUtf8CharDynArray;
     i: integer;
+const DEFAULT: TSynValidateTextProps = (
+  1,maxInt,0,0,0,0,0,0,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt);
 begin
-  inherited;
+  if (MinLength=0) and (MaxLength=0) then  // if not previously set
+    fProps := DEFAULT;
+  inherited SetParameters(Value);
   if Value='' then
     exit;
   JSONDecode(Value,['MinLength','MaxLength',
@@ -37299,27 +37306,25 @@ begin
     'MinLowerCount','MinUpperCount','MinSpaceCount',
     'MaxLeftTrimCount','MaxRightTrimCount',
     'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
-    'MaxLowerCount','MaxUpperCount','MaxSpaceCount'],V);
-  if length(fProps)<>length(V) then
+    'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
+    'UTF8Length'],V);
+  if length(V)<>length(fProps)+1 then
     exit;
   for i := 0 to high(fProps) do
     fProps[i] := GetCardinalDef(V[i],fProps[i]);
+  fUTF8Length := IdemPChar(V[length(fProps)],'1') or
+                 IdemPChar(V[length(fProps)],'TRUE');
 end;
 
 
 { TSynValidatePassWord }
 
 procedure TSynValidatePassWord.SetParameters(Value: RawUTF8);
+const DEFAULT: TSynValidateTextProps = (
+  5,20,1,1,1,1,1,0,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,0);
 begin
   // set default values for validating a strong password
-  MinLength := 5;
-  MaxLength := 10;
-  MinAlphaCount := 1;
-  MinDigitCount := 1;
-  MinPunctCount := 1;
-  MinLowerCount := 1;
-  MinUpperCount := 1;
-  MaxSpaceCount := 0;
+  fProps := DEFAULT;
   // read custom parameters
   inherited;
 end;

@@ -653,7 +653,9 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
     end;
     Column.DBType := mORMotType[Prop.SQLFieldType];
     Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
-    Column.Width := Prop.FieldWidth;
+    if Column.DBType=ftUTF8 then
+      Column.Width := Prop.FieldWidth else
+      Column.Width := 0;
     Column.Unique := aIsUnique in Prop.Attributes;
     Column.PrimaryKey := false;
     result := true;
