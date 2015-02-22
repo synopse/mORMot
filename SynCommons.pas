@@ -37434,6 +37434,7 @@ end;
 
 // we by-pass crt.pp since this unit cancels the SIGINT signal
 
+{$I-}
 procedure TextColor(Color: TConsoleColor);
 const AnsiTbl : string[8]='04261537';
 begin
@@ -37445,9 +37446,10 @@ begin
     write(#27'[0;3');
   write(AnsiTbl[(ord(color) and 7)+1],'m');
 end;
+{$I+}
 
 procedure TextBackground(Color: TConsoleColor);
-begin // not implemented yet
+begin // not implemented yet - but not needed either
 end;
 
 procedure ConsoleWaitForEnterKey;

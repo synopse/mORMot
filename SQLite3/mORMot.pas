@@ -37150,7 +37150,7 @@ function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
 var tmp: RawUTF8;
 begin
-  tmp := StringFromFile(JSONFile);
+  tmp := AnyTextFileToRawUTF8(JSONFile,true);
   if tmp='' then
     result := false else begin
     RemoveCommentsFromJSON(pointer(tmp));
