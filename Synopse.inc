@@ -114,7 +114,7 @@
 {.$define DOPATCHTRTL}
 // if defined, the low-level patches made to RecordCopy() low-level function
 // as defined in SynCommons.pas will be applied (if applicable to your Delphi
-// version) - you are free to use it, but we have unset it by default
+// version) - you should better use it, but we have unset it by default
 
 {.$define NOX64PATCHRTL}
 // if defined, with Win64 Delphi XE2+ compilers, FillChar() and Move() WON'T use

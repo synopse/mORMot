@@ -25056,6 +25056,8 @@ var NewJump: packed record
     Distance: integer; // relative jump is 32 bit even on CPU64
   end;
 begin
+  if (Func=nil) or (RedirectFunc=nil) then
+    exit; // nothing to redirect to
   assert(sizeof(TPatchCode)=sizeof(NewJump));
   NewJump.Code := $e9;
   NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
@@ -27145,8 +27147,13 @@ begin
   StrLen := @StrLenX86;
   {$else}
   {$ifdef CPU64}
+  {$ifdef NOX64PATCHRTL}
+  FillCharAddr := nil;
+  MoveAddr := nil;
+  {$else}
   FillCharAddr := @FillCharSSE2;
   MoveAddr := @MoveSSE2;
+  {$endif}
   StrLen := @StrLenSSE2;
   {$else}
   MoveAddr := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
