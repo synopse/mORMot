@@ -604,7 +604,7 @@ begin
             WR.Add(TField(ColumnAttr).AsInteger);
           {$endif}
       SynCommons.ftDouble:
-        WR.Add(TField(ColumnAttr).AsFloat);
+        WR.AddDouble(TField(ColumnAttr).AsFloat);
       SynCommons.ftCurrency:
         if TField(ColumnAttr).DataType in [ftBCD,ftFMTBcd] then
           AddBcd(WR,TField(ColumnAttr).AsBCD) else

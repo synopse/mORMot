@@ -2140,7 +2140,7 @@ begin // dedicated version to avoid as much memory allocation than possible
            WR.Add(PInt64(V)^) else
            WR.AddNoJSONEscape(V); // already as SQLT_STR
        ftDouble:
-         WR.Add(PDouble(V)^);
+         WR.AddDouble(PDouble(V)^);
        ftCurrency:
          WR.AddFloatStr(V); // already as SQLT_STR
        ftDate:

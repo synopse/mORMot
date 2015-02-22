@@ -543,8 +543,10 @@ begin
           W.Add(AsInteger);
         ftLargeint:
           W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
-        ftFloat, ftCurrency, ftBCD:
-          W.Add(AsFloat);
+        ftFloat, ftCurrency:
+          W.Add(AsFloat,TFloatField(Data.Fields[f]).Precision);
+        ftBCD:
+          W.AddCurr64(AsCurrency);
         ftTimeStamp, ftDate, ftTime, ftDateTime: begin
           W.Add('"');
           W.AddDateTime(AsDateTime);

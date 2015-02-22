@@ -6221,7 +6221,7 @@ begin
     case ColumnType(col) of
       ftNull:     WR.AddShort('null');
       ftInt64:    WR.Add(ColumnInt(col));
-      ftDouble:   WR.Add(ColumnDouble(col));
+      ftDouble:   WR.AddDouble(ColumnDouble(col));
       ftCurrency: WR.AddCurr64(ColumnCurrency(col));
       ftDate: begin
         WR.Add('"');
@@ -6405,7 +6405,7 @@ begin
         case V.VType of
           ftNull:     W.AddShort(NULL[tab]);
           ftInt64:    W.Add(V.VInt64);
-          ftDouble:   W.Add(V.VDouble);
+          ftDouble:   W.AddDouble(V.VDouble);
           ftCurrency: W.AddCurr64(V.VCurrency);
           ftDate: begin
             if not Tab then
@@ -7094,7 +7094,7 @@ begin
     case VType of
       ftNull:     Dest.AddShort('NULL');
       ftInt64:    Dest.Add({$ifdef DELPHI5OROLDER}integer{$endif}(VInt64));
-      ftDouble:   Dest.Add(PDouble(@VInt64)^);
+      ftDouble:   Dest.AddDouble(PDouble(@VInt64)^);
       ftCurrency: Dest.AddCurr64(VInt64);
       ftDate:     Dest.AddDateTime(PDateTime(@VInt64),' ','''');
       ftUTF8:     Dest.AddQuotedStr(pointer(VData),'''',MaxCharCount);
@@ -7683,7 +7683,7 @@ begin
       ftInt64:
         WR.Add(FromVarInt64Value(Data));
       ftDouble:
-        WR.Add(PDouble(Data)^);
+        WR.AddDouble(PDouble(Data)^);
       ftCurrency:
         WR.AddCurr64(PInt64(Data)^);
       ftDate: begin

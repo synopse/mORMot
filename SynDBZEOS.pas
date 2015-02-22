@@ -1125,10 +1125,10 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           P := fResultSet.GetPAnsiChar(col+1,Len);
           WR.AddNoJSONEscape(P,Len);
         end else
-          WR.Add(fResultSet.GetDouble(col+1));
+          WR.AddDouble(fResultSet.GetDouble(col+1));
       ftCurrency:
         if fDBMS in [dSQLite] then
-          WR.Add(fResultSet.GetDouble(col+1)) else
+          WR.AddDouble(fResultSet.GetDouble(col+1)) else
           WR.AddCurr64(fResultSet.GetCurrency(col+1));
       ftDate: begin
         WR.Add('"');

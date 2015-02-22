@@ -2557,7 +2557,7 @@ label bin,regex;
 begin
   case Kind of
   betFloat:
-    W.Add(PDouble(Element)^);
+    W.AddDouble(PDouble(Element)^);
   betString, betJS, betDeprecatedSymbol: begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);

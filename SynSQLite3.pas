@@ -4612,7 +4612,7 @@ begin
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request,i));
       SQLITE_FLOAT:
-        WR.Add(sqlite3.column_double(Request,i));
+        WR.AddDouble(sqlite3.column_double(Request,i));
       SQLITE_TEXT: begin
         WR.Add('"');
         WR.AddJSONEscape(sqlite3.column_text(Request,i),0);

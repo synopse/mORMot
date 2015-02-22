@@ -1915,7 +1915,7 @@ begin
     JSTYPE_NUMBER:
       if JSVAL_IS_INT(FValue) then
         W.Add(JSVAL_TO_INT(FValue)) else
-        W.Add(JSVAL_TO_DOUBLE(FValue));
+        W.AddDouble(JSVAL_TO_DOUBLE(FValue));
     JSTYPE_BOOLEAN:
       W.AddString(JSON_BOOLEAN[JSVAL_TO_BOOLEAN(FValue)=JS_TRUE]);
     JSTYPE_OBJECT,

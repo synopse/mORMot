@@ -1451,7 +1451,7 @@ begin // dedicated version to avoid as much memory allocation than possible
       stOK:
 Write:case ColumnType of
         ftInt64:    WR.Add(V^.Int64);
-        ftDouble:   WR.Add(V^.Double);
+        ftDouble:   WR.AddDouble(V^.Double);
         ftCurrency: WR.AddCurr64(V^.Int64);
         ftDate: begin
           WR.Add('"');

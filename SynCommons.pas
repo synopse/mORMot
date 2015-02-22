@@ -374,6 +374,8 @@ unit SynCommons;
     now "Iso8601" naming will be only for standard ISO-8601 text, not Int64 value
   - BREAKING CHANGE: TTextWriter.Add(Format) won't handle the alternate $ % tags
     any more, unless you define the OLDTEXTWRITERFORMAT conditional
+  - BREAKING CHANGE: TTextWriter.AddDouble() and AddSingle() dedicated methods
+    replacing ambiquituous Add(), which was not appropriate for single values
   - BREAKING CHANGE: FormatUTF8() and TTextWriter.Add(Format) PUTF8Char type for
     constant text parameter has been changed into RawUTF8, to let the compiler
     handle any Unicode content as expected
@@ -5619,9 +5621,9 @@ type
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add(const guid: TGUID); overload;
     /// append a floating-point Value as a String
-    procedure Add(Value: double); overload;
+    procedure AddDouble(Value: double);
     /// append a floating-point Value as a String
-    procedure Add(Value: single); overload;
+    procedure AddSingle(Value: single);
     /// append a floating-point Value as a String
     procedure Add(Value: Extended; precision: integer); overload;
     /// append a floating-point text buffer
@@ -9546,6 +9548,7 @@ type
     {$endif}
     /// raise an exception if VTable=nil
     procedure CheckVTableInitialized;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize a record data content for a specified table
     // - a void content is set
@@ -28344,10 +28347,10 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     {$else}
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
     {$endif}
-    ptDouble:    aWriter.Add(unaligned(PDouble(Value)^));
+    ptDouble:    aWriter.AddDouble(unaligned(PDouble(Value)^));
     ptInt64,ptID:aWriter.Add(PInt64(Value)^);
     ptInteger:   aWriter.Add(PInteger(Value)^);
-    ptSingle:    aWriter.Add(PSingle(Value)^);
+    ptSingle:    aWriter.AddSingle(PSingle(Value)^);
     ptWord:      aWriter.AddU(PWord(Value)^);
     {$ifndef NOVARIANTS}
     ptVariant:   aWriter.AddVariantJSON(PVariant(Value)^,twJSONEscape);
@@ -33675,7 +33678,7 @@ begin
     AddNoJSONEscape(@S[1],ExtendedToString(S,Value,precision));
 end;
 
-procedure TTextWriter.Add(Value: double);
+procedure TTextWriter.AddDouble(Value: double);
 var S: ShortString;
 begin
   if Value=0 then
@@ -33683,7 +33686,7 @@ begin
     AddNoJSONEscape(@S[1],ExtendedToString(S,Value,DOUBLE_PRECISION));
 end;
 
-procedure TTextWriter.Add(Value: single);
+procedure TTextWriter.AddSingle(Value: single);
 var S: ShortString;
 begin
   if Value=0 then
@@ -33908,7 +33911,7 @@ begin
   if length(Doubles)=0 then
     exit;
   for i := 0 to high(Doubles) do begin
-    Add(Doubles[i]);
+    AddDouble(Doubles[i]);
     Add(',');
   end;
   CancelLastComma;
@@ -34123,8 +34126,8 @@ begin
   varInteger:  Add(VInteger);
   varInt64:    Add(VInt64);
   varWord64:   Add(VInt64);
-  varSingle:   Add(VSingle);
-  varDouble:   Add(VDouble);
+  varSingle:   AddSingle(VSingle);
+  varDouble:   AddDouble(VDouble);
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
   varBoolean:  AddString(JSON_BOOLEAN[VBoolean]);
@@ -34480,9 +34483,9 @@ begin // code below must match TDynArray.LoadFromJSON
       djWord:     AddU(PWordArray(P)^[i]);
       djInteger:  Add(PIntegerArray(P)^[i]);
       djCardinal: AddU(PCardinalArray(P)^[i]);
-      djSingle:   Add(PSingleArray(P)^[i]);
+      djSingle:   AddSingle(PSingleArray(P)^[i]);
       djInt64:    Add(PInt64Array(P)^[i]);
-      djDouble:   Add(PDoubleArray(P)^[i]);
+      djDouble:   AddDouble(PDoubleArray(P)^[i]);
       djCurrency: AddCurr64(PInt64Array(P)^[i]);
       end;
       Add(',');
@@ -35179,7 +35182,7 @@ begin
     vtBoolean:  AddString(JSON_BOOLEAN[VBoolean]);
     vtInteger:  Add(VInteger);
     vtInt64:    Add(VInt64^);
-    vtExtended: Add(VExtended^);
+    vtExtended: Add(VExtended^,DOUBLE_PRECISION);
     vtCurrency: AddCurr64(VInt64^);
     vtObject:   WriteObject(VObject);
     {$ifndef NOVARIANTS}
@@ -35195,7 +35198,7 @@ begin
   vtInteger:      Add(VInteger);
   vtBoolean:      AddU(byte(VBoolean));
   vtChar:         Add(@VChar,1,Escape);
-  vtExtended:     Add(VExtended^);
+  vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
   vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
   vtPointer:      AddPointer(PtrUInt(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
@@ -40942,7 +40945,7 @@ begin
   tftCurrency:
     W.AddCurr64(PInt64(FieldBuffer)^);
   tftDouble:
-    W.Add(PDouble(FieldBuffer)^);
+    W.AddDouble(PDouble(FieldBuffer)^);
   // some variable-size field value
   tftVarUInt32:
     W.Add(FromVarUInt32(PByte(FieldBuffer)));
@@ -44015,4 +44018,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

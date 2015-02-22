@@ -16316,7 +16316,7 @@ end;
 
 procedure TSQLPropInfoRTTIDouble.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  W.Add(fPropInfo.GetDoubleProp(Instance));
+  W.AddDouble(fPropInfo.GetDoubleProp(Instance));
 end;
 
 procedure TSQLPropInfoRTTIDouble.GetValueVar(Instance: TObject;
@@ -38634,7 +38634,7 @@ begin
             AddDateTime(P^.GetDoubleProp(Value));
             Add('"');
           end else
-            Add(P^.GetFloatProp(Value));
+            Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
         end;
         {$ifdef UNICODE}
         tkUString: begin // write converted to UTF-8
@@ -43434,7 +43434,7 @@ begin
          WR.AddU(PCardinal(V)^);
     8: WR.Add(PInt64(V)^);
   end;
-  smvDouble, smvDateTime: WR.Add(PDouble(V)^);
+  smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
   smvRawJSON:    WR.AddNoJSONEscape(PPointer(V)^);
