@@ -673,7 +673,8 @@ unit SynCommons;
   - added TSynFPUException class to allow per-method customization of the FPU
     exception mapping: to be used e.g. when mixing code between external
     libraries and Delphi code
-  - added dedicated TSynValidateNonVoidText class
+  - added new TSynValidateNonVoidText and TSynFilterTruncate classes
+  - added Utf8TruncateToUnicodeLength() and Utf8TruncateToLength() functions
   - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
     MaxUpperCount properties to TSynValidateText class
   - if DOPATCHTRTL is defined, will enable asm-optimized RecordClear and
@@ -1502,13 +1503,27 @@ function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; sourceBytes: PtrInt=
 // ending WideChar(#0)
 function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; MaxDestChars, sourceBytes: PtrInt): PtrInt; overload;
 
-/// calculate the Unicode character count (i.e. the glyph count),
-// UTF-8 encoded in source^
+/// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
+// - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
 // - faster than System.UTF8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
 
-/// calculate the character count of the first line UTF-8 encoded in source^
-// - end the count at first #13 or #10 character
+/// will truncate the supplied UTF-8 value if its length exceeds the specified
+// UTF-16 Unicode characters count
+// - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
+// - returns FALSE if text was not truncated, TRUE otherwise
+function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUtf16: integer): boolean;
+
+/// will truncate the supplied UTF-8 value if its length exceeds the specified
+// UTF-8 Unicode characters count
+// - this function will ensure that the returned content will contain only valid
+// UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
+// - returns FALSE if text was not truncated, TRUE otherwise
+function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
+
+/// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
+// - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
+// - end the parsing at first #13 or #10 character
 function Utf8FirstLineToUnicodeLength(source: PUTF8Char): PtrInt;
 
 /// convert a UTF-8 encoded buffer into a RawUnicode string
@@ -7411,7 +7426,7 @@ type
   end;
 
 {$M+} // to have existing RTTI for published properties
-  /// text validation to be applied to any Record field content 
+  /// text validation to be applied to any Record field content
   // - default MinLength value is 1, MaxLength is maxInt: so a blank
   // TSynValidateText.Create('') is the same as TSynValidateNonVoidText
   // - MinAlphaCount, MinDigitCount, MinPunctCount, MinLowerCount and
@@ -7440,13 +7455,15 @@ type
       var ErrorMsg: string): boolean; override;
   published
     /// Minimal length value allowed for the text content
-    // - the length is calculated with Unicode glyphs, not with UTF-8 encoded
-    // char count
+    // - the length is calculated with UTF-16 Unicode codepoints, not with
+    // UTF-8 encoded bytes count - MinLength may not match the UCS4 glyphs
+    // number, in case of UTF-16 surrogates
     // - default is 1, i.e. a void text will not pass the validation
     property MinLength: cardinal read fProps[0] write fProps[0];
     /// Maximal length value allowed for the text content
-    // - the length is calculated with Unicode glyphs, not with UTF-8 encoded
-    // char count
+    // - the length is calculated with UTF-16 Unicode codepoints, not with
+    // UTF-8 encoded bytes count - MaxLength may not match the UCS4 glyphs
+    // number, in case of UTF-16 surrogates
     // - default is maxInt, i.e. no maximum length is set
     property MaxLength: cardinal read fProps[1] write fProps[1];
     /// Minimal alphabetical character [a-zA-Z] count
@@ -7569,6 +7586,32 @@ type
   public
     /// perform the space triming conversion to the specified value
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
+  end;
+
+  /// a custom filter which will truncate a text above a given maximum length
+  // - expects optional JSON parameters of the allowed text length range as
+  // $ '{MaxLength":10}
+  TSynFilterTruncate = class(TSynFilter)
+  protected
+    fMaxLength: cardinal;
+    fUTF8Length: boolean;
+    /// decode the MaxLength: parameter
+    procedure SetParameters(Value: RawUTF8); override;
+  public
+    /// perform the length truncation of the specified value
+    procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
+    /// Maximal length value allowed for the text content
+    // - the length is calculated with UTF-16 Unicode codepoints, unless
+    // UTF8Length has been set to TRUE so that the UTF-8 byte count is checked
+    // - default is 0, i.e. no maximum length is forced
+    property MaxLength: cardinal read fMaxLength write fMaxLength;
+    /// defines if MaxLength is stored as UTF-8 or UTF-16 codepoints number
+    // - with default FALSE, the length is calculated with UTF-16 Unicode
+    // codepoints - MaxLength may not match the UCS4 glyphs number, in case of
+    // UTF-16 surrogates
+    // - you can set this property to TRUE so that the UTF-8 byte count would
+    // be used for truncation againts the MaxLength parameter
+    property UTF8Length: boolean read fUTF8Length write fUTF8Length;
   end;
 
 
@@ -13069,6 +13112,51 @@ begin
           inc(source); // check valid UTF-8 content
     end;
   until false;
+end;
+
+function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUTF16: integer): boolean;
+var c: byte;
+    extra,i: integer;
+    source: PUTF8Char;
+begin
+  source := pointer(text);
+  if (source<>nil) and (cardinal(maxUtf16)<cardinal(length(text))) then
+    repeat
+      if maxUTF16<=0 then begin
+        SetLength(text,source-pointer(text)); // truncate
+        result := true;
+        exit;
+      end;
+      c := byte(source^);
+      inc(source);
+      if c=0 then break else
+      if c and $80=0 then
+        dec(maxUTF16) else begin
+        extra := UTF8_EXTRABYTES[c];
+        if extra=0 then break else // invalid leading byte
+        if extra>=UTF8_EXTRA_SURROGATE then
+          dec(maxUTF16,2) else
+          dec(maxUTF16);
+        for i := 1 to extra do // inc(source,extra) is faster but not safe
+          if byte(source^) and $c0<>$80 then
+            break else
+            inc(source); // check valid UTF-8 content
+      end;
+    until false;
+  result := false;
+end;
+
+function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
+var L: cardinal;
+begin
+  L := length(text);
+  if L<maxUTF8 then begin
+    result := false;
+    exit; // nothing to truncate
+  end;
+  while (L>0) and (ord(Text[L]) and $c0=$80) do dec(L);
+  SetLength(text,L);
+  result := true;
 end;
 
 function Utf8FirstLineToUnicodeLength(source: PUTF8Char): PtrInt;
@@ -36938,6 +37026,25 @@ end;
 procedure TSynFilterTrim.Process(aFieldIndex: integer; var Value: RawUTF8);
 begin
   Value := Trim(Value);
+end;
+
+
+{ TSynFilterTruncate}
+
+procedure TSynFilterTruncate.SetParameters(Value: RawUTF8);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(Value,['MaxLength','UTF8Length'],V);
+  fMaxLength := GetCardinalDef(V[0],0);
+  fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
+end;
+
+procedure TSynFilterTruncate.Process(aFieldIndex: integer; var Value: RawUTF8);
+begin
+  if fMaxLength-1<cardinal(maxInt) then
+    if fUTF8Length then
+      Utf8TruncateToLength(Value,fMaxLength) else
+      Utf8TruncateToUnicodeLength(Value,fMaxLength);
 end;
 
 
