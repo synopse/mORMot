@@ -68,8 +68,11 @@ uses
 { ----- Manage Service/Daemon settings }
 
 type
-  /// abstract class for storing application settings as a JSON file
-  TApplicationSettings = class(TSynAutoCreateFields)
+  /// abstract class for storing application settings
+  TApplicationSettingsAbstract = class(TSynAutoCreateFields);
+
+  /// parent class for storing application settings as a JSON file
+  TApplicationSettingsFile = class(TApplicationSettingsAbstract)
   protected
     fSettingsJsonFileName: TFileName;
   public
@@ -94,7 +97,7 @@ implementation
 
 { TApplicationSettings }
 
-constructor TApplicationSettings.Create(
+constructor TApplicationSettingsFile.Create(
   const aSettingsJsonFileName: TFileName);
 begin
   inherited Create;
@@ -105,14 +108,14 @@ begin
   JSONFileToObject(fSettingsJsonFileName,self);
 end;
 
-destructor TApplicationSettings.Destroy;
+destructor TApplicationSettingsFile.Destroy;
 begin
   ObjectToJSONFile(Self,fSettingsJsonFileName,[woHumanReadable,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment]);
   inherited;
 end;
 
-function TApplicationSettings.FileNameRelativeToSettingsFile(
+function TApplicationSettingsFile.FileNameRelativeToSettingsFile(
   const aFileName: TFileName): TFileName;
 var path,settings: TFileName;
 begin

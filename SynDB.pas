@@ -3371,7 +3371,7 @@ begin
     varCurrency: result := Curr64ToString(VInt64);
     varDouble:   result := DoubleToString(VDouble);
     varDate:     result := Ansi7ToString(DateTimeToIso8601Text(VDate,' '));
-    varString:   result := string(AnsiString(VAny));
+    varString:   result := UTF8ToString(RawUTF8(VAny));
     {$ifdef HASVARUSTRING}
     varUString:  result := UnicodeString(VAny);
     {$endif}
@@ -3468,7 +3468,11 @@ end;
 procedure TQueryValue.SetString(const aValue: string);
 begin
   CheckExists;
+  {$ifdef UNICODE}
   fValue := aValue;
+  {$else}
+  RawUTF8ToVariant(StringToUTF8(aValue),fValue);
+  {$endif}
 end;
 
 procedure TQueryValue.SetVariant(const aValue: Variant);
@@ -5975,7 +5979,8 @@ begin
       if VPointer=nil then
         BindNull(i,IO) else
         raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',[self]);
-    vtVariant:    BindVariant(i,VVariant^,true,IO);
+    vtVariant:
+      BindVariant(i,VVariant^,VariantTypeToSQLDBFieldType(VVariant^)=ftBlob,IO);
     else
       raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
         [self,i,VType]);
@@ -6032,10 +6037,17 @@ begin
     {$endif}
     varString:
       if DataIsBlob then
-        // no conversion if was set via TQuery.AsBlob property e.g.
-        BindBlob(Param,RawByteString(VAny),IO) else
+        if (VAny<>nil) and (PInteger(VAny)^ and $00ffffff=JSON_BASE64_MAGIC) then
+          // recognized as Base64 encoded text
+          BindBlob(Param,Base64ToBin(PAnsiChar(VAny)+3,length(RawByteString(VAny))-3)) else
+          // no conversion if was set via TQuery.AsBlob property e.g.
+          BindBlob(Param,RawByteString(VAny),IO) else
         // direct bind of AnsiString as UTF-8 value
-        BindTextU(Param,CurrentAnsiConvert.AnsiToUTF8(AnsiString(VAny)),IO);
+        {$ifdef UNICODE}
+        BindTextU(Param,AnyAnsiToUTF8(RawByteString(VAny)),IO);
+        {$else} // on older Delphi, we assume AnsiString = RawUTF8
+        BindTextU(Param,RawUTF8(VAny),IO);
+        {$endif}
     else
     if VType=varByRef or varVariant then
       BindVariant(Param,PVariant(VPointer)^,DataIsBlob,IO) else
