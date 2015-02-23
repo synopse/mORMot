@@ -148,7 +148,6 @@ function {{name}}2Variant(const _array: {{name}}): variant;
 {{/withHelpers}}
 
 implementation
-{{#withRecords}}
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := Value.{{fullPropName}};
 {{/isSimple}}{{#nestedRecord}}{{>setrec}}{{/nestedRecord}}{{#fromVariant}}  result.{{fullPropName}} := {{fromVariant}}(Value.{{fullPropName}});
@@ -200,6 +199,7 @@ end;
 {$HINTS ON}
 
 {{/withEnumerates}}
+{{#withRecords}}
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
   that the JSON used for transmission would match record fields naming }
@@ -216,9 +216,9 @@ begin
 {{>getrec}}
 end;
 {{/records}}
+
 {{/withRecords}}
 {{#withArrays}}
-
 
 { Some helpers for dynamic array types }
 
@@ -243,8 +243,8 @@ end;
 
 {{/arrays}}
 {{/withArrays}}
-
 {{#orm}}
+
 {{^isInMormotPas}}
 
 { {{className}} }
