@@ -1273,7 +1273,7 @@ begin
   if not result then exit;
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
   result := Comparemem(@Digest,@D3,sizeof(Digest));
-  {$ifdef CPU64}
+  {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
     Exclude(CpuFeatures,cfSSE41);
     result := result and SingleTest('abc', D1) and
@@ -3929,7 +3929,7 @@ var H: TSHAHash;
     t1, t2: cardinal;
     {$endif}
 begin
-  {$ifdef CPU64}
+  {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
     if K256Aligned='' then begin
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));

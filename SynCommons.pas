@@ -27167,18 +27167,18 @@ begin
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
+  {$ifdef DOPATCHTRTL}
   if DebugHook=0 then begin // patch only outside debugging
     RedirectCode(SystemFillCharAddress,FillCharAddr);
     RedirectCode(@System.Move,MoveAddr);
-    {$ifdef DOPATCHTRTL}
     RedirectCode(SystemRecordCopyAddress,@RecordCopy);
     RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
     RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
     {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
     RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
     {$endif UNICODE}
-    {$endif DOPATCHTRTL}
   end;
+  {$endif DOPATCHTRTL}
 end;
 
 {$endif CPUARM}

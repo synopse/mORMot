@@ -832,6 +832,7 @@ unit mORMot;
       value will continue to return simple fields, excluding BLOBs)
     - TSQLRecord.CreateAndFillPrepareMany() will raise an exception when run
       on a TSQLRecord with no many-to-many published field
+    - introducing new TSQLRecord.EnginePrepareMany() method
     - fixed TSQLRecordMany Source/Dest fields serialization - see [22ce911c715]
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
@@ -6187,6 +6188,13 @@ type
      - is used by TSQLRecord.CreateAndFillPrepareMany constructor }
     function FillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
+    /// compute a JOINed statement including TSQLRecordMany fields
+    // - is called by FillPrepareMany() to retrieve the JSON of the corresponding
+    // request: so you could use this method to retrieve directly the same
+    // information, ready to be transmitted (e.g. as RawJSON) to a client  
+    function EnginePrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
+      const aParamsSQLJoin, aBoundsSQLJoin: array of const;
+      out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
     {/ fill all published properties of an object from a TSQLTable prepared row
       - FillPrepare() must have been called before
       - if Dest is nil, this object values are filled
@@ -24852,14 +24860,14 @@ begin
       '%.CreateAndFillPrepareMany(): FillPrepareMany() failure',[self]);
 end;
 
-function TSQLRecord.FillPrepareMany(aClient: TSQLRest;
-  const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
-var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
+function TSQLRecord.EnginePrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
+  const aParamsSQLJoin, aBoundsSQLJoin: array of const;
+  out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
+var aSQLFields, aSQLFrom, aSQLWhere: RawUTF8;
     aField: string[3];
     aMany: RawUTF8;
     f, n, i, SQLFieldsCount: Integer;
     Props: TSQLRecordProperties;
-    T: TSQLTable;
     SQLFields: array of record
       SQL: string[3];
       Prop: TSQLPropInfo;
@@ -24869,7 +24877,6 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
     D: TSQLRecord;
     J,JBeg: PUTF8Char;
     Objects: array of TSQLRecord;
-    ObjectsClass: array of TSQLRecordClass;
 
   function AddField(aProp: TSQLPropInfo): Boolean;
   begin
@@ -24940,9 +24947,8 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQL: RawUTF8;
     end;
     result := 'A.'+result; // Owner=? -> A.Owner=?
   end;
-
 begin
-  result := false;
+  result := '';
   FillClose; // so that no further FillOne will work
   if (self=nil) or (aClient=nil) then
     exit;
@@ -25017,9 +25023,9 @@ begin
       inc(aField[1]);
     end;
   if Props.fSQLFillPrepareMany<>'' then
-    aSQL := Props.fSQLFillPrepareMany else begin
-    aSQL := FormatUTF8('select % from % where %',[aSQLFields,aSQLFrom,aSQLWhere]);
-    Props.fSQLFillPrepareMany := aSQL;
+    SQL := Props.fSQLFillPrepareMany else begin
+    SQL := FormatUTF8('select % from % where %',[aSQLFields,aSQLFrom,aSQLWhere]);
+    Props.fSQLFillPrepareMany := SQL;
   end;
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
   if aFormatSQLJoin<>'' then begin
@@ -25043,21 +25049,37 @@ begin
       if J^=#0 then break;
       aSQLWhere := aSQLWhere+ProcessField(JBeg);
     until JBeg^=#0;
-    aSQL := aSQL+' and ('+FormatUTF8(aSQLWhere,aParamsSQLJoin,aBoundsSQLJoin)+')';
+    SQL := SQL+' and ('+FormatUTF8(aSQLWhere,aParamsSQLJoin,aBoundsSQLJoin)+')';
   end;
-  // execute SQL statement and retrieve data
-  T := aClient.ExecuteList(ObjectsClass,aSQL);
-  if (T=nil) or (T.fResults=nil) then
+  // execute SQL statement and retrieve the matching data
+  result := aClient.EngineList(SQL);
+  if result<>'' then // prepare Fill mapping on success - see FillPrepareMany()
+    for i := 0 to SQLFieldsCount-1 do
+      with SQLFields[i] do
+        fFill.AddMap(Instance,Prop,i);
+end;
+
+function TSQLRecord.FillPrepareMany(aClient: TSQLRest;
+  const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
+var JSON,SQL: RawUTF8;
+    ObjectsClass: TSQLRecordClassDynArray;
+    T: TSQLTable;
+begin
+  result := false;
+  JSON := EnginePrepareMany(aClient,aFormatSQLJoin,aParamsSQLJoin,aBoundsSQLJoin,
+    ObjectsClass,SQL);
+  if JSON='' then
     exit;
+  T := TSQLTableJSON.CreateFromTables(ObjectsClass,SQL,JSON);
+  if (T=nil) or (T.fResults=nil) then begin
+    T.Free;
+    exit;
+  end;
+{  assert(T.FieldCount=SQLFieldsCount);
+  for i := 0 to SQLFieldsCount-1 do
+    assert(IdemPropName(SQLFields[i].SQL,T.fResults[i],StrLen(T.fResults[i]))); }
   fFill.fTable := T;
   T.OwnerMustFree := true;
-  // map fields
-  assert(T.FieldCount=SQLFieldsCount);
-  for i := 0 to SQLFieldsCount-1 do
-    assert(IdemPropName(SQLFields[i].SQL,T.fResults[i],StrLen(T.fResults[i])));
-  for i := 0 to SQLFieldsCount-1 do
-    with SQLFields[i] do
-      fFill.AddMap(Instance,Prop,i);
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
   result := true;
 end;
