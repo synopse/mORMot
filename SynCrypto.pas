@@ -1116,21 +1116,14 @@ type
 const
   RCon: array[0..9] of cardinal= ($01,$02,$04,$08,$10,$20,$40,$80,$1b,$36);
 
-{$ifdef AESSTATICTABLES}
- AES static tables where dropped due to unnecessary long code
-{$else AESSTATICTABLES}
 // AES computed tables
 var
   SBox, InvSBox: array[byte] of byte;
   Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
 
 procedure ComputeAesStaticTables; // will compute 4.5 KB of constant tables
-var i, x,y,z: byte;
+var i, x,y: byte;
     pow,log: array of byte;
-function Mul(x,y: byte): cardinal;
-begin
-  result := pow[(log[x]+log[y])mod $ff];
-end;
 begin
   SetLength(pow,256);
   SetLength(log,256);
@@ -1139,41 +1132,40 @@ begin
     pow[i] := x;
     log[x] := i;
     if x and $80<>0 then
-      x := ( x xor ( ( x shl 1 ) xor  $1B ) ) else
-      x := ( x xor ( ( x shl 1 ) ) );
+      x := x xor (x shl 1) xor $1B else
+      x := x xor (x shl 1);
   end;
   SBox[0] := $63;
   InvSBox[$63] := 0;
   for i := 1 to 255 do begin
-    x := pow[255-log[i]];
-    y := x; y := ( ( y shl 1 ) or ( y shr 7 ) );
-    x := x xor y; y := ( ( y shl 1 ) or ( y shr 7 ) );
-    x := x xor y; y := ( ( y shl 1 ) or ( y shr 7 ) );
-    x := x xor y; y := ( ( y shl 1 ) or ( y shr 7 ) );
+    x := pow[255-log[i]]; y := (x shl 1)+(x shr 7);
+    x := x xor y; y := (y shl 1)+(y shr 7);
+    x := x xor y; y := (y shl 1)+(y shr 7);
+    x := x xor y; y := (y shl 1)+(y shr 7);
     x := x xor y xor $63;
     SBox[i] := x;
     InvSBox[x] := i;
   end;
   for i := 0 to 255 do begin
     x := SBox[i];
+    y := x shl 1;
     if x and $80<>0 then
-      y := ( x shl 1 ) xor $1B else
-      y := ( x shl 1 );
-      z := y xor x;
-    Te0[i] := y+x shl 8+x shl 16+z shl 24;
+      y := y xor $1B;
+    Te0[i] := y+x shl 8+x shl 16+(y xor x)shl 24;
     Te1[i] := Te0[i] shl 8+Te0[i] shr 24;
     Te2[i] := Te1[i] shl 8+Te1[i] shr 24;
     Te3[i] := Te2[i] shl 8+Te2[i] shr 24;
     x := InvSBox[i];
     if x=0 then
-      Td0[i] := 0 else
-      Td0[i] := Mul($e,x)+(Mul($9,x)shl 8)+(Mul($d,x)shl 16)+(Mul($b,x)shl 24);
+      continue;
+    x := log[x]; // Td0[x] = Si[x].[0e,09,0d,0b] -> e.g. log[$0e]=223 below
+    Td0[i] := pow[(x+223)mod 255]+pow[(x+199)mod 255]shl 8+
+        pow[(x+238)mod 255]shl 16+pow[(x+104)mod 255]shl 24;
     Td1[i] := Td0[i] shl 8+Td0[i] shr 24;
     Td2[i] := Td1[i] shl 8+Td1[i] shr 24;
     Td3[i] := Td2[i] shl 8+Td2[i] shr 24;
   end;
 end;
-{$endif AESSTATICTABLES}
 
 type
   TSHAHash  = packed record
@@ -5876,9 +5868,7 @@ end;
 
 
 initialization
-{$ifndef AESSTATICTABLES}
   ComputeAesStaticTables;
-{$endif AESSTATICTABLES}
 {$ifdef USEPADLOCK}
   PadlockInit;
 {$endif}
