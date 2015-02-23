@@ -27139,36 +27139,43 @@ end;
 {$endif CPU64}
 
 procedure InitRedirectCode;
+{$ifdef DOPATCHTRTL}
 var FillCharAddr, MoveAddr: pointer;
+{$endif}
 begin
   {$ifdef DELPHI5OROLDER}
-  FillCharAddr := @FillCharX87;
-  MoveAddr := @MoveX87;
   StrLen := @StrLenX86;
   {$else}
   {$ifdef CPU64}
-  {$ifdef NOX64PATCHRTL}
-  FillCharAddr := nil;
-  MoveAddr := nil;
-  {$else}
-  FillCharAddr := @FillCharSSE2;
-  MoveAddr := @MoveSSE2;
-  {$endif}
   StrLen := @StrLenSSE2;
   {$else}
-  MoveAddr := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
-  if SupportsSSE2 then begin
-    FillCharAddr := @FillCharSSE2;
-    StrLen := @StrLenSSE2;
-  end else begin
-    FillCharAddr := @FillCharX87;
+  if SupportsSSE2 then
+    StrLen := @StrLenSSE2 else
     StrLen := @StrLenX86;
-  end;
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
   {$ifdef DOPATCHTRTL}
   if DebugHook=0 then begin // patch only outside debugging
+    {$ifdef DELPHI5OROLDER}
+    FillCharAddr := @FillCharX87;
+    MoveAddr := @MoveX87;
+    {$else}
+    {$ifdef CPU64}
+    {$ifdef NOX64PATCHRTL}
+    FillCharAddr := nil;
+    MoveAddr := nil;
+    {$else}
+    FillCharAddr := @FillCharSSE2;
+    MoveAddr := @MoveSSE2;
+    {$endif NOX64PATCHRTL}
+    {$else}
+    MoveAddr := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
+    if SupportsSSE2 then
+      FillCharAddr := @FillCharSSE2 else
+      FillCharAddr := @FillCharX87;
+    {$endif CPU64}
+    {$endif DELPHI5OROLDER}
     RedirectCode(SystemFillCharAddress,FillCharAddr);
     RedirectCode(@System.Move,MoveAddr);
     RedirectCode(SystemRecordCopyAddress,@RecordCopy);
