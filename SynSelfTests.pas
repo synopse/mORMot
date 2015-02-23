@@ -7212,7 +7212,8 @@ var A: TAES;
     i,k,ks,m, len: integer;
     AES: TAESFull;
     PC: PAnsiChar;
-    //Timer: ILocalPrecisionTimer;
+    noaesni: boolean;
+    Timer: array[boolean] of TPrecisionTimer;
     ValuesCrypted,ValuesOrig: array[0..1] of RawByteString;
 const MAX = 4096*1024;  // test 4 MB data, i.e. multi-threaded AES
       MODES: array[0..4{$ifdef USE_PROV_RSA_AES}+2{$endif}] of TAESAbstractClass =
@@ -7220,82 +7221,96 @@ const MAX = 4096*1024;  // test 4 MB data, i.e. multi-threaded AES
          {$ifdef USE_PROV_RSA_AES}, TAESECB_API, TAESCBC_API{$endif});
       // TAESCFB_API and TAESOFB_API just do not work
 begin
+  Check(AESSelfTest(true),'Internal Tables');
   SetLength(orig,MAX);
   SetLength(crypted,MAX+256);
   st := '1234essai';
   pInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
-  for k := 0 to 2 do begin
-    ks := 128+k*64; // test keysize of 128, 192 and 256 bits
-    for i := 1 to 100 do begin
+  for noaesni := false to true do begin
+    Timer[noaesni].Init;
+    for k := 0 to 2 do begin
+      ks := 128+k*64; // test keysize of 128, 192 and 256 bits
       SHA256Weak(st,Key);
-      move(Key,s,16);
-      A.EncryptInit(Key,ks);
-      A.Encrypt(s,b);
-      A.Done;
-      A.DecryptInit(Key,ks);
-      A.Decrypt(b,p);
-      A.Done;
-      Check(CompareMem(@p,@s,AESBLockSize));
-      Check(AESSHA256(AESSHA256(st,st,true),st,False)=st);
-      st := st+AnsiChar(Random(255));
-    end;
-    PC := Pointer(orig);
-    len := MAX;
-    repeat // populate orig with random data
-      if len>length(st) then
-        i := length(st) else
-        i := len;
-      dec(len,i);
-      move(pointer(st)^,PC^,i);
-      inc(PC,i);
-    until len=0;
-    len := AES.EncodeDecode(Key,ks,MAX,True,nil,nil,pointer(orig),pointer(crypted));
-    Check(len<MAX+256);
-    Check(len>=MAX);
-    //Timer := TLocalPrecisionTimer.Create;
-    len := AES.EncodeDecode(Key,ks,len,False,nil,nil,pointer(crypted),nil);
-    try
-      fillchar(iv,sizeof(iv),1);
-      Check(len=MAX);
-      Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),MAX));
-      for m := low(MODES) to high(MODES) do
-      with MODES[m].Create(Key,ks,iv) do
+      for i := 1 to 100 do begin
+        move(Key,s,16);
+        A.EncryptInit(Key,ks);
+        A.Encrypt(s,b);
+        A.Done;
+        A.DecryptInit(Key,ks);
+        A.Decrypt(b,p);
+        A.Done;
+        Check(CompareMem(@p,@s,AESBLockSize));
+        Timer[noaesni].Resume;
+        Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);
+        Timer[noaesni].Pause;
+        Timer[noaesni].ComputeTime;
+        st := st+RandomString(4);
+      end;
+      PC := Pointer(orig);
+      len := MAX;
+      repeat // populate orig with random data
+        if len>length(st) then
+          i := length(st) else
+          i := len;
+        dec(len,i);
+        move(pointer(st)^,PC^,i);
+        inc(PC,i);
+      until len=0;
+      len := AES.EncodeDecode(Key,ks,MAX,True,nil,nil,pointer(orig),pointer(crypted));
+      Check(len<MAX+256);
+      Check(len>=MAX);
+      len := AES.EncodeDecode(Key,ks,len,False,nil,nil,pointer(crypted),nil);
       try
-        //Timer.Start;
-        for i := 0 to 256 do begin
-          if i<64 then
-            len := i else
-          if i<128 then
-            len := i*16 else
-            len := i*32;
-          FillChar(pointer(crypted)^,len,0);
-          Encrypt(AES.outStreamCreated.Memory,pointer(crypted),len);
-          FillChar(pointer(orig)^,len,0);
-          Decrypt(pointer(crypted),pointer(orig),len);
-          Check((len=0) or (not isZero(pointer(orig),len)) or
-            isZero(AES.outStreamCreated.Memory,len));
-          Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),len));
-          s2 := copy(orig,1,len);
-          Check(DecryptPKCS7(EncryptPKCS7(s2))=s2,IntToStr(len));
-        end;
-        //fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
-        if m<length(ValuesCrypted) then begin
-          ValuesCrypted[m] := Copy(crypted,1,len);
-          ValuesOrig[m] := s2;
-        end else
-        if m>4 then begin
-          Check(ValuesOrig[m-5]=s2);
-          Check(ValuesCrypted[m-5]=Copy(crypted,1,len),MODES[m].ClassName);
+        Check(len=MAX);
+        Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),MAX));
+        if not noaesni then begin
+          fillchar(iv,sizeof(iv),1);
+          for m := low(MODES) to high(MODES) do
+          with MODES[m].Create(Key,ks,iv) do
+          try
+            //Timer.Start;
+            for i := 0 to 256 do begin
+              if i<64 then
+                len := i else
+              if i<128 then
+                len := i*16 else
+                len := i*32;
+              FillChar(pointer(crypted)^,len,0);
+              Encrypt(AES.outStreamCreated.Memory,pointer(crypted),len);
+              FillChar(pointer(orig)^,len,0);
+              Decrypt(pointer(crypted),pointer(orig),len);
+              Check((len=0) or (not isZero(pointer(orig),len)) or
+                isZero(AES.outStreamCreated.Memory,len));
+              Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),len));
+              s2 := copy(orig,1,len);
+              Check(DecryptPKCS7(EncryptPKCS7(s2))=s2,IntToStr(len));
+            end;
+            //fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
+            if m<length(ValuesCrypted) then begin
+              ValuesCrypted[m] := Copy(crypted,1,len);
+              ValuesOrig[m] := s2;
+            end else
+            if m>4 then begin
+              Check(ValuesOrig[m-5]=s2);
+              Check(ValuesCrypted[m-5]=Copy(crypted,1,len),MODES[m].ClassName);
+            end;
+          finally
+            Free;
+          end;
         end;
       finally
-        Free;
+        AES.outStreamCreated.Free;
       end;
-    finally
-      AES.outStreamCreated.Free;
     end;
+    if noaesni then begin
+      fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
+        [fRunConsole,length(st),Timer[false].Time,Timer[true].Time]);
+      Include(CpuFeatures,cfAESNI);
+    end;
+    if A.UsesAESNI then
+      Exclude(CpuFeatures,cfAESNI) else
+      break;
   end;
-  if A.UsesAESNI then
-    fRunConsole := fRunConsole+' using AES-NI instruction set';
 end;
 
 procedure TTestCryptographicRoutines._CompressShaAes;
