@@ -579,12 +579,12 @@ type
     // - for real seek, this method will raise an error: it's a compression-only stream
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// the number of byte written, i.e. the current uncompressed size
-    property SizeIn: {$ifdef KYLIX3}integer{$else}cardinal{$endif} read FStrm.total_in;
-    /// write all pending compressed data into outStream 
-    procedure Flush;
+    function SizeIn: cardinal;
     /// the number of byte sent to the destination stream, i.e. the current
     // compressed size
-    property SizeOut: {$ifdef KYLIX3}integer{$else}cardinal{$endif} read FStrm.total_out;
+    function SizeOut: cardinal;
+    /// write all pending compressed data into outStream
+    procedure Flush;
     /// the current CRC of the written data, i.e. the uncompressed data CRC
     property CRC: cardinal read fCRC;
   end;
@@ -977,7 +977,7 @@ begin
     try
       Z.CopyFrom(S,Size64.Lo);
       Z.Flush;
-      assert(Z.SizeIn={$ifdef KYLIX3}integer{$endif}(Size64.Lo));
+      assert(Z.SizeIn=Size64.Lo);
       with Entry[Count] do begin
         with fhr.fileInfo do begin
           zcrc32 := Z.CRC;
@@ -5081,9 +5081,19 @@ begin
   end;
   if fGZFormat then begin
     fDestStream.Write(fCRC,4);
-    fDestStream.Write(SizeIn,4);
+    fDestStream.Write(FStrm.total_in,4);
   end;
   inherited;
+end;
+
+function TSynZipCompressor.SizeIn: cardinal;
+begin // FStrm.total_in may be integer, cardinal or ulong -> use function
+  result := FStrm.total_in;
+end;
+
+function TSynZipCompressor.SizeOut: cardinal;
+begin // FStrm.total_out may be integer, cardinal or ulong -> use function
+  result := FStrm.total_out;
 end;
 
 function TSynZipCompressor.FlushBufferOut: integer;
@@ -5107,11 +5117,11 @@ end;
 
 function TSynZipCompressor.Seek(Offset: Integer; Origin: Word): Longint;
 begin
-  if not FInitialized then 
+  if not FInitialized then
     result := 0 else
   if (Offset = 0) and (Origin = soFromCurrent) then // for TStream.Position
-      Result := FStrm.total_in else begin
-    Result := 0;
+      result := FStrm.total_in else begin
+    result := 0;
     assert((Offset = 0) and (Origin = soFromBeginning) and (FStrm.total_in = 0));
   end;
 end;
