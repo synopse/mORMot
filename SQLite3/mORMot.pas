@@ -766,8 +766,9 @@ unit mORMot;
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
     - introducing TInjectableObject to easily implement the IoC SOLID pattern,
       for both TSQLRest services and stubing/mocking
-    - introducing TInterfaceResolver and TInterfaceResolverForSingleInterface
-      abstract class, to be used for IoC with TInjectableObject types
+    - introducing TInterfaceResolver, TInterfaceResolverForSingleInterface and
+      TInterfaceResolverInjected, to be used for IoC with TInjectableObject types
+      and allowing TSQLRest.Services.Inject*() and Resolve() methods
     - added TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
       methods to specify interface from it name, without the need to use the
       TypeInfo(IMyInterface) syntax in end-user code
@@ -8672,11 +8673,14 @@ type
     /// this overriden constructor will check and store the supplied class
     // to implement an interface by TGUID
     constructor Create(const aInterface: TGUID; aImplementation: TInterfacedObjectClass); overload;
-    /// you can use this method to resolve the interface as a new instance 
+    /// you can use this method to resolve the interface as a new instance
     function GetOneInstance(out Obj): boolean;
   end;
 
   TInterfaceStub = class;
+
+  /// used to store a list of TInterfacedObject instances
+  TInterfacedObjectObjArray = array of TInterfacedObject;
 
   /// used to store a list of TInterfaceResolver instances
   TInterfaceResolverObjArray = array of TInterfaceResolver;
@@ -8684,27 +8688,94 @@ type
   /// used to store a list of TInterfaceStub instances
   TInterfaceStubObjArray = array of TInterfaceStub;
 
+  /// abstract factory class targetting a any kind of interface
+  // - you can inherit from this class to customize dependency resolution (IoC),
+  // defining the injection via InjectStub/InjectResolver/InjectInstance methods,
+  // and doing the instance resolution using the overloaded Resolve*() methods
+  // - TServiceContainer will inherit from this class, as the main entry point
+  // for interface-based services of the framework (via TSQLRest.Services)
+  TInterfaceResolverInjected = class(TInterfaceResolver)
+  protected
+    fResolvers: TInterfaceResolverObjArray;
+    fCreatedInterfaceStub: TInterfaceStubObjArray;
+    fDependencies: TInterfacedObjectObjArray;
+    function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+  public
+    /// prepare and setup interface IoC resolution with some blank TInterfaceStub
+    // specified by their TGUID
+    procedure InjectStub(const aStubsByGUID: array of TGUID); overload; virtual;
+    /// prepare and setup interface IoC resolution with TInterfaceResolver
+    // kind of factory
+    // - e.g. a customized TInterfaceStub/TInterfaceMock, a TServiceContainer,
+    // a TDDDRepositoryRestObjectMapping or any factory class
+    procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver); overload; virtual;
+    /// prepare and setup interface IoC resolution from a TInterfacedObject instance
+    // - any TInterfaceObject declared as dependency should also be used only
+    // once, or the initialize should use a local IUnknown reference to ensure
+    // the instance will stay alive during all the process:
+    // !var daemon: TInfraMyDaemon;
+    // !    daemonLocal: IUnknown;
+    // !begin
+    // !  daemon := TInfraMyDaemon.Create;
+    // !  daemonLocal := IUnknown; // call _AddRef
+    // !  Rest.Services.Inject([daemon]);
+    // !  ... // here daemon may be resolved one or several times
+    // !  Rest.Free; // here daemon won't be released (RefCount>1)
+    // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
+    procedure InjectInstance(const aDependencies: array of TInterfacedObject); overload; virtual;
+    /// can be used to perform an IoC for a given interface
+    // - will search for the supplied interface to its internal list of resolvers
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
+    // !   ... use calc methods
+    function Resolve(aInterface: PTypeInfo; out Obj): boolean; overload;
+    /// can be used to perform an IoC for a given interface
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if ServiceContainer.Resolve(ICalculator,cal) then
+    // !   ... use calc methods
+    function Resolve(const aGUID: TGUID; out Obj): boolean; overload;
+    /// can be used to perform several IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
+    // - raise an EServiceException if any interface can't be resolved
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
+    /// can be used to perform several IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TGUID and @Instance
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - raise an EServiceException if any interface can't be resolved
+    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
+    /// release all used instances
+    // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
+    destructor Destroy; override;
+  end;
+
   {$M+}
   /// any service implementation class could inherit from this class to
   // allow dependency injection aka SOLID IoC by the framework
   // - once created, the framework will call AddResolver() member, so that its
-  // protected Resolve*() methods could be used to inject any needed dependency
-  // for lazy dependency resolution (e.g. within a public property getter)
+  // Resolve*() methods could be used to inject any needed dependency for lazy
+  // dependency resolution (e.g. within a public property getter)
   // - any interface published property could be automatically injected; see
   // e.g. how TServiceFactoryServer.CreateInstance() initialize them
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
-    fResolvers: TInterfaceResolverObjArray;
+    fResolver: TInterfaceResolverInjected;
     // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
-    fCreatedInterfaceStub: TInterfaceStubObjArray;
-    fDependencies: array of TInterfacedObject;
     // IoC resolution protected methods
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean;
     /// this method will resolve all interface published properties
     procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
   public
-    /// initialize an instance, using Mocks and Stubs to resolve dependencies
+    /// initialize an instance, defining one or several mean of dependency resolution
     // - simple TInterfaceStub could be created directly from their TGUID,
     // then any kind of IoC resolver instances could be specified, i.e. either
     // customized TInterfaceStub/TInterfaceMock, a TServiceContainer or
@@ -8722,20 +8793,37 @@ type
     // !   ...
     // - note that all the injected stubs/mocks instances will be owned by the
     // TInjectableObject, and therefore released with it
+    // - any TInterfaceObject declared as dependency should also be used only
+    // once, or the initialize should use a local IUnknown reference to ensure
+    // the instance will stay alive during all the process:
+    // !var daemon: TInfraMyDaemon;
+    // !    daemonLocal: IUnknown;
+    // !begin
+    // !  daemon := TInfraMyDaemon.Create;
+    // !  daemonLocal := IUnknown; // call _AddRef
+    // !  service := TInfraMyService.CreateInjected(Rest,[],[],[daemon]);
+    // !  ... // here daemon may be resolved one or several times
+    // !  service.Free; // here daemon won't be released (RefCount>1)
+    // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
+    // - once all IoC is defined, will call the AutoResolve() protected method
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
-    /// register a dependency resolver class to this instance list
-    // - the resolver may be a TServiceContainer or a TInterfaceStub
-    procedure AddResolver(aResolver: TInterfaceResolver);
-    /// can be used to perform an IoC for a given interface
+    /// initialize an instance, defining one dependency resolver
+    // - the resolver may be e.g. a TServiceContainer
+    // - once the IoC is defined, will call the AutoResolve() protected method
+    constructor CreateWithResolver(aResolver: TInterfaceResolverInjected;
+      aRaiseEServiceExceptionIfNotFound: boolean=true);
+    /// can be used to perform an IoC for a given interface type information
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
+    /// can be used to perform an IoC for a given interface TGUID
+    procedure Resolve(const aGUID: TGUID; out Obj); overload;
     /// can be used to perform several IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
     /// can be used to perform several IoC for a given set of interfaces
-    // - here interfaces and instances are provided as TGUID and pointers 
+    // - here interfaces and instances are provided as TGUID and pointers
     procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to CreateInjected()
@@ -10071,8 +10159,9 @@ type
 
   /// a global services provider class
   // - used to maintain a list of interfaces implementation
-  // - inherits from TInterfaceResolver so match TInjectableObject expectations
-  TServiceContainer = class(TInterfaceResolver)
+  // - inherits from TInterfaceResolverInjected and its Resolve() methods,
+  // compatible with TInjectableObject
+  TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fRest: TSQLRest;
     // list of service names ['Calculator',...]
@@ -10135,29 +10224,8 @@ type
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
     // - is defined as virtual so that e.g. TServiceContainerClient would
-    // automatically register the interface, if it was not already done 
-    function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual; 
-    /// this method could be used to resolve any dependency from its interface
-    // - will search for the supplied interface to its internal list of resolvers
-    // - returns TRUE and set the Obj variable with a matching instance 
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
-    // !   ... use calc methods
-    // - match TOnDependencyResolve callback expectations, so will be used
-    // for service dependency injection into any TInjectableObject instance
-    function Resolve(aInterface: PTypeInfo; out Obj): boolean; overload; 
-    /// this method could be used to resolve any dependency from its interface
-    // - you shall have registered the interface by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - returns TRUE and set the Obj variable with a matching instance
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if ServiceContainer.Resolve(ICalculator,cal) then
-    // !   ... use calc methods
-    function Resolve(const aGUID: TGUID; out Obj): boolean; overload;
+    // automatically register the interface, if it was not already done
+    function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -40479,24 +40547,8 @@ var factory: TServiceFactory;
 begin
   factory := Info(aInterface);
   if factory=nil then
-    result := false else
+    result := inherited TryResolve(aInterface,Obj) else
     result := factory.Get(Obj);
-end;
-
-function TServiceContainer.Resolve(aInterface: PTypeInfo; out Obj): boolean;
-begin
-  if self=nil then
-    result := false else
-    result := TryResolve(aInterface,Obj);
-end;
-
-function TServiceContainer.Resolve(const aGUID: TGUID; out Obj): boolean;
-var factory: TServiceFactory;
-begin
-  factory := Info(aGUID);
-  if factory<>nil then
-    result := factory.Get(Obj) else
-    result := false;
 end;
 
 function TServiceContainer.Index(aIndex: integer): TServiceFactory;
@@ -42538,9 +42590,9 @@ begin
 end;
 
 
-{ TInjectableObject }
+{ TInterfaceResolverInjected }
 
-function TInjectableObject.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
+function TInterfaceResolverInjected.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
 var i: integer;
 begin
   if (self<>nil) and (aInterface<>nil) then begin
@@ -42560,38 +42612,121 @@ begin
   result := false;
 end;
 
-procedure TInjectableObject.Resolve(aInterface: PTypeInfo; out Obj);
+procedure TInterfaceResolverInjected.InjectStub(const aStubsByGUID: array of TGUID);
+var i: integer;
 begin
-  if not TryResolve(aInterface,Obj) then
-    raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,aInterface^.Name]);
+  for i := 0 to high(aStubsByGUID) do
+    InjectResolver([TInterfaceStub.Create(aStubsByGUID[i])]);
 end;
 
-procedure TInjectableObject.ResolveByPair(const aInterfaceObjPairs: array of pointer);
+procedure TInterfaceResolverInjected.InjectResolver(
+  const aOtherResolvers: array of TInterfaceResolver);
+var i: integer;
+begin
+  for i := 0 to high(aOtherResolvers) do begin
+    if aOtherResolvers[i].InheritsFrom(TInterfaceStub) then begin
+      include(TInterfaceStub(aOtherResolvers[i]).fOptions,
+        imoFakeInstanceWontReleaseTInterfaceStub);
+      ObjArrayAdd(fCreatedInterfaceStub,aOtherResolvers[i]);
+    end;
+    ObjArrayAddOnce(fResolvers,aOtherResolvers[i]);
+  end;
+end;
+
+procedure TInterfaceResolverInjected.InjectInstance(const aDependencies: array of TInterfacedObject);
+var i: integer;
+begin
+  for i := 0 to high(aDependencies) do
+    ObjArrayAdd(fDependencies,aDependencies[i]);
+end;
+
+destructor TInterfaceResolverInjected.Destroy;
+begin
+  try
+    ObjArrayClear(fCreatedInterfaceStub);
+  finally
+    inherited Destroy;
+  end;
+end;
+
+function TInterfaceResolverInjected.Resolve(aInterface: PTypeInfo; out Obj): boolean;
+begin
+  if self=nil then
+    result := false else
+    result := TryResolve(aInterface,Obj);
+end;
+
+function TInterfaceResolverInjected.Resolve(const aGUID: TGUID; out Obj): boolean;
+var known: TInterfaceFactory;
+begin
+  if self=nil then
+    result := false else begin
+    known := TInterfaceFactory.Get(aGUID);
+    if known<>nil then
+      result := Resolve(known.fInterfaceTypeInfo,Obj) else
+      result := false;
+  end;
+end;
+
+procedure TInterfaceResolverInjected.ResolveByPair(
+  const aInterfaceObjPairs: array of pointer);
 var n,i: integer;
 begin
   n := length(aInterfaceObjPairs);
   if (n=0) or (n and 1=1) then
     raise EServiceException.CreateUTF8('%.Resolve([odd])',[self]);
   for i := 0 to (n shr 1)-1 do
-    Resolve(aInterfaceObjPairs[i*2],aInterfaceObjPairs[i*2+1]^);
+    if not Resolve(aInterfaceObjPairs[i*2],aInterfaceObjPairs[i*2+1]^) then
+      raise EServiceException.CreateUTF8('%.ResolveByPair(%) unsatisfied',
+        [self,PTypeInfo(aInterfaceObjPairs[i*2])^.Name]);
 end;
 
-procedure TInjectableObject.Resolve(const aInterfaces: array of TGUID;
+procedure TInterfaceResolverInjected.Resolve(const aInterfaces: array of TGUID;
   const aObjs: array of pointer);
 var n,i: integer;
-    known: TInterfaceFactory;
 begin
   n := length(aInterfaces);
   if (n=0) or (n<>length(aObjs)) then
     raise EServiceException.CreateUTF8('%.Resolve([?,?])',[self]) else
-    for i := 0 to n-1 do begin
-      known := TInterfaceFactory.Get(aInterfaces[i]);
-      if known<>nil then
-        Resolve(known.fInterfaceTypeInfo,aObjs[i]^) else
-        raise EServiceException.CreateUTF8(
-          '%.Resolve([%]): Interface not registered - you could use '+
-          'TInterfaceFactory.RegisterInterfaces()',[self,GUIDToShort(aInterfaces[i])]);
-    end;
+    for i := 0 to n-1 do
+      if not Resolve(aInterfaces[i],aObjs[i]^) then
+        raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',
+          [self,GUIDToShort(aInterfaces[i])]);
+end;
+
+
+{ TInjectableObject }
+
+function TInjectableObject.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
+begin
+  if (self<>nil) and (aInterface<>nil) and (fResolver<>nil) then
+    result := fResolver.TryResolve(aInterface,Obj) else
+    result := false;
+end;
+
+procedure TInjectableObject.Resolve(aInterface: PTypeInfo; out Obj);
+begin
+  if not TryResolve(aInterface,Obj) then
+    raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,aInterface^.Name]);
+end;
+
+procedure TInjectableObject.Resolve(const aGUID: TGUID; out Obj);
+begin
+  if not fResolver.Resolve(aGUID,Obj) then
+    raise EServiceException.CreateUTF8(
+      '%.Resolve(%): Interface not registered - you could use '+
+      'TInterfaceFactory.RegisterInterfaces()',[self,GUIDToShort(aGUID)]);
+end;
+
+procedure TInjectableObject.ResolveByPair(const aInterfaceObjPairs: array of pointer);
+begin
+  fResolver.ResolveByPair(aInterfaceObjPairs);
+end;
+
+procedure TInjectableObject.Resolve(const aInterfaces: array of TGUID;
+  const aObjs: array of pointer);
+begin
+  fResolver.Resolve(aInterfaces,aObjs);
 end;
 
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
@@ -42600,7 +42735,7 @@ var i: integer;
     P: PPropInfo;
     addr: pointer;
 begin
-  if (self=nil) or (fResolvers=nil) then
+  if (self=nil) or (fResolver=nil) then
     raise EServiceException.CreateUTF8('%.AutoResolve with no prior registration',[self]);
   CT := {$ifdef FPC}ClassType{$else}PPointer(self)^{$endif};
   if CT<>TInjectableObject then
@@ -42610,11 +42745,9 @@ begin
         if P^.GetterIsField then begin
           addr := P^.GetterAddr(self);
           if TryResolve(P^.PropType{$ifndef FPC}^{$endif},addr^) then begin
-            if fCreatedInterfaceStub<>nil then begin
-              if fAutoResolvedInterfaceAddress=nil then
-                fAutoResolvedInterfaceAddress := TList.Create;
-              fAutoResolvedInterfaceAddress.Add(addr);
-            end
+            if fAutoResolvedInterfaceAddress=nil then
+              fAutoResolvedInterfaceAddress := TList.Create;
+            fAutoResolvedInterfaceAddress.Add(addr);
           end else
           if aRaiseEServiceExceptionIfNotFound then
             raise EServiceException.CreateUTF8(
@@ -42634,35 +42767,27 @@ constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
   const aOtherResolvers: array of TInterfaceResolver;
   const aDependencies: array of TInterfacedObject;
   aRaiseEServiceExceptionIfNotFound: boolean);
-var i: integer;
 begin
   inherited Create;
-  for i := 0 to high(aStubsByGUID) do
-    ObjArrayAdd(fCreatedInterfaceStub,TInterfaceStub.Create(aStubsByGUID[i]));
-  for i := 0 to high(aOtherResolvers) do 
-    if aOtherResolvers[i].InheritsFrom(TInterfaceStub) then
-      ObjArrayAdd(fCreatedInterfaceStub,aOtherResolvers[i]) else
-      AddResolver(aOtherResolvers[i]);
-  for i := 0 to high(fCreatedInterfaceStub) do begin
-    include(fCreatedInterfaceStub[i].fOptions,imoFakeInstanceWontReleaseTInterfaceStub);
-    AddResolver(fCreatedInterfaceStub[i]);
-  end;
-  for i := 0 to high(aDependencies) do
-    ObjArrayAdd(fDependencies,aDependencies[i]);
+  fResolver := TInterfaceResolverInjected.Create;
+  fResolver.InjectStub(aStubsByGUID);
+  fResolver.InjectResolver(aOtherResolvers);
+  fResolver.InjectInstance(aDependencies);
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 
-procedure TInjectableObject.AddResolver(aResolver: TInterfaceResolver);
+constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolverInjected;
+  aRaiseEServiceExceptionIfNotFound: boolean);
 begin
-  if aResolver<>nil then
-    ObjArrayAddOnce(fResolvers,aResolver);
+  inherited Create;
+  fResolver := aResolver;
+  AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 
 destructor TInjectableObject.Destroy;
 var i: integer;
 begin
   try
-    if fCreatedInterfaceStub<>nil then
     try
       if fAutoResolvedInterfaceAddress<>nil then begin
         for i := 0 to fAutoResolvedInterfaceAddress.Count-1 do
@@ -42671,7 +42796,7 @@ begin
         fAutoResolvedInterfaceAddress.Free;
       end;
     finally
-      ObjArrayClear(fCreatedInterfaceStub);
+      FreeAndNil(fResolver);
     end;
   finally
     inherited Destroy;
@@ -43180,11 +43305,8 @@ begin
   case fImplementationClassKind of
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
-  ickInjectable: begin
-    result := TInjectableObjectClass(fImplementationClass).Create;
-    TInjectableObject(result).AddResolver(Rest.Services);
-    TInjectableObject(result).AutoResolve(true);
-  end;
+  ickInjectable:
+    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(Rest.Services);
   else
     result := fImplementationClass.Create;
   end;
