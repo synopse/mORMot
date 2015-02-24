@@ -542,6 +542,9 @@ type
       const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject); reintroduce;
+    constructor CreateWithResolver(aRest: TSQLRest;
+      aResolver: TInterfaceResolverInjected;
+      aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
     property Rest: TSQLRest read FRest;
   end;
 
@@ -652,7 +655,7 @@ implementation
 constructor TCQRSQueryObject.Create;
 begin
   fLock := TAutoLocker.Create;
-  inherited;
+  inherited Create;
 end;
 
 function TCQRSQueryObject.GetLastError: TCQRSResult;
@@ -1458,10 +1461,10 @@ end;
 
 constructor TCQRSQueryObjectRest.Create(aRest: TSQLRest);
 begin
-  inherited Create;
-  if not Assigned(aRest) then
-    raise ECQRSException.CreateUTF8('%.Create(Rest=nil)',[self]);
   fRest := aRest;
+  if (aRest=nil) or (aRest.Services=nil) then
+    inherited Create else
+    inherited CreateWithResolver(aRest.Services);
 end;
 
 constructor TCQRSQueryObjectRest.CreateInjected(aRest: TSQLRest;
@@ -1469,10 +1472,22 @@ constructor TCQRSQueryObjectRest.CreateInjected(aRest: TSQLRest;
   const aOtherResolvers: array of TInterfaceResolver;
   const aDependencies: array of TInterfacedObject);
 begin
+  if not Assigned(aRest) then
+    raise ECQRSException.CreateUTF8('%.CreateInjected(Rest=nil)',[self]);
   Create(aRest);
-  inherited CreateInjected(aStubsByGUID,aOtherResolvers,aDependencies);
+  inherited CreateInjected(aStubsByGUID,aOtherResolvers,
+    aDependencies,true);
 end;
 
+constructor TCQRSQueryObjectRest.CreateWithResolver(aRest: TSQLRest;
+  aResolver: TInterfaceResolverInjected;
+  aRaiseEServiceExceptionIfNotFound: boolean);
+begin
+  if not Assigned(aRest) then
+    raise ECQRSException.CreateUTF8('%.CreateWithResolver(Rest=nil)',[self]);
+  fRest := aRest;
+  inherited CreateWithResolver(aResolver,aRaiseEServiceExceptionIfNotFound);
+end;
 
 { TDDDMonitoredDaemonProcess }
 

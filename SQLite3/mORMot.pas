@@ -8711,8 +8711,8 @@ type
     procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver); overload; virtual;
     /// prepare and setup interface IoC resolution from a TInterfacedObject instance
     // - any TInterfaceObject declared as dependency should also be used only
-    // once, or the initialize should use a local IUnknown reference to ensure
-    // the instance will stay alive during all the process:
+    // once, or you should initialize a local IUnknown reference to ensure the
+    // instance will stay alive during the whole process:
     // !var daemon: TInfraMyDaemon;
     // !    daemonLocal: IUnknown;
     // !begin
@@ -8768,6 +8768,7 @@ type
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolver: TInterfaceResolverInjected;
+    fResolverOwned: Boolean;
     // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
     // IoC resolution protected methods
@@ -8794,8 +8795,8 @@ type
     // - note that all the injected stubs/mocks instances will be owned by the
     // TInjectableObject, and therefore released with it
     // - any TInterfaceObject declared as dependency should also be used only
-    // once, or the initialize should use a local IUnknown reference to ensure
-    // the instance will stay alive during all the process:
+    // once, or you should initialize a local IUnknown reference to ensure the
+    // instance will stay alive during the whole process:
     // !var daemon: TInfraMyDaemon;
     // !    daemonLocal: IUnknown;
     // !begin
@@ -42633,7 +42634,8 @@ begin
   end;
 end;
 
-procedure TInterfaceResolverInjected.InjectInstance(const aDependencies: array of TInterfacedObject);
+procedure TInterfaceResolverInjected.InjectInstance(
+  const aDependencies: array of TInterfacedObject);
 var i: integer;
 begin
   for i := 0 to high(aDependencies) do
@@ -42751,11 +42753,11 @@ begin
           end else
           if aRaiseEServiceExceptionIfNotFound then
             raise EServiceException.CreateUTF8(
-              '%.AutoResolve: impossible to resolve %: % property',
+              '%.AutoResolve: impossible to resolve published property %: %',
               [self,P^.Name,P^.PropType^.Name]);
         end else
           raise EServiceException.CreateUTF8(
-            '%.AutoResolve: %: % property should directly read the field',
+            '%.AutoResolve: published property %: % should directly read the field',
             [self,P^.Name,P^.PropType^.Name]);
       P := P^.Next;
     end;
@@ -42770,6 +42772,7 @@ constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
 begin
   inherited Create;
   fResolver := TInterfaceResolverInjected.Create;
+  fResolverOwned := true;
   fResolver.InjectStub(aStubsByGUID);
   fResolver.InjectResolver(aOtherResolvers);
   fResolver.InjectInstance(aDependencies);
@@ -42779,6 +42782,8 @@ end;
 constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolverInjected;
   aRaiseEServiceExceptionIfNotFound: boolean);
 begin
+  if aResolver=nil then
+    raise EServiceException.CreateUTF8('%.CreateWithResolver(nil)',[self]);
   inherited Create;
   fResolver := aResolver;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
@@ -42796,7 +42801,8 @@ begin
         fAutoResolvedInterfaceAddress.Free;
       end;
     finally
-      FreeAndNil(fResolver);
+      if fResolverOwned then
+        FreeAndNil(fResolver);
     end;
   finally
     inherited Destroy;
