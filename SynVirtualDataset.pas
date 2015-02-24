@@ -30,6 +30,7 @@ unit SynVirtualDataSet;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
+  - Esteban Martin (EMartin)
   - mingda
   - Murat Ak
     
@@ -635,14 +636,17 @@ begin
         fColumns[i].FieldType := SynCommons.ftBlob;
       SynCommons.ftCurrency:
         fColumns[i].FieldType := SynCommons.ftDouble;
-      SynCommons.ftInt64:
-        for j := 1 to first^.Count-1 do // ensure type coherency of whole column
-          with DocVariantDataSafe(fValues[j],dvObject)^ do
-          if (i<Length(Names)) and IdemPropNameU(Names[i],fColumns[i].Name) then
-          if VariantTypeToSQLDBFieldType(Values[i]) in [SynCommons.ftDouble,SynCommons.ftCurrency] then begin
-            fColumns[i].FieldType := SynCommons.ftDouble;
-            break;
-          end;
+      SynCommons.ftInt64: // ensure type coherency of whole column
+        for j := 1 to first^.Count-1 do
+          if j>=Length(fValues) then // check objects are consistent
+            break else
+            with DocVariantDataSafe(fValues[j],dvObject)^ do
+            if (i<Length(Names)) and IdemPropNameU(Names[i],fColumns[i].Name) then
+            if VariantTypeToSQLDBFieldType(Values[i]) in
+                [SynCommons.ftNull,SynCommons.ftDouble,SynCommons.ftCurrency] then begin
+              fColumns[i].FieldType := SynCommons.ftDouble;
+              break;
+            end;
       end;
     end;
   end;
