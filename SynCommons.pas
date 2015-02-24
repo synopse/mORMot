@@ -11177,6 +11177,19 @@ procedure TextBackground(Color: TConsoleColor);
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
 
+/// could be used in the main program block of a console application to
+// handle unexpected fatal exceptions
+// - typical use may be:
+// !begin
+// !  try
+// !    ... // main console process
+// !  except
+// !    on E: Exception do
+// !      ConsoleShowFatalException(E);
+// !  end;
+// !end.
+procedure ConsoleShowFatalException(E: Exception);
+
 var
   /// low-level handle used for console writing
   // - may be overriden when console is redirected
@@ -37466,6 +37479,26 @@ end;
 
 {$endif MSWINDOWS}
 
+{$I-}
+procedure ConsoleShowFatalException(E: Exception);
+begin
+  TextColor(ccLightRed);
+  write(#13#10'Fatal exception ');
+  TextColor(ccWhite);
+  write(E.ClassName);
+  TextColor(ccLightRed);
+  Writeln(' raised with message:');
+  TextColor(ccLightBlue);
+  writeln(E.Message);
+  TextColor(ccLightGray);
+  writeln(#13#10'Program will now abort');
+  {$ifndef LINUX}
+  writeln('Press [Enter] to quit');
+  if ioresult=0 then
+    Readln;
+  {$endif}
+end;
+{$I+}
 
 
 { ************ Unit-Testing classes and functions }
