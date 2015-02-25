@@ -37092,23 +37092,24 @@ begin
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         repeat inc(From) until not (From^ in [#1..' ']);
         V := 0;
-        EndOfObject := From^;
-        with P^.PropType^.SetEnumType^ do
-        while EndOfObject<>']' do begin
-          PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
-          if (PropValue=nil) or (not wasString) then
-            exit;
-          if PropValue^='*' then begin
-            if MaxValue<32 then
-              V := ALLBITS_CARDINAL[MaxValue+1] else
-              V := -1;
-            break;
-          end;
-          ndx := GetEnumNameValue(PropValue);
-          if ndx<0 then
-            exit; // invalid enum string value
-          SetBit(V,ndx);
-        end;
+        if From^=']' then
+          repeat inc(From) until not (From^ in [#1..' ']) else
+          with P^.PropType^.SetEnumType^ do
+          repeat
+            PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
+            if (PropValue=nil) or (not wasString) then
+              exit;
+            if PropValue^='*' then begin
+              if MaxValue<32 then
+                V := ALLBITS_CARDINAL[MaxValue+1] else
+                V := -1;
+              break;
+            end;
+            ndx := GetEnumNameValue(PropValue);
+            if ndx<0 then
+              exit; // invalid enum string value
+            SetBit(V,ndx);
+          until EndOfObject=']';
         P^.SetOrdProp(Value,V);
       end else
       if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+

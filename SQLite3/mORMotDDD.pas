@@ -924,12 +924,6 @@ end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 { TODO:
-  Complex types flattening for aggregates (allowing any sub level):
-  * User.Email -> TSQLUser.EMail
-  * User.Name.First -> TSQLUser.Name_First
-  * User.Address.Street1 -> TSQLUser.Address_Street1
-  * User.Address.Country.Iso  -> TSQLUser.Address_Country (Iso is single prop)
-  * User.BirthDate.Value -> TSQLUser.BirthDate (Value is single prop)
   T*ObjArray properties: Order.Line[] TOrderLineObjArray -> which one?
   -> TSQLOrder.Line as variant (JSON) ?
   -> TSQLOrder.Line as JSON dynarray (new feature request) ?
@@ -1315,7 +1309,9 @@ function TDDDRepositoryRestQuery.ORMGetAllAggregates(
 var res: TObjectDynArray absolute aAggregateObjArray;
     i: integer;
 begin
-  if ORMBegin(qaGet,result) then begin
+  if ORMBegin(qaGet,result) then
+  if (ORM.FillTable=nil) or (ORM.FillTable.RowCount=0) then
+    ORMResult(cqrsSuccess) else begin
     SetLength(res,ORM.FillTable.RowCount);
     i := 0;
     if ORM.FillRewind then
