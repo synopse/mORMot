@@ -7217,7 +7217,8 @@ procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8; out res
 // - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
 // of the supplied JSON buffer (so that JSON content  would stay untouched)
 // - the optional header is added at the beginning of the resulting string
-// - an optional name space content node could be added around the generated XML
+// - an optional name space content node could be added around the generated XML,
+// e.g. '<content>'
 function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8=XMLUTF8_HEADER;
   const NameSpace: RawUTF8=''): RawUTF8;
 

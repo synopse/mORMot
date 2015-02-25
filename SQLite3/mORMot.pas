@@ -31956,11 +31956,21 @@ end;
 
 procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
 var W: TTextWriter;
+    json,xml: RawUTF8;
 begin
   W := TJSONSerializer.CreateOwnedStream;
   try
     InternalStat(Ctxt,W);
-    Ctxt.Returns(W.Text);
+    W.SetText(json);
+    if Ctxt.InputExists['format'] or
+       IdemPropNameU(Ctxt.URIBlobFieldName,'json') then
+      json := JSONReformat(json) else
+      if IdemPropNameU(Ctxt.URIBlobFieldName,'xml') then begin
+        JSONBufferToXML(pointer(json),XMLUTF8_HEADER,'<Stats>',xml);
+        Ctxt.Returns(xml,200,XML_CONTENT_TYPE_HEADER);
+        exit;
+      end;
+    Ctxt.Returns(json);
   finally
     W.Free;
   end;
