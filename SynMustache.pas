@@ -29,6 +29,7 @@ unit SynMustache;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - shura1990
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -1046,9 +1047,9 @@ begin
   Name := pointer(ValueName);
   i := PosEx(' ',ValueName);
   if i>1 then begin
-    inc(Name,i);
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),i-1);
     if helper>=0 then begin
+      inc(Name,i);
       GetValueFromContext(Name,temp); // allows {{helper1 helper2 value}} call
       n := fContextCount+4;
       if length(fTempGetValueFromContextHelper)<n then
