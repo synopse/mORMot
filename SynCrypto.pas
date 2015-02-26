@@ -2904,8 +2904,8 @@ asm // W=eax Buf=edx
      push  ebx
      mov   esi,eax
      // part 1: W[i]:= RB(TW32Buf(Buf)[i])
-     mov eax,[edx]; mov ebx,[edx+4]; bswap eax; bswap ebx; mov [esi],eax; mov [esi+4],ebx
-     mov eax,[edx+8]; mov ebx,[edx+12]; bswap eax; bswap ebx; mov [esi+8],eax; mov [esi+12],ebx
+     mov eax,[edx];    mov ebx,[edx+ 4]; bswap eax; bswap ebx; mov [esi  ],eax;  mov [esi+ 4],ebx
+     mov eax,[edx+8];  mov ebx,[edx+12]; bswap eax; bswap ebx; mov [esi+8],eax;  mov [esi+12],ebx
      mov eax,[edx+16]; mov ebx,[edx+20]; bswap eax; bswap ebx; mov [esi+16],eax; mov [esi+20],ebx
      mov eax,[edx+24]; mov ebx,[edx+28]; bswap eax; bswap ebx; mov [esi+24],eax; mov [esi+28],ebx
      mov eax,[edx+32]; mov ebx,[edx+36]; bswap eax; bswap ebx; mov [esi+32],eax; mov [esi+36],ebx
@@ -2964,6 +2964,7 @@ const
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
   K256Aligned: RawByteString; // movdqa + paddd do expect 16 bytes alignment
+
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
     ($0405060700010203,$0C0D0E0F08090A0B);
@@ -3931,13 +3932,12 @@ var H: TSHAHash;
 begin
   {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
-    if K256Aligned='' then begin
+    if K256Aligned='' then 
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
-      if PtrUInt(K256ALigned)and 15<>0 then
-        raise ESynCrypto.Create('TSHA256.Compress unaligned K256 for x64');
-    end;
-    sha256_sse4(TSHAContext(Context).Buffer,TSHAContext(Context).Hash,1);
-    exit;
+    if PtrUInt(K256ALigned)and 15=0 then begin
+      sha256_sse4(TSHAContext(Context).Buffer,TSHAContext(Context).Hash,1);
+      exit;
+    end; // if K256Aligned[] is not properly aligned -> fallback to pascal
   end;
   {$endif CPU64}
 
