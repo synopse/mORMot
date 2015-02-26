@@ -11494,6 +11494,7 @@ type
   {$else}
   /// an interface used by TAutoLocker to protect multi-thread execution
   IAutoLocker = interface
+    ['{97559643-6474-4AD3-AF72-B9BB84B4955D}']
     /// will enter the mutex until the IUnknown reference is released
     // - i.e. until you left the method block
     // - using an IUnknown interface to let the compiler auto-generate a
@@ -11513,14 +11514,17 @@ type
   // - you can use one instance of this to protect multi-thread execution
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
-  TAutoLocker = class(TInterfacedObject,IAutoLocker)
+  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // could define one published property of a mORMot.pas' TInjectableObject
+  // as IAutoLocker so that this class may be automatically injected
+  TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
   {$endif}
   protected
     fLock: TRTLCriticalSection;
     fLocked: boolean;
   public
     /// initialize the mutex
-    constructor Create;
+    constructor Create; override;
     /// will enter the mutex until the IUnknown reference is released
     // - warning: under FPC, you should assign its result to a local lockFPC:
     // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
@@ -11536,6 +11540,7 @@ type
 {$ifndef NOVARIANTS}
   /// ref-counted interface for thread-safe access to a TDocVariant document
   ILockedDocVariant = interface
+    ['{CADC2C20-3F5D-4539-9D23-275E833A86F3}']
     function GetValue(const Name: RawUTF8): Variant;
     procedure SetValue(const Name: RawUTF8; const Value: Variant);
     /// check and return a given property by name
@@ -11559,17 +11564,24 @@ type
   end;
 
   /// allows thread-safe access to a TDocVariant document
-  TLockedDocVariant = class(TInterfacedObject,ILockedDocVariant)
+  // - this class inherits from TInterfacedObjectWithCustomCreate so you
+  // could define one published property of a mORMot.pas' TInjectableObject
+  // as IAutoLocker so that this class may be automatically injected
+  TLockedDocVariant = class(TInterfacedObjectWithCustomCreate,ILockedDocVariant)
   protected
     fValue: TDocVariantData;
     fLock: TAutoLocker;
     function GetValue(const Name: RawUTF8): Variant;
     procedure SetValue(const Name: RawUTF8; const Value: Variant);
   public
+    /// initialize the thread-safe document with a fast TDocVariant 
+    // - i.e. call Create(true) aka Create(JSON_OPTIONS[true])
+    // - will be the TInterfacedObjectWithCustomCreate default constructor
+    constructor Create; overload; override;
     /// initialize the thread-safe document storage
-    constructor Create(FastStorage: boolean=True); overload;
+    constructor Create(FastStorage: boolean); reintroduce; overload;
     /// initialize the thread-safe document storage with the corresponding options
-    constructor Create(options: TDocVariantOptions); overload;
+    constructor Create(options: TDocVariantOptions); reintroduce; overload;
     /// finalize the storage
     destructor Destroy; override;
     /// check and return a given property by name
@@ -37949,6 +37961,11 @@ end;
 {$ifndef NOVARIANTS}
 
 { TLockedDocVariant }
+
+constructor TLockedDocVariant.Create;
+begin
+  Create(JSON_OPTIONS[true]);
+end;
 
 constructor TLockedDocVariant.Create(FastStorage: boolean);
 begin

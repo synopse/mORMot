@@ -764,11 +764,11 @@ unit mORMot;
     - new woStorePointer option to let ObjectToJSON() add "Address":"0431298a"  
     - introducing TInterfaceFactoryGenerated so that interface methods can be
       described for FPC, which lacks of expected RTTI - see [9357b49fe2]
-    - introducing TInjectableObject to easily implement the IoC SOLID pattern,
-      for both TSQLRest services and stubing/mocking
+    - introducing TInjectableObject to easily implement the DI/IoC SOLID
+      patterns, for both TSQLRest services and stubing/mocking
     - introducing TInterfaceResolver, TInterfaceResolverForSingleInterface and
-      TInterfaceResolverInjected, to be used for IoC with TInjectableObject types
-      and allowing TSQLRest.Services.Inject*() and Resolve() methods
+      TInterfaceResolverInjected, to be used for DI/IoC with TInjectableObject
+      types and allowing TSQLRest.Services.Inject*() and Resolve() methods
     - added TSQLRest*.ServiceDefine() and enhanced TInterfaceStub/TInterfaceMock
       methods to specify interface from it name, without the need to use the
       TypeInfo(IMyInterface) syntax in end-user code
@@ -8650,7 +8650,7 @@ type
   // - you can inherit from this class to chain the TryResolve() calls so
   // that several kind of implementations may be asked by a TInjectableObject,
   // e.g. TInterfaceStub, TServiceContainer or TDDDRepositoryRestObjectMapping
-  // - this will implement factory pattern, as a safe and thread-safe IoC
+  // - this will implement factory pattern, as a safe and thread-safe DI/IoC
   TInterfaceResolver = class
   protected
     /// override this method to check if this instance implements aInterface
@@ -8689,11 +8689,12 @@ type
   TInterfaceStubObjArray = array of TInterfaceStub;
 
   /// abstract factory class targetting a any kind of interface
-  // - you can inherit from this class to customize dependency resolution (IoC),
-  // defining the injection via InjectStub/InjectResolver/InjectInstance methods,
+  // - you can inherit from this class to customize dependency injection (DI/IoC),
+  // defining the resolution via InjectStub/InjectResolver/InjectInstance methods,
   // and doing the instance resolution using the overloaded Resolve*() methods
   // - TServiceContainer will inherit from this class, as the main entry point
   // for interface-based services of the framework (via TSQLRest.Services)
+  // - you can use RegisterGlobal() class method to define some process-wide DI
   TInterfaceResolverInjected = class(TInterfaceResolver)
   protected
     fResolvers: TInterfaceResolverObjArray;
@@ -8701,15 +8702,23 @@ type
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
   public
-    /// prepare and setup interface IoC resolution with some blank TInterfaceStub
-    // specified by their TGUID
+    /// define a global class type for interface resolution
+    // - most of the time, you would need a local DI/IoC resolution list; but
+    // you may use this method to register a set of shared and global resolution
+    // patterns, common to the whole injection process
+    // - by default, TAutoLocker and TLockedDocVariant will be registered by
+    // this unit to implement IAutoLocker and ILockedDocVariant interfaces
+    class procedure RegisterGlobal(aInterface: PTypeInfo;
+      aImplementationClass: TInterfacedObjectWithCustomCreateClass);
+    /// prepare and setup interface DI/IoC resolution with some blank
+    // TInterfaceStub specified by their TGUID
     procedure InjectStub(const aStubsByGUID: array of TGUID); overload; virtual;
-    /// prepare and setup interface IoC resolution with TInterfaceResolver
+    /// prepare and setup interface DI/IoC resolution with TInterfaceResolver
     // kind of factory
     // - e.g. a customized TInterfaceStub/TInterfaceMock, a TServiceContainer,
     // a TDDDRepositoryRestObjectMapping or any factory class
     procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver); overload; virtual;
-    /// prepare and setup interface IoC resolution from a TInterfacedObject instance
+    /// prepare and setup interface DI/IoC resolution from a TInterfacedObject instance
     // - any TInterfaceObject declared as dependency should also be used only
     // once, or you should initialize a local IUnknown reference to ensure the
     // instance will stay alive during the whole process:
@@ -8723,7 +8732,7 @@ type
     // !  Rest.Free; // here daemon won't be released (RefCount>1)
     // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
     procedure InjectInstance(const aDependencies: array of TInterfacedObject); overload; virtual;
-    /// can be used to perform an IoC for a given interface
+    /// can be used to perform an DI/IoC for a given interface
     // - will search for the supplied interface to its internal list of resolvers
     // - returns TRUE and set the Obj variable with a matching instance
     // - can be used as such to resolve an ICalculator interface:
@@ -8732,7 +8741,7 @@ type
     // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
     // !   ... use calc methods
     function Resolve(aInterface: PTypeInfo; out Obj): boolean; overload;
-    /// can be used to perform an IoC for a given interface
+    /// can be used to perform an DI/IoC for a given interface
     // - you shall have registered the interface TGUID by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
     // - returns TRUE and set the Obj variable with a matching instance
@@ -8742,11 +8751,11 @@ type
     // !   if ServiceContainer.Resolve(ICalculator,cal) then
     // !   ... use calc methods
     function Resolve(const aGUID: TGUID; out Obj): boolean; overload;
-    /// can be used to perform several IoC for a given set of interfaces
+    /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     // - raise an EServiceException if any interface can't be resolved
     procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
-    /// can be used to perform several IoC for a given set of interfaces
+    /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TGUID and @Instance
     // - you shall have registered the interface TGUID by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
@@ -8759,7 +8768,7 @@ type
 
   {$M+}
   /// any service implementation class could inherit from this class to
-  // allow dependency injection aka SOLID IoC by the framework
+  // allow dependency injection aka SOLID DI/IoC by the framework
   // - once created, the framework will call AddResolver() member, so that its
   // Resolve*() methods could be used to inject any needed dependency for lazy
   // dependency resolution (e.g. within a public property getter)
@@ -8771,15 +8780,15 @@ type
     fResolverOwned: Boolean;
     // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
-    // IoC resolution protected methods
+    // DI/IoC resolution protected methods
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean;
     /// this method will resolve all interface published properties
     procedure AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
   public
     /// initialize an instance, defining one or several mean of dependency resolution
     // - simple TInterfaceStub could be created directly from their TGUID,
-    // then any kind of IoC resolver instances could be specified, i.e. either
-    // customized TInterfaceStub/TInterfaceMock, a TServiceContainer or
+    // then any kind of DI/IoC resolver instances could be specified, i.e.
+    // either customized TInterfaceStub/TInterfaceMock, a TServiceContainer or
     // a TDDDRepositoryRestObjectMapping, and then any TInterfacedObject
     // instance would be used during dependency resolution:
     // ! procedure TMyTestCase.OneTestCaseMethod;
@@ -8806,24 +8815,24 @@ type
     // !  ... // here daemon may be resolved one or several times
     // !  service.Free; // here daemon won't be released (RefCount>1)
     // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
-    // - once all IoC is defined, will call the AutoResolve() protected method
+    // - once all DI/IoC is defined, will call the AutoResolve() protected method
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
     /// initialize an instance, defining one dependency resolver
     // - the resolver may be e.g. a TServiceContainer
-    // - once the IoC is defined, will call the AutoResolve() protected method
+    // - once the DI/IoC is defined, will call the AutoResolve() protected method
     constructor CreateWithResolver(aResolver: TInterfaceResolverInjected;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
-    /// can be used to perform an IoC for a given interface type information
+    /// can be used to perform an DI/IoC for a given interface type information
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
-    /// can be used to perform an IoC for a given interface TGUID
+    /// can be used to perform an DI/IoC for a given interface TGUID
     procedure Resolve(const aGUID: TGUID; out Obj); overload;
-    /// can be used to perform several IoC for a given set of interfaces
+    /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
-    /// can be used to perform several IoC for a given set of interfaces
+    /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TGUID and pointers
     procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// release all used instances
@@ -9900,7 +9909,7 @@ type
     /// initialize the service provider on the server side
     // - expect an direct server-side implementation class, which may inherit
     // from plain TInterfacedClass, TInterfacedObjectWithCustomCreate if you
-    // need an overridden constructor, or TInjectableObject to support IoC
+    // need an overridden constructor, or TInjectableObject to support DI/IoC
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes,
     // a time out (in seconds) can be defined - if the time out is 0, interface
     // will be forced in sicSingle mode
@@ -11465,7 +11474,7 @@ type
     // no ICalculator is defined on server side:
     // ! if fServer.Services['Calculator'].Get(Calc)) then
     // !   ...
-    // - safer typical use, following the IoC pattern, and which would not
+    // - safer typical use, following the DI/IoC pattern, and which would not
     // trigger any access violation if Services=nil, could be:
     // ! if fServer.Services.Resolve(ICalculator,Calc) then
     // !   ...
@@ -41170,6 +41179,8 @@ var m,a,reg: integer;
 {$endif}
 label error;
 begin
+  if aInterface=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Create(nil)',[self]);
   if aInterface^.Kind<>tkInterface then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): % is not an interface',[self,aInterface^.Name,aInterface^.Name]);
@@ -42604,22 +42615,60 @@ end;
 
 { TInterfaceResolverInjected }
 
+var
+  GlobalInterfaceResolution: array of record
+    TypeInfo: PTypeInfo;
+    ImplementationClass: TInterfacedObjectWithCustomCreateClass;
+    InterfaceEntry: PInterfaceEntry;
+  end;
+
+class procedure TInterfaceResolverInjected.RegisterGlobal(
+  aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectWithCustomCreateClass);
+var aInterfaceEntry: PInterfaceEntry;
+    n: integer;
+begin
+  if aInterface=nil then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.RegisterGlobalInterfaceResolution(nil)',[self]);
+  if aInterface^.Kind<>tkInterface then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.RegisterGlobalInterfaceResolution(%): % is not an interface',
+      [self,aInterface^.Name,aInterface^.Name]);
+  aInterfaceEntry := aImplementationClass.GetInterfaceEntry(
+    PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
+  if aInterfaceEntry=nil then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.RegisterGlobalInterfaceResolution(): % does not implement %',
+      [self,aImplementationClass,aInterface^.Name]);
+  n := length(GlobalInterfaceResolution);
+  SetLength(GlobalInterfaceResolution,n+1);
+  with GlobalInterfaceResolution[n] do begin
+    TypeInfo := aInterface;
+    ImplementationClass := aImplementationClass;
+    InterfaceEntry := aInterfaceEntry;
+  end;
+end;
+
 function TInterfaceResolverInjected.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
 var i: integer;
 begin
-  if (self<>nil) and (aInterface<>nil) then begin
-    if fResolvers<>nil then
-    for i := 0 to length(fResolvers)-1 do
-      if fResolvers[i].TryResolve(aInterface,Obj) then begin
-        result := true;
-        exit;
-      end;
-    if fDependencies<>nil then
-    for i := 0 to Length(fDependencies)-1 do
-      if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then begin
-        result := true;
-        exit;
-      end;
+  if aInterface<>nil then begin
+    result := true;
+    if self<>nil then begin
+      if fResolvers<>nil then
+      for i := 0 to length(fResolvers)-1 do
+        if fResolvers[i].TryResolve(aInterface,Obj) then
+          exit;
+      if fDependencies<>nil then
+      for i := 0 to Length(fDependencies)-1 do
+        if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then
+          exit;
+    end;
+    for i := 0 to length(GlobalInterfaceResolution)-1 do
+      with GlobalInterfaceResolution[i] do
+      if TypeInfo=aInterface then
+        if GetInterfaceFromEntry(ImplementationClass.Create,InterfaceEntry,Obj) then
+          exit;
   end;
   result := false;
 end;
@@ -44547,10 +44596,7 @@ initialization
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
+  TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);
+  TInterfaceResolverInjected.RegisterGlobal(TypeInfo(ILockedDocVariant),TLockedDocVariant);
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
 end.
-
-
-
-
-
