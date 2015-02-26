@@ -28802,12 +28802,12 @@ begin
   if TVarData(Source).VType and varByRef<>0 then begin
     typ := TVarData(Source).VType and not varByRef;
     case typ of
-    varVariant:
-      if PVarData(TVarData(Source).VPointer)^.VType<=varNativeString then begin
+    varVariant: begin
+      if PVarData(TVarData(Source).VPointer)^.VType in VTYPE_STATIC then begin
         Dest := PVarData(TVarData(Source).VPointer)^;
         result := true;
-      end else
-        result := False;
+      end else 
+        result := false;
     varNull..varDate,varBoolean,varShortInt..varWord64: begin
       Dest.VType := typ;
       Dest.VInt64 :=  PInt64(TVarData(Source).VAny)^;
