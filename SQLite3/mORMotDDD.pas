@@ -1068,21 +1068,21 @@ end;
 
 function TDDDRepositoryRestFactory.GetImplementationName: string;
 begin
-  if self=nil then
+  if (self=nil) or (fImplementation=nil) then
     result := '' else
     result := fImplementation.ClassName;
 end;
 
 function TDDDRepositoryRestFactory.GetAggregateName: string;
 begin
-  if self=nil then
+  if (self=nil) or (fAggregate=nil) then
     result := '' else
     result := fAggregate.ClassName;
 end;
 
 function TDDDRepositoryRestFactory.GetTableName: string;
 begin
-  if self=nil then
+  if (self=nil) or (fTable=nil) then
     result := '' else
     result := fTable.ClassName;
 end;
