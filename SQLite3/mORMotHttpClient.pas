@@ -101,6 +101,8 @@ unit mORMotHttpClient;
      - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
        (see mORMotHTTPServer.pas for the server side)
      - TSQLite3HttpClient* classes renamed as TSQLHttpClient*
+     - introducing TSQLHttpClientCurl class, using cross-platform libcurl to
+       connect over HTTP or HTTPS (using system OpenSSL library, if available)
      - all TSQLHttpClient* classes are now thread-safe (i.e. protected by
        a global mutex, as other TSQLRestClientURI implementations already did)
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
@@ -135,9 +137,7 @@ interface
 uses
 {$ifdef MSWINDOWS}
   Windows,
-  {$define USEWININET}
 {$else}
-  {$undef USEWININET}
   {$ifdef KYLIX3}
   Types,
   LibC,
@@ -216,6 +216,8 @@ type
     property Port: AnsiString read fPort;
   end;
 
+  TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
+
   /// HTTP/1.1 RESTFUL JSON mORMot Client class using SynCrtSock / WinSock
   // - will give the best performance on a local computer, but has been found
   // out to be slower over a network
@@ -241,15 +243,14 @@ type
     property Socket: THttpClientSocket read fSocket;
   end;
 
-{$ifdef USEWININET}
-  /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet
-  // or WinHTTP API
+  /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet,
+  // WinHTTP or libcurl API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
-  // better) TSQLHttpClientWinHTTP overridden classes
-  TSQLHttpClientWinGeneric = class(TSQLHttpClientGeneric)
+  // better) TSQLHttpClientWinHTTP overridden classes under Windows
+  TSQLHttpClientRequest = class(TSQLHttpClientGeneric)
   protected
-    fWinAPI: TWinHttpAPI;
-    fWinAPIClass: TWinHttpAPIClass;
+    fRequest: THttpRequest;
+    fRequestClass: THttpRequestClass;
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout: DWORD;
     fHttps: boolean;
@@ -282,8 +283,8 @@ type
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
       ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce; overload;
     /// internal class instance used for the connection
-    // - will return either a TWinINet, either a TWinHTTP class instance
-    property WinAPI: TWinHttpAPI read fWinAPI;
+    // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
+    property Request: THttpRequest read fRequest;
     /// allows to ignore untrusted SSL certificates
     // - similar to adding a security exception for a domain in the browser
     property IgnoreSSLCertificateErrors: boolean
@@ -300,6 +301,9 @@ type
       read fExtendedOptions.AuthPassword write fExtendedOptions.AuthPassword;
   end;
 
+  TSQLHttpClientRequestClass = class of TSQLHttpClientRequest;
+
+  {$ifdef USEWININET}
   /// HTTP/1.1 RESTFUL JSON mORMot Client class using WinINet API
   // - this class is 15/20 times slower than TSQLHttpClient using SynCrtSock
   // on a local machine, but was found to be faster throughout local networks
@@ -309,10 +313,10 @@ type
   // - you can optionaly specify manual Proxy settings at constructor level
   // - by design, the WinINet API should not be used from a service
   // - is implemented by creating a TWinINet internal class instance
-  TSQLHttpClientWinINet = class(TSQLHttpClientWinGeneric)
+  TSQLHttpClientWinINet = class(TSQLHttpClientRequest)
   protected
     procedure InternalSetClass; override;
-  end;                
+  end;
 
   /// HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
   // - has a common behavior as THttpClientSocket() but seems to be faster
@@ -330,21 +334,30 @@ type
   // - you can optionaly specify manual Proxy settings at constructor level
   // - by design, the WinHTTP API can be used from a service or a server
   // - is implemented by creating a TWinHTTP internal class instance
-  TSQLHttpClientWinHTTP = class(TSQLHttpClientWinGeneric)
+  TSQLHttpClientWinHTTP = class(TSQLHttpClientRequest)
   protected
     procedure InternalSetClass; override;
   end;
-{$endif}
+  {$endif USEWININET}
 
-{$ifdef ONLYUSEHTTPSOCKET} 
+  {$ifdef USELIBCURL}
+  /// HTTP/1.1 RESTFUL JSON Client class using libculr
+  // - will handle HTTP and HTTPS, if OpenSSL or similar libray is available
+  TSQLHttpClientCurl = class(TSQLHttpClientRequest)
+  protected                               
+    procedure InternalSetClass; override;
+  end;
+  {$endif USELIBCURL}
+
+  {$ifdef ONLYUSEHTTPSOCKET}
   /// HTTP/1.1 RESTFUL JSON deault mORMot Client class
   // -  maps the raw socket implementation class
   TSQLHttpClient = TSQLHttpClientWinSock;
-{$else}
+  {$else}
   /// HTTP/1.1 RESTFUL JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
-{$endif ONLYUSEHTTPSOCKET}
+  {$endif ONLYUSEHTTPSOCKET}
 
 
 implementation
@@ -493,11 +506,9 @@ begin
 end;
 
 
-{$ifdef USEWININET}
+{ TSQLHttpClientRequest }
 
-{ TSQLHttpClientWinGeneric }
-
-constructor TSQLHttpClientWinGeneric.Create(const aServer, aPort: AnsiString;
+constructor TSQLHttpClientRequest.Create(const aServer, aPort: AnsiString;
   aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
   SendTimeout,ReceiveTimeout: DWORD);
 begin
@@ -509,39 +520,39 @@ begin
   fReceiveTimeout := ReceiveTimeout;
 end;
 
-constructor TSQLHttpClientWinGeneric.Create(const aServer,
+constructor TSQLHttpClientRequest.Create(const aServer,
   aPort: AnsiString; aModel: TSQLModel);
 begin
   Create(aServer,aPort,aModel,false); // will use default settings
 end;
 
-function TSQLHttpClientWinGeneric.InternalCheckOpen: boolean;
+function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
   result := false;
-  if fWinAPI=nil then
+  if fRequest=nil then
   try
     EnterCriticalSection(fMutex);
     try
       InternalSetClass;
-      if fWinAPIClass=nil then
-        raise ECommunicationException.CreateUTF8('fWinAPIClass=nil for %',[self]);
-      fWinAPI := fWinAPIClass.Create(fServer,fPort,fHttps,fProxyName,fProxyByPass,
-        fSendTimeout,fReceiveTimeout);
-      fWinAPI.ExtendedOptions := fExtendedOptions;
+      if fRequestClass=nil then
+        raise ECommunicationException.CreateUTF8('fRequestClass=nil for %',[self]);
+      fRequest := fRequestClass.Create(fServer,fPort,fHttps,
+        fProxyName,fProxyByPass,fSendTimeout,fReceiveTimeout);
+      fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
         // global SHA-256 / AES-256-CTR encryption + SynLZ compression
-        fWinAPI.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
+        fRequest.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
       if hcSynLz in Compression then
         // SynLZ is very fast and efficient, perfect for a Delphi Client
-        fWinAPI.RegisterCompress(CompressSynLZ);
+        fRequest.RegisterCompress(CompressSynLZ);
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
-        fWinAPI.RegisterCompress(CompressGZip);
+        fRequest.RegisterCompress(CompressGZip);
       result := true;
     except
       on Exception do
-        FreeAndNil(fWinAPI);
+        FreeAndNil(fRequest);
     end;
   finally
     LeaveCriticalSection(fMutex);
@@ -549,18 +560,18 @@ begin
     result := true;
 end;
 
-procedure TSQLHttpClientWinGeneric.InternalClose;
+procedure TSQLHttpClientRequest.InternalClose;
 begin
-  FreeAndNil(fWinAPI);
+  FreeAndNil(fRequest);
 end;
 
-function TSQLHttpClientWinGeneric.InternalRequest(const url, method: RawUTF8;
+function TSQLHttpClientRequest.InternalRequest(const url, method: RawUTF8;
   var Header, Data, DataType: RawUTF8): Int64Rec;
 var OutHeader, OutData: RawByteString;
 begin
-  if fWinAPI=nil then
+  if fRequest=nil then
     result.Lo := HTML_NOTIMPLEMENTED else begin
-    result.Lo := fWinAPI.Request(url,method,KeepAliveMS,Header,Data,DataType,
+    result.Lo := fRequest.Request(url,method,KeepAliveMS,Header,Data,DataType,
       OutHeader,OutData);
     result.Hi := GetCardinal(pointer(
       FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
@@ -570,11 +581,13 @@ begin
 end;
 
 
+{$ifdef USEWININET}
+
 { TSQLHttpClientWinINet }
 
 procedure TSQLHttpClientWinINet.InternalSetClass;
 begin
-  fWinAPIClass := TWinINet;
+  fRequestClass := TWinINet;
   inherited;
 end;
 
@@ -583,10 +596,22 @@ end;
 
 procedure TSQLHttpClientWinHTTP.InternalSetClass;
 begin
-  fWinAPIClass := TWinHTTP;
+  fRequestClass := TWinHTTP;
   inherited;
 end;
 
 {$endif}
+
+{$ifdef USELIBCURL}
+
+{ TSQLHttpClientCurl}
+
+procedure TSQLHttpClientCurl.InternalSetClass;
+begin
+  fRequestClass := TCurlHTTP;
+  inherited;
+end;
+
+{$endif USELIBCURL}
 
 end.

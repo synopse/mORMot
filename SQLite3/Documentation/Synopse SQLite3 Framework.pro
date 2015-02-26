@@ -6630,6 +6630,7 @@ rankdir=LR;
 \TSQLHttpClientWinHTTP\TSQLHttpClientWinGeneric
 \TSQLHttpClientWinGeneric\TSQLHttpClientGeneric
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
+\TSQLHttpClientCurl\TSQLHttpClientWinGeneric
 \TSQLHttpClientGeneric\TSQLRestClientURI
 \TSQLRestClientURI\TSQLRestClient
 \TSQLRestClient\TSQLRest
@@ -6755,8 +6756,9 @@ In fact, there are several implementation of a @**HTTP@/1.1 clients, according t
 \TSQLHttpClientWinHTTP\TSQLHttpClientWinGeneric
 \TSQLHttpClientWinGeneric\TSQLHttpClientGeneric
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
+\TSQLHttpClientCurl\TSQLHttpClientGeneric
 \
-So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client.
+So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @*libcurl@} library is installed, especially if you want to use HTTPS.
 Each class has its own architecture, and attaches itself to a Windows communication library, all based on {\i WinSock} API. As stated by their name, {\f1\fs20 TSQLHttpClientWinSock} will call directly the {\i WinSock} API, {\f1\fs20 TSQLHttpClientWinINet} will call {\i WinINet} API (as used by IE 6) and {\f1\fs20 TSQLHttpClientWinHTTP} will cal the latest {\i WinHTTP} API:
 - {\i WinSock} is the common user-space API to access the sockets stack of Windows, i.e. IP connection - it's able to handle any IP protocol, including TCP/IP, UDP/IP, and any protocol over it (including HTTP);
 - {\i WinINet} was designed as an HTTP API client platform that allowed the use of interactive message dialogs such as entering user credentials - it's able to handle HTTP and FTP protocols;
@@ -6768,7 +6770,7 @@ Each class has its own architecture, and attaches itself to a Windows communicat
 \WinHTTP\WinSock
 \AutoProxy APIs\WinHTTP
 \
-Here are some PROs and CONs of those solutions:
+Here are some PROs and CONs of the available solutions, under {\i Windows}:
 |%25%20%30%25
 |\b Criteria|WinSock|WinINet|WinHTTP\b0
 |API Level|Low|High|Medium
@@ -13161,14 +13163,8 @@ $ svn update
 If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
 For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on {\i Linux}, please execute:
 $ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
-Also note that in order to execute the regression tests, you would need to download some files from the command line (since {\f1\fs20 SynCrtSock.pas} does not support {\f1\fs20 https} download yet under {\i Linux}):
-$ wget https://api.github.com/users/zendframework/repos
-$ mv repos zendframework.json
-$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/interpolation.json
-$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/comments.json
-$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/sections.json
-$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/inverted.json
-$ wget https://raw.githubusercontent.com/mustache/spec/master/specs/partials.json
+If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64 bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 libcurl} (and {\f1\fs20 OpenSSL}) in 32 bit, as such:
+$ sudo apt-get install libcurl3:i386
 If it may be for any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
 $user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
 $   linux-gate.so.1 =>  (0xb774c000)
