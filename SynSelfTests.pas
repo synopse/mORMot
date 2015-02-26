@@ -782,6 +782,10 @@ type
     /// test via TSQLHttpClientWinSock instances over OS's socket API server
     // - this test won't work within the Delphi IDE debugger
     procedure SocketAPI;
+    {$ifdef USELIBCURL}
+    /// test via TSQLHttpClientCurl using libcurl library
+    procedure _libcurl;
+    {$endif}
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amLocked
     procedure Locked;
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amUnlocked
@@ -3953,9 +3957,8 @@ begin
     mustacheJsonFileName := MUSTACHE_SPECS[spec]+'.json';
     mustacheJson := StringFromFile(mustacheJsonFileName);
     if mustacheJson='' then begin
-      mustacheJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
-        'https://raw.githubusercontent.com/mustache/spec/master/specs/'+
-        StringToAnsi7(mustacheJsonFileName));
+      mustacheJson := HttpGet('https://raw.githubusercontent.com/mustache/spec/'+
+        'master/specs/'+StringToAnsi7(mustacheJsonFileName));
       FileFromString(mustacheJson,mustacheJsonFileName);
     end;
     RecordLoadJSON(mus,pointer(mustacheJson),TypeInfo(TMustacheTests));
@@ -5322,14 +5325,12 @@ begin
 
   discogsJson := StringFromFile(discogsFileName);
   if discogsJson='' then begin
-    discogsJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
-      'http://api.discogs.com/artists/45/releases?page=1&per_page=100');
+    discogsJson := HttpGet('http://api.discogs.com/artists/45/releases?page=1&per_page=100');
     FileFromString(discogsJson,discogsFileName);
   end;
   zendframeworkJson := StringFromFile(zendframeworkFileName);
   if zendframeworkJson='' then begin
-    zendframeworkJson := {$ifdef MSWINDOWS}TWinINet.Get{$else}HttpGet{$endif}(
-      'https://api.github.com/users/zendframework/repos');
+    zendframeworkJson := HttpGet('https://api.github.com/users/zendframework/repos');
     FileFromString(zendframeworkJson,zendframeworkFileName);
   end;
   TestGit([soReadIgnoreUnknownFields]);
@@ -9128,7 +9129,7 @@ begin
       Create(Props,'root',HTTP_DEFAULTPORT,'user','pass');
     try
       DoTest(TSQLDBSocketConnectionProperties.Create(ADDR,'root','user','pass'),'socket');
-      {$ifdef MSWINDOWS}
+      {$ifdef USEWININET}
       DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'),'winhttp');
       DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'),'wininet');
       {$endif}
@@ -12342,12 +12343,10 @@ begin
       'Client'+IntToStr(GetCurrentThreadId),1000);
     TSQLRestClientURIMessage(result).DoNotProcessMessages := true;
   end else
-  if fTestClass=TSQLHttpClientWinHTTP then
-    result := TSQLHttpClientWinHTTP.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
   {$endif}
-  if fTestClass=TSQLHttpClientWinSock then
-    result := TSQLHttpClientWinSock.Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
-    raise Exception.Create('Invalid fTestClass');
+  if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then
+    result := TSQLHttpClientGenericClass(fTestClass).Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
+    raise ESynException.CreateUTF8('Invalid fTestClass=%',[fTestClass]);
 end;
 
 procedure TTestMultiThreadProcess.CreateThreadPool;
@@ -12513,6 +12512,13 @@ begin
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
 end;
+
+{$ifdef USELIBCURL}
+procedure TTestMultiThreadProcess._libcurl;
+begin
+  Test(TSQLHttpClientCurl,useHttpSocket);
+end;
+{$endif}
 
 procedure TTestMultiThreadProcess._TSQLRestClientDB;
 begin
