@@ -34,6 +34,7 @@ unit SynPdf;
    CoMPi
    Damien (ddemars)
    David Mead (MDW)
+   FalconB
    Harald Simon
    Ondrej (reddwarf)
    Sinisa (sinisav)
@@ -8534,7 +8535,7 @@ begin
       try
         FCanvas.SetPage(P);
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
-          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom,
+          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleTop,
           fDisableTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
@@ -8557,7 +8558,7 @@ begin
       try
         FCanvas.FContents.FSaveAtTheEnd := false; // force flush NOW
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
-          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleBottom,
+          fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleTop,
           fDisableTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
