@@ -28802,7 +28802,7 @@ begin
   if TVarData(Source).VType and varByRef<>0 then begin
     typ := TVarData(Source).VType and not varByRef;
     case typ of
-    varVariant: begin
+    varVariant: 
       if PVarData(TVarData(Source).VPointer)^.VType in VTYPE_STATIC then begin
         Dest := PVarData(TVarData(Source).VPointer)^;
         result := true;
