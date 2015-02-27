@@ -19355,7 +19355,7 @@ begin
     {$ifdef UNICODE}
     UTF8DecodeToUnicodeString(U,StrLen(U),result);
     {$else}
-    CurrentAnsiConvert.UTF8BufferToAnsi(U,StrLen(U),result);
+    CurrentAnsiConvert.UTF8BufferToAnsi(U,StrLen(U),RawByteString(result));
     {$endif}
 end;
 

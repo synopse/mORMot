@@ -223,7 +223,7 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): Int
 // - it will also check for dst buffer overflow, so will be more secure than
 // other functions, which expect the content to be verified (e.g. via CRC)
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
-  maxDst: Integer): Integer; 
+  maxDst: Integer): Integer;
 
 {$ifndef PUREPASCAL}
 /// optimized asm version of the 1st compression algorithm
@@ -247,20 +247,6 @@ var
   /// fastest available SynLZ decompression (using 1st algorithm)
   SynLZDecompress1: function(src: PAnsiChar; size: integer; dst: PAnsiChar): integer
      = {$ifdef PUREPASCAL}SynLZDecompress1pas{$else}SynLZDecompress1asm{$endif};
-
-{$ifndef UNICODE}
-type
-  /// define RawByteString, as it does exist in Delphi 2009 and up
-  // - to be used for byte storage into an AnsiString
-  RawByteString = AnsiString;
-{$endif}
-
-/// compress a data content using the SynLZ algorithm
-// - as expected by THttpSocket.RegisterCompress
-// - will return 'synlz' as ACCEPT-ENCODING: header parameter
-// - will store a hash of both compressed and uncompressed stream: if the
-// data is corrupted during transmission, will instantly return ''
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawByteString;
 
 
 implementation
@@ -1226,38 +1212,6 @@ begin
     result := s1 xor (s2 shl 16);
   end else
     result := 0;
-end;
-
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawByteString;
-var DataLen, len: integer;
-    P: PAnsiChar;
-begin
-  DataLen := length(Data);
-  if DataLen<>0 then // '' is compressed and uncompressed to ''
-  if Compress then begin
-    len := SynLZcompressdestlen(DataLen)+8;
-    SetString(result,nil,len);
-    P := pointer(result);
-    PCardinal(P)^ := Hash32(pointer(Data),DataLen);
-    len := SynLZcompress1(pointer(Data),DataLen,P+8);
-    PCardinal(P+4)^ := Hash32(pointer(P+8),len);
-    SetString(Data,P,len+8);
-  end else begin
-    result := '';
-    P := pointer(Data);
-    if (DataLen<=8) or (Hash32(pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
-      exit;
-    len := SynLZdecompressdestlen(P+8);
-    SetLength(result,len);
-    if (len<>0) and
-        ((SynLZdecompress1(P+8,DataLen-8,pointer(result))<>len) or
-       (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
-      result := '';
-      exit;
-    end else 
-      SetString(Data,PAnsiChar(pointer(result)),len);
-  end;
-  result := 'synlz';
 end;
 
 

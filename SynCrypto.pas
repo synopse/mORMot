@@ -925,7 +925,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString; const IV: RawByteString
 // CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
 // data is corrupted during transmission, will instantly return ''
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
 
 
 {$ifdef USEPADLOCK}
@@ -5838,7 +5838,8 @@ begin
   end;
 end;
 
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
+var Data: RawByteString absolute DataRawByteString;
 begin
   if (Data<>'') and (CompressShaAesClass<>nil) then
   try

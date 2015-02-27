@@ -572,7 +572,7 @@ begin
   if fRequest=nil then
     result.Lo := HTML_NOTIMPLEMENTED else begin
     result.Lo := fRequest.Request(url,method,KeepAliveMS,Header,Data,DataType,
-      OutHeader,OutData);
+      SockString(OutHeader),SockString(OutData));
     result.Hi := GetCardinal(pointer(
       FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
     Header := OutHeader;

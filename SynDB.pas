@@ -3262,8 +3262,7 @@ var tmp: TBlobData;
     L: integer;
 begin
   CheckValue;
-  if TVarData(fValue).VType<>varNull then
-    tmp := TBlobData(fValue);
+  VariantToRawByteString(fValue,tmp);
   L := length(tmp);
   Setlength(result,L);
   move(pointer(tmp)^,pointer(result)^,L);
@@ -3283,9 +3282,7 @@ end;
 function TQueryValue.GetBlob: TBlobData;
 begin
   CheckValue;
-  if TVarData(fValue).VType<>varNull then
-    Result := TBlobData(fValue) else
-    Result := '';
+  VariantToRawByteString(fValue,result);
 end;
 
 function TQueryValue.GetBoolean: Boolean;
@@ -3394,11 +3391,9 @@ begin
 end;
 
 procedure TQueryValue.SetAsBytes(const Value: TBytes);
-var tmp: TBlobData;
 begin
   CheckExists;
-  System.SetString(tmp,PAnsiChar(Value),length(Value));
-  fValue := tmp;
+  RawByteStringToVariant(pointer(Value),length(Value),fValue);
   fValueBlob := true;
 end;
 
@@ -3411,7 +3406,7 @@ end;
 procedure TQueryValue.SetBlob(const aValue: TBlobData);
 begin
   CheckExists;
-  fValue := aValue;
+  RawByteStringToVariant(aValue,fValue);
   fValueBlob := true;
 end;
 
@@ -6192,7 +6187,7 @@ begin
           {$ifndef UNICODE}
           if not fConnection.Properties.VariantStringAsWideString then begin
             VType := varString;
-            CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,AnsiString(VAny));
+            CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
           end else
           {$endif}
             UTF8ToSynUnicode(V.VText,V.VBlobLen,SynUnicode(VAny));
@@ -6309,7 +6304,7 @@ begin
   {$else}
   ftUTF8:     RawUTF8(Dest) := VariantToUTF8(Temp);
   {$endif}
-  ftBlob:     TBlobData(Dest) := TBlobData(Temp);
+  ftBlob:     VariantToRawByteString(Temp,RawByteString(Dest));
   else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
     [self,TSQLDBFieldTypeToString(result)]);
   end;
@@ -8028,4 +8023,4 @@ initialization
     TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
   {$endif}
 end.
-
+

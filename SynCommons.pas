@@ -379,6 +379,8 @@ unit SynCommons;
   - BREAKING CHANGE: FormatUTF8() and TTextWriter.Add(Format) PUTF8Char type for
     constant text parameter has been changed into RawUTF8, to let the compiler
     handle any Unicode content as expected
+  - RawByteString is now defined as "= type AnsiString" under non Unicode Delphi
+    so that it would be recognized with its own encoding (pseudo code page 65535)
   - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Win32/Win64 target platform only
     for the SynCommons and mORMot* units, but see SynCrossPlatform* units for
     clients on all other targets, including OSX and the NextGen compilers)
@@ -896,7 +898,7 @@ type
   // - use this type if you don't want the Delphi compiler not to do any
   // code page conversions when you assign a typed AnsiString to a RawByteString,
   // i.e. a RawUTF8 or a WinAnsiString
-  RawByteString = AnsiString;
+  RawByteString = type AnsiString;
   /// pointer to a RawByteString
   PRawByteString = ^RawByteString;
 {$endif}
@@ -11708,6 +11710,13 @@ procedure InitializeCriticalSectionIfNeededAndEnter(var CS: TRTLCriticalSection)
 // - if the supplied mutex is void (i.e. all filled with 0), do nothing
 procedure DeleteCriticalSectionIfNeeded(var CS: TRTLCriticalSection);
 
+/// compress a data content using the SynLZ algorithm
+// - as expected by THttpSocket.RegisterCompress
+// - will return 'synlz' as ACCEPT-ENCODING: header parameter
+// - will store a hash of both compressed and uncompressed stream: if the
+// data is corrupted during transmission, will instantly return ''
+function CompressSynLZ(var DataRawByteString; Compress: boolean): AnsiString;
+
 /// compress a data content using the SynLZ algorithm from one stream into another
 // - returns the number of bytes written to Dest
 // - you should specify a Magic number to be used to identify the block
@@ -13808,7 +13817,7 @@ end;
 {$else}
 function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
 begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,result);
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
 end;
 {$endif}
 
@@ -13820,7 +13829,7 @@ end;
 {$else}
 procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
 begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,result);
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
 end;
 {$endif}
 
@@ -13832,7 +13841,7 @@ end;
 {$else}
 function UTF8ToString(const Text: RawUTF8): string;
 begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text),length(Text),result);
+  CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text),length(Text),RawByteString(result));
 end;
 {$endif}
 
@@ -28930,10 +28939,12 @@ begin
   with TVarData(Value) do begin
     if not (VType in VTYPE_STATIC) then
       VarClear(Value);
-    VType := varString;
-    VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    if (Data<>nil) and (DataLen>0) then
+    if (Data=nil) or (DataLen<=0) then
+      VType := varNull else begin
+      VType := varString;
+      VAny := nil; // avoid GPF below when assigning a string variable to VAny
       SetString(RawByteString(VAny),PAnsiChar(Data),DataLen);
+    end;
   end;
 end;
 
@@ -28942,18 +28953,25 @@ begin
   with TVarData(Value) do begin
     if not (VType in VTYPE_STATIC) then
       VarClear(Value);
-    VType := varString;
-    VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    if Data<>'' then
+    if Data='' then
+      VType := varNull else begin
+      VType := varString;
+      VAny := nil; // avoid GPF below when assigning a string variable to VAny
       RawByteString(VAny) := Data;
+    end;
   end;
 end;           
 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 begin
-  if TVarData(Value).VType=varString then
-    Dest := RawByteString(TVarData(Value).VAny) else
-    Dest := RawByteString(Value); // if not from RawByteStringToVariant()
+  case TVarData(Value).VType of
+  varEmpty, varNull:
+    Dest := '';
+  varString:
+    Dest := RawByteString(TVarData(Value).VAny);
+  else // not from RawByteStringToVariant() -> conversion to string
+    Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+  end;
 end;
 
 function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
@@ -42727,6 +42745,39 @@ begin
       result := Len;
 end;
 
+function CompressSynLZ(var DataRawByteString; Compress: boolean): AnsiString;
+var DataLen, len: integer;
+    P: PAnsiChar;
+    Data: RawByteString absolute DataRawByteString;
+begin
+  DataLen := length(Data);
+  if DataLen<>0 then // '' is compressed and uncompressed to ''
+  if Compress then begin
+    len := SynLZcompressdestlen(DataLen)+8;
+    SetString(result,nil,len);
+    P := pointer(result);
+    PCardinal(P)^ := Hash32(pointer(Data),DataLen);
+    len := SynLZcompress1(pointer(Data),DataLen,P+8);
+    PCardinal(P+4)^ := Hash32(pointer(P+8),len);
+    SetString(Data,P,len+8);
+  end else begin
+    result := '';
+    P := pointer(Data);
+    if (DataLen<=8) or (Hash32(pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
+      exit;
+    len := SynLZdecompressdestlen(P+8);
+    SetLength(result,len);
+    if (len<>0) and
+        ((SynLZdecompress1(P+8,DataLen-8,pointer(result))<>len) or
+       (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
+      result := '';
+      exit;
+    end else
+      SetString(Data,PAnsiChar(pointer(result)),len);
+  end;
+  result := 'synlz';
+end;
+
 function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream; Magic: cardinal): integer;
 var DataLen: integer;
     S: pointer;
@@ -44148,4 +44199,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

@@ -126,17 +126,19 @@ unit SynCrtSock;
   - handle 'Range: bytes=***-***' request in THttpApiServer
 
   Version 1.18
-  - introducing THttpServerRequest class for HTTP server context
+  - replaced RawByteString type (defined locally for non-Unicode version of
+    Delphi) by a dedicated SockString type, used for data storage and for
+    simple ASCII content (like URIs or port number)
+  - added and tested Linux support (FPC/CrossKylix), via sockets or libcurl API
+  - introducing THttpServerRequest class for HTTP server context and
+    THttpRequest as abstract parent for HTTP client classes
   - http.sys kernel-mode server now handles HTTP API 2.0 (available since
     Windows Vista / Server 2008), or fall back to HTTP API 1.0 (for Windows XP
     or Server 2003) - thanks pavel for the feedback and initial patch!
-  - added and tested Linux support, with direct socket or libcurl classes
   - deep code refactoring of thread process, especially for TSynThreadPool as
     used by THttpServer: introducing TNotifiedThread and TSynThreadPoolSubThread;
     as a result, it fixes OnHttpThreadStart and OnHttpThreadTerminate to be
     triggered from every thread, and propagated from THttpApiServer's clones
-  - converted any AnsiString type into a more neutral RawByteString (this is
-    correct for URIs or port numbers, and avoid any dependency to SynCommons)
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
   - added optional parameter to set buffer size for TCrtSocket.CreateSockIn
     and TCrtSocket.CreateSockOut methods
@@ -279,12 +281,13 @@ type
 {$ifdef UNICODE}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = UnicodeString;
+  /// define a raw storage string type, used for data buffer management
+  SockString = type RawByteString;
 {$else}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = WideString;
-  /// define RawByteString, as it does exist in Delphi 2009 and up
-  // - to be used for byte storage into an AnsiString
-  RawByteString = AnsiString;
+  /// define a raw storage string type, used for data buffer management
+  SockString = type AnsiString;
 {$endif}
 
 {$ifndef CONDITIONALEXPRESSIONS}
@@ -338,16 +341,16 @@ type
   TCrtSocket = class
   protected
     /// raise an ECrtSocket exception on error (called by Open/Bind constructors)
-    procedure OpenBind(const aServer, aPort: RawByteString; doBind: boolean;
+    procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
       aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
     procedure SetInt32OptionByIndex(OptName, OptVal: integer);
   public
     /// initialized after Open() with socket
     Sock: TSocket;
     /// initialized after Open() with Server name
-    Server: RawByteString;
+    Server: SockString;
     /// initialized after Open() with port number
-    Port: RawByteString;
+    Port: SockString;
     /// after CreateSockIn, use Readln(SockIn,s) to read a line from the opened socket
     SockIn: ^TextFile;
     /// after CreateSockOut, use Writeln(SockOut,s) to send a line to the opened socket
@@ -363,10 +366,10 @@ type
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: cardinal=10000); reintroduce; virtual;
     /// connect to aServer:aPort
-    constructor Open(const aServer, aPort: RawByteString; aLayer: TCrtSocketLayer=cslTCP;
+    constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000);
     /// bind to aPort
-    constructor Bind(const aPort: RawByteString; aLayer: TCrtSocketLayer=cslTCP);
+    constructor Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
@@ -391,11 +394,11 @@ type
     /// simulate writeln() with direct use of Send(Sock, ..)
     // - useful on multi-treaded environnement (as in THttpServer.Process)
     // - no temp buffer is used
-    // - handle RawByteString, ShortString, Char, Integer parameters
+    // - handle SockString, ShortString, Char, Integer parameters
     // - raise ECrtSocket exception on socket error
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line
-    procedure SockSend(const Line: RawByteString=''); overload;
+    procedure SockSend(const Line: SockString=''); overload;
     /// flush all pending data to be sent
     procedure SockSendFlush;
     /// fill the Buffer with Length bytes
@@ -404,7 +407,7 @@ type
     // - raise ECrtSocket exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
     /// returns the socket input stream as a string
-    function SockReceiveString: RawByteString;
+    function SockReceiveString: SockString;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -416,7 +419,7 @@ type
     // - raise ECrtSocket exception on socket error
     // - by default, will handle #10 or #13#10 as line delimiter (as normal text
     // files), but you can delimit lines using #13 if CROnly is TRUE
-    procedure SockRecvLn(out Line: RawByteString; CROnly: boolean=false); overload;
+    procedure SockRecvLn(out Line: SockString; CROnly: boolean=false); overload;
     /// call readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
@@ -438,7 +441,7 @@ type
     // - raise a ECrtSocket exception on any error
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
-    procedure Write(const Data: RawByteString);
+    procedure Write(const Data: SockString);
     /// set the TCP_NODELAY option for the connection
     // - default 1 (true) will disable the Nagle buffering algorithm; it should only be
     // set for applications that send frequent small bursts of information
@@ -462,7 +465,7 @@ type
   private
     SockInEof: boolean;
     /// updated by every Snd()
-    SndBuf: RawByteString;
+    SndBuf: SockString;
     SndBufLen: integer;
     /// close and shutdown the connection (called from Destroy)
     procedure Close;
@@ -475,14 +478,14 @@ type
   // - the data is compressed (if Compress=TRUE) or uncompressed (if
   // Compress=FALSE) in the Data variable (i.e. it is modified in-place)
   // - to be used with THttpSocket.RegisterCompress method
-  // - type is a generic AnsiString, which should be in practice a
-  // RawByteString or a RawByteString 
-  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawByteString;
+  // - DataRawByteStringtype should be a generic AnsiString/RawByteString, which
+  // should be in practice a SockString or a RawByteString
+  THttpSocketCompress = function(var DataRawByteString; Compress: boolean): AnsiString;
 
   /// used to maintain a list of known compression algorithms
   THttpSocketCompressRec = record
     /// the compression name, as in ACCEPT-ENCODING: header (gzip,deflate,synlz)
-    Name: RawByteString;
+    Name: SockString;
     /// the function handling compression and decompression
     Func: THttpSocketCompress;
     /// the size in bytes after which compress will take place
@@ -511,7 +514,7 @@ type
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawByteString;
+    fCompressAcceptEncoding: SockString;
     /// GetHeader set index of protocol in fCompress[], from ACCEPT-ENCODING: 
     fCompressHeader: THttpSocketCompressSet;
     /// same as HeaderValue('Content-Encoding'), but retrieved during Request
@@ -525,8 +528,8 @@ type
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Data is not '', will add 'Content-Type: ' header
-    procedure CompressDataAndWriteHeaders(const OutContentType: RawByteString;
-      var OutContent: RawByteString);
+    procedure CompressDataAndWriteHeaders(const OutContentType: SockString;
+      var OutContent: SockString);
   public
     /// TCP/IP prefix to mask HTTP protocol
     // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
@@ -535,30 +538,30 @@ type
     // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
-    TCPPrefix: RawByteString;
+    TCPPrefix: SockString;
     /// will contain the first header line:
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
-    Command: RawByteString;
+    Command: SockString;
     /// will contain the header lines after a Request - use HeaderValue() to get one
-    Headers: array of RawByteString;
+    Headers: array of SockString;
     /// will contain the data retrieved from the server, after the Request
-    Content: RawByteString;
+    Content: SockString;
     /// same as HeaderValue('Content-Length'), but retrieved during Request
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: integer;
     /// same as HeaderValue('Content-Type'), but retrieved during Request
-    ContentType: RawByteString;
+    ContentType: SockString;
     /// same as HeaderValue('Connection')='close', but retrieved during Request
     ConnectionClose: boolean;
     /// add an header entry, returning the just entered entry index in Headers[]
-    function HeaderAdd(const aValue: RawByteString): integer;
+    function HeaderAdd(const aValue: SockString): integer;
     /// set all Header values at once, from CRLF delimited text
-    procedure HeaderSetText(const aText: RawByteString);
+    procedure HeaderSetText(const aText: SockString);
     /// get all Header values at once, as CRLF delimited text
-    function HeaderGetText: RawByteString; virtual;
+    function HeaderGetText: SockString; virtual;
     /// HeaderValue('Content-Type')='text/html', e.g.
-    function HeaderValue(aName: RawByteString): RawByteString;
+    function HeaderValue(aName: SockString): SockString;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlzo/synlz) protocols
@@ -578,9 +581,9 @@ type
   private
   public
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
-    Method: RawByteString;
+    Method: SockString;
     /// contains the URL ('/' e.g.) after GetRequest()
-    URL: RawByteString;
+    URL: SockString;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
     // (default HTTP/1.1 behavior is keep alive, unless 'Connection: Close'
     // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
@@ -588,7 +591,7 @@ type
     // in every message")
     KeepAliveClient: boolean;
     /// the recognized client IP, after a call to InitRequest()
-    RemoteIP: RawByteString;
+    RemoteIP: SockString;
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
     constructor Create(aServer: THttpServer); reintroduce;
@@ -605,7 +608,7 @@ type
     function GetRequest(withBody: boolean=true): boolean;
     /// get all Header values at once, as CRLF delimited text
     // - this overridden version will add the 'RemoteIP: 1.2.3.4' header
-    function HeaderGetText: RawByteString; override;
+    function HeaderGetText: SockString; override;
   end;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -624,7 +627,7 @@ type
     /// by default, the client is identified as IE 5.5, which is very
     // friendly welcome by most servers :(
     // - you can specify a custom value here
-    UserAgent: RawByteString;
+    UserAgent: SockString;
 
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -632,25 +635,25 @@ type
 
     /// after an Open(server,port), return 200 if OK, http status error otherwise - get
     // the page data in Content
-    function Get(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
+    function Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
-    function Head(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
+    function Head(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Post(const url, Data, DataType: RawByteString; KeepAlive: cardinal=0;
-      const header: RawByteString=''): integer;
+    function Post(const url, Data, DataType: SockString; KeepAlive: cardinal=0;
+      const header: SockString=''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Put(const url, Data, DataType: RawByteString; KeepAlive: cardinal=0;
-      const header: RawByteString=''): integer;
+    function Put(const url, Data, DataType: SockString; KeepAlive: cardinal=0;
+      const header: SockString=''): integer;
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
-    function Delete(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
+    function Delete(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
 
     /// low-level HTTP/1.1 request
     // - called by all REST methods above
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
-    function Request(const url, method: RawByteString; KeepAlive: cardinal;
-      const header, Data, DataType: RawByteString; retry: boolean): integer;
+    function Request(const url, method: SockString; KeepAlive: cardinal;
+      const header, Data, DataType: SockString; retry: boolean): integer;
   end;
 
   {$ifndef LVCL}
@@ -776,37 +779,37 @@ type
   // faster than manual buffering/sending)
   THttpServerRequest = class
   protected
-    fURL, fMethod, fInHeaders, fInContent, fInContentType: RawByteString;
-    fOutContent, fOutContentType, fOutCustomHeaders: RawByteString;
+    fURL, fMethod, fInHeaders, fInContent, fInContentType: SockString;
+    fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
     fCallingThread: TNotifiedThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
-    fAuthenticatedUser: RawByteString;
+    fAuthenticatedUser: SockString;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders, aInContent, aInContentType: RawByteString);
+    procedure Prepare(const aURL, aMethod, aInHeaders, aInContent, aInContentType: SockString);
     /// input parameter containing the caller URI
-    property URL: RawByteString read fURL;
+    property URL: SockString read fURL;
     /// input parameter containing the caller method (GET/POST...)
-    property Method: RawByteString read fMethod;
+    property Method: SockString read fMethod;
     /// input parameter containing the caller message headers
-    property InHeaders: RawByteString read fInHeaders;
+    property InHeaders: SockString read fInHeaders;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
-    property InContent: RawByteString read fInContent;
+    property InContent: SockString read fInContent;
     // input parameter defining the caller message body content type
-    property InContentType: RawByteString read fInContentType;
+    property InContentType: SockString read fInContentType;
     /// output parameter to be set to the response message body
-    property OutContent: RawByteString read fOutContent write fOutContent ;
+    property OutContent: SockString read fOutContent write fOutContent ;
     /// output parameter to define the reponse message body content type
-    property OutContentType: RawByteString read fOutContentType write fOutContentType;
+    property OutContentType: SockString read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
-    property OutCustomHeaders: RawByteString read fOutCustomHeaders write fOutCustomHeaders;
+    property OutCustomHeaders: SockString read fOutCustomHeaders write fOutCustomHeaders;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
@@ -824,7 +827,7 @@ type
     // domain user name is retrieved from the supplied AccessToken
     // - could also be set by the THttpServerGeneric.Request() method, after
     // proper authentication, so that it would be logged as expected
-    property AuthenticatedUser: RawByteString read fAuthenticatedUser;
+    property AuthenticatedUser: SockString read fAuthenticatedUser;
   end;
 
   /// event handler used by THttpServerGeneric.OnRequest property
@@ -848,13 +851,13 @@ type
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawByteString;
+    fCompressAcceptEncoding: SockString;
     fOnHttpThreadStart: TNotifyThreadEvent;
-    fServerName: RawByteString;
+    fServerName: SockString;
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
     procedure NotifyThreadStart(Sender: TNotifiedThread);
-    procedure SetServerName(const aName: RawByteString); virtual;
+    procedure SetServerName(const aName: SockString); virtual;
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: Boolean); reintroduce; 
@@ -907,7 +910,7 @@ type
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log 
-    property ServerName: RawByteString read fServerName write SetServerName;
+    property ServerName: SockString read fServerName write SetServerName;
   end;
 
   {$ifdef MSWINDOWS}
@@ -981,7 +984,7 @@ type
     fExecuteFinished: boolean;
     fLogData: pointer;
     fLogDataStorage: array of byte;
-    fLoggingServiceName: RawByteString;
+    fLoggingServiceName: SockString;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
@@ -994,8 +997,8 @@ type
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); override;
     function GetAPIVersion: string; override;
     function GetLogging: boolean;
-    procedure SetServerName(const aName: RawByteString); override;
-    procedure SetLoggingServiceName(const aName: RawByteString);
+    procedure SetServerName(const aName: SockString); override;
+    procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -1036,14 +1039,14 @@ type
     // Resume method after all Url have been added
     // - if aRegisterURI is TRUE, the URI will be registered (need adminitrator
     // rights) - default is FALSE, as defined by Windows security policy
-    function AddUrl(const aRoot, aPort: RawByteString; Https: boolean=false;
-      const aDomainName: RawByteString='*'; aRegisterURI: boolean=false): integer;
+    function AddUrl(const aRoot, aPort: SockString; Https: boolean=false;
+      const aDomainName: SockString='*'; aRegisterURI: boolean=false): integer;
     /// un-register the URLs to Listen On
     // - this method expect the same parameters as specified to AddUrl()
     // - return 0 (NO_ERROR) on success, an error code if failed (e.g.
     // -1 if the corresponding parameters do not match any previous AddUrl)
-    function RemoveUrl(const aRoot, aPort: RawByteString; Https: boolean=false;
-      const aDomainName: RawByteString='*'): integer;
+    function RemoveUrl(const aRoot, aPort: SockString; Https: boolean=false;
+      const aDomainName: SockString='*'): integer;
     /// will authorize a specified URL prefix
     // - will allow to call AddUrl() later for any user on the computer
     // - if aRoot is left '', it will authorize any root for this port
@@ -1055,8 +1058,8 @@ type
     // - will first delete any matching rule for this URL prefix
     // - if OnlyDelete is true, will delete but won't add the new authorization;
     // in this case, any error message at deletion will be returned
-    class function AddUrlAuthorize(const aRoot, aPort: RawByteString; Https: boolean=false;
-      const aDomainName: RawByteString='*'; OnlyDelete: boolean=false): string;
+    class function AddUrlAuthorize(const aRoot, aPort: SockString; Https: boolean=false;
+      const aDomainName: SockString='*'; OnlyDelete: boolean=false): string;
     /// will register a compression algorithm
     // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
@@ -1140,7 +1143,7 @@ type
     // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUTF8Conversion])
     // - this value is dedicated to one instance, so the main instance won't
     // propagate the change to all cloned instances
-    property LoggingServiceName: RawByteString
+    property LoggingServiceName: SockString
       read fLoggingServiceName write SetLoggingServiceName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
@@ -1203,7 +1206,7 @@ type
     fInternalHttpServerRespList: TList;
     fServerConnectionCount: cardinal;
     fServerKeepAliveTimeOut: cardinal;
-    fTCPPrefix: RawByteString;
+    fTCPPrefix: SockString;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -1228,7 +1231,7 @@ type
     // - you can specify a number of threads to be initialized to handle
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 64)
-    constructor Create(const aPort: RawByteString
+    constructor Create(const aPort: SockString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
     /// release all memory and handlers
     destructor Destroy; override;
@@ -1249,7 +1252,7 @@ type
     // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
-    property TCPPrefix: RawByteString read fTCPPrefix write fTCPPrefix;
+    property TCPPrefix: SockString read fTCPPrefix write fTCPPrefix;
     {$ifdef USETHREADPOOL}
     /// number of times there was no availibility in the internal thread pool
     // to handle an incoming request
@@ -1270,17 +1273,17 @@ type
     Https: boolean;
     /// the server name
     // - e.g. 'www.somewebsite.com'
-    Server: RawByteString;
+    Server: SockString;
     /// the server port
     // - e.g. '80'
-    Port: RawByteString;
+    Port: SockString;
     /// the resource address
     // - e.g. '/category/name/10?param=1'
-    Address: RawByteString;
+    Address: SockString;
     /// fill the members from a supplied URI
-    function From(aURI: RawByteString): boolean;
+    function From(aURI: SockString): boolean;
     /// compute the whole normalized URI
-    function URI: RawByteString;
+    function URI: SockString;
   end;
 
   /// the supported authentication schemes which may be used by HTTP clients
@@ -1304,9 +1307,9 @@ type
   /// abstract class to handle HTTP/1.1 request
   THttpRequest = class
   protected
-    fServer: RawByteString;
-    fProxyName: RawByteString;
-    fProxyByPass: RawByteString;
+    fServer: SockString;
+    fProxyName: SockString;
+    fProxyByPass: SockString;
     fPort: cardinal;
     fHttps: boolean;
     fKeepAlive: cardinal;
@@ -1314,19 +1317,19 @@ type
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawByteString;
+    fCompressAcceptEncoding: SockString;
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
     fCompressHeader: THttpSocketCompressSet;
-    class function InternalREST(const url,method,data,header: RawByteString;
-      aIgnoreSSLCertificateErrors: boolean): RawByteString;
+    class function InternalREST(const url,method,data,header: SockString;
+      aIgnoreSSLCertificateErrors: boolean): SockString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
-    procedure InternalCreateRequest(const method, aURL: RawByteString); virtual; abstract;
-    procedure InternalSendRequest(const aData: RawByteString); virtual; abstract;
+    procedure InternalCreateRequest(const method, aURL: SockString); virtual; abstract;
+    procedure InternalSendRequest(const aData: SockString); virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-      Data: RawByteString): integer; virtual; abstract;
+      Data: SockString): integer; virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
-    procedure InternalAddHeader(const hdr: RawByteString); virtual; abstract;
+    procedure InternalAddHeader(const hdr: SockString); virtual; abstract;
   public
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
@@ -1338,8 +1341,8 @@ type
     // parameters, so we won't publish any properties to change those
     // initial values once created
     // - aProxyName and *TimeOut parameters are currently ignored by TCurlHttp
-    constructor Create(const aServer, aPort: RawByteString; aHttps: boolean;
-      const aProxyName: RawByteString=''; const aProxyByPass: RawByteString='';
+    constructor Create(const aServer, aPort: SockString; aHttps: boolean;
+      const aProxyName: SockString=''; const aProxyByPass: SockString='';
       ConnectionTimeOut: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT;
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
       ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); virtual;
@@ -1347,9 +1350,9 @@ type
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
     // http status error otherwise
-    function Request(const url, method: RawByteString; KeepAlive: cardinal;
-      const InHeader, InData, InDataType: RawByteString;
-      out OutHeader, OutData: RawByteString): integer; virtual;
+    function Request(const url, method: SockString; KeepAlive: cardinal;
+      const InHeader, InData, InDataType: SockString;
+      out OutHeader, OutData: SockString): integer; virtual;
 
     /// wrapper method to retrieve a resource via an HTTP GET
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -1357,8 +1360,8 @@ type
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Get() but either TWinHTTP.Get() or TWinINet.Get() methods
-    class function Get(const aURI: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
+    class function Get(const aURI: SockString;
+      const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1367,8 +1370,8 @@ type
     // aHeader content
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Post() but either TWinHTTP.Post() or TWinINet.Post() methods
-    class function Post(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
+    class function Post(const aURI, aData: SockString;
+      const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1377,16 +1380,16 @@ type
     // aHeader content
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Put() but either TWinHTTP.Put() or TWinINet.Put() methods
-    class function Put(const aURI, aData: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
+    class function Put(const aURI, aData: SockString;
+      const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a TWinHttpAPI inherited instance: do not use
     // TWinHttpAPI.Delete() but either TWinHTTP.Delete() or TWinINet.Delete()
-    class function Delete(const aURI: RawByteString;
-      const aHeader: RawByteString=''; aIgnoreSSLCertificateErrors: Boolean=true): RawByteString;
+    class function Delete(const aURI: SockString;
+      const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -1419,16 +1422,16 @@ type
       read fExtendedOptions write fExtendedOptions;
   published
     /// the remote server host name, as stated specified to the class constructor
-    property Server: RawByteString read fServer;
+    property Server: SockString read fServer;
     /// the remote server port number, as specified to the class constructor
     property Port: cardinal read fPort;
     /// if the remote server uses HTTPS, as specified to the class constructor
     property Https: boolean read fHttps;
     /// the remote server optional proxy, as specified to the class constructor
-    property ProxyName: RawByteString read fProxyName;
+    property ProxyName: SockString read fProxyName;
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
-    property ProxyByPass: RawByteString read fProxyByPass;
+    property ProxyByPass: SockString read fProxyByPass;
   end;
   {$M-}
 
@@ -1442,11 +1445,11 @@ type
   protected
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
-    function InternalGetInfo(Info: DWORD): RawByteString; virtual; abstract;
+    function InternalGetInfo(Info: DWORD): SockString; virtual; abstract;
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
-    function InternalReadData(var Data: RawByteString; Read: integer): cardinal; virtual; abstract;
+    function InternalReadData(var Data: SockString; Read: integer): cardinal; virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-      Data: RawByteString): integer; override;
+      Data: SockString): integer; override;
   end;
 
   {/ a class to handle HTTP/1.1 request using the WinINet API
@@ -1461,13 +1464,13 @@ type
   protected
     // those internal methods will raise an EWinINet exception on error
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
-    procedure InternalCreateRequest(const method, aURL: RawByteString); override;
+    procedure InternalCreateRequest(const method, aURL: SockString); override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawByteString); override;
-    procedure InternalSendRequest(const aData: RawByteString); override;
-    function InternalGetInfo(Info: DWORD): RawByteString; override;
+    procedure InternalAddHeader(const hdr: SockString); override;
+    procedure InternalSendRequest(const aData: SockString); override;
+    function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalReadData(var Data: RawByteString; Read: integer): cardinal; override;
+    function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -1503,13 +1506,13 @@ type
   protected
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
-    procedure InternalCreateRequest(const method, aURL: RawByteString); override;
+    procedure InternalCreateRequest(const method, aURL: SockString); override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawByteString); override;
-    procedure InternalSendRequest(const aData: RawByteString); override;
-    function InternalGetInfo(Info: DWORD): RawByteString; override;
+    procedure InternalAddHeader(const hdr: SockString); override;
+    procedure InternalSendRequest(const aData: SockString); override;
+    function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
-    function InternalReadData(var Data: RawByteString; Read: integer): cardinal; override;
+    function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -1528,66 +1531,66 @@ type
   TCurlHTTP = class(THttpRequest)
   protected
     fHandle: pointer;
-    fRootURL: RawByteString;
-    fUserAgent: RawByteString;
+    fRootURL: SockString;
+    fUserAgent: SockString;
     fIn: record
       Headers: pointer;
-      Method: RawByteString;
+      Method: SockString;
     end;
     fOut: record
-      Header, Encoding, AcceptEncoding, Data: RawByteString;
+      Header, Encoding, AcceptEncoding, Data: SockString;
     end;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
-    procedure InternalCreateRequest(const method, aURL: RawByteString); override;
-    procedure InternalSendRequest(const aData: RawByteString); override;
+    procedure InternalCreateRequest(const method, aURL: SockString); override;
+    procedure InternalSendRequest(const aData: SockString); override;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-      Data: RawByteString): integer; override;
+      Data: SockString): integer; override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawByteString); override;
+    procedure InternalAddHeader(const hdr: SockString); override;
   public
     /// release the connection
     destructor Destroy; override;
     /// the HTTP User Agent: header value
-    property UserAgent: RawByteString read fUserAgent write fUserAgent;
+    property UserAgent: SockString read fUserAgent write fUserAgent;
   end;
 
 {$endif USELIBCURL}
 
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
-function Open(const aServer, aPort: RawByteString): TCrtSocket;
+function Open(const aServer, aPort: SockString): TCrtSocket;
 
 /// create a THttpClientSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
-function OpenHttp(const aServer, aPort: RawByteString): THttpClientSocket;
+function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
-function HttpGet(const server, port: RawByteString; const url: RawByteString): RawByteString; overload;
+function HttpGet(const server, port: SockString; const url: SockString): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
-function HttpGet(const aURI: RawByteString): RawByteString; overload;
+function HttpGet(const aURI: SockString): SockString; overload;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
-function HttpPost(const server, port: RawByteString; const url, Data, DataType: RawByteString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
 
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7 bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
-function SendEmail(const Server, From, CSVDest, Subject, Text: RawByteString;
-  const Headers: RawByteString=''; const User: RawByteString=''; const Pass: RawByteString='';
-  const Port: RawByteString='25'; const TextCharSet: RawByteString = 'ISO-8859-1'): boolean;
+function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
+  const Headers: SockString=''; const User: SockString=''; const Pass: SockString='';
+  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
 // - for pre-Unicode versions of Delphi, Text is expected to be already UTF-8
 // encoded - since Delphi 2010, it will be converted from UnicodeString
-function SendEmailSubject(const Text: string): RawByteString;
+function SendEmailSubject(const Text: string): SockString;
 
 const
   /// HTML Status Code for "Success"
@@ -1615,27 +1618,27 @@ const
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
-function StatusCodeToReason(Code: integer): RawByteString;
+function StatusCodeToReason(Code: integer): SockString;
 
 /// retrieve the IP adress from a computer name
-function ResolveName(const Name: RawByteString;
+function ResolveName(const Name: SockString;
   Family: Integer=AF_INET; SockProtocol: Integer=IPPROTO_TCP;
-  SockType: integer=SOCK_STREAM): RawByteString;
+  SockType: integer=SOCK_STREAM): SockString;
 
 /// Base64 encoding of a string
-function Base64Encode(const s: RawByteString): RawByteString;
+function Base64Encode(const s: SockString): SockString;
 
 /// Base64 decoding of a string
-function Base64Decode(const s: RawByteString): RawByteString;
+function Base64Decode(const s: SockString): SockString;
 
 /// escaping of HTML codes like < > & "
-function HtmlEncode(const s: RawByteString): RawByteString;
+function HtmlEncode(const s: SockString): SockString;
 
 {$ifdef Win32}
 /// remotly get the MAC address of a computer, from its IP Address
 // - only works under Win2K and later
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
-function GetRemoteMacAddress(const IP: RawByteString): RawByteString;
+function GetRemoteMacAddress(const IP: SockString): SockString;
 {$endif}
 
 
@@ -1648,7 +1651,7 @@ uses
 
 { ************ some shared helper functions and classes }
 
-function StatusCodeToReason(Code: integer): RawByteString;
+function StatusCodeToReason(Code: integer): SockString;
 begin
   case Code of
     100: result := 'Continue';
@@ -1686,7 +1689,7 @@ begin
 end;
 
 // Base64 string encoding
-function Base64Encode(const s: RawByteString): RawByteString;
+function Base64Encode(const s: SockString): SockString;
 procedure Encode(rp, sp: PAnsiChar; len: integer);
 const
   b64: array[0..63] of AnsiChar =
@@ -1729,7 +1732,7 @@ begin
   Encode(pointer(result),pointer(s),len);
 end;
 
-function Base64Decode(const s: RawByteString): RawByteString;
+function Base64Decode(const s: SockString): SockString;
 var i, j, len: integer;
     sp, rp: PAnsiChar;
     c, ch: integer;
@@ -1779,7 +1782,7 @@ begin
   end;  
 end;
 
-function HtmlEncode(const s: RawByteString): RawByteString;
+function HtmlEncode(const s: SockString): SockString;
 var i: integer;
 begin // not very fast, but working
   result := '';
@@ -1857,7 +1860,7 @@ begin
   result := -1;
 end;
 
-function GetNextItem(var P: PAnsiChar; Sep: AnsiChar = ','): RawByteString;
+function GetNextItem(var P: PAnsiChar; Sep: AnsiChar = ','): SockString;
 // return next CSV string in P, nil if no more
 var S: PAnsiChar;
 begin
@@ -1891,7 +1894,7 @@ begin
   until false;
 end; // P^ will point to the first non digit char
 
-function GetNextLine(var P: PAnsiChar): RawByteString;
+function GetNextLine(var P: PAnsiChar): SockString;
 var S: PAnsiChar;
 begin
   if P=nil then
@@ -1922,7 +1925,7 @@ end;
 {$ifdef UNICODE}
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
-function Trim(const S: RawByteString): RawByteString;
+function Trim(const S: SockString): SockString;
 {$ifdef PUREPASCAL}
 var I, L: Integer;
 begin
@@ -1958,7 +1961,7 @@ asm  // fast implementation by John O'Harrow
   cmp  byte ptr [edx+ecx-1],' '
 {$ifdef UNICODE}
   jbe  @@TrimRight
-  push 65535 // RawByteString code page for Delphi 2009 and up
+  push 65535 // SockString code page for Delphi 2009 and up
   call  System.@LStrFromPCharLen // we need a call, not a direct jmp
   ret
 {$else}
@@ -1970,7 +1973,7 @@ asm  // fast implementation by John O'Harrow
 end;
 {$endif}
 
-function UpperCase(const S: RawByteString): RawByteString;
+function UpperCase(const S: SockString): SockString;
 procedure Upper(Source, Dest: PAnsiChar; L: cardinal);
 var Ch: AnsiChar; // this sub-call is shorter and faster than 1 plain proc
 begin
@@ -2068,7 +2071,7 @@ begin
 end;
 
 {$ifndef CONDITIONALEXPRESSIONS}
-function Utf8ToAnsi(const UTF8: RawByteString): RawByteString;
+function Utf8ToAnsi(const UTF8: SockString): SockString;
 begin
   result := UTF8; // no conversion
 end;
@@ -2156,7 +2159,7 @@ begin
   end;
 end;
 
-function Ansi7ToUnicode(const Ansi: RawByteString): RawByteString;
+function Ansi7ToUnicode(const Ansi: SockString): SockString;
 var n, i: integer;
 begin  // fast ANSI 7 bit conversion
   if Ansi='' then
@@ -2168,19 +2171,19 @@ begin  // fast ANSI 7 bit conversion
   end;
 end;
 
-function DefaultUserAgent(Instance: TObject): RawByteString;
+function DefaultUserAgent(Instance: TObject): SockString;
 const
   DEFAULT_AGENT = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows; Synopse mORMot '+
     SYNOPSE_FRAMEWORK_VERSION+' ';
 begin
-  result := DEFAULT_AGENT+RawByteString(Instance.ClassName)+')';
+  result := DEFAULT_AGENT+SockString(Instance.ClassName)+')';
 end;
 
 /// decode 'CONTENT-ENCODING: ' parameter from registered compression list
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
   P: PAnsiChar): THttpSocketCompressSet;
 var i: integer;
-    aName: RawByteString;
+    aName: SockString;
     Beg: PAnsiChar;
 begin
   integer(result) := 0;
@@ -2198,10 +2201,10 @@ begin
 end;
 
 function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
-  aFunction: THttpSocketCompress; var aAcceptEncoding: RawByteString;
-  aCompressMinSize: integer): RawByteString;
+  aFunction: THttpSocketCompress; var aAcceptEncoding: SockString;
+  aCompressMinSize: integer): SockString;
 var i, n: integer;
-    dummy, aName: RawByteString;
+    dummy, aName: SockString;
 begin
   result := '';
   if @aFunction=nil then
@@ -2230,8 +2233,8 @@ begin
 end;
 
 function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  var Handled: THttpSocketCompressRecDynArray; const OutContentType: RawByteString;
-  var OutContent: RawByteString): RawByteString;
+  var Handled: THttpSocketCompressRecDynArray; const OutContentType: SockString;
+  var OutContent: SockString): SockString;
 var i, OutContentLen: integer;
     OutContentIsText: boolean;
     OutContentTypeP: PAnsiChar absolute OutContentType;
@@ -2256,7 +2259,7 @@ begin
 end;
 
 {$ifdef Win32}
-function GetRemoteMacAddress(const IP: RawByteString): RawByteString;
+function GetRemoteMacAddress(const IP: SockString): SockString;
 // implements http://msdn.microsoft.com/en-us/library/aa366358
 type
   TSendARP = function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer; PhyAddrLen: Pointer): DWORD; stdcall;
@@ -2303,9 +2306,9 @@ const
 { TURI }
 
 const
-  DEFAULT_PORT: array[boolean] of RawByteString = ('80','443');
+  DEFAULT_PORT: array[boolean] of SockString = ('80','443');
 
-function TURI.From(aURI: RawByteString): boolean;
+function TURI.From(aURI: SockString): boolean;
 var P: PAnsiChar;
 begin
   Https := false;
@@ -2333,8 +2336,8 @@ begin
     result := true;
 end;
 
-function TURI.URI: RawByteString;
-const Prefix: array[boolean] of RawByteString = ('http://','https://');
+function TURI.URI: SockString;
+const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   result := Prefix[Https]+Server+':'+Port+'/'+Address;
 end;
@@ -2345,8 +2348,8 @@ end;
 var
   WsaDataOnce: TWSADATA;
 
-function ResolveName(const Name: RawByteString;
-  Family, SockProtocol, SockType: integer): RawByteString;
+function ResolveName(const Name: SockString;
+  Family, SockProtocol, SockType: integer): SockString;
 var l: TStringList;
 begin
   l := TStringList.Create;
@@ -2354,16 +2357,16 @@ begin
     ResolveNameToIP(Name, Family, SockProtocol, SockType, l);
     if l.Count=0 then
       result := Name else
-      result := RawByteString(l[0]);
+      result := SockString(l[0]);
   finally
     l.Free;
   end;
 end;
 
-function CallServer(const Server, Port: RawByteString; doBind: boolean;
+function CallServer(const Server, Port: SockString; doBind: boolean;
    aLayer: TCrtSocketLayer): TSocket;
 var Sin: TVarSin;
-    IP: RawByteString;
+    IP: SockString;
     SOCK_TYPE, IPPROTO: integer;
     li: TLinger;
     {$ifndef MSWINDOWS}
@@ -2517,13 +2520,13 @@ end;
 
 { TCrtSocket }
 
-constructor TCrtSocket.Bind(const aPort: RawByteString; aLayer: TCrtSocketLayer=cslTCP);
+constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 begin
   Create(5000); // default bind timeout is 5 seconds
   OpenBind('0.0.0.0',aPort,true,-1,aLayer); // raise an ECrtSocket exception on error
 end;
 
-constructor TCrtSocket.Open(const aServer, aPort: RawByteString; aLayer: TCrtSocketLayer;
+constructor TCrtSocket.Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer;
   aTimeOut: cardinal);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
@@ -2579,7 +2582,7 @@ begin
     [WSAGetLastError,OptName,OptVal]);
 end;
   
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawByteString;
+procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
 const BINDTXT: array[boolean] of string = ('open','bind');
 begin
@@ -2609,7 +2612,7 @@ begin
   with Values[i] do
   case VType of
     vtString:     Snd(@VString^[1], pByte(VString)^);
-    vtAnsiString: Snd(VAnsiString, length(RawByteString(VAnsiString)));
+    vtAnsiString: Snd(VAnsiString, length(SockString(VAnsiString)));
 {$ifdef UNICODE}
     vtUnicodeString: begin
       tmp := shortstring(UnicodeString(VUnicodeString)); // convert into ansi (max length 255)
@@ -2627,7 +2630,7 @@ begin
   Snd(@CRLF, 2);
 end;
 
-procedure TCrtSocket.SockSend(const Line: RawByteString);
+procedure TCrtSocket.SockSend(const Line: SockString);
 begin
   if Line<>'' then
     Snd(pointer(Line),length(Line));
@@ -2667,7 +2670,7 @@ begin
   result := true;
 end;
 
-procedure TCrtSocket.Write(const Data: RawByteString);
+procedure TCrtSocket.Write(const Data: SockString);
 begin
   SndLow(pointer(Data),length(Data));
 end;
@@ -2791,8 +2794,8 @@ begin
   result := true;
 end;
 
-procedure TCrtSocket.SockRecvLn(out Line: RawByteString; CROnly: boolean=false);
-procedure RecvLn(var Line: RawByteString);
+procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
+procedure RecvLn(var Line: SockString);
 var P: PAnsiChar;
     LP, L: PtrInt;
     tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
@@ -2877,7 +2880,7 @@ begin
 end;
 {$endif}
 
-function TCrtSocket.SockReceiveString: RawByteString;
+function TCrtSocket.SockReceiveString: SockString;
 var Size, L, Read: integer;
 begin
   result := '';
@@ -2914,37 +2917,37 @@ begin
   UserAgent := DefaultUserAgent(self);
 end;
 
-function THttpClientSocket.Delete(const url: RawByteString; KeepAlive: cardinal;
-  const header: RawByteString): integer;
+function THttpClientSocket.Delete(const url: SockString; KeepAlive: cardinal;
+  const header: SockString): integer;
 begin
   result := Request(url,'DELETE',KeepAlive,header,'','',false);
 end;
 
-function THttpClientSocket.Get(const url: RawByteString; KeepAlive: cardinal=0; const header: RawByteString=''): integer;
+function THttpClientSocket.Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
 begin
   result := Request(url,'GET',KeepAlive,header,'','',false);
 end;
 
-function THttpClientSocket.Head(const url: RawByteString; KeepAlive: cardinal;
-  const header: RawByteString): integer;
+function THttpClientSocket.Head(const url: SockString; KeepAlive: cardinal;
+  const header: SockString): integer;
 begin
   result := Request(url,'HEAD',KeepAlive,header,'','',false);
 end;
 
-function THttpClientSocket.Post(const url, Data, DataType: RawByteString; KeepAlive: cardinal;
-  const header: RawByteString): integer;
+function THttpClientSocket.Post(const url, Data, DataType: SockString; KeepAlive: cardinal;
+  const header: SockString): integer;
 begin
   result := Request(url,'POST',KeepAlive,header,Data,DataType,false);
 end;
 
-function THttpClientSocket.Put(const url, Data, DataType: RawByteString;
-  KeepAlive: cardinal; const header: RawByteString): integer;
+function THttpClientSocket.Put(const url, Data, DataType: SockString;
+  KeepAlive: cardinal; const header: SockString): integer;
 begin
   result := Request(url,'PUT',KeepAlive,header,Data,DataType,false);
 end;
 
-function THttpClientSocket.Request(const url, method: RawByteString;
-  KeepAlive: cardinal; const Header, Data, DataType: RawByteString; retry: boolean): integer;
+function THttpClientSocket.Request(const url, method: SockString;
+  KeepAlive: cardinal; const Header, Data, DataType: SockString; retry: boolean): integer;
 procedure DoRetry(Error: integer);
 begin
   if retry then // retry once -> return error only if failed after retrial 
@@ -2960,7 +2963,7 @@ begin
   end;
 end;
 var P: PAnsiChar;
-    aURL, aData: RawByteString;
+    aURL, aData: SockString;
 begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
@@ -3046,7 +3049,7 @@ begin
   end;
 end;
 
-function Open(const aServer, aPort: RawByteString): TCrtSocket;
+function Open(const aServer, aPort: SockString): TCrtSocket;
 begin
   try
     result := TCrtSocket.Open(aServer,aPort);
@@ -3056,7 +3059,7 @@ begin
   end;
 end;
 
-function OpenHttp(const aServer, aPort: RawByteString): THttpClientSocket;
+function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
 begin
   try
     result := THttpClientSocket.Open(aServer,aPort);
@@ -3066,7 +3069,7 @@ begin
   end;
 end;
 
-function HttpGet(const server, port: RawByteString; const url: RawByteString): RawByteString;
+function HttpGet(const server, port: SockString; const url: SockString): SockString;
 var Http: THttpClientSocket;
 begin
   result := '';
@@ -3080,7 +3083,7 @@ begin
   end;
 end;
 
-function HttpGet(const aURI: RawByteString): RawByteString;
+function HttpGet(const aURI: SockString): SockString;
 var URI: TURI;
 begin
   if URI.From(aURI) then
@@ -3103,7 +3106,7 @@ begin
   writeln(length(Result));
 end;
 
-function HttpPost(const server, port: RawByteString; const url, Data, DataType: RawByteString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
 var Http: THttpClientSocket;
 begin
   result := false;
@@ -3118,10 +3121,10 @@ begin
 end;
 
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
-  User, Pass, Port, TextCharSet: RawByteString): boolean;
+  User, Pass, Port, TextCharSet: SockString): boolean;
 var TCP: TCrtSocket;
-procedure Expect(const Answer: RawByteString);
-var Res: RawByteString;
+procedure Expect(const Answer: SockString);
+var Res: SockString;
 begin
   repeat
     readln(TCP.SockIn^,Res);
@@ -3129,13 +3132,13 @@ begin
   if not IdemPChar(pointer(Res),pointer(Answer)) then
     raise ECrtSocket.Create(string(Res));
 end;
-procedure Exec(const Command, Answer: RawByteString);
+procedure Exec(const Command, Answer: SockString);
 begin
   writeln(TCP.SockOut^,Command);
   Expect(Answer)
 end;
 var P: PAnsiChar;
-    rec, ToList: RawByteString;
+    rec, ToList: SockString;
 begin
   result := false;
   P := pointer(CSVDest);
@@ -3158,7 +3161,7 @@ begin
     repeat
       rec := trim(GetNextItem(P));
       if rec='' then continue;
-      if pos(RawByteString('<'),rec)=0 then
+      if pos(SockString('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
       ToList := ToList+rec+', ';
@@ -3176,7 +3179,7 @@ begin
   end;
 end;
 
-function SendEmailSubject(const Text: string): RawByteString;
+function SendEmailSubject(const Text: string): SockString;
 var utf8: UTF8String;
 begin
   utf8 := UTF8String(Text);
@@ -3194,7 +3197,7 @@ begin
 end;
 
 procedure THttpServerRequest.Prepare(
-  const aURL, aMethod, aInHeaders, aInContent, aInContentType: RawByteString);
+  const aURL, aMethod, aInHeaders, aInContent, aInContentType: SockString);
 begin
   fURL := aURL;
   fMethod := aMethod;
@@ -3246,7 +3249,7 @@ begin
   fOnTerminate := Event;
 end;
 
-procedure THttpServerGeneric.SetServerName(const aName: RawByteString);
+procedure THttpServerGeneric.SetServerName(const aName: SockString);
 begin
   fServerName := aName;
 end;
@@ -3254,7 +3257,7 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: RawByteString
+constructor THttpServer.Create(const aPort: SockString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
 var aSock: TCrtSocket;
 begin
@@ -3385,7 +3388,7 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket; aCallingThread: TNo
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
-    s: RawByteString;
+    s: SockString;
     ErrorMsg: string;
     FileToSend: TFileStream;
 begin
@@ -3436,7 +3439,7 @@ begin
     if not(Code in [STATUS_SUCCESS,STATUS_CREATED]) and (Context.OutContent='') then begin
       Context.OutCustomHeaders := '';
       Context.OutContentType := 'text/html'; // create message to display
-      Context.OutContent := RawByteString(format(
+      Context.OutContent := SockString(format(
         '<body style="font-family:verdana"><h1>%s Server Error %d</h1><hr><p>%s<p>%s',
         [ClassName,Code,StatusCodeToReason(Code),ErrorMsg]));
     end;
@@ -3646,7 +3649,7 @@ end;
 { THttpSocket }
 
 procedure THttpSocket.GetBody;
-var Line: RawByteString; // 32 bits chunk length in hexa
+var Line: SockString; // 32 bits chunk length in hexa
     LinePChar: array[0..31] of AnsiChar;
     Len, LContent, Error: integer;
 begin
@@ -3709,7 +3712,7 @@ begin
 end;
 
 procedure THttpSocket.GetHeader;
-var s: RawByteString;
+var s: SockString;
     i, n: integer;
     P: PAnsiChar;
 begin
@@ -3755,14 +3758,14 @@ begin
   SetLength(Headers,n);
 end;
 
-function THttpSocket.HeaderAdd(const aValue: RawByteString): integer;
+function THttpSocket.HeaderAdd(const aValue: SockString): integer;
 begin
   result := length(Headers);
   SetLength(Headers,result+1);
   Headers[result] := aValue;
 end;
 
-procedure THttpSocket.HeaderSetText(const aText: RawByteString);
+procedure THttpSocket.HeaderSetText(const aText: SockString);
 var P, PDeb: PAnsiChar;
     n: integer;
 begin
@@ -3783,7 +3786,7 @@ begin
   SetLength(Headers,n);
 end;
 
-function THttpSocket.HeaderGetText: RawByteString;
+function THttpSocket.HeaderGetText: SockString;
 var i,L,n: integer;
     V: PtrInt;
     P: PAnsiChar;
@@ -3812,7 +3815,7 @@ begin
   end;
 end;
 
-function THttpSocket.HeaderValue(aName: RawByteString): RawByteString;
+function THttpSocket.HeaderValue(aName: SockString): SockString;
 var i: integer;
 begin
   if Headers<>nil then begin
@@ -3832,9 +3835,9 @@ begin
   result := RegisterCompressFunc(fCompress,aFunction,fCompressAcceptEncoding,aCompressMinSize)<>'';
 end;
 
-procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: RawByteString;
-  var OutContent: RawByteString);
-var OutContentEncoding: RawByteString;
+procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: SockString;
+  var OutContent: SockString);
+var OutContentEncoding: SockString;
 begin
   if integer(fCompressHeader)<>0 then begin
     OutContentEncoding := CompressDataAndGetHeaders(fCompressHeader,fCompress,
@@ -3847,11 +3850,11 @@ begin
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
-procedure GetSinIPFromCache(const Sin: TVarSin; var result: RawByteString);
+procedure GetSinIPFromCache(const Sin: TVarSin; var result: SockString);
 begin
   if Sin.sin_family=AF_INET then
     with LongRec(Sin.sin_addr) do
-      result := RawByteString(Format(
+      result := SockString(Format(
         '%d.%d.%d.%d',[Bytes[0],Bytes[1],Bytes[2],Bytes[3]])) else
     result := GetSinIP(Sin); // AF_INET6 may be optimized in a future revision
 end;
@@ -3894,7 +3897,7 @@ begin
     GetSinIPFromCache(Name,RemoteIP);
 end;
 
-function THttpServerSocket.HeaderGetText: RawByteString;
+function THttpServerSocket.HeaderGetText: SockString;
 var ConnectionID: shortstring;
 begin
   BinToHexDisplay(@Sock,4,ConnectionID);
@@ -4475,10 +4478,10 @@ type
     // will set both StatusCode and Reason
     // - OutStatus is a temporary variable which will be field with the
     // corresponding text
-    procedure SetStatus(code: integer; var OutStatus: RawByteString);
+    procedure SetStatus(code: integer; var OutStatus: SockString);
     // will set the content of the reponse, and ContentType header
     procedure SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
-      const Content: RawByteString; const ContentType: RawByteString='text/html');
+      const Content: SockString; const ContentType: SockString='text/html');
     /// will set all header values from lines
     // - Content-Type/Content-Encoding/Location will be set in KnownHeaders[]
     // - all other headers will be set in temp UnknownHeaders[]
@@ -4852,7 +4855,7 @@ const
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  out RemoteIP: RawByteString): RawByteString;
+  out RemoteIP: SockString): SockString;
 const
   KNOWNHEADERS: array[reqCacheControl..reqUserAgent] of string[19] = (
     'Cache-Control','Connection','Date','Keep-Alive','Pragma','Trailer',
@@ -5127,9 +5130,9 @@ const
     'HttpSetRequestQueueProperty', 'HttpQueryRequestQueueProperty'
     );
 
-function RegURL(aRoot, aPort: RawByteString; Https: boolean;
-  aDomainName: RawByteString): SynUnicode;
-const Prefix: array[boolean] of RawByteString = ('http://','https://');
+function RegURL(aRoot, aPort: SockString; Https: boolean;
+  aDomainName: SockString): SynUnicode;
+const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   if aPort='' then
     aPort := '80';
@@ -5216,8 +5219,8 @@ end;
 
 { THttpApiServer }
 
-function THttpApiServer.AddUrl(const aRoot, aPort: RawByteString; Https: boolean;
-  const aDomainName: RawByteString; aRegisterURI: boolean): integer;
+function THttpApiServer.AddUrl(const aRoot, aPort: SockString; Https: boolean;
+  const aDomainName: SockString; aRegisterURI: boolean): integer;
 var uri: SynUnicode;
     n: integer;
 begin
@@ -5239,8 +5242,8 @@ begin
   end;
 end;
 
-function THttpApiServer.RemoveUrl(const aRoot, aPort: RawByteString; Https: boolean;
-  const aDomainName: RawByteString): integer;
+function THttpApiServer.RemoveUrl(const aRoot, aPort: SockString; Https: boolean;
+  const aDomainName: SockString): integer;
 var uri: SynUnicode;
     i,j,n: integer;
 begin
@@ -5265,8 +5268,8 @@ begin
     end;
 end;
 
-class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawByteString;
-  Https: boolean; const aDomainName: RawByteString; OnlyDelete: boolean): string;
+class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: SockString;
+  Https: boolean; const aDomainName: SockString; OnlyDelete: boolean): string;
 const
   /// will allow AddUrl() registration to everyone
   // - 'GA' (GENERIC_ALL) to grant all access
@@ -5418,7 +5421,7 @@ begin
   end;
 end;
 
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawByteString);
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: SockString);
 var Buffer: array[0..511] of byte;
     BufferSize, UserSize, DomainSize: DWORD;
     UserInfo: PSIDAndAttributes;
@@ -5445,21 +5448,21 @@ end;
 
 procedure THttpApiServer.Execute;
 type
-  TVerbText = array[hvOPTIONS..hvSEARCH] of RawByteString;
+  TVerbText = array[hvOPTIONS..hvSEARCH] of SockString;
 const
   VERB_TEXT: TVerbText = (
     'OPTIONS','GET','HEAD','POST','PUT','DELETE','TRACE','CONNECT','TRACK',
     'MOVE','COPY','PROPFIND','PROPPATCH','MKCOL','LOCK','UNLOCK','SEARCH');
 var Req: PHTTP_REQUEST;
     ReqID: HTTP_REQUEST_ID;
-    ReqBuf, RespBuf, RemoteIP: RawByteString;
+    ReqBuf, RespBuf, RemoteIP: SockString;
     i: integer;
     flags, bytesRead, bytesSent: cardinal;
     Err: HRESULT;
     InCompressAccept: THttpSocketCompressSet;
     InContentLength, InContentLengthRead: cardinal;
-    InContentEncoding, InAcceptEncoding, Range: RawByteString;
-    OutContentEncoding, OutStatus: RawByteString;
+    InContentEncoding, InAcceptEncoding, Range: SockString;
+    OutContentEncoding, OutStatus: SockString;
     Context: THttpServerRequest;
     FileHandle: THandle;
     Resp: PHTTP_RESPONSE;
@@ -5921,7 +5924,7 @@ begin
     THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).fLogData := nil;
 end;
 
-procedure THttpApiServer.SetServerName(const aName: RawByteString);
+procedure THttpApiServer.SetServerName(const aName: SockString);
 var i: integer;
 begin
   inherited SetServerName(aName);
@@ -5932,7 +5935,7 @@ begin
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).ServerName := aName;
 end;
 
-procedure THttpApiServer.SetLoggingServiceName(const aName: RawByteString);
+procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
 begin
   if self=nil then
     exit;
@@ -5996,7 +5999,7 @@ end;
 { HTTP_RESPONSE }
 
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
-  const Content, ContentType: RawByteString);
+  const Content, ContentType: SockString);
 begin
   fillchar(DataChunk,sizeof(DataChunk),0);
   if Content='' then
@@ -6073,7 +6076,7 @@ begin
   until false;
 end;
 
-procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawByteString);
+procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: SockString);
 begin
   StatusCode := code;
   OutStatus := StatusCodeToReason(code);
@@ -6094,8 +6097,8 @@ begin
   result := RegisterCompressFunc(fCompress,aFunction,fCompressAcceptEncoding,aCompressMinSize)<>'';
 end;
 
-constructor THttpRequest.Create(const aServer, aPort: RawByteString; aHttps: boolean;
-  const aProxyName,aProxyByPass: RawByteString;
+constructor THttpRequest.Create(const aServer, aPort: SockString; aHttps: boolean;
+  const aProxyName,aProxyByPass: SockString;
   ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 begin
   fPort := GetCardinal(pointer(aPort));
@@ -6110,10 +6113,10 @@ begin
   InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout); // raise an exception on error
 end;
 
-class function THttpRequest.InternalREST(const url,method,data,header: RawByteString;
-  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
+class function THttpRequest.InternalREST(const url,method,data,header: SockString;
+  aIgnoreSSLCertificateErrors: Boolean): SockString;
 var URI: TURI;
-    outHeaders: RawByteString;
+    outHeaders: SockString;
 begin
   result := '';
   with URI do
@@ -6131,34 +6134,34 @@ begin
   end;
 end;
 
-class function THttpRequest.Get(const aURI,aHeader: RawByteString;
-  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
+class function THttpRequest.Get(const aURI,aHeader: SockString;
+  aIgnoreSSLCertificateErrors: Boolean): SockString;
 begin
   result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function THttpRequest.Post(const aURI, aData, aHeader: RawByteString;
-  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
+class function THttpRequest.Post(const aURI, aData, aHeader: SockString;
+  aIgnoreSSLCertificateErrors: Boolean): SockString;
 begin
   result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function THttpRequest.Put(const aURI, aData, aHeader: RawByteString;
-  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
+class function THttpRequest.Put(const aURI, aData, aHeader: SockString;
+  aIgnoreSSLCertificateErrors: Boolean): SockString;
 begin
   result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-class function THttpRequest.Delete(const aURI, aHeader: RawByteString;
-  aIgnoreSSLCertificateErrors: Boolean): RawByteString;
+class function THttpRequest.Delete(const aURI, aHeader: SockString;
+  aIgnoreSSLCertificateErrors: Boolean): SockString;
 begin
   result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors);
 end;
 
-function THttpRequest.Request(const url, method: RawByteString;
-  KeepAlive: cardinal; const InHeader, InData, InDataType: RawByteString;
-  out OutHeader, OutData: RawByteString): integer;
-var aData, aDataEncoding, aAcceptEncoding, aURL: RawByteString;
+function THttpRequest.Request(const url, method: SockString;
+  KeepAlive: cardinal; const InHeader, InData, InDataType: SockString;
+  out OutHeader, OutData: SockString): integer;
+var aData, aDataEncoding, aAcceptEncoding, aURL: SockString;
     i: integer;
 begin
   if (url='') or (url[1]<>'/') then
@@ -6170,14 +6173,14 @@ begin
     // common headers
     InternalAddHeader(InHeader);
     if InDataType<>'' then
-      InternalAddHeader(RawByteString('Content-Type: ')+InDataType);
+      InternalAddHeader(SockString('Content-Type: ')+InDataType);
     // handle custom compression
     aData := InData;
     if integer(fCompressHeader)<>0 then begin
       aDataEncoding := CompressDataAndGetHeaders(fCompressHeader,fCompress,
         InDataType,aData);
       if aDataEncoding<>'' then
-        InternalAddHeader(RawByteString('Content-Encoding: ')+aDataEncoding);
+        InternalAddHeader(SockString('Content-Encoding: ')+aDataEncoding);
     end;
     if fCompressAcceptEncoding<>'' then
       InternalAddHeader(fCompressAcceptEncoding);
@@ -6214,7 +6217,7 @@ const
   HTTP_RESP_BLOCK_SIZE = 8*1024;
 
 function TWinHttpAPI.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-  Data: RawByteString): integer;
+  Data: SockString): integer;
 var Bytes, ContentLength, Read: DWORD;
 begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
     result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
@@ -6279,7 +6282,7 @@ begin
   inherited;
 end;
 
-procedure TWinINet.InternalAddHeader(const hdr: RawByteString);
+procedure TWinINet.InternalAddHeader(const hdr: SockString);
 begin
   if (hdr<>'') and not HttpAddRequestHeadersA(fRequest,
      Pointer(hdr), length(hdr), HTTP_ADDREQ_FLAG_COALESCE) then
@@ -6316,7 +6319,7 @@ begin
     raise EWinINet.Create;
 end;
 
-function TWinINet.InternalGetInfo(Info: DWORD): RawByteString;
+function TWinINet.InternalGetInfo(Info: DWORD): SockString;
 var dwSize, dwIndex: DWORD;
 begin
   result := '';
@@ -6340,13 +6343,13 @@ begin
     result := 0;
 end;
 
-function TWinINet.InternalReadData(var Data: RawByteString; Read: integer): cardinal;
+function TWinINet.InternalReadData(var Data: SockString; Read: integer): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], length(Data)-Read, result) then
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalCreateRequest(const method, aURL: RawByteString);
+procedure TWinINet.InternalCreateRequest(const method, aURL: SockString);
 const ALL_ACCEPT: array[0..1] of PAnsiChar = ('*/*',nil);
 var Flags: DWORD;
 begin
@@ -6362,7 +6365,7 @@ begin
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalSendRequest(const aData: RawByteString);
+procedure TWinINet.InternalSendRequest(const aData: SockString);
 begin
   if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
     raise EWinINet.Create;
@@ -6416,7 +6419,7 @@ begin
   inherited;
 end;
 
-procedure TWinHTTP.InternalAddHeader(const hdr: RawByteString);
+procedure TWinHTTP.InternalAddHeader(const hdr: SockString);
 begin
   if (hdr<>'') and
     not WinHttpAddRequestHeaders(FRequest, Pointer(Ansi7ToUnicode(hdr)), length(hdr),
@@ -6451,9 +6454,9 @@ begin
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
-function TWinHTTP.InternalGetInfo(Info: DWORD): RawByteString;
+function TWinHTTP.InternalGetInfo(Info: DWORD): SockString;
 var dwSize, dwIndex: DWORD;
-    tmp: RawByteString;
+    tmp: SockString;
     i: integer;
 begin
   result := '';
@@ -6481,13 +6484,13 @@ begin
     result := 0;
 end;
 
-function TWinHTTP.InternalReadData(var Data: RawByteString; Read: integer): cardinal;
+function TWinHTTP.InternalReadData(var Data: SockString; Read: integer): cardinal;
 begin
   if not WinHttpReadData(fRequest, @PByteArray(Data)[Read], length(Data)-Read, result) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
 end;
 
-procedure TWinHTTP.InternalCreateRequest(const method, aURL: RawByteString);
+procedure TWinHTTP.InternalCreateRequest(const method, aURL: SockString);
 const ALL_ACCEPT: array[0..1] of PWideChar = ('*/*',nil);
 var Flags: DWORD;
 begin
@@ -6521,7 +6524,7 @@ const
   WINHTTP_AUTH_SCHEME_DIGEST = $00000008;
   WINHTTP_AUTH_SCHEME_NEGOTIATE = $00000010;
 
-procedure TWinHTTP.InternalSendRequest(const aData: RawByteString);
+procedure TWinHTTP.InternalSendRequest(const aData: SockString);
 var L: integer;
     winAuth: DWORD;
 begin
@@ -6834,7 +6837,7 @@ end;
 
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
-var storage: ^RawByteString absolute opaque;
+var storage: ^SockString absolute opaque;
     n: integer;
 begin
   if storage=nil then
@@ -6867,8 +6870,8 @@ begin
   inherited;
 end;
 
-procedure TCurlHTTP.InternalCreateRequest(const method, aURL: RawByteString);
-var url: RawByteString;
+procedure TCurlHTTP.InternalCreateRequest(const method, aURL: SockString);
+var url: SockString;
 begin
   url := fRootURL+aURL;
   curl.easy_setopt(fHandle,coURL,pointer(url));
@@ -6882,7 +6885,7 @@ begin
   Finalize(fOut);
 end;
 
-procedure TCurlHTTP.InternalAddHeader(const hdr: RawByteString);
+procedure TCurlHTTP.InternalAddHeader(const hdr: SockString);
 var P,H: PAnsiChar;
 begin
   P := pointer(hdr);
@@ -6893,7 +6896,7 @@ begin
   end;
 end;
 
-procedure TCurlHTTP.InternalSendRequest(const aData: RawByteString);
+procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
 begin
   if (fIn.Method='') or (fIn.Method='GET') then
     curl.easy_setopt(fHandle,coHTTPGet,1) else
@@ -6923,10 +6926,10 @@ begin
 end;
 
 function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-  Data: RawByteString): integer;
+  Data: SockString): integer;
 var res: TCurlResult;
     P: PAnsiChar;
-    s: RawByteString;
+    s: SockString;
     i: integer;
 begin
   res := curl.easy_perform(fHandle);
@@ -6934,7 +6937,7 @@ begin
     result := STATUS_SERVERERROR else begin
     curl.easy_getinfo(fHandle,ciResponseCode,result);
     Header := Trim(fOut.Header);
-    i := Pos(RawByteString(#13),Header);
+    i := Pos(SockString(#13),Header);
     if i>0 then // trim initial 'HTTP/1.1 200 OK'#$D#$A
       system.Delete(Header,1,i+1);
     P := pointer(Header);

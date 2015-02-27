@@ -178,6 +178,8 @@ type
   protected
     fKeepAliveMS: cardinal;
     fURI: TURI;
+    function GetServer: RawByteString; {$ifdef HASINLINE}inline;{$endif}
+    function GetPort: RawByteString;   {$ifdef HASINLINE}inline;{$endif}
     /// you could inherit from it and set your custom fProtocol instance
     procedure SetInternalProperties; override;
     procedure SetServerName(const aServerName: RawUTF8);
@@ -187,9 +189,9 @@ type
     function InternalRequest(var Data,DataType: RawByteString): integer; virtual; abstract;
   published
     /// the associated server IP address or name
-    property Server: RawByteString read fURI.Server;
+    property Server: RawByteString read GetServer;
     /// the associated port number
-    property Port: RawByteString read fURI.Port;
+    property Port: RawByteString read GetPort;
     /// time (in milliseconds) to keep the connection alive with the server
     // - default is 60000, i.e. one minute
     property KeepAliveMS: cardinal read fKeepAliveMS write fKeepAliveMS;
@@ -288,6 +290,16 @@ end;
 
 { TSQLDBHTTPConnectionPropertiesAbstract }
 
+function TSQLDBHTTPConnectionPropertiesAbstract.GetServer: RawByteString;
+begin
+  result := fURI.Server;
+end;
+
+function TSQLDBHTTPConnectionPropertiesAbstract.GetPort: RawByteString;
+begin
+  result := fURI.Port;
+end;
+
 procedure TSQLDBHTTPConnectionPropertiesAbstract.SetServerName(
   const aServerName: RawUTF8);
 begin
@@ -382,7 +394,8 @@ var inData,inDataType,head: RawByteString;
 begin
   inData := Data;
   inDataType := DataType;
-  result := fClient.Request(fDatabaseName,'POST',fKeepAliveMS,'',inData,inDataType,head,Data);
+  result := fClient.Request(fDatabaseName,'POST',fKeepAliveMS,'',inData,inDataType,
+    SockString(head),SockString(Data));
   DataType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER)
 end;
 

@@ -130,6 +130,7 @@ unit SynZip;
      log files as for EventArchiveZip)
 
    Version 1.18
+   - defined ZipString dedicated type, to store data in a Unicode-neutral manner 
    - introducing new TZipWriteToStream class, able to create a zip without file
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
@@ -236,29 +237,31 @@ function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
   checkCRC: PCardinal; ZlibFormat: Boolean=false): cardinal;
 
 
-{$ifndef UNICODE}
 type
-  /// define RawByteString, as it does exist in Delphi 2009 and up
-  // - to be used for byte storage into an AnsiString
-  RawByteString = AnsiString;
+{$ifdef UNICODE}
+  /// define a raw storage string type, used for data buffer management
+  ZipString = type RawByteString;
+{$else}
+  /// define a raw storage string type, used for data buffer management
+  ZipString = type AnsiString;
   /// as available in newer Delphi versions
   NativeUInt = cardinal;
 {$endif}
 
 /// compress some data, with a proprietary format (including CRC)
-function CompressString(const data: RawByteString; failIfGrow: boolean = false;
-  CompressionLevel: integer=6) : RawByteString;
+function CompressString(const data: ZipString; failIfGrow: boolean = false;
+  CompressionLevel: integer=6) : ZipString;
 
 /// uncompress some data, with a proprietary format (including CRC)
 // - return '' in case of a decompression failure
-function UncompressString(const data: RawByteString) : RawByteString;
+function UncompressString(const data: ZipString) : ZipString;
 
 
 /// (un)compress a data content using the gzip algorithm
 // - as expected by THttpSocket.RegisterCompress
 // - will use internaly a level compression of 1, i.e. fastest available (content
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressGZip(var DataRawByteString; Compress: boolean): AnsiString;
 
 /// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
 // - as expected by THttpSocket.RegisterCompress
@@ -266,7 +269,7 @@ function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
 // - deflate content encoding is pretty inconsistent in practice, so slightly
 // slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressDeflate(var DataRawByteString; Compress: boolean): AnsiString;
 
 /// (un)compress a data content using the zlib algorithm
 // - as expected by THttpSocket.RegisterCompress
@@ -274,7 +277,7 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteStr
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
 // - zlib content encoding is pretty inconsistent in practice, so slightly
 // slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressZLib(var DataRawByteString; Compress: boolean): AnsiString;
 
 
 
@@ -289,7 +292,7 @@ type
 
 /// just hash aString with CRC32 algorithm
 // - crc32 is better than adler32 for short strings
-function CRC32string(const aString: RawByteString): cardinal;
+function CRC32string(const aString: ZipString): cardinal;
 
 // don't know why using objects below produce an Internal Error DT5830
 // under Delphi 2009 Update 3 !!!!!
@@ -547,7 +550,7 @@ function get_crc_table: pointer;
 
 {/ uncompress a .gz file content
  - return '' if the .gz content is invalid (e.g. bad crc) }
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 
 type
   /// a simple TStream descendant for compressing data into a stream
@@ -643,12 +646,12 @@ type
     /// get the index of a file inside the .zip archive
     function NameToIndex(const aName: TFileName): integer;
     /// uncompress a file stored inside the .zip archive into memory
-    function UnZip(aIndex: integer): RawByteString; overload;
+    function UnZip(aIndex: integer): ZipString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(aIndex: integer; const DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
     /// uncompress a file stored inside the .zip archive into memory
-    function UnZip(const aName: TFileName): RawByteString; overload;
+    function UnZip(const aName: TFileName): ZipString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(const aName, DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
@@ -682,7 +685,7 @@ type
     // - those will be appended after the data blocks at the end of the .zip file
     Entry: array of record
       /// the file name, as stored in the .zip internal directory
-      intName: RawByteString;
+      intName: ZipString;
       /// the corresponding file header
       fhr: TFileHeader;
     end;
@@ -701,7 +704,7 @@ type
       FileAge: integer=1+1 shl 5+30 shl 9);
     /// append a file content into the destination file
     // - useful to add the initial Setup.exe file, e.g.
-    procedure Append(const Content: RawByteString);
+    procedure Append(const Content: ZipString);
     /// release associated memory, and close destination archive
     destructor Destroy; override;
   end;
@@ -899,7 +902,7 @@ begin
   end;
 end;
 
-procedure TZipWriteAbstract.Append(const Content: RawByteString);
+procedure TZipWriteAbstract.Append(const Content: ZipString);
 begin
   if (self=nil) or (fAppendOffset<>0) then
     exit;
@@ -1116,7 +1119,7 @@ var lhr: PLastHeader;
     {$ifdef CONDITIONALEXPRESSIONS}
     tmp: UTF8String;
     {$else}
-    tmp: RawByteString;
+    tmp: ZipString;
     {$endif}
 begin
   for i := 0 to 127 do begin // resources size may be rounded up to alignment
@@ -1315,7 +1318,7 @@ begin
   result := false; // data descriptor block not found
 end;
 
-function TZipRead.UnZip(aIndex: integer): RawByteString;
+function TZipRead.UnZip(aIndex: integer): ZipString;
 var len: cardinal;
     info: TFileInfo;
 begin
@@ -1435,7 +1438,7 @@ begin
     result := UnZip(aIndex,DestDir,DestDirIsFileName);
 end;
 
-function TZipRead.UnZip(const aName: TFileName): RawByteString;
+function TZipRead.UnZip(const aName: TFileName): ZipString;
 var aIndex: integer;
 begin
   aIndex := NameToIndex(aName);
@@ -1446,7 +1449,7 @@ end;
 
 {$endif Linux}
 
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 var Len: integer;
 begin
   result := '';
@@ -4740,8 +4743,8 @@ begin
     result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf)); end;
 end;*)
 
-function CompressString(const data: RawByteString; failIfGrow: boolean = false;
-  CompressionLevel: integer=6) : RawByteString;
+function CompressString(const data: ZipString; failIfGrow: boolean = false;
+  CompressionLevel: integer=6) : ZipString;
 var i1 : integer;
 begin
   result := '';
@@ -4755,7 +4758,7 @@ begin
   else result := '';
 end;
 
-function UncompressString(const data: RawByteString) : RawByteString;
+function UncompressString(const data: ZipString) : ZipString;
 begin
   result := '';
   if Length(data) > 12 then begin
@@ -4893,9 +4896,10 @@ const
 
   HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
 
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressGZip(var DataRawByteString; Compress: boolean): AnsiString;
 var L: integer;
     P: PAnsiChar;
+    Data: ZipString absolute DataRawByteString;
 begin
   L := length(Data);
   if Compress then begin
@@ -4914,10 +4918,10 @@ begin
   result := 'gzip';
 end;
 
-procedure CompressInternal(var Data: RawByteString; Compress: boolean; Bits: integer);
+procedure CompressInternal(var Data: ZipString; Compress: boolean; Bits: integer);
 var strm: TZStream;
     code, len: integer;
-    tmp: RawByteString;
+    tmp: ZipString;
 begin
   StreamInit(strm);
   strm.next_in := pointer(Data);
@@ -4958,13 +4962,15 @@ begin
   SetString(Data,PAnsiChar(pointer(tmp)),strm.total_out);
 end;
 
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressDeflate(var DataRawByteString; Compress: boolean): AnsiString;
+var Data: ZipString absolute DataRawByteString;
 begin
   CompressInternal(Data,Compress,-MAX_WBITS);
   result := 'deflate';
 end;
 
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressZLib(var DataRawByteString; Compress: boolean): AnsiString;
+var Data: ZipString absolute DataRawByteString;
 begin
   CompressInternal(Data,Compress,+MAX_WBITS);
   result := 'zlib';
@@ -5037,7 +5043,7 @@ begin
   flags := flags and not(1 shl 11);
 end;
 
-function CRC32string(const aString: RawByteString): cardinal;
+function CRC32string(const aString: ZipString): cardinal;
 // crc32 is better than adler32 for short strings, and fast enough in zlib 1.2.5
 begin
   result := length(aString);

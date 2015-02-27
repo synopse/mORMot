@@ -4516,7 +4516,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
   P := pointer(sqlite3.column_text(Request,Col));
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,SynCommons.StrLen(P),result);
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,SynCommons.StrLen(P),RawByteString(result));
 end;
 {$endif}
 
