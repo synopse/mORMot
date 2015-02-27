@@ -692,7 +692,7 @@ function MethodHasView(const aMethod: TServiceMethod): boolean;
 begin // any method returning a TMVCAction do not have any associated view
   result := (aMethod.ArgsResultIndex<0) or
             (aMethod.Args[aMethod.ArgsResultIndex].ValueType<>smvRecord) or
-            (aMethod.Args[aMethod.ArgsResultIndex].TypeInfo<>TypeInfo(TMVCAction));
+            (aMethod.Args[aMethod.ArgsResultIndex].ArgTypeInfo<>TypeInfo(TMVCAction));
 end;
 
 constructor TMVCViewsMustache.Create(aInterface: PTypeInfo;

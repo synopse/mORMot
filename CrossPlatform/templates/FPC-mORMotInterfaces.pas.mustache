@@ -1,12 +1,9 @@
-/// SOA interface methods definition to circumvent FPC restriction
+/// SOA interface methods definition to circumvent FPC missing RTTI
 {{#uri}}
 // - retrieved from http://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
 {{/uri}}
 {{^uri}}
-{{#soa.enabled}}
-// - define RTTI for{{#soa.services}} {{interfaceName}}{{/soa.services}}
-{{/soa.enabled}}
 // - generated at {{time}}
 {{/uri}}
 unit {{fileName}};
@@ -22,7 +19,7 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit is intended to work on FPC compilers, which lacks of RTTI
+  This unit is intended to work on older FPC compilers, which lack of RTTI
   for interfaces - see http://bugs.freepascal.org/view.php?id=26774
   
   USAGE:
@@ -38,7 +35,7 @@ unit {{fileName}};
 
 interface
 
-{$I Synopse.inc} // needed for setting proper FPC modes
+{$I Synopse.inc} // needed for setting HASINTERFACERTTI and proper FPC modes
 
 uses
   SysUtils,
@@ -52,7 +49,7 @@ uses
 implementation
 
 {{#soa.enabled}}
-{$ifdef FPC} // circumvent a FPC-only bug: Delphi has RTTI for this
+{$ifndef HASINTERFACERTTI} // circumvent old FPC bug of missing RTTI
 
 { TInterfaceFactoryDefinition }
 
@@ -85,6 +82,6 @@ initialization
   TInterfaceFactoryDefinition.RegisterInterface(TypeInfo({{interfaceName}}));
 {{/soa.services}}
 
-{$endif FPC}
+{$endif HASINTERFACERTTI}
 {{/soa.enabled}}
 end.

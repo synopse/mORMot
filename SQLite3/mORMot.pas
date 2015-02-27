@@ -2518,12 +2518,14 @@ type
   TCallingConvention = (ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
 
   /// the available kind of method parameters
-  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut {$ifndef FPC}, pfResult{$endif});
+  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut,
+    {$ifdef FPC}pfConstRef{$else}pfResult{$endif});
 
   /// a set of kind of method parameters
   TParamFlags = set of TParamFlag;
 
   PReturnInfo = ^TReturnInfo;
+  PCallingConvention = ^TCallingConvention;
   PParamInfo  = ^TParamInfo;
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
@@ -8445,9 +8447,9 @@ type
     /// the argument name, as declared in Delphi
     ParamName: PShortString;
     /// the type name, as declared in Delphi
-    TypeName: PShortString;
+    ArgTypeName: PShortString;
     /// the low-level RTTI information of this argument
-    TypeInfo: PTypeInfo;
+    ArgTypeInfo: PTypeInfo;
     /// we do not handle all kind of Delphi variables
     ValueType: TServiceMethodValueType;
     /// the variable direction as defined at code level
@@ -15744,11 +15746,7 @@ const
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
      ftInt64,     // sftTimeLog
-     {$ifdef CPUARM}
-     ftDouble,
-     {$else}
      ftCurrency,  // sftCurrency
-     {$endif}
      ftUTF8,      // sftObject
 {$ifndef NOVARIANTS}
      ftUTF8,      // sftVariant
@@ -15781,12 +15779,8 @@ begin
   case aValue.VType of
     ftInt64:
       SetInt64(pointer(temp),aValue.VInt64);
-    {$ifdef CPUARM}
-    ftCurrency,
-    {$else}
     ftCurrency:
       aValue.VInt64 := StrToCurr64(pointer(temp));
-    {$endif}
     ftDouble:
       aValue.VDouble := GetExtended(pointer(temp));
     ftDate:
@@ -15808,12 +15802,8 @@ begin
   case aValue.VType of
     ftInt64:
       SetValueVar(Instance,Int64ToUtf8(aValue.VInt64),false);
-    {$ifdef CPUARM}
-    ftCurrency,
-    {$else}
     ftCurrency:
       SetValueVar(Instance,Curr64ToStr(aValue.VInt64),false);
-    {$endif}
     ftDouble:
       SetValueVar(Instance,DoubleToStr(aValue.VDouble),false);
     ftDate:
@@ -15843,8 +15833,7 @@ const
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,
-                            {$ifdef CPUARM}varDouble,{$else}varCurrency,{$endif}
+    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
  // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID
@@ -15856,12 +15845,8 @@ begin
     VarClear(variant(result));
   result.VType := SQL_ELEMENTTYPES[fieldType];
   case fieldType of
-  {$ifdef CPUARM}
-  sftCurrency,
-  {$else}
   sftCurrency:
     result.VInt64 := StrToCurr64(Value);
-  {$endif}
   sftFloat: begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
@@ -16019,11 +16004,7 @@ begin
     sftTimeLog, sftModTime, sftCreateTime: // specific class for further use
       C := TSQLPropInfoRTTITimeLog;
     sftCurrency:
-    {$ifdef CPUARM}
-      C := TSQLPropInfoRTTIDouble;
-    {$else}
       C := TSQLPropInfoRTTICurrency;
-    {$endif}
     sftDateTime:
       C := TSQLPropInfoRTTIDateTime;
     sftID: // = TSQLRecord(aID)
@@ -16529,11 +16510,7 @@ function TSQLPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject; const aValue: 
 var V: double;
 begin
   case aValue.VType of
-  {$ifdef CPUARM}
-  ftCurrency,
-  {$else}
   ftCurrency:       V := aValue.VCurrency;
-  {$endif}
   ftDouble, ftDate: V := aValue.VDouble;
   ftInt64:          V := aValue.VInt64;
   else begin
@@ -19203,11 +19180,7 @@ begin
             FieldType := sftUTF8Text else // force string value not to be a number
           if FieldType=sftInteger then
             // we only checked the first field -> best guess...
-            {$ifdef CPUARM}
-            FieldType := sftDouble;
-            {$else}
             FieldType := sftCurrency;
-            {$endif}
           break; // get first non null field content
         end;
       end;
@@ -22339,14 +22312,12 @@ begin
     tkFloat: begin
       if DestInfo^.PropType^.FloatType=PropType^.FloatType then
       case PropType^.FloatType of
-      {$ifndef CPUARM}
       ftCurr: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
           result := GetCurrencyProp(Source)=DestInfo^.GetCurrencyProp(Dest);
         exit;
       end;
-      {$endif}
       ftDoub: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
           result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
@@ -22422,11 +22393,9 @@ obj:    S := GetObjProp(Source);
       // works also with TID, TTimeLog, Double and Currency
 i64:  SetInt64Prop(Dest,GetInt64Prop(Source));
     tkFloat:
-    {$ifndef CPUARM}
     if (PropType^.FloatType in [ftDoub,ftCurr]) and
        GetterIsField and SetterIsField then
       goto I64 else
-    {$endif}
       SetFloatProp(Dest,GetFloatProp(Source));
     {$ifdef FPC}tkAString,{$endif}
     tkLString: begin
@@ -23153,21 +23122,48 @@ end;
 
 
 type
+  TIntfFlag = (ifHasGuid,ifDispInterface,ifDispatch{$ifdef FPC},ifHasStrGUID{$endif});
+  TIntfFlags = set of TIntfFlag;
+
   PInterfaceTypeData = ^TInterfaceTypeData;
-  TInterfaceTypeData = packed record
-    IntfParent : PPTypeInfo; // ancestor
-    IntfFlags : set of (ifHasGuid, ifDispInterface, ifDispatch {$ifdef FPC}, ifHasStrGUID{$endif});
-    IntfGuid : TGUID;
-    IntfUnit : ShortString;
+  TInterfaceTypeData =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
+    IntfParent: PPTypeInfo; // ancestor
+    IntfFlags: TIntfFlags;
+    IntfGuid: TGUID;
+    IntfUnit: ShortString;
   end;
+
+  {$ifdef FPC}
+  PRawInterfaceTypeData = ^TRawInterfaceTypeData;
+  TRawInterfaceTypeData =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
+    RawIntfParent: PTypeInfo;
+    RawIntfFlags : TIntfFlagsBase;
+    IID: TGUID;
+    RawIntfUnit: ShortString;
+    IIDStr: ShortString;
+  end;
+  {$endif}
+
 
   TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
     mkClassProcedure, mkClassFunction, { Obsolete } mkSafeProcedure, mkSafeFunction);
 
-  TIntfMethodEntryTail = packed record
+  TIntfMethodEntryTail = 
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
+    {$ifdef FPC}
+    Version: Byte; // alwyas 3 at the moment
+    {$else}
     Kind: TMethodKind;
+    {$endif}
     CC: TCallingConvention;
+    {$ifdef FPC}
+    ResultType: PTypeInfo;
+    StackSize: Word;
+    {$endif}
     ParamCount: Byte;
+    {Params: array[0..ParamCount - 1] of TVmtMethodParam;}
   end;
 
 { TTypeInfo }
@@ -23342,12 +23338,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
     tkFloat:
-      {$ifndef CPUARM}
       if @self=TypeInfo(Currency) then begin
         result := sftCurrency;
         exit;
       end else
-      {$endif}
       if @self=TypeInfo(TDateTime) then begin
         result := sftDateTime;
         exit;
@@ -40806,7 +40800,7 @@ begin
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
       if ValueType=smvDynArray then
-        DynArrays[IndexVar].Init(TypeInfo,V^);
+        DynArrays[IndexVar].Init(ArgTypeInfo,V^);
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
         AddJSON(Params,V); 
@@ -40896,7 +40890,7 @@ begin
           end;
         end;
         smvRecord: begin
-          R := RecordLoadJSON(V^,R,TypeInfo);
+          R := RecordLoadJSON(V^,R,ArgTypeInfo);
           if R=nil then
             RaiseError('returned record',[]);
         end;
@@ -41017,11 +41011,7 @@ begin
     if P=TypeInfo(TDateTime) then
       result := smvDateTime else
     case P^.FloatType of
-      {$ifdef CPUARM}
-      ftCurr,
-      {$else}
       ftCurr: result := smvCurrency;
-      {$endif}
       ftDoub: result := smvDouble;
     end;
   {$ifdef FPC}tkAString,{$endif} tkLString:
@@ -41054,6 +41044,8 @@ begin
   {$endif}
   tkDynArray: // TDynArray.LoadFromJSON / TTextWriter.AddDynArrayJSON type
     result := smvDynArray;
+  tkUnknown: // assume var/out untyped arguments are in fact objects
+    result := smvObject;
   end;
 end;
 
@@ -41215,12 +41207,12 @@ begin
     Args[0].ValueType := smvSelf;
     for a := 1 to high(Args) do
     with Args[a] do begin
-      ValueType := TypeInfoToMethodValueType(TypeInfo);
+      ValueType := TypeInfoToMethodValueType(ArgTypeInfo);
       case ValueType of
       smvNone: begin
-        case TypeInfo^.Kind of
+        case ArgTypeInfo^.Kind of
         tkClass: begin
-          C := TypeInfo^.ClassType^.ClassType;
+          C := ArgTypeInfo^.ClassType^.ClassType;
           if C.InheritsFrom(TList) then
             ErrorMsg := ' - use TObjectList instead' else
           {$ifndef LVCL}
@@ -41236,7 +41228,7 @@ begin
         end;
 error:  raise EInterfaceFactoryException.CreateUTF8(
           '%.Create: %.% "%" parameter has unexpected type %%',
-          [self,aInterface^.Name,URI,ParamName^,TypeInfo^.Name,ErrorMsg]);
+          [self,aInterface^.Name,URI,ParamName^,ArgTypeInfo^.Name,ErrorMsg]);
       end;
       smvObject:
         if ValueDirection=smdResult then begin
@@ -41287,7 +41279,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       include(ArgsUsed,ValueType);
       if ValueType in [smvRawUTF8..smvWideString] then
         Include(ValueKindAsm,vIsString);
-      if (ValueType=smvDynArray) and InternalIsObjArray(TypeInfo) then
+      if (ValueType=smvDynArray) and InternalIsObjArray(ArgTypeInfo) then
         Include(ValueKindAsm,vIsObjArray);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
           {$ifdef FPC},smvDynArray{$endif}]) or
@@ -41302,19 +41294,19 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         smvInt64, smvDouble, smvDateTime, smvCurrency:
           SizeInStorage := 8;
         smvEnum:
-          SizeInStorage := TypeInfo^.EnumBaseType^.SizeInStorageAsEnum;
+          SizeInStorage := ArgTypeInfo^.EnumBaseType^.SizeInStorageAsEnum;
         smvSet: begin
-          SizeInStorage := TypeInfo^.SetEnumType^.SizeInStorageAsSet;
+          SizeInStorage := ArgTypeInfo^.SetEnumType^.SizeInStorageAsSet;
           if SizeInStorage=0 then
             raise EInterfaceFactoryException.CreateUTF8(
               '%.Create: % set too big in %.% method % parameter',
-              [self,TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
+              [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
         smvRecord:
-          if TypeInfo^.RecordType^.Size<=PTRSIZ then
+          if ArgTypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateUTF8(
               '%.Create: % record too small in %.% method % parameter',
-              [self,TypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]) else
+              [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]) else
             SizeInStorage := PTRSIZ; // handle only records when passed by ref
         else
           SizeInStorage := PTRSIZ;
@@ -41567,13 +41559,21 @@ procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
 var P: Pointer;
     PB: PByte absolute P;
     PI: PInterfaceTypeData absolute P;
+    {$ifdef FPC}
+    PIR: PRawInterfaceTypeData absolute P;
+    {$endif}
     PW: PWord absolute P;
     PS: PShortString absolute P;
     PME: ^TIntfMethodEntryTail absolute P;
     PF: ^TParamFlags absolute P;
     PP: ^PPTypeInfo absolute P;
     Ancestor: PTypeInfo;
+    {$ifdef FPC}
+    propCount: integer;
+    aResultType: PTypeInfo;
+    {$else}
     Kind: TMethodKind;
+    {$endif}
     f: TParamFlags;
     m,a: integer;
     n: cardinal;
@@ -41592,10 +41592,20 @@ begin
     Ancestor := nil;
   if Ancestor<>nil then
     AddMethodsFromTypeInfo(Ancestor);
-  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
   // retrieve methods for this interface level
   {$ifdef FPC}
-  PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // ignore iidstr
+  if PI^.IntfUnit='System' then
+    exit;
+  if aInterface^.Kind=tkInterface then
+    P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]) else
+    P := AlignToPtr(@PIR^.IIDStr[ord(PIR^.IIDStr[0])+1]);
+  propCount := PSmallInt(P)^; // FPC add property information -> ignore now
+  inc(P,sizeOf(SmallInt));
+  P := AlignToPtr(P);
+  for a := 0 to propCount-1 do
+    P := AlignToPtr(@PPropInfo(P)^.Name[ord(PPropInfo(P)^.Name[0])+1]);
+  {$else}
+  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
   {$endif}
   n := PW^; inc(PW);
   if (PW^=$ffff) or (n=0) then
@@ -41606,6 +41616,60 @@ begin
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
+      {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
+      inc(PB,ord(PS^[0])+1);
+      inc(PB); // skip Version field (always 2)
+      {$ifndef CPUARM}
+      if PCallingConvention(P)^<>ccRegister then
+         RaiseError('method shall use register calling convention',[]);
+      {$endif}
+      inc(PB,sizeOf(TCallingConvention));
+      aResultType := PTypeInfo(ppointer(P)^);
+      inc(PP);
+      inc(PW); // skip StackSize
+      n := PB^;
+      inc(PB);
+      if aResultType<>nil then  // we have a function
+        SetLength(Args,n+1) else
+        SetLength(Args,n);
+      if length(Args)>MAX_METHOD_ARGS then
+         RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
+      if aResultType<>nil then
+      with Args[n] do begin
+        ParamName := @CONST_PSEUDO_RESULT_NAME;
+        ValueDirection := smdResult;
+        ArgTypeInfo := aResultType;
+        if ArgTypeInfo=TypeInfo(Integer) then // under FPC integer->'longint'
+          ArgTypeName := @CONST_INTEGER_NAME else
+          ArgTypeName := @ArgTypeInfo^.Name;
+      end;
+      for a := 0 to n-1 do
+      with Args[a] do begin
+        f := PF^;
+        if pfVar in f then
+          ValueDirection := smdVar else
+        if pfOut in f then
+          ValueDirection := smdOut;
+        ArgsNotResultLast := a;
+        if ValueDirection<>smdConst then
+          ArgsOutNotResultLast := a;
+        inc(PF);
+        P := AlignToPtr(P);
+        ArgTypeInfo := PTypeInfo(ppointer(P)^);
+        ArgTypeName := @ArgTypeInfo^.Name;
+        if TypeInfoToMethodValueType(ArgTypeInfo) in [smvRecord,smvDynArray] then begin
+          if f*[pfConst,pfVar,pfOut{$IFDEF FPC_HAS_CONSTREF},pfConstRef{$endif}]=[] then
+             RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
+        end;
+        inc(PP);
+        inc(PB);    // skip ParReg
+        inc(PB,SizeOf(LongInt)); // skip ParOff
+        if PS^='$self' then
+          ParamName := @CONST_PSEUDO_SELF_NAME else
+          ParamName := PS;
+        Inc(PB,ord(PS^[0])+1);
+      end;
+      {$else FPC}
       PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
       Kind := PME^.Kind;
       if PME^.CC<>ccRegister then
@@ -41631,16 +41695,16 @@ begin
           ArgsOutNotResultLast := a;
         ParamName := PS;
         PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-        TypeName := PS;
+        ArgTypeName := PS;
         PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
         if PP^=nil then
           RaiseError('"%" parameter has no information',[ParamName^]);
-        TypeInfo := PP^{$ifndef FPC}^{$endif};
+        ArgTypeInfo := PP^^;
         inc(PP);
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
-        if TypeInfoToMethodValueType(TypeInfo) in [smvRecord,smvDynArray] then
+        if TypeInfoToMethodValueType(ArgTypeInfo) in [smvRecord,smvDynArray] then
           if f*[pfConst,pfVar,pfOut]=[] then
             RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
       end;
@@ -41649,15 +41713,16 @@ begin
         with Args[n] do begin
           ParamName := @CONST_PSEUDO_RESULT_NAME;
           ValueDirection := smdResult;
-          TypeName := PS;
+          ArgTypeName := PS;
           PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-          TypeInfo := PP^{$ifndef FPC}^{$endif};
+          ArgTypeInfo := PP^^;
           inc(PP);
         end;
-      // go to next method
       {$ifdef ISDELPHIXE}
       inc(PB,PW^); // skip custom attributes
       {$endif}
+      {$endif FPC}
+      // go to next method
     end;
   end;
 end;
@@ -41684,8 +41749,8 @@ begin
   SetLength(meth^.Args,na+1); // leave Args[0]=self
   with meth^.Args[0] do begin
     ParamName := @CONST_PSEUDO_SELF_NAME;
-    TypeInfo := fInterfaceTypeInfo;
-    TypeName := @TypeInfo^.Name;
+    ArgTypeInfo := fInterfaceTypeInfo;
+    ArgTypeName := @ArgTypeInfo^.Name;
   end;
   ns := length(fTempStrings);
   SetLength(fTempStrings,ns+na);
@@ -41705,12 +41770,12 @@ begin
     if aParams[a*ARGPERARG+2].VType<>vtPointer then
       raise EInterfaceFactoryException.CreateUTF8('%: expect TypeInfo() at #% for %.AddMethod("%")',
         [fInterfaceTypeInfo^.Name,a,self,aName]);
-    arg^.TypeInfo := aParams[a*ARGPERARG+2].VPointer;
+    arg^.ArgTypeInfo := aParams[a*ARGPERARG+2].VPointer;
     {$ifdef FPC} // under FPC, TypeInfo(Integer)=TypeInfo(Longint)
-    if arg^.TypeInfo=TypeInfo(Integer) then
-      arg^.TypeName := @CONST_INTEGER_NAME else
+    if arg^.ArgTypeInfo=TypeInfo(Integer) then
+      arg^.ArgTypeName := @CONST_INTEGER_NAME else
     {$endif}
-      arg^.TypeName := @arg^.TypeInfo^.Name;
+      arg^.ArgTypeName := @arg^.ArgTypeInfo^.Name;
   end;
 end;
 
@@ -42910,9 +42975,9 @@ begin
     case ValueType of
     smvNone, smvObject:
       raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
-        [self,fInterface.fInterfaceTypeInfo^.Name,URI,TypeName^]);
+        [self,fInterface.fInterfaceTypeInfo^.Name,URI,ArgTypeName^]);
     smvRecord:
-      if TypeInfo=System.TypeInfo(TServiceCustomAnswer) then
+      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then
         if InstanceCreation=sicClientDriven then
           raise EServiceException.CreateUTF8('%.Create: %.% '+
             'sicClientDriven mode not allowed with TServiceCustomAnswer result',
@@ -43709,7 +43774,7 @@ begin
   WR.AddShort(CONST_ARGDIRTOJSON[ValueDirection]);
   WR.AddShort('","type":"');
   if CONST_ARGTYPETOJSON[ValueType]='' then
-    WR.AddShort(TypeInfo^.Name) else
+    WR.AddShort(ArgTypeInfo^.Name) else
     WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
   WR.AddShort('"},');
 end;
@@ -43740,11 +43805,11 @@ begin
                  {$endif}
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[]);
-  smvRecord:     WR.AddRecordJSON(V^,TypeInfo);
+  smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
   smvVariant:    WR.AddVariantJSON(PVariant(V)^,twJSONEscape);
   {$endif}
-  smvDynArray:   WR.AddDynArrayJSON(TypeInfo,V^);
+  smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
   end;
   if vIsString in ValueKindAsm then
     WR.AddShort('",') else
@@ -43770,7 +43835,7 @@ begin
   smvObject:   WR.AddShort('null,'); // may raise an error on the client side
   smvDynArray: WR.AddShort('[],');
   smvRecord:   begin
-    WR.AddVoidRecordJSON(TypeInfo);
+    WR.AddVoidRecordJSON(ArgTypeInfo);
     WR.Add(',');
   end;
   {$ifndef NOVARIANTS}
@@ -44010,14 +44075,14 @@ begin
     with Args[a] do
       case ValueType of
       smvObject:
-        Objects[IndexVar] := TypeInfo^.ClassCreate;
+        Objects[IndexVar] := ArgTypeInfo^.ClassCreate;
       smvDynArray:
         with DynArrays[IndexVar] do begin
-          Wrapper.Init(TypeInfo,Value);
+          Wrapper.Init(ArgTypeInfo,Value);
           IsObjArray := vIsObjArray in ValueKindAsm;
         end;
       smvRecord:
-        SetLength(Records[IndexVar],TypeInfo^.RecordType^.Size);
+        SetLength(Records[IndexVar],ArgTypeInfo^.RecordType^.Size);
       {$ifndef NOVARIANTS}
       smvVariant:
         SetLength(Records[IndexVar],sizeof(Variant));
@@ -44047,7 +44112,7 @@ begin
           IgnoreComma(Par);
         end;
         smvRecord:
-          Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,TypeInfo);
+          Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,ArgTypeInfo);
         {$ifndef NOVARIANTS}
         smvVariant:
           Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
@@ -44181,7 +44246,7 @@ begin
           with Args[a] do
           case ValueType of
           smvRecord: begin
-            RecordClear(Records[i][0],TypeInfo);
+            RecordClear(Records[i][0],ArgTypeInfo);
             inc(i);
           end;
           {$ifndef NOVARIANTS}

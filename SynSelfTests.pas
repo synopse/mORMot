@@ -1219,7 +1219,7 @@ begin
     Check(RawUTF8(tmp)=v);
     V2 := GetExtended(pointer(v),err);
     Check(err=0);
-    Check(Abs(V1-V2)<1E-10);
+    CheckSame(V1,V2,1E-4);
     i64 := StrToCurr64(pointer(v));
     Check(PInt64(@V1)^=i64);
   end;
@@ -7303,14 +7303,18 @@ begin
         AES.outStreamCreated.Free;
       end;
     end;
+    {$ifdef CPUARM}
+    break;
+    {$else}
     if noaesni then begin
       fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
         [fRunConsole,length(st),Timer[false].Time,Timer[true].Time]);
-      Include(CpuFeatures,cfAESNI);
+      Include(CpuFeatures,cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAESNI then
       Exclude(CpuFeatures,cfAESNI) else
       break;
+    {$endif}
   end;
 end;
 
@@ -11568,7 +11572,7 @@ begin
       Check(Args[0].ParamName^='Self');
       Check(Args[0].ValueDirection=smdConst);
       Check(Args[0].ValueType=smvSelf);
-      Check(Args[0].TypeName^='ICalculator');
+      Check(Args[0].ArgTypeName^='ICalculator');
       Check(Args[1].ValueDirection=smdConst);
       Check(Args[1].ValueType=ExpectedType[i]);
       if i<3 then
@@ -11578,7 +11582,7 @@ begin
         Check(Args[2].ParamName^='n2');
         Check(Args[2].ValueDirection=smdConst);
         Check(Args[2].ValueType=ExpectedType[i]);
-        Check(IdemPropName(Args[3].TypeName^,ExpectedTypes[i]),string(Args[3].TypeName^));
+        Check(IdemPropName(Args[3].ArgTypeName^,ExpectedTypes[i]),string(Args[3].ArgTypeName^));
         Check(Args[3].ValueDirection=smdResult);
         Check(Args[3].ValueType=ExpectedType[i]);
       end else begin

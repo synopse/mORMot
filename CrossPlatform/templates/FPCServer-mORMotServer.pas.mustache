@@ -19,7 +19,7 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit is intended to work on FPC compilers, which lacks of RTTI
+  This unit is intended to work on older FPC compilers, which lack of RTTI
   for interfaces and records. As a result, you would be able to compile
   your server executable for hosting in Linux.
 
@@ -79,7 +79,7 @@ end;
 
 interface
 
-{$I Synopse.inc} // needed for setting proper FPC modes
+{$I Synopse.inc} // needed for setting HASINTERFACERTTI and proper FPC modes
 
 uses
   SysUtils,
@@ -92,7 +92,7 @@ uses
 
 implementation
 
-{$ifdef FPC} // circumvent a FPC-only bug
+{$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
 {{#soa.enabled}}
 
 { TInterfaceFactoryDefinition }
@@ -122,7 +122,7 @@ begin
 {{/soa.services}}
 end;
 
-{$endif FPC}
+{$endif HASINTERFACERTTI}
 {{/soa.enabled}}
 {{#withRecords}}
 {{<textrec}}{{#fields}}{{propName}} {{#typeDelphi}}{{typeDelphi}}{{/typeDelphi}}{{#nestedRecord}}{ {{>textrec}} }{{/nestedRecord}}{{#nestedSimpleArray}}array of {{typeDelphi}}{{/nestedSimpleArray}}{{#nestedRecordArray}}[ {{>textrec}} ]{{/nestedRecordArray}} {{/fields}}{{/textrec}}
@@ -145,12 +145,12 @@ initialization
     TypeInfo({{name}}),__{{name}});
 {{/records}}
 {{#soa.enabled}}
-{$ifdef FPC} // circumvent a FPC-only bug
+{$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
 {{#soa.services}}
   TInterfaceFactoryDefinition.RegisterInterface(
     TypeInfo(I{{interfaceURI}}));
 {{/soa.services}}
-{$endif FPC}
+{$endif HASINTERFACERTTI}
 {{/soa.enabled}}
 
 {$endif ISDELPHI2010}

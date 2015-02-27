@@ -404,7 +404,7 @@ begin
   r := 0;
   for a := 1 to high(meth.Args) do begin
     with meth.Args[a] do begin
-      arg := ContextFromInfo(TYPES_SOA[ValueType],'',TypeInfo);
+      arg := ContextFromInfo(TYPES_SOA[ValueType],'',ArgTypeInfo);
       arg.argName := ParamName^;
       arg.dir := ord(ValueDirection);
       arg.dirName := DIRTODELPHI[ValueDirection];
