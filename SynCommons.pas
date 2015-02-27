@@ -10027,8 +10027,8 @@ type
     procedure CopyByValue(var Dest: TVarData; const Source: TVarData); virtual; 
     /// this method will allow to look for dotted name spaces, e.g. 'parent.child'
     // - should return Unassigned if the FullName does not match any value
-    // - this default implementation will call IntGet() until the corresponding
-    // nested variant value will be availble
+    // - this default implementation will handle TDocVariant storage, or using
+    // generic TSynInvokeableVariantType.IntGet() until nested value match
     // - you can override it with a more optimized version
     procedure Lookup(var Dest: TVarData; const V: TVarData; FullName: PUTF8Char); virtual;
     /// will check if the value is an array, and return the number of items
@@ -28840,7 +28840,8 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 begin
   if not(TVarData(Dest).VType in VTYPE_STATIC) then
     VarClear(Dest);
-  if TVarData(Source).VType=varVariant or varByRef then // if already by ref
+  if (TVarData(Source).VType=varVariant or varByRef) or
+     (TVarData(Source).VType in VTYPE_STATIC) then // already byref or simple
     TVarData(Dest) := TVarData(Source) else begin
     TVarData(Dest).VType := varVariant or varByRef;
     TVarData(Dest).VPointer := @Source;
@@ -29295,15 +29296,34 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
   FullName: PUTF8Char);
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
-    DestVar: TVarData;
+    DestVar,LookupVar: TVarData;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
+  while DestVar.VType=varByRef or varVariant do
+    DestVar := PVarData(DestVar.VPointer)^;
   repeat
     itemName := GetNextItem(FullName,'.');
     if itemName='' then
       exit;
-    if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
+    if DestVar.VType=DocVariantType.VarType then begin
+      if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
+        exit;
+    end else
+    if FindCustomVariantType(DestVar.VType,TCustomVariantType(Handler)) and
+       Handler.InheritsFrom(TSynInvokeableVariantType) then
+    try // handle any kind of document storage: TSynTableVariant,TBSONVariant...
+      LookupVar.VType := varEmpty;
+      Handler.IntGet(LookupVar,DestVar,pointer(itemName));
+      if LookupVar.VType<=varNull then
+        exit; // assume varNull means not found  
+      DestVar := LookupVar;
+    except
+      on Exception do begin
+        DestVar.VType := varEmpty;
+        exit;
+      end;
+    end else
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;

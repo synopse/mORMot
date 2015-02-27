@@ -3889,6 +3889,9 @@ begin
   mustache := TSynMustache.Parse('{{#a}}'#$A'{{one}}'#$A'{{/a}}'#$A);
   html := mustache.RenderJSON('{a:{one:1}}');
   Check(html='1'#$A);
+  mustache := TSynMustache.Parse('{{#a}}{{one}}{{#b}}{{one}}{{two}}{{/b}}{{/a}}');
+  html := mustache.RenderJSON('{a:{one:1},b:{two:2}}');
+  Check(html='112');
   mustache := TSynMustache.Parse('{{>partial}}'#$A'3');
   html := mustache.RenderJSON('{}',TSynMustachePartials.CreateOwned(['partial','1'#$A'2']));
   Check(html='1'#$A'23','external partials');
