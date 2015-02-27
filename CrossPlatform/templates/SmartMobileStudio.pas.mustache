@@ -73,14 +73,16 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
     {{#fields}}
     f{{name}}: {{typePascal}}; 
     {{/fields}}
-    // those overriden methods will emulate the needed RTTI
+    // those overridden methods will emulate the needed RTTI
     class function ComputeRTTI: TRTTIPropInfos; override;
     procedure SetProperty(FieldIndex: integer; const Value: variant); override;
     function GetProperty(FieldIndex: integer): variant; override;
   public
-    {{#fields}}
+{{#fields}}
+{{#isSQLRecord}}    // defined as {{name}}: {{typeDelphi}} on the server
+{{/isSQLRecord}}
     property {{name}}: {{typePascal}} read f{{name}} write f{{name}};
-    {{/fields}}
+{{/fields}}
   end;
   
 {{/isInMormotPas}}

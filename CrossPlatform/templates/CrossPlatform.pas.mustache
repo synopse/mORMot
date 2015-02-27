@@ -75,18 +75,20 @@ type
     {{/fields}}
   {{#hasRecords}}
   public
-    {{#fields}}
-    {{#isrecord}}
+{{#fields}}
+{{#isrecord}}
     property {{name}}: {{typePascal}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
-    {{/isrecord}}
-    {{/fields}}
+{{/isrecord}}
+{{/fields}}
   {{/hasRecords}}
   published
-    {{#fields}}
-    {{^isrecord}}
+{{#fields}}
+{{^isrecord}}
+{{#isSQLRecord}}    // defined as {{name}}: {{typeDelphi}} on the server
+{{/isSQLRecord}}
     property {{name}}: {{typePascal}}{{#width}} index {{width}}{{/width}} read f{{name}} write f{{name}}{{#unique}} stored AS_UNIQUE{{/unique}};
-    {{/isrecord}}
-    {{/fields}}
+{{/isrecord}}
+{{/fields}}
   end;
   
 {{/isInMormotPas}}

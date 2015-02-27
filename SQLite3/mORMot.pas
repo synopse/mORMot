@@ -12642,6 +12642,7 @@ type
     /// a method can be specified to be notified when a session is created
     // - for OnSessionCreate, returning TRUE will abort the session creation -
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
+    // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
@@ -32051,8 +32052,9 @@ begin
     if OnSessionCreate(self,Session,Ctxt) then begin
       {$ifdef WITHLOG}
       Ctxt.Log.Log(sllUserAuth,'Session aborted by OnSessionCreate() callback '+
-         'for User.LogonName=% (connected from "%/%")',
-        [User.LogonName,Session.RemoteIP,Session.ConnectionID],self);
+         'for User.LogonName=% (connected from "%/%") - clients=%, sessions=%',
+        [User.LogonName,Session.RemoteIP,Session.ConnectionID,
+         fStats.ClientsCurrent,fSessions.Count],self);
       {$endif}
       User := nil;
       FreeAndNil(Session); // returning TRUE aborts the session creation

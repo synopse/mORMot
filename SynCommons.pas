@@ -22679,12 +22679,12 @@ begin
   len := length(data);
   d := pointer(data);
   for i := 0 to (len shr 2)-1 do begin
-    key := key xor PCardinalArray(@crc32ctab)^[i and $ff];
+    key := key xor crc32ctab[0,i and $ff];
     d^ := d^ xor key;
     inc(d);
   end;
   for i := 0 to (len and 3)-1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor byte(key xor crc32ctab[0,i]);
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,i];
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;

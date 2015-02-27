@@ -195,17 +195,17 @@ const
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
-    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', ''),
+    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID'),
    // lngCS
    ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
     'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'decimal', 'single', 'double', 'double', 'string', 'string', 'dynamic',
-    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', ''),
+    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID'),
    // lngJava
    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
-    'String', 'byte[]', '', '', 'Object', '', ''));
+    'String', 'byte[]', '', '', 'Object', '', 'TID'));
                        
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,   // sftUnknown
@@ -593,7 +593,8 @@ begin
   end;
   case typ of
   wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
-  wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString: ; // simple types
+  wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString:
+    ; // simple types have no special marshalling
   wDateTime:
     _ObjAddProps(['isDateTime',true,'toVariant','DateTimeToIso8601',
       'fromVariant','Iso8601ToDateTime'],result);
@@ -629,10 +630,11 @@ begin
         RegisterType(fRecords);
     end;
   end;
-  wObject,wSQLRecord: begin
-    if (typ=wSQLRecord) and
-       (fServer.Model.GetTableIndexInheritsFrom(TSQLRecordClass(typInfo^.ClassType^.ClassType))<0) then
-      raise EWrapperContext.CreateUTF8('% should be part of the model',[typName]);
+  wSQLRecord:
+    if fServer.Model.GetTableIndexInheritsFrom(TSQLRecordClass(typInfo^.ClassType^.ClassType))<0 then
+      raise EWrapperContext.CreateUTF8('% should be part of the model',[typName]) else
+      _ObjAddProps(['isSQLRecord',true],result);
+  wObject: begin
    _ObjAddProps(['isObject',true],result);
    if typInfo<>nil then
      _ObjAddProps(['toVariant','ObjectToVariant','fromVariant',typName+'.CreateFromVariant'],result);
