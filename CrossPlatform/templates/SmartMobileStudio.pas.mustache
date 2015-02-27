@@ -115,7 +115,7 @@ const
 
 
 /// return the database Model corresponding to this server
-function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
+function GetModel(aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
 // - it will use by default port {{port}} over root '{{root}}'{{#host}}, corresponding
@@ -127,7 +127,7 @@ function GetModel(const aRoot: string=SERVER_ROOT): TSQLModel;
 // - request will be asynchronous, and trigger onSuccess or onError event
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
   onSuccess, onError: TSQLRestEvent;
-  aServerPort: integer=SERVER_PORT; const aServerRoot: string=SERVER_ROOT;
+  aServerPort: integer=SERVER_PORT; aServerRoot: string=SERVER_ROOT;
   aHttps: boolean={{#https}}true{{/https}}{{^https}}false{{/https}});
 
 {{#withHelpers}}
@@ -279,13 +279,13 @@ end;
 {{/isInMormotPas}}
 {{/orm}}
 
-function GetModel(const aRoot: string): TSQLModel;
+function GetModel(aRoot: string): TSQLModel;
 begin
   result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],aRoot);
 end;
 
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer; const aServerRoot: string;
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer; aServerRoot: string;
   aHttps: boolean);
 begin
   var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,
