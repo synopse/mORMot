@@ -587,8 +587,10 @@ begin
           W.Add(AsInteger);
         ftLongWord:
           W.AddU(TLongWordField(Data.Fields[f]).Value);
-        ftExtended, ftSingle:
-          W.Add(AsFloat);
+        ftExtended:
+          W.Add(AsFloat,DOUBLE_PRECISION);
+        ftSingle:
+          W.Add(AsFloat,SINGLE_PRECISION);
         {$endif}
         else W.AddShort('null'); // unhandled field type
         end;
