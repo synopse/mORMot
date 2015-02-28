@@ -3111,12 +3111,12 @@ function HttpGet(const aURI: SockString): SockString;
 var URI: TURI;
 begin
   if URI.From(aURI) then
-    if URI.Https or true then
+    if URI.Https then
+      {$ifdef MSWINDOWS} 
+      result := TWinHTTP.Get(aURI) else
+      {$else}
       {$ifdef USELIBCURL}
       result := TCurlHTTP.Get(aURI) else
-      {$else}
-      {$ifdef MSWINDOWS}
-      result := TWinHTTP.Get(aURI) else
       {$else}
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
@@ -3127,7 +3127,6 @@ begin
   if result='' then
     writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
   {$endif}
-  writeln(length(Result));
 end;
 
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
