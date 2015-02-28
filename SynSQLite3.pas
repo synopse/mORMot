@@ -1945,7 +1945,8 @@ type
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// used to make global configuration changes to current database
-    config: function(operation: integer): integer; cdecl varargs;
+    config: function(operation: integer): integer;
+      {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
 
     /// will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
@@ -4962,12 +4963,14 @@ begin
 end;
 
 procedure TSQLite3Library.ForceToUseSharedMemoryManager;
+{$ifdef DELPHI5OROLDER} begin // varargs attribute was unknown under Delphi 5
+{$else}
+{$ifdef CPU64} begin // not working under Win64
+{$else}
 var mem: TSQLite3MemMethods;
     res: integer;
 begin
-  {$ifndef CPU64} // not working under Win64
   if not Assigned(config) then
-  {$endif}
     exit;
   mem.xMalloc := @xMalloc;
   mem.xFree := @xFree;
@@ -4983,6 +4986,8 @@ begin
     SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
     {$endif}
     fUseInternalMM := true;
+{$endif}
+{$endif}
 end;
 
 function TSQLite3Library.GetVersion: RawUTF8;

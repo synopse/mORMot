@@ -1200,7 +1200,9 @@ function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; 
 function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+{$ifndef DELPHI5OROLDER}
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
+{$endif}
 {$ifdef INCLUDE_TRACE}
 function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
   UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
@@ -1302,7 +1304,9 @@ begin
   backup_finish        := @sqlite3_backup_finish;
   backup_remaining     := @sqlite3_backup_remaining;
   backup_pagecount     := @sqlite3_backup_pagecount;
-  config               := @sqlite3_config;  
+  {$ifndef DELPHI5OROLDER}
+  config               := @sqlite3_config;
+  {$endif}
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
   {$ifdef FPC}

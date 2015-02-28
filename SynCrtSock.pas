@@ -3874,6 +3874,16 @@ begin
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
+{$ifdef DELPHI5OROLDER} // missing Bytes[] member
+type
+  LongRec = packed record
+    case Integer of
+      0: (Lo, Hi: Word);
+      1: (Words: array [0..1] of Word);
+      2: (Bytes: array [0..3] of Byte);
+  end;
+{$endif}
+
 procedure GetSinIPFromCache(const Sin: TVarSin; var result: SockString);
 begin
   if Sin.sin_family=AF_INET then
@@ -6563,7 +6573,7 @@ begin
     end;
     if not WinHttpSetCredentials(fRequest,WINHTTP_AUTH_TARGET_SERVER,
        winAuth,pointer(AuthUserName),pointer(AuthPassword),nil) then
-      RaiseLastOSError;
+      RaiseLastModuleError(winhttpdll,EWinHTTP);
   end;
   if fHTTPS and IgnoreSSLCertificateErrors then 
     if not WinHttpSetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,

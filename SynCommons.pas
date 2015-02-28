@@ -798,11 +798,10 @@ type
 const
   varShortInt = $0010;
   varInt64 = $0014; { vt_i8 }
-
   soBeginning = soFromBeginning;
   soCurrent = soFromCurrent;
-
   reInvalidPtr = 2;
+  PathDelim  = '\';
 
 type
   PPointer = ^Pointer;
@@ -3019,6 +3018,9 @@ function EnsureDirectoryExists(const Directory: TFileName;
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): Boolean;
+
+/// retrieve the corresponding environment variable value
+function GetEnvironmentVariable(const Name: string): string;
 
 /// retrieve the full path name of the given execution module (e.g. library)
 function GetModuleName(Module: HMODULE): TFileName;
@@ -9963,6 +9965,20 @@ const
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a raw binary buffer into a variant RawByteString varString
+// - you can then use VariantToRawByteString() to retrieve the binary content
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
+
+/// convert a RawByteString content into a variant varString
+// - you can then use VariantToRawByteString() to retrieve the binary content 
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant); overload;
+
+/// convert back a RawByteString from a variant
+// - the supplied variant should have been created via a RawByteStringToVariant()
+// function call 
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
+
+
 {$ifndef NOVARIANTS}
 
 type
@@ -10294,19 +10310,6 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 // EVariantTypeCastError
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word); overload;
-
-/// convert a raw binary buffer into a variant RawByteString varString
-// - you can then use VariantToRawByteString() to retrieve the binary content 
-procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
-
-/// convert a RawByteString content into a variant varString
-// - you can then use VariantToRawByteString() to retrieve the binary content 
-procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant); overload;
-
-/// convert back a RawByteString from a variant
-// - the supplied variant should have been created via a RawByteStringToVariant()
-// function call 
-procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 
 /// convert an open array (const Args: array of const) argument to a variant
 // - note that cardinal values should be type-casted to Int64() (otherwise
@@ -11518,13 +11521,13 @@ type
   // could define one published property of a mORMot.pas' TInjectableObject
   // as IAutoLocker so that this class may be automatically injected
   TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
-  {$endif}
+  {$endif DELPHI5OROLDER}
   protected
     fLock: TRTLCriticalSection;
     fLocked: boolean;
   public
     /// initialize the mutex
-    constructor Create; override;
+    constructor Create; {$ifndef DELPHI5OROLDER} override; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - warning: under FPC, you should assign its result to a local lockFPC:
     // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
@@ -11537,6 +11540,7 @@ type
     destructor Destroy; override;
   end;
 
+{$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
 {$ifndef NOVARIANTS}
   /// ref-counted interface for thread-safe access to a TDocVariant document
   ILockedDocVariant = interface
@@ -11599,6 +11603,7 @@ type
     // will definitively be more thread safe
     property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
   end;
+{$endif}
 {$endif}
 
   /// used to refer to a simple authentication class
@@ -19295,6 +19300,19 @@ var Code: Integer;
 begin
   Code := GetFileAttributes(pointer(Directory));
   result := (Code<>-1) and (FILE_ATTRIBUTE_DIRECTORY and Code<>0);
+end;
+
+function GetEnvironmentVariable(const Name: string): string;
+var Len: Integer;
+    Buffer: array[0..1023] of Char;
+begin
+  Result := '';
+  Len := Windows.GetEnvironmentVariable(pointer(Name),@Buffer,SizeOf(Buffer));
+  if Len<SizeOf(Buffer) then
+    SetString(result,Buffer,Len) else begin
+    SetLength(result,Len-1);
+    Windows.GetEnvironmentVariable(pointer(Name),pointer(result),Len);
+  end;
 end;
 
 function GetModuleName(Module: HMODULE): TFileName;
@@ -28801,11 +28819,11 @@ begin
   if TVarData(Source).VType and varByRef<>0 then begin
     typ := TVarData(Source).VType and not varByRef;
     case typ of
-    varVariant: 
+    varVariant:
       if PVarData(TVarData(Source).VPointer)^.VType in VTYPE_STATIC then begin
         Dest := PVarData(TVarData(Source).VPointer)^;
         result := true;
-      end else 
+      end else
         result := false;
     varNull..varDate,varBoolean,varShortInt..varWord64: begin
       Dest.VType := typ;
@@ -28817,6 +28835,46 @@ begin
     end;
   end else
     result := false;
+end;
+
+procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
+begin
+  with TVarData(Value) do begin
+    if not (VType in VTYPE_STATIC) then
+      VarClear(Value);
+    if (Data=nil) or (DataLen<=0) then
+      VType := varNull else begin
+      VType := varString;
+      VAny := nil; // avoid GPF below when assigning a string variable to VAny
+      SetString(RawByteString(VAny),PAnsiChar(Data),DataLen);
+    end;
+  end;
+end;
+
+procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
+begin
+  with TVarData(Value) do begin
+    if not (VType in VTYPE_STATIC) then
+      VarClear(Value);
+    if Data='' then
+      VType := varNull else begin
+      VType := varString;
+      VAny := nil; // avoid GPF below when assigning a string variable to VAny
+      RawByteString(VAny) := Data;
+    end;
+  end;
+end;           
+
+procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
+begin
+  case TVarData(Value).VType of
+  varEmpty, varNull:
+    Dest := '';
+  varString:
+    Dest := RawByteString(TVarData(Value).VAny);
+  else // not from RawByteStringToVariant() -> conversion to string
+    Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+  end;
 end;
 
 {$ifndef NOVARIANTS}
@@ -28922,46 +28980,6 @@ begin
     {$endif}
     else raise ESynException.CreateUTF8('RawUTF8ToVariant(ExpectedValueType=%)',
       [ExpectedValueType]);
-  end;
-end;
-
-procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
-begin
-  with TVarData(Value) do begin
-    if not (VType in VTYPE_STATIC) then
-      VarClear(Value);
-    if (Data=nil) or (DataLen<=0) then
-      VType := varNull else begin
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      SetString(RawByteString(VAny),PAnsiChar(Data),DataLen);
-    end;
-  end;
-end;
-
-procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
-begin
-  with TVarData(Value) do begin
-    if not (VType in VTYPE_STATIC) then
-      VarClear(Value);
-    if Data='' then
-      VType := varNull else begin
-      VType := varString;
-      VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      RawByteString(VAny) := Data;
-    end;
-  end;
-end;           
-
-procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
-begin
-  case TVarData(Value).VType of
-  varEmpty, varNull:
-    Dest := '';
-  varString:
-    Dest := RawByteString(TVarData(Value).VAny);
-  else // not from RawByteStringToVariant() -> conversion to string
-    Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
   end;
 end;
 
@@ -37785,7 +37803,7 @@ end;
 
 function TSynMonitorTime.PerSecond(const aValue: QWord): QWord;
 begin
-  if Int64(fMicroSeconds)<=0 then // avoid negative or div per 0
+  if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
     result := (aValue*QWord(1000*1000)) div fMicroSeconds;
 end;
@@ -37986,6 +38004,7 @@ begin
 end;
 
 
+{$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
 {$ifndef NOVARIANTS}
 
 { TLockedDocVariant }
@@ -38094,6 +38113,7 @@ begin
 end;
 
 {$endif NOVARIANTS}
+{$endif DELPHI5OROLDER} 
 
 
 function GetDelphiCompilerVersion: RawUTF8;
@@ -43513,9 +43533,8 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fLock := TAutoLocker.Create;
-  fTokenSeed := GetTickCount64*PtrUInt(self);
-  fSessionGenerator := PtrUInt(ClassType)*Int64Rec(fTokenSeed).Hi;
-  fSessionGenerator := abs(fSessionGenerator);
+  fTokenSeed := GetTickCount64*PtrUInt(self)*Random(maxInt);
+  fSessionGenerator := abs(fTokenSeed*PtrUInt(ClassType));
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;

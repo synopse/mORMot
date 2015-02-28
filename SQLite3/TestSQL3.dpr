@@ -83,6 +83,10 @@ program TestSQL3;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
+  {$ifdef KYLIX3}
+  FastMM4,
+  mORMotSelfTests;
+  {$else}
   {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
   FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
   FastMM4 in '..\RTL7\FastMM4.pas',
@@ -167,6 +171,7 @@ uses
 {$endif LVCL}
   SynZip in '..\SynZip.pas',
   SynSelfTests in '..\SynSelfTests.pas';
+{$endif KYLIX3}
 
 begin
   {$ifdef ISDELPHI2007ANDUP}

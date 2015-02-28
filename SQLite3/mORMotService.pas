@@ -84,6 +84,9 @@ interface
   // define it if you don't need to include the mORMot.pas unit
   // - could save some code size in the final executable
 {$endif}
+{$ifdef DELPHI5OROLDER}
+  {$define NOMORMOTKERNEL}
+{$endif}
 
 uses
   Windows, WinSVC, Messages, Classes, SysUtils,

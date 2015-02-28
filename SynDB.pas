@@ -3466,7 +3466,17 @@ begin
   {$ifdef UNICODE}
   fValue := aValue;
   {$else}
+  {$ifdef DELPHI5OROLDER}
+  with TVarData(fValue) do begin
+    if not(VType in VTYPE_STATIC) then
+      VarClear(fValue);
+    VType := varString;
+    VAny := nil; // avoid GPF below when assigning a string variable to VAny
+    RawByteString(VAny) := StringToUTF8(aValue);
+  end;
+  {$else}
   RawUTF8ToVariant(StringToUTF8(aValue),fValue);
+  {$endif}
   {$endif}
 end;
 
@@ -5937,6 +5947,14 @@ begin
     end;
 end;
 
+function VariantIsBlob(const V: variant): boolean;
+begin
+  with TVarData(V) do
+    result := (VType=varNull) or
+      ((VType=varString) and (VString<>nil) and
+       (PCardinal(VString)^ and $ffffff=JSON_BASE64_MAGIC));
+end;
+
 procedure TSQLDBStatement.Bind(const Params: array of const;
   IO: TSQLDBParamInOutType);
 var i,c: integer;
@@ -5975,7 +5993,7 @@ begin
         BindNull(i,IO) else
         raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',[self]);
     vtVariant:
-      BindVariant(i,VVariant^,VariantTypeToSQLDBFieldType(VVariant^)=ftBlob,IO);
+      BindVariant(i,VVariant^,VariantIsBlob(VVariant^),IO);
     else
       raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
         [self,i,VType]);

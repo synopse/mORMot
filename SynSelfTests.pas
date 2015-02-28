@@ -134,7 +134,6 @@ uses
   Classes,
 {$ifndef NOVARIANTS}
   SynMongoDB,
-  mORMotMongoDB,
   SynMustache,
   Variants,
 {$endif}
@@ -164,6 +163,7 @@ uses
   mORMotHttpServer,
   mORMotHttpClient,
   {$ifndef NOVARIANTS}
+  mORMotMongoDB,
   mORMotMVC,
   {$endif}
   mORMotDDD,
@@ -271,9 +271,9 @@ type
     {$ifndef DELPHI5OROLDER}
     /// test TObjectDynArrayWrapper class
     procedure _TObjectDynArrayWrapper;
-    {$endif}
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
+    {$endif}
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -350,11 +350,11 @@ type
     procedure _TDocVariant;
     /// BSON process (using TDocVariant)
     procedure _BSON;
-{$endif}
-{$endif}
-{$endif}
+{$endif LVCL}
     /// test SELECT statement parsing
     procedure _TSynTableStatement;
+{$endif DELPHI5OROLDER}
+{$endif NOVARIANTS}
   end;
 
 {$ifndef DELPHI5OROLDER}
@@ -1055,7 +1055,9 @@ type
 implementation
 
 uses
+{$ifndef DELPHI5OROLDER}
   TestSQL3FPCInterfaces,
+{$endif}
 {$ifndef LVCL}
   SyncObjs,
 {$endif}
@@ -2509,6 +2511,7 @@ begin
   Int64ToUtf8(-9223372036854775808,s);
   Check(s='-9223372036854775808');
   {$endif}
+  {$ifndef DELPHI5OROLDER}
   d := GetExtended('1234');
   CheckSame(d,1234);
   d := GetExtended('1234.1');
@@ -2522,6 +2525,7 @@ begin
   d := GetExtended('40640.5028819444',err);
   Check(err=0);
   CheckSame(d,40640.5028819444);
+  {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');
@@ -3571,6 +3575,8 @@ begin
   end;
 end;
 
+{$ifndef DELPHI5OROLDER}
+
 type
   TPersistentAutoCreateFieldsTest = class(TPersistentAutoCreateFields)
   private
@@ -3671,9 +3677,6 @@ begin
     test.Free;
   end;
 end;
-
-
-{$ifndef DELPHI5OROLDER}
 
 function TSQLRecordPeopleCompareByFirstName(const A,B): integer;
 begin

@@ -794,7 +794,7 @@ begin
   if TestMethodIndex<0 then begin
     Color(ccWhite);
     writeln(fSaveToFile,#13#10' ',C.MethodIndex+1,'.',C.TestCaseIndex+1,
-      '. ',C.Ident,': ',#13);
+      '. ',C.Ident,': '{$ifdef LINUX},#13{$endif});
   end else begin
     Run := C.Assertions-C.fAssertionsBeforeRun;
     Failed := C.AssertionsFailed-C.fAssertionsFailedBeforeRun;
@@ -820,9 +820,9 @@ begin
       Write(fSaveToFile,'  ',KB(C.fRunConsoleMemoryUsed));
       C.fRunConsoleMemoryUsed := 0; // display only once
     end;
-    Writeln(fSaveToFile,#13);
+    Writeln(fSaveToFile{$ifdef LINUX},#13{$endif});
     if C.fRunConsole<>'' then begin
-      Writeln(fSaveToFile,'     ',C.fRunConsole,#13);
+      Writeln(fSaveToFile,'     ',C.fRunConsole{$ifdef LINUX},#13{$endif});
       C.fRunConsole := '';
     end;
     if TestMethodIndex=C.Count-1 then begin
@@ -834,7 +834,7 @@ begin
       if C.AssertionsFailed=0 then
         Write(fSaveToFile,' PASSED') else
         Write(fSaveToFile,' FAILED');
-      Writeln(fSaveToFile,'  ',TotalTimer.Stop,#13);
+      Writeln(fSaveToFile,'  ',TotalTimer.Stop{$ifdef LINUX},#13{$endif});
     end;
     Color(ccLightGray);
   end;

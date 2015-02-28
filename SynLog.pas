@@ -1827,7 +1827,7 @@ asm
 end;
 
 // the original unwider function, from the Windows API
-procedure oldUnWindProc; external kernel name 'RtlUnwind';
+procedure oldUnWindProc; external kernel32 name 'RtlUnwind';
 
 {$endif WITH_PATCHEXCEPT}
 
@@ -2059,6 +2059,8 @@ begin
   result := false; // caller should append "at EAddr" and the stack trace
 end;
 
+{$ifndef WITH_PATCHEXCEPT}
+
 {$ifdef WITH_MAPPED_EXCEPTIONS}
 
 {$else NO WITH_MAPPED_EXCEPTIONS}
@@ -2139,6 +2141,8 @@ end;
 
 {$endif WITH_MAPPED_EXCEPTIONS}
 
+{$endif WITH_PATCHEXCEPT}
+
 {$endif NOEXCEPTIONINTERCEPT}
 
 
@@ -2178,8 +2182,8 @@ begin
     PatchCallRtlUnWind;
     {$else}
     oldUnWindProc := RTLUnwindProc;
-    {$endif}
     RTLUnwindProc := @SynRtlUnwind;
+    {$endif}
     {$endif WITH_VECTOREXCEPT}
     {$endif WITH_MAPPED_EXCEPTIONS}
   end;

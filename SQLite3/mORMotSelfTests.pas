@@ -75,50 +75,16 @@ implementation
 
 uses
   {$ifdef MSWINDOWS}
-  Windows,
-  {$endif}
-  Classes,
-  SynLZ,
-  SynLZO,
-  SynCrypto,
-  SynCrtSock,
-  SynCommons,
-  SynLog,
-  SynTests,
-{$ifndef DELPHI5OROLDER}
-  {$ifdef MSWINDOWS}
+  Windows, // for AllocConsole
+  {$ifndef DELPHI5OROLDER}
   SynBigTable,
   {$endif}
-  SynSQLite3,
-  SynSQLite3Static,
-  mORMot,
-  mORMotSQLite3,
-  mORMotHttpClient,
-  mORMotHttpServer,
-{$ifndef FPC}
-{$ifdef MSWINDOWS}
-  SynPdf,
-  SynGdiPlus,
-  mORMotService,
-  mORMotFastCgiServer,
-  //mORMotBigTable,
-{$endif}
-{$endif}
-{$endif}
-{$ifndef LVCL}
-  Contnrs,
-  SynDB,
-  SynDBSQLite3,
-  {$ifdef MSWINDOWS}
-  SynOleDB,
-  SynDBOracle,
-  SynDBODBC,
-  {$endif MSWINDOWS}
-{$ifndef DELPHI5OROLDER}
-  mORMotDB,
-{$endif DELPHI5OROLDER}
-{$endif LVCL}
-  SynZip,
+  {$endif}
+  {$ifndef DELPHI5OROLDER}
+  mORMot, // for TSQLLog
+  {$endif}
+  SynLog,
+  SynTests,
   SynSelfTests;
 
 type
@@ -187,7 +153,9 @@ begin
   {$ifdef MSWINDOWS}
   AllocConsole;
   {$endif}
+  {$ifndef DELPHI5OROLDER}
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
+  {$endif}
   TSQLLog.Family.Level := LOG_STACKTRACE; // log errors by default
   if false then // "if not false then" will create around 550 MB of log file
   with TSQLLog.Family do begin
