@@ -414,8 +414,8 @@
   // but less needed under Linux, since thread creation sounds much cheaper
   // see http://www.akkadia.org/drepper/nptl-design.pdf
   {$define USETHREADPOOL}
-  {.$define ONLYUSEHTTPSOCKET} // for debugging
-  {.$define USELIBCURL}   // for testing under Windows (no big advantage)
+  {.$define ONLYUSEHTTPSOCKET} // for testing under Windows (should use http.sys)
+  {.$define USELIBCURL}     // for testing under Windows (no benefit vs WinHTTP)
 {$else}
   // http.sys server is Windows-specific
   {$define ONLYUSEHTTPSOCKET}

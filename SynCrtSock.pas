@@ -130,8 +130,8 @@ unit SynCrtSock;
     Delphi) by a dedicated SockString type, used for data storage and for
     simple ASCII content (like URIs or port number)
   - added and tested Linux support (FPC/CrossKylix), via sockets or libcurl API
-  - introducing THttpServerRequest class for HTTP server context and
-    THttpRequest as abstract parent for HTTP client classes
+  - introducing THttpServerRequest class for HTTP server context and THttpRequest
+    (replacing TWinHttpAPI) as abstract parent for HTTP client classes
   - http.sys kernel-mode server now handles HTTP API 2.0 (available since
     Windows Vista / Server 2008), or fall back to HTTP API 1.0 (for Windows XP
     or Server 2003) - thanks pavel for the feedback and initial patch!
@@ -171,17 +171,17 @@ unit SynCrtSock;
   - force disable range checking and other compiler options for this unit
   - included more detailed information to HTTP client User-Agent header
   - added ConnectionTimeOut, SendTimeout and ReceiveTimeout optional parameters
-    to TWinHttpAPI constructors - feature request [bfe485b678]
+    to THttpRequest constructors - feature request [bfe485b678]
   - added optional aCompressMinSize parameter to RegisterCompress() methods
-  - added TWinHttpAPI.Get/Post/Put/Delete() class functions for easy remote
+  - added THttpRequest.Get/Post/Put/Delete() class functions for easy remote
     resource retrieval using either WinHTTP or WinINet APIs
   - added TURI structure, ready to parse a supplied HTTP URI
   - added 'ConnectionID: 1234578' to the HTTP headers - request [0636eeec54]
-  - added TWinHttpAPI.IgnoreSSLCertificateErrors property (proposal by EMartin)
-  - added TWinHttpAPI AuthScheme and AuthUserName/AuthPassword properties, for
+  - added THttpRequest.IgnoreSSLCertificateErrors property (proposal by EMartin)
+  - added THttpRequest AuthScheme and AuthUserName/AuthPassword properties, for
     authentication - only implemented at TWinHttp level (thanks Eric Grange)
   - fixed TCrtSocket.BytesIn and TCrtSocket.BytesOut properties
-  - fixed ticket [82df275784] TWinHttpAPI with responses without Content-Length
+  - fixed ticket [82df275784] THttpRequest with responses without Content-Length
   - fixed ticket [f0749956af] TWinINet does not work with HTTPS servers
   - fixed ticket [842a5ae15a] THttpApiServer.Execute/SendError message
   - fixed ticket [f2ae4022a4] EWinINet error handling
@@ -260,21 +260,21 @@ const
   // - should match HTML_CONTENT_STATICFILE constant defined in mORMot.pas unit
   HTTP_RESP_STATICFILE = '!STATICFILE';
 
-  /// TWinHttpAPI timeout default value for DNS resolution
+  /// THttpRequest timeout default value for DNS resolution
   // - leaving to 0 will let system default value be used
   HTTP_DEFAULT_RESOLVETIMEOUT = 0;
-  /// TWinHttpAPI timeout default value for remote connection
+  /// THttpRequest timeout default value for remote connection
   // - default is 60 seconds
   HTTP_DEFAULT_CONNECTTIMEOUT = 60000;
-  /// TWinHttpAPI timeout default value for data sending
+  /// THttpRequest timeout default value for data sending
   // - default is 30 seconds
   // - you can override this value by setting the corresponding parameter in
-  // TWinHttpAPI.Create() constructor
+  // THttpRequest.Create() constructor
   HTTP_DEFAULT_SENDTIMEOUT = 30000;
-  /// TWinHttpAPI timeout default value for data receiving
+  /// THttpRequest timeout default value for data receiving
   // - default is 30 seconds
   // - you can override this value by setting the corresponding parameter in
-  // TWinHttpAPI.Create() constructor
+  // THttpRequest.Create() constructor
   HTTP_DEFAULT_RECEIVETIMEOUT = 30000;
 
 type
@@ -1266,8 +1266,8 @@ type
 {$M-}
 
   /// structure used to parse an URI into its components
-  // - ready to be supplied e.g. to a TWinHttpAPI sub-class
-  // - used e.g. by class function TWinHttpAPI.Get()
+  // - ready to be supplied e.g. to a THttpRequest sub-class
+  // - used e.g. by class function THttpRequest.Get()
   TURI = {$ifdef UNICODE}record{$else}object{$endif}
     /// if the server is accessible via http:// or https://
     Https: boolean;
@@ -1292,7 +1292,7 @@ type
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
-  // the actual SynCrtSock TWinHttpApi implementation class
+  // the actual SynCrtSock's THttpRequest implementation class
   // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
   // - AuthScheme and AuthUserName/AuthPassword properties are handled
   // by the TWinHttp class only by now
@@ -1305,6 +1305,7 @@ type
 
   {$M+}
   /// abstract class to handle HTTP/1.1 request
+  // - never instantiate this class, but inherited TWinHTTP, TWinINet or TCurlHTTP 
   THttpRequest = class
   protected
     fServer: SockString;
@@ -1313,6 +1314,7 @@ type
     fPort: cardinal;
     fHttps: boolean;
     fKeepAlive: cardinal;
+    fUserAgent: SockString;
     fExtendedOptions: THttpRequestExtendedOptions;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
@@ -1335,6 +1337,7 @@ type
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy
+    // (works only with TWinHTTP and TWinINet yet)
     // - you can customize the default client timeouts by setting appropriate
     // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
     // creation of this instance, the connection is tied to the initial
@@ -1358,8 +1361,9 @@ type
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
-    // - it will internally create a TWinHttpAPI inherited instance: do not use
-    // TWinHttpAPI.Get() but either TWinHTTP.Get() or TWinINet.Get() methods
+    // - it will internally create a THttpRequest inherited instance: do not use
+    // THttpRequest.Get() but either TWinHTTP.Get(), TWinINet.Get() or
+    // TCurlHTTP.Get() methods
     class function Get(const aURI: SockString;
       const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to create a resource via an HTTP POST
@@ -1368,8 +1372,9 @@ type
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is POSTed to the server, with an optional
     // aHeader content
-    // - it will internally create a TWinHttpAPI inherited instance: do not use
-    // TWinHttpAPI.Post() but either TWinHTTP.Post() or TWinINet.Post() methods
+    // - it will internally create a THttpRequest inherited instance: do not use
+    // THttpRequest.Post() but either TWinHTTP.Post(), TWinINet.Post() or
+    // TCurlHTTP.Post() methods
     class function Post(const aURI, aData: SockString;
       const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to update a resource via an HTTP PUT
@@ -1378,16 +1383,18 @@ type
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - the supplied aData content is PUT to the server, with an optional
     // aHeader content
-    // - it will internally create a TWinHttpAPI inherited instance: do not use
-    // TWinHttpAPI.Put() but either TWinHTTP.Put() or TWinINet.Put() methods
+    // - it will internally create a THttpRequest inherited instance: do not use
+    // THttpRequest.Put() but either TWinHTTP.Put(), TWinINet.Put() or
+    // TCurlHTTP.Put() methods
     class function Put(const aURI, aData: SockString;
       const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
-    // - it will internally create a TWinHttpAPI inherited instance: do not use
-    // TWinHttpAPI.Delete() but either TWinHTTP.Delete() or TWinINet.Delete()
+    // - it will internally create a THttpRequest inherited instance: do not use
+    // THttpRequest.Delete() but either TWinHTTP.Delete(), TWinINet.Delete() or
+    // TCurlHTTP.Delete() methods
     class function Delete(const aURI: SockString;
       const aHeader: SockString=''; aIgnoreSSLCertificateErrors: Boolean=true): SockString;
 
@@ -1432,15 +1439,23 @@ type
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
     property ProxyByPass: SockString read fProxyByPass;
+    /// the HTTP "User Agent:" header value
+    // - you can customize this value from its default content
+    // (only for TCurlHTTP class)
+    property UserAgent: SockString read fUserAgent write fUserAgent;
   end;
   {$M-}
 
+  /// store the actual class of a HTTP/1.1 client instance
+  // - may be used to define at runtime which API to be used (e.g. WinHTTP,
+  // WinINet or LibCurl), following the Liskov substitution principle
   THttpRequestClass = class of THttpRequest;
 
 {$ifdef USEWININET}
-  /// a class to handle HTTP/1.1 request using either WinINet, either WinHTTP API
-  // - has a common behavior as THttpClientSocket()
-  // - this abstract class will be implemented e.g. with TWinINet or TWinHttp
+  /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
+  // - both APIs have a common logic, which is encapsulated by this parent class
+  // - this abstract class defined some abstract methods which will be
+  // implemented by TWinINet or TWinHttp with the proper API calls
   TWinHttpAPI = class(THttpRequest)
   protected
     /// used for internal connection
@@ -1452,14 +1467,15 @@ type
       Data: SockString): integer; override;
   end;
 
-  {/ a class to handle HTTP/1.1 request using the WinINet API
-   - has a common behavior as THttpClientSocket()
-   - The Microsoft Windows Internet (WinINet) application programming interface
-     (API) enables applications to access standard Internet protocols, such as
-     FTP and HTTP/HTTPS.
-   - by design, the WinINet API should not be used from a service
-   - note: WinINet is MUCH slower than THttpClientSocket: do not use this, only
-     if you find some performance improvements on some networks }
+  /// a class to handle HTTP/1.1 request using the WinINet API
+  // - The Microsoft Windows Internet (WinINet) application programming interface
+  // (API) enables applications to access standard Internet protocols, such as
+  // FTP and HTTP/HTTPS, similar to what IE offers
+  // - by design, the WinINet API should not be used from a service, since this
+  // API may require end-user GUI interaction
+  // - note: WinINet is MUCH slower than THttpClientSocket or TWinHttp: do not
+  // use this, only if you find some configuration benefit on some old networks
+  // (e.g. to diaplay the dialup popup window for a GUI client application) 
   TWinINet = class(TWinHttpAPI)
   protected
     // those internal methods will raise an EWinINet exception on error
@@ -1494,10 +1510,14 @@ type
   // class to use in your client programs
   // - WinHTTP does not share any proxy settings with Internet Explorer.
   // The WinHTTP proxy configuration is set by either
-  // proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
-  // netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
-  // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
-  // the current user's proxy settings for Internet Explorer (under 64 bit
+  // $ proxycfg.exe
+  // on Windows XP and Windows Server 2003 or earlier, either
+  // $ netsh.exe
+  // on Windows Vista and Windows Server 2008 or later; for instance,
+  // you can run either:
+  // $ proxycfg -u
+  // $ netsh winhttp import proxy source=ie
+  // to use the current user's proxy settings for Internet Explorer (under 64 bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
   // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
@@ -1528,11 +1548,17 @@ type
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
   // able to directly connect via HTTP or HTTPS on most Linux systems
+  // - under a 32 bit Linux system, the libcurl library (and its dependencies,
+  // like OpenSSL) may not be installed - you can add it via your package
+  // manager, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3
+  // - under a 64 bit Linux system, you should install the 32 bit flavor of
+  // libcurl, e.g. on Ubuntu:
+  // $ sudo apt-get install libcurl3:i386
   TCurlHTTP = class(THttpRequest)
   protected
     fHandle: pointer;
     fRootURL: SockString;
-    fUserAgent: SockString;
     fIn: record
       Headers: pointer;
       Method: SockString;
@@ -1550,8 +1576,6 @@ type
   public
     /// release the connection
     destructor Destroy; override;
-    /// the HTTP User Agent: header value
-    property UserAgent: SockString read fUserAgent write fUserAgent;
   end;
 
 {$endif USELIBCURL}
@@ -6110,6 +6134,7 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
+  fUserAgent := DefaultUserAgent(self);
   InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout); // raise an exception on error
 end;
 
@@ -6303,7 +6328,7 @@ begin
   if fProxyName='' then
    OpenType := INTERNET_OPEN_TYPE_PRECONFIG else
    OpenType := INTERNET_OPEN_TYPE_PROXY;
-  fSession := InternetOpenA(Pointer(DefaultUserAgent(self)), OpenType,
+  fSession := InternetOpenA(Pointer(fUserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession=nil then
     raise EWinINet.Create;
@@ -6441,7 +6466,7 @@ begin
   if fProxyName='' then
     OpenType := WINHTTP_ACCESS_TYPE_DEFAULT_PROXY else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpOpen(pointer(Ansi7ToUnicode(DefaultUserAgent(self))), OpenType,
+  fSession := WinHttpOpen(pointer(Ansi7ToUnicode(fUserAgent)), OpenType,
     pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
   if fSession=nil then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
@@ -6860,7 +6885,6 @@ begin
     LibCurlInitialize;
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
-  fUserAgent := DefaultUserAgent(self);
 end;
 
 destructor TCurlHTTP.Destroy;
@@ -6897,7 +6921,8 @@ begin
 end;
 
 procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
-begin
+begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+  // libcurl has dedicated options for GET,HEAD,POST verbs
   if (fIn.Method='') or (fIn.Method='GET') then
     curl.easy_setopt(fHandle,coHTTPGet,1) else
   if fIn.Method='HEAD' then
@@ -6907,11 +6932,11 @@ begin
     curl.easy_setopt(fHandle,coPostFields,Pointer(aData));
     curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
     InternalAddHeader('Expect:'); // disable 'Expect: 100'
-  end
-  else begin
+  end else begin
+    // handle other HTTP verbs
     curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
     curl.easy_setopt(fHandle,coNoBody,0);
-    if aData='' then // e.g. DELETE
+    if aData='' then // e.g. DELETE or LOCK
       curl.easy_setopt(fHandle,coUpload,0) else begin // e.g. POST
       curl.easy_setopt(fHandle,coUpload,1);
       curl.easy_setopt(fHandle,coInFile,pointer(aData));
@@ -6937,9 +6962,12 @@ begin
     result := STATUS_SERVERERROR else begin
     curl.easy_getinfo(fHandle,ciResponseCode,result);
     Header := Trim(fOut.Header);
-    i := Pos(SockString(#13),Header);
-    if i>0 then // trim initial 'HTTP/1.1 200 OK'#$D#$A
-      system.Delete(Header,1,i+1);
+    if IdemPChar(pointer(Header),'HTTP/') then begin
+      i := 6;
+      while Header[i]>=' ' do inc(i);
+      while Header[i] in [#13,#10] do inc(i);
+      system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
+    end;
     P := pointer(Header);
     while P<>nil do begin
       s := GetNextLine(P);
@@ -6958,8 +6986,8 @@ begin
     curl.slist_free_all(fIn.Headers);
     fIn.Headers := nil;
   end;
-  Finalize(fOut);
   Finalize(fIn);
+  Finalize(fOut);
 end;
 
 
