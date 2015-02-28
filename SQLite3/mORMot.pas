@@ -4067,6 +4067,9 @@ type
   /// exception dedicated to interface factory, e.g. services and mock/stubs
   EInterfaceFactoryException = class(ESynException);
 
+  /// exception raised in case of Dependency Injection (aka IoC) issue
+  EInterfaceResolverException = class(ESynException);
+
   /// exception dedicated to interface based service implementation
   EServiceException = class(EORMException);
 
@@ -8703,6 +8706,8 @@ type
     fCreatedInterfaceStub: TInterfaceStubObjArray;
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    class function RegisterGlobalCheck(aInterface: PTypeInfo;
+      aImplementationClass: TClass): PInterfaceEntry;
   public
     /// define a global class type for interface resolution
     // - most of the time, you would need a local DI/IoC resolution list; but
@@ -8711,7 +8716,24 @@ type
     // - by default, TAutoLocker and TLockedDocVariant will be registered by
     // this unit to implement IAutoLocker and ILockedDocVariant interfaces
     class procedure RegisterGlobal(aInterface: PTypeInfo;
-      aImplementationClass: TInterfacedObjectWithCustomCreateClass);
+      aImplementationClass: TInterfacedObjectWithCustomCreateClass); overload;
+    /// define a global instance for interface resolution
+    // - most of the time, you would need a local DI/IoC resolution list; but
+    // you may use this method to register a set of shared and global resolution
+    // patterns, common to the whole injection process
+    // - the supplied instance will be owned by the global list (incrementing
+    // its internal reference count), until it would be released via
+    // ! RegisterGlobalDelete()
+    // - the supplied instance will be freed in the finalization of this unit,
+    // if not previously released via RegisterGlobalDelete()
+    class procedure RegisterGlobal(aInterface: PTypeInfo;
+      aImplementation: TInterfacedObject); overload;
+    /// undefine a global instance for interface resolution
+    // - you can unregister a given instance previously defined via
+    // ! RegisterGlobal(aInterface,aImplementation)
+    // - if you do not call RegisterGlobalDelete(), the remaning instances will
+    // be freed in the finalization of this unit
+    class procedure RegisterGlobalDelete(aInterface: PTypeInfo); 
     /// prepare and setup interface DI/IoC resolution with some blank
     // TInterfaceStub specified by their TGUID
     procedure InjectStub(const aStubsByGUID: array of TGUID); overload; virtual;
@@ -42653,10 +42675,10 @@ begin
   fInterfaceTypeInfo := aInterface;
   guid := aInterface^.InterfaceGUID;
   if guid=nil then
-    raise EInterfaceFactoryException.CreateUTF8('%.Create expects an Interface',[self]);
+    raise EInterfaceResolverException.CreateUTF8('%.Create expects an Interface',[self]);
   fImplementationEntry := aImplementation.GetInterfaceEntry(guid^);
   if fImplementationEntry=nil then
-    raise EInterfaceFactoryException.CreateUTF8('%.Create: % does not implement %',
+    raise EInterfaceResolverException.CreateUTF8('%.Create: % does not implement %',
       [self,aImplementation,fInterfaceTypeInfo^.Name]);
 end;
 
@@ -42683,37 +42705,112 @@ end;
 { TInterfaceResolverInjected }
 
 var
+  GlobalInterfaceResolutionLock: TRTLCriticalSection;
   GlobalInterfaceResolution: array of record
     TypeInfo: PTypeInfo;
     ImplementationClass: TInterfacedObjectWithCustomCreateClass;
+    ImplementationInstance: TInterfacedObject;
     InterfaceEntry: PInterfaceEntry;
   end;
+
+class function TInterfaceResolverInjected.RegisterGlobalCheck(aInterface: PTypeInfo;
+  aImplementationClass: TClass): PInterfaceEntry;
+var i: integer;
+begin
+  if (aInterface=nil) or (aImplementationClass=nil) then
+    raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobal(nil)',[self]);
+  if aInterface^.Kind<>tkInterface then
+    raise EInterfaceResolverException.CreateUTF8(
+      '%.RegisterGlobal(%): % is not an interface',
+      [self,aInterface^.Name,aInterface^.Name]);
+  result := aImplementationClass.GetInterfaceEntry(
+    PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
+  if result=nil then
+    raise EInterfaceResolverException.CreateUTF8(
+      '%.RegisterGlobal(): % does not implement %',
+      [self,aImplementationClass,aInterface^.Name]);
+  EnterCriticalSection(GlobalInterfaceResolutionLock);
+  for i := 0 to length(GlobalInterfaceResolution)-1 do
+    if GlobalInterfaceResolution[i].TypeInfo=aInterface then begin
+      LeaveCriticalSection(GlobalInterfaceResolutionLock);
+      raise EInterfaceResolverException.CreateUTF8(
+        '%.RegisterGlobal(%): % already registered',
+        [self,aImplementationClass,aInterface^.Name]);
+    end;
+end;
 
 class procedure TInterfaceResolverInjected.RegisterGlobal(
   aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectWithCustomCreateClass);
 var aInterfaceEntry: PInterfaceEntry;
     n: integer;
 begin
-  if aInterface=nil then
-    raise EInterfaceFactoryException.CreateUTF8(
-      '%.RegisterGlobalInterfaceResolution(nil)',[self]);
-  if aInterface^.Kind<>tkInterface then
-    raise EInterfaceFactoryException.CreateUTF8(
-      '%.RegisterGlobalInterfaceResolution(%): % is not an interface',
-      [self,aInterface^.Name,aInterface^.Name]);
-  aInterfaceEntry := aImplementationClass.GetInterfaceEntry(
-    PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
-  if aInterfaceEntry=nil then
-    raise EInterfaceFactoryException.CreateUTF8(
-      '%.RegisterGlobalInterfaceResolution(): % does not implement %',
-      [self,aImplementationClass,aInterface^.Name]);
-  n := length(GlobalInterfaceResolution);
-  SetLength(GlobalInterfaceResolution,n+1);
-  with GlobalInterfaceResolution[n] do begin
-    TypeInfo := aInterface;
-    ImplementationClass := aImplementationClass;
-    InterfaceEntry := aInterfaceEntry;
+  aInterfaceEntry := RegisterGlobalCheck(aInterface,aImplementationClass);
+  try
+    n := length(GlobalInterfaceResolution);
+    SetLength(GlobalInterfaceResolution,n+1);
+    with GlobalInterfaceResolution[n] do begin
+      TypeInfo := aInterface;
+      ImplementationClass := aImplementationClass;
+      InterfaceEntry := aInterfaceEntry;
+    end;
+  finally
+    LeaveCriticalSection(GlobalInterfaceResolutionLock);
   end;
+end;
+
+class procedure TInterfaceResolverInjected.RegisterGlobal(
+  aInterface: PTypeInfo; aImplementation: TInterfacedObject);
+var aInterfaceEntry: PInterfaceEntry;
+    n: integer;
+begin
+  aInterfaceEntry := RegisterGlobalCheck(aInterface,aImplementation.ClassType);
+  try
+    n := length(GlobalInterfaceResolution);
+    SetLength(GlobalInterfaceResolution,n+1);
+    with GlobalInterfaceResolution[n] do begin
+      TypeInfo := aInterface;
+      IInterface(aImplementation)._AddRef;
+      ImplementationInstance := aImplementation;
+      InterfaceEntry := aInterfaceEntry;
+    end;
+  finally
+    LeaveCriticalSection(GlobalInterfaceResolutionLock);
+  end;
+end;
+
+class procedure TInterfaceResolverInjected.RegisterGlobalDelete(aInterface: PTypeInfo);
+var i: integer;
+begin
+  if (aInterface=nil) or (aInterface^.Kind<>tkInterface) then
+    raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobalDelete(?)',[self]);
+  EnterCriticalSection(GlobalInterfaceResolutionLock);
+  try
+    for i := 0 to length(GlobalInterfaceResolution)-1 do
+      with GlobalInterfaceResolution[i] do
+      if TypeInfo=aInterface then
+        if ImplementationInstance=nil then
+          raise EInterfaceResolverException.CreateUTF8(
+            '%.RegisterGlobalDelete(%) does not match an instance, but a class',
+            [self,aInterface^.Name]) else begin
+          IInterface(ImplementationInstance)._Release;
+          exit;
+        end;
+  finally
+    LeaveCriticalSection(GlobalInterfaceResolutionLock);
+  end;
+end;
+
+procedure FinalizeGlobalInterfaceResolution;
+var i: Integer;
+begin
+  for i := length(GlobalInterfaceResolution)-1 downto 0 do
+    with GlobalInterfaceResolution[i] do
+      if ImplementationInstance<>nil then
+      try
+        ImplementationInstance.Free;
+      except
+      end;
+  DeleteCriticalSection(GlobalInterfaceResolutionLock);
 end;
 
 function TInterfaceResolverInjected.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
@@ -42721,7 +42818,7 @@ var i: integer;
 begin
   if aInterface<>nil then begin
     result := true;
-    if self<>nil then begin
+    if self<>nil then begin // first check local DI/IoC
       if fResolvers<>nil then
       for i := 0 to length(fResolvers)-1 do
         if fResolvers[i].TryResolve(aInterface,Obj) then
@@ -42731,11 +42828,20 @@ begin
         if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then
           exit;
     end;
-    for i := 0 to length(GlobalInterfaceResolution)-1 do
-      with GlobalInterfaceResolution[i] do
-      if TypeInfo=aInterface then
-        if GetInterfaceFromEntry(ImplementationClass.Create,InterfaceEntry,Obj) then
-          exit;
+    EnterCriticalSection(GlobalInterfaceResolutionLock); // shared DI/IoC
+    try
+      for i := 0 to length(GlobalInterfaceResolution)-1 do
+        with GlobalInterfaceResolution[i] do
+        if TypeInfo=aInterface then 
+          if ImplementationInstance<>nil then begin
+            if GetInterfaceFromEntry(ImplementationInstance,InterfaceEntry,Obj) then
+              exit;
+          end else
+            if GetInterfaceFromEntry(ImplementationClass.Create,InterfaceEntry,Obj) then
+              exit;
+    finally
+      LeaveCriticalSection(GlobalInterfaceResolutionLock);
+    end;
   end;
   result := false;
 end;
@@ -44663,7 +44769,11 @@ initialization
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
+  InitializeCriticalSection(GlobalInterfaceResolutionLock);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(ILockedDocVariant),TLockedDocVariant);
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
+
+finalization
+  FinalizeGlobalInterfaceResolution;
 end.
