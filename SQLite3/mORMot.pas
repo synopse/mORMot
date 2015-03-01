@@ -2397,7 +2397,8 @@ type
     /// copy a published property value from one instance to another
     // - this method use direct copy of the low-level binary content, and is
     // therefore faster than a SetValue(Dest,GetValue(Source)) call
-    procedure CopyValue(Source, Dest: TObject);
+    // - if DestInfo is nil, it will assume DestInfo=@self
+    procedure CopyValue(Source, Dest: TObject; DestInfo: PPropInfo=nil);
     /// compare two published properties
     function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return true if this property is a BLOB (TSQLRawBlob)
@@ -3611,7 +3612,8 @@ type
   /// the class kind as handled by ClassInstanceCreate() functions
   TClassInstanceCreate = (
     cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
-    cicTSynPersistent,cicTInterfacedCollection,cicTCollection,cicTObject);
+    cicTSynPersistent,cicTInterfacedCollection,cicTInterfacedObjectWithCustomCreate,
+    cicTCollection,cicTObject);
 
 /// compute the class kind of a given class
 // - as handled by ClassInstanceCreate() functions
@@ -22404,78 +22406,111 @@ begin
   end;
 end;
 
-procedure TPropInfo.CopyValue(Source, Dest: TObject);
+procedure TPropInfo.CopyValue(Source, Dest: TObject; DestInfo: PPropInfo);
 var Value: RawByteString;
     WS: WideString;
     {$ifndef NOVARIANTS}
     V: variant;
     {$endif}
     S,D: TObject;
-label i64, int, obj;
+    kS,kD: TTypeKind;
+    ft: TSQLFieldType;
+label i64, int, dst, obj, str;
 begin
-  if (@self<>nil) and (Source<>nil) and (Dest<>Source) and (Dest<>nil) then
-//    (PPointer(Source)^=PPointer(Dest)^) then // allow parent into child e.g.
-  case PropType^.Kind of
+  if DestInfo=nil then
+    DestInfo := @self;
+  if (@self=nil) or (Source=nil) or (Dest=Source) or (Dest=nil) then
+    exit;
+  kS := PropType^.Kind;
+  kD := DestInfo^.PropType^.Kind;
+  case kS of
     {$ifdef FPC}tkBool,{$endif}
     tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
-int:  SetOrdProp(Dest,GetOrdProp(Source));
-    tkClass:
-    case PropType^.ClassSQLFieldType of
-      sftID: // TSQLRecord published properties (sftID)
-        if TSQLRecord(Source).fFill.JoinedFields then
-          // -> pre-allocated fields by Create*Joined()
-          goto obj else
-          // -> these are not class instances, but INTEGER reference to records
-          goto int;
-      sftMany, sftObject: begin
-        // generic case: copy also class content (create instances)
-obj:    S := GetObjProp(Source);
-        D := GetObjProp(Dest);
-        // note: Get/SetOrdProp() works also for CPU64 (returns an PtrInt)
+int:  if DestInfo=@Self then
+        SetOrdProp(Dest,GetOrdProp(Source)) else
+dst:  if kD in tkOrdinalTypes then
+        DestInfo^.SetInt64Value(Dest,GetInt64Value(Source));
+    tkClass: begin
+      ft := PropType^.ClassSQLFieldType;
+      case ft of
+        sftID: // TSQLRecord published properties (sftID)
+          if TSQLRecord(Source).fFill.JoinedFields then
+            // -> pre-allocated fields by Create*Joined()
+            goto obj else
+            // -> these are not class instances, but INTEGER reference to records
+            goto int;
+        sftMany, sftObject: begin
+          // generic case: copy also class content (create instances)
+  obj:    S := GetObjProp(Source);
+          if (DestInfo=@self) or
+             ((kD=tkClass) and (DestInfo^.PropType^.ClassSQLFieldType=ft)) then begin
+            D := DestInfo.GetObjProp(Dest);
 {$ifndef LVCL}
-        if S.InheritsFrom(TCollection) then
-          CopyCollection(TCollection(S),TCollection(D)) else
-{$endif}begin
-          D.Free; // release previous child
-          if S=nil then
-            D := nil else begin
-            D := ClassInstanceCreate(S.ClassType); // create new child instance
-            CopyObject(S,D); // copy child content
+            if S.InheritsFrom(TCollection) then
+              CopyCollection(TCollection(S),TCollection(D)) else
+{$endif}    begin
+              D.Free; // release previous D instance then set a new copy of S
+              if S=nil then
+                D := nil else begin
+                D := ClassInstanceCreate(S.ClassType); 
+                CopyObject(S,D);
+              end;
+              DestInfo.SetOrdProp(Dest,PtrInt(D));
+            end;
           end;
-          SetOrdProp(Dest,PtrInt(D));
         end;
       end;
     end;
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
-      // works also with TID, TTimeLog, Double and Currency
-i64:  SetInt64Prop(Dest,GetInt64Prop(Source));
+      if DestInfo=@self then
+        // works also with TID, TTimeLog, Double and Currency
+i64:    SetInt64Prop(Dest,GetInt64Prop(Source)) else
+        goto dst;
     tkFloat:
-    if (PropType^.FloatType in [ftDoub,ftCurr]) and
-       GetterIsField and SetterIsField then
-      goto I64 else
-      SetFloatProp(Dest,GetFloatProp(Source));
+    if DestInfo=@self then
+      if (PropType^.FloatType in [ftDoub,ftCurr]) and
+         GetterIsField and SetterIsField then
+        goto I64 else
+        SetFloatProp(Dest,GetFloatProp(Source)) else
+      if kD=tkFloat then
+        DestInfo.SetFloatProp(Dest,GetFloatProp(Source));
     {$ifdef FPC}tkAString,{$endif}
     tkLString: begin
-      GetLongStrProp(Source,Value);
-      SetLongStrProp(Dest,Value);
+      if kD=tkLString then begin
+        GetLongStrProp(Source,Value);
+        DestInfo.SetLongStrProp(Dest,Value);
+      end else
+str:  if kD in tkStringTypes then begin
+        GetLongStrValue(Source,RawUTF8(Value));
+        DestInfo.SetLongStrValue(Dest,RawUTF8(Value));
+      end;
     end;
     {$ifdef UNICODE}
     tkUString:
-      SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source));
+      if kD=tkUString then
+        SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source)) else
+        goto str;
     {$endif}
-    tkWString: begin
-      GetWideStrProp(Source,WS);
-      SetWideStrProp(Dest,WS);
-    end;
+    tkWString:
+      if kD=tkWString then begin
+        GetWideStrProp(Source,WS);
+        SetWideStrProp(Dest,WS);
+      end else
+        goto str;
     tkDynArray:
-      GetDynArray(Dest).Copy(GetDynArray(Source));
+      if (DestInfo=@self) or
+         (PropType{$ifndef FPC}^{$endif}=DestInfo.PropType{$ifndef FPC}^{$endif}) then
+        DestInfo.GetDynArray(Dest).Copy(GetDynArray(Source));
     tkRecord{$ifdef FPC},tkObject{$endif}:
-      RecordCopy(GetFieldAddr(Dest)^,GetFieldAddr(Source)^,PropType{$ifndef FPC}^{$endif});
+      if (DestInfo=@self) or
+         (PropType{$ifndef FPC}^{$endif}=DestInfo.PropType{$ifndef FPC}^{$endif}) then
+        RecordCopy(DestInfo.GetFieldAddr(Dest)^,GetFieldAddr(Source)^,PropType{$ifndef FPC}^{$endif});
     {$ifndef NOVARIANTS}
-    tkVariant: begin // do not handle getter/setter yet
-      GetVariantProp(Source,V);
-      SetVariantProp(Dest,V);
-    end;
+    tkVariant:
+      if kD=tkVariant then begin
+        GetVariantProp(Source,V);
+        SetVariantProp(Dest,V);
+      end;
     {$endif}
   end; // note: tkString (shortstring) not handled
 end;
@@ -36154,6 +36189,7 @@ procedure CopyObject(aFrom, aTo: TObject);
 var P: PPropInfo;
     i: integer;
     C: TClass;
+    valid: boolean;
 label I64;
 begin
   if (aFrom=nil) or (aTo=nil) then
@@ -36164,19 +36200,20 @@ begin
     exit;
   end;
   {$endif}
-  if aFrom.InheritsFrom(TStrings) then begin
-    CopyStrings(TStrings(aFrom),(aTo as TStrings));
+  if aFrom.InheritsFrom(TStrings) and aTo.InheritsFrom(TStrings) then begin
+    CopyStrings(TStrings(aFrom),TStrings(aTo));
     exit;
   end;
   C := aFrom.ClassType;
   if aTo.InheritsFrom(C) then
-  while C<>nil do begin
-    for i := 1 to InternalClassPropInfo(C,P) do begin
-      P^.CopyValue(aFrom,aTo); // shortstring not handled
-      P := P^.Next;
-    end;
-    C := C.ClassParent;
-  end;
+    while C<>nil do begin
+      for i := 1 to InternalClassPropInfo(C,P) do begin
+        P^.CopyValue(aFrom,aTo); // shortstring not handled
+        P := P^.Next;
+      end;
+      C := C.ClassParent;
+    end else // if classes have nothing in common, use JSON serialization
+    JSONToObject(aTo,pointer(ObjectToJSON(aFrom)),valid);
 end;
 
 {$ifndef LVCL}
