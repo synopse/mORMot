@@ -6836,7 +6836,8 @@ begin
   try
     curl.Module := LoadLibrary(LIBCURL_DLL);
     if curl.Module=0 then
-      raise ECrtSocket.CreateFmt('Unable to find %s',[LIBCURL_DLL]);
+      raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
+        +': try sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
     P := @@curl.global_init;
     for api := low(NAMES) to high(NAMES) do begin
       P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));

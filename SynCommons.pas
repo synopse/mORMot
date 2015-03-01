@@ -10967,7 +10967,13 @@ function _Obj(const NameValuePairs: array of const;
 // initialized with the Name/Value pairs
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
-procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant);
+procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant); overload;
+
+/// add the property values of a document to a document-based object content
+// - if the Document and Obj are a TDocVariant object, then all Document's
+// properties will be added at the root level of Obj
+// - if Document or Obj are not a TDocVariant object, will do nothing 
+procedure _ObjAddProps(const Document: variant; var Obj: variant); overload;
 
 /// initialize a variant instance to store some document-based array content
 // - array will be initialized with data supplied as parameters, e.g.
@@ -30949,6 +30955,22 @@ begin
   end else
     // add name,value pairs to the TDocVariant object
     TDocVariantData(Obj).AddNameValuesToObject(NameValuePairs);
+end;
+
+procedure _ObjAddProps(const Document: variant; var Obj: variant);
+var i: integer;
+begin
+  while TVarData(Obj).VType=varByRef or varVariant do
+    TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
+  if (DocVariantType=nil) or
+     (TVarData(Obj).VType<>DocVariantType.VarType) or
+     (TDocVariantData(Obj).Kind<>dvObject) or
+     (TVarData(Document).VType<>DocVariantType.VarType) or
+     (TDocVariantData(Document).Kind<>dvObject) then
+    exit; // nothing to do
+  with TDocVariantData(Document) do
+    for i := 0 to VCount-1 do
+      TDocVariantData(Obj).AddValue(VName[i],VValue[i]);
 end;
 
 function _ObjFast(const NameValuePairs: array of const): variant;

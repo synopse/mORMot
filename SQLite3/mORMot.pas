@@ -1823,6 +1823,11 @@ function ObjectToVariantDebug(Value: TObject;
 // - just a wrapper around _JsonFast(ObjectToJSONDebug())
 function ObjectToVariantDebug(Value: TObject): variant; overload;
 
+/// add the property values of a TObject to a document-based object content
+// - if Obj is a TDocVariant object, then all Values's published
+// properties will be added at the root level of Obj
+procedure _ObjAddProps(Value: TObject; var Obj: variant); overload;
+
 /// is able to compare two objects by value
 // - both instances may or may not be of the same class, but properties
 // should match
@@ -3557,6 +3562,9 @@ function ClassFieldCountWithParents(ClassType: TClass;
 /// retrieve all class hierachy types which have some published properties  
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 
+/// retrieve the PPropInfo values of all published properties of a class
+function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
+
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -3587,8 +3595,9 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
 
 /// create an instance of the given class
-// - will handle the custom virtual constructors of TSQLRecord or
-// TCollection classes as expected, so is to be preferred to aClass.Create
+// - will handle the custom virtual constructors of TSQLRecord, TCollection,
+// TSynPersistent, TPersistentWithCustomCreate, classes as expected, so is to
+// be preferred to aClass.Create
 function ClassInstanceCreate(aClass: TClass): TObject; overload;
 
 /// create an instance of the given class from its registered class name
@@ -3674,7 +3683,7 @@ type
   TInterfacedCollectionClass = class of TInterfacedCollection;
 
   /// abstract TCollectionItem class, which will instantiate all its nested
-  // TPersistent class published properties, then release them when freed
+  // TPersistent/TSynPersistent class published properties, then release them when freed
   // - could be used for gathering of TCollectionItem properties, e.g. for
   // Domain objects in DDD, especially for list of value objects
   // - note that non published properties won't be instantiated
@@ -15570,6 +15579,31 @@ end;
 begin
   result := nil;
   InternalAdd(ClassType,result);
+end;
+
+function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
+var CP: PClassProp;
+    P: PPropInfo;
+    i,n,n1: integer;
+begin
+  n := 0;
+  result := nil;
+  while ClassType<>nil do begin
+    CP := InternalClassProp(ClassType);
+    if CP=nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    if CP^.PropCount>0 then begin
+      n1 := n;
+      inc(n,CP^.PropCount);
+      SetLength(result,n);
+      P := AlignToPtr(@CP^.PropList);
+      for i := n1 to n-1 do begin
+        result[i] := P;
+        P := P^.Next;
+      end;
+    end;
+    ClassType := ClassType.ClassParent;
+  end;
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -36290,6 +36324,11 @@ begin
   result := _JsonFast(ObjectToJSONDebug(Value));
 end;
 
+procedure _ObjAddProps(Value: TObject; var Obj: variant);
+begin
+  _ObjAddProps(_JsonFast(ObjectToJSON(Value)),Obj);
+end;
+
 function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8): variant;
@@ -36625,6 +36664,7 @@ begin
   repeat
     if C<>TSQLRecord then
     if C<>TObjectList then
+    if C<>TInterfacedObjectWithCustomCreate then
     if C<>TPersistentWithCustomCreate then
     if C<>TSynPersistent then
   {$ifndef LVCL}
@@ -36666,6 +36706,9 @@ begin
       result := cicTPersistentWithCustomCreate;
       exit;
     end else begin
+      result := cicTInterfacedObjectWithCustomCreate;
+      exit;
+    end else begin
       result := cicTObjectList;
       exit;
     end else begin
@@ -36689,6 +36732,8 @@ begin
       result := TPersistentWithCustomCreateClass(aClass).Create;
     cicTSynPersistent:
       result := TSynPersistentClass(aClass).Create;
+    cicTInterfacedObjectWithCustomCreate:
+      result := TInterfacedObjectWithCustomCreateClass(aClass).Create;
     {$ifndef LVCL}
     cicTInterfacedCollection:
       result := TInterfacedCollectionClass(aClass).Create;
@@ -43002,7 +43047,7 @@ constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
   const aDependencies: array of TInterfacedObject;
   aRaiseEServiceExceptionIfNotFound: boolean);
 begin
-  inherited Create;
+  Create;
   fResolver := TInterfaceResolverInjected.Create;
   fResolverOwned := true;
   fResolver.InjectStub(aStubsByGUID);
@@ -43016,7 +43061,7 @@ constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolverIn
 begin
   if aResolver=nil then
     raise EServiceException.CreateUTF8('%.CreateWithResolver(nil)',[self]);
-  inherited Create;
+  Create;
   fResolver := aResolver;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
