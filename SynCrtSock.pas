@@ -1281,6 +1281,8 @@ type
     // - e.g. '/category/name/10?param=1'
     Address: SockString;
     /// fill the members from a supplied URI
+    // - note that the URI should already be escaped according to RFC 3986,
+    // e.g. any ':' character should have been changed into '%3A'
     function From(aURI: SockString): boolean;
     /// compute the whole normalized URI
     function URI: SockString;
