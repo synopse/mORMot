@@ -31919,7 +31919,7 @@ begin
     W.AddShort(',"methods":[');
     for i := 0 to high(fPublishedMethod) do
       with fPublishedMethod[i] do
-      if Stats<>nil then begin
+      if (Stats<>nil) and (Stats.TaskCount<>0) then begin
         W.Add('{"%":',[Name]);
         Stats.ComputeDetailsTo(W);
         W.Add('}',',');
@@ -33767,12 +33767,11 @@ end;
 
 procedure TSQLRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
   Write: boolean; const CounterDiff: Int64);
-var n: integer;
 begin
   if TableIndex<0 then
     exit;
-  n := length(fPerTable[Write]);
-  if TableIndex>=n then // tables may have been added after Create()
+  if TableIndex>=length(fPerTable[Write]) then
+    // tables may have been added after Create()
     SetLength(fPerTable[Write],TableIndex+1);
   if fPerTable[Write,TableIndex]=nil then
     fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;

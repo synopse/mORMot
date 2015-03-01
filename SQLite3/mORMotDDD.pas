@@ -565,18 +565,35 @@ type
     fIndex: integer;
     fProcessIdleDelay: cardinal;
     fMonitoring: TSynMonitorWithSize;
-    fPending: TSQLRecord;
+    /// the main thread loop, which will call the protected Execute* methods
     procedure Execute; override;
-    procedure OnException(E: Exception); virtual;
   protected
-    // create fPending + save fPending.State to "processing"
-    // returns fPending.ID=0 if no more pending task
-    procedure ExecuteRetrievePendingAndSetProcessing; virtual; abstract;
-    // should save fPending.State to "processed" or "failed"
-    // and finally call fMonitoring.Processed(bytesProcessed)
-    procedure ExecuteProcessAndSetResult; virtual; abstract;
-    // is called when there is no more pending task
+    /// check for any pending task, and mark it as started
+    // - will be executed within fDaemon.fProcessLock so that it would be
+    // atomic among all fDaemon.fProcess[] threads - overriden implementation
+    // should therefore ensure that this method executes as fast as possible
+    // to minimize contention
+    // - returns FALSE if there is no pending task
+    // - returns TRUE if there is a pending task, and ExecuteProcessAndSetResult
+    // should be called by Execute outside the fDaemon.fProcessLock
+    function ExecuteRetrievePendingAndSetProcessing: boolean; virtual; abstract;
+    /// execute the task, and set its resulting state
+    // - resulting state may be e.g. "processed" or "failed"
+    // - should return the number of bytes processed, for fMonitoring update
+    // - will be executed outside fDaemon.fProcessLock so that overriden
+    // implementation may take as much time as necessary for its process
+    function ExecuteProcessAndSetResult: QWord;  virtual; abstract;
+    /// finalize the pending task
+    // - will always be called, even if ExecuteRetrievePendingAndSetProcessing
+    // returned FALSE
+    procedure ExecuteProcessFinalize; virtual; abstract;
+    /// is called when there is no more pending task
+    // - may be used e.g. to release a connection or some resource (e.g. an
+    // ORM TSQLRestBatch instance)
     procedure ExecuteIdle; virtual; abstract;
+    /// will be called on any exception in Execute
+    // - this default implementation will call fMonitoring.ProcessError() 
+    procedure ExecuteOnException(E: Exception); virtual;
   public
     /// initialize the process thread for a given Service/Daemon instance
     constructor Create(aDaemon: TDDDMonitoredDaemon; aIndexInDaemon: integer); virtual;
@@ -585,9 +602,29 @@ type
     /// milliseconds delay defined before getting the next pending tasks
     // - equals TDDDMonitoredDaemon.ProcessIdleDelay, unless a fatal exception
     // occurred during TDDDMonitoredDaemonProcess.ExecuteIdle method: in this
-    // case, the delay has been increased to 500 ms
+    // case, the delay would been increased to 500 ms
     property IdleDelay: cardinal read fProcessIdleDelay;
   end;
+
+  /// abstract process thread class with monitoring abilities, using the ORM
+  // for pending tasks persistence
+  // - a protected TSQLRecord instance will be maintained to store the
+  // processing task and its current state 
+  TDDDMonitoredDaemonProcessRest = class(TDDDMonitoredDaemonProcess)
+  protected
+    /// the internal ORM instance used to maintain the current task
+    // - it should contain the data to be processed, the processing state
+    // (e.g. at least "processing", "processed" and "failed"), and optionally
+    // the resulting content (if any)
+    // - overriden ExecuteRetrievePendingAndSetProcessing method should create
+    // fPending then save fPending.State to "processing"
+    // - overriden ExecuteProcessAndSetResult method should perform the task,
+    // then save fPending.State to "processed" or "failed"
+    fPending: TSQLRecord;
+    /// finalize the pending task: will free fPending and set it to nil
+    procedure ExecuteProcessFinalize; override;
+  end;
+
 
   /// used to determine which actual thread class will implement the process
   TDDDMonitoredDaemonProcessClass = class of TDDDMonitoredDaemonProcess;
@@ -617,7 +654,7 @@ type
     /// monitor the Daemon/Service by returning some information as a TDocVariant
     // - its Status.stats sub object will contain global processing statistics,
     // and Status.threadstats similar information, detailled by running thread
-    function RetrieveState(out Status: variant): TCQRSResult; 
+    function RetrieveState(out Status: variant): TCQRSResult;
     /// launch all processing threads
     // - any previous running threads are first stopped
     function Start: TCQRSResult; virtual;
@@ -629,7 +666,7 @@ type
     property ProcessThreadCount: integer read fProcessThreadCount;
     /// how many milliseconds each process thread should wait before checking
     // for pending tasks
-    // - default value is 50 ms, which seems good enough in practice 
+    // - default value is 50 ms, which seems good enough in practice
     property ProcessIdleDelay: integer read fProcessIdleDelay write fProcessIdleDelay;
   end;
 
@@ -638,9 +675,10 @@ type
 
 type
   /// abstract class for implementing an Application Layer service
+  // - is defined as an TInjectableObject, so that any published properties
+  // defining some interfaces would be resolved at creation 
   TDDDApplication = class(TInjectableObject)
   protected
-
   end;
 
 
@@ -1516,27 +1554,26 @@ begin
           repeat
             if Terminated then
               exit;
-            fPending := nil;
             try
               fMonitoring.ProcessStart;
               try
                 fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
                 try
-                  ExecuteRetrievePendingAndSetProcessing;
+                  if not ExecuteRetrievePendingAndSetProcessing then
+                    break; // no more pending tasks
                 finally
                   fDaemon.fProcessLock.Leave;
                 end;
-                if fPending.ID=0 then
-                  break; // no more pending tasks
                 fMonitoring.ProcessDoTask;
-                ExecuteProcessAndSetResult; // always set, even if Terminated
+                // always set, even if Terminated
+                fMonitoring.AddSize(ExecuteProcessAndSetResult);
               finally
                 fMonitoring.ProcessEnd;
-                FreeAndNil(fPending);
+                ExecuteProcessFinalize;
               end;
             except
               on E: Exception do begin
-                OnException(E);
+                ExecuteOnException(E);
                 break; // will call ExecuteIdle then go to idle state
               end;
             end;
@@ -1546,9 +1583,9 @@ begin
         end;
       except
         on E: Exception do begin
-          OnException(E); // exception during ExecuteIdle should not happen
+          ExecuteOnException(E); // exception during ExecuteIdle should not happen
           if fProcessIdleDelay<500 then
-            fProcessIdleDelay := 500; // avoid CPU+resource burning 
+            fProcessIdleDelay := 500; // avoid CPU+resource burning
         end;
       end;
     until false;
@@ -1557,10 +1594,17 @@ begin
   end;
 end;
 
-procedure TDDDMonitoredDaemonProcess.OnException(E: Exception);
+procedure TDDDMonitoredDaemonProcess.ExecuteOnException(E: Exception);
 begin
   fMonitoring.ProcessError(ObjectToVariantDebug(
     E,'{threadindex:?,daemon:?}',[fIndex,fDaemon.GetStatus]));
+end;
+
+{ TDDDMonitoredDaemonProcessRest }
+
+procedure TDDDMonitoredDaemonProcessRest.ExecuteProcessFinalize;
+begin
+  FreeAndNil(fPending);
 end;
 
 
@@ -1644,6 +1688,7 @@ begin
     fProcess[i] := fProcessClass.Create(self,i);
 end;
 
+
 function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 var i: integer;
     allfinished: boolean;
@@ -1675,7 +1720,6 @@ begin
       ORMResult(E);
   end;
 end;
-
 
 
 

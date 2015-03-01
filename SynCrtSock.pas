@@ -6849,11 +6849,8 @@ begin
     curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
     if curl.info.ssl_version<>nil then
       curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
-{    for api := 0 to 1000 do
-      if curl.info.protocols[api]=nil then
-        break else
-        write(curl.info.protocols[api], ' ');
-    writeln(#13#10,curl.infoText); }
+//   api := 0; with curl.info do while protocols[api]<>nil do begin
+//     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   except
     on E: Exception do begin
       if curl.Module<>0 then begin
