@@ -3755,6 +3755,26 @@ type
     destructor Destroy; override;
   end;
 
+  /// abstract TInterfacedObject class, which will instantiate all its nested
+  // TPersistent/TSynPersistent published properties, then release them when freed
+  // - could be used for gathering of TCollectionItem properties, e.g. for
+  // Domain objects in DDD, especially for list of value objects
+  // - note that non published properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance matching its parent type
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  TInterfacedObjectAutoCreateFields = class(TInterfacedObjectWithCustomCreate)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    constructor Create; override;
+    /// this overriden constructor will release all its nested persistent
+    // classes and T*ObjArray published properties
+    destructor Destroy; override;
+  end;
+
   /// a generic value object able to handle any task / process statistic
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
@@ -8876,7 +8896,45 @@ type
   end;
   {$M-}
 
+  /// defines the class of a TInjectableObject type
   TInjectableObjectClass = class of TInjectableObject;
+
+  /// used to set the published properties of a TInjectableAutoCreateFields
+  // - TInjectableAutoCreateFields.Create will check any resolver able to
+  // implement this interface, then run its SetProperties() method on it
+  IAutoCreateFieldsResolve = interface
+    ['{396362E9-B60D-43D4-A0D4-802E4479F24E}']
+    /// this method will be called once on an instance has been created
+    procedure SetProperties(Instance: TObject);
+  end;
+
+  /// abstract class which will auto-inject its dependencies (DI/IoC), and also
+  // manage the instances of its TPersistent/TSynPersistent published properties
+  // - abstract class able with a virtual constructor, dependency injection
+  // (i.e. SOLID DI/IoC), and automatic memory management of all nested class
+  // published properties
+  // - will also release any T*ObjArray dynamic array storage of persistents,
+  // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
+  // - this class is a perfect parent for any class storing data by value, and
+  // dependency injection, e.g. DDD services or daemons
+  // - note that non published (e.g. public) properties won't be instantiated
+  // - please take care that you would not create any endless recursion: you
+  // should ensure that at one level, nested published properties won't have any
+  // class instance matching its parent type
+  // - since the destructor will release all nested properties, you should
+  // never store a reference of any of those nested instances outside
+  // - if any associated resolver implements IAutoCreateFieldsResolve, its
+  // SetProperties() method will be called on all created T*Persistent
+  // published properties, so that it may initialize its values
+  TInjectableAutoCreateFields = class(TInjectableObject)
+  public
+    /// this overriden constructor will instantiate all its nested
+    // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    constructor Create; override;
+    /// this overriden constructor will release all its nested persistent
+    // classes and T*ObjArray published properties
+    destructor Destroy; override;
+  end;
 
   /// event used by TInterfaceFactory.CreateFakeInstance() to run a method
   // - aMethod will specify which method is to be executed
@@ -22356,15 +22414,15 @@ begin
     exit;
   kS := PropType^.Kind;
   kD := DestInfo^.PropType^.Kind;
-  if KS in tkStringTypes then
-    if KD in tkStringTypes then
+  if kS in tkStringTypes then
+    if kD in tkStringTypes then
       result := CompareStrings else
       exit else
-  if KS in tkOrdinalTypes then
-    if KD in tkOrdinalTypes then
+  if kS in tkOrdinalTypes then
+    if kD in tkOrdinalTypes then
       result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
       exit else
-  if KS=KD then
+  if kS=kD then
     case KS of
     tkClass:
       result := ObjectEquals(GetObjProp(Source),DestInfo^.GetObjProp(Dest));
@@ -44127,6 +44185,40 @@ begin
   AutoDestroyFields(self);
   inherited Destroy;
 end;
+
+
+{ TInterfacedObjectAutoCreateFields }
+
+constructor TInterfacedObjectAutoCreateFields.Create;
+begin
+  inherited;
+  AutoCreateFields(self);
+end;
+
+destructor TInterfacedObjectAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
+
+{ TInjectableAutoCreateFields }
+
+constructor TInjectableAutoCreateFields.Create;
+var Inject: IAutoCreateFieldsResolve;
+begin
+  inherited Create; // will auto-inject its dependencies (DI/IoC)
+  AutoCreateFields(self);
+  if TryResolve(TypeInfo(IAutoCreateFieldsResolve),Inject) then
+    Inject.SetProperties(self);
+end;
+
+destructor TInjectableAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
 
 
 {$ifndef LVCL}
