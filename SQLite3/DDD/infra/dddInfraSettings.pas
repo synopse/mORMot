@@ -69,7 +69,14 @@ uses
 
 type
   /// abstract class for storing application settings
-  TApplicationSettingsAbstract = class(TSynAutoCreateFields);
+  // - this class implements IAutoCreateFieldsResolve so is able to inject
+  // its own values to any TInjectableAutoCreateFields instance
+  TApplicationSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
+    IAutoCreateFieldsResolve)
+  protected
+    fAllProps: PPropInfoDynArray;
+    procedure SetProperties(Instance: TObject); virtual;
+  end;
 
   /// parent class for storing application settings as a JSON file
   TApplicationSettingsFile = class(TApplicationSettingsAbstract)
@@ -122,6 +129,22 @@ begin
   path := ExtractFilePath(ExpandFileName(aFileName));
   settings := ExtractFilePath(ExpandFileName(SettingsJsonFileName));
   result := ExtractRelativePath(settings,path)+ExtractFileName(aFileName);
+end;
+
+{ TApplicationSettingsAbstract }
+
+procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
+var i: integer;
+    P: PPropInfo;
+begin
+  if Instance=nil then
+    exit;
+  if fAllProps=nil then
+    fAllProps := ClassFieldAllProps(ClassType);
+  for i := 0 to high(fAllProps) do begin
+    P := ClassFieldProp(Instance.ClassType,fAllProps[i]^.Name);
+    fAllProps[i]^.CopyValue(self,Instance,P);
+  end;
 end;
 
 end.

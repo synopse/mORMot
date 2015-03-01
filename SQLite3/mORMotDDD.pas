@@ -675,10 +675,13 @@ type
 
 type
   /// abstract class for implementing an Application Layer service
-  // - is defined as an TInjectableObject, so that any published properties
-  // defining some interfaces would be resolved at creation 
-  TDDDApplication = class(TInjectableObject)
+  // - is defined as an TInjectableAutoCreateFields, so that any published
+  // properties defined as interfaces would be resolved at creation, and
+  // published properties defined as TPersistent/TSynPersistent will be
+  // managed by this instance, i.e. created and released with it  
+  TDDDApplication = class(TInjectableAutoCreateFields)
   protected
+  public
   end;
 
 
