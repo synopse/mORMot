@@ -112,7 +112,11 @@ begin
     {$endif}
     {$else}
     {$ifdef Linux}      
-    libName := 'libsqlite3.so.0';
+      {$ifdef Android}
+      libName := 'libsqlite.so';
+      {$else}
+      libName := 'libsqlite3.so.0';
+      {$endif}
     {$else}
     libName := 'libsqlite3.dylib';
     {$endif}

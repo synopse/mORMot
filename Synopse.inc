@@ -192,6 +192,10 @@
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define NOX64PATCHRTL} // official FPC's RTL already includes this x64 asm
 
+  {$ifdef ANDROID}
+    {$define LINUX}
+  {$endif}
+
   {$ifdef CPU64}
     {$define PUREPASCAL}
   {$else}
@@ -395,7 +399,10 @@
 {$endif}
 
 // Only Win32+Linux32 do support our SQLite3 static linked library  
-{$ifdef CPU64}  
+{$ifdef CPU64}
+  {$define NOSQLITE3STATIC}
+{$endif}
+{$ifdef ANDROID}
   {$define NOSQLITE3STATIC}
 {$endif}
 
@@ -419,8 +426,10 @@
 {$else}
   // http.sys server is Windows-specific
   {$define ONLYUSEHTTPSOCKET}
+  {$ifndef ANDROID}
   // cross-platform libcurl has a great API -> TCurlHttp and TSQLHttpClientCurl
   {$define USELIBCURL}
+  {$endif}
 {$endif}
 
 

@@ -56,6 +56,10 @@ interface
 {$inline on}
 {$h+}
 
+{$ifdef ANDROID}
+  {$define LINUX}
+{$endif}
+
 uses
   SysUtils
   {$ifdef Linux}

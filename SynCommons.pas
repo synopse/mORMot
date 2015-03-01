@@ -8937,9 +8937,11 @@ procedure SleepHiRes(ms: cardinal);
 
 {$else MSWINDOWS}
 
+{$ifndef ANDROID}
 /// compatibility function for Linux
 function GetCurrentThreadID: LongWord; cdecl;
   external 'libpthread.so.0' name 'pthread_self';
+{$endif}
 
 {$ifdef KYLIX3}
 /// overloaded function using open64() to allow 64 bit positions
@@ -14233,7 +14235,7 @@ type
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
     {$ifdef FPC}
-    {$ifdef VER2_7}
+    {$ifdef ISFPC27}
     codePage: Word;
     elemSize: Word;
     {$endif}
@@ -38156,6 +38158,7 @@ begin
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
   {$ifdef VER2_7_0}+' 2.7.0'{$endif}
   {$ifdef VER2_7_1}+' 2.7.1'{$endif}
+  {$ifdef VER3_0_0}+' 3.0.0'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
 {$else}
   {$ifdef VER90}  'Delphi 2'{$endif}
@@ -44148,7 +44151,7 @@ const n2u: array[138..255] of byte =
 {$endif OWNNORMTOUPPER}
 begin
   {$ifdef FPC}
-  {$ifdef VER2_7}
+  {$ifdef ISFPC27}
   DefaultSystemCodepage := CODEPAGE_US;
   {$endif}
   {$endif FPC}

@@ -186,16 +186,17 @@ uses
   {$endif}
 {$endif}
 {$ifdef MSWINDOWS}
-  Windows
+  Windows;
 {$else}
-  Types,
   {$ifdef KYLIX3}
-  LibC
+  LibC,
   {$else}
-  clocale
+  {$ifndef ANDROID}
+  clocale,
   {$endif}
+  {$endif}
+  Types;
 {$endif}
-  ;
 
 type
   /// the format used for storing data
@@ -5208,6 +5209,3 @@ initialization
   InitCrc32Tab;
 {$endif}
 end.
-
-
-
