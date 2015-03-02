@@ -35188,6 +35188,11 @@ begin
     CodePage := 0;
     {$endif}
   case CodePage of
+  CP_SQLRAWBLOB:
+    if s<>'' then begin
+      AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR,4);
+      WrBase64(pointer(s),length(s),false);
+    end;
   CP_UTF8:
     Add(pointer(s),0,Escape);  // direct write of RawUTF8 content
   CP_UTF16:
