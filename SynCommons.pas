@@ -4329,13 +4329,12 @@ type
     function JustAdded: boolean;
   end;
 
-  {$M+} 
-  /// abstract parent class with threadsafe implementation of IInterface and
-  // a virtual constructor
-  // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
-  // you need an interfaced object with a virtual constructor, ready to be
-  // overridden to initialize the instance
-  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
+  /// abstract parent class with a virtual constructor, ready to be overridden
+  // to initialize the instance
+  // - you can specify such a class if you need an object including published
+  // properties (like TPersistent) with a virtual constructor (e.g. to
+  // initialize some nested class properties)
+  TPersistentWithCustomCreate = class(TPersistent)
   public
     /// this virtual constructor will be called at instance creation
     // - this constructor does nothing, but is declared as virtual so that
@@ -4343,12 +4342,13 @@ type
     constructor Create; virtual;
   end;
 
-  /// abstract parent class with a virtual constructor, ready to be overridden
-  // to initialize the instance
-  // - you can specify such a class if you need an object including published
-  // properties (like TPersistent) with a virtual constructor (e.g. to
-  // initialize some nested class properties)
-  TPersistentWithCustomCreate = class(TPersistent)
+  {$M+} 
+  /// abstract parent class with threadsafe implementation of IInterface and
+  // a virtual constructor
+  // - you can specify e.g. such a class to TSQLRestServer.ServiceRegister() if
+  // you need an interfaced object with a virtual constructor, ready to be
+  // overridden to initialize the instance
+  TInterfacedObjectWithCustomCreate = class(TInterfacedObject)
   public
     /// this virtual constructor will be called at instance creation
     // - this constructor does nothing, but is declared as virtual so that
@@ -35188,15 +35188,14 @@ begin
     CodePage := 0;
     {$endif}
   case CodePage of
-  CP_SQLRAWBLOB:
-    if s<>'' then begin
-      AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR,4);
-      WrBase64(pointer(s),length(s),false);
-    end;
   CP_UTF8:
     Add(pointer(s),0,Escape);  // direct write of RawUTF8 content
   CP_UTF16:
     AddW(pointer(s),0,Escape); // direct write of UTF-16 content
+  CP_SQLRAWBLOB: begin
+    AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR,4);
+    WrBase64(pointer(s),L,false);
+  end;
   else begin
     if L>=SizeOf(tmpU8)div 3 then
       Getmem(U8,L*3+1) else

@@ -71,6 +71,8 @@ type
   /// abstract class for storing application settings
   // - this class implements IAutoCreateFieldsResolve so is able to inject
   // its own values to any TInjectableAutoCreateFields instance
+  // - you have to manage instance lifetime of these inherited classes with a
+  // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
   TApplicationSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
     IAutoCreateFieldsResolve)
   protected
@@ -102,6 +104,14 @@ type
 implementation
 
 
+{ TApplicationSettingsAbstract }
+
+procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
+begin
+  CopyObject(self,Instance);
+end;
+
+
 { TApplicationSettings }
 
 constructor TApplicationSettingsFile.Create(
@@ -131,20 +141,5 @@ begin
   result := ExtractRelativePath(settings,path)+ExtractFileName(aFileName);
 end;
 
-{ TApplicationSettingsAbstract }
-
-procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
-var i: integer;
-    P: PPropInfo;
-begin
-  if Instance=nil then
-    exit;
-  if fAllProps=nil then
-    fAllProps := ClassFieldAllProps(ClassType);
-  for i := 0 to high(fAllProps) do begin
-    P := ClassFieldProp(Instance.ClassType,fAllProps[i]^.Name);
-    fAllProps[i]^.CopyValue(self,Instance,P);
-  end;
-end;
 
 end.

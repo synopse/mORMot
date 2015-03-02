@@ -1755,8 +1755,8 @@ procedure WriteObject(Value: TObject; var IniContent: RawUTF8;
 function WriteObject(Value: TObject): RawUTF8; overload;
 
 /// copy object properties
-// - copy only Integer, Int64, enumerates (including boolean), object properties
-// and (Ansi/Wide/Unicode)String properties (excluding shortstring)
+// - copy Integer, Int64, enumerates (including boolean), variant, records,
+// dynamic arrays, classes and any string properties (excluding shortstring)
 // - TCollection items can be copied also, if they are of the same exact class
 // - object properties instances are created in aTo if the objects are not
 // TSQLRecord children (in this case, these are not class instances, but
@@ -3565,6 +3565,10 @@ function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 
 /// retrieve the PPropInfo values of all published properties of a class
 function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
+
+/// will fill Dest published properties from the values in Source published
+// properties
+//procedure ClassFieldInject(Source,Dest: TObject);
 
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
@@ -8774,18 +8778,8 @@ type
     // a TDDDRepositoryRestObjectMapping or any factory class
     procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver); overload; virtual;
     /// prepare and setup interface DI/IoC resolution from a TInterfacedObject instance
-    // - any TInterfaceObject declared as dependency should also be used only
-    // once, or you should initialize a local IUnknown reference to ensure the
-    // instance will stay alive during the whole process:
-    // !var daemon: TInfraMyDaemon;
-    // !    daemonLocal: IUnknown;
-    // !begin
-    // !  daemon := TInfraMyDaemon.Create;
-    // !  daemonLocal := IUnknown; // call _AddRef
-    // !  Rest.Services.Inject([daemon]);
-    // !  ... // here daemon may be resolved one or several times
-    // !  Rest.Free; // here daemon won't be released (RefCount>1)
-    // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
+    // - any TInterfacedObject declared as dependency will have its reference
+    // count increased, and decreased in Destroy
     procedure InjectInstance(const aDependencies: array of TInterfacedObject); overload; virtual;
     /// can be used to perform an DI/IoC for a given interface
     // - will search for the supplied interface to its internal list of resolvers
@@ -8818,10 +8812,10 @@ type
     procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
+    // - will call _Release on all TInterfacedObject dependencies 
     destructor Destroy; override;
   end;
 
-  {$M+}
   /// any service implementation class could inherit from this class to
   // allow dependency injection aka SOLID DI/IoC by the framework
   // - once created, the framework will call AddResolver() member, so that its
@@ -8858,19 +8852,9 @@ type
     // !   ...
     // - note that all the injected stubs/mocks instances will be owned by the
     // TInjectableObject, and therefore released with it
-    // - any TInterfaceObject declared as dependency should also be used only
-    // once, or you should initialize a local IUnknown reference to ensure the
-    // instance will stay alive during the whole process:
-    // !var daemon: TInfraMyDaemon;
-    // !    daemonLocal: IUnknown;
-    // !begin
-    // !  daemon := TInfraMyDaemon.Create;
-    // !  daemonLocal := IUnknown; // call _AddRef
-    // !  service := TInfraMyService.CreateInjected(Rest,[],[],[daemon]);
-    // !  ... // here daemon may be resolved one or several times
-    // !  service.Free; // here daemon won't be released (RefCount>1)
-    // !end; // here daemonLocal := nil -> RefCount=0 -> daemon.Free
-    // - once all DI/IoC is defined, will call the AutoResolve() protected method
+    // - any TInterfacedObject declared as dependency will have its reference
+    // count increased, and decreased in Destroy
+    // - once DI/IoC is defined, will call the AutoResolve() protected method
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject;
@@ -8894,7 +8878,6 @@ type
     // - including all TInterfaceStub instances as specified to CreateInjected()
     destructor Destroy; override;
   end;
-  {$M-}
 
   /// defines the class of a TInjectableObject type
   TInjectableObjectClass = class of TInjectableObject;
@@ -15659,7 +15642,11 @@ begin
       P := AlignToPtr(@CP^.PropList);
       for i := n1 to n-1 do begin
         result[i] := P;
+        {$ifdef HASINLINE}
         P := P^.Next;
+        {$else}
+        P := @P^.Name[ord(P^.Name[0])+1];
+        {$endif}
       end;
     end;
     ClassType := ClassType.ClassParent;
@@ -15678,9 +15665,13 @@ var i: integer;
 begin
   while aClassType<>nil do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if IdemPropName(result^.Name,PropName) then
+      if (result^.Name[0]=PropName[0]) and IdemPropName(result^.Name,PropName) then
         exit else
+        {$ifdef HASINLINE}
         result := result^.Next;
+        {$else}
+        result := @result^.Name[ord(result^.Name[0])+1];
+        {$endif}
     aClassType := aClassType.ClassParent;
   end;
   result := nil;
@@ -15692,7 +15683,7 @@ var i, L: integer;
 {$endif}
 begin
   {$ifdef FPC}
-  result := pointer(GetFPCPropInfo(aClassType,PUTF8Char(PropName)));
+  result := pointer(GetFPCPropInfo(aClassType,PropName));
   {$else}
   L := StrLen(PropName);
   while (L<>0) and (aClassType<>nil) do begin
@@ -23360,7 +23351,8 @@ begin
     if CT^.ClassType<>TSQLRecordMany then
     if CT^.ClassType<>TSQLRecord then
     if (CT^.ClassType<>TPersistent) and (CT^.ClassType<>TRawUTF8List) and
-       (CT^.ClassType<>TObjectList) then
+       (CT^.ClassType<>TObjectList) and (CT^.ClassType<>TSynPersistent) and
+       (CT^.ClassType<>TInterfacedObjectWithCustomCreate) then
       if CT^.ParentInfo<>nil then
         with CT^.ParentInfo^{$ifndef FPC}^{$endif} do
           CT := AlignToPtr(@Name[ord(Name[0])+1]) // get parent ClassType
@@ -36244,11 +36236,9 @@ begin
 end;
 
 procedure CopyObject(aFrom, aTo: TObject);
-var P: PPropInfo;
+var P,P2: PPropInfo;
     i: integer;
-    C: TClass;
-    valid: boolean;
-label I64;
+    C,C2: TClass;
 begin
   if (aFrom=nil) or (aTo=nil) then
     exit;
@@ -36258,20 +36248,30 @@ begin
     exit;
   end;
   {$endif}
-  if aFrom.InheritsFrom(TStrings) and aTo.InheritsFrom(TStrings) then begin
-    CopyStrings(TStrings(aFrom),TStrings(aTo));
+  if aFrom.InheritsFrom(TStrings) then begin
+    if aTo.InheritsFrom(TStrings) then
+      CopyStrings(TStrings(aFrom),TStrings(aTo));
     exit;
   end;
   C := aFrom.ClassType;
-  if aTo.InheritsFrom(C) then
-    while C<>nil do begin
+  C2 := aTo.ClassType;
+  if C2.InheritsFrom(C) then // fast process of matching PPropInfo
+    repeat
       for i := 1 to InternalClassPropInfo(C,P) do begin
-        P^.CopyValue(aFrom,aTo); // shortstring not handled
+        P^.CopyValue(aFrom,aTo);
         P := P^.Next;
       end;
       C := C.ClassParent;
-    end else // if classes have nothing in common, use JSON serialization
-    JSONToObject(aTo,pointer(ObjectToJSON(aFrom)),valid);
+    until C=TObject else // slower lookup by property name
+    repeat
+      for i := 1 to InternalClassPropInfo(C,P) do begin
+        P2 := ClassFieldPropWithParents(C2,P^.Name);
+        if P2<>nil then
+          P^.CopyValue(aFrom,aTo,P2);
+        P := P^.Next;
+      end;
+      C := C.ClassParent;
+    until C=TObject;
 end;
 
 {$ifndef LVCL}
@@ -42964,7 +42964,7 @@ begin
           exit;
       if fDependencies<>nil then
       for i := 0 to Length(fDependencies)-1 do
-        if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then
+        if fDependencies[i].GetInterface(aInterface^.InterfaceGUID^,Obj) then 
           exit;
     end;
     EnterCriticalSection(GlobalInterfaceResolutionLock); // shared DI/IoC
@@ -43010,14 +43010,19 @@ procedure TInterfaceResolverInjected.InjectInstance(
   const aDependencies: array of TInterfacedObject);
 var i: integer;
 begin
-  for i := 0 to high(aDependencies) do
+  for i := 0 to high(aDependencies) do begin
+    IInterface(aDependencies[i])._AddRef; // Destroy will do _Release
     ObjArrayAdd(fDependencies,aDependencies[i]);
+  end;
 end;
 
 destructor TInterfaceResolverInjected.Destroy;
+var i: integer;
 begin
   try
     ObjArrayClear(fCreatedInterfaceStub);
+    for i := 0 to length(fDependencies)-1 do
+      IInterface(fDependencies[i])._Release;
   finally
     inherited Destroy;
   end;
@@ -43156,8 +43161,8 @@ constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolverIn
 begin
   if aResolver=nil then
     raise EServiceException.CreateUTF8('%.CreateWithResolver(nil)',[self]);
+  fResolver := aResolver; // may be needed by override Create
   Create;
-  fResolver := aResolver;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 
@@ -44191,7 +44196,7 @@ end;
 
 constructor TInterfacedObjectAutoCreateFields.Create;
 begin
-  inherited;
+  inherited Create;
   AutoCreateFields(self);
 end;
 
