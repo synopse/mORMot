@@ -1248,6 +1248,10 @@ function VariantToEnum(const Value: variant; const TextValues: array of string):
 /// convert any TSQLRecord class instance into a TJSONVariant type
 function ObjectToVariant(value: TSQLRecord): variant;
 
+/// hash the supplied text values after UTF-8 encoding
+// - as expected by the framework server
+function SHA256Compute(const Values: array of string): string;
+
 /// encode a text as defined by RFC 3986
 function UrlEncode(const aValue: string): string; overload;
 
