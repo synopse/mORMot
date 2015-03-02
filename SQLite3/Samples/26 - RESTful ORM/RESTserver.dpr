@@ -14,7 +14,7 @@ uses
   SynCrtSock,
   mORMotHTTPServer,
   RESTData,
-  RESTServerClass in 'RESTServerClass.pas';
+  RESTServerClass;
 
 var ORMServer: TNoteServer;
     HTTPServer: TSQLHttpServer;
