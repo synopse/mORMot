@@ -5682,7 +5682,7 @@ type
       index found
      - caller SHOULD always call the Filter() method before calling Validate() }
     function Validate(aRest: TSQLRest; const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
-      aInvalidFieldIndex: PInteger=nil): string; overload; virtual;
+      aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): string; overload; virtual;
     {/  validate the specified fields values of the current TSQLRecord instance
     - this version will call the overloaded Validate() method above
     - returns '' if all field names were correct and processed, or an
@@ -5690,20 +5690,22 @@ type
     - if aInvalidFieldIndex is set, it will contain the first invalid field
       index }
     function Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
-      aInvalidFieldIndex: PInteger=nil): string; overload;
+      aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): string; overload;
     /// filter then validate the specified fields values of the current TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
     // and display the faulty field name at the beginning of the error message
     // - returns true if all field names were correct and processed, or false
     // and an explicit error message (translated in the current language) on error
     function FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
-      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload;
+      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
+      aValidator: PSynValidate=nil): boolean; overload;
     /// filter then validate the specified fields values of the current TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
     // and return '' on validation success, or an error message with the faulty 
     // field names at the beginning
     function FilterAndValidate(aRest: TSQLRest;
-      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): RawUTF8; overload;
+      const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
+      aValidator: PSynValidate=nil): RawUTF8; overload;
     /// should modify the record content before writing to the Server
     // - this default implementation will update any sftModTime / TModTime and
     // sftCreateTime / TCreateTime properties content with the exact server time stamp
@@ -15665,7 +15667,8 @@ var i: integer;
 begin
   while aClassType<>nil do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if (result^.Name[0]=PropName[0]) and IdemPropName(result^.Name,PropName) then
+      if {$ifndef HASINLINE}(result^.Name[0]=PropName[0]) and{$endif}
+         IdemPropName(result^.Name,PropName) then
         exit else
         {$ifdef HASINLINE}
         result := result^.Next;
@@ -25587,7 +25590,7 @@ begin
 end;
 
 function TSQLRecord.Validate(aRest: TSQLRest; const aFields: TSQLFieldBits;
-  aInvalidFieldIndex: PInteger): string;
+  aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var f, i: integer;
     Value: RawUTF8;
     Validate: TSynValidate;
@@ -25617,6 +25620,8 @@ begin
             // TSynValidate process failed -> notify caller
             if aInvalidFieldIndex<>nil then
               aInvalidFieldIndex^ := f;
+            if aValidator<>nil then
+              aValidator^ := Validate;
             if result='' then
               // no custom message -> show a default message
               result := format(sValidationFailed,[
@@ -25636,21 +25641,21 @@ begin
 end;
 
 function TSQLRecord.Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
-  aInvalidFieldIndex: PInteger=nil): string;
+  aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var F: TSQLFieldBits;
 begin
   if RecordProps.FieldIndexsFromRawUTF8(aFields,F) then
     // must always call the virtual Validate() method
-    result := Validate(aRest,F,aInvalidFieldIndex) else
+    result := Validate(aRest,F,aInvalidFieldIndex,aValidator) else
     result := '';
 end;
 
 function TSQLRecord.FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
-  const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean;
+  const aFields: TSQLFieldBits; aValidator: PSynValidate): boolean;
 var invalidField: Integer;
 begin
   Filter(aFields);
-  aErrorMessage := Validate(aRest,aFields,@invalidField);
+  aErrorMessage := Validate(aRest,aFields,@invalidField,aValidator);
   if aErrorMessage='' then
     result := true else begin
     if invalidField>=0 then
@@ -25660,10 +25665,11 @@ begin
   end;
 end;
 
-function TSQLRecord.FilterAndValidate(aRest: TSQLRest; const aFields: TSQLFieldBits): RawUTF8;
+function TSQLRecord.FilterAndValidate(aRest: TSQLRest;
+  const aFields: TSQLFieldBits; aValidator: PSynValidate): RawUTF8;
 var msg: string;
 begin
-  if FilterAndValidate(aRest,msg,aFields) then
+  if FilterAndValidate(aRest,msg,aFields,aValidator) then
     result := '' else
     result := StringToUTF8(msg);
 end;

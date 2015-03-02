@@ -7341,6 +7341,10 @@ type
       virtual; abstract;
   end;
 
+  /// points to a TSynValidate variable
+  // - used e.g. as optional parameter to TSQLRecord.Validate/FilterAndValidate
+  PSynValidate = ^TSynValidate;
+
   /// IP v4 address validation to be applied to a Record field content
   // (typicaly a TSQLRecord)
   // - this versions expect no parameter
