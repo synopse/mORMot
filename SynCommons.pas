@@ -38147,25 +38147,12 @@ begin
   result :=
 {$ifdef FPC}
   'Free Pascal'
-  {$ifdef VER2_4_0}+' 2.4.0'{$endif}
-  {$ifdef VER2_4_2}+' 2.4.2'{$endif}
-  {$ifdef VER2_4_3}+' 2.4.3'{$endif}
-  {$ifdef VER2_4_4}+' 2.4.4'{$endif}
-  {$ifdef VER2_5_0}+' 2.5.0'{$endif}
-  {$ifdef VER2_5_1}+' 2.5.1'{$endif}
-  {$ifdef VER2_6_0}+' 2.6.0'{$endif}
-  {$ifdef VER2_6_1}+' 2.6.1'{$endif}
-  {$ifdef VER2_6_2}+' 2.6.2'{$endif}
-  {$ifdef VER2_6_3}+' 2.6.3'{$endif}
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
   {$ifdef VER2_7_0}+' 2.7.0'{$endif}
   {$ifdef VER2_7_1}+' 2.7.1'{$endif}
-  {$ifdef VER3_0_0}+' 3.0.0'{$endif}
+  {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
 {$else}
-  {$ifdef VER90}  'Delphi 2'{$endif}
-  {$ifdef VER100} 'Delphi 3'{$endif}
-  {$ifdef VER120} 'Delphi 4'{$endif}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$if     defined(KYLIX3)}'Kylix 3'
