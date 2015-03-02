@@ -8937,9 +8937,11 @@ procedure SleepHiRes(ms: cardinal);
 
 {$else MSWINDOWS}
 
-{$ifndef ANDROID}
-/// compatibility function for Linux
+/// compatibility function for Linux/Android
 function GetCurrentThreadID: LongWord; cdecl;
+{$ifdef ANDROID}
+  external 'libc.so' name 'pthread_self';
+{$else}
   external 'libpthread.so.0' name 'pthread_self';
 {$endif}
 
