@@ -42636,6 +42636,7 @@ procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var with
 var i: integer;
 begin
   fillchar(Fields,sizeof(Fields),0);
+  withID := false;
   for i := 0 to Length(Select)-1 do
     if Select[i].Field=0 then
       withID := true else
