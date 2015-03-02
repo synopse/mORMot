@@ -8705,9 +8705,10 @@ type
   protected
     fInterfaceTypeInfo: PTypeInfo;
     fImplementationEntry: PInterfaceEntry;
+    fImplementationClass: TInterfacedObjectClass;
+    fImplementationClassIsCustomCreate: boolean;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
-    // inherited classes should provide the right class
-    function CreateInstance: TInterfacedObject; virtual; abstract;
+    function CreateInstance: TInterfacedObject; virtual;
   public
     /// this overriden constructor will check and store the supplied class
     // to implement an interface
@@ -8827,7 +8828,7 @@ type
   // e.g. how TServiceFactoryServer.CreateInstance() initialize them
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
-    fResolver: TInterfaceResolverInjected;
+    fResolver: TInterfaceResolver;
     fResolverOwned: Boolean;
     // used by CreateInjected()
     fAutoResolvedInterfaceAddress: TList;
@@ -8864,7 +8865,7 @@ type
     /// initialize an instance, defining one dependency resolver
     // - the resolver may be e.g. a TServiceContainer
     // - once the DI/IoC is defined, will call the AutoResolve() protected method
-    constructor CreateWithResolver(aResolver: TInterfaceResolverInjected;
+    constructor CreateWithResolver(aResolver: TInterfaceResolver;
       aRaiseEServiceExceptionIfNotFound: boolean=true);
     /// can be used to perform an DI/IoC for a given interface type information
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
@@ -31856,26 +31857,24 @@ function TSQLRestServer.ServiceRegister(
   aImplementationClass: TInterfacedClass; const aInterfaces: array of PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation): TServiceFactoryServer;
 begin
-  result := nil;
-  if (self=nil) or (aImplementationClass=nil) or (high(aInterfaces)<0) then
-    exit;
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
-  result := (fServices as TServiceContainerServer).
-    AddImplementation(aImplementationClass,aInterfaces,aInstanceCreation,nil);
+  if (aImplementationClass=nil) or (high(aInterfaces)<0) then
+    result := nil else
+    result := (fServices as TServiceContainerServer).
+      AddImplementation(aImplementationClass,aInterfaces,aInstanceCreation,nil);
 end;
 
 function TSQLRestServer.ServiceRegister(aSharedImplementation: TInterfacedObject;
   const aInterfaces: array of PTypeInfo): TServiceFactoryServer;
 begin
-  result := nil;
-  if (self=nil) or (aSharedImplementation=nil) or (high(aInterfaces)<0) then
-    exit;
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
-  result := (fServices as TServiceContainerServer).
-    AddImplementation(TInterfacedClass(aSharedImplementation.ClassType),
-      aInterfaces,sicShared,aSharedImplementation);
+  if (self=nil) or (aSharedImplementation=nil) or (high(aInterfaces)<0) then
+    result := nil else
+    result := (fServices as TServiceContainerServer).
+      AddImplementation(TInterfacedClass(aSharedImplementation.ClassType),
+        aInterfaces,sicShared,aSharedImplementation);
 end;
 
 function TSQLRestServer.ServiceRegister(aClient: TSQLRest;
@@ -42825,12 +42824,22 @@ begin
   if fImplementationEntry=nil then
     raise EInterfaceResolverException.CreateUTF8('%.Create: % does not implement %',
       [self,aImplementation,fInterfaceTypeInfo^.Name]);
+  fImplementationClass := aImplementation;
+  fImplementationClassIsCustomCreate :=
+    aImplementation.InheritsFrom(TInterfacedObjectWithCustomCreate);
 end;
 
 constructor TInterfaceResolverForSingleInterface.Create(const aInterface: TGUID;
   aImplementation: TInterfacedObjectClass);
 begin
   Create(TInterfaceFactory.GUID2TypeInfo(aInterface),aImplementation);
+end;
+
+function TInterfaceResolverForSingleInterface.CreateInstance: TInterfacedObject;
+begin
+  if not fImplementationClassIsCustomCreate then
+    result := fImplementationClass.Create else
+    result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
 end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
@@ -43069,14 +43078,16 @@ end;
 procedure TInterfaceResolverInjected.Resolve(const aInterfaces: array of TGUID;
   const aObjs: array of pointer);
 var n,i: integer;
+    info: PTypeInfo;
 begin
   n := length(aInterfaces);
   if (n=0) or (n<>length(aObjs)) then
-    raise EServiceException.CreateUTF8('%.Resolve([?,?])',[self]) else
-    for i := 0 to n-1 do
-      if not Resolve(aInterfaces[i],aObjs[i]^) then
-        raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',
-          [self,GUIDToShort(aInterfaces[i])]);
+    raise EServiceException.CreateUTF8('%.Resolve([?,?])',[self]);
+  for i := 0 to n-1 do begin
+    info := TInterfaceFactory.GUID2TypeInfo(aInterfaces[i]);
+    if not Resolve(info,aObjs[i]^) then
+      raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,info^.Name]);
+  end;
 end;
 
 
@@ -43096,22 +43107,31 @@ begin
 end;
 
 procedure TInjectableObject.Resolve(const aGUID: TGUID; out Obj);
+var info: PTypeInfo;
 begin
-  if not fResolver.Resolve(aGUID,Obj) then
+  info := TInterfaceFactory.GUID2TypeInfo(aGUID);
+  if not TryResolve(info,Obj) then
     raise EServiceException.CreateUTF8(
-      '%.Resolve(%): Interface not registered - you could use '+
-      'TInterfaceFactory.RegisterInterfaces()',[self,GUIDToShort(aGUID)]);
+      '%.Resolve(%): Interface not registered',[self,info^.Name]);
 end;
 
 procedure TInjectableObject.ResolveByPair(const aInterfaceObjPairs: array of pointer);
 begin
-  fResolver.ResolveByPair(aInterfaceObjPairs);
+  if high(aInterfaceObjPairs)=1 then
+    Resolve(aInterfaceObjPairs[0],aInterfaceObjPairs[1]^) else
+  if fResolver.InheritsFrom(TInterfaceResolverInjected) then
+    TInterfaceResolverInjected(fResolver).ResolveByPair(aInterfaceObjPairs) else
+    raise EServiceException.CreateUTF8('%.ResolveByPair(?)',[self]);
 end;
 
 procedure TInjectableObject.Resolve(const aInterfaces: array of TGUID;
   const aObjs: array of pointer);
 begin
-  fResolver.Resolve(aInterfaces,aObjs);
+  if (high(aInterfaces)=0) and (high(aObjs)=0) then
+    Resolve(aInterfaces[0],aObjs[0]^) else
+  if fResolver.InheritsFrom(TInterfaceResolverInjected) then
+    TInterfaceResolverInjected(fResolver).Resolve(aInterfaces,aObjs) else
+    raise EServiceException.CreateUTF8('%.ResolveByPair(?,?)',[self]);
 end;
 
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
@@ -43156,18 +43176,20 @@ begin
   Create;
   fResolver := TInterfaceResolverInjected.Create;
   fResolverOwned := true;
-  fResolver.InjectStub(aStubsByGUID);
-  fResolver.InjectResolver(aOtherResolvers);
-  fResolver.InjectInstance(aDependencies);
+  TInterfaceResolverInjected(fResolver).InjectStub(aStubsByGUID);
+  TInterfaceResolverInjected(fResolver).InjectResolver(aOtherResolvers);
+  TInterfaceResolverInjected(fResolver).InjectInstance(aDependencies);
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 
-constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolverInjected;
+constructor TInjectableObject.CreateWithResolver(aResolver: TInterfaceResolver;
   aRaiseEServiceExceptionIfNotFound: boolean);
 begin
+  if fResolver<>nil then
+    exit; // inject once! 
   if aResolver=nil then
     raise EServiceException.CreateUTF8('%.CreateWithResolver(nil)',[self]);
-  fResolver := aResolver; // may be needed by override Create
+  fResolver := aResolver; // may be needed by overriden Create
   Create;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;

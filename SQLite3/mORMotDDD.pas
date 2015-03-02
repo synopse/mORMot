@@ -103,11 +103,14 @@ uses
 { *********** Some Domain-Driven-Design Common Definitions }
 
 type
-  /// abstract ancestor for all Domain-Driven-Design related Exceptions
+  /// abstract ancestor for all Domain-Driven Design related Exceptions
   EDDDException = class(ESynException);
 
   /// Exception type linked to CQRS repository service methods
   ECQRSException = class(EDDDException);
+
+  /// abstract ancestor for any Domain-Driven Design infrastructure Exceptions
+  EDDDInfraException = class(EDDDException);
 
 
 { ----- Persistence / Repository Interfaces }
@@ -410,7 +413,7 @@ type
     /// perform filtering and validation on a supplied DDD Aggregate
     // - all logic defined by AddFilterOrValidate() will be processed
     function AggregateFilterAndValidate(aAggregate: TObject;
-      aInvalidFieldIndex: PInteger=nil): RawUTF8; virtual;
+      aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): RawUTF8; virtual;
     /// serialize a DDD Aggregate as JSON
     // - you can optionaly force the generated JSON to match the mapped
     // TSQLRecord fields, so that it would be compatible with ORM's JSON
@@ -542,8 +545,7 @@ type
       const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject); reintroduce;
-    constructor CreateWithResolver(aRest: TSQLRest;
-      aResolver: TInterfaceResolverInjected;
+    constructor CreateWithResolver(aRest: TSQLRest; aResolver: TInterfaceResolver;
       aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
     property Rest: TSQLRest read FRest;
   end;
@@ -1157,7 +1159,7 @@ begin
 end;
 
 function TDDDRepositoryRestFactory.AggregateFilterAndValidate(
-  aAggregate: TObject; aInvalidFieldIndex: PInteger): RawUTF8;
+  aAggregate: TObject; aInvalidFieldIndex: PInteger; aValidator: PSynValidate): RawUTF8;
 var f,i: integer;
     Value: TRawUTF8DynArray; // avoid twice retrieval
     Old: RawUTF8;
@@ -1191,6 +1193,8 @@ begin
         if not fValidate[f,i].Process(f,Value[f],msg) then begin
           if aInvalidFieldIndex<>nil then
             aInvalidFieldIndex^ := f;
+          if aValidator<>nil then
+            aValidator^ := fValidate[f,i];
           if msg='' then
             // no custom message -> show a default message
             msg := format(sValidationFailed,[GetCaptionFromClass(fValidate[f,i].ClassType)]);
@@ -1435,7 +1439,15 @@ end;
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
   aCommand: TSQLOccasion; aAggregate: TObject);
 var msg: RawUTF8;
+    validator: TSynValidate;
     ndx: integer;
+procedure SetValidationError(default: TCQRSResult);
+begin
+  if (validator<>nil) and
+     (validator.ClassType=TSynValidateUniqueField) then
+    ORMResultMsg(cqrsAlreadyExists,msg) else
+    ORMResultMsg(default,msg);
+end;
 begin
   case aCommand of
   soSelect: begin
@@ -1450,15 +1462,15 @@ begin
   end;
   if aCommand in [soUpdate,soInsert] then begin
     if aAggregate<>nil then begin
-      msg := Factory.AggregateFilterAndValidate(aAggregate);
+      msg := Factory.AggregateFilterAndValidate(aAggregate,nil,@validator);
       if msg<>'' then begin
-        ORMResultMsg(cqrsDDDValidationFailed,msg);
+        SetValidationError(cqrsDDDValidationFailed);
         exit;
       end;
     end;
-    msg := ORM.FilterAndValidate(Factory.Rest);
+    msg := ORM.FilterAndValidate(Factory.Rest,[0..MAX_SQLFIELDS-1],@validator);
     if msg<>'' then begin
-      ORMResultMsg(cqrsDataLayerError,msg);
+      SetValidationError(cqrsDataLayerError);
       exit;
     end;
   end;
@@ -1499,7 +1511,7 @@ end;
 constructor TCQRSQueryObjectRest.Create(aRest: TSQLRest);
 begin
   fRest := aRest;
-  if (aRest=nil) or (aRest.Services=nil) then
+  if (fResolver<>nil) or (aRest=nil) or (aRest.Services=nil) then
     inherited Create else
     inherited CreateWithResolver(aRest.Services);
 end;
@@ -1517,8 +1529,7 @@ begin
 end;
 
 constructor TCQRSQueryObjectRest.CreateWithResolver(aRest: TSQLRest;
-  aResolver: TInterfaceResolverInjected;
-  aRaiseEServiceExceptionIfNotFound: boolean);
+  aResolver: TInterfaceResolver; aRaiseEServiceExceptionIfNotFound: boolean);
 begin
   if not Assigned(aRest) then
     raise ECQRSException.CreateUTF8('%.CreateWithResolver(Rest=nil)',[self]);
@@ -1615,7 +1626,6 @@ end;
 
 constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest);
 begin
-  inherited;
   fProcessIdleDelay := 50;
   fProcessLock := TAutoLocker.Create;
   fProcessTimer.Start;
@@ -1623,6 +1633,7 @@ begin
     fProcessThreadCount := 1 else
   if fProcessThreadCount>20 then
     fProcessThreadCount := 20;
+  inherited Create(aRest);
 end;
 
 constructor TDDDMonitoredDaemon.Create(aRest: TSQLRest;
