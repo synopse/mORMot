@@ -1920,13 +1920,13 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
-function Int64ToUtf8(Value: Int64): RawUTF8; overload;
+function Int64ToUtf8(Value: Int64): RawByteString; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
-function Int32ToUtf8(Value: integer): RawUTF8; overload;
+function Int32ToUtf8(Value: integer): RawByteString; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
@@ -1942,7 +1942,7 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
-function UInt32ToUtf8(Value: cardinal): RawUTF8; overload;
+function UInt32ToUtf8(Value: cardinal): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
@@ -14956,7 +14956,7 @@ end;
 
 {$define OWNI2S}
 
-function Int32ToUTF8(Value : integer): RawUTF8; // 3x faster than SysUtils.IntToStr
+function Int32ToUTF8(Value : integer): RawByteString; // 3x faster than SysUtils.IntToStr
 // from IntToStr32_JOH_IA32_6_a, adapted for Delphi 2009+
 asm // eax=Value, edx=@result
   push   ebx
@@ -15053,7 +15053,7 @@ asm // eax=Value, edx=@result
   mov    [ecx],al                {Save Final Digit}
 end;
 
-function Int64ToUTF8(Value: Int64): RawUTF8;
+function Int64ToUTF8(Value: Int64): RawByteString;
 // from IntToStr64_JOH_IA32_6_b, adapted for Delphi 2009+ 
 asm
   push   ebx
@@ -16158,7 +16158,7 @@ end;
 
 {$ifndef OWNI2S}
 
-function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
+function Int32ToUTF8(Value : integer): RawByteString; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -16166,7 +16166,7 @@ begin
   SetString(result,P,@tmp[15]-P);
 end;
 
-function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
+function Int64ToUtf8(Value: Int64): RawByteString; // faster than SysUtils.IntToStr
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -16176,7 +16176,7 @@ end;
 
 {$endif}
 
-function UInt32ToUTF8(Value: Cardinal): RawUTF8; // faster than SysUtils.IntToStr
+function UInt32ToUTF8(Value: Cardinal): RawByteString; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
