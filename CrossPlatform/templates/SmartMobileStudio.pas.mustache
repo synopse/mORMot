@@ -137,6 +137,7 @@ procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/au
 // - used internally: you should not need those functions in your end-user code
 {{#enumerates}}
 function Variant2{{name}}(const _variant: variant): {{name}};
+function {{name}}ToText(const value: {{name}}): string;
 {{/enumerates}}
 {{#records}}
 function Variant2{{name}}(const Value: variant): {{name}};
@@ -195,6 +196,11 @@ implementation
 function Variant2{{name}}(const _variant: variant): {{name}};
 begin
   asm return @VariantToEnum(@_variant,@{{name}}); end;
+end;
+
+function {{name}}ToText(const value: {{name}}): string;
+begin
+  asm return @{{name}}[@value]; end;
 end;
 
 {{/enumerates}}
