@@ -25013,8 +25013,11 @@ begin
   with ExeVersion do
   if Version<>nil then
     if Version.Version32=setVersion then
-      exit else
-      FreeAndNil(Version); // allow version number forcing
+      exit else begin // forget previous to allow version number forcing
+      i := GarbageCollector.IndexOf(Version);
+      if i>0 then
+        GarbageCollector.Delete(i);
+    end;
   with ExeVersion do
   if Version=nil then begin
     {$ifdef MSWINDOWS}
@@ -44083,7 +44086,7 @@ begin
   try
     GarbageCollector.Delete(i); // will call GarbageCollector[i].Free
   except
-    on E: Exception do
+    on Exception do
       ; // just ignore exceptions in client code destructors
   end;
   for i := GarbageCollectorFreeAndNilList.Count-1 downto 0 do // LIFO
