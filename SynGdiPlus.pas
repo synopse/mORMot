@@ -651,8 +651,7 @@ procedure SaveAs(Graphic: TPersistent; const FileName: TFileName;
 // - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
 // picture biggest side won't exceed this pixel number
 procedure SaveAsRawByteString(Graphic: TPersistent;
-  out Data: {$ifdef UNICODE}RawByteString{$else}AnsiString{$endif};
-  Format: TGDIPPictureType; CompressionQuality: integer=80;
+  out DataRawByteString; Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0);
 
 /// helper to load a specified graphic from GIF/PNG/JPG/TIFF format content
@@ -1595,9 +1594,12 @@ begin
   end;
 end;
 
+{$ifndef UNICODE}
+type RawByteString = AnsiString;
+{$endif}
+
 procedure SaveAsRawByteString(Graphic: TPersistent;
-  out Data: {$ifdef UNICODE}RawByteString{$else}AnsiString{$endif};
-  Format: TGDIPPictureType; CompressionQuality: integer=80;
+  out DataRawByteString; Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
 var Stream: TMemoryStream;
 begin
@@ -1605,7 +1607,7 @@ begin
   try
     SaveAs(Graphic,Stream,Format,CompressionQuality,MaxPixelsForBiggestSide,
       BitmapSetResolution);
-    SetString(Data,PAnsiChar(Stream.Memory),Stream.Seek(0,soFromCurrent));
+    SetString(RawByteString(DataRawByteString),PAnsiChar(Stream.Memory),Stream.Seek(0,soFromCurrent));
   finally
     Stream.Free;
   end;

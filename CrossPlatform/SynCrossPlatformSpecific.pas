@@ -688,9 +688,9 @@ constructor TWinHttpConnectionClass.Create(
 begin
   inherited;
   InitializeCriticalSection(fLock);
-  fConnection := TWinHTTP.Create(RawByteString(fParameters.Server),
-    RawByteString(IntToStr(fParameters.Port)),fParameters.Https,
-    RawByteString(fParameters.ProxyName),RawByteString(fParameters.ProxyByPass),
+  fConnection := TWinHTTP.Create(SockString(fParameters.Server),
+    SockString(IntToStr(fParameters.Port)),fParameters.Https,
+    SockString(fParameters.ProxyName),SockString(fParameters.ProxyByPass),
     fParameters.ConnectionTimeOut,fParameters.SendTimeout,fParameters.ReceiveTimeout);
   fOpaqueConnection := fConnection;
   fConnection.IgnoreSSLCertificateErrors := true; // do not be paranoid here
@@ -705,15 +705,15 @@ end;
 
 procedure TWinHttpConnectionClass.URI(var Call: TSQLRestURIParams;
   const InDataType: string; KeepAlive: integer);
-var inb,outb,outh: RawByteString;
+var inb,outb,outh: SockString;
     n: integer;
 begin
   EnterCriticalSection(fLock);
   try
     SetString(inb,PAnsiChar(Call.InBody),length(Call.InBody));
-    Call.OutStatus := fConnection.Request(RawByteString(Call.Url),
-      RawByteString(Call.Verb),KeepAlive,RawByteString(Call.InHead),
-      inb,RawByteString(InDataType),outh,outb);
+    Call.OutStatus := fConnection.Request(SockString(Call.Url),
+      SockString(Call.Verb),KeepAlive,SockString(Call.InHead),
+      inb,SockString(InDataType),outh,outb);
     Call.OutHead := string(outh);
     n := length(outb);
     SetLength(Call.OutBody,n);

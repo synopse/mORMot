@@ -17,7 +17,7 @@ const
 
 var delete: boolean;
 
-procedure Call(const Root: RawByteString);
+procedure Call(const Root: SockString);
 begin
   writeln(REGSTR[delete],' of http://+:8080/',root,'/ for http.sys');
   writeln(THttpApiServer.AddUrlAuthorize(root,'8080',false,'+',delete));
