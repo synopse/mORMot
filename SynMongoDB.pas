@@ -2679,15 +2679,24 @@ begin
     end;
     ElementBytes := BSON_ELEMENTSIZE[Kind];
   end;
-  varString: begin
-    Kind := betString;
-    Data.Text := aVarData.VAny;
-    Data.TextLen := Length(RawUTF8(aVarData.VAny));
-st2:ElementBytes := Data.TextLen+1;
-    if aVarData.VAny=nil then
-      Data.InternalStorage := 1 else
-      Element := nil; // special case handled by TBSONWriter.BSONWrite()
-  end;
+  varString: 
+    if (aVarData.VAny<>nil) and
+       (PInteger(aVarData.VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+       Iso8601CheckAndDecode(PUTF8Char(aVarData.VAny)+3,Length(RawUTF8(aVarData.VAny))-3,
+         PDateTime(@Data.InternalStorage)^) then begin
+      // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+      Element := @Data.InternalStorage;
+      Kind := betDateTime;
+      ElementBytes := BSON_ELEMENTSIZE[betDateTime];
+    end else begin
+      Kind := betString;
+      Data.Text := aVarData.VAny;
+      Data.TextLen := Length(RawUTF8(aVarData.VAny));
+st2:  ElementBytes := Data.TextLen+1;
+      if aVarData.VAny=nil then
+        Data.InternalStorage := 1 else
+        Element := nil; // special case handled by TBSONWriter.BSONWrite()
+    end;
   {$ifdef HASVARUSTRING}
   varUString: begin
     RawUnicodeToUtf8(aVarData.VAny,length(UnicodeString(aVarData.VAny)),RawUTF8(aTemp));
@@ -3225,6 +3234,7 @@ end;
 procedure TBSONWriter.BSONWriteVariant(const name: RawUTF8; const value: variant);
 var temp: RawUTF8;
     JSON: PUTF8Char;
+    dt: TDateTime;
 begin
   with TVarData(value) do begin
     case VType of
@@ -3245,7 +3255,12 @@ begin
     varDouble:   BSONWrite(Name,VDouble);
     varDate:     BSONWriteDateTime(Name,VDate);
     varCurrency: BSONWrite(Name,VCurrency);
-    varString:   BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
+    varString:
+      if (VAny<>nil) and (PInteger(VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+         Iso8601CheckAndDecode(PUTF8Char(VAny)+3,Length(RawUTF8(VAny))-3,dt) then 
+        // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+        BSONWriteDateTime(Name,dt) else
+        BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
     {$ifdef HASVARUSTRING}
     varUString: begin
       RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),temp);
@@ -3492,6 +3507,10 @@ begin
         BSONWrite(name,pointer(blob),length(blob)) else
       if Iso8601CheckAndDecode(Value,ValueLen,ValueDateTime) then
         // recognized TTextWriter.AddDateTime() pattern
+        BSONWriteDateTime(name,ValueDateTime) else
+      if (PInteger(Value)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+         Iso8601CheckAndDecode(Value+3,ValueLen-3,ValueDateTime) then
+        // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) pattern
         BSONWriteDateTime(name,ValueDateTime) else
         // will point to the in-place escaped JSON text
         BSONWriteString(name,Value,ValueLen);

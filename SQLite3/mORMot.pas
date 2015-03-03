@@ -37409,8 +37409,11 @@ begin
       {$endif}
       tkFloat:
         if P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then
-          if wasString then
-            P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,0)) else
+          if wasString then begin
+            if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
+              inc(PropValue,3); // ignore U+FFF1 pattern 
+            P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,0));
+          end else
             exit else
         if wasString then
           exit else
@@ -39012,7 +39015,9 @@ begin
              P^.GetterIsField then
             AddCurr64(PInt64(P^.GetterAddr(Value))^) else
           if P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then begin
-            Add('"');
+            if woDateTimeWithMagic in Options then
+              AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
+              Add('"');
             AddDateTime(P^.GetDoubleProp(Value));
             Add('"');
           end else

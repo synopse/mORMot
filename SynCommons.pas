@@ -2361,6 +2361,7 @@ function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
 /// returns true if the file name extension contained in p^ is the same same as extup^
 // - ignore case - extup^ must be already Upper
 // - chars are compared as WinAnsi (codepage 1252), not as UTF-8
+// - could be used e.g. like IdemFileExt(aFileName,'.JP');
 function IdemFileExt(p: PUTF8Char; extup: PAnsiChar): Boolean;
 
 /// internal function, used to retrieve a UCS4 char (>127) from UTF-8 
@@ -4980,6 +4981,9 @@ const
   /// '"' + UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
   JSON_SQLDATE_MAGIC_QUOTE = ord('"')+cardinal(JSON_SQLDATE_MAGIC) shl 8;
 
+  ///'"' +  UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
+  JSON_SQLDATE_MAGIC_QUOTE_VAR: cardinal = JSON_SQLDATE_MAGIC_QUOTE;
+
 
 type
   /// handled field/parameter/column types for abstract database access
@@ -5488,11 +5492,13 @@ type
   // $ "Enum": "Destroying", // Idle,Started,Finished,Destroying
   // - woEnumSetsAsText will store sets and enumerables as text (is also
   // included in woFullExpand or woHumanReadable)
+  // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
+  // before the ISO-8601 encoded TDateTime value
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woEnumSetsAsText);
+    woEnumSetsAsText, woDateTimeWithMagic);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -35186,6 +35192,10 @@ begin
   L := length(s);
   if L=0 then
     exit;
+  if PInteger(s)^ and $ffffff=JSON_BASE64_MAGIC then begin
+    WrBase64(pointer(s),L,false); // identified as a BLOB content
+    exit;
+  end;
   if CodePage<0 then
     {$ifdef UNICODE}
     CodePage := StringCodePage(s);
@@ -35193,8 +35203,8 @@ begin
     CodePage := 0;
     {$endif}
   case CodePage of
-  CP_UTF8:
-    Add(pointer(s),0,Escape);  // direct write of RawUTF8 content
+  CP_UTF8, CP_RAWBYTESTRING:
+    Add(pointer(s),0,Escape);  // direct write of RawUTF8/RawByteString content
   CP_UTF16:
     AddW(pointer(s),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
