@@ -22710,13 +22710,14 @@ begin
   UniqueString(AnsiString(data));
   len := length(data);
   d := pointer(data);
+  key := key xor cardinal(len);
   for i := 0 to (len shr 2)-1 do begin
-    key := key xor crc32ctab[0,i and $ff];
+    key := key xor crc32ctab[0,i xor $ff];
     d^ := d^ xor key;
     inc(d);
   end;
   for i := 0 to (len and 3)-1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,i];
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,17 shl i];
 end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
