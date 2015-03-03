@@ -84,6 +84,8 @@ type
     function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;
     /// validate the first phase of a dual pass challenge authentication
     function ChallengeSelectFinal(const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
+    /// returns TRUE if the dual pass challenge did succeed
+    function Logged: boolean;
     /// set the credential for Get() or further IAuthCommand.Update/Delete
     // - this method execution will be disabled for most clients
     function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
@@ -96,12 +98,12 @@ type
     ['{8252727B-336B-4105-80FD-C8DFDBD4801E}']
     /// register a new credential, from its LogonName/HashedPassword values
     // - aHashedPassword should match the algorithm expected by the actual
-    // implementation class
+    // implementation class, over UTF-8 encoded LogonName+':'+Password
     // - on success, the newly created credential will be the currently selected
     function Add(const aLogonName: RawUTF8; aHashedPassword: TAuthQueryNonce): TCQRSResult;
     /// update the current selected credential password
     // - aHashedPassword should match the algorithm expected by the actual
-    // implementation class
+    // implementation class, over UTF-8 encoded LogonName+':'+Password
     // - will be allowed only for the current challenged user
     function UpdatePassword(const aHashedPassword: TAuthQueryNonce): TCQRSResult;
     /// delete the current selected credential

@@ -72,7 +72,7 @@ uses
 
 type
   /// ORM object to persist authentication information, i.e. TAuthInfo
-  TSQLRecordAuthInfo = class(TSQLRecord)
+  TSQLRecordUserAuth = class(TSQLRecord)
   protected
     fLogon: RawUTF8;
     fHashedPassword: RawUTF8;
@@ -94,6 +94,7 @@ type
   protected
     fChallengeLogonName: RawUTF8;
     fChallengeNonce: TAuthQueryNonce;
+    fLogged: boolean;
     // inherited classes should override this method with the proper algorithm
     class function DoHash(const aValue: TAuthQueryNonce): TAuthQueryNonce; virtual; abstract;
   public
@@ -104,6 +105,8 @@ type
     /// set the credential for Get() or further IDomAuthCommand.Update/Delete
     // - this method execution will be disabled for most clients
     function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
+    /// returns TRUE if the dual pass challenge did succeed
+    function Logged: boolean;
     /// retrieve some information about the current selected credential
     function Get(out aAggregate: TAuthInfo): TCQRSResult;
     /// register a new credential, from its LogonName/HashedPassword values
@@ -180,6 +183,7 @@ implementation
 function TDDDAuthenticationAbstract.ChallengeSelectFirst(
   const aLogonName: RawUTF8): TAuthQueryNonce;
 begin
+  fLogged := false;
   fChallengeLogonName := Trim(aLogonName);
   fChallengeNonce := DoHash(aLogonName+NowToString);
   result := fChallengeNonce;
@@ -194,11 +198,18 @@ begin
   if result<>cqrsSuccess then
     exit;
   if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
-     (ORM as TSQLRecordAuthInfo).HashedPassword)=aChallengedPassword then
-    ORMResult(cqrsSuccess) else
+     (ORM as TSQLRecordUserAuth).HashedPassword)=aChallengedPassword then begin
+    fLogged := true;
+    ORMResult(cqrsSuccess);
+  end else
     ORMResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
   fChallengeNonce := '';
   fChallengeLogonName := '';
+end;
+
+function TDDDAuthenticationAbstract.Logged: boolean;
+begin
+  result := fLogged;
 end;
 
 class function TDDDAuthenticationAbstract.ComputeHashPassword(
@@ -231,7 +242,7 @@ function TDDDAuthenticationAbstract.Add(const aLogonName: RawUTF8;
 begin
   if not ORMBegin(qaCommandDirect,result) then
     exit;
-  with ORM as TSQLRecordAuthInfo do begin
+  with ORM as TSQLRecordUserAuth do begin
     Logon := aLogonName;
     HashedPassword := aHashedPassword;
   end;
@@ -243,7 +254,7 @@ function TDDDAuthenticationAbstract.UpdatePassword(
 begin
   if not ORMBegin(qaCommandOnSelect,result) then
     exit;
-  (ORM as TSQLRecordAuthInfo).HashedPassword := aHashedPassword;
+  (ORM as TSQLRecordUserAuth).HashedPassword := aHashedPassword;
   ORMPrepareForCommit(soUpdate,nil);
 end;
 
@@ -284,7 +295,7 @@ begin
 end;
 var Rest: TSQLRestServerFullMemory;
 begin
-  Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordAuthInfo]);
+  Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUserAuth]);
   try
     Factory := TDDDAuthenticationRestFactoryAbstract.Create(Rest,self,nil);
     try
@@ -322,7 +333,7 @@ constructor TDDDAuthenticationRestFactoryAbstract.Create(aRest: TSQLRest;
   aOwner: TDDDRepositoryRestManager);
 begin
   inherited Create(
-    IDomAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordAuthInfo,
+    IDomAuthCommand,aImplementationClass,TAuthInfo,aRest,TSQLRecordUserAuth,
     ['Logon','LogonName'],aOwner);
 end;
 
@@ -345,9 +356,9 @@ end;
 
 
 
-{ TSQLRecordAuthInfo }
+{ TSQLRecordUserAuth }
 
-class procedure TSQLRecordAuthInfo.InternalDefineModel(
+class procedure TSQLRecordUserAuth.InternalDefineModel(
   Props: TSQLRecordProperties);
 begin
   AddFilterNotVoidText(['Logon','HashedPassword']);
