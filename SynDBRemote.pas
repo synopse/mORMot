@@ -146,7 +146,7 @@ type
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil); override;
   end;
 
-  {$ifdef MSWINDOWS}
+  {$ifndef ONLYUSEHTTPSOCKET}
 
   /// implements a SynDB HTTP server using fast http.sys kernel-mode server
   // - under Windows, this class is faster and more stable than TSQLDBServerSockets
@@ -165,7 +165,7 @@ type
       aProtocol: TSQLDBProxyConnectionProtocolClass=nil); override;
   end;
 
-  {$endif MSWINDOWS}
+  {$endif ONLYUSEHTTPSOCKET}
 
 
 { -------------- HTTP Client classes for SynDB remote access }
@@ -214,27 +214,50 @@ type
     property Socket: THttpClientSocket read fSocket;
   end;
 
-  {$ifdef MSWINDOWS}
+
+  /// implements an abstract HTTP client via THttpRequest abstract class,
+  // able to access remotely any SynDB
+  // - never instantiate this class, but rather TSQLDBWinHTTPConnectionProperties
+  // or TSQLDBWinINetConnectionProperties
+  TSQLDBHttpRequestConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
+  protected
+    fClient: THttpRequest;
+    function InternalRequest(var Data,DataType: RawByteString): integer; override;
+  public
+    /// released used memory
+    destructor Destroy; override;
+    /// low-level direct access to the WinHTTP implementation instance
+    property Client: THttpRequest read fClient;
+  end;
+
+  {$ifdef USELIBCURL}
+
+  /// implements a HTTP client via the libcurl API, able to access remotely any SynDB
+  TSQLDBCurlConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
+  public
+    /// initialize the properties for remote access via HTTP using libcurl
+    // - aServerName should be the HTTP server address as 'server:port'
+    // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
+    // - the user/password credential should match server-side authentication
+    constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
+  end;
+
+  {$endif USELIBCURL}
+
+  {$ifdef USEWININET}
 
   /// implements a HTTP client via WinHTTP API, able to access remotely any SynDB
-  TSQLDBWinHTTPConnectionProperties = class(TSQLDBHTTPConnectionPropertiesAbstract)
-  protected
-    fClient: TWinHttpAPI;
-    function InternalRequest(var Data,DataType: RawByteString): integer; override;
+  TSQLDBWinHTTPConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
   public
     /// initialize the properties for remote access via HTTP using WinHTTP
     // - aServerName should be the HTTP server address as 'server:port'
     // - aDatabaseName would be used to compute the URI as in TSQLDBServerAbstract
     // - the user/password credential should match server-side authentication
     constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
-    /// released used memory
-    destructor Destroy; override;
-    /// low-level direct access to the WinHTTP implementation instance
-    property Client: TWinHttpAPI read fClient;
   end;
 
   /// implements a HTTP client via WinINet API, able to access remotely any SynDB
-  TSQLDBWinINetConnectionProperties = class(TSQLDBWinHTTPConnectionProperties)
+  TSQLDBWinINetConnectionProperties = class(TSQLDBHttpRequestConnectionProperties)
   public
     /// initialize the properties for remote access via HTTP using WinINet
     // - aServerName should be the HTTP server address as 'server:port'
@@ -243,7 +266,7 @@ type
     constructor Create(const aServerName,aDatabaseName, aUserID,aPassWord: RawUTF8); override;
   end;
 
-  {$endif MSWINDOWS}
+  {$endif USEWININET}
 
   
 implementation
@@ -365,21 +388,9 @@ begin
 end;
 
 
-{$ifdef MSWINDOWS}
+{ TSQLDBHttpRequestConnectionProperties }
 
-{ TSQLDBWinHTTPConnectionProperties }
-
-constructor TSQLDBWinHTTPConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
-begin
-  if fClient=nil then begin // not after TSQLDBWinINetConnectionProperties.Create
-    SetServerName(aServerName);
-    fClient := TWinHTTP.Create(Server,Port,fURI.Https);
-  end;
-  inherited;
-end;
-
-destructor TSQLDBWinHTTPConnectionProperties.Destroy;
+destructor TSQLDBHttpRequestConnectionProperties.Destroy;
 begin
   try
     inherited;
@@ -388,7 +399,7 @@ begin
   end;
 end;
 
-function TSQLDBWinHTTPConnectionProperties.InternalRequest(
+function TSQLDBHttpRequestConnectionProperties.InternalRequest(
   var Data,DataType: RawByteString): integer;
 var inData,inDataType,head: RawByteString;
 begin
@@ -400,6 +411,18 @@ begin
 end;
 
 
+{$ifdef USEWININET}
+
+{ TSQLDBWinHTTPConnectionProperties }
+
+constructor TSQLDBWinHTTPConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fClient := TWinHTTP.Create(Server,Port,fURI.Https);
+  inherited;
+end;
+
 { TSQLDBWinINetConnectionProperties }
 
 constructor TSQLDBWinINetConnectionProperties.Create(const aServerName,
@@ -410,6 +433,23 @@ begin
   inherited;
 end;
 
+{$endif USEWININET}
+
+{$ifdef USELIBCURL}
+
+{ TSQLDBCurlConnectionProperties }
+
+constructor TSQLDBCurlConnectionProperties.Create(const aServerName,
+  aDatabaseName, aUserID, aPassWord: RawUTF8);
+begin
+  SetServerName(aServerName);
+  fClient := TCurlHTTP.Create(Server,Port,fURI.Https);
+end;
+
+{$endif USELIBCURL}
+
+
+{$ifndef ONLYUSEHTTPSOCKET}
 
 { TSQLDBServerHttpApi }
 
@@ -434,7 +474,7 @@ begin
     THttpApiServer(fServer).Clone(fThreadPoolCount-1);
 end;
 
-{$endif MSWINDOWS}
+{$endif ONLYUSEHTTPSOCKET}
 
 
 { TSQLDBServerSockets }
