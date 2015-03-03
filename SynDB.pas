@@ -1050,7 +1050,7 @@ type
     property PassWordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
   public
     /// create a new TSQLDBConnectionProperties instance from the stored values
-    function NewInstance: TSQLDBConnectionProperties; reintroduce;
+    function NewInstanceFromSelf: TSQLDBConnectionProperties;
     /// create a new TSQLDBConnectionProperties instance from a JSON content
     // - as previously serialized with TSQLDBConnectionProperties.SaveToJSON
     // - you can specify a custom Key, if the default is not enough for you
@@ -5965,7 +5965,7 @@ begin
   fPassWord := BinToBase64(data);
 end;
 
-function TSQLDBConnectionPropertiesStorage.NewInstance: TSQLDBConnectionProperties;
+function TSQLDBConnectionPropertiesStorage.NewInstanceFromSelf: TSQLDBConnectionProperties;
 var ndx: integer;
 begin
   if self=nil then
@@ -5985,7 +5985,7 @@ var Storage: TSQLDBConnectionPropertiesStorage;
 begin
   Storage := TSQLDBConnectionPropertiesStorage.CreateFromJSON(aJSON,Key);
   try
-    result := Storage.NewInstance;
+    result := Storage.NewInstanceFromSelf;
   finally
     Storage.Free;
   end;
