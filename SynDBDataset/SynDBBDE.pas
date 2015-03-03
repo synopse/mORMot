@@ -307,4 +307,6 @@ begin
   (fQuery as DBTables.TQuery).ExecSQL;
 end;
 
+initialization
+  TSQLDBBDEConnectionProperties.RegisterClassNameForStorage;
 end.

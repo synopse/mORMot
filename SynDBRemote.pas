@@ -488,4 +488,14 @@ begin
   fServer.OnRequest := Process;
 end;
 
+
+initialization
+  TSQLDBSocketConnectionProperties.RegisterClassNameForStorage;
+  {$ifdef USEWININET}
+  TSQLDBWinHTTPConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBWinINetConnectionProperties.RegisterClassNameForStorage;
+  {$endif}
+  {$ifdef USELIBCURL}
+  TSQLDBCurlConnectionProperties.RegisterClassNameForStorage;
+  {$endif}
 end.

@@ -1,7 +1,7 @@
 /// ZEOS 7.x direct access classes for SynDB units (not DB.pas based)
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit SynDBZEOS;
+unit SynDBZeos;
 
 {
   This file is part of Synopse framework.
@@ -1164,4 +1164,6 @@ begin // take care of the layout of internal ZDBC buffers for each provider
 end;
 {$endif ZEOS72UP}
 
+initialization
+  TSQLDBZEOSConnectionProperties.RegisterClassNameForStorage;
 end.

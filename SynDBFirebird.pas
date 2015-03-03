@@ -1058,10 +1058,10 @@ end;
 
 function XSQLVAR.ColumnName: RawUTF8;
 begin
-   SetString(result,sqlname,sqlname_length);
+  SetString(result,sqlname,sqlname_length);
 end;
 
 initialization
   assert(ord(dpb_gstat_attach)=67);
-
+  TSQLDBFirebirdConnectionProperties.RegisterClassNameForStorage;
 end.

@@ -581,6 +581,7 @@ end;
 
 
 initialization
+  TSQLDBNexusDBConnectionProperties.RegisterClassNameForStorage;
 
 finalization
   FinalizeNXEmbeddedEngine;

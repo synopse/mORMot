@@ -720,6 +720,7 @@ type
   // - an ODBC Driver should be specified at creation
   // - you should better use direct connection classes, like
   // TOleDBMSSQLConnectionProperties or TOleDBOracleConnectionProperties
+  // as defined in SynDBODBC.pas
   TOleDBODBCSQLConnectionProperties = class(TOleDBConnectionProperties)
   protected
     fDriver: RawUTF8;
@@ -2607,6 +2608,17 @@ end;
 
 initialization
   assert(sizeof(TOleDBStatementParam) and (sizeof(Int64)-1)=0);
+  TOleDBConnectionProperties.RegisterClassNameForStorage;
+  TOleDBOracleConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMSOracleConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMSSQLConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMSSQL2005ConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMSSQL2008ConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMSSQL2012ConnectionProperties.RegisterClassNameForStorage;
+  TOleDBMySQLConnectionProperties.RegisterClassNameForStorage;
+  TOleDBJetConnectionProperties.RegisterClassNameForStorage;
+  TOleDBAS400ConnectionProperties.RegisterClassNameForStorage;
+  TOleDBODBCSQLConnectionProperties.RegisterClassNameForStorage;
 
 finalization
   if OleDBCoinitialized<>0 then

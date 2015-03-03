@@ -153,6 +153,9 @@ unit SynDB;
     individual reading or writing speed by a factor of 4x
   - TSQLDBConnectionProperties.Create will set ForcedSchemaName := 'dbo'
     ("DataBase Owner") by default for dMSSQL kind of database engine
+  - introducing TSQLDBConnectionProperties SaveTo/SaveToJSON/SaveToFile methods
+    and TSQLDBConnectionPropertiesStorage.NewInstance*() methods to persist
+    the database connection properties, and the associated class, as JSON
   - new TSQLDBConnectionProperties/TSQLDBConnection.OnProcess event handlers
   - added TSQLDBConnectionProperties.StoreVoidStringAsNull, which will be
     set e.g. for MS SQL and Jet databases which do not allow by default to
@@ -1010,6 +1013,70 @@ type
   /// pointer to a bit set to identify columns, e.g. null columns
   PSQLDBProxyStatementColumns = ^TSQLDBProxyStatementColumns;
 
+  /// used to persist a TSQLDBConnectionProperties instance
+  // - the password will be stored as Base64, after a simple encryption
+  // - typical content could be:
+  // $ {
+  // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
+  // $	"ServerName": "server",
+  // $	"DatabaseName": "",
+  // $	"UserID": "",
+  // $	"Password": "PtvlPA=="
+  // $ }
+  // - the "Kind" value will be used to let NewInstance*() methods create the
+  // proper class instance
+  TSQLDBConnectionPropertiesStorage = class(TSynPersistent)
+  private
+    fPassWord: RawUTF8;
+    fServerName: RawUTF8;
+    fDatabaseName: RawUTF8;
+    fUserID: RawUTF8;
+    fKind: string;
+    fKey: cardinal;
+    function GetKey: cardinal;
+    function GetPassWordPlain: RawUTF8;
+    procedure SetPassWordPlain(const Value: RawUTF8);
+  public
+    /// unserialize the database definition from JSON
+    // - as previously serialized with the SaveToJSON method
+    // - you can specify a custom Key used for password encryption, if the
+    // default value is not safe enough for you
+    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0);
+    /// serialize the database definition as JSON
+    function SaveToJSON: RawUTF8;
+    /// the private key used to cypher the password storage
+    property Key: cardinal read GetKey write fKey;
+    /// access to the associated unencrypted Password value
+    property PassWordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
+  public
+    /// create a new TSQLDBConnectionProperties instance from the stored values
+    function NewInstance: TSQLDBConnectionProperties; reintroduce;
+    /// create a new TSQLDBConnectionProperties instance from a JSON content
+    // - as previously serialized with TSQLDBConnectionProperties.SaveToJSON
+    // - you can specify a custom Key, if the default is not enough for you
+    class function NewInstanceFromJSON(const aJSON: RawUTF8;
+      Key: cardinal=0): TSQLDBConnectionProperties;
+    /// create a new TSQLDBConnectionProperties instance from a JSON file
+    // - as previously serialized with TSQLDBConnectionProperties.SaveToFile
+    // - you can specify a custom Key, if the default is not enough for you
+    class function NewInstanceFromFile(const aJSONFile: TFileName;
+      Key: cardinal=0): TSQLDBConnectionProperties;
+  published
+    /// the TSQLDBConnectionProperties class name
+    // - will be used to instantiate the expected class type
+    property Kind: string read fKind write fKind;
+    /// the associated server name, as specified at creation
+    property ServerName: RawUTF8 read fServerName write fServerName;
+    /// the associated database name, as specified at creation
+    property DatabaseName: RawUTF8 read fDatabaseName write fDatabaseName;
+    /// the associated User Identifier, as specified at creation
+    property UserID: RawUTF8 read fUserID write fUserID;
+    /// the associated Password, encrypted for storage
+    // - will be persisted encrypted with a private key
+    // - use the PassWordPlain property to access to its uncyphered value
+    property PassWord: RawUTF8 read fPassWord write fPassWord;
+  end;
+
   /// abstract class used to set Database-related properties
   // - handle e.g. the Database server location and connection parameters (like
   // UserID and password)
@@ -1059,6 +1126,9 @@ type
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
     function GetMainConnection: TSQLDBConnection; virtual;
+    /// any overriden TSQLDBConnectionProperties class should call it in the
+    // initialization section of its implementation unit to be recognized 
+    class procedure RegisterClassNameForStorage;
     /// will be called at the end of constructor
     // - this default implementation will do nothing
     procedure SetInternalProperties; virtual;
@@ -1134,13 +1204,29 @@ type
     // - children may optionaly handle the fact that no UserID or Password
     // is supplied here, by displaying a corresponding Dialog box
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); virtual;
+    /// save the properties into a persistent storage object
+    // - so that you could use TSQLDBConnectionPropertiesStorage.NewInstance()
+    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - current Storage.Key value will be used for the password encryption
+    procedure SaveTo(Storage: TSQLDBConnectionPropertiesStorage);
+    /// save the properties into a JSON file
+    // - you could use TSQLDBConnectionPropertiesStorage.NewInstanceFromJSON()
+    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - you can specify a custom Key, if the default is not enough for you
+    function SaveToJSON(Key: cardinal=0): RawUTF8;
+    /// save the properties into a JSON file
+    // - you could use TSQLDBConnectionPropertiesStorage.NewInstanceFromFile()
+    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - you can specify a custom Key, if the default is not enough for you
+    procedure SaveToFile(const aJSONFile: TFileName; Key: cardinal=0);
     /// release related memory, and close MainConnection
     destructor Destroy; override;
+
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    function NewConnection: TSQLDBConnection; virtual; abstract;
+    function NewConnection: TSQLDBConnection; virtual;
     /// get a thread-safe connection
     // - this default implementation will return the MainConnection shared
     // instance, so the provider should be thread-safe by itself
@@ -4525,6 +4611,11 @@ begin
   result := fMainConnection;
 end;
 
+function TSQLDBConnectionProperties.NewConnection: TSQLDBConnection; 
+begin
+  raise ESQLDBException.CreateUTF8('%.NewConnection',[self]);
+end;
+
 function TSQLDBConnectionProperties.ThreadSafeConnection: TSQLDBConnection;
 begin
   result := MainConnection; // provider should be thread-safe
@@ -5778,6 +5869,134 @@ begin
   result := DB_SQLLIMITCLAUSE[DBMS];
 end;
 
+var
+  GlobalProperties: array of TSQLDBConnectionPropertiesClass;
+
+class procedure TSQLDBConnectionProperties.RegisterClassNameForStorage;
+begin
+  ObjArrayAddOnce(GlobalProperties,TObject(self)); // TClass stored as TObject
+end;
+
+procedure TSQLDBConnectionProperties.SaveTo(Storage: TSQLDBConnectionPropertiesStorage);
+begin
+  if Storage=nil then
+    exit;
+  Storage.Kind := ClassName;
+  Storage.ServerName := ServerName;
+  Storage.DatabaseName := DatabaseName;
+  Storage.UserID := UserID;
+  Storage.SetPassWordPlain(PassWord);
+end;
+
+function TSQLDBConnectionProperties.SaveToJSON(Key: cardinal): RawUTF8;
+var Storage: TSQLDBConnectionPropertiesStorage;
+begin
+  Storage := TSQLDBConnectionPropertiesStorage.Create;
+  try
+    Storage.Key := Key;
+    SaveTo(Storage);
+    result := Storage.SaveToJSON;
+  finally
+    Storage.Free;
+  end;
+end;
+
+procedure TSQLDBConnectionProperties.SaveToFile(const aJSONFile: TFileName;
+  Key: cardinal);
+begin
+  FileFromString(JSONReformat(SaveToJSON(Key)),aJSONFile);
+end;
+
+
+{ TSQLDBConnectionPropertiesStorage }
+
+// manual JSON serialization since SynDB has no link to mORMot.pas and its RTTI
+
+constructor TSQLDBConnectionPropertiesStorage.CreateFromJSON(const JSON: RawUTF8;
+  Key: cardinal);
+var privateCopy: RawUTF8;
+    values: TPUtf8CharDynArray;
+begin
+  fKey := Key;
+  privateCopy := JSON;
+  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','UserID','Password'],values);
+  UTF8DecodeToString(values[0],StrLen(values[0]),fKind);
+  fServerName := values[1];
+  fDatabaseName := values[2];
+  fUserID := values[3];
+  fPassWord := values[4];
+end;
+
+function TSQLDBConnectionPropertiesStorage.SaveToJSON: RawUTF8;
+begin
+  result := JSONEncode(['Kind',fKind,'ServerName',fServerName,
+    'DatabaseName',fDatabaseName,'UserID',fUserID,'Password',fPassword]);
+end;
+
+function TSQLDBConnectionPropertiesStorage.GetKey: cardinal;
+begin
+  if self=nil then
+    result := 0 else
+  if fKey=0 then
+    result := $A5abba5A else
+    result := fKey;
+end;
+
+function TSQLDBConnectionPropertiesStorage.GetPassWordPlain: RawUTF8;
+begin
+  if (self=nil) or (fPassWord='') then
+    result := '' else begin
+    result := Base64ToBin(fPassWord);
+    SymmetricEncrypt(GetKey,RawByteString(result));
+  end;
+end;
+
+procedure TSQLDBConnectionPropertiesStorage.SetPassWordPlain(const Value: RawUTF8);
+var data: RawByteString;
+begin
+  if self=nil then
+    exit;
+  if Value='' then begin
+    fPassWord := '';
+    exit;
+  end;
+  data := Value;
+  SymmetricEncrypt(GetKey,data);
+  fPassWord := BinToBase64(data);
+end;
+
+function TSQLDBConnectionPropertiesStorage.NewInstance: TSQLDBConnectionProperties;
+var ndx: integer;
+begin
+  if self=nil then
+    raise ESQLDBException.CreateUTF8('%.NewInstance',[self]);
+  for ndx := 0 to length(GlobalProperties)-1 do
+    if GlobalProperties[ndx].ClassNameIs(Kind) then begin
+      result := GlobalProperties[ndx].Create(ServerName,DatabaseName,UserID,PassWordPlain);
+      exit;
+    end;
+  raise ESQLDBException.CreateUTF8('%.NewInstance: unknown % class - please '+
+    'add a reference to its implementation unit',[self,Kind]);
+end;
+
+class function TSQLDBConnectionPropertiesStorage.NewInstanceFromJSON(const aJSON: RawUTF8;
+  Key: cardinal): TSQLDBConnectionProperties;
+var Storage: TSQLDBConnectionPropertiesStorage;
+begin
+  Storage := TSQLDBConnectionPropertiesStorage.CreateFromJSON(aJSON,Key);
+  try
+    result := Storage.NewInstance;
+  finally
+    Storage.Free;
+  end;
+end;
+
+class function TSQLDBConnectionPropertiesStorage.NewInstanceFromFile(const aJSONFile: TFileName;
+  Key: cardinal): TSQLDBConnectionProperties;
+begin
+  result := NewInstanceFromJSON(StringFromFile(aJSONFile),Key);
+end;
+
 
 { TSQLDBConnectionPropertiesThreadSafe }
 
@@ -5788,7 +6007,7 @@ begin
   try
     if fMainConnection<>nil then
       fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
-    for i := 0 to fConnectionPool.Count-1 do 
+    for i := 0 to fConnectionPool.Count-1 do
       TSQLDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
@@ -8029,7 +8248,7 @@ end;
 
 const
   __TSQLDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 '+
-    'ColumnLength,ColumnPrecision,ColumnScale: PtrInt '+
+    'ColumnLength,ColumnPrecision,ColumnScale PtrInt '+
     'ColumnType TSQLDBFieldType ColumnIndexed boolean';
 
 initialization
@@ -8041,4 +8260,5 @@ initialization
     TypeInfo(TSQLDBColumnDefine),__TSQLDBColumnDefine);
   {$endif}
 end.
+
 

@@ -532,4 +532,6 @@ begin
 end;
 
 
+initialization
+  TSQLDBUniDACConnectionProperties.RegisterClassNameForStorage;
 end.

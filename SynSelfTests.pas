@@ -173,8 +173,10 @@ uses
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
+{$ifdef MSWINDOWS}
 {$ifdef USEZEOS}
   SynDBZeos,
+{$endif}
 {$endif}
   SynCommons,
   SynLog,
@@ -684,6 +686,8 @@ type
     {$endif}
     /// test SynDB connection remote access via HTTP
     procedure _SynDBRemote;
+    /// test TSQLDBConnectionProperties persistent as JSON
+    procedure DBPropertiesPersistence;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -9160,6 +9164,29 @@ begin
   finally
     Props.Free;
   end;
+end;
+
+procedure TTestExternalDatabase.DBPropertiesPersistence;
+var Props: TSQLDBConnectionProperties;
+    json: RawUTF8;
+begin
+  Props := TSQLDBSQLite3ConnectionProperties.Create('server','','','');
+  json := Props.SaveToJSON(14);
+  Check(json='{"Kind":"TSQLDBSQLite3ConnectionProperties","ServerName":"server","DatabaseName":"","UserID":"","Password":""}');
+  Props.Free;
+  Props := TSQLDBSQLite3ConnectionProperties.Create('server','','','1234');
+  json := Props.SaveToJSON(14);
+  Check(json='{"Kind":"TSQLDBSQLite3ConnectionProperties","ServerName":"server","DatabaseName":"","UserID":"","Password":"amFOmQ=="}');
+  Props.SaveToFile('connectionprops.json');
+  Props.Free;
+  Props := TSQLDBConnectionPropertiesStorage.NewInstanceFromFile('connectionprops.json');
+  Check(Props.ClassType=TSQLDBSQLite3ConnectionProperties);
+  Check(Props.ServerName='server');
+  Check(Props.DatabaseName='');
+  Check(Props.UserID='');
+  Check(Props.PassWord='1234');
+  Props.Free;
+  DeleteFile('connectionprops.json');
 end;
 
 procedure TTestExternalDatabase.CryptedDatabase;

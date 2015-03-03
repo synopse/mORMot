@@ -804,4 +804,6 @@ begin
     fCurrentRow := 0;
 end;
 
+initialization
+  TSQLDBSQLite3ConnectionProperties.RegisterClassNameForStorage;
 end.

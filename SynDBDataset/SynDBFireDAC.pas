@@ -664,4 +664,6 @@ begin
   end;
 end;
 
+initialization
+  TSQLDBFireDACConnectionProperties.RegisterClassNameForStorage;
 end.

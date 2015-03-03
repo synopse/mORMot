@@ -1943,4 +1943,6 @@ begin
   Dest^ := '"';
 end;
 
+initialization
+  TODBCConnectionProperties.RegisterClassNameForStorage;
 end.
