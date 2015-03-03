@@ -432,6 +432,8 @@ unit SynCommons;
     TPersistent kind of objects (used e.g. with internal JSON serialization,
     for interface-based services, or for DDD objects)
   - introducing TSynAuthentication class for simple generic authentication
+  - introducing TSynConnectionDefinition class used e.g. for JSON-defined
+    runtime instantiation of a TSQLDBConnectionProperties or TSQLRest instance
   - added TDynArrayHashed.HashElement property
   - new TDynArrayHashed.AddUniqueName() method
   - introduced TSingleDynArray, recognized as such in JSON serialization
@@ -5069,7 +5071,6 @@ type
   TSQLParamTypeDynArray = array of TSQLParamType;
 
   TTextWriter = class;
-  TRawUTF8List = class;
 
   /// method prototype for custom serialization of a dynamic array item
   // - each element of the dynamic array will be called as aValue parameter
@@ -6162,6 +6163,62 @@ type
     property StartDataPosition: integer read fStartDataPosition;
   end;
 
+  /// handle safe storage of any connection properties
+  // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
+  // by mORMot.pas to serialize TSQLRest instances
+  // - the password will be stored as Base64, after a simple encryption
+  // - typical content could be:
+  // $ {
+  // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
+  // $	"ServerName": "server",
+  // $	"DatabaseName": "",
+  // $	"User": "",
+  // $	"Password": "PtvlPA=="
+  // $ }
+  // - the "Kind" value will be used to let the corresponding TSQLRest or
+  // TSQLDBConnectionProperties NewInstance*() class methods create the
+  // actual instance, from its class name
+  TSynConnectionDefinition = class(TSynPersistent)
+  protected
+    fPassWord: RawUTF8;
+    fServerName: RawUTF8;
+    fDatabaseName: RawUTF8;
+    fUser: RawUTF8;
+    fKind: string;
+    fKey: cardinal;
+    function GetKey: cardinal;
+    function GetPassWordPlain: RawUTF8;
+    procedure SetPassWordPlain(const Value: RawUTF8);
+  public
+    /// unserialize the database definition from JSON
+    // - as previously serialized with the SaveToJSON method
+    // - you can specify a custom Key used for password encryption, if the
+    // default value is not safe enough for you
+    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0);
+    /// serialize the database definition as JSON
+    function SaveToJSON: RawUTF8;
+    /// the private key used to cypher the password storage
+    property Key: cardinal read GetKey write fKey;
+    /// access to the associated unencrypted Password value
+    property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
+  published
+    /// the class name implementing the connection or TSQLRest instance
+    // - will be used to instantiate the expected class type
+    property Kind: string read fKind write fKind;
+    /// the associated server name (or file, for SQLite3) to be connected to
+    property ServerName: RawUTF8 read fServerName write fServerName;
+    /// the associated database name (if any), or additional options
+    property DatabaseName: RawUTF8 read fDatabaseName write fDatabaseName;
+    /// the associated User Identifier (if any)
+    property User: RawUTF8 read fUser write fUser;
+    /// the associated Password, e.g. for storage or transmission encryption 
+    // - will be persisted encrypted with a private key
+    // - use the PassWordPlain property to access to its uncyphered value
+    property Password: RawUTF8 read fPassword write fPassword;
+  end;
+
+
+type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
   // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
   // internal JSON format (which is faster than a query to the SQLite3 engine)
@@ -6312,7 +6369,6 @@ type
     /// release the list for exclusive access
     procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
   end;
-
 
   /// This class is able to emulate a TStringList with our native UTF-8 string type
   // - cross-compiler, from Delphi 6 and up, i.e is Unicode Ready for all
@@ -6514,6 +6570,13 @@ type
     function GetEventByName(const aText: RawUTF8; out aEvent: TMethod): boolean;
   end;
 
+const
+  /// convert identified field types into high-level ORM types
+  // - as will be implemented in unit mORMot.pas
+  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
+    '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
+
+type
   /// handle memory mapping of a file content
   /// used to store and retrieve Words in a sorted array
   TMemoryMap = {$ifndef UNICODE}object{$else}record{$endif}
@@ -6821,13 +6884,6 @@ type
     property Tag: PtrInt read fTag write fTag;
   end;
 
-const
-  /// convert identified field types into high-level ORM types
-  // - as will be implemented in unit mORMot.pas
-  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
-    '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
-  
-type
   PFileBufferReader = ^TFileBufferReader;
 
   /// this structure can be used to speed up reading from a file
@@ -36866,6 +36922,62 @@ var tmp: RawUTF8;
 begin
   SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
   result := JSONBufferReformatToFile(pointer(tmp),Dest,Format);
+end;
+
+
+{ TSynConnectionDefinition }
+
+constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8;
+  Key: cardinal);
+var privateCopy: RawUTF8;
+    values: TPUtf8CharDynArray;
+begin
+  fKey := Key;
+  privateCopy := JSON;
+  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],values);
+  UTF8DecodeToString(values[0],StrLen(values[0]),fKind);
+  fServerName := values[1];
+  fDatabaseName := values[2];
+  fUser := values[3];
+  fPassWord := values[4];
+end;
+
+function TSynConnectionDefinition.SaveToJSON: RawUTF8;
+begin
+  result := JSONEncode(['Kind',fKind,'ServerName',fServerName,
+    'DatabaseName',fDatabaseName,'User',fUser,'Password',fPassword]);
+end;
+
+function TSynConnectionDefinition.GetKey: cardinal;
+begin
+  if self=nil then
+    result := 0 else
+  if fKey=0 then
+    result := $A5abba5A else
+    result := fKey;
+end;
+
+function TSynConnectionDefinition.GetPassWordPlain: RawUTF8;
+begin
+  if (self=nil) or (fPassWord='') then
+    result := '' else begin
+    result := Base64ToBin(fPassWord);
+    SymmetricEncrypt(GetKey,RawByteString(result));
+  end;
+end;
+
+procedure TSynConnectionDefinition.SetPassWordPlain(const Value: RawUTF8);
+var data: RawByteString;
+begin
+  if self=nil then
+    exit;
+  if Value='' then begin
+    fPassWord := '';
+    exit;
+  end;
+  data := Value;
+  SymmetricEncrypt(GetKey,data);
+  fPassWord := BinToBase64(data);
 end;
 
 

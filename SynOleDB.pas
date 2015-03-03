@@ -2608,17 +2608,19 @@ end;
 
 initialization
   assert(sizeof(TOleDBStatementParam) and (sizeof(Int64)-1)=0);
-  TOleDBConnectionProperties.RegisterClassNameForStorage;
-  TOleDBOracleConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMSOracleConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMSSQLConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMSSQL2005ConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMSSQL2008ConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMSSQL2012ConnectionProperties.RegisterClassNameForStorage;
-  TOleDBMySQLConnectionProperties.RegisterClassNameForStorage;
-  TOleDBJetConnectionProperties.RegisterClassNameForStorage;
-  TOleDBAS400ConnectionProperties.RegisterClassNameForStorage;
-  TOleDBODBCSQLConnectionProperties.RegisterClassNameForStorage;
+  TOleDBConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBOracleConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSOracleConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQLConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2005ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2008ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2012ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMySQLConnectionProperties.RegisterClassNameForDefinition;
+  {$ifndef CPU64} // Jet is not available on Win64
+  TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
+  {$endif}
+  TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 
 finalization
   if OleDBCoinitialized<>0 then

@@ -4781,7 +4781,7 @@ Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it d
 !  end;
 You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade, especially for @66@.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application, or let your old application communicate with the database over plain HTTP, without the need to install any RDBMS client - see @131@.
 :  Storing connection properties as JSON
-You can use {\f1\fs20 TSQLDBConnectionPropertiesStorage} to persist the connection properties as a @*JSON@ content, in memory or file.
+You can use a {\f1\fs20 TSynConnectionDefinition} storage to persist the connection properties as a @*JSON@ content, in memory or file.
 Typical stored content could be:
 $ {
 $   "Kind": "TSQLDBSQLite3ConnectionProperties",
@@ -4790,13 +4790,14 @@ $   "DatabaseName": "",
 $   "UserID": "",
 $   "Password": "PtvlPA=="
 $ }
-The {\f1\fs20 "Kind"} parameter will be used to store the actual class name. So switching from one database to another would be done at runtime, by modifying a setting, without the need to recompile the application. Note that the {\f1\fs20 SynDB*} units implementing the class should be compiled with the executable, e.g. {\f1\fs20 SynDBSQLite3.pas} for {\f1\fs20 TSQLDBSQLite3ConnectionProperties}.
+The {\f1\fs20 "Kind"} parameter will be used to store the actual {\f1\fs20 TSQLDBConnectionProperties} class name. So switching from one database to another could be easily done at runtime, by modifying a setting stored e.g. in a JSON text file, without the need to recompile the application. Note that the {\f1\fs20 SynDB*} units implementing the class should be compiled within the executable, e.g. {\f1\fs20 SynDBSQLite3.pas} for {\f1\fs20 TSQLDBSQLite3ConnectionProperties}, or {\f1\fs20 SynDBZeos.pas} for {\f1\fs20 TSQLDBZeosConnectionProperties}.
 To create a new {\f1\fs20 TSQLDBConnectionProperties} instance from a local JSON file, you could simply write:
 !var Props: TSQLDBConnectionProperties;
 ! ...
-!  Props := TSQLDBConnectionPropertiesStorage.NewInstanceFromFile('localDBsettings.json');
-The password will be encrypted and encoded as {\i Base64} in the file, for safety. You could use {\f1\fs20 TSQLDBConnectionPropertiesStorage}'s {\f1\fs20 Password} and {\f1\fs20 PasswordPlain} properties to compute the value to be written on disk.
-Since {\f1\fs20 TSQLDBConnectionPropertiesStorage} is a {\f1\fs20 TSynPersistent} class, you can nest it into a {\f1\fs20 TSynAutoCreateFields} instance containing all settings of your application.\line Then {\f1\fs20 mORMot.pas}' {\f1\fs20 ObjectToJSON}/{\f1\fs20 ObjectToJSONFile} and {\f1\fs20 JSONToObject}/{\f1\fs20 JSONFileToObject} functions could be used for persistence as a file or in a database, of those global settings.
+!  Props := TSQLDBConnectionProperties.CreateFromFile('localDBsettings.json');
+The password will be encrypted and encoded as {\i Base64} in the file, for safety. You could use {\f1\fs20 TSynConnectionDefinition}'s {\f1\fs20 Password} and {\f1\fs20 PasswordPlain} properties to compute the value to be written on disk.
+Since {\f1\fs20 TSynConnectionDefinition} is a {\f1\fs20 TSynPersistent} class, you can nest it into a {\f1\fs20 TSynAutoCreateFields} instance containing all settings of your application.\line Then {\f1\fs20 mORMot.pas}' {\f1\fs20 ObjectToJSON}/{\f1\fs20 ObjectToJSONFile} and {\f1\fs20 JSONToObject}/{\f1\fs20 JSONFileToObject} functions could be used for persistence as a file or in a database, of those global settings.
+See also {\f1\fs20 TSQLRest.CreateFrom()} for a similar feature at ORM/REST level, and {\f1\fs20 function TSQLRestCreateFrom( aDefinition: TSynConnectionDefinition  )} as defined in {\f1\fs20 mORMotDB.pas} which is able to create a regular local ORM if {\f1\fs20 aDefinition.Kind} is a {\f1\fs20 TSQLRest} class name, but also an ORM with external DB storage - see @146@ - if {\f1\fs20 aDefinition.Kind} is a {\f1\fs20 TSQLDBConnectionProperties} class name.
 \page
 : SynDB clients
 From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
@@ -5172,7 +5173,7 @@ Even if you may be tempted to use such remote access to implement a {\i n-Tier a
 But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
 Note that for cross-platform clients, {\i mORMot}'s ORM/SOA patterns are a much better approach: do not put SQL in your mobile application, but use services, so that you would not need to re-validate and re-publish the app to the store after any small fix of your business logic!
 \page
-: SynDB ORM Integration
+:146 SynDB ORM Integration
 :  Code-first or database-first
 When working with any @13@, you have mainly two possibilities:
 - Start from scratch, i.e. write your classes and let the ORM create all the database structure, which will reflect directly the object properties - it is also named "@*code-first@";

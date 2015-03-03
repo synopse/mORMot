@@ -2818,6 +2818,8 @@ type
 
     /// read-only access to the SQLite3 database handle
     property DB: TSQLite3DB read fDB;
+    /// read-only access to the SQlite3 password used for encryption
+    property Password: RawUTF8 read fPassword;
     /// read-only access to the SQLite3 database filename opened without its path
     property FileNameWithoutPath: TFileName read fFileNameWithoutPath;
     /// access to the internal JSON cache, used by ExecuteJSON() method

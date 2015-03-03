@@ -1944,5 +1944,5 @@ begin
 end;
 
 initialization
-  TODBCConnectionProperties.RegisterClassNameForStorage;
+  TODBCConnectionProperties.RegisterClassNameForDefinition;
 end.

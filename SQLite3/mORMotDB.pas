@@ -514,6 +514,18 @@ function VirtualTableExternalRegisterAll(aModel: TSQLModel;
   aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
 
 
+/// create a new TSQLRest instance, and possibly an external database, from its
+// Model and stored values
+// - aDefinition.Kind will define the actual class which will be instantiated,
+// which MAY be not only TSQLRestFullMemory or TSQLRestServerDB, but also any
+// TSQLDBConnectionProperties class name: in this case, it will instantiate a
+// TSQLRestServerDB instance, calling VirtualTableExternalRegisterAll() with
+// the connection properties
+function TSQLRestCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions): TSQLRest;
+
+
 implementation
 
 function VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
@@ -583,6 +595,47 @@ begin
   if VirtualTableExternalRegister(aModel,aClass,aExternalDB,aExternalTableName) then
     result := @aModel.Props[aClass].ExternalDB else
     result := nil;
+end;
+
+function TSQLRestCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions): TSQLRest;
+var propsClass: TSQLDBConnectionPropertiesClass;
+    props: TSQLDBConnectionProperties;
+    restClass: TSQLRestClass;
+    fake: TSynConnectionDefinition;
+begin
+  result := nil;
+  if aDefinition=nil then
+    exit;
+  props := nil;
+  propsClass := TSQLDBConnectionProperties.ClassFrom(aDefinition);
+  if propsClass=nil then begin // try if aDefinition.Kind is a TSQLRest class
+    if TSQLRest.ClassFrom(aDefinition)<>nil then
+      result := TSQLRest.CreateFrom(aModel,aDefinition);
+    exit;
+  end;
+  try // aDefinition.Kind was a TSQLDBConnectionProperties -> all external DB
+    props := propsClass.Create(aDefinition.ServerName,aDefinition.DatabaseName,
+      aDefinition.User,aDefinition.PassWordPlain);
+    fake := TSynConnectionDefinition.Create;
+    try
+      fake.Kind := 'TSQLRestServerDB'; 
+      restClass := TSQLRest.ClassFrom(fake); // is mORMotSQlite3.pas linked?
+      if restClass=nil then
+        fake.Kind := 'TSQLRestFullMemory' else // fallback to mORMot.pas server
+        fake.DatabaseName := ':memory:'; // avoid a link to SynSQLite3.pas
+      if aHandleAuthentication then
+        fake.User := 'authenticated';
+      if VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions) then
+        result := TSQLRest.CreateFrom(aModel,fake);
+    finally
+      fake.Free;
+    end;
+  except
+    on Exception do
+      props.Free;  // avoid memory leak
+  end;
 end;
 
 

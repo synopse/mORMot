@@ -533,5 +533,5 @@ end;
 
 
 initialization
-  TSQLDBUniDACConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBUniDACConnectionProperties.RegisterClassNameForDefinition;
 end.

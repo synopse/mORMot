@@ -3248,6 +3248,6 @@ end;
 
 
 initialization
-  TSQLDBOracleConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
 end.
 

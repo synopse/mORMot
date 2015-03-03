@@ -10639,6 +10639,12 @@ type
     // - this default implementation will trigger an EORMException
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
+    /// any overriden TSQLRest class should call it in the initialization section 
+    class procedure RegisterClassNameForDefinition;
+    // inherited classes should unserialize the other aDefinition properties by
+    // overriding this method, in a reverse logic to overriden DefinitionTo()
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); virtual;
    protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -10734,6 +10740,47 @@ type
     /// release internal used instances
     // - e.g. release associated TSQLModel or TServiceContainer
     destructor Destroy; override;
+    /// save the TSQLRest properties into a persistent storage object
+    // - you can then use TSQLRest.CreateFrom() to re-instantiate it
+    // - current Definition.Key value will be used for the password encryption
+    // - this default implementation will set the class name in Definition.Kind:
+    // inherited classes should override this method and serialize other
+    // properties, then override RegisteredClassCreateFrom() protected method
+    // to initiate the very same instance
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); virtual;
+    /// save the properties into a JSON file
+    // - you can then use TSQLRest.CreateFromJSON() to re-instantiate it
+    // - you can specify a custom Key, if the default is not enough for you
+    function DefinitionToJSON(Key: cardinal=0): RawUTF8;
+    /// save the properties into a JSON file
+    // - you can then use TSQLRest.CreateFromFile() to re-instantiate it
+    // - you can specify a custom Key, if the default is not enough for you
+    procedure DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal=0);
+    /// create a new TSQLRest instance from its Model and stored values
+    // - aDefinition.Kind will define the actual class which will be
+    // instantiated: currently TSQLRestServerFullMemory, TSQLRestServerDB,
+    // TSQLRestClientURINamedPipe, TSQLRestClientURIMessage,
+    // TSQLHttpClientWinSock, TSQLHttpClientWinINet, TSQLHttpClientWinHTTP,
+    // and TSQLHttpClientCurl classes are recognized by this method
+    // - then other aDefinition fields will be used to refine the instance:
+    // please refer to each overriden DefinitionTo() method documentation  
+    // - see function TSQLRestCreateFrom() in mORMotDB.pas so that aDefinition.Kind
+    // set with a TSQLDBConnectionProperties class name will create a TSQLRest
+    // instance will all tables defined as external on this connection
+    class function CreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition): TSQLRest; virtual;
+    /// create a new TSQLRest instance from its Model and JSON stored values
+    // - aDefinition.Kind will define the actual class which will be instantiated
+    // - you can specify a custom Key, if the default is not safe enough for you
+    class function CreateFromJSON(aModel: TSQLModel;
+      const aJSONDefinition: RawUTF8; aKey: cardinal=0): TSQLRest;
+    /// create a new TSQLRest instance from its Model and a JSON file
+    // - aDefinition.Kind will define the actual class which will be instantiated
+    // - you can specify a custom Key, if the default is not safe enough for you
+    class function CreateFromFile(aModel: TSQLModel;
+      const aJSONFile: TFileName; aKey: cardinal=0): TSQLRest;
+    /// retrieve the registered class from the aDefinition.Kind string
+    class function ClassFrom(aDefinition: TSynConnectionDefinition): TSQLRestClass;
     {$ifdef WITHLOG}
     /// the logging family used for this instance
     // - is set by default to SQLite3Log.Family, but could be set to something
@@ -13781,6 +13828,8 @@ type
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
   public
     /// initialize an in-memory REST server with no database file
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
@@ -13795,6 +13844,11 @@ type
     // - this overridden destructor will write any modification on file (if
     // needed), and release all used memory
     destructor Destroy; override;
+    /// save the TSQLRestFullMemory properties into a persistent storage object
+    // - CreateFrom() will expect Definition.ServerName to store the FileName,
+    // use binary storage if Definition.DatabaseName is not void, and handle
+    // authentication if Definition.User or Definition.Password is not void
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
     // - you must call explicitely this before having called StaticDataCreate()
@@ -14571,6 +14625,8 @@ type
     // - this value is set to #0 (i.e. string of one #0 char) while waiting
     // for a WM_COPYDATA message in URI() method
     fCurrentResponse: RawUTF8;
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     /// method calling the RESTful server by using Windows WM_COPYDATA messages
     procedure InternalURI(var Call: TSQLRestURIParams); override;
     /// overridden protected method to handle Windows Message loop connection
@@ -14594,6 +14650,10 @@ type
       ClientWindowName: string; TimeOutMS: cardinal); reintroduce; overload;
     /// release the internal Window class created, if any
     destructor Destroy; override;
+    /// save the TSQLRestClientURIMessage properties into a persistent storage object
+    // - CreateFrom() will expect Definition.ServerName to store the
+    // ServerWindowName, and Definition.DatabaseName to be the ClientWindowName
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// event to be triggered when a WM_COPYDATA message is received from the server
     // - to be called by the corresponding message WM_COPYDATA; method in the
     // client window
@@ -14620,6 +14680,8 @@ type
   {$endif}
 {$endif}
   protected
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     /// method calling the RESTful server through a DLL or executable, by using
     // a named pipe (faster than TCP/IP or HTTP connection)
     // - return status code in result.Lo
@@ -14643,6 +14705,10 @@ type
     // must be fully qualified ('\\ServerName\pipe\ApplicationName' e.g.)
     // - raise an exception if the server is not running or invalid
     constructor Create(aModel: TSQLModel; const ApplicationName: TFileName); reintroduce;
+    /// save the TSQLRestClientURIMessage properties into a persistent storage object
+    // - CreateFrom() will expect Definition.ServerName to store the
+    // expected ApplicationName
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
   end;
 {$endif Win32}
 
@@ -26983,6 +27049,84 @@ begin
   inherited Destroy;
 end;
 
+var
+  GlobalDefinitions: array of TSQLRestClass;
+
+class procedure TSQLRest.RegisterClassNameForDefinition;
+begin
+  ObjArrayAddOnce(GlobalDefinitions,TObject(self)); // TClass stored as TObject
+end;
+
+procedure TSQLRest.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition<>nil then
+    Definition.Kind := ClassName;
+end;
+
+function TSQLRest.DefinitionToJSON(Key: cardinal=0): RawUTF8;
+var Definition: TSynConnectionDefinition;
+begin
+  Definition := TSynConnectionDefinition.Create;
+  try
+    Definition.Key := Key;
+    DefinitionTo(Definition);
+    result := Definition.SaveToJSON;
+  finally
+    Definition.Free;
+  end;
+end;
+
+procedure TSQLRest.DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal);
+begin
+  FileFromString(JSONReformat(DefinitionToJSON(aKey)),aJSONFile);
+end;
+
+class function TSQLRest.ClassFrom(aDefinition: TSynConnectionDefinition): TSQLRestClass;
+var ndx: integer;
+begin
+  for ndx := 0 to length(GlobalDefinitions)-1 do
+    if GlobalDefinitions[ndx].ClassNameIs(aDefinition.Kind) then begin
+      result := GlobalDefinitions[ndx];
+      exit;
+    end;
+  result := nil;
+end;
+
+constructor TSQLRest.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  Create(aModel);
+end;
+
+class function TSQLRest.CreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition): TSQLRest;
+var C: TSQLRestClass;
+begin
+  C := ClassFrom(aDefinition);
+  if C=nil then
+    raise EORMException.CreateUTF8('%.CreateFrom: unknown % class - please '+
+      'add a reference to its implementation unit',[self,aDefinition.Kind]);
+  result := C.RegisteredClassCreateFrom(aModel,aDefinition);
+end;
+
+class function TSQLRest.CreateFromJSON(aModel: TSQLModel;
+  const aJSONDefinition: RawUTF8; aKey: cardinal): TSQLRest;
+var Definition: TSynConnectionDefinition;
+begin
+  Definition := TSynConnectionDefinition.CreateFromJSON(aJSONDefinition,aKey);
+  try
+    result := CreateFrom(aModel,Definition);
+  finally
+    Definition.Free;
+  end;
+end;
+
+class function TSQLRest.CreateFromFile(aModel: TSQLModel;
+  const aJSONFile: TFileName; aKey: cardinal): TSQLRest;
+begin
+  result := CreateFromJSON(aModel,StringFromFile(aJSONFile),aKey);
+end;
+
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
@@ -33698,6 +33842,20 @@ begin
     fPipeName := ServerPipeNamePrefix+ApplicationName;
 end;
 
+procedure TSQLRestClientURINamedPipe.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited; // set Kind
+  Definition.ServerName := StringToUTF8(fPipeName);
+end;
+
+constructor TSQLRestClientURINamedPipe.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  Create(aModel,UTF8ToString(aDefinition.ServerName));
+end;
+
 function TSQLRestClientURINamedPipe.InternalCheckOpen: boolean;
 procedure InternalCreateClientPipe;
 var Pipe: THandle;
@@ -35468,6 +35626,27 @@ begin
   LoadFromFile;
   CreateMissingTables(0,[]);
 end;
+
+constructor TSQLRestServerFullMemory.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  fFileName := UTF8ToString(aDefinition.ServerName);
+  fBinaryFile := aDefinition.DatabaseName<>'';
+  Create(aModel,(aDefinition.User<>'') or (aDefinition.Password<>''));
+  LoadFromFile;     
+end;
+
+procedure TSQLRestServerFullMemory.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited; // set Kind
+  Definition.ServerName := StringToUTF8(fFileName);
+  if fBinaryFile then
+    Definition.DatabaseName := 'binary';
+  if fHandleAuthentication then
+    Definition.User := 'authenticated';
+end; 
 
 procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0;
   Options: TSQLInitializeTableOptions=[]);
@@ -37601,6 +37780,22 @@ begin
   finally
     ReleaseInternalWindow(fClientWindowName,fClientWindow);
   end;
+end;
+
+procedure TSQLRestClientURIMessage.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited; // set Kind
+  Definition.ServerName := StringToUTF8(fServerWindowName);
+  Definition.DatabaseName := StringToUTF8(fClientWindowName);
+end;
+
+constructor TSQLRestClientURIMessage.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  Create(aModel,UTF8ToString(aDefinition.ServerName),
+    UTF8ToString(aDefinition.DatabaseName),10000);
 end;
 
 procedure TSQLRestClientURIMessage.InternalURI(var Call: TSQLRestURIParams);
@@ -45015,6 +45210,11 @@ initialization
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(ILockedDocVariant),TLockedDocVariant);
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
+  TSQLRestServerFullMemory.RegisterClassNameForDefinition;
+{$ifdef MSWINDOWS}
+  TSQLRestClientURINamedPipe.RegisterClassNameForDefinition;
+  TSQLRestClientURIMessage.RegisterClassNameForDefinition;
+{$endif}
 
 finalization
   FinalizeGlobalInterfaceResolution;

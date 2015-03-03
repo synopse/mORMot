@@ -1063,5 +1063,5 @@ end;
 
 initialization
   assert(ord(dpb_gstat_attach)=67);
-  TSQLDBFirebirdConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBFirebirdConnectionProperties.RegisterClassNameForDefinition;
 end.

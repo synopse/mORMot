@@ -805,5 +805,5 @@ begin
 end;
 
 initialization
-  TSQLDBSQLite3ConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBSQLite3ConnectionProperties.RegisterClassNameForDefinition;
 end.

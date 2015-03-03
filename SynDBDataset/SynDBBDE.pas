@@ -308,5 +308,5 @@ begin
 end;
 
 initialization
-  TSQLDBBDEConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBBDEConnectionProperties.RegisterClassNameForDefinition;
 end.

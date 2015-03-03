@@ -178,8 +178,14 @@ type
     fCompression: TSQLHttpCompressions;
     /// connection parameters as set by Create()
     fServer, fPort: AnsiString;
+    fHttps: boolean;
+    fProxyName, fProxyByPass: AnsiString;
+    fSendTimeout, fReceiveTimeout: DWORD;
+    fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TSQLHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     /// process low-level HTTP/1.1 request
     // - call by URI() public method
     // - returns 200,202,204 if OK, http status error otherwise in result.Lo
@@ -191,13 +197,18 @@ type
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// connect to TSQLHttpServer on aServer:aPort
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; virtual;
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; overload; virtual;
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
-    // life time, until application is closed or Family.EchoRemoteStop is called 
-    constructor CreateForRemoteLogging(const aServer: AnsiString; 
+    // life time, until application is closed or Family.EchoRemoteStop is called
+    constructor CreateForRemoteLogging(const aServer: AnsiString;
       aLogClass: TSynLogClass; aPort: Integer=8091; const aRoot: RawUTF8='LogService');
+    /// save the TSQLHttpClientGeneric properties into a persistent storage object
+    // - CreateFrom() will expect Definition.ServerName to store the URI as
+    // 'server:port' or 'https://server:port', and Definition.User/Password to
+    // store the proxy name and bypass values (for WinINet/WinHTTP)
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -251,10 +262,6 @@ type
   protected
     fRequest: THttpRequest;
     fRequestClass: THttpRequestClass;
-    fProxyName, fProxyByPass: AnsiString;
-    fSendTimeout, fReceiveTimeout: DWORD;
-    fHttps: boolean;
-    fExtendedOptions: THttpRequestExtendedOptions;
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -429,6 +436,8 @@ begin
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ];
+  fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
+  fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
 end;
 
 constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
@@ -443,6 +452,39 @@ begin
   ServerRemoteLogStart(aLogClass,true);
   fRemoteLogClass.Log(sllTrace,
     'Echoing to remote server http://%/%/RemoteLog:%',[aServer,aRoot,aPort]);
+end;
+
+procedure TSQLHttpClientGeneric.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited; // set Kind
+  if fHttps then
+    Definition.ServerName := 'https://';
+  Definition.ServerName := FormatUTF8('%%:%',[Definition.ServerName,fServer,fPort]);
+  Definition.DatabaseName := JSONEncode([
+   'IgnoreSSLCertificateErrors',ord(fExtendedOptions.IgnoreSSLCertificateErrors),
+   'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout]);
+  Definition.User := CurrentAnsiConvert.AnsiToUTF8(fProxyName);
+  Definition.Password := CurrentAnsiConvert.AnsiToUTF8(fProxyByPass);
+end;
+
+constructor TSQLHttpClientGeneric.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+var URI: TURI;
+    tmp: RawUTF8;
+    values: TPUTF8CharDynArray;
+begin
+  URI.From(aDefinition.ServerName);
+  Create(URI.Server,URI.Port,aModel);
+  fHttps := URI.Https;
+  tmp := aDefinition.DataBaseName;
+  JSONDecode(tmp,['IgnoreSSLCertificateErrors','SendTimeout','ReceiveTimeout'],values);
+  fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(GetCardinalDef(values[0],1));
+  fSendTimeout := GetCardinalDef(values[1],fSendTimeout);
+  fReceiveTimeout := GetCardinalDef(values[2],fReceiveTimeout);
+  fProxyName := CurrentAnsiConvert.UTF8ToAnsi(aDefinition.User);
+  fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(aDefinition.Password);
 end;
 
 
@@ -614,4 +656,13 @@ end;
 
 {$endif USELIBCURL}
 
+initialization
+  TSQLHttpClientWinSock.RegisterClassNameForDefinition;
+{$ifdef USELIBCURL}
+  TSQLHttpClientCurl.RegisterClassNameForDefinition;
+{$endif}
+{$ifdef USEWININET}
+  TSQLHttpClientWinINet.RegisterClassNameForDefinition;
+  TSQLHttpClientWinHTTP.RegisterClassNameForDefinition;
+{$endif}
 end.

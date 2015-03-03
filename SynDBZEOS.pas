@@ -1165,5 +1165,5 @@ end;
 {$endif ZEOS72UP}
 
 initialization
-  TSQLDBZEOSConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
 end.

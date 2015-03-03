@@ -490,12 +490,12 @@ end;
 
 
 initialization
-  TSQLDBSocketConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBSocketConnectionProperties.RegisterClassNameForDefinition;
   {$ifdef USEWININET}
-  TSQLDBWinHTTPConnectionProperties.RegisterClassNameForStorage;
-  TSQLDBWinINetConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBWinHTTPConnectionProperties.RegisterClassNameForDefinition;
+  TSQLDBWinINetConnectionProperties.RegisterClassNameForDefinition;
   {$endif}
   {$ifdef USELIBCURL}
-  TSQLDBCurlConnectionProperties.RegisterClassNameForStorage;
+  TSQLDBCurlConnectionProperties.RegisterClassNameForDefinition;
   {$endif}
 end.

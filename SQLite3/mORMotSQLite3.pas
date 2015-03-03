@@ -360,6 +360,8 @@ type
     fBatchFirstID: TID;
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     /// retrieve a TSQLRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSQLRequest.Close method must be called
@@ -511,6 +513,11 @@ type
       aHandleUserAuthentication: boolean=false; const aPassword: RawUTF8=''); reintroduce; overload;
     /// close database and free used memory
     destructor Destroy; override;
+    /// save the TSQLRestServerDB properties into a persistent storage object
+    // - CreateFrom() will expect Definition.DatabaseName to store the DBFileName,
+    // handle authentication if Definition.User is not void, and use encrypt
+    // the file using Definition.Password if not void
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
     // - you must call explicitely this before having called StaticDataCreate()
@@ -1001,6 +1008,26 @@ begin
       fOwnedDB.Free; // do nothing if DB<>fOwnedDB
     end;
   end;
+end;
+
+procedure TSQLRestServerDB.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited; // set Kind
+  if fDB<>nil then begin
+    Definition.ServerName := StringToUTF8(fDB.FileName);
+    Definition.PasswordPlain := fDB.Password;
+  end;
+  if fHandleAuthentication then
+    Definition.User := 'authenticated';
+end;
+
+constructor TSQLRestServerDB.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  Create(aModel,UTF8ToString(aDefinition.DatabaseName),
+    aDefinition.User<>'',aDefinition.PasswordPlain);
 end;
 
 function TSQLRestServerDB.PrepareVacuum(const aSQL: RawUTF8): boolean;
