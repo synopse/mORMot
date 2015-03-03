@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="9"/>
+    <BuildModes Active="Default"/>
+    <Units Count="4">
+      <Unit0>
+        <Filename Value="mORMotOnAndroid.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="mORMotOnAndroid"/>
+        <CursorPos X="23" Y="79"/>
+        <ExtraEditorCount Value="1"/>
+        <ExtraEditor1>
+          <EditorIndex Value="-1"/>
+          <TopLine Value="17"/>
+          <CursorPos X="25" Y="69"/>
+        </ExtraEditor1>
+        <UsageCount Value="200"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="Form_main.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Form_Main"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="1"/>
+        <CursorPos X="80" Y="124"/>
+        <UsageCount Value="147"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="And_Controls\And_Jni_Bridge.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="And_Jni_Bridge"/>
+        <EditorIndex Value="3"/>
+        <UsageCount Value="29"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="..\src\Controls.java"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="608"/>
+        <CursorPos X="28" Y="620"/>
+        <UsageCount Value="27"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Java"/>
+      </Unit3>
+    </Units>
+  </ProjectSession>
+</CONFIG>
