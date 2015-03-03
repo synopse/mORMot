@@ -1136,6 +1136,8 @@ unit mORMot;
       methods and associated TSQLRestServerAuthentication* classes, used also by
       TSQLRestClientURI.SetUser() to allow generic class-driven authentication
       schemes for feature request [8c8a2a880c]
+    - added TSQLRestServerAuthentication.Options, e.g. saoUserByLogonOrID to
+      allow login via TSQLAuthUser.ID in addition to LogonName
     - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck
       to disable the session timestamp check during URI signature authentication
     - new TSQLRestServerAuthenticationNone weak but simple method
@@ -5383,9 +5385,9 @@ type
     // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties; out Bits: TSQLFieldBits);
 
-    {/ the TSQLTable stated as FillPrepare() parameter
-      - the internal temporary table is stored here for TSQLRecordMany
-      - this instance is freed by TSQLRecord.Destroy if fTable.OwnerMustFree=true }
+    /// the TSQLTable stated as FillPrepare() parameter
+    // - the internal temporary table is stored here for TSQLRecordMany
+    // - this instance is freed by TSQLRecord.Destroy if fTable.OwnerMustFree=true 
     property Table: TSQLTable read fTable;
     /// the current Row during a Loop
     property FillCurrentRow: integer read fFillCurrentRow;
@@ -12044,17 +12046,31 @@ type
   TSQLRestServerAuthenticationClientSetUserPassword = (
     passClear, passHashed, passKerberosSPN);
 
+  /// optional behavior of TSQLRestServerAuthentication class
+  // - by default, saoUserByLogonOrID is set, allowing
+  // TSQLRestServerAuthentication.GetUser() to retrieve the TSQLAuthUser by
+  // logon name or by ID, if the supplied logon name is an integer
+  TSQLRestServerAuthenticationOption = (saoUserByLogonOrID);
+
+  /// defines the optional behavior of TSQLRestServerAuthentication class
+  TSQLRestServerAuthenticationOptions = set of TSQLRestServerAuthenticationOption;
+
   /// abstract class used to implement server-side authentication in TSQLRestServer
   // - inherit from this class to implement expected authentication scheme
   TSQLRestServerAuthentication = class
   protected
     fServer: TSQLRestServer;
+    fOptions: TSQLRestServerAuthenticationOptions;
     // GET ModelRoot/auth?UserName=...&Session=... -> release session
     function AuthSessionRelease(Ctxt: TSQLRestServerURIContext): boolean;
     /// retrieve an User instance from its logon name
     // - should return nil if not found
     // - this default implementation will retrieve it from ORM, and
     // call TSQLAuthUser.CanUserLog() to ensure authentication is allowed
+    // - if aUserName is an integer, it will try to retrieve it from ORM using
+    // the supplied value as its TSQLAuthUser.ID: it may be convenient when the
+    // client is not an end-user application but a mORMot server (in a cloud
+    // architecture), since it would benefit from local ORM cache
     // - you can override this method and return an on-the-fly created value
     // as a TSQLRestServer.SQLAuthUserClass instance (i.e. not persisted
     // in database nor retrieved by ORM), but the resulting TSQLAuthUser
@@ -12092,13 +12108,19 @@ type
     // - returns nil if this remote request does not match this authentication
     // - method execution is protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; virtual; abstract;
+    /// allow to tune the authentication process 
+    // - default value is [saoUserByLogonOrID]
+    property Options: TSQLRestServerAuthenticationOptions read fOptions write fOptions;
     /// class method to be used on client side to create a remote session
     // - call this method instead of TSQLRestClientURI.SetUser() if you need
     // a custom authentication class
+    // - if saoUserByLogonOrID is defined in the server Options, aUserName may
+    // be a TSQLAuthUser.ID and not a TSQLAuthUser.LogonName
     // - will call the ModelRoot/Auth service, i.e. call TSQLRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
-    class function ClientSetUser(Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
+    class function ClientSetUser(Sender: TSQLRestClientURI;
+      const aUserName, aPassword: RawUTF8;
       aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean; virtual;
     /// class method to be called on client side to sign an URI
     // - used by TSQLRestClientURI.URI()
@@ -14124,6 +14146,8 @@ type
     // - returns true on success
     // - calling this method is optional, depending on your user right policy:
     // your Server need to handle authentication
+    // - if saoUserByLogonOrID is defined in the server Options, aUserName may
+    // be a TSQLAuthUser.ID integer value and not a TSQLAuthUser.LogonName
     // - on success, the SessionUser property map the logged user session on the
     // server side
     // - if aHashedPassword is TRUE, the aPassword parameter is expected to
@@ -39944,6 +39968,7 @@ end;
 constructor TSQLRestServerAuthentication.Create(aServer: TSQLRestServer);
 begin
   fServer := aServer;
+  fOptions := [saoUserByLogonOrID];
 end;
 
 function TSQLRestServerAuthentication.AuthSessionRelease(
@@ -39975,8 +40000,14 @@ end;
 
 function TSQLRestServerAuthentication.GetUser(Ctxt: TSQLRestServerURIContext;
   const aUserName: RawUTF8): TSQLAuthUser;
+var UserID: TID;
+    err: integer;
 begin
-  result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
+  UserID := GetInt64(pointer(aUserName),err);
+  if (err=0) and (UserID>0) and (saoUserByLogonOrID in fOptions) then
+    // TSQLAuthUser.ID was transmitted -> may use the ORM cache
+    result := fServer.fSQLAuthUserClass.Create(fServer,UserID) else
+    result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
   if result.fID=0 then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
