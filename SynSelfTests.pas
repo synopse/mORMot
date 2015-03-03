@@ -2257,6 +2257,7 @@ var i: integer;
     name,value: RawUTF8;
     P: PUTF8Char;
     GUID2: TGUID;
+    U: TURI;
 const GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 procedure Test(const decoded,encoded: RawUTF8);
 begin
@@ -2301,6 +2302,16 @@ begin
   fillchar(GUID2,sizeof(GUID2),0);
   SynCommons.Base64Decode(Pointer(s),@GUID2,SizeOf(GUID2));
   Check(IsEqualGUID(GUID2,GUID));
+  Check(U.From('toto.com'));
+  Check(U.URI='http://toto.com/');
+  Check(U.From('toto.com:123'));
+  Check(U.URI='http://toto.com:123/');
+  Check(U.From('https://toto.com:123/tata/titi'));
+  Check(U.URI='https://toto.com:123/tata/titi');
+  Check(U.From('https://toto.com:123/tata/tutu:tete'));
+  Check(U.URI='https://toto.com:123/tata/tutu:tete');
+  Check(U.From('toto.com/tata/tutu:tete'));
+  Check(U.URI='http://toto.com/tata/tutu:tete');
 end;
 
 procedure TTestLowLevelCommon._GUID;

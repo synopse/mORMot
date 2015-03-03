@@ -2335,7 +2335,7 @@ const
   DEFAULT_PORT: array[boolean] of SockString = ('80','443');
 
 function TURI.From(aURI: SockString): boolean;
-var P: PAnsiChar;
+var P,S: PAnsiChar;
 begin
   Https := false;
   Finalize(self);
@@ -2350,14 +2350,19 @@ begin
     inc(P,8);
     Https := true;
   end;
-  if PosChar(P,':')<>nil then begin
-    Server := GetNextItem(P,':');
-    Port := GetNextItem(P,'/');
-  end else begin
-    Server := GetNextItem(P,'/');
+  S := P;
+  while not (S^ in [#0,':','/']) do inc(S);
+  SetString(Server,P,S-P);
+  if S^=':' then begin
+    inc(S);
+    P := S;
+    while not (S^ in [#0,'/']) do inc(S);
+    SetString(Port,P,S-P);
+  end else
     Port := DEFAULT_PORT[Https];
-  end;
-  Address := P;
+  if S^<>#0 then // ':' or '/'
+    inc(S);
+  Address := S;
   if Server<>'' then
     result := true;
 end;
@@ -2365,7 +2370,9 @@ end;
 function TURI.URI: SockString;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
-  result := Prefix[Https]+Server+':'+Port+'/'+Address;
+  if (Port='80') or (Port='0') or (Port='') then
+    result := Prefix[Https]+Server+'/'+Address else
+    result := Prefix[Https]+Server+':'+Port+'/'+Address;
 end;
 
 
