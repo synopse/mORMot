@@ -187,7 +187,8 @@ unit mORMotReport;
     TGDIPages.NewPageLayout() methods and also Orientation property which now
     allows several page orientations per report - feature request [204b698b3d]
   - now internal page content (TMetaFile) is compressed using our SynLZ
-    algorithm: we were able to generate reports with more than 20,000 pages! 
+    algorithm: we were able to generate reports with more than 20,000 pages!
+  - added optional EndOfPagePositions parameter to TGDIPages.AppendRichEdit()
   - speed up and memory resource decrease for pdf export of huge reports
   - fixed issue about disabled Zoom menu entry if no Outline is defined
   - fixed unexpected exception with TGDIPages.DrawText() and huge string
@@ -717,7 +718,10 @@ type
     // - note that if you want the TRichEdit component to handle more than 64 KB
     // of RTF content, you have to set its MaxLength property as expected (this
     // is a limitation of the VCL, not of this method)
-    procedure AppendRichEdit(RichEditHandle: HWnd);
+    // - you can specify optionally a pointer to a TIntegerDynArray variable,
+    // which will be filled with the position of each page last char: it may
+    // be handy e.g. to add some cross-reference table about the rendered content
+    procedure AppendRichEdit(RichEditHandle: HWnd; EndOfPagePositions: PIntegerDynArray=nil);
     /// jump some line space between paragraphs
     // - Increments the current Y Position the equivalent of a single line
     // relative to the current font height and line spacing
@@ -4850,7 +4854,8 @@ begin
   FillRect(Message.DC,R,Brush.Handle);
 end;
 
-procedure TGDIPages.AppendRichEdit(RichEditHandle: HWnd);
+procedure TGDIPages.AppendRichEdit(RichEditHandle: HWnd;
+  EndOfPagePositions: PIntegerDynArray);
 var Range: TFormatRange;
     LogX, LogY, LastChar, MaxLen, OldMap: integer;
     TextLenEx: TGetTextLengthEx; // RichEdit 2.0 Window Class
@@ -4881,6 +4886,8 @@ begin
         hdc := fCanvas.Handle;
         hdcTarget := hdc;
         LastChar := SendMessage(RichEditHandle, EM_FORMATRANGE, 1, Integer(@Range));
+        if EndOfPagePositions<>nil then
+          AddInteger(EndOfPagePositions^,LastChar);
         if cardinal(LastChar)>=cardinal(MaxLen) then
           break;
         NewPageInternal;
