@@ -4594,14 +4594,14 @@ Here are the units implementing the external database-agnostic features:
 |{\f1\fs20 SynDBMidasVCL}|read/write {\f1\fs20 @*TClientDataSet@} result sets
 |%
 It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework (even the remote access). They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB.pas}, switching from one database engine to another (even a remote HTTP access) is just a matter of changing one class type.
-:  Classes
+:  SynDB Classes
 The data is accessed via three families of classes:
 - {\i Connection properties}, which store the database high-level properties (like database implementation classes, server and database name, user name and password);
 - {\i Connections}, which implements an actual connection to a remote database, according to the specified {\i Connection properties} - of course, there can be multiple {\i connections} for the same {\i connection properties} instance;
 - {\i Statements}, which are individual SQL queries or requests, which may be multiple for one existing {\i connection}.
 In practice, you define a {\f1\fs20 TSQLDBConnectionProperties} instance, then you derivate {\f1\fs20 TSQLDBConnection} and {\f1\fs20 TSQLDBStatement} instances using dedicated {\f1\fs20 NewConnection} / {\f1\fs20 ThreadSafeConnection} / {\f1\fs20 NewStatement} methods.
 Here is the general class hierarchy, for all available remote {\i connection properties}:
-\graph HierTSQLDBConnectionPropertiesThreadSafe TSQLDBConnectionPropertiesThreadSafe classes hierarchy
+\graph HierTSQLDBConnectionProperties TSQLDBConnectionProperties classes hierarchy
 rankdir=LR;
 \TSQLDBSQLite3ConnectionProperties\TSQLDBConnectionProperties
 \TSQLDBZEOSConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
@@ -4625,8 +4625,10 @@ rankdir=LR;
 \TSQLDBConnectionPropertiesThreadSafe\TSQLDBConnectionProperties
 \TSQLDBHTTPConnectionPropertiesAbstract\TSQLDBConnectionProperties
 \TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
-\TSQLDBWinHTTPConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
-\TSQLDBWinINetConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBHttpRequestConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBCurlConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinINetConnectionProperties\TSQLDBHttpRequestConnectionProperties
 \
 Those classes are the root classes of the {\f1\fs20 SynDB.pas} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
 Then the following {\i connection} classes are defined:
@@ -4778,6 +4780,23 @@ Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it d
 !    Q.Free;
 !  end;
 You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade, especially for @66@.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application, or let your old application communicate with the database over plain HTTP, without the need to install any RDBMS client - see @131@.
+:  Storing connection properties as JSON
+You can use {\f1\fs20 TSQLDBConnectionPropertiesStorage} to persist the connection properties as a @*JSON@ content, in memory or file.
+Typical stored content could be:
+$ {
+$   "Kind": "TSQLDBSQLite3ConnectionProperties",
+$   "ServerName": "database.db3",
+$   "DatabaseName": "",
+$   "UserID": "",
+$   "Password": "PtvlPA=="
+$ }
+The {\f1\fs20 "Kind"} parameter will be used to store the actual class name. So switching from one database to another would be done at runtime, by modifying a setting, without the need to recompile the application. Note that the {\f1\fs20 SynDB*} units implementing the class should be compiled with the executable, e.g. {\f1\fs20 SynDBSQLite3.pas} for {\f1\fs20 TSQLDBSQLite3ConnectionProperties}.
+To create a new {\f1\fs20 TSQLDBConnectionProperties} instance from a local JSON file, you could simply write:
+!var Props: TSQLDBConnectionProperties;
+! ...
+!  Props := TSQLDBConnectionPropertiesStorage.NewInstanceFromFile('localDBsettings.json');
+The password will be encrypted and encoded as {\i Base64} in the file, for safety. You could use {\f1\fs20 TSQLDBConnectionPropertiesStorage}'s {\f1\fs20 Password} and {\f1\fs20 PasswordPlain} properties to compute the value to be written on disk.
+Since {\f1\fs20 TSQLDBConnectionPropertiesStorage} is a {\f1\fs20 TSynPersistent} class, you can nest it into a {\f1\fs20 TSynAutoCreateFields} instance containing all settings of your application.\line Then {\f1\fs20 mORMot.pas}' {\f1\fs20 ObjectToJSON}/{\f1\fs20 ObjectToJSONFile} and {\f1\fs20 JSONToObject}/{\f1\fs20 JSONFileToObject} functions could be used for persistence as a file or in a database, of those global settings.
 \page
 : SynDB clients
 From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
@@ -5065,13 +5084,16 @@ To publish your {\f1\fs20 SynDB.pas} connection, you just need to initialize one
 \TSQLDBServerSockets\TSQLDBServerAbstract
 \
 You can define either a HTTP server based on the socket API - {\f1\fs20 TSQLDBServerSockets} - or the more stable and fast {\f1\fs20 TSQLDBServerHttpApi} class (under {\i Windows} only), which uses the {\f1\fs20 http.sys} kernel mode HTTP server available since Windows XP - see @88@.
-For the client side, you could use the following classes also defined in {\f1\fs20 SynDBRemote.pas}:
+For the client side, you could use one of the following classes also defined in {\f1\fs20 SynDBRemote.pas}:
 \graph HierTSQLDBWinINetConnectionProperties SynDB Remote access Client classes hierarchy
 \TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
-\TSQLDBWinHTTPConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
-\TSQLDBWinINetConnectionProperties\TSQLDBWinHTTPConnectionProperties
+\TSQLDBHttpRequestConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinINetConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBCurlConnectionProperties\TSQLDBHttpRequestConnectionProperties
 \
-As you can see, you may choose between a pure socket API client, one using {\f1\fs20 WinINet}, or another using {\f1\fs20 WinHTTP}. The latest is the more stable over the {\i Internet}, even if plain sockets tend to give better numbers on {\f1\fs20 localhost} as stated by our @59@. Please read @135@ for a comparison of the diverse APIs.
+Note that {\f1\fs20 TSQLDBHttpRequestConnectionProperties} is an abstract parent class, so you should not instantiate it directly, but one of its inherited implementations.
+As you can see, you may choose between a pure socket API client, others using {\f1\fs20 WinINet} or {\f1\fs20 WinHTTP} (under {\i Windows}), or the {\f1\fs20 libcurl} API (especially on {\i @*Linux@}). The {\f1\fs20 TSQLDBWinHTTPConnectionProperties} class is the more stable over the {\i Internet} on {\i Windows}, even if plain sockets tend to give better numbers on {\f1\fs20 localhost} as stated by our @59@. Please read @135@ for a comparison of the diverse APIs.
 :   Publish a SynDB connection over HTTP
 To define a HTTP server, you may write:
 !uses SynDB, // RDBMS core
@@ -6758,7 +6780,7 @@ In fact, there are several implementation of a @**HTTP@/1.1 clients, according t
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
 \TSQLHttpClientCurl\TSQLHttpClientGeneric
 \
-So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @*libcurl@} library is installed, especially if you want to use HTTPS.
+So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @**libcurl@} library is installed, especially if you want to use HTTPS.
 Each class has its own architecture, and attaches itself to a Windows communication library, all based on {\i WinSock} API. As stated by their name, {\f1\fs20 TSQLHttpClientWinSock} will call directly the {\i WinSock} API, {\f1\fs20 TSQLHttpClientWinINet} will call {\i WinINet} API (as used by IE 6) and {\f1\fs20 TSQLHttpClientWinHTTP} will cal the latest {\i WinHTTP} API:
 - {\i WinSock} is the common user-space API to access the sockets stack of Windows, i.e. IP connection - it's able to handle any IP protocol, including TCP/IP, UDP/IP, and any protocol over it (including HTTP);
 - {\i WinINet} was designed as an HTTP API client platform that allowed the use of interactive message dialogs such as entering user credentials - it's able to handle HTTP and FTP protocols;

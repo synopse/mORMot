@@ -9158,6 +9158,9 @@ begin
       DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'),'winhttp');
       DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'),'wininet');
       {$endif}
+      {$ifdef USELIBCURL}                  
+      DoTest(TSQLDBCurlConnectionProperties.Create(ADDR,'root','user','pass'),'libcurl');
+      {$endif}
     finally
       Server.Free;
     end;
