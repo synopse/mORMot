@@ -36,6 +36,7 @@ unit mORMot;
     Pavel (mpv)
     Jordi Tudela
     Martin Suer
+    MilesYou
     Sabbiolina
     Vadim Orel
 
@@ -4548,7 +4549,7 @@ type
     // - ready to be used by TSQLTableJSON.CreateFromTables()
     // - i.e. the class itself then, all fields of type sftID (excluding sftMany)
     property JoinedFields: TSQLPropInfoRTTIIDObjArray read fJoinedFields;
-    /// wrapper of all nest TSQLRecord class of this TSQLRecord
+    /// wrapper of all nested TSQLRecord class of this TSQLRecord
     // - ready to be used by TSQLTableJSON.CreateFromTables()
     // - i.e. the class itself as JoinedFieldsTable[0], then, all nested
     // TSQLRecord published properties (of type sftID, ergo excluding sftMany)
@@ -26143,7 +26144,7 @@ procedure TSQLModel.SetTableProps(aIndex: integer);
 var i,j,f: integer;
     Kind: TSQLRecordVirtualKind;
     Table: TSQLRecordClass;
-    aTableName: RawUTF8;
+    aTableName,aFieldName: RawUTF8;
     Props: TSQLModelRecordProperties;
     Search: TClass;
     W: TTextWriter;
@@ -26213,22 +26214,35 @@ begin
   end;
   if Props.Props.JoinedFieldsTable<>nil then begin
     W := TTextWriter.CreateOwnedStream;
-    try
+    try      
       W.AddShort('SELECT ');
-      for j := 0 to high(Props.Props.JoinedFieldsTable) do
-      with Props.Props.JoinedFieldsTable[j].RecordProps do begin
+      // JoinedFieldsTable[0] is the class itself
+      with Props.Props do begin
         W.Add('%.RowID as `%.RowID`,',[SQLTableName,SQLTableName]);
         for f := 0 to High(SimpleFields) do
           if SimpleFields[f].SQLFieldType<>sftID then
             W.Add('%.% as `%.%`,',[SQLTableName,SimpleFields[f].Name,
               SQLTableName,SimpleFields[f].Name]);
       end;
+      // add JoinedFieldsTable[1..] fields
+      for j := 1 to high(Props.Props.JoinedFieldsTable) do begin
+        aFieldName := Props.Props.JoinedFields[j-1].Name;
+        W.Add('%.RowID as `%.RowID`,',[aFieldName,aFieldName]);
+        with Props.Props.JoinedFieldsTable[j].RecordProps do
+        for f := 0 to High(SimpleFields) do
+          if SimpleFields[f].SQLFieldType<>sftID then
+            W.Add('%.% as `%.%`,',[aFieldName,SimpleFields[f].Name,
+              aFieldName,SimpleFields[f].Name]);
+      end;
       W.CancelLastComma;
+      // add LEFT JOIN clause
       W.AddStrings([' FROM ',aTableName]);
-      for f := 1 to high(Props.Props.JoinedFieldsTable) do
-        with Props.Props.JoinedFieldsTable[f].RecordProps do
-          W.Add(' LEFT JOIN % ON %.%=%.RowID',[
-            SQLTableName,aTableName,Props.Props.JoinedFields[f-1].Name,SQLTableName]);
+      for j := 1 to high(Props.Props.JoinedFieldsTable) do begin
+        aFieldName := Props.Props.JoinedFields[j-1].Name;
+        with Props.Props.JoinedFieldsTable[j].RecordProps do
+          W.Add(' LEFT JOIN % AS % ON %.%=%.RowID',[
+            SQLTableName,aFieldName,aTableName,aFieldName,aFieldName]);
+      end;
       W.SetText(Props.SQL.SelectAllJoined);
     finally
       W.Free;
