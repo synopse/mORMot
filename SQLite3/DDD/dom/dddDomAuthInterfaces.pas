@@ -86,6 +86,8 @@ type
     function ChallengeSelectFinal(const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
     /// returns TRUE if the dual pass challenge did succeed
     function Logged: boolean;
+    /// returns the logon name of the authenticated user
+    function LogonName: RawUTF8;
     /// set the credential for Get() or further IAuthCommand.Update/Delete
     // - this method execution will be disabled for most clients
     function SelectByName(const aLogonName: RawUTF8): TCQRSResult;

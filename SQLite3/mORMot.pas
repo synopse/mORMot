@@ -41282,9 +41282,12 @@ begin
         V := Value[arg];
         case ValueType of
         smvObject: begin
-          R := JSONToObject(V^,R,valid);
-          if not valid then
-            RaiseError('returned object',[]);
+          if PInteger(R)^=NULL_LOW then
+            inc(R,4) else begin // null from TInterfacedStub -> stay untouched
+            R := JSONToObject(V^,R,valid);
+            if not valid then
+              RaiseError('returned object',[]);
+          end;
           IgnoreComma(R);
         end;
         smvRawJSON: begin

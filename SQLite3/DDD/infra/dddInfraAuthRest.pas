@@ -107,6 +107,8 @@ type
     function SelectByName(const aLogonName: RawUTF8): TCQRSResult;
     /// returns TRUE if the dual pass challenge did succeed
     function Logged: boolean;
+    /// returns the logon name of the authenticated user
+    function LogonName: RawUTF8;
     /// retrieve some information about the current selected credential
     function Get(out aAggregate: TAuthInfo): TCQRSResult;
     /// register a new credential, from its LogonName/HashedPassword values
@@ -205,6 +207,13 @@ begin
     ORMResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
   fChallengeNonce := '';
   fChallengeLogonName := '';
+end;
+
+function TDDDAuthenticationAbstract.LogonName: RawUTF8;
+begin
+  if (ORM=nil) or not Logged then
+    result := '' else
+    result := TSQLRecordUserAuth(ORM).Logon;
 end;
 
 function TDDDAuthenticationAbstract.Logged: boolean;
