@@ -2198,6 +2198,15 @@ function UrlEncode(const svar: RawUTF8): RawUTF8; overload;
 /// encode a string to be compatible with URI encoding
 function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
 
+/// encode supplied parameters to be compatible with URI encoding
+// - parameters must be supplied two by two, as Name,Value pairs, e.g.
+// ! url := UrlEncodeFull(['select','*','where','ID=12','offset',23,'object',aObject]);
+// - parameters can be either textual, integer or extended, or any TObject
+// (standard UrlEncode() will only handle
+// - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
+// function
+function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
+
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
@@ -6180,11 +6189,11 @@ type
   // actual instance, from its class name
   TSynConnectionDefinition = class(TSynPersistent)
   protected
-    fPassWord: RawUTF8;
+    fKind: string;
     fServerName: RawUTF8;
     fDatabaseName: RawUTF8;
     fUser: RawUTF8;
-    fKind: string;
+    fPassWord: RawUTF8;
     fKey: cardinal;
     function GetKey: cardinal;
     function GetPassWordPlain: RawUTF8;
@@ -6216,6 +6225,22 @@ type
     // - use the PassWordPlain property to access to its uncyphered value
     property Password: RawUTF8 read fPassword write fPassword;
   end;
+
+/// will serialize any TObject into its UTF-8 JSON representation
+/// - serialize as JSON the published integer, Int64, floating point values,
+// TDateTime (stored as ISO 8601 text), string, variant and enumerate
+// (e.g. boolean) properties of the object (and its parents)
+// - won't handle shortstring properties
+// - the enumerates properties are stored with their integer index value
+// - will write also the properties published in the parent classes
+// - nested properties are serialized as nested JSON objects
+// - any TCollection property will also be serialized as JSON arrays
+// - you can add some custom serializers for ANY Delphi class, via mORMot.pas'
+// TJSONSerializer.RegisterCustomSerializer() class method
+// - call internaly TJSONSerializer.WriteObject() method (or fallback to
+// TJSONWriter if mORMot.pas is not linked to the executable)
+function ObjectToJSON(Value: TObject;
+  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 
 type
@@ -21948,6 +21973,20 @@ begin
     result[i] := Values[i];
 end;
 
+var
+  DefaultTextWriterJSONClass: TTextWriterClass = TTextWriter;
+
+function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
+begin
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  try
+    WriteObject(Value,Options);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
 function UrlEncode(const svar: RawUTF8): RawUTF8;
 begin
   result := UrlEncode(pointer(svar));
@@ -22004,6 +22043,40 @@ begin
     exit;
   SetLength(result,Size(Text)); // reserve exact memory count
   Enc(Text,pointer(result));
+end;
+
+function UrlEncode(const NameValuePairs: array of const): RawUTF8;
+// (['select','*','where','ID=12','offset',23,'object',aObject]);
+var A, n: PtrInt;
+    name, value: RawUTF8;
+  function Invalid(P: PAnsiChar): boolean;
+  begin
+    result := true;
+    if P<>nil then begin
+      repeat // cf. rfc3986 2.3. Unreserved Characters
+        if not (P^ in ['a'..'z','A'..'Z','0'..'9','_','.','~']) then
+          exit else
+          inc(P);
+      until P^=#0;
+      result := false;
+    end;
+  end;
+begin
+  result := '';
+  n := high(NameValuePairs);
+  if n>0 then begin
+    for A := 0 to n shr 1 do begin
+      VarRecToUTF8(NameValuePairs[A*2],name);
+      if Invalid(pointer(name)) then
+        continue; // just skip invalid names
+      with NameValuePairs[A*2+1] do
+        if VType=vtObject then
+          value := ObjectToJSON(VObject,[]) else
+          VarRecToUTF8(NameValuePairs[A*2+1],value);
+      result := result+'&'+name+'='+UrlEncode(value);
+    end;
+    result[1] := '?';
+  end;
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
@@ -27636,9 +27709,6 @@ begin
   end;
 end;
 
-var
-  DefaultTextWriterJSONClass: TTextWriterClass = TTextWriter;
-  
 function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
