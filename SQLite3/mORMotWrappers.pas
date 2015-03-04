@@ -567,15 +567,15 @@ begin
       end;
     end;
   end;
+  if typName='' then begin
+    typName := TYPES_LANG[lngDelphi,typ];
+    if (typName='') and (typInfo<>nil) then
+      TypeInfoToName(typInfo,typName);
+  end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then
     typ := wGUID else
   if (typ=wRecord) and IdemPropNameU(typName,'TServiceCustomAnswer') then
-    typ := wCustomAnswer else
-    if typName='' then begin
-      typName := TYPES_LANG[lngDelphi,typ];
-      if (typName='') and (typInfo<>nil) then
-        TypeInfoToName(typInfo,typName);
-    end;
+    typ := wCustomAnswer;
   typeWrapper := GetEnumName(TypeInfo(TWrapperType),ord(typ));
   result := _ObjFast([
     'typeWrapper',typeWrapper^,      'typeSource',typName,
