@@ -306,8 +306,8 @@ begin
       FIREDAC_PROVIDER[dMSSQL]+'?server=(localDB)\v11.0;OSAuthent=Yes','','.','',' MSSQL2012',false);
     {$endif}
     {$ifdef USEUNIDAC}
-    Test(TSQLDBUniDACConnectionProperties,UNIDAC_PROVIDER[dMSSQL],
-      '(localdb)\v11.0','','',' MSSQL2012',false);
+    Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
+      dMSSQL,'(localdb)\v11.0'),'','',' MSSQL2012',false);
     {$endif}
     {$endif USELOCALDBMSSQLEXPRESS}
 
@@ -324,8 +324,8 @@ begin
       FIREDAC_PROVIDER[dMSSQL]+'?server=.\SQLEXPRESS;OSAuthent=Yes','','.','',' MSSQL2008',false);
     {$endif}
     {$ifdef USEUNIDAC}
-    Test(TSQLDBUniDACConnectionProperties,UNIDAC_PROVIDER[dMSSQL],
-      '.\SQLExpress','','',' MSSQL2008',false);
+    Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
+      dMSSQL,'.\SQLExpress'),'','',' MSSQL2008',false);
     {$endif}
     {$endif USELOCALMSSQLEXPRESS}
 

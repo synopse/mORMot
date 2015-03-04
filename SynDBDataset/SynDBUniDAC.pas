@@ -32,6 +32,7 @@ unit SynDBUniDAC;
   - alexpirate
   - delphinium (louisyeow)
   - itSDS
+  - milesyou
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -412,20 +413,21 @@ begin
   fDatabase := TUniConnection.Create(nil);
   fDatabase.ProviderName := UTF8ToString(fProperties.ServerName);
   case aProperties.DBMS of
-  dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2:
+  dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
     fDatabase.Database := UTF8ToString(fProperties.DatabaseName);
   else
     fDatabase.Server := UTF8ToString(fProperties.DatabaseName);
   end;
+  fDatabase.Username := UTF8ToString(fProperties.UserID);
+  fDatabase.Password := UTF8ToString(fProperties.PassWord);
+  // handle the options set by TSQLDBUniDACConnectionProperties.URI() 
   options := (fProperties as TSQLDBUniDACConnectionProperties).fSpecificOptions;
-  if fDatabase.Server='' then // see TSQLDBUniDACConnectionProperties.URI()
+  if fDatabase.Server='' then 
     fDatabase.Server := options.Values['Server'];
   if fDatabase.Database='' then
     fDatabase.Database := options.Values['Database'];
   if (fDatabase.Port=0) and TryStrToInt(options.Values['Port'],PortNumber) then
     fDatabase.Port := PortNumber;
-  fDatabase.Username := UTF8ToString(fProperties.UserID);
-  fDatabase.Password := UTF8ToString(fProperties.PassWord);
   for i := 0 to options.Count-1 do
     if FindRawUTF8(['Server','Database','Port'],
         StringToUTF8(options.Names[i]),false)<0 then

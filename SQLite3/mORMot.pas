@@ -7355,13 +7355,13 @@ type
   /// pre-computed SQL statements for ORM operations for a given
   // TSQLModelRecordProperties instance
   TSQLModelRecordPropertiesSQL = record
-    {/ the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
-     - format is
-     ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-     - returns '*' if no field is of TSQLRawBlob/TSQLRecordMany kind
-     - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
-     - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
-     - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true }
+    /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
+    // - format is
+    // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
+    // - returns '*' if no field is of TSQLRawBlob/TSQLRecordMany kind
+    // - returns 'COL1,COL2' with all COL* set to simple field names if withID is false
+    // - returns 'ID,COL1,COL2' with all COL* set to simple field names if withID is true
+    // - returns 'Table.ID,Table.COL1,Table.COL2' if withTableName and withID are true 
     TableSimpleFields: array[boolean,boolean] of RawUTF8;
     /// the SQL statement for reading all simple fields and RowID
     // - to be checked if we may safely call EngineList()
