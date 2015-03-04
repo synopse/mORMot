@@ -1782,21 +1782,6 @@ procedure CopyCollection(Source, Dest: TCollection);
 // reset the properties content published in the parent classes)
 procedure SetDefaultValuesObject(Value: TPersistent);
 
-/// will serialize any TObject into its UTF-8 JSON representation
-/// - serialize as JSON the published integer, Int64, floating point values,
-// TDateTime (stored as ISO 8601 text), string, variant and enumerate
-// (e.g. boolean) properties of the object (and its parents)
-// - won't handle shortstring properties
-// - the enumerates properties are stored with their integer index value
-// - will write also the properties published in the parent classes
-// - nested properties are serialized as nested JSON objects
-// - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY Delphi class, via the
-// TJSONSerializer.RegisterCustomSerializer() class method
-// - call internaly TJSONSerializer.WriteObject() method
-function ObjectToJSON(Value: TObject;
-  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
-
 /// persist a class instance into a JSON file
 procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
   Options: TTextWriterWriteObjectOptions=[woHumanReadable]);
@@ -1840,15 +1825,6 @@ procedure _ObjAddProps(Value: TObject; var Obj: variant); overload;
 // e.g. if they are just some conversion of the same information, you can
 // set ignoreGetterFields=TRUE
 function ObjectEquals(Value1,Value2: TObject; ignoreGetterFields: boolean=false): boolean;
-
-/// encode supplied parameters to be compatible with URI encoding
-// - parameters must be supplied two by two, as Name,Value pairs, e.g.
-// ! url := UrlEncodeFull(['select','*','where','ID=12','offset',23,'object',aObject]);
-// - parameters can be either textual, integer or extended, or any TObject
-// (standard UrlEncode() will only handle
-// - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
-// function
-function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
 
 type
   /// available options for JSONToObject() parsing process
@@ -10763,11 +10739,19 @@ type
     // and TSQLHttpClientCurl classes are recognized by this method
     // - then other aDefinition fields will be used to refine the instance:
     // please refer to each overriden DefinitionTo() method documentation  
-    // - see function TSQLRestCreateFrom() in mORMotDB.pas so that aDefinition.Kind
-    // set with a TSQLDBConnectionProperties class name will create a TSQLRest
-    // instance will all tables defined as external on this connection
+    // - use TSQLRestMongoDBCreate() and/or TSQLRestExternalDBCreate() instead
+    // to create a TSQLRest instance will all tables defined as external when
+    // aDefinition.Kind is 'MongoDB' or a TSQLDBConnectionProperties class
+    // - will raise an exception if the supplied definition are not valid
     class function CreateFrom(aModel: TSQLModel;
-      aDefinition: TSynConnectionDefinition): TSQLRest; virtual;
+      aDefinition: TSynConnectionDefinition): TSQLRest;
+    /// try to create a new TSQLRest instance from its Model and stored values
+    // - will return nil if the supplied definition are not valid
+    // - if the newly created instance is a TSQLRestServer, will force the
+    // supplied aServerHandleAuthentication parameter to enable authentication
+    class function CreateTryFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition;
+      aServerHandleAuthentication: boolean): TSQLRest;
     /// create a new TSQLRest instance from its Model and JSON stored values
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
@@ -12619,6 +12603,8 @@ type
     property Deleted: QWord read fDeleted;
   end;
 
+  TSQLRestServerClass = class of TSQLRestServer;
+
   /// a generic REpresentational State Transfer (REST) server
   // - descendent must implement the protected EngineList() Retrieve() Add()
   // Update() Delete() methods
@@ -12676,6 +12662,8 @@ type
       MaxRevisionJSON: integer;
       MaxUncompressedBlobSize: integer;
     end;
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); reintroduce; virtual; 
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
     function CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
@@ -12950,6 +12938,13 @@ type
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const Tables: array of TSQLRecordClass;
       aHandleUserAuthentication: boolean=false);
+    /// create a new minimal TSQLRestServer instance, to be used with
+    // external SQL or NoSQL storage
+    // - will try to instantiate an in-memory TSQLRestServerDB, and if
+    // mORMotSQLite3.pas is not linked, fallback to a TSQLRestServerFullMemory 
+    // - used e.g. by TSQLRestMongoDBCreate() and TSQLRestExternalDBCreate() 
+    class function CreateInMemoryForAllVirtualTables(aModel: TSQLModel;
+      aHandleUserAuthentication: boolean): TSQLRestServer;
     /// release memory and any existing pipe initialized by ExportServer()
     destructor Destroy; override;
     
@@ -13828,7 +13823,7 @@ type
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
-      aDefinition: TSynConnectionDefinition); override;
+      aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); override;
   public
     /// initialize an in-memory REST server with no database file
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
@@ -13845,8 +13840,7 @@ type
     destructor Destroy; override;
     /// save the TSQLRestFullMemory properties into a persistent storage object
     // - CreateFrom() will expect Definition.ServerName to store the FileName,
-    // use binary storage if Definition.DatabaseName is not void, and handle
-    // authentication if Definition.User or Definition.Password is not void
+    // and use binary storage if Definition.DatabaseName is not void
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -14147,6 +14141,8 @@ type
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
 {$endif}
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
     // register the user session to the TSQLRestClientURI instance
@@ -14218,6 +14214,10 @@ type
     // match your need
     function SetUser(const aUserName, aPassword: RawUTF8;
       aHashedPassword: Boolean=false): boolean;
+    /// save the TSQLRestClientURI properties into a persistent storage object
+    // - CreateFrom() will expect Definition.UserName/Password to store the
+    // credentials which would be used by SetUser()
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// clear session and call the /auth service on the server to notify shutdown
     // - is called by Destroy and SetUser/ClientSetUser methods, so you should
     // not have usually to call this method directly
@@ -27121,6 +27121,19 @@ begin
   result := C.RegisteredClassCreateFrom(aModel,aDefinition);
 end;
 
+class function TSQLRest.CreateTryFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
+var C: TSQLRestClass;
+begin
+  C := ClassFrom(aDefinition);
+  if C=nil then
+    result := nil else
+    if C.InheritsFrom(TSQLRestServer) then
+      result := TSQLRestServerClass(C).RegisteredClassCreateFrom(
+        aModel,aServerHandleAuthentication,aDefinition) else
+      result := C.RegisteredClassCreateFrom(aModel,aDefinition);
+end;
+
 class function TSQLRest.CreateFromJSON(aModel: TSQLModel;
   const aJSONDefinition: RawUTF8; aKey: cardinal): TSQLRest;
 var Definition: TSynConnectionDefinition;
@@ -29167,6 +29180,35 @@ begin
   end;
 end;
 
+constructor TSQLRestClientURI.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+begin
+  if fModel=nil then
+    Create(aModel); // if not already created with a reintroduced constructor
+  if aDefinition.User<>'' then begin
+    {$ifdef SSPIAUTH}
+    if aDefinition.User='***SSPI***' then
+      SetUser('',aDefinition.PasswordPlain) else
+    {$endif}
+      SetUser(aDefinition.User,aDefinition.PasswordPlain,true);
+  end;
+end;
+
+procedure TSQLRestClientURI.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited DefinitionTo(Definition); // save Kind
+  if (fSessionAuthentication<>nil) and (fSessionUser<>nil) then begin
+    {$ifdef SSPIAUTH}
+    if fSessionAuthentication.InheritsFrom(TSQLRestServerAuthenticationSSPI) then
+      Definition.User := '***SSPI***' else
+    {$endif}
+       Definition.User := fSessionUser.LogonName;
+     Definition.PasswordPlain := fSessionUser.fPasswordHashHexa;
+  end;
+end;
+
 procedure TSQLRestClientURI.Commit(SessionID: cardinal);
 begin
   inherited Commit(CONST_AUTHENTICATION_NOT_USED); // reset fTransactionActiveSession flag
@@ -30072,6 +30114,29 @@ begin
   Model.Owner := self;
 end;
 
+class function TSQLRestServer.CreateInMemoryForAllVirtualTables(aModel: TSQLModel;
+  aHandleUserAuthentication: boolean): TSQLRestServer;
+var restClass: TSQLRestClass;
+    fake: TSynConnectionDefinition;
+begin
+  fake := TSynConnectionDefinition.Create;
+  try
+    fake.Kind := 'TSQLRestServerDB';
+    restClass := TSQLRest.ClassFrom(fake);
+    if (restClass=nil) or
+       not restClass.InheritsFrom(TSQLRestServer) then begin
+      // fallback if mORMotSQlite3.pas not linked
+      result := TSQLRestServerFullMemory.Create(aModel,aHandleUserAuthentication);
+      exit;
+    end;
+    fake.ServerName := ':memory:'; // avoid dependency to SynSQLite3.pas
+    result := TSQLRestServerClass(restClass).RegisteredClassCreateFrom(
+      aModel,aHandleUserAuthentication,fake);
+  finally
+    fake.Free;
+  end;
+end;
+
 procedure TSQLRestServer.CreateMissingTables(user_version: cardinal=0;
   Options: TSQLInitializeTableOptions=[]);
 begin 
@@ -30085,6 +30150,12 @@ begin
     for t := 0 to Model.TablesMax do
       if not TableHasRows(Model.Tables[t]) then
         Model.Tables[t].InitializeTable(self,'',Options);
+end;
+
+constructor TSQLRestServer.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition);
+begin
+  Create(aModel,aServerHandleAuthentication);
 end;
 
 destructor TSQLRestServer.Destroy;
@@ -33858,7 +33929,7 @@ procedure TSQLRestClientURINamedPipe.DefinitionTo(Definition: TSynConnectionDefi
 begin
   if Definition=nil then
     exit;
-  inherited; // set Kind
+  inherited DefinitionTo(Definition); // write Kind + User/Password
   Definition.ServerName := StringToUTF8(fPipeName);
 end;
 
@@ -33866,6 +33937,7 @@ constructor TSQLRestClientURINamedPipe.RegisteredClassCreateFrom(aModel: TSQLMod
   aDefinition: TSynConnectionDefinition);
 begin
   Create(aModel,UTF8ToString(aDefinition.ServerName));
+  inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser() 
 end;
 
 function TSQLRestClientURINamedPipe.InternalCheckOpen: boolean;
@@ -35640,12 +35712,12 @@ begin
 end;
 
 constructor TSQLRestServerFullMemory.RegisteredClassCreateFrom(aModel: TSQLModel;
-  aDefinition: TSynConnectionDefinition);
+  aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition);
 begin
   fFileName := UTF8ToString(aDefinition.ServerName);
   fBinaryFile := aDefinition.DatabaseName<>'';
-  Create(aModel,(aDefinition.User<>'') or (aDefinition.Password<>''));
-  LoadFromFile;     
+  Create(aModel,aServerHandleAuthentication);
+  LoadFromFile;
 end;
 
 procedure TSQLRestServerFullMemory.DefinitionTo(Definition: TSynConnectionDefinition);
@@ -35656,8 +35728,6 @@ begin
   Definition.ServerName := StringToUTF8(fFileName);
   if fBinaryFile then
     Definition.DatabaseName := 'binary';
-  if fHandleAuthentication then
-    Definition.User := 'authenticated';
 end; 
 
 procedure TSQLRestServerFullMemory.CreateMissingTables(user_version: cardinal=0;
@@ -36578,17 +36648,6 @@ begin
     result := '';
 end;
 
-function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
-begin
-  with TJSONSerializer.CreateOwnedStream do
-  try
-    WriteObject(Value,Options);
-    SetText(result);
-  finally
-    Free;
-  end;
-end;
-
 function ObjectEquals(Value1,Value2: TObject; ignoreGetterFields: boolean): boolean;
 var i: integer;
     C1,C2: TClass;
@@ -36653,40 +36712,6 @@ begin
     if ContextFormat[1]='{' then
       _ObjAddProps([ContextName,_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
       _ObjAddProps([ContextName,FormatUTF8(ContextFormat,ContextArgs)],result);
-end;
-
-function UrlEncode(const NameValuePairs: array of const): RawUTF8;
-// (['select','*','where','ID=12','offset',23,'object',aObject]);
-var A, n: PtrInt;
-    name, value: RawUTF8;
-  function Invalid(P: PAnsiChar): boolean;
-  begin
-    result := true;
-    if P<>nil then begin
-      repeat // cf. rfc3986 2.3. Unreserved Characters
-        if not (P^ in ['a'..'z','A'..'Z','0'..'9','_','.','~']) then
-          exit else
-          inc(P);
-      until P^=#0;
-      result := false;
-    end;
-  end;
-begin
-  result := '';
-  n := high(NameValuePairs);
-  if n>0 then begin
-    for A := 0 to n shr 1 do begin
-      VarRecToUTF8(NameValuePairs[A*2],name);
-      if Invalid(pointer(name)) then
-        continue;
-      with NameValuePairs[A*2+1] do
-        if VType=vtObject then
-          value := ObjectToJSON(VObject,[]) else
-          VarRecToUTF8(NameValuePairs[A*2+1],value);
-      result := result+'&'+name+'='+UrlEncode(value);
-    end;
-    result[1] := '?';
-  end;
 end;
 
 var
@@ -37798,7 +37823,7 @@ procedure TSQLRestClientURIMessage.DefinitionTo(Definition: TSynConnectionDefini
 begin
   if Definition=nil then
     exit;
-  inherited; // set Kind
+  inherited DefinitionTo(Definition); // save Kind + User/Password
   Definition.ServerName := StringToUTF8(fServerWindowName);
   Definition.DatabaseName := StringToUTF8(fClientWindowName);
 end;
@@ -37808,6 +37833,7 @@ constructor TSQLRestClientURIMessage.RegisteredClassCreateFrom(aModel: TSQLModel
 begin
   Create(aModel,UTF8ToString(aDefinition.ServerName),
     UTF8ToString(aDefinition.DatabaseName),10000);
+  inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser() 
 end;
 
 procedure TSQLRestClientURIMessage.InternalURI(var Call: TSQLRestURIParams);

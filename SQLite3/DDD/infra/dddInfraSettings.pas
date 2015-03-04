@@ -62,7 +62,10 @@ uses
   Classes,
   SynCommons,
   mORMot,
-  mORMotDDD;
+  mORMotDDD,
+  SynDB, mORMotDB, // for TRestSettings on external SQL database
+  mORMotMongoDB,   // for TRestSettings on external NoSQL database
+  mORMotWrappers;  // for TRestSettings to publish wrapper methods
 
   
 { ----- Manage Service/Daemon settings }
@@ -97,6 +100,50 @@ type
     /// the .settings file name, including full path
     property SettingsJsonFileName: TFileName
       read fSettingsJsonFileName write fSettingsJsonFileName;
+  end;
+
+  /// storage class for initializing an ORM REST class 
+  // - this class will contain some generic properties to initialize a TSQLRest
+  // pointing to a local or remote SQL/NoSQL database, with optional wrappers
+  TRestSettings = class(TSynAutoCreateFields)
+  protected
+    fDefinition: TSynConnectionDefinition;
+    fRoot: RawUTF8;
+    fLogLevels: TSynLogInfos;
+    fWrapperTemplateFolder: TFileName;
+  public
+    /// is able to instantiate a REST instance according to the stored definition
+    // - Definition.Kind will identify the TSQLRestServer or TSQLRestClient class
+    // to be instantiated, or if equals 'MongoDB' use a full MongoDB store, or an
+    // external SQL database if it matches a TSQLDBConnectionProperties classname
+    // - will return nil if the supplied Definition is not correct
+    // - note that the supplied Model.Root should have been set to the Root
+    // property of this class, when created
+    // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
+    // and publish the /wrapper HTML page if WrapperTemplateFolder is set
+    function NewRestInstance(aModel: TSQLModel; aHandleAuthentication: boolean;
+      aExternalDBOptions: TVirtualTableExternalRegisterOptions;
+      aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest; virtual;
+  published
+    /// the URI Root to be used for the REST Model
+    property Root: RawUTF8 read fRoot write fRoot;
+    /// would let function NewRestInstance() create the expected TSQLRest
+    property Definition: TSynConnectionDefinition read fDefinition;
+    /// the log levels to be defined
+    property LogLevels: TSynLogInfos read fLogLevels write fLogLevels;
+    /// if set to a valid folder, the generated TSQLRest will publish a
+    // '/Root/wrapper' HTML page so that client code could be generated
+    property WrapperTemplateFolder: TFileName
+      read fWrapperTemplateFolder write fWrapperTemplateFolder;
+  end;
+
+  /// parent class for storing REST-based application settings as a JSON file
+  TApplicationSettingsRestFile = class(TApplicationSettingsFile)
+  protected
+    fRest: TRestSettings;
+  published
+    /// allow to instantiate a REST instance from its JSON definition
+    property Rest: TRestSettings read fRest;
   end;
 
 
@@ -141,5 +188,22 @@ begin
   result := ExtractRelativePath(settings,path)+ExtractFileName(aFileName);
 end;
 
+
+{ TRestSettings }
+
+function TRestSettings.NewRestInstance(aModel: TSQLModel; aHandleAuthentication: boolean;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
+  aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+begin
+  result := TSQLRestMongoDBCreate(aModel,Definition,aHandleAuthentication,aMongoDBOptions);
+  if result=nil then // failed to use MongoDB -> try external or internal DB
+    result := TSQLRestExternalDBCreate(aModel,Definition,aHandleAuthentication,aExternalDBOptions);
+  if result=nil then
+    exit; // no match or wrong parameters
+  result.LogFamily.Level := LogLevels-[sllNone]; // '*' would include sllNone
+  if result.InheritsFrom(TSQLRestServer) then
+    if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolder) then
+      AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolder]);
+end;
 
 end.

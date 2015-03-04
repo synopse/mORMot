@@ -202,10 +202,41 @@ type
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestStorageMongoDB;
 
+type
+  /// all possible options for StaticMongoDBRegisterAll/TSQLRestMongoDBCreate functions
+  // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
+  // external DB, but you can avoid it for speed when handling session and security
+  // by setting mrDoNotRegisterUserGroupTables
+  // - you can set mrMapAutoFieldsIntoSmallerLength to compute a field name
+  // mapping with minimal length, so that the stored BSON would be smaller:
+  // by definition, ID/RowID will be mapped as 'id', but other fields will
+  // use their first letter, and another other letter if needed (after a '_',
+  // or in uppercase, or the next one) e.g. FirstName -> 'f', LastName -> 'l',
+  // LockedAccount: 'la'...
+  TStaticMongoDBRegisterOption = (
+    mrDoNotRegisterUserGroupTables,
+    mrMapAutoFieldsIntoSmallerLength
+    );
+  /// set of options for StaticMongoDBRegisterAll/TSQLRestMongoDBCreate functions
+  TStaticMongoDBRegisterOptions = set of TStaticMongoDBRegisterOption;
+
 /// create and register ALL classes of a given model to access a MongoDB server
 // - the collection names will follow the class names
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; DoNotRegisterUserGroupTables: boolean=false): boolean;
+  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions=[]): boolean;
+
+/// create a new TSQLRest instance, possibly using MongoDB for its ORM process
+// - if aDefinition.Kind matches a TSQLRest registered class, one new instance
+// of this kind will be created and returned
+// - if aDefinition.Kind is 'MongoDB', it will instantiate an in-memory
+// TSQLRestServerDB or a TSQLRestServerFullMemory instance, then call
+// StaticMongoDBRegisterAll() with a TMongoClient initialized from
+// aDefinition.ServerName ('server' or 'server:port'), and a TMongoDatabase
+// created from aDefinition.DatabaseName: it will return nil if the supplied
+// TMongoClient/TMongoDatabase parameters are invalid
+function TSQLRestMongoDBCreate(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
+  aOptions: TStaticMongoDBRegisterOptions): TSQLRest; overload;
 
 
 implementation
@@ -235,7 +266,7 @@ begin
 end;
 
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; DoNotRegisterUserGroupTables: boolean): boolean;
+  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions): boolean;
 var i: integer;
 begin
   if (aServer=nil) or (aMongoDatabase=nil) then begin
@@ -245,12 +276,39 @@ begin
   result := true;
   with aServer.Model do
   for i := 0 to high(Tables) do
-    if DoNotRegisterUserGroupTables and
+    if (mrDoNotRegisterUserGroupTables in aOptions) and
        (Tables[i].InheritsFrom(TSQLAuthGroup) or
         Tables[i].InheritsFrom(TSQLAuthUser)) then
       continue else
     if StaticMongoDBRegister(Tables[i],aServer,aMongoDatabase,'')=nil then
       result := false;
+end;
+
+function TSQLRestMongoDBCreate(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
+  aOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+var client: TMongoClient;
+    database: TMongoDatabase;
+    server,port: RawUTF8;
+begin
+  result := nil;
+  if aDefinition=nil then
+    exit;
+  if SameText(aDefinition.Kind,'MongoDB') then begin
+    Split(aDefinition.ServerName,':',server,port);
+    client := TMongoClient.Create(server,GetIntegerDef(pointer(port),MONGODB_DEFAULTPORT));
+    try
+      database := TMongoDatabase.Create(client,aDefinition.DatabaseName);
+      result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
+        aModel,aHandleAuthentication);
+      StaticMongoDBRegisterAll(TSQLRestServer(result),database,aOptions);
+    except
+      FreeAndNil(result);
+      client.Free; // avoid memory leak
+    end;
+  end else
+    // not MongoDB -> try if aDefinition.Kind is a TSQLRest class
+    result := TSQLRest.CreateTryFrom(aModel,aDefinition,aHandleAuthentication);
 end;
 
 

@@ -206,8 +206,9 @@ type
       aLogClass: TSynLogClass; aPort: Integer=8091; const aRoot: RawUTF8='LogService');
     /// save the TSQLHttpClientGeneric properties into a persistent storage object
     // - CreateFrom() will expect Definition.ServerName to store the URI as
-    // 'server:port' or 'https://server:port', and Definition.User/Password to
-    // store the proxy name and bypass values (for WinINet/WinHTTP)
+    // 'server:port' or 'https://server:port', Definition.User/Password to store
+    // the TSQLRestClientURI.SetUser() information, and Definition.DatabaseName
+    // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
@@ -458,33 +459,42 @@ procedure TSQLHttpClientGeneric.DefinitionTo(Definition: TSynConnectionDefinitio
 begin
   if Definition=nil then
     exit;
-  inherited; // set Kind
+  inherited DefinitionTo(Definition); // save Kind + User/Password
   if fHttps then
     Definition.ServerName := 'https://';
   Definition.ServerName := FormatUTF8('%%:%',[Definition.ServerName,fServer,fPort]);
-  Definition.DatabaseName := JSONEncode([
+  if fExtendedOptions.IgnoreSSLCertificateErrors then
+  Definition.DatabaseName := UrlEncode([
    'IgnoreSSLCertificateErrors',ord(fExtendedOptions.IgnoreSSLCertificateErrors),
-   'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout]);
-  Definition.User := CurrentAnsiConvert.AnsiToUTF8(fProxyName);
-  Definition.Password := CurrentAnsiConvert.AnsiToUTF8(fProxyByPass);
+   'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout,
+   'ProxyName',fProxyName,'ProxyByPass',fProxyByPass]);
+  Definition.DatabaseName := copy(Definition.DatabaseName,2,MaxInt); // trim leading '?'
 end;
 
 constructor TSQLHttpClientGeneric.RegisteredClassCreateFrom(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition);
 var URI: TURI;
+    P: PUTF8Char;
+    V: cardinal;
     tmp: RawUTF8;
-    values: TPUTF8CharDynArray;
 begin
   URI.From(aDefinition.ServerName);
   Create(URI.Server,URI.Port,aModel);
   fHttps := URI.Https;
-  tmp := aDefinition.DataBaseName;
-  JSONDecode(tmp,['IgnoreSSLCertificateErrors','SendTimeout','ReceiveTimeout'],values);
-  fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(GetCardinalDef(values[0],1));
-  fSendTimeout := GetCardinalDef(values[1],fSendTimeout);
-  fReceiveTimeout := GetCardinalDef(values[2],fReceiveTimeout);
-  fProxyName := CurrentAnsiConvert.UTF8ToAnsi(aDefinition.User);
-  fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(aDefinition.Password);
+  P := Pointer(aDefinition.DataBaseName);
+  while P<>nil do begin
+    if UrlDecodeCardinal(P,'SENDTIMEOUT',V) then
+      fSendTimeout := V else
+    if UrlDecodeCardinal(P,'RECEIVETIMEOUT',V) then
+      fReceiveTimeout := V else
+    if UrlDecodeValue(P,'PROXYNAME',tmp) then
+      fProxyName := CurrentAnsiConvert.UTF8ToAnsi(tmp) else
+    if UrlDecodeValue(P,'PROXYBYPASS',tmp) then
+      fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(tmp);
+    if UrlDecodeCardinal(P,'IGNORESSLCERTIFICATEERRORS',V,@P) then
+      fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(V);
+  end;
+  inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser()
 end;
 
 

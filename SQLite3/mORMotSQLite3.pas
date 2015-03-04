@@ -361,7 +361,7 @@ type
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
-      aDefinition: TSynConnectionDefinition); override;
+      aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); override;
     /// retrieve a TSQLRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSQLRequest.Close method must be called
@@ -514,9 +514,8 @@ type
     /// close database and free used memory
     destructor Destroy; override;
     /// save the TSQLRestServerDB properties into a persistent storage object
-    // - CreateFrom() will expect Definition.DatabaseName to store the DBFileName,
-    // handle authentication if Definition.User is not void, and use encrypt
-    // the file using Definition.Password if not void
+    // - RegisteredClassCreateFrom() will expect Definition.DatabaseName to store
+    // the DBFileName, and optionally encrypt the file using Definition.Password 
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -1019,15 +1018,13 @@ begin
     Definition.ServerName := StringToUTF8(fDB.FileName);
     Definition.PasswordPlain := fDB.Password;
   end;
-  if fHandleAuthentication then
-    Definition.User := 'authenticated';
 end;
 
 constructor TSQLRestServerDB.RegisteredClassCreateFrom(aModel: TSQLModel;
-  aDefinition: TSynConnectionDefinition);
+  aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition);
 begin
-  Create(aModel,UTF8ToString(aDefinition.DatabaseName),
-    aDefinition.User<>'',aDefinition.PasswordPlain);
+  Create(aModel,UTF8ToString(aDefinition.ServerName),aServerHandleAuthentication,
+    aDefinition.PasswordPlain);
 end;
 
 function TSQLRestServerDB.PrepareVacuum(const aSQL: RawUTF8): boolean;
@@ -2448,6 +2445,7 @@ initialization
   // all our SynSQlite3 related functions shall log to main TSQLLog
   SynSQLite3Log := TSQLLog;
   {$endif}
+  TSQLRestServerDB.RegisterClassNameForDefinition;
 end.
 
 
