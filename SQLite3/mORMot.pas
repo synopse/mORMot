@@ -8833,8 +8833,6 @@ type
   protected
     fResolver: TInterfaceResolver;
     fResolverOwned: Boolean;
-    // used by CreateInjected()
-    fAutoResolvedInterfaceAddress: TList;
     // DI/IoC resolution protected methods
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean;
     /// this method will resolve all interface published properties
@@ -41337,6 +41335,9 @@ begin
   end;
 end;
 begin
+  // WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
+  // if your debugger reached here, you are executing a "fake" interface
+  // forged to call a remote SOA server or mock/stub an interface
   self := SelfFromInterface;
   if aCall.MethodIndex>=fFactory.fMethodsCount then
     RaiseError('out of range method: %>=%',[aCall.MethodIndex,fFactory.fMethodsCount]);
@@ -43362,21 +43363,21 @@ end;
 
 procedure TInjectableObject.ResolveByPair(const aInterfaceObjPairs: array of pointer);
 begin
-  if high(aInterfaceObjPairs)=1 then
-    Resolve(aInterfaceObjPairs[0],aInterfaceObjPairs[1]^) else
   if fResolver.InheritsFrom(TInterfaceResolverInjected) then
     TInterfaceResolverInjected(fResolver).ResolveByPair(aInterfaceObjPairs) else
+  if high(aInterfaceObjPairs)=1 then
+    Resolve(aInterfaceObjPairs[0],aInterfaceObjPairs[1]^) else
     raise EServiceException.CreateUTF8('%.ResolveByPair(?)',[self]);
 end;
 
 procedure TInjectableObject.Resolve(const aInterfaces: array of TGUID;
   const aObjs: array of pointer);
 begin
-  if (high(aInterfaces)=0) and (high(aObjs)=0) then
-    Resolve(aInterfaces[0],aObjs[0]^) else
   if fResolver.InheritsFrom(TInterfaceResolverInjected) then
     TInterfaceResolverInjected(fResolver).Resolve(aInterfaces,aObjs) else
-    raise EServiceException.CreateUTF8('%.ResolveByPair(?,?)',[self]);
+  if (high(aInterfaces)=0) and (high(aObjs)=0) then
+    Resolve(aInterfaces[0],aObjs[0]^) else
+    raise EServiceException.CreateUTF8('%.Resolve(?,?)',[self]);
 end;
 
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
@@ -43394,15 +43395,11 @@ begin
       if P^.PropType^.Kind=tkInterface then
         if P^.GetterIsField then begin
           addr := P^.GetterAddr(self);
-          if TryResolve(P^.PropType{$ifndef FPC}^{$endif},addr^) then begin
-            if fAutoResolvedInterfaceAddress=nil then
-              fAutoResolvedInterfaceAddress := TList.Create;
-            fAutoResolvedInterfaceAddress.Add(addr);
-          end else
-          if aRaiseEServiceExceptionIfNotFound then
-            raise EServiceException.CreateUTF8(
-              '%.AutoResolve: impossible to resolve published property %: %',
-              [self,P^.Name,P^.PropType^.Name]);
+          if not TryResolve(P^.PropType{$ifndef FPC}^{$endif},addr^) then
+            if aRaiseEServiceExceptionIfNotFound then
+              raise EServiceException.CreateUTF8(
+                '%.AutoResolve: impossible to resolve published property %: %',
+                [self,P^.Name,P^.PropType^.Name]);
         end else
           raise EServiceException.CreateUTF8(
             '%.AutoResolve: published property %: % should directly read the field',
@@ -43440,23 +43437,11 @@ begin
 end;
 
 destructor TInjectableObject.Destroy;
-var i: integer;
 begin
-  try
-    try
-      if fAutoResolvedInterfaceAddress<>nil then begin
-        for i := 0 to fAutoResolvedInterfaceAddress.Count-1 do
-          // ensure creatures are released before their creator
-          PUnknown(fAutoResolvedInterfaceAddress[i])^ := nil;
-        fAutoResolvedInterfaceAddress.Free;
-      end;
-    finally
-      if fResolverOwned then
-        FreeAndNil(fResolver);
-    end;
-  finally
-    inherited Destroy;
-  end;
+  inherited Destroy;
+  CleanupInstance; // ensure creatures are released before their creator
+  if fResolverOwned then
+    FreeAndNil(fResolver); // let the creator move away
 end;
 
 
