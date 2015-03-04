@@ -444,6 +444,7 @@ constructor TSQLDBCurlConnectionProperties.Create(const aServerName,
 begin
   SetServerName(aServerName);
   fClient := TCurlHTTP.Create(Server,Port,fURI.Https);
+  inherited;
 end;
 
 {$endif USELIBCURL}

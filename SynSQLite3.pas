@@ -2058,30 +2058,33 @@ type
   ESQLite3Exception = class(ESynException)
   protected
     fErrorCode: integer;
+    fSQLite3ErrorCode: TSQLite3ErrorCode;
   public
     /// the DB which raised this exception
     DB: TSQLite3DB;
-    /// the corresponding error code, e.g. secMISUSE
-    SQLite3ErrorCode: TSQLite3ErrorCode;
     /// create the exception, getting the message from DB
     constructor Create(aDB: TSQLite3DB; aErrorCode: integer); reintroduce; overload;
-    /// create the exception, getting the message from caller
-    constructor Create(const aMessage: string; aErrorCode: integer); reintroduce; overload;
   published
     /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
     property ErrorCode: integer read fErrorCode;
+    /// the corresponding error code, e.g. secMISUSE
+    property SQLite3ErrorCode: TSQLite3ErrorCode read fSQLite3ErrorCode;
   end;
 
 /// convert a SQLite3 result code into a TSQLite3ErrorCode item
 function sqlite3_resultToErrorCode(aResult: integer): TSQLite3ErrorCode;
 
-/// convert a SQLite3 result code into a TSQLite3ErrorCode item
-// - e.g. sqlite3_resultToErrorText(secOK)='SQLITE_OK'
+/// convert a SQLite3 result code into the corresponding SQLite constant name
+// - e.g. sqlite3_resultToErrorText(SQLITE_OK)='SQLITE_OK'
 function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
 
-{/ test the result state of a sqlite3.*() function
-  - raise a ESQLite3Exception if the result state is an error
-  - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) }
+/// convert a TSQLite3ErrorCode item into the corresponding SQLite constant name
+// - e.g. ErrorCodeToText(secOK)='SQLITE_OK'
+function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
+
+/// test the result state of a sqlite3.*() function
+// - raise a ESQLite3Exception if the result state is an error
+// - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) 
 function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
 
 var
@@ -3375,11 +3378,14 @@ begin
   fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
   {$endif}
+  if Trim(aFileName)='' then
+    raise ESQLite3Exception.CreateUTF8('%.Create(nil)',[self]);
   fOpenV2Flags := aOpenV2Flags;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
-    raise ESQLite3Exception.Create(
-      'Your version of SQLite3 does not support custom OpenV2Flags');
+    raise ESQLite3Exception.CreateUTF8(
+      'Your % version of SQLite3 does not support custom OpenV2Flags',
+      [sqlite3.libversion]);
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
@@ -3873,7 +3879,7 @@ begin
   fLog.Enter.Log(sllDB,'closing "%"',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
-    raise ESQLite3Exception.Create('DBClose called with no sqlite3 global');
+    raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
   if fBackupBackgroundInProcess<>nil then
     BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
@@ -4641,7 +4647,10 @@ end;
 
 constructor ESQLite3Exception.Create(aDB: TSQLite3DB; aErrorCode: integer);
 begin
-  CreateFmt('Error %s (%d)',[sqlite3_resultToErrorText(aErrorCode),aErrorCode]);
+  fErrorCode := aErrorCode;
+  fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
+  CreateUTF8('Error % (%) using %',
+    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,sqlite3.libversion]);
   if aDB=0 then
     Message := Message+' with aDB=nil' else begin
     Message := Format('%s - "%s"',[Message,sqlite3.errmsg(aDB)]);
@@ -4649,13 +4658,6 @@ begin
       Message := Format('%s extended_errcode=%d',[Message,sqlite3.extended_errcode(aDB)]);
   end;
   DB := aDB;
-end;
-
-constructor ESQLite3Exception.Create(const aMessage: string; aErrorCode: integer);
-begin
-  fErrorCode := aErrorCode;
-  SQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
-  Create(aMessage);
 end;
 
 function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
@@ -4677,14 +4679,17 @@ begin
   end;
 end;
 
-function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
-var err: TSQLite3ErrorCode;
+function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 begin
-  err := sqlite3_resultToErrorCode(aResult);
   if err=secUnknown then
     result := 'unknown SQLITE_*' else
     result := 'SQLITE_'+Copy(ShortStringToUTF8(GetEnumName(
       TypeInfo(TSQLite3ErrorCode),ord(err))^),4,100);
+end;
+
+function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
+begin
+  result := ErrorCodeToText(sqlite3_resultToErrorCode(aResult));
 end;
 
 

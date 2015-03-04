@@ -4297,7 +4297,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         user := GetNextItem(PUTF8Char(O),#1);
         session := Protocol.Authenticate.CreateSession(user,PCardinal(O)^);
         if session=0 then
-          raise ESQLDBRemote.Create('Invalid Credentials - check User and Password');
+          raise ESQLDBRemote.Create('Impossible to Open a Session - '+
+           'check connection and User/Password');
       end;
       PRemoteMessageHeader(msgOutput)^.SessionID := session;
       msgOutput := msgOutput+AnsiChar(Properties.DBMS);
