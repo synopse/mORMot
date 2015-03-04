@@ -1562,6 +1562,8 @@ type
     fIn: record
       Headers: pointer;
       Method: SockString;
+      Data: SockString;
+      DataOffset: integer;
     end;
     fOut: record
       Header, Encoding, AcceptEncoding, Data: SockString;
@@ -6888,6 +6890,19 @@ begin
   end;
 end;
 
+function CurlReadData(buffer: PAnsiChar; size,nitems: integer;
+  opaque: pointer): integer; cdecl;
+var instance: TCurlHTTP absolute opaque;
+    dataLen: integer;
+begin
+  dataLen := length(instance.fIn.Data)-instance.fIn.DataOffset;
+  result := size*nitems;
+  if result>dataLen then
+    result := dataLen;
+  move(PAnsiChar(pointer(instance.fIn.Data))[instance.fIn.DataOffset],buffer^,result);
+  inc(instance.fIn.DataOffset,result);
+end;
+
 
 { TCurlHTTP }
 
@@ -6936,27 +6951,26 @@ end;
 
 procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  // libcurl has dedicated options for GET,HEAD,POST verbs
+  // libcurl has dedicated options for GET,HEAD verbs
   if (fIn.Method='') or (fIn.Method='GET') then
     curl.easy_setopt(fHandle,coHTTPGet,1) else
   if fIn.Method='HEAD' then
-    curl.easy_setopt(fHandle,coNoBody,1) else
-  if fIn.Method='POST' then begin
-    curl.easy_setopt(fHandle,coPost,1);
-    curl.easy_setopt(fHandle,coPostFields,Pointer(aData));
-    curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
-    InternalAddHeader('Expect:'); // disable 'Expect: 100'
-  end else begin
+    curl.easy_setopt(fHandle,coNoBody,1) else begin
     // handle other HTTP verbs
     curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
-    curl.easy_setopt(fHandle,coNoBody,0);
-    if aData='' then // e.g. DELETE or LOCK
-      curl.easy_setopt(fHandle,coUpload,0) else begin // e.g. POST
+    if aData='' then begin // e.g. DELETE or LOCK
+      curl.easy_setopt(fHandle,coNoBody,1);
+      curl.easy_setopt(fHandle,coUpload,0);
+    end else begin // e.g. POST or PUT
+      curl.easy_setopt(fHandle,coNoBody,0);
       curl.easy_setopt(fHandle,coUpload,1);
-      curl.easy_setopt(fHandle,coInFile,pointer(aData));
+      fIn.Data := aData;
+      fIn.DataOffset := 0;
+      curl.easy_setopt(fHandle,coInFile,pointer(self));
+      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
       curl.easy_setopt(fHandle,coInFileSize,length(aData));
-      InternalAddHeader('Expect:'); // disable 'Expect: 100'
     end;
+    InternalAddHeader('Expect:'); // disable 'Expect: 100 Continue'
   end;
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coFile,@fOut.Data);
@@ -6971,6 +6985,7 @@ var res: TCurlResult;
     s: SockString;
     i: integer;
 begin
+  curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
   if res<>crOK then
     result := STATUS_SERVERERROR else begin
@@ -7001,6 +7016,7 @@ begin
     fIn.Headers := nil;
   end;
   Finalize(fIn);
+  fIn.DataOffset := 0;
   Finalize(fOut);
 end;
 
