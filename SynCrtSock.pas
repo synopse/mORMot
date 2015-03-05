@@ -1293,14 +1293,18 @@ type
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TSQLHttpClient* wrapper class to
   // the actual SynCrtSock's THttpRequest implementation class
-  // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
-  // - AuthScheme and AuthUserName/AuthPassword properties are handled
-  // by the TWinHttp class only by now
   THttpRequestExtendedOptions = record
+    /// let HTTPS be less paranoid about SSL certificates
+    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
     IgnoreSSLCertificateErrors: Boolean;
-    AuthUserName: SynUnicode;
-    AuthPassword: SynUnicode;
-    AuthScheme: THttpRequestAuthentication;
+    /// allow HTTP authentication to take place at connection
+    // - Auth.Scheme and UserName/Password properties are handled
+    // by the TWinHttp class only by now
+    Auth: record
+      UserName: SynUnicode;
+      Password: SynUnicode;
+      Scheme: THttpRequestAuthentication;
+    end;
   end;
 
   {$M+}
@@ -1416,13 +1420,13 @@ type
       write fExtendedOptions.IgnoreSSLCertificateErrors;
     /// optional Authentication Scheme
     property AuthScheme: THttpRequestAuthentication
-      read fExtendedOptions.AuthScheme write fExtendedOptions.AuthScheme;
+      read fExtendedOptions.Auth.Scheme write fExtendedOptions.Auth.Scheme;
     /// optional User Name for Authentication
     property AuthUserName: SynUnicode
-      read fExtendedOptions.AuthUserName write fExtendedOptions.AuthUserName;
+      read fExtendedOptions.Auth.UserName write fExtendedOptions.Auth.UserName;
     /// optional Password for Authentication
     property AuthPassword: SynUnicode
-      read fExtendedOptions.AuthPassword write fExtendedOptions.AuthPassword;
+      read fExtendedOptions.Auth.Password write fExtendedOptions.Auth.Password;
     /// internal structure used to store extended options
     // - will be replicated by IgnoreSSLCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions

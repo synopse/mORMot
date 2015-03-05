@@ -300,13 +300,13 @@ type
       write fExtendedOptions.IgnoreSSLCertificateErrors;
     /// optional Authentication Scheme
     property AuthScheme: THttpRequestAuthentication
-      read fExtendedOptions.AuthScheme write fExtendedOptions.AuthScheme;
+      read fExtendedOptions.Auth.Scheme write fExtendedOptions.Auth.Scheme;
     /// optional User Name for Authentication
     property AuthUserName: SynUnicode
-      read fExtendedOptions.AuthUserName write fExtendedOptions.AuthUserName;
+      read fExtendedOptions.Auth.UserName write fExtendedOptions.Auth.UserName;
     /// optional Password for Authentication
     property AuthPassword: SynUnicode
-      read fExtendedOptions.AuthPassword write fExtendedOptions.AuthPassword;
+      read fExtendedOptions.Auth.Password write fExtendedOptions.Auth.Password;
   end;
 
   TSQLHttpClientRequestClass = class of TSQLHttpClientRequest;
