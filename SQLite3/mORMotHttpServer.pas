@@ -225,7 +225,8 @@ type
   // first execution
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TSQLHttpServerOptions =
-    ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}useHttpSocket);
+    ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}
+     useHttpSocket, useBidirSocket);
 
   /// available security options for TSQLHttpServer.Create() constructor
   // - default secNone will use plain HTTP connection

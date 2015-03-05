@@ -390,6 +390,8 @@ type
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
   // - this class will use AES-NI hardware instructions, if available
+  // - those classes are re-entrant, i.e. that you can call the Encrypt*
+  // or Decrypt* methods on the same instance several times
   TAESAbstractSyn = class(TAESAbstract)
   protected
     fIn, fOut: PAESBlock;
@@ -406,6 +408,8 @@ type
     // - KeySize is in bits, i.e. 128,192,256
     // - IV is the Initialization Vector
     constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); override;
+    /// compute a class instance similar to this one
+    function Clone: TAESAbstractSyn; virtual;
     /// perform the AES cypher in the corresponding mode
     // - this abstract method will set CV from AES.Context, and fIn/fOut
     // from BufIn/BufOut
@@ -5335,9 +5339,15 @@ end;
 constructor TAESAbstractSyn.Create(const aKey; aKeySize: cardinal;
   const aIV: TAESBlock);
 begin
-  inherited;
+  inherited Create(aKey,aKeySize,aIV);
   TAESContext(AES.Context).IV := aIV;
   move(aKey,fKey,fKeySizeBytes);
+end;
+
+function TAESAbstractSyn.Clone: TAESAbstractSyn;
+begin
+  result := ClassType.Create as TAESAbstractSyn;
+  result.Create(self,fKeySize,TAESContext(AES.Context).IV);
 end;
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);

@@ -443,8 +443,8 @@ type
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: SockString);
     /// set the TCP_NODELAY option for the connection
-    // - default 1 (true) will disable the Nagle buffering algorithm; it should only be
-    // set for applications that send frequent small bursts of information
+    // - default 1 (true) will disable the Nagle buffering algorithm; it should
+    // only be set for applications that send frequent small bursts of information
     // without getting an immediate response, where timely delivery of data
     // is required - so it expects buffering before calling Write() or SndLow()
     // - you can set 0 (false) here to enable the Nagle algorithm, if needed
@@ -552,8 +552,10 @@ type
     ContentLength: integer;
     /// same as HeaderValue('Content-Type'), but retrieved during Request
     ContentType: SockString;
-    /// same as HeaderValue('Connection')='close', but retrieved during Request
+    /// same as HeaderValue('Connection')='Close', but retrieved during Request
     ConnectionClose: boolean;
+    /// same as HeaderValue('Connection')='Upgrade', but retrieved during Request
+    ConnectionUpgrade: boolean;
     /// add an header entry, returning the just entered entry index in Headers[]
     function HeaderAdd(const aValue: SockString): integer;
     /// set all Header values at once, from CRLF delimited text
@@ -698,8 +700,11 @@ type
     /// initialize the response thread for the corresponding incoming socket
     // - this version will handle KeepAlive, for such an incoming request
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
-      {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif}); overload;
+      {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
+      overload; virtual;
   end;
+
+  THttpServerRespClass = class of THttpServerResp;
 
 {$ifdef USETHREADPOOL}
 
@@ -726,7 +731,7 @@ type
   protected
     FRequestQueue: THandle;
     FThread: TObjectList; // of TSynThreadPoolSubThread
-    FThreadID: array[0..63] of THandle;
+    FThreadID: array[0..63] of THandle; // WaitForMultipleObjects() limit=64
     FGeneratedThreadCount: integer;
     FOnHttpThreadTerminate: TNotifyThreadEvent;
     /// process to be executed after notification
@@ -772,11 +777,6 @@ type
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
-  // - OutCustomHeader will handle Content-Type/Location
-  // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE', defined
-  // as STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8
-  // file name of a file which must be sent to the client via http.sys (much
-  // faster than manual buffering/sending)
   THttpServerRequest = class
   protected
     fURL, fMethod, fInHeaders, fInContent, fInContentType: SockString;
@@ -788,7 +788,8 @@ type
     fAuthenticatedUser: SockString;
   public
     /// initialize the context, associated to a HTTP server instance
-    constructor Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
+    constructor Create(aServer: THttpServerGeneric;
+      aCallingThread: TNotifiedThread); virtual;
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
@@ -807,13 +808,20 @@ type
     /// output parameter to be set to the response message body
     property OutContent: SockString read fOutContent write fOutContent ;
     /// output parameter to define the reponse message body content type
+    // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE', defined
+    // as STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8
+    // file name of a file which must be sent to the client via http.sys (much
+    // faster than manual buffering/sending)
     property OutContentType: SockString read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
+    // - e.g. to set Content-Type/Location
     property OutCustomHeaders: SockString read fOutCustomHeaders write fOutCustomHeaders;
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
     /// the thread instance which called this execution context
+    // - when assigned to a THttpServerGeneric.OnCallback event, this
+    // CallingThread should be set to the client connection to be notified
     property CallingThread: TNotifiedThread read fCallingThread;
     /// is TRUE if the caller is connected via HTTPS
     // - only set for THttpApiServer class yet
@@ -848,6 +856,9 @@ type
   protected
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
+    /// optional event handler when this server supports callbacks, e.g. when
+    // upgraded to websocket
+    fOnCallback: TOnHttpServerRequest;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -864,16 +875,17 @@ type
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
-    // - result of the function is the HTTP error code (200 if OK, e.g.)
-    // - OutCustomHeader will handle Content-Type/Location
+    // - result of the function is the HTTP error code (200 if OK, e.g.),
+    // - OutCustomHeader is available to handle Content-Type/Location
     // - if OutContentType is HTTP_RESP_STATICFILE (i.e. '!STATICFILE' or
     // STATICFILE_CONTENT_TYPE defined in mORMot.pas), then OutContent is the
     // UTF-8 file name of a file which must be sent to the client via http.sys
     // (much faster than manual buffering/sending) and  the OutCustomHeader should
     // contain the proper 'Content-type: ....'
-    // - default implementation is to call the OnRequest event (if existing)
+    // - default implementation is to call the OnRequest event (if existing),
+    // and will return STATUS_NOTFOUND if OnRequest was not set
     // - warning: this process must be thread-safe (can be called by several
-    // threads simultaneously)
+    // threads simultaneously, but with a given Ctxt instance for each)
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -888,6 +900,19 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
+    /// server can send a request back to the client, when the connection has
+    // been upgraded to WebSocket
+    // - only TWebSocketServer from SynBidirSock.pas implements this feature
+    // - caller should check Assigned(OnCallback) to know if bidirectional
+    // communicated has been initiated by the client
+    // - websocket upgrade should have been initiated by the client
+    // - InURL/InMethod/InContent properties are input parameters (InContentType
+    // is ignored)
+    // - OutContent/OutContentType/OutCustomHeader are output parameters
+    // - CallingThread should be set to the client's Ctxt.CallingThread
+    // value, so that the THttpServer could know which connnection is to be used
+    // - result of the function is the HTTP error code (200 if OK, e.g.)
+    property OnCallback: TOnHttpServerRequest read fOnCallback;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -1207,6 +1232,8 @@ type
     fServerConnectionCount: cardinal;
     fServerKeepAliveTimeOut: cardinal;
     fTCPPrefix: SockString;
+    fSock: TCrtSocket;
+    fThreadRespClass: THttpServerRespClass;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -1220,21 +1247,22 @@ type
     // default process is to get headers, and call public function Request
     procedure Process(ClientSock: THttpServerSocket; aCallingThread: TNotifiedThread); virtual;
   public
-    /// contains the main server Socket
-    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
-    // and accept incoming request
-    // - THttpServerSocket are created on the fly for every request, then
-    // a THttpServerResp thread is created for handling this THttpServerSocket
-    Sock: TCrtSocket;
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
     // - you can specify a number of threads to be initialized to handle
     // incoming connections (default is 32, which may be sufficient for most
-    // cases, maximum is 64)
+    // cases, maximum is 64) - if you set 0, the thread pool will be disabled
+    // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
     /// release all memory and handlers
     destructor Destroy; override;
+    /// access to the main server low-level Socket
+    // - it's a raw TCrtSocket, which only need a socket to be bound, listening
+    // and accept incoming request
+    // - THttpServerSocket are created on the fly for every request, then
+    // a THttpServerResp thread is created for handling this THttpServerSocket
+    property Sock: TCrtSocket read fSock;
   published
     /// will contain the total number of connection to the server
     // - it's the global count since the server started
@@ -2648,16 +2676,16 @@ begin
   for i := 0 to high(Values) do
   with Values[i] do
   case VType of
-    vtString:     Snd(@VString^[1], pByte(VString)^);
-    vtAnsiString: Snd(VAnsiString, length(SockString(VAnsiString)));
+    vtString:     Snd(@VString^[1],pByte(VString)^);
+    vtAnsiString: Snd(VAnsiString,length(SockString(VAnsiString)));
 {$ifdef UNICODE}
     vtUnicodeString: begin
-      tmp := shortstring(UnicodeString(VUnicodeString)); // convert into ansi (max length 255)
+      tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
       Snd(@tmp[1],length(tmp));
     end;
 {$endif}
-    vtPChar:      Snd(VPChar, StrLen(VPChar));
-    vtChar:       Snd(@VChar, 1);
+    vtPChar:      Snd(VPChar,StrLen(VPChar));
+    vtChar:       Snd(@VChar,1);
     vtWideChar:   Snd(@VWideChar,1); // only ansi part of the character
     vtInteger:    begin
       Str(VInteger,tmp);
@@ -3225,7 +3253,8 @@ end;
 
 { THttpServerRequest }
 
-constructor THttpServerRequest.Create(aServer: THttpServerGeneric; aCallingThread: TNotifiedThread);
+constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
+  aCallingThread: TNotifiedThread);
 begin
   inherited Create;
   fServer := aServer;
@@ -3267,7 +3296,7 @@ begin
   NotifyThreadStart(Ctxt.CallingThread);
   if Assigned(OnRequest) then
     result := OnRequest(Ctxt) else
-    result := STATUS_NOTFOUND; 
+    result := STATUS_NOTFOUND;
 end;
 
 procedure THttpServerGeneric.NotifyThreadStart(Sender: TNotifiedThread);
@@ -3297,14 +3326,16 @@ constructor THttpServer.Create(const aPort: SockString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
 var aSock: TCrtSocket;
 begin
+  fThreadRespClass := THttpServerResp;
   InitializeCriticalSection(fProcessCS);
   aSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   inherited Create(false);
-  Sock := aSock;
+  fSock := aSock;
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
 {$ifdef USETHREADPOOL}
-  fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
+  if ServerThreadPoolCount>0 then
+    fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
 {$endif}
 end;
 
@@ -3339,7 +3370,7 @@ begin
   KillThread(ThreadID);  // manualy do it here
 {$endif}
 {$endif}
-  FreeAndNil(Sock);
+  FreeAndNil(fSock);
   inherited Destroy;         // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
 end;
@@ -3389,18 +3420,20 @@ abort:  Shutdown(ClientSock,1);
       end;
 {$else}
 {$ifdef USETHREADPOOL}
-      if not fThreadPool.Push(ClientSock) then begin
-        for i := 1 to 1500 do begin
-          inc(fThreadPoolContentionCount);
-          SleepHiRes(20); // wait a little until a thread gets free
-          if fThreadPool.Push(ClientSock) then
-            Break;
-        end;
-        inc(fThreadPoolContentionAbortCount);
-        goto Abort; // 1500*20 = 30 seconds timeout
-      end;
+      if fThreadPool<>nil then begin
+        if not fThreadPool.Push(ClientSock) then begin
+          for i := 1 to 1500 do begin
+            inc(fThreadPoolContentionCount);
+            SleepHiRes(20); // wait a little until a thread gets free
+            if fThreadPool.Push(ClientSock) then
+              Break;
+          end;
+          inc(fThreadPoolContentionAbortCount);
+          goto Abort; // 1500*20 = 30 seconds timeout
+        end
+      end else
 {$else} // default implementation creates one thread for each incoming socket
-        THttpServerResp.Create(ClientSock, self);
+        fThreadRespClass.Create(ClientSock, self);
 {$endif}
 {$endif}
       end;
@@ -3420,7 +3453,8 @@ begin
   // nothing to do by default
 end;
 
-procedure THttpServer.Process(ClientSock: THttpServerSocket; aCallingThread: TNotifiedThread);
+procedure THttpServer.Process(ClientSock: THttpServerSocket;
+  aCallingThread: TNotifiedThread);
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
@@ -3434,7 +3468,7 @@ begin
   if Terminated then
     exit;
   Context := THttpServerRequest.Create(self,aCallingThread);
-  try
+  try                          
     // calc answer
     with ClientSock do
       Context.Prepare(URL,Method,HeaderGetText,Content,ContentType);
@@ -3757,6 +3791,7 @@ begin
   ContentLength := -1;
   fContentCompress := -1;
   ConnectionClose := false;
+  ConnectionUpgrade := false;
   Chunked := false;
   n := 0;
   repeat
@@ -3769,14 +3804,19 @@ begin
     inc(n);
     {$ifdef DEBUG23}system.Writeln(ClassName,'.HeaderIn ',s);{$endif}
     P := pointer(s);
-    if IdemPChar(P,'CONTENT-LENGTH:') then
-      ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16)) else
-    if IdemPChar(P,'CONTENT-TYPE:') then
-      ContentType := trim(copy(s,14,128)) else
+    if IdemPChar(P,'CONTENT-') then begin
+      if IdemPChar(P+8,'LENGTH:') then
+        ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16)) else
+      if IdemPChar(P+8,'TYPE:') then
+        ContentType := trim(copy(s,14,128));
+    end else
     if IdemPChar(P,'TRANSFER-ENCODING: CHUNKED') then
       Chunked := true else
-    if IdemPChar(P,'CONNECTION: CLOSE') then
-      ConnectionClose := true else
+    if IdemPChar(P,'CONNECTION: ') then
+       if IdemPChar(P+12,'CLOSE') then
+          ConnectionClose := true else
+       if IdemPChar(P+12,'UPGRADE') then
+          ConnectionUpgrade := true;
     if fCompress<>nil then
       if IdemPChar(P,'ACCEPT-ENCODING:') then
         fCompressHeader := ComputeContentEncoding(fCompress,P+16) else
@@ -3980,7 +4020,7 @@ begin
     EndTix := GetTickCount;
     result := EndTix<StartTix+5000; // 5 sec for header -> DOS / TCP SYN Flood
     // if time wrap after 49.7 days -> EndTix<StartTix -> always accepted
-    if result and withBody then
+    if result and withBody and not ConnectionUpgrade then 
       GetBody;
   except
     on E: Exception do
@@ -4054,7 +4094,7 @@ end;
 { TSynThreadPoolSubThread }
 
 const
-  // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp 
+  // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp
   THREADPOOL_BIGBODYSIZE = 1024*1024;
 
   // kept-alive or big HTTP requests will create a dedicated THttpServerResp
@@ -4123,7 +4163,7 @@ begin
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
         // HTTP/1.1 Keep Alive -> process in background thread
         // or posted data > 1 MB -> get Body in background thread
-        THttpServerResp.Create(ServerSock,fServer,self);
+        fServer.fThreadRespClass.Create(ServerSock,fServer,self);
         ServerSock := nil; // THttpServerResp will do ServerSock.Free
       end else begin
         // no Keep Alive = multi-connection -> process in the Thread Pool

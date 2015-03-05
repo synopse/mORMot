@@ -2790,7 +2790,7 @@ function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar=','): RawUTF8;
 // - start at Index=0 for first one
 // - return -1 if specified Value was not found in CSV items
 function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
-  CaseSensitive: boolean=true): integer;
+  CaseSensitive: boolean=true; TrimValue: boolean=false): integer;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
@@ -5745,11 +5745,11 @@ type
     // - Instance must be not nil
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar);
     /// append an array of integers as CSV
-    procedure AddCSV(const Integers: array of Integer); overload;
+    procedure AddCSVInteger(const Integers: array of Integer); overload;
     /// append an array of doubles as CSV
-    procedure AddCSV(const Doubles: array of double); overload;
+    procedure AddCSVDouble(const Doubles: array of double); overload;
     /// append an array of RawUTF8 as CSV
-    procedure AddCSV(const Values: array of RawUTF8); overload;
+    procedure AddCSVUTF8(const Values: array of RawUTF8); overload;
     /// append an array of const as CSV
     procedure AddCSVConst(const Values: array of const);
     /// write some data Base64 encoded
@@ -7077,13 +7077,13 @@ function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): R
 {$endif}
 
 /// encode the supplied RawUTF8 array data as an UTF-8 valid JSON array content
-function JSONEncodeArray(const Values: array of RawUTF8): RawUTF8; overload;
+function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8; overload;
 
 /// encode the supplied integer array data as a valid JSON array
-function JSONEncodeArray(const Values: array of integer): RawUTF8; overload;
+function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8; overload;
 
 /// encode the supplied floating-point array data as a valid JSON array
-function JSONEncodeArray(const Values: array of double): RawUTF8; overload;
+function JSONEncodeArrayDouble(const Values: array of double): RawUTF8; overload;
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
@@ -21866,13 +21866,15 @@ begin
       result := GetNextItemString(P,Sep);
 end;
 
-function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
-  CaseSensitive: boolean=true): integer;
+function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar;
+  CaseSensitive,TrimValue: boolean): integer;
 var s: RawUTF8;
 begin
   result := 0;
   while CSV<>nil do begin
     s := GetNextItem(CSV,Sep);
+    if TrimValue then
+      s := trim(s);
     if CaseSensitive then begin
       if s=Value then
         exit;
@@ -34229,7 +34231,7 @@ begin
   B^ := ',';
 end;
 
-procedure TTextWriter.AddCSV(const Integers: array of Integer);
+procedure TTextWriter.AddCSVInteger(const Integers: array of Integer);
 var i: integer;
 begin
   if length(Integers)=0 then
@@ -34241,7 +34243,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.AddCSV(const Doubles: array of double);
+procedure TTextWriter.AddCSVDouble(const Doubles: array of double);
 var i: integer;
 begin
   if length(Doubles)=0 then
@@ -34253,7 +34255,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.AddCSV(const Values: array of RawUTF8);
+procedure TTextWriter.AddCSVUTF8(const Values: array of RawUTF8);
 var i: integer;
 begin
   if length(Values)=0 then
@@ -36154,13 +36156,13 @@ begin
 end;
 {$endif}
 
-function JSONEncodeArray(const Values: array of double): RawUTF8;
+function JSONEncodeArrayDouble(const Values: array of double): RawUTF8;
 var W: TTextWriter;
 begin
   W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
-    W.AddCSV(Values);
+    W.AddCSVDouble(Values);
     W.Add(']');
     result := W.Text;
   finally
@@ -36168,13 +36170,13 @@ begin
   end;
 end;
 
-function JSONEncodeArray(const Values: array of RawUTF8): RawUTF8;
+function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8;
 var W: TTextWriter;
 begin
   W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
-    W.AddCSV(Values);
+    W.AddCSVUTF8(Values);
     W.Add(']');
     result := W.Text;
   finally
@@ -36182,13 +36184,13 @@ begin
   end;
 end;
 
-function JSONEncodeArray(const Values: array of integer): RawUTF8;
+function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8;
 var W: TTextWriter;
 begin
   W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('[');
-    W.AddCSV(Values);
+    W.AddCSVInteger(Values);
     W.Add(']');
     result := W.Text;
   finally

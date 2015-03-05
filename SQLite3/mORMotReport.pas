@@ -281,7 +281,7 @@ type
   /// Event triggered to allow custom unicode character display on the screen
   // - called for all text, whatever the alignment is
   // - Text content can be modified by this event handler to customize
-  // some characters (e.g. '>=' can be converted to the one unicode equivalent)
+  // some characters (e.g. '>=' can be converted to the one Unicode glyph)
   TOnStringToUnicodeEvent = function(const Text: SynUnicode): SynUnicode of object;
     
   /// available known paper size for NewPageLayout() method
@@ -631,9 +631,9 @@ type
 {$endif}
     /// if true, the headers are copied only once to the text
     ForceCopyTextAsWholeContent: boolean;
-    /// customize left aligned text conversion from Ansi
-    // - to be used before Delphi 2009/2010/XE only, in order to force some
-    // character customization (e.g. <= or >=)
+    /// customize text conversion before drawing
+    // - Text content can be modified by this event handler to customize
+    // some characters (e.g. '>=' can be converted to its Unicode glyph)
     OnStringToUnicode: TOnStringToUnicodeEvent;
     /// set group page fill method
     // - if set to true, the groups will be forced to be placed on the same page
@@ -5253,7 +5253,7 @@ begin
   if (self=nil) or (Owner=nil) then
     exit; // avoid GPF
   // convert text to unicode and add to fText[] internal buffer
-  Owner.InternalUnicodeString(s,PW,PWLen,nil);
+  Owner.InternalUnicodeString(StringToSynUnicode(s),PW,PWLen,nil);
   AddText(PW,PWLen);
 end;
 

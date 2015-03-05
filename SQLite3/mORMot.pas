@@ -45022,7 +45022,7 @@ begin
     case Stub of // address of VMT[0] entry, i.e. QueryInterface
       $04244483: result := pointer(PtrInt(aValue)+ShortJmp);
       $04244481: result := pointer(PtrInt(aValue)+LongJmp);
-      else // recognize TInterfaceFactory.CreateFakeInstance() mocks
+      else // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
       if Stub=PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then
         result := TInterfacedObjectFake(pointer(aValue)).SelfFromInterface else
         result := nil;
