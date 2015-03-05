@@ -240,7 +240,13 @@ procedure QueryPerformanceCounter(var Value: Int64);
 var info: TTimebaseInfoData;
 begin // returns time in nano second resolution
   mach_timebase_info(info);
-  Value := (mach_absolute_time * info.Numer) div info.Denom;
+  if info.Denom=1 then
+    if info.Numer=1 then
+      // seems to be the case on Intel CPUs
+      Value := mach_absolute_time else
+      Value := mach_absolute_time*info.Numer else
+    // use floating point to avoid potential overflow
+    Value := round(mach_absolute_time*(info.Numer/info.Denom));
 end;
 
 function QueryPerformanceFrequency(var Value: Int64):boolean;
