@@ -601,7 +601,7 @@ type
     FGlobalObject: TSMObject;
     FEngineContentVersion: Cardinal;
     FStringFinalizer: JSStringFinalizer;
-    FThreadID: DWORD;
+    FThreadID: TThreadID;
     FLastErrorMsg: RawUTF8;
     FLastErrorFileName: RawUTF8;
     FLastErrorLine: integer;
@@ -811,7 +811,7 @@ type
     procedure SetMaxPerEngineMemory(AMaxMem: Cardinal);
     /// returns -1 if none was defined yet
     // - this method is not protected via the global FEngineCS mutex/lock
-    function ThreadEngineIndex(ThreadID: DWORD): Integer;
+    function ThreadEngineIndex(ThreadID: TThreadID): Integer;
     /// returns nil if none was defined yet
     function CurrentThreadEngine: TSMEngine;
     /// create a new SpiderMonkey Engine
@@ -1408,9 +1408,9 @@ begin
   FMaxPerEngineMemory := AMaxMem;
 end;
 
-function TSMEngineManager.ThreadEngineIndex(ThreadID: DWORD): Integer;
+function TSMEngineManager.ThreadEngineIndex(ThreadID: TThreadID): Integer;
 begin
-  if self <> nil then
+  if self<>nil then
     for result := 0 to FEnginePool.Count-1 do
       if TSMEngine(FEnginePool.List[result]).fThreadID=ThreadID then
         exit;
@@ -1432,7 +1432,7 @@ end;
 
 function TSMEngineManager.ThreadSafeEngine: TSMEngine;
 var i: integer;
-    ThreadID: DWORD;
+    ThreadID: TThreadID;
 begin
   EnterCriticalSection(fEngineCS);
   try
@@ -1448,13 +1448,13 @@ begin
         // content version changed -> force recreate thread Engine
         {$ifdef SM_DEBUG}
         SynSMLog.Add.Log(sllDebug,
-          'Drop SpiderMonkey Engine for thread % - modification found', ThreadID);
+          'Drop SpiderMonkey Engine for thread % - modification found',ThreadID);
         {$endif}
         FEnginePool.Delete(i); // as in ReleaseCurrentThreadEngine
       end;
     // here result=nil or to be ignored (just dropped)
     {$ifdef SM_DEBUG}
-    SynSMLog.Add.Log(sllDebug, 'Create new JavaScript Engine for thread %', ThreadID);
+    SynSMLog.Add.Log(sllDebug, 'Create new JavaScript Engine for thread %',ThreadID);
     {$endif}
     result := CreateNewEngine;
     result.fThreadID := ThreadID;

@@ -2212,7 +2212,7 @@ type
   // - e.g. OleDB, ODBC and Oracle connections will inherit from this class
   TSQLDBConnectionThreadSafe = class(TSQLDBConnection)
   protected
-    fThreadID: DWORD;
+    fThreadID: TThreadID;
   end;
 
   /// threading modes set to TSQLDBConnectionPropertiesThreadSafe.ThreadingMode
@@ -5928,7 +5928,7 @@ begin
 end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
-var ID: DWORD;
+var ID: TThreadID;
 begin
   if self<>nil then begin
     ID := GetCurrentThreadId;

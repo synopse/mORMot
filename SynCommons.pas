@@ -768,10 +768,12 @@ const
 {$endif}
 
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
+
 type
   PBoolean = ^Boolean;
 
-{$else}
+{$else FPC}
+
 type
   /// a CPU-dependent unsigned integer type cast of a pointer / register
   // - used for 64 bits compatibility, native under Free Pascal Compiler
@@ -793,7 +795,13 @@ type
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
   QWord = {$ifdef HASINLINE}UInt64{$else}Int64{$endif};
-{$endif}
+
+  {$ifndef ISDELPHIXE2}
+  /// used to store the handle of a system Thread
+  TThreadID = cardinal;
+  {$endif}
+
+{$endif FPC}
 
 {$ifdef DELPHI5OROLDER}
   // Delphi 5 doesn't have those basic types defined :(
@@ -8230,7 +8238,7 @@ procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const
 /// name a thread so that it would be easily identified in the IDE debugger
 // - you can force this function to do nothing by setting the NOSETTHREADNAME
 // conditional, if you have issues with this feature when debugging your app
-procedure SetThreadName(ThreadID: cardinal; const Format: RawUTF8; const Args: array of const);
+procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8; const Args: array of const);
 
 type
   TSynBackgroundThreadAbstract = class;
@@ -8276,7 +8284,7 @@ type
     fProcessEvent: TEvent;
     fCallerEvent: TEvent;
     fParam: pointer;
-    fCallerThreadID: cardinal;
+    fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnBeforeExecute: TNotifyThreadEvent;
@@ -9028,17 +9036,15 @@ procedure SleepHiRes(ms: cardinal);
 
 {$else MSWINDOWS}
 
-/// compatibility function for Linux/Android
-function GetCurrentThreadID: LongWord; cdecl;
-{$ifdef ANDROID}
-  external 'libc.so' name 'pthread_self';
-{$else}
-  external 'libpthread.so.0' name 'pthread_self';
-{$endif}
-
 {$ifdef KYLIX3}
+
+/// compatibility function for Linux
+function GetCurrentThreadID: TThreadID; cdecl;
+  external 'libpthread.so.0' name 'pthread_self';
+
 /// overloaded function using open64() to allow 64 bit positions
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
+
 {$endif}
 
 /// compatibility function, to be implemented according to the running OS
@@ -11913,7 +11919,9 @@ implementation
 uses
   {$ifdef Linux}
   SynFPCLinux, BaseUnix, Unix, dynlibs,
+  {$ifndef Darwin}
   SysCall,
+  {$endif}
   {$endif}
   SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
 {$endif}
@@ -25203,6 +25211,14 @@ begin
   end;
 end;
 
+{$ifdef DARWIN}
+function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
+  cdecl external 'libc.dylib' name 'mprotect';
+  {$define USEMPROTECT}
+{$endif}
+{$ifdef KYLIX3}
+  {$define USEMPROTECT}
+{$endif}
 
 procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
   LeaveUnprotected: boolean=false);
@@ -25233,10 +25249,10 @@ begin
   AlignedAddr := PtrInt(Old) and not (PageSize - 1);
   while PtrInt(Old) + Size >= AlignedAddr + PageSize do
     Inc(PageSize,_SC_PAGE_SIZE);
-  {$ifdef FPC}
-  Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
-  {$else}
+  {$ifdef USEMPROTECT}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
+  {$else}
+  Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
   {$endif}
     try
       for i := 0 to Size-1 do    // do not use Move() here
@@ -43890,7 +43906,7 @@ begin
   SetThreadName(GetCurrentThreadId,Format,Args);
 end;
 
-procedure SetThreadName(ThreadID: cardinal; const Format: RawUTF8;
+procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 var name: RawByteString;
 {$ifndef ISDELPHIXE2}
@@ -44103,7 +44119,7 @@ end;
 
 function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
 var start: Int64;
-    ThreadID: cardinal;
+    ThreadID: TThreadID;
     E: Exception;
     IsIdle: boolean;
 function OnIdleProcessNotify: integer;

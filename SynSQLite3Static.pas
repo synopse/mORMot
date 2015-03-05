@@ -99,34 +99,16 @@ implementation
 
 
 procedure DoInitialization;
-var libName: TFileName;
 begin
   FreeAndNil(sqlite3);
   try
-    {$ifdef MSWINDOWS}
-    {$ifdef CPU64}
-    // see http://synopse.info/files/SQLite3-64.7z
-    libName := 'sqlite3-64.dll';
-    {$else}
-    libName := 'sqlite3.dll';
-    {$endif}
-    {$else}
-    {$ifdef Linux}      
-      {$ifdef Android}
-      libName := 'libsqlite.so';
-      {$else}
-      libName := 'libsqlite3.so.0';
-      {$endif}
-    {$else}
-    libName := 'libsqlite3.dylib';
-    {$endif}
-    {$endif}
-    sqlite3 := TSQLite3LibraryDynamic.Create(libName);        
+    sqlite3 := TSQLite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);        
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do  
       {$ifdef LINUX}
-      writeln(libName,' initialization failed with ',E.ClassName,': ',E.Message);
+      writeln(SQLITE_LIBRARY_DEFAULT_NAME+' initialization failed with ',
+        E.ClassName,': ',E.Message);
       {$endif}
   end;
 end;

@@ -251,6 +251,29 @@ type
   TSQLite3ValueArray = array[0..63] of TSQLite3Value;
 
 const
+  {$ifdef MSWINDOWS}
+  {$ifdef CPU64}
+  // see http://synopse.info/files/SQLite3-64.7z
+  SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
+  {$else}
+  SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';
+  {$endif}
+  {$else}
+  {$ifdef Linux}
+    {$ifdef Android}
+    SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite.so';
+    {$else}
+      {$ifdef Darwin}
+      SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.dylib';
+      {$else}
+      SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.so.0';
+      {$endif}
+    {$endif}
+  {$else}
+  SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.so';
+  {$endif}
+  {$endif}
+
   {/ internal SQLite3 type as Integer }
   SQLITE_INTEGER = 1;
   {/ internal SQLite3 type as Floating point value }
@@ -1970,7 +1993,7 @@ type
   public
     /// initialize the specified external library
     // - raise an ESQLite3Exception on error
-    constructor Create(const LibraryName: TFileName='sqlite3.dll'); reintroduce;
+    constructor Create(const LibraryName: TFileName=SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
     /// unload the external library
     destructor Destroy; override;
   published
@@ -3373,13 +3396,13 @@ begin
   if sqlite3=nil then
     raise ESQLite3Exception.Create('No SQLite3 libray available: you shall '+
       'either add SynSQLite3Static to your project uses clause, '+
-      'or run sqlite3 := TSQLite3LibraryDynamic.Create');
+      'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)');
   {$ifdef WITHLOG}
   fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
   {$endif}
-  if Trim(aFileName)='' then
-    raise ESQLite3Exception.CreateUTF8('%.Create(nil)',[self]);
+  if SysUtils.Trim(aFileName)='' then
+    raise ESQLite3Exception.CreateUTF8('%.Create('''')',[self]);
   fOpenV2Flags := aOpenV2Flags;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then

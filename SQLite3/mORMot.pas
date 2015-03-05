@@ -32635,7 +32635,7 @@ end;
 
 procedure TSQLRestServer.BeginCurrentThread(Sender: TThread);
 var i: integer;
-    CurrentThreadId: cardinal;
+    CurrentThreadId: TThreadID;
 begin
   InterlockedIncrement(fStats.fCurrentThreadCount);
   CurrentThreadId := GetCurrentThreadId;
@@ -32666,7 +32666,7 @@ const
 
 procedure TSQLRestServer.EndCurrentThread(Sender: TThread);
 var i: integer;
-    CurrentThreadId: cardinal;
+    CurrentThreadId: TThreadID;
     Inst: TServiceFactoryServerInstance;
 begin
   InterlockedDecrement(fStats.fCurrentThreadCount);
@@ -43847,7 +43847,7 @@ begin
   end;
   sicPerThread: begin
     Inst.Instance := nil;
-    Inst.InstanceID := GetCurrentThreadId;
+    Inst.InstanceID := PtrUInt(GetCurrentThreadId);
     if not InternalInstanceRetrieve(Inst,0) and (Inst.Instance<>nil) then
       result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
   end;
@@ -44020,7 +44020,7 @@ begin
       sicClientDriven:
         Inst.InstanceID := Ctxt.ServiceInstanceID;
       sicPerThread:
-        Inst.InstanceID := GetCurrentThreadId;
+        Inst.InstanceID := PtrUInt(GetCurrentThreadId);
       else
         if Ctxt.Session>CONST_AUTHENTICATION_NOT_USED then
           case InstanceCreation of // authenticated user -> handle context

@@ -892,7 +892,7 @@ type
     procedure Collections(Item: TCollTest; var List: TCollTestsI; out Copy: TCollTestsI);
     {$endif}
     /// returns the thread ID running the method on server side
-    function GetCurrentThreadID: cardinal;
+    function GetCurrentThreadID: TThreadID;
     /// validate record transmission
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
     //// validate TSQLRecord transmission
@@ -946,9 +946,9 @@ type
   ITestPerThread = interface(IInvokable)
     ['{202B6C9F-FCCB-488D-A425-5472554FD9B1}']
     function GetContextServiceInstanceID: cardinal;
-    function GetThreadIDAtCreation: cardinal;
-    function GetCurrentThreadID: cardinal;
-    function GetCurrentRunningThreadID: cardinal;
+    function GetThreadIDAtCreation: TThreadID;
+    function GetCurrentThreadID: TThreadID;
+    function GetCurrentRunningThreadID: TThreadID;
   end;
 
   /// a test value object, used by IUserRepository/ISmsSender interfaces
@@ -10826,7 +10826,7 @@ type
     procedure Collections(Item: TCollTest; var List: TCollTestsI; out Copy: TCollTestsI);
     destructor Destroy; override;
     {$endif LVCL}
-    function GetCurrentThreadID: cardinal;
+    function GetCurrentThreadID: TThreadID;
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     function GetCustomer(CustomerId: Integer; out CustomerData: TCustomerData): Boolean;
     procedure FillPeople(var People: TSQLRecordPeople);
@@ -10856,13 +10856,13 @@ type
 
   TServicePerThread = class(TInterfacedObjectWithCustomCreate,ITestPerThread)
   protected
-    fThreadIDAtCreation: cardinal;
+    fThreadIDAtCreation: TThreadID;
   public
     constructor Create; override;
     function GetContextServiceInstanceID: cardinal;
-    function GetThreadIDAtCreation: cardinal;
-    function GetCurrentThreadID: cardinal;
-    function GetCurrentRunningThreadID: cardinal;
+    function GetThreadIDAtCreation: TThreadID;
+    function GetCurrentThreadID: TThreadID;
+    function GetCurrentRunningThreadID: TThreadID;
   end;
 
 
@@ -10944,14 +10944,19 @@ begin
   result := Nav;
 end;
 
+function GetThreadID: TThreadID;
+begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
+  result := GetCurrentThreadId;
+end;
+
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetCurrentThreadID<>MainThreadID then
+    if GetThreadID<>MainThreadID then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetCurrentThreadID=MainThreadID then
+    if GetThreadID=MainThreadID then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -10973,9 +10978,9 @@ begin
 end;
 {$endif}
 
-function TServiceComplexCalculator.GetCurrentThreadID: cardinal;
+function TServiceComplexCalculator.GetCurrentThreadID: TThreadID;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadId;
+  result := GetThreadID;
 end;
 
 function TServiceComplexCalculator.GetCustomer(CustomerId: Integer;
@@ -11075,36 +11080,35 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation :=
-    {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
+  fThreadIDAtCreation := GetThreadID;
 end;
 
-function TServicePerThread.GetCurrentThreadID: cardinal;
+function TServicePerThread.GetCurrentThreadID: TThreadID;
 begin
-  result := {$ifdef MSWINDOWS}Windows.{$else}SynCommons.{$endif}GetCurrentThreadID;
+  result := GetThreadID;
   with PServiceRunningContext(@ServiceContext)^ do
     if Request<>nil then
       if Result<>Request.ServiceInstanceID then
         raise Exception.Create('Unexpected ServiceInstanceID');
 end;
 
-function TServicePerThread.GetThreadIDAtCreation: cardinal;
+function TServicePerThread.GetThreadIDAtCreation: TThreadID;
 begin
   result := fThreadIDAtCreation;
 end;
 
-function TServicePerThread.GetContextServiceInstanceID: cardinal;
+function TServicePerThread.GetContextServiceInstanceID: TThreadID;
 begin
   with PServiceRunningContext(@ServiceContext)^ do
     if Request=nil then
       result := 0 else begin
       result := Request.ServiceInstanceID;
-      if result<>GetCurrentThreadID then
+      if result<>GetThreadID then
         raise Exception.Create('Unexpected ThreadID');
     end;
 end;
 
-function TServicePerThread.GetCurrentRunningThreadID: cardinal;
+function TServicePerThread.GetCurrentRunningThreadID: TThreadID;
 var Thread: TThread;
 begin
   Thread := ServiceContext.RunningThread;
@@ -11113,7 +11117,7 @@ begin
   if Thread=nil then
     result := 0 else begin
     result := Thread.ThreadID;
-    if result<>GetCurrentThreadID then
+    if result<>GetThreadID then
       raise Exception.Create('Unexpected ThreadID');
   end;
 end;

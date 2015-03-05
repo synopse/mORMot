@@ -59,6 +59,9 @@ interface
 {$ifdef ANDROID}
   {$define LINUX}
 {$endif}
+{$ifdef Darwin}
+  {$define LINUX}
+{$endif}
 
 uses
   SysUtils
@@ -138,7 +141,7 @@ implementation
 
 {$ifdef Linux}
 uses
-  Classes, Unix, BaseUnix, linux, dynlibs;
+  Classes, Unix, BaseUnix, {$ifndef Darwin}linux,{$endif} dynlibs;
 {$endif}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
@@ -209,22 +212,6 @@ begin
   result.MilliSecond := tz.tv_usec div 1000;
 end;
 
-{$if not defined(GetTickCountTimeOfDay)}
-function GetTickCount64: Int64;
-var tp: timespec;
-begin
-  clock_gettime(CLOCK_MONOTONIC, @tp); // exists since Linux Kernel 2.6
-  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_nsec div 1000000);
-end;
-{$ELSE}
-function GetTickCount64: Int64;
-var tp: TTimeVal;
-begin
-  fpgettimeofday(@tp, nil);
-  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_usec div 1000);
-end;
-{$ENDIF}
-
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
@@ -234,6 +221,48 @@ const
   C_THOUSAND = Int64(1000);
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
+
+{$ifdef DARWIN}
+// clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
+
+type
+  TTimebaseInfoData = record
+    Numer: cardinal;
+    Denom: cardinal;
+  end;
+
+function mach_absolute_time: UInt64;
+  cdecl external 'libc.dylib' name 'mach_absolute_time';
+function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
+  cdecl external 'libc.dylib' name 'mach_timebase_info';
+
+procedure QueryPerformanceCounter(var Value: Int64);
+var info: TTimebaseInfoData;
+begin // returns time in nano second resolution
+  mach_timebase_info(info);
+  Value := (mach_absolute_time * info.Numer) div info.Denom;
+end;
+
+function QueryPerformanceFrequency(var Value: Int64):boolean;
+begin
+  Value := C_BILLION; // 1 second = 1e9 nanoseconds
+  result := true;
+end;
+
+function GetTickCount64: Int64;
+begin
+  QueryPerformanceCounter(result);
+  result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
+end;
+
+{$else}
+
+function GetTickCount64: Int64;
+var tp: timespec;
+begin
+  clock_gettime(CLOCK_MONOTONIC, @tp); // exists since Linux Kernel 2.6
+  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_nsec div 1000000);
+end;
 
 procedure QueryPerformanceCounter(var Value: Int64);
 var r : TTimeSpec;
@@ -252,6 +281,8 @@ begin
     value := C_BILLION div (r.tv_nsec+(r.tv_sec*C_BILLION));
   result := FIsHighResolution;
 end;
+
+{$endif}
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;

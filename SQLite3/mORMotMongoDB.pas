@@ -52,11 +52,15 @@ unit mORMotMongoDB;
   
   TODO:
   - complex WHERE clause with a MongoDB Query object instead of SQL syntax
-  - handle TSQLRawBlob fields optionally with GridFS (and rely on TByteDynArray
-    to store smaller BLOBs within the document)
+    (mitigated by the fact that most SQL queries are translated into BSON
+    Query Object at runtime - need for most complex features like in-object
+    inspection)
+  - handle TSQLRawBlob fields with GridFS (and rely on TByteDynArray to store
+    smaller BLOBs - < 16 MB - within the document, or in a separated collection)
   - allow PolyMorphic schemas: the same MongoDB collection may be able to
     store a hierarchy of TSQLRecord classes, storing only relevant fields in
-    each document - this may be a huge benefit in common OOP work  
+    each document - this may be a huge benefit in common OOP work - could be
+    implemented in mORMot.pas for any DB - see [bf459fe126] and [da0bccd89e] 
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
     in a dedicated mORMotDBMongoDB unit (but perhaps we may loose interest)
 

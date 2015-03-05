@@ -623,7 +623,7 @@ type
     fWriterStream: TStream;
     fThreadLock: TRTLCriticalSection;
     fThreadContext: PSynLogThreadContext;
-    fThreadID: cardinal;
+    fThreadID: TThreadID;
     fThreadIndex: integer;
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
@@ -631,7 +631,7 @@ type
     fFileName: TFileName;
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
-    fThreadHash: TWordDynArray;
+    fThreadHash: TWordDynArray; // 64 KB buffer
     fThreadContexts: array of TSynLogThreadContext;
     fThreadContextCount: integer;
     fCurrentLevel: TSynLogInfo;
@@ -668,7 +668,7 @@ type
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
-    procedure LockAndGetThreadContextInternal(ID: DWORD);
+    procedure LockAndGetThreadContextInternal(ID: TThreadID);
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; virtual;
@@ -2443,12 +2443,12 @@ const
   // pool (like we do for all our mORMot servers, including http.sys based)
   MAXLOGTHREAD = 1 shl 15;
 
-procedure TSynLog.LockAndGetThreadContextInternal(ID: DWORD);
+procedure TSynLog.LockAndGetThreadContextInternal(ID: TThreadID);
 var hash: integer;
     Pass2: boolean;
 label storendx;
 begin
-  hash := ID and (MAXLOGTHREAD-1);
+  hash := PtrUInt(ID) and (MAXLOGTHREAD-1);
   Pass2 := false;
   fThreadIndex := fThreadHash[hash];
   if fThreadIndex<>0 then
@@ -2482,7 +2482,7 @@ storendx:
 end;
 
 procedure TSynLog.LockAndGetThreadContext;
-var ID: DWORD;
+var ID: TThreadID;
 begin
   EnterCriticalSection(fThreadLock);
   ID := GetCurrentThreadId;
@@ -2587,7 +2587,7 @@ begin
   assert(RtlCaptureStackBackTraceRetrieved=btOK);
   {$endif}
   {$endif}
-  SetLength(fThreadHash,MAXLOGTHREAD);
+  SetLength(fThreadHash,MAXLOGTHREAD); // 64 KB buffer
   SetLength(fThreadContexts,256);
 end;
 
@@ -3281,7 +3281,7 @@ begin
     fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
   {$endif}
   if fFamily.fPerThreadLog=ptOneFilePerThread then
-    fFileName := fFileName+' '+IntToString(GetCurrentThreadId);
+    fFileName := fFileName+' '+IntToString(Int64(GetCurrentThreadId));
   fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
 end;
 

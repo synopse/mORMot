@@ -195,6 +195,10 @@
   {$ifdef ANDROID}
     {$define LINUX}
   {$endif}
+  {$ifdef DARWIN}
+    {$define LINUX}
+    {$define PUREPASCAL} // e.g. low-level stack layout differs  
+  {$endif}
 
   {$ifdef CPU64}
     {$define PUREPASCAL}
@@ -398,11 +402,14 @@
   {.$define SQLITE3_FASTCALL}
 {$endif}
 
-// Only Win32+Linux32 do support our SQLite3 static linked library  
+// Only Win32+Linux32 do support our SQLite3 static linked library yet  
 {$ifdef CPU64}
   {$define NOSQLITE3STATIC}
 {$endif}
 {$ifdef ANDROID}
+  {$define NOSQLITE3STATIC}
+{$endif}
+{$ifdef DARWIN}
   {$define NOSQLITE3STATIC}
 {$endif}
 
@@ -431,5 +438,4 @@
   {$define USELIBCURL}
   {$endif}
 {$endif}
-
 
