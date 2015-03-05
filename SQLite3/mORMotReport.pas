@@ -33,6 +33,7 @@ unit mORMotReport;
   Contributor(s):
   - Celery
   - Leo
+  - Mike Lamusse (mogulza)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -203,7 +204,9 @@ unit mORMotReport;
   - allow preview as a blank colored component at design time (thanks to Celery)
   - added VisibleButtons optional parameter to TGDIPages.ShowPreviewForm method
     as requested by [4d64a52675]
-
+  - added withNewLine optional parameter to DrawText*() methods so that you
+    may be able to append some text without creating a new paragraph - from a
+    proposal patch by Mike Lamusse (mogulza): thanks for sharing!
 
 *)
 
@@ -381,7 +384,10 @@ type
     fHeaderLines: TObjectList;
     fFooterLines: TObjectList;
     fColumns: array of TColRec;
-    fColumnHeaderList: TStringList;
+    fColumnHeaderList: array of record
+      headers: TSynUnicodeDynArray;
+      flags: integer;
+    end;
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
     fZoomTimer: TTimer;
 {$endif}
@@ -522,8 +528,8 @@ type
 
     procedure LineInternal(start,finish: integer; DoubleLine: boolean);
     procedure PrintFormattedLine(s: SynUnicode; flags: integer;
-      const aBookmark: string=''; const aLink: string='');
-    procedure LeftOrJustifiedWrap(const s: SynUnicode);
+      const aBookmark: string=''; const aLink: string=''; withNewLine: boolean=true);
+    procedure LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean=true);
     procedure RightOrCenterWrap(const s: SynUnicode);
     procedure GetTextLimitsPx(var LeftOffset, RightOffset: integer);
     procedure HandleTabsAndPrint(const leftstring: SynUnicode;
@@ -557,6 +563,7 @@ type
     // to get the Y position of the destination
     fOutline: TStringList;
     fInternalUnicodeString: SynUnicode;
+    fForcedLeftOffset : integer;
     PreviewForm: TForm;
     PreviewButtons: array of TButton;
     PreviewPageCountLabel: TLabel;
@@ -656,20 +663,29 @@ type
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    procedure DrawText(const s: string); {$ifdef HASINLINE}inline;{$endif}
+    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // so that the next DrawText() will continue drawing at the current position 
+    procedure DrawText(const s: string; withNewLine: boolean=true);
+      {$ifdef HASINLINE}inline;{$endif} 
     /// draw some UTF-8 text as a paragraph, with the current alignment
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    procedure DrawTextU(const s: RawUTF8); {$ifdef HASINLINE}inline;{$endif}
+    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // so that the next DrawText() will continue drawing at the current position 
+    procedure DrawTextU(const s: RawUTF8; withNewLine: boolean=true);
+      {$ifdef HASINLINE}inline;{$endif}
     /// draw some Unicode text as a paragraph, with the current alignment
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
-    procedure DrawTextW(const s: SynUnicode);
+    // - by default, will write a paragraph, unless withNewLine is set to FALSE,
+    // so that the next DrawText() will continue drawing at the current position 
+    procedure DrawTextW(const s: SynUnicode; withNewLine: boolean=true); 
     /// draw some text as a paragraph, with the current alignment
     // - this method use format() like parameterss
-    procedure DrawTextFmt(const s: string; const Args: array of const);
+    procedure DrawTextFmt(const s: string; const Args: array of const;
+      withNewLine: boolean=true);
     /// get the formating flags associated to a Title
     function TitleFlags: integer;
     /// draw some text as a paragraph title
@@ -830,7 +846,11 @@ type
     /// Will add the current 'Page n/n' text at the specified position
     // - PageText must be of format 'Page %d/%d', in the desired language
     // - if XPos=-1, will put the text at the current right margin
-    procedure AddPagesToFooterAt(const PageText: string; XPos: integer);
+    // - if the vertical position does not fit your need, you could set
+    // YPosMultiplier to a value which will be multipled by fFooterHeight to
+    // compute the YPos
+    procedure AddPagesToFooterAt(const PageText: string; XPos: integer;
+      YPosMultiplier: integer=1);
 
     /// register a column, with proper alignment
     procedure AddColumn(left, right: integer; align: TColAlign; bold: boolean);
@@ -860,7 +880,14 @@ type
     // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
     // row is printed on white with this background color (e.g. to highlight errors)
     procedure DrawTextAcrossCols(const StringArray: array of SynUnicode;
-      BackgroundColor: TColor=clNone);
+      BackgroundColor: TColor=clNone); overload;
+    /// draw some text, split across every columns
+    // - you can specify an optional bookmark name to be used to link a column
+    // content via a AddLink() call
+    // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
+    // row is printed on white with this background color (e.g. to highlight errors)
+    procedure DrawTextAcrossCols(const StringArray, LinkArray: array of SynUnicode;
+      BackgroundColor: TColor=clNone); overload;
     /// draw some text, split across every columns
     // - this method expect the text to be separated by commas
     // - if BackgroundColor is not clNone (i.e. clRed or clNavy or clBlack), the
@@ -1171,7 +1198,7 @@ type
   end;
 
   PRenderBoxLayout = ^TRenderBoxLayout;
-  
+
   /// the internal "drawing" box structure used by TRenderBox
   // - TRenderBox.InternalRender populate fLayout[] with this structures,
   // ready to be drawn to the document Canvas
@@ -1442,12 +1469,6 @@ implementation
 uses
   {$ifdef ISDELPHIXE3}System.UITypes,{$endif}
   Types, Clipbrd, Consts;
-
-type
-  //TZStrings: used by ColumnHeaderList to store #0 terminated char arrays
-  //eg: A column header row might look like - 'Column One'#0'Column Two'#0
-  TZStrings = SynUnicode;
-
 
 // Miscellaneous functions ...
 
@@ -2387,21 +2408,13 @@ end;
 
 procedure TGDIPages.PrintColumnHeaders;
 var
-  i,j,SavedFontSize,FontCol: integer;
+  i,SavedFontSize,FontCol: integer;
   SavedFontStyle: TFontStyles;
   SavedAlign: TTextAlign;
   SavedWordWrapLeftCols: boolean;
-  headers: array[0..MAXCOLS-1] of SynUnicode;
-  zStr: TZStrings;
-
-  function GetSubstringFromStringArray(var s: TZStrings): SynUnicode;
-  begin
-    result := PWideChar(pointer(s)); // result := next #0 ended string in s
-    delete(s,1,length(result)+1);
-  end;
 
 begin
-  if (fColumnHeaderList.Count = 0) or (fColumns=nil) then exit;
+  if (fColumnHeaderList = nil) or (fColumns=nil) then exit;
   CheckYPos;
 
   fColumnHeaderPrinted := true;   //stops an endless loop
@@ -2414,17 +2427,11 @@ begin
   if Assigned(fStartColumnHeader) then
     fStartColumnHeader(Self);
   FontCol := fCanvas.Font.Color;
-  for i := 0 to fColumnHeaderList.Count-1 do begin
-    SetFontWithFlags(integer(fColumnHeaderList.Objects[i]));
+  for i := 0 to High(fColumnHeaderList) do begin
+    SetFontWithFlags(fColumnHeaderList[i].flags);
     fCanvas.Font.Color := clBlack;
-    j := 0;
-    zStr := fColumnHeaderList[i];
-    while (j < MAXCOLS) and (zStr<>'') do begin
-      headers[j] := GetSubstringFromStringArray(zStr);
-      inc(j);
-    end;
     fDrawTextAcrossColsDrawingHeader := true;
-    DrawTextAcrossCols(slice(headers,j));
+    DrawTextAcrossCols(fColumnHeaderList[i].headers,[],clNone);
     fDrawTextAcrossColsDrawingHeader := false;
   end;
   fCanvas.Font.Color := FontCol;
@@ -2581,7 +2588,7 @@ begin
 end;
 
 procedure TGDIPages.PrintFormattedLine(s: SynUnicode; flags: integer;
-  const aBookmark: string; const aLink: string);
+  const aBookmark: string; const aLink: string; withNewLine: boolean); 
 var i, xpos: integer;
     leftOffset, rightOffset: integer;
 begin
@@ -2601,8 +2608,10 @@ begin
     LineInternal(leftOffset,rightOffset,flags and FORMAT_DOUBLELINE=FORMAT_DOUBLELINE);
     NewLine;
   end else
-  if s = '' then
-    NewLine else
+  if s = '' then begin
+    if withNewLine then
+      NewLine;
+  end else
   if (flags and FORMAT_XPOS_MASK <> 0) then begin
     xpos := ((flags and FORMAT_XPOS_MASK) shr 16)-2;
     if xpos<0 then
@@ -2611,7 +2620,7 @@ begin
     DrawTextAt(s,xpos);
   end else
   if (falign in  [taLeft,taJustified]) then
-    LeftOrJustifiedWrap(s) else
+    LeftOrJustifiedWrap(s,withNewLine) else
     RightOrCenterWrap(s);
   if aBookmark<>'' then
     AddBookMark(aBookmark,fCurrentTextTop);
@@ -2622,7 +2631,7 @@ begin
     // first line of written text is added
 end;
 
-procedure TGDIPages.LeftOrJustifiedWrap(const s: SynUnicode);
+procedure TGDIPages.LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean); 
 var indent, leftOffset, rightOffset, LineWidth: integer;
     leftstring, rightstring: SynUnicode;
     firstLoop: boolean;
@@ -2660,7 +2669,8 @@ begin
     leftstring := rightstring;
     NewLine;
   until false;
-  NewLine;
+  if withNewLine then
+    NewLine; 
 end;
 
 procedure TGDIPages.RightOrCenterWrap(const s: SynUnicode);
@@ -2701,8 +2711,10 @@ procedure TGDIPages.GetTextLimitsPx(var LeftOffset, RightOffset: integer);
 begin
   // Offsets (in Printer pixels) based on current page margins
   LeftOffset := fPageMarginsPx.left;
+  if fForcedLeftOffset <> -1 then
+    leftOffset := fForcedLeftOffset; 
   RightOffset := fPhysicalSizePx.x-fPageMarginsPx.right;
-  if RightOffset<=LeftOffset then
+  if RightOffset < LeftOffset then
     raise Exception.Create('GetTextLimitsPx: wrong margins');
 end;
 
@@ -2766,6 +2778,7 @@ begin
     if BiDiMode=bdRightToLeft then
       leftOffset := rightOffset-size.cx;
     TextOut(fCanvas,leftOffset,fCurrentYPos,PW,PWLen);
+    fForcedLeftOffset := leftOffset+size.cx; 
     // don't care about line width: it should be always equal or smaller,
     // and we are left aligned
   end else begin // justified
@@ -2901,9 +2914,11 @@ begin
       exit;
     end;
   end;
-  if (Button=mbLeft) and (ssDouble in Shift) then begin
-    Zoom := PAGE_WIDTH; // double click on page -> reset zoom to page width
-  end else
+  if (Button=mbLeft) and (ssDouble in Shift) then 
+    // allows dblclick to alternate between PAGE_FIT and PAGE_WIDTH
+    if ZoomStatus = zsPageWidth then
+      Zoom := PAGE_FIT else
+      Zoom := PAGE_WIDTH else
 {$ifndef MOUSE_CLICK_PERFORM_ZOOM}
   if Button=mbLeft then begin
     fButtonDown.X := (X shr 3)shl 3; // move 8 pixels by 8 pixels
@@ -3160,7 +3175,6 @@ begin
 
   fHeaderLines := TObjectList.Create;
   fFooterLines := TObjectList.Create;
-  fColumnHeaderList := TStringList.create;
 
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
   fZoomTimer := TTimer.create(Self);
@@ -3208,6 +3222,7 @@ begin
   fBookmarks := TStringList.Create;
   fLinks := TStringList.Create;
   fOutline := TStringList.Create;
+  fForcedLeftOffset := -1; 
 end;
 
 destructor TGDIPages.Destroy;
@@ -3215,7 +3230,6 @@ begin
   Clear;
   fHeaderLines.free;
   fFooterLines.free;
-  fColumnHeaderList.free;
   fPreviewSurface.free;
   PreviewSurfaceBitmap.Free;
 {$ifdef MOUSE_CLICK_PERFORM_ZOOM}
@@ -3255,19 +3269,21 @@ begin
   fButtonDown.X := -1; // so MouseMove() won't scroll paintbox
 end;
 
-procedure TGDIPages.DrawText(const s: string);
+procedure TGDIPages.DrawText(const s: string; withNewLine : boolean);
 begin
-  DrawTextW(StringToSynUnicode(s));
+  DrawTextW(StringToSynUnicode(s), withNewLine);
 end;
 
-procedure TGDIPages.DrawTextW(const s: SynUnicode);
+procedure TGDIPages.DrawTextW(const s: SynUnicode; withNewLine: boolean);
 var P, Start: PWideChar;
     tmpStr: SynUnicode;
 begin
   if Self=nil then exit;
   CheckYPos;
-  if s = '' then
-    NewLine else begin
+  if s = '' then begin
+    if withNewLine then
+      NewLine;
+  end else begin
     // split NewLine characters (#13 or #13#10) into multi lines
     P := pointer(s);
     while P^ <> #0 do begin
@@ -3276,16 +3292,16 @@ begin
       SetString(tmpStr, Start, P-Start);
       if not fInHeaderOrFooter then
         fCanvasText := fCanvasText+SynUnicodeToString(tmpStr)+#13#10;
-      PrintFormattedLine(tmpStr, FORMAT_DEFAULT);
+      PrintFormattedLine(tmpStr, FORMAT_DEFAULT, '', '', withNewLine);
       if P^ = #13 then Inc(P);
       if P^ = #10 then Inc(P);
     end;
   end;
 end;
 
-procedure TGDIPages.DrawTextU(const s: RawUTF8);
+procedure TGDIPages.DrawTextU(const s: RawUTF8; withNewLine: boolean);
 begin
-  DrawTextW(UTF8ToSynUnicode(s));
+  DrawTextW(UTF8ToSynUnicode(s),withNewLine);
 end;
 
 procedure TGDIPages.DrawTitle(const s: SynUnicode; DrawBottomLine: boolean=false;
@@ -3545,6 +3561,7 @@ begin
   if Self=nil then exit; // avoid GPF
   CheckHeaderDone;
   inc(fCurrentYPos, GetLineHeight);
+  fForcedLeftOffset := -1; 
 //  fCanvasText := fCanvasText+#13#10;
 end;
 
@@ -3996,7 +4013,8 @@ begin
   fFooterLines.Add(Foot);
 end;
 
-procedure TGDIPages.AddPagesToFooterAt(const PageText: string; XPos: integer);
+procedure TGDIPages.AddPagesToFooterAt(const PageText: string;
+  XPos,YPosMultiplier: integer);
 begin
   if fPagesToFooterText<>'' then
     exit; // only add once
@@ -4004,7 +4022,7 @@ begin
   if XPos<0 then
     fPagesToFooterAt.X := -1 else
     fPagesToFooterAt.X := MmToPrinterPxX(XPos);
-  fPagesToFooterAt.Y := fFooterHeight;
+  fPagesToFooterAt.Y := fFooterHeight * YPosMultiplier;
   fPagesToFooterState := SavedState;
 end;
 
@@ -4097,8 +4115,7 @@ end;
 procedure TGDIPages.AddColumnHeaders(const headers: array of SynUnicode;
   WithBottomGrayLine: boolean=false; BoldFont: boolean=false;
   RowLineHeight: integer=0; flags: integer=0);
-var i: integer;
-    zStr: TZStrings;
+var n,i: integer;
 begin
   if Self=nil then exit; // avoid GPF
   if flags=0 then begin
@@ -4106,10 +4123,12 @@ begin
       Font.Style := [fsBold];
     flags := TextFormatsToFlags;
   end;
-  zStr := '';
-  for i := Low(headers) to High(headers) do
-    zStr := zStr + headers[i]+#0;
-  fColumnHeaderList.AddObject(zStr,pointer(flags));
+  n := length(fColumnHeaderList);
+  SetLength(fColumnHeaderList,n+1);
+  fColumnHeaderList[n].flags := flags;
+  SetLength(fColumnHeaderList[n].headers,Length(headers));
+  for i := 0 to high(headers) do
+    fColumnHeaderList[n].headers[i] := headers[i];
   fColumnHeaderPrinted := false;
   fColumnHeaderPrintedAtLeastOnce := false;
   fColumnsWithBottomGrayLine := WithBottomGrayLine;
@@ -4137,7 +4156,7 @@ end;
 procedure TGDIPages.DrawTextAcrossColsFromCSV(var CSV: PWideChar; BackgroundColor: TColor=clNone);
 begin
   if Self<>nil then // avoid GPF
-    DrawTextAcrossCols(CSVToArray(CSV,length(fColumns)),BackgroundColor);
+    DrawTextAcrossCols(CSVToArray(CSV,length(fColumns)),[],BackgroundColor); 
 end;
 
 /// round inverted color to white or black
@@ -4150,8 +4169,15 @@ begin
     result := clBlack;
 end;
 
-procedure TGDIPages.DrawTextAcrossCols(const StringArray: array of SynUnicode;
-  BackgroundColor: TColor = clNone);
+procedure TGDIPages.DrawTextAcrossCols(const StringArray: array of SynUnicode; 
+  BackgroundColor: TColor);
+begin
+  DrawTextAcrossCols(StringArray,[],BackgroundColor);
+end;
+
+procedure TGDIPages.DrawTextAcrossCols(const StringArray, LinkArray: array of SynUnicode;
+  BackgroundColor: TColor);
+
 function HasCRLF(const s: SynUnicode): boolean;
 var i: integer;
 begin
@@ -4161,6 +4187,7 @@ begin
       exit;
   result := false;
 end;
+
 function WrapText(s: SynUnicode; MaxWidth: integer; Lines: PSynUnicodeDynArray): integer;
 var j,k,sp: integer;
 begin
@@ -4195,15 +4222,17 @@ begin
     s := trim(copy(s,sp,maxInt)); // trim ' ',#13,#10 for next line
   until s='';
 end;
+
 var RowRect: TRect;
     lh: integer;
-var max, i, j, k, c, H, ParenthW, LinesCount, X: integer;
+    max, i, j, k, c, H, ParenthW, LinesCount, X: integer;
     s: SynUnicode;
     line: string;
     Lines: TSynUnicodeDynArray;
     PW: PWideChar;
     PWLen, Options: integer;
     size: TSize;
+    r: TRect;
 begin
   if Self=nil then exit; // avoid GPF
   max := high(fColumns);
@@ -4232,8 +4261,8 @@ begin
       CheckHeaderDone;
     end;
   end;
-  if (fColumnHeaderList.Count > 0) and not fColumnHeaderPrinted then begin
-    i := fColumnHeaderList.Count + 2;
+  if (fColumnHeaderList<>nil) and not fColumnHeaderPrinted then begin
+    i := length(fColumnHeaderList) + 2;
     if not HasSpaceForLines(i) then
       NewPageInternal;
     PrintColumnHeaders;
@@ -4300,16 +4329,22 @@ begin
         caRight:
           if BiDiMode=bdLeftToRight then
             RowRect.Left := ColRight-size.cx-ParenthW;
-        caCurrency:
-          begin
-            if fNegsToParenthesesInCurrCols then
-              InternalUnicodeString(ConvertNegsToParentheses(s),PW,PWLen,@size);
-            RowRect.Left := ColRight-size.cx-ParenthW;
-            // no bdRightToleft handling necessary for caCurrency
-          end;
+        caCurrency: begin
+          if fNegsToParenthesesInCurrCols then
+            InternalUnicodeString(ConvertNegsToParentheses(s),PW,PWLen,@size);
+          RowRect.Left := ColRight-size.cx-ParenthW;
+          // no bdRightToleft handling necessary for caCurrency
+        end;
       end;
       dec(RowRect.Left,ParenthW);
       ExtTextOutW(Handle,RowRect.Left+ParenthW,fCurrentYPos,Options,@RowRect,PW,PWLen,nil);
+      if (i<length(LinkArray)) and (LinkArray[i]<>'') then begin
+        r.Left := PrinterPxToMmX(rowrect.Left);
+        r.Top := PrinterPxToMmX(rowrect.Top);
+        r.right := PrinterPxToMmX(rowrect.left+(rowrect.right-fColumns[0].ColLeft) div (max+1));
+        r.Bottom := PrinterPxToMmX(rowrect.Bottom);
+        AddLink(LinkArray[i],r);
+      end;
       inc(RowRect.Left,size.cx+ParenthW);
       if ColBold then
         Font.Style := Font.Style-[fsBold];
@@ -4340,14 +4375,13 @@ begin
   NewLine;
 end;
 
-
 procedure TGDIPages.DrawLinesInCurrencyCols(doublelines: boolean);
 var i: integer;
 begin
   if Self=nil then exit; // avoid GPF
   CheckYPos;
-  if (fColumnHeaderList.Count > 0) and not fColumnHeaderPrinted then begin
-    i := fColumnHeaderList.Count + 2;
+  if (fColumnHeaderList<>nil) and not fColumnHeaderPrinted then begin
+    i := length(fColumnHeaderList) + 2;
     if not HasSpaceForLines(i) then
       NewPageInternal;
     PrintColumnHeaders;
@@ -4416,7 +4450,7 @@ end;
 procedure TGDIPages.ClearColumnHeaders;
 begin
   if Self=nil then exit; // avoid GPF
-  fColumnHeaderList.clear;
+  fColumnHeaderList := nil;
 end;
 
 function TGDIPages.CreatePictureMetaFile(Width, Height: integer;
@@ -4429,9 +4463,10 @@ begin
   end;
 end;
 
-procedure TGDIPages.DrawTextFmt(const s: string; const Args: array of const);
+procedure TGDIPages.DrawTextFmt(const s: string; const Args: array of const;
+  withNewLine: boolean);
 begin
-  DrawText(format(s,Args));
+  DrawText(format(s,Args),withNewLine);
 end;
 
 function TGDIPages.TitleFlags: integer;
