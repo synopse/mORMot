@@ -578,7 +578,7 @@ type
   // - this structure is a hashed-per-thread variable
   TSynLogThreadContext = record
     /// the corresponding Thread ID
-    ID: cardinal;
+    ID: TThreadID;
     /// number of items stored in Recursion[]
     RecursionCount: integer;
     /// number of items available in Recursion[]

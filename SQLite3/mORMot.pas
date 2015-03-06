@@ -32687,7 +32687,7 @@ begin
         fStaticVirtualTable[i].InheritsFrom(TSQLRestStorage) then
        TSQLRestStorage(fStaticVirtualTable[i]).EndCurrentThread(Sender);
   if Services<>nil then begin
-    Inst.InstanceID := GetCurrentThreadId;
+    Inst.InstanceID := PtrUInt(CurrentThreadId);
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
