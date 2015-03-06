@@ -381,6 +381,10 @@ type
     // the input buffer
     function DecryptPKCS7(const Input: RawByteString): RawByteString;
 
+    /// simple wrapper able to cypher/decypher any content
+    // - here all data could be text or binary
+    class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean): RawByteString;
+
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
   end;
@@ -815,7 +819,7 @@ procedure AESSHA256(bIn, bOut: pointer; Len: integer; const Password: RawByteStr
 
 /// AES encryption using the TAES format with a supplied SHA256 password
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
-function  AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString; overload;
+function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString; overload;
 
 /// AES encryption using the TAESFull format with a supplied SHA256 password
 // - outStream will be larger/smaller than Len: this is a full AES version with
@@ -5331,6 +5335,22 @@ begin
   FillChar(PByteArray(result)^[len],padding,padding);
   // encryption
   Encrypt(pointer(result),pointer(result),len+padding);
+end;
+
+class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
+  Encrypt: boolean): RawByteString;
+var instance: TAESAbstract;
+    digest: TSHA256Digest;
+begin
+  SHA256Weak(Key,digest);
+  instance := Create(digest,256,PAESBlock(@digest)^);
+  try
+    if Encrypt then
+      result := instance.EncryptPKCS7(Input) else
+      result := instance.DecryptPKCS7(Input);
+  finally
+    instance.Free;
+  end;
 end;
 
 
