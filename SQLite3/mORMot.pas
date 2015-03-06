@@ -6432,6 +6432,7 @@ type
     fOwnerMustFree: Boolean;
     /// current cursor row (1..RowCount), as set by the Step() method
     fStepRow: integer;
+    function GetRowCount: integer; {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
     /// fill the fFieldNames[] array
@@ -6975,7 +6976,7 @@ type
     /// read-only access to the number of data Row in this table
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself 
-    property RowCount: integer read fRowCount;
+    property RowCount: integer read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
     property FieldCount: integer read fFieldCount;
     /// read-only access to the ID/RowID field index
@@ -19349,6 +19350,13 @@ begin
   SetFieldType(FieldIndex(FieldName),FieldType,FieldTypeInfo,FieldSize);
 end;
 
+function TSQLTable.GetRowCount: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := fRowCount;
+end;
+
 procedure TSQLTable.InitFieldTypes;
 var f,i: integer;
     FieldType: TSQLFieldType;
@@ -24190,9 +24198,11 @@ var f: integer;
     FieldName: shortstring;
     Props: TSQLRecordProperties;
 begin
-  if (aTable=nil) or (aTable.fResults=nil) then // avoid any GPF
+  if aTable=nil then // avoid any GPF
     exit;
   fTable := aTable;
+  if aTable.fResults=nil then
+    exit; // void content
   Props := aRecord.RecordProps;
   for f := 0 to aTable.FieldCount-1 do begin
     ColumnName := aTable.fResults[f];
