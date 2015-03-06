@@ -387,8 +387,16 @@ type
     /// read Length bytes from SockIn buffer + Sock if necessary
     // - if SockIn is available, it first gets data from SockIn^.Buffer,
     // then directly receive data from socket
-    // - can be used also without SockIn: it will call directly SockRecv() in such case
-    function SockInRead(Content: PAnsiChar; Length: integer): integer;
+    // - can be used also without SockIn: it will call directly SockRecv()
+    // in such case
+    function SockInRead(Content: PAnsiChar; Length: integer;
+      UseOnlySockIn: boolean=false): integer;
+    /// returns the number of bytes in SockIn buffer or pending in Sock
+    // - if SockIn is available, it first check from any data in SockIn^.Buffer,
+    // then call InputSock to try to receive any pending data
+    // - will wait up to the specified aTimeOut value (in milliseconds) for
+    // incoming data
+    function SockInPending(aTimeOut: integer=-1): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..)
@@ -406,6 +414,9 @@ type
     // - bypass the SockIn^ buffers
     // - raise ECrtSocket exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
+    /// returns how many bytes are pending in the sockets API buffer
+    // - a negative value is returned in case of socket error
+    function SockReceivePending(TimeOut: cardinal): integer;
     /// returns the socket input stream as a string
     function SockReceiveString: SockString;
     /// fill the Buffer with Length bytes
@@ -702,6 +713,8 @@ type
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
       {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
       overload; virtual;
+    /// the associated socket to communicate with the client  
+    property ServerSock: THttpServerSocket read fServerSock;
   end;
 
   THttpServerRespClass = class of THttpServerResp;
@@ -856,9 +869,6 @@ type
   protected
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
-    /// optional event handler when this server supports callbacks, e.g. when
-    // upgraded to websocket
-    fOnCallback: TOnHttpServerRequest;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -900,19 +910,6 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
-    /// server can send a request back to the client, when the connection has
-    // been upgraded to WebSocket
-    // - only TWebSocketServer from SynBidirSock.pas implements this feature
-    // - caller should check Assigned(OnCallback) to know if bidirectional
-    // communicated has been initiated by the client
-    // - websocket upgrade should have been initiated by the client
-    // - InURL/InMethod/InContent properties are input parameters (InContentType
-    // is ignored)
-    // - OutContent/OutContentType/OutCustomHeader are output parameters
-    // - CallingThread should be set to the client's Ctxt.CallingThread
-    // value, so that the THttpServer could know which connnection is to be used
-    // - result of the function is the HTTP error code (200 if OK, e.g.)
-    property OnCallback: TOnHttpServerRequest read fOnCallback;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -2598,17 +2595,20 @@ begin
   OpenBind(aServer,aPort,false,-1,aLayer); // raise an ECrtSocket exception on error
 end;
 
+type
+  PTextRec = ^TTextRec;
+
 procedure TCrtSocket.Close;
 begin
   if (SockIn<>nil) or (SockOut<>nil) then begin
     ioresult; // reset ioresult value if SockIn/SockOut were used
     if SockIn<>nil then begin
-      TTextRec(SockIn^).BufPos := 0;  // reset input buffer
-      TTextRec(SockIn^).BufEnd := 0;
+      PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+      PTextRec(SockIn)^.BufEnd := 0;
     end;
     if SockOut<>nil then begin
-      TTextRec(SockOut^).BufPos := 0; // reset output buffer
-      TTextRec(SockOut^).BufEnd := 0;
+      PTextRec(SockIn)^.BufPos := 0; // reset output buffer
+      PTextRec(SockIn)^.BufEnd := 0;
     end;
   end;
   if Sock=-1 then
@@ -2740,27 +2740,55 @@ begin
   SndLow(pointer(Data),length(Data));
 end;
 
-function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer): integer;
+function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
+  UseOnlySockIn: boolean): integer;
+var len: integer;
 // read Length bytes from SockIn^ buffer + Sock if necessary
 begin
   // get data from SockIn buffer, if any (faster than ReadChar)
+  result := 0;
   if SockIn<>nil then
-    with TTextRec(SockIn^) do begin
-      result := BufEnd-BufPos;
-      if result>0 then begin
-        if result>Length then
-          result := Length;
-        move(BufPtr[BufPos],Content^,result);
-        inc(BufPos,result);
-        inc(Content,result);
-        dec(Length,result);
+    with PTextRec(SockIn)^ do
+    repeat
+      len := BufEnd-BufPos;
+      if len>0 then begin
+        if len>Length then
+          len := Length;
+        move(BufPtr[BufPos],Content^,len);
+        inc(BufPos,len);
+        inc(Content,len);
+        dec(Length,len);
+        inc(result,len);
       end;
-    end else
-      result := 0;
+      if Length=0 then
+        exit; // we got everything we wanted
+      if not UseOnlySockIn then
+        break;
+      if InputSock(PTextRec(SockIn)^)<0 then 
+        raise ECrtSocket.Create('SockInRead InputSock');
+    until false;
   // direct receiving of the triming bytes from socket
   if Length>0 then begin
     SockRecv(Content,Length);
     inc(result,Length);
+  end;
+end;
+
+function TCrtSocket.SockInPending(aTimeOut: integer=-1): integer;
+var backup: cardinal;
+begin
+  if SockIn=nil then
+    raise ECrtSocket.Create('SockInPending without SockIn');
+  with PTextRec(SockIn)^ do begin
+    result := BufEnd-BufPos;
+    if (result=0) and (SockReceivePending(aTimeOut)>0) then begin
+      // non data in SockIn^.Buffer, but some at socket level -> retrieve now
+      backup := TimeOut;
+      TimeOut := 0;
+      if InputSock(PTextRec(SockIn)^)=NO_ERROR then 
+        result := BufEnd-BufPos;
+      TimeOut := backup;
+    end;
   end;
 end;
 
@@ -2857,6 +2885,23 @@ begin
       inc(PByte(Buffer),Size);
     until Length=0;
   result := true;
+end;
+
+function TCrtSocket.SockReceivePending(TimeOut: cardinal): integer;
+var tv: TTimeVal;
+    fdset: TFDSet;
+begin
+  FillChar(fdset,sizeof(fdset),0);
+  FD_SET(Sock,fdset);
+  tv.tv_usec := TimeOut*1000;
+  tv.tv_sec := 0; 
+  result := Select(Sock+1,@fdset,nil,nil,@tv);
+  if result<0 then
+    {$ifdef LINUX}
+    if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
+      result := 0 else
+    {$endif}
+      exit; // notify socket error 
 end;
 
 procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
@@ -3432,9 +3477,8 @@ abort:  Shutdown(ClientSock,1);
           goto Abort; // 1500*20 = 30 seconds timeout
         end
       end else
-{$else} // default implementation creates one thread for each incoming socket
+{$endif}// default implementation creates one thread for each incoming socket
         fThreadRespClass.Create(ClientSock, self);
-{$endif}
 {$endif}
       end;
   except
@@ -3603,8 +3647,6 @@ procedure THttpServerResp.Execute;
 procedure HandleRequestsProcess;
 var StartTick, StopTick, Tick: cardinal;
     Size: integer;
-    tv: TTimeVal;
-    fdset: TFDSet;
 begin
   {$ifdef USETHREADPOOL}
   if fThreadPool<>nil then
@@ -3617,20 +3659,9 @@ begin
       repeat // within this loop, break=wait for next command, exit=quit
         if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
           exit; // server is down -> close connection
-        FillChar(fdset,sizeof(fdset),0);
-        FD_SET(fServerSock.Sock,fdset);
-        tv.tv_usec := 50*1000;
-        tv.tv_sec := 0; // 50 ms timeout
-        Size := Select(fServerSock.Sock+1,@fdset,nil,nil,@tv);
-        // Recv() may return Size=0 if no data is pending, but no TCP/IP error
-        if (fServer=nil) or fServer.Terminated then
-          exit; // server is down -> disconnect the client
-        if Size<0 then
-          {$ifdef LINUX}
-          if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
-            Size := 0 else
-          {$endif}
-            exit; // socket error -> disconnect the client
+        Size := fServerSock.SockReceivePending(50); // 50 ms timeout
+        if (fServer=nil) or fServer.Terminated or (Size<0) then
+          exit; // server is down or socket error -> disconnect the client
         if Size=0 then begin
           // no data available -> wait for keep alive timeout
           Tick := GetTickCount;

@@ -24766,8 +24766,9 @@ begin
     if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then
       SetCodePage(part.Content,CP_UTF8,false) else // ensure raw field value is UTF-8
     {$endif}
-    if part.Encoding='base64' then // "quoted-printable" not yet handled here
+    if IdemPropNameU(part.Encoding,'base64') then
       part.Content := Base64ToBin(part.Content);
+    // note: "quoted-printable" not yet handled here
     SetLength(MultiPart,length(MultiPart)+1);
     MultiPart[high(MultiPart)] := part;
     result := true;
