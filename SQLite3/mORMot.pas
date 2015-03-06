@@ -32,6 +32,7 @@ unit mORMot;
     Alexander (chaa)
     Alfred Glaenzer (alf)
     DigDiver
+    EgorovAlex
     Esmond
     Pavel (mpv)
     Jordi Tudela
@@ -850,6 +851,8 @@ unit mORMot;
       order to enable it, define a SSPIAUTH conditional and call
       TSQLRestClientURI.SetUser() with an empty user name, and ensure that
       TSQLAuthUser.LoginName contains a matching 'DomainName\UserName' value
+    - introducing TSQLRestServerAuthenticationActiveDirectory class, thanks to
+      an implementation proposal from EgorovAlex - thanks for sharing!
     - added TSQLRecordTimed class, and TSQLRecord.AddFilterNotVoidAllTextFields
       and TSQLModel.AddTableInherited methods
     - Windows Authentication can use either NTLM or the more secure Kerberos
@@ -12081,7 +12084,12 @@ type
   // - by default, saoUserByLogonOrID is set, allowing
   // TSQLRestServerAuthentication.GetUser() to retrieve the TSQLAuthUser by
   // logon name or by ID, if the supplied logon name is an integer
-  TSQLRestServerAuthenticationOption = (saoUserByLogonOrID);
+  // - if saoHandleUnknownLogonAsStar is defined, any user successfully
+  // authenticated could be logged with the same ID (and authorization)
+  // than TSQLAuthUser.Logon='*' - of course, this is meaningfull only with
+  // an external credential check (e.g. via SSPI or Active Directory)
+  TSQLRestServerAuthenticationOption = (
+    saoUserByLogonOrID, saoHandleUnknownLogonAsStar);
 
   /// defines the optional behavior of TSQLRestServerAuthentication class
   TSQLRestServerAuthenticationOptions = set of TSQLRestServerAuthenticationOption;
@@ -12348,13 +12356,17 @@ type
   end;
 
   {$ifdef SSPIAUTH}
-  /// authentication using Windows Security Support Provider Interface (SSPI)
-  // - is able to authenticate using either NTLM or Kerberos
+
+  /// authentication of the current logged user using Windows Security Support
+  // Provider Interface (SSPI)
+  // - is able to authenticate the currently logged user on the client side,
+  // using either NTLM or Kerberos - it would allow to safely authenticate
+  // on a mORMot server without prompting the user to enter its password 
   // - ClientSetUser() will ignore aUserName, and expect aPassword to be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
   // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
   // authentication
-  TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationSignedURI)
+  TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationURI)
   protected
     /// Windows built-in authentication
     // - holds information between calls to ServerSSPIAuth
@@ -12375,13 +12387,40 @@ type
     /// finalize internal memory structures
     destructor Destroy; override;
     /// will try to handle the Auth RESTful method with Windows SSPI API
-    // - to be called in a two pass "challenging" algorithm, as implemented by
-    // TSQLRestServerAuthenticationSignedURI.Auth method
+    // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
     // to a Windows SSPI API secure challenge
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
   end;
-  {$endif}
+
+  /// authentication of a User and its Password using Active Directory
+  // - ClientSetUser() will use aUserName as 'Domain\Login', and will validate
+  // aPassword against the one registered for his/her account
+  TSQLRestServerAuthenticationActiveDirectory = class(TSQLRestServerAuthenticationURI)
+  protected
+    class function ClientComputeSessionKey(Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8; override;
+  public
+    /// will try to handle the Auth RESTful method with Windows SSPI API
+    // - to be called in a two pass "challenging" algorithm, as implemented by
+    // TSQLRestServerAuthenticationSignedURI.Auth method
+    // - the user name and password supplied from the client side will be
+    // checked against the domain supplied in the user name (e.g. 'Domain\Login')
+    function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
+    /// class method to be used on client side to create a remote session
+    // - call TSQLRestServerAuthenticationActiveDirectory.ClientSetUser() instead
+    // of TSQLRestClientURI.SetUser(), and never the method of this abstract class
+    // - expects aUserName to be in form of 'Domain\Login', so that 'Login'
+    // will be checked via Active Direction with the supplied password against
+    // the supplied 'Domain' - if 'Domain' is the computer name where the server
+    // is started (i.e. 'ComputeName\Login'), the user will be searched within
+    // the registered local accounts login 
+    // - needs the plain aPassword, so aPasswordKind should be passClear
+    // - returns true on success
+    class function ClientSetUser(Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
+      aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean; override;
+  end;
+
+  {$endif SSPIAUTH}
 
   /// TSynAuthentication* class using TSQLAuthUser/TSQLAuthGroup for credentials
   // - could be used e.g. for SynDBRemote access in conjunction with mORMot
@@ -40256,6 +40295,12 @@ begin
     // TSQLAuthUser.ID was transmitted -> may use the ORM cache
     result := fServer.fSQLAuthUserClass.Create(fServer,UserID) else
     result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
+  if (result.fID=0) and
+     (saoHandleUnknownLogonAsStar in fOptions) then
+    if fServer.Retrieve('LogonName=?',[],['*'],result) then begin
+      result.LogonName := aUserName;
+      result.DisplayName := aUserName;
+    end;
   if result.fID=0 then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
@@ -40300,6 +40345,7 @@ begin
     U := TSQLAuthUser.Create;
     try
       U.LogonName := trim(aUserName);
+      U.DisplayName := U.LogonName;
       if aPassworKind<>passClear then
         U.PasswordHashHexa := aPassword else
         U.PasswordPlain := aPassword; // compute SHA256('salt'+aPassword);
@@ -40722,15 +40768,14 @@ begin
     try
       User.PasswordHashHexa := ''; // override with context
       fServer.SessionCreate(User,Ctxt,Session);
-      if Session<>nil then begin
+      if Session<>nil then
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
-            'logonname',Session.User.LogonName]),
-            HTML_SUCCESS, (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData))
-        else
-          Ctxt.Returns(['result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
+            'logonname',Session.User.LogonName]),HTML_SUCCESS,
+            (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
+          Ctxt.Returns([
+            'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonname',Session.User.LogonName,'data',BinToBase64(OutData)]);
-      end;
     finally
       User.Free;
     end;
@@ -40789,6 +40834,80 @@ begin
     FreeSecContext(fSSPIAuthContexts[i]);
   inherited;
 end;
+
+
+{ TSQLRestServerAuthenticationActiveDirectory }
+
+const
+  AD_SALT = '5aLt';
+
+function TSQLRestServerAuthenticationActiveDirectory.Auth(Ctxt: TSQLRestServerURIContext): boolean;
+function CheckPassword(const UserName,Password: RawUTF8): Boolean;
+var Domain,Login: RawUTF8;
+    hToken: THandle;
+begin
+  split(UserName,Domain,Login);
+  result := LogonUser(pointer(UTF8ToString(Login)),pointer(UTF8ToString(Domain)),
+    pointer(UTF8ToString(Password)),9,LOGON32_PROVIDER_WINNT50,hToken);
+  if result then
+    CloseHandle(hToken);
+end;
+var aUserName, aHashedPassWord, aPassword: RawUTF8;
+    User: TSQLAuthUser;
+begin
+  result := true;
+  if AuthSessionRelease(Ctxt) then
+    exit;
+  aUserName := Ctxt.InputUTF8OrVoid['UserName'];
+  if aUserName<>'' then begin
+    User := GetUser(Ctxt,aUserName);
+    if User<>nil then
+    try
+      User.PasswordHashHexa := ''; // not needed, especially if from LogonName='*'
+      aHashedPassWord := Base64ToBin(Ctxt.InputUTF8OrVoid['Password']);
+      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(false)+AD_SALT,false);
+      if not CheckPassword(aUserName,aPassWord) then begin
+        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(true)+AD_SALT,false);
+        if not CheckPassword(aUserName,aPassWord) then
+          exit; // current and previous server nonce did not success
+      end;
+      // now client is authenticated -> create a session
+      SessionCreate(Ctxt,User);
+    finally
+      User.Free;
+    end;
+  end else 
+    if aUserName<>'' then
+      // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
+      Ctxt.Results([Nonce(false)]) else
+      // parameters does not match any expected layout
+      result := false;
+end;
+
+class function TSQLRestServerAuthenticationActiveDirectory.ClientComputeSessionKey(Sender: TSQLRestClientURI;
+  User: TSQLAuthUser): RawUTF8;
+var aServerNonce: RawUTF8;
+begin
+  result := '';
+  if User.LogonName='' then
+    exit;
+  aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
+  if aServerNonce='' then
+    exit;
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,
+    'Password',BinToBase64(TAESCFB.SimpleEncrypt(
+    User.PasswordHashHexa,aServerNonce+AD_SALT,true))]);
+end;
+
+class function TSQLRestServerAuthenticationActiveDirectory.ClientSetUser(
+  Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
+  aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean;
+begin
+  if aPassworKind<>passClear then
+    raise ESecurityException.CreateUTF8('%.ClientSetUser() expects passClear',[self]);
+  result := inherited ClientSetUser(Sender,aUserName,aPassword,passHashed);
+end;
+
 
 {$endif SSPIAUTH}
 
