@@ -2782,6 +2782,7 @@ begin
   result := self;
 end;
 
+{$I-}
 function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
   const Text: RawUTF8): boolean;
 {$ifdef MSWINDOWS}
@@ -2808,13 +2809,14 @@ begin
   {$ifdef MSWINDOWS}
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
   AnsiToOem(pointer(tmp),pointer(tmp));
+  writeln(tmp);
+  {$else}
+  write(Text,#13#10);
   {$endif}
-  {$I-}
-  write(tmp,#13#10);
   ioresult;
-  {$I+}
   TextColor(ccLightGray);
 end;
+{$I+}
 
 procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
   aInstance: TObject);
