@@ -1505,6 +1505,7 @@ type
     // will call TMongoReplyCursor.FetchAllToJSON(TTextWriter(Opaque))
     procedure ReplyJSONStrict(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     procedure ReplyJSONExtended(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
+    procedure ReplyJSONNoMongo(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     // will call TMongoReplyCursor.AppendAllToDocVariantDynArray(TVariantDynArray(Opaque))
     procedure ReplyDocVariant(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     // will call TMongoReplyCursor.AppendAllToBSON(TBSONWrite(Opaque))
@@ -4899,9 +4900,11 @@ begin
   try
     if ReturnAsJSONArray then
       W.Add('[');
-    if Mode=modMongoShell then
-      GetRepliesAndFree(Query,ReplyJSONExtended,W) else
-      GetRepliesAndFree(Query,ReplyJSONStrict,W);
+    case Mode of
+      modNoMongo:     GetRepliesAndFree(Query,ReplyJSONNoMongo,W);
+      modMongoStrict: GetRepliesAndFree(Query,ReplyJSONStrict,W);
+      modMongoShell:  GetRepliesAndFree(Query,ReplyJSONExtended,W);
+    end;
     W.CancelLastComma;
     if ReturnAsJSONArray then
       W.Add(']');
@@ -4977,6 +4980,14 @@ procedure TMongoConnection.ReplyJSONExtended(Request: TMongoRequest;
 var W: TTextWriter absolute Opaque;
 begin
   Reply.FetchAllToJSON(W,modMongoShell,false);
+  W.Add(',');
+end;
+
+procedure TMongoConnection.ReplyJSONNoMongo(Request: TMongoRequest;
+  const Reply: TMongoReplyCursor; var Opaque);
+var W: TTextWriter absolute Opaque;
+begin
+  Reply.FetchAllToJSON(W,modNoMongo,false);
   W.Add(',');
 end;
 
