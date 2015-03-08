@@ -2245,9 +2245,6 @@ end;
 {$ifdef MSWINDOWS}
 
 var
-  StdOut: THandle;
-
-var
   AutoFlushThread: THandle = 0;
   AutoFlushSecondElapsed: cardinal;
 
@@ -2807,20 +2804,16 @@ begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
+  TextColor(LOGCOLORS[Level]);
   {$ifdef MSWINDOWS}
-  if StdOut=0 then
-    exit;
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
-  TextColor(LOGCOLORS[Level]);
   AnsiToOem(pointer(tmp),pointer(tmp));
-  tmp := tmp+#13#10;
-  FileWrite(stdOut,PByte(tmp)^,length(tmp));
-  TextColor(ccLightGray);
-  {$else}
-  TextColor(LOGCOLORS[Level]);
-  writeln(#13#10,Text,#13#10);
-  TextColor(ccLightGray);
   {$endif}
+  {$I-}
+  write(tmp,#13#10);
+  ioresult;
+  {$I+}
+  TextColor(ccLightGray);
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
