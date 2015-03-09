@@ -557,6 +557,9 @@ const
 const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
+
+  SHUT_WR = 1;
+  
 type
   PWSAData = ^TWSAData;
   TWSAData = packed record

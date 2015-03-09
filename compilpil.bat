@@ -257,6 +257,11 @@ echo - Sample 30
 rem %DCC% MVCServerMongoDB.dpr %Switches%
 @if errorlevel 1 pause
 
+cd "\dev\lib\sqlite3\Samples\31 - WebSockets"
+echo - Sample 31
+%DCC% Project31SimpleEchoServer.dpr %Switches%
+@if errorlevel 1 pause
+
 
 cd "\dev\lib\sqlite3\Samples\MainDemo"
 echo - Sample MainDemo

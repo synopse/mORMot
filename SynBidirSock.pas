@@ -48,6 +48,16 @@ unit SynBidirSock;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
 
+
+   TODO: add TWebSocketClientRequest with the possibility to
+   - broadcast a message to several aCallingThread: THttpServerResp values
+   - send asynchronously (e.g. for SOA methods sending events with no result)
+
+   TODO: enhance server process to use events, and not threads
+   - current implementation has its threads spending most time waiting in loops
+   - eventually also at SynCrtSock's THttpServer class level also
+
+
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -106,8 +116,10 @@ type
     payload: RawByteString;
   end;
 
+  {$M+}
   TWebSocketServerResp = class;
-  
+  {$M-}
+
   /// handle an application-level WebSockets protocol
   // - shared by TWebSocketServer and TWebSocketClient classes
   // - once upgraded to WebSockets, a HTTP link could be used e.g. to transmit our
@@ -150,6 +162,7 @@ type
   // - a first call with frame.opcode=focContinuation will take place when
   // the connection will be upgrade to WebSockets
   // - then any incoming focText/focBinary events will trigger this callback
+  // - eventually, a focConnectionClose will notify the connection ending 
   TOnWebSocketProtocolChatIncomingFrame =
     procedure(Sender: TWebSocketServerResp; const Frame: TWebSocketFrame) of object;
 
@@ -257,6 +270,8 @@ type
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
     function CloneByName(const ProtocolName: RawUTF8): TWebSocketProtocol;
+    /// how many protocols are stored
+    function Count: integer;
   end;
 
   TWebSocketServerRespProcessOne = (wspNone, wspDone, wspError, wspClosed);
@@ -278,8 +293,9 @@ type
     function TryAcquireConnection(TimeOutMS: cardinal): boolean;
     /// methods run by TWebSocketServerRest.WebSocketProcessLoop
     procedure ProcessStart; virtual;
+    procedure ProcessStop; virtual;
     function ProcessOne: TWebSocketServerRespProcessOne; virtual;
-    // OnCallback property will point to this method after upgrade to WebSockets   
+    // OnCallback property will point to this method after upgrade to WebSockets
     function NotifyCallback(Ctxt: THttpServerRequest): cardinal; virtual;
   public
     /// initialize the context, associated to a HTTP/WebSockets server instance
@@ -310,15 +326,15 @@ type
       Context: TWebSocketServerResp): boolean; virtual;
     /// this is the main execution loop in WebSockets mode
     function WebSocketProcessLoop(ClientSock: THttpServerSocket;
-      Context: TWebSocketServerResp; const ProtocolName: RawUTF8): boolean; virtual;
+      Context: TWebSocketServerResp): boolean; virtual;
     /// overriden method which will recognize the WebSocket protocol handshake,
     // then run the whole bidirectional communication in its calling thread
     // - here aCallingThread is a THttpServerResp, and ClientSock.Headers
     // and ConnectionUpgrade properties should be checked for the handshake
     procedure Process(ClientSock: THttpServerSocket;
       aCallingThread: TNotifiedThread); override;
-    /// store the protocol list
-    property Protocols: TWebSocketProtocolList read fProtocols;
+    /// identifies an incoming THttpServerResp as a valid TWebSocketServerResp
+    function IsActiveWebSocket(CallingThread: TNotifiedThread): TWebSocketServerResp; virtual;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -326,9 +342,11 @@ type
     // for any incoming connection
     // - note that this constructor will not register any protocol, so is
     // useless until you execute Protocols.Add()
-    constructor Create(const aPort: SockString); reintroduce; overload;
+    constructor Create(const aPort: SockString); reintroduce;
     /// close the server
     destructor Destroy; override;
+    /// access to the protocol list handled by this server
+    property Protocols: TWebSocketProtocolList read fProtocols;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -343,7 +361,6 @@ type
   protected
     fCallbackAcquireTimeOutMS: cardinal;
     fCallbackAnswerTimeOutMS: cardinal;
-    function IsActiveWebSocket(CallingThread: TNotifiedThread): TWebSocketServerResp; virtual;
   public
     /// create a Server Thread, binded and listening on a port, with our
     // 'synopsebinary' and optionally 'synopsejson' modes
@@ -378,9 +395,7 @@ type
       read fCallbackAnswerTimeOutMS write fCallbackAnswerTimeOutMS;
   end;
 
-  // TODO: add TWebSocketClientRequest with the possibility to
-  // - broadcast a message to several aCallingThread: THttpServerResp values
-  // - send asynchronously (e.g. for SOA methods sending events with no result)
+
 
 
 { -------------- WebSockets Client classes for bidirectional remote access }
@@ -423,7 +438,7 @@ begin
   if (self=nil) or (Sender=nil) or Sender.Terminated or
      not (Frame.opcode in [focText,focBinary]) then
     exit;
-  if (Sender.fServer as TWebSocketServerRest).IsActiveWebSocket(Sender)=Sender then
+  if (Sender.fServer as TWebSocketServer).IsActiveWebSocket(Sender)=Sender then
     result := Sender.SendFrame(frame)
 end;
 
@@ -673,6 +688,13 @@ begin
     result := fProtocols[i].Clone;
 end;
 
+function TWebSocketProtocolList.Count: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := length(fProtocols);
+end;
+
 destructor TWebSocketProtocolList.Destroy;
 begin
   ObjArrayClear(fProtocols);
@@ -720,12 +742,14 @@ constructor TWebSocketServer.Create(const aPort: SockString);
 begin
   inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // no thread pool
   fThreadRespClass := TWebSocketServerResp;
-  fConnections := TObjectList.Create;
+  fConnections := TObjectList.Create(false);
+  fProtocols := TWebSocketProtocolList.Create;
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
   Context: TWebSocketServerResp): boolean;
-var upgrade,version,protocol,key,hash: RawUTF8;
+var upgrade,version,protocol,prot,key,hash: RawUTF8;
+    P: PUTF8Char;
     SHA: TSHA1;
     Digest: TSHA1Digest;
 begin
@@ -739,7 +763,17 @@ begin
   if GetInteger(pointer(version))<13 then
     exit; // we expect WebSockets protocol version 13 at least
   protocol := ClientSock.HeaderValue('Sec-WebSocket-Protocol');
-  if protocol='' then
+  if protocol<>'' then begin
+    P := pointer(protocol);
+    repeat
+      prot := trim(GetNextItem(P));
+      Context.fWebSocketProtocol := fProtocols.CloneByName(prot);
+    until (P=nil) or (Context.fWebSocketProtocol<>nil);
+  end else
+    // if no protocol is specified, expect a single one to be registered
+    if Protocols.Count=1 then
+      Context.fWebSocketProtocol := fProtocols.fProtocols[0];
+  if Context.fWebSocketProtocol=nil then
     exit;
   key := ClientSock.HeaderValue('Sec-WebSocket-Key');
   if Base64ToBinLength(pointer(key),length(key))<>16 then
@@ -748,15 +782,17 @@ begin
   SHA.Full(pointer(key),length(key),Digest);
   hash := 'HTTP/1.1 101 Switching Protocols'#13#10+
     'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10+
-    'Sec-WebSocket-Accept: '+BinToBase64(@Digest,sizeof(Digest))+#13#10+
+    'Sec-WebSocket-Accept: '+BinToBase64(@Digest,sizeof(Digest))+#13#10;
+  if protocol<>'' then
     // note: we expect only a single protocol requested by the client now
-    'Sec-WebSocket-Protocol: '+protocol+#13#10;
+    hash := hash+'Sec-WebSocket-Protocol: '+protocol+#13#10#13#10 else
+    hash := hash+#13#10;
   ClientSock.SndLow(pointer(hash),length(hash));
   EnterCriticalSection(fProcessCS);
   fConnections.Add(Context);
   LeaveCriticalSection(fProcessCS);
   try
-    result := WebSocketProcessLoop(ClientSock,Context,protocol);
+    result := WebSocketProcessLoop(ClientSock,Context);
   finally
     FreeAndNil(Context.fWebSocketProtocol); // notify end of WebSockets
     EnterCriticalSection(fProcessCS);
@@ -772,8 +808,8 @@ begin
      ClientSock.KeepAliveClient and
      IdemPropName(ClientSock.Method,'GET') and
      aCallingThread.InheritsFrom(TWebSocketServerResp) then
-    WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(aCallingThread));
-  inherited Process(ClientSock,aCallingThread);
+    WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(aCallingThread)) else
+    inherited Process(ClientSock,aCallingThread);
 end;
 
 destructor TWebSocketServer.Destroy;
@@ -784,10 +820,9 @@ begin
 end;
 
 function TWebSocketServer.WebSocketProcessLoop(ClientSock: THttpServerSocket;
-  Context: TWebSocketServerResp; const ProtocolName: RawUTF8): boolean;
+  Context: TWebSocketServerResp): boolean;
 begin
   result := false;
-  Context.fWebSocketProtocol := fProtocols.CloneByName(ProtocolName);
   if Context.fWebSocketProtocol=nil then
     exit;
   Context.ProcessStart;
@@ -803,25 +838,11 @@ begin
     wspClosed:
       Context.ServerSock.KeepAliveClient := false; // will close connection
     end;
+  Context.ProcessStop;
   result := true;
 end;
 
-
-{ TWebSocketServerRest }
-
-constructor TWebSocketServerRest.Create(const aPort: SockString;
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
-begin
-  Create(aPort);
-  fProtocols := TWebSocketProtocolList.Create;
-  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsEncryptionKey,''));
-  if aWebSocketsAJAX then
-    fProtocols.Add(TWebSocketProtocolJSON.Create);
-  fCallbackAcquireTimeOutMS := 5000;
-  fCallbackAnswerTimeOutMS := 1000;
-end;
-
-function TWebSocketServerRest.IsActiveWebSocket(
+function TWebSocketServer.IsActiveWebSocket(
   CallingThread: TNotifiedThread): TWebSocketServerResp;
 var connectionIndex: Integer;
 begin
@@ -835,6 +856,20 @@ begin
      CallingThread.InheritsFrom(TWebSocketServerResp) then
     //  this request is a websocket, on a non broken connection
     result := TWebSocketServerResp(CallingThread);
+end;
+
+
+{ TWebSocketServerRest }
+
+constructor TWebSocketServerRest.Create(const aPort: SockString;
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+begin
+  inherited Create(aPort);
+  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsEncryptionKey,''));
+  if aWebSocketsAJAX then
+    fProtocols.Add(TWebSocketProtocolJSON.Create);
+  fCallbackAcquireTimeOutMS := 5000;
+  fCallbackAnswerTimeOutMS := 1000;
 end;
 
 function TWebSocketServerRest.WebSocketsCallback(
@@ -856,7 +891,7 @@ end;
 constructor TWebSocketServerResp.Create(aServerSock: THttpServerSocket;
   aServer: THttpServer {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
 begin
-  if not aServer.InheritsFrom(TWebSocketServerRest) then
+  if not aServer.InheritsFrom(TWebSocketServer) then
     raise ESynBidirSocket.CreateUTF8('%.Create(%: TWebSocketServer?)',[self,aServer]);
   InitializeCriticalSection(fAcquireConnectionLock);
   inherited Create(aServerSock,aServer{$ifdef USETHREADPOOL},aThreadPool{$endif});
@@ -872,8 +907,18 @@ begin
 end;
 
 procedure TWebSocketServerResp.ProcessStart;
+var dummy: TWebSocketFrame;
 begin
+  dummy.opcode := focContinuation;
+  WebSocketProtocol.ProcessFrame(self,dummy,dummy);
   fLastPingTicks := GetTickCount64;
+end;
+
+procedure TWebSocketServerResp.ProcessStop;
+var dummy: TWebSocketFrame;
+begin
+  dummy.opcode := focConnectionClose;
+  WebSocketProtocol.ProcessFrame(self,dummy,dummy);
 end;
 
 function TWebSocketServerResp.ProcessOne: TWebSocketServerRespProcessOne;
@@ -964,8 +1009,21 @@ type
    len8: byte;
    len32: cardinal;
    len64: cardinal;
-   mask: cardinal;
+   mask: cardinal; // 0 indicates no payload masking
  end;
+
+procedure ProcessMask(data: pointer; mask: cardinal; len: integer);
+var i,maskCount: integer;
+begin
+  maskCount := len shr 2;
+  for i := 0 to maskCount-1 do
+    PCardinalArray(data)^[i] := PCardinalArray(data)^[i] xor mask;
+  maskCount := maskCount*4;
+  for i := maskCount to maskCount+(len and 3)-1 do begin
+    PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
+    mask := mask shr 8;
+  end;
+end;
 
 function TWebSocketServerResp.GetFrame(
   out Frame: TWebSocketFrame; TimeOut: cardinal): boolean;
@@ -982,33 +1040,27 @@ begin
     hdr.len8 := hdr.len8 and 127;
   if hdr.len8<FRAME_LEN2BYTES then
     hdr.len32 := hdr.len8 else
-  if hdr.len8=FRAME_LEN2BYTES then
-    fServerSock.SockInRead(@hdr.len32,2,true) else
+  if hdr.len8=FRAME_LEN2BYTES then begin
+    fServerSock.SockInRead(@hdr.len32,2,true);
+    hdr.len32 := swap(hdr.len32); 
+  end else
   if hdr.len8=FRAME_LEN8BYTES then begin
     fServerSock.SockInRead(@hdr.len32,8,true);
-    if (hdr.len64<>0) or (hdr.len32>1 shl 28) then
+    if hdr.len32<>0 then // size is more than 32 bits -> reject 
+      hdr.len32 := maxInt else
+      hdr.len32 := bswap32(hdr.len64);
+    if hdr.len32>1 shl 28 then
       raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
   end;
   if masked then
     fServerSock.SockInRead(@hdr.mask,4,true);
 end;
 procedure GetData(var data: RawByteString);
-var i,maskCount: integer;
-    mask: cardinal;
 begin
   SetString(data,nil,hdr.len32);
   fServerSock.SockInRead(pointer(data),hdr.len32);
-  mask := hdr.mask;
-  if mask<>0 then begin
-    maskCount := hdr.len32 shr 2;
-    for i := 0 to maskCount-1 do
-      PCardinalArray(data)^[i] := PCardinalArray(data)^[i] xor mask;
-    maskCount := maskCount*4;
-    for i := maskCount to maskCount+integer(hdr.len32 and 3)-1 do begin
-      PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
-      mask := mask shr 8;
-    end;
-  end;
+  if hdr.mask<>0 then
+    ProcessMask(pointer(data),hdr.mask,hdr.len32);
 end;
 var data: RawByteString;
 begin
@@ -1020,7 +1072,7 @@ begin
   GetData(Frame.payload);
   while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
     GetHeader;
-    if opcode<>Frame.opcode then
+    if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
       raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
         [self,GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode))^,
          GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(Frame.opcode))^]);
@@ -1037,26 +1089,29 @@ end;
 function TWebSocketServerResp.SendFrame(
   const Frame: TWebSocketFrame): boolean;
 var hdr: TFrameHeader;
+    len: cardinal;
 begin
   try
     result := true;
     hdr.first := byte(Frame.opcode) or FRAME_FIN;
-    hdr.len32 := Length(Frame.payload);
-    if hdr.len32<FRAME_LEN2BYTES then begin
-      hdr.len8 := hdr.len32;
+    len := Length(Frame.payload);
+    if len<FRAME_LEN2BYTES then begin
+      hdr.len8 := len;
       fServerSock.Snd(@hdr,2);
     end else
-    if hdr.len32<65536 then begin
+    if len<65536 then begin
       hdr.len8 := FRAME_LEN2BYTES;
-      fServerSock.Snd(@hdr,3);
+      hdr.len32 := swap(len);
+      fServerSock.Snd(@hdr,4);
     end else begin
       hdr.len8 := FRAME_LEN8BYTES;
-      hdr.len64 := 0;
-      fServerSock.SndLow(@hdr,9); // huge payload sent outside TCrtSock buffers
-      fServerSock.SndLow(pointer(Frame.payload),hdr.len32);
+      hdr.len64 := bswap32(len);
+      hdr.len32 := 0;
+      fServerSock.SndLow(@hdr,10); // huge payload sent outside TCrtSock buffers
+      fServerSock.SndLow(pointer(Frame.payload),len);
       exit;
     end;
-    fServerSock.Snd(pointer(Frame.payload),hdr.len32);
+    fServerSock.Snd(pointer(Frame.payload),len);
     fServerSock.SockSendFlush; // send at once up to 64 KB
   except
     result := false;
@@ -1086,6 +1141,7 @@ begin
     InterlockedDecrement(fTryAcquireConnectionCount)
   end;
 end;
+
 
 
 end.

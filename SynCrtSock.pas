@@ -2623,8 +2623,8 @@ begin
   end;
   if Sock=-1 then
     exit; // no opened connection to close
-  Shutdown(Sock,1);
-  CloseSocket(Sock);
+  Shutdown(Sock,SHUT_WR);
+  CloseSocket(Sock); // SO_LINGER usually set to 5 or 10 seconds
   Sock := -1; // don't change Server or Port, since may try to reconnect
 end;
 
@@ -2777,7 +2777,7 @@ begin
       if InputSock(PTextRec(SockIn)^)<0 then 
         raise ECrtSocket.Create('SockInRead InputSock');
     until false;
-  // direct receiving of the triming bytes from socket
+  // direct receiving of the remaining bytes from socket
   if Length>0 then begin
     SockRecv(Content,Length);
     inc(result,Length);
@@ -3858,7 +3858,7 @@ begin
     if IdemPChar(P,'CONNECTION: ') then
        if IdemPChar(P+12,'CLOSE') then
           ConnectionClose := true else
-       if IdemPChar(P+12,'UPGRADE') then
+       if IdemPChar(P+12,'UPGRADE') or IdemPChar(P+12,'KEEP-ALIVE, UPGRADE') then
           ConnectionUpgrade := true;
     if fCompress<>nil then
       if IdemPChar(P,'ACCEPT-ENCODING:') then
@@ -7167,4 +7167,4 @@ finalization
     FreeLibrary(curl.Module);
   end;
   {$endif USELIBCURL}
-end.
+end.
