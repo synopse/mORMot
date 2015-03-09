@@ -511,7 +511,7 @@ type
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
     procedure InternalCommit; virtual;
-    /// on rollback, delete the internal BATCH
+    /// on rollback, delete the internal BATCH - called by Destroy
     procedure InternalRollback; virtual;
   public
     /// this constructor will set default fBatch options
@@ -528,8 +528,15 @@ type
     // - if you do not need this method, just do not declare it in I*Command
     function DeleteAll: TCQRSResult; virtual;
     /// write all pending changes prepared by Add/UpdatePassword/Delete methods
+    // - this is the only mandatory method, to be declared in your I*Command
     // - will process the current fORM using the fCommand
     function Commit: TCQRSResult; virtual;
+    /// flush any pending changes prepared by Add/UpdatePassword/Delete methods
+    // - if you do not need this method, just do not declare it in I*Command
+    // - the easiest to perform a roll-back would be to release the I*Command
+    // instance - but you may explictly reset the pending changes by calling
+    // this method
+    function Rollback: TCQRSResult; virtual;
   end;
 
   /// abstract CQRS class tied to a TSQLRest instance for low-level persistence
@@ -1503,6 +1510,14 @@ function TDDDRepositoryRestCommand.Commit: TCQRSResult;
 begin
   if ORMBegin(qaCommit,result) then
     InternalCommit;
+end;
+
+function TDDDRepositoryRestCommand.Rollback: TCQRSResult;
+begin
+  ORMBegin(qaNone,result,cqrsSuccess);
+  if fBatch.Count=0 then
+    ORMResult(cqrsNoPriorCommand) else
+    InternalRollback;
 end;
 
 
