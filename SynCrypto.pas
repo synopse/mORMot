@@ -5367,7 +5367,7 @@ end;
 function TAESAbstractSyn.Clone: TAESAbstractSyn;
 begin
   result := ClassType.Create as TAESAbstractSyn;
-  result.Create(self,fKeySize,TAESContext(AES.Context).IV);
+  result.Create(fKey,fKeySize,TAESContext(AES.Context).IV);
 end;
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);

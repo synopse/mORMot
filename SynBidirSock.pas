@@ -245,12 +245,13 @@ type
     destructor Destroy; override;
     /// initialize the WebSockets binary protocol
     // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used on on this protocol
-    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); reintroduce; overload;
+    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock;
+      aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol
     /// - AES-CFB 256 bit encryption will be enabled on this protocol if some
     // strings are supplied
     // - the supplied key and initialization vector will be hashed using SHA-256
-    constructor Create(const aKey,aIV: RawUTF8); reintroduce; overload;
+    constructor Create(const aKey,aIV: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
@@ -603,15 +604,16 @@ end;
 { TWebSocketProtocolBinary }
 
 constructor TWebSocketProtocolBinary.Create(
-  const aKey; aKeySize: cardinal; const aIV: TAESBlock);
+  const aKey; aKeySize: cardinal; const aIV: TAESBlock; aCompressed: boolean);
 begin
   Create('synopsebinary');
   if aKeySize>=128 then
     fEncryption := TAESCFB.Create(aKey,aKeySize,aIV);
-  fCompressed := true;
+  fCompressed := aCompressed;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aKey, aIV: RawUTF8);
+constructor TWebSocketProtocolBinary.Create(const aKey, aIV: RawUTF8;
+  aCompressed: boolean);
 var key,iv: TSHA256Digest;
 begin
   if (aKey<>'') and (aIV<>'') then begin
@@ -619,9 +621,9 @@ begin
     if aIV='' then
       iv := key else
       SHA256Weak(aIV,iv);
-    Create(key,256,PAESBlock(@iv)^);
+    Create(key,256,PAESBlock(@iv)^,aCompressed);
   end else
-    Create(key,0,PAESBlock(@iv)^);
+    Create(key,0,PAESBlock(@iv)^,aCompressed);
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;

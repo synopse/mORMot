@@ -808,9 +808,9 @@ type
   protected
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
   published
-    /// low-level test of our WebSockets JSON protocol
+    /// low-level test of our 'synopsejson' WebSockets JSON protocol
     procedure WebsocketsJSONProtocol;
-    /// low-level test of our WebSockets binary protocol
+    /// low-level test of our 'synopsebinary' WebSockets binary protocol
     procedure WebsocketsBinaryProtocol;
   end;
 
@@ -12706,8 +12706,10 @@ end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
 begin
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',''),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv'),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',false),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv',false),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',true),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv',true),focBinary);
 end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
@@ -12722,15 +12724,17 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
   protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
 procedure TestOne(const content,contentType: RawByteString);
 var C1,C2: THttpServerRequest;
+    P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
 begin
   C1 := THttpServerRequest.Create(nil,nil);
   C2 := THttpServerRequest.Create(nil,nil);
+  P2 := TWebSocketProtocolRestHook(protocol).Clone;
   try
     C1.Prepare('url','POST','headers',content,contentType);
     TWebSocketProtocolRestHook(protocol).InputToFrame(C1,frame);
     Check(frame.opcode=opcode);
-    TWebSocketProtocolRestHook(protocol).FrameToInput(frame,C2);
+    TWebSocketProtocolRestHook(P2).FrameToInput(frame,C2);
     Check(C2.URL='url');
     Check(C2.Method='POST');
     Check(C2.InHeaders='headers');
@@ -12742,11 +12746,12 @@ begin
     frame.opcode := focContinuation;
     TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
     Check(frame.opcode=opcode);
-    TWebSocketProtocolRestHook(protocol).FrameToOutput(frame,C2);
+    TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2);
     Check(C2.OutContent=content);
     Check(C2.OutContentType=contentType);
     Check(C2.OutCustomHeaders='outheaders');
   finally
+    P2.Free;
     C2.Free;
     C1.Free;
   end;
