@@ -40906,37 +40906,41 @@ function CheckPassword(const UserName,Password: RawUTF8): Boolean;
 var Domain,Login: RawUTF8;
     hToken: THandle;
 begin
-  split(UserName,Domain,Login);
+  split(UserName,'\',Domain,Login);
   result := LogonUser(pointer(UTF8ToString(Login)),pointer(UTF8ToString(Domain)),
     pointer(UTF8ToString(Password)),9,LOGON32_PROVIDER_WINNT50,hToken);
   if result then
     CloseHandle(hToken);
 end;
-var aUserName, aHashedPassWord, aPassword: RawUTF8;
+var aUserName, aHashedPassWord, aPassword, aSalt: RawUTF8;
     User: TSQLAuthUser;
 begin
   result := true;
   if AuthSessionRelease(Ctxt) then
     exit;
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
-  if aUserName<>'' then begin
+  aHashedPassWord := Base64ToBin(Ctxt.InputUTF8OrVoid['Password']);
+  if (aUserName<>'') and (aHashedPassWord<>'') then begin
     User := GetUser(Ctxt,aUserName);
     if User<>nil then
     try
       User.PasswordHashHexa := ''; // not needed, especially if from LogonName='*'
-      aHashedPassWord := Base64ToBin(Ctxt.InputUTF8OrVoid['Password']);
-      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(false)+AD_SALT,false);
-      if not CheckPassword(aUserName,aPassWord) then begin
-        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(true)+AD_SALT,false);
-        if not CheckPassword(aUserName,aPassWord) then
-          exit; // current and previous server nonce did not success
+      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(false)+AD_SALT,false,true);
+      split(aPassword,'\',aSalt,aPassword);
+      if aSalt<>AD_SALT then begin
+        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(true)+AD_SALT,false,true);
+        split(aPassword,'\',aSalt,aPassword);
+        if aSalt<>AD_SALT then
+          exit; // current and previous server nonce did not match -> fail
       end;
+      if not CheckPassword(aUserName,aPassWord) then
+        exit; // Active Directory password incorrect
       // now client is authenticated -> create a session
       SessionCreate(Ctxt,User);
     finally
       User.Free;
     end;
-  end else 
+  end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
       Ctxt.Results([Nonce(false)]) else
@@ -40956,7 +40960,7 @@ begin
     exit;
   result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,
     'Password',BinToBase64(TAESCFB.SimpleEncrypt(
-    User.PasswordHashHexa,aServerNonce+AD_SALT,true))]);
+    AD_SALT+'\'+User.PasswordHashHexa,aServerNonce+AD_SALT,true,true))]);
 end;
 
 class function TSQLRestServerAuthenticationActiveDirectory.ClientSetUser(

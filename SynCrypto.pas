@@ -391,8 +391,11 @@ type
     function DecryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString;
 
     /// simple wrapper able to cypher/decypher any content
-    // - here all data could be text or binary
-    class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean): RawByteString;
+    // - here all data variable could be text or binary
+    // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
+    // and stored at the beginning of the output binary buffer
+    class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean;
+      IVAtBeginning: boolean=false): RawByteString;
 
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
@@ -5360,7 +5363,7 @@ begin
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
-  Encrypt: boolean): RawByteString;
+  Encrypt, IVAtBeginning: boolean): RawByteString;
 var instance: TAESAbstract;
     digest: TSHA256Digest;
 begin
@@ -5368,8 +5371,8 @@ begin
   instance := Create(digest,256,PAESBlock(@digest)^);
   try
     if Encrypt then
-      result := instance.EncryptPKCS7(Input) else
-      result := instance.DecryptPKCS7(Input);
+      result := instance.EncryptPKCS7(Input,IVAtBeginning) else
+      result := instance.DecryptPKCS7(Input,IVAtBeginning);
   finally
     instance.Free;
   end;
