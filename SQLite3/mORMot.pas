@@ -3567,10 +3567,6 @@ function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 /// retrieve the PPropInfo values of all published properties of a class
 function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
 
-/// will fill Dest published properties from the values in Source published
-// properties
-//procedure ClassFieldInject(Source,Dest: TObject);
-
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -3983,6 +3979,14 @@ const
   // from SynCommons supplyings the file name)
   // - should match HTTP_RESP_STATICFILE constant defined in SynCrtSock.pas unit
   STATICFILE_CONTENT_TYPE = '!STATICFILE';
+
+  /// used to notify e.g. the THttpServerRequest not to wait for any response
+  // from the client
+  // - is not to be used in normal HTTP process, but may be used e.g. by
+  // TWebSocketProtocolRest.ProcessFrame() to avoid to wait for an incoming
+  // response from the other endpoint
+  // - should match HTTP_RESP_NORESPONSE constant defined in SynCrtSock.pas unit
+  NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
   /// HTTP header used e.g. by THttpApiServer.Request for http.sys to send
   // a static file in kernel mode

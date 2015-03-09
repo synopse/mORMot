@@ -259,6 +259,13 @@ const
   // from SynCommons supplyings the file name)
   // - should match HTML_CONTENT_STATICFILE constant defined in mORMot.pas unit
   HTTP_RESP_STATICFILE = '!STATICFILE';
+  /// used to notify e.g. the THttpServerRequest not to wait for any response
+  // from the client
+  // - is not to be used in normal HTTP process, but may be used e.g. by
+  // TWebSocketProtocolRest.ProcessFrame() to avoid to wait for an incoming
+  // response from the other endpoint
+  // - should match NORESPONSE_CONTENT_TYPE constant defined in mORMot.pas unit
+  HTTP_RESP_NORESPONSE = '!NORESPONSE';
 
   /// THttpRequest timeout default value for DNS resolution
   // - leaving to 0 will let system default value be used
@@ -825,6 +832,9 @@ type
     // as STATICFILE_CONTENT_TYPE in mORMot.pas), then OutContent is the UTF-8
     // file name of a file which must be sent to the client via http.sys (much
     // faster than manual buffering/sending)
+    // - if OutContentType is HTTP_RESP_NORESPONSE (i.e. '!NORESPONSE', defined
+    // as NORESPONSE_CONTENT_TYPE in mORMot.pas), then the actual transmission
+    // protocol may not wait for any answer - used e.g. for WebSockets
     property OutContentType: SockString read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
     // - e.g. to set Content-Type/Location
@@ -3547,6 +3557,8 @@ begin
          Context.OutContent := '';
         end;
       end;
+    if Context.OutContentType=HTTP_RESP_NORESPONSE then
+      Context.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
@@ -5792,6 +5804,8 @@ begin
               FileClose(FileHandle);
             end;
           end else begin
+            if Context.OutContentType=HTTP_RESP_NORESPONSE then
+              Context.OutContentType := ''; // true HTTP always expects a response
             // response is in OutContent -> send it from memory
             if fCompress<>nil then begin
               with Resp^.Headers.KnownHeaders[reqContentEncoding] do
