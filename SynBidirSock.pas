@@ -648,7 +648,7 @@ begin
     tmp := tmp+Values[i]+#1;
   tmp := tmp+ContentType+#1+Content;
   if fCompressed then
-    SynLZCompress(pointer(tmp),length(tmp),value) else
+    SynLZCompress(pointer(tmp),length(tmp),value,512) else
     value := tmp;
   if fEncryption<>nil then
     value := fEncryption.EncryptPKCS7(value);

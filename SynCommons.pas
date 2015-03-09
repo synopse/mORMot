@@ -11874,11 +11874,12 @@ function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZCompress(const Data: RawByteString): RawByteString; overload;
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString); overload;
+procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  CompressionSizeTrigger: integer=100); overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
@@ -11888,11 +11889,13 @@ function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString); overload;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZCompressToBytes(const Data: RawByteString): TByteDynArray; overload;
+function SynLZCompressToBytes(const Data: RawByteString;
+  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZCompressToBytes(P: PAnsiChar; PLen: integer): TByteDynArray; overload;
+function SynLZCompressToBytes(P: PAnsiChar; PLen: integer;
+  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload; 
@@ -43268,17 +43271,17 @@ begin
     FreeAndNil(result);
 end;
 
-function SynLZCompress(const Data: RawByteString): RawByteString;
-begin
-  SynLZCompress(pointer(Data),length(Data),result);
-end;
-
 const
-  SYNLZCOMPRESS_SYNLZ_SIZETRIGGER = 100;
   SYNLZCOMPRESS_STORED = #0;
   SYNLZCOMPRESS_SYNLZ = #1;
 
-procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer): RawByteString;
+begin
+  SynLZCompress(pointer(Data),length(Data),result,CompressionSizeTrigger);
+end;
+
+procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  CompressionSizeTrigger: integer);
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
@@ -43286,7 +43289,7 @@ begin
   if PLen=0 then
     exit;
   crc := crc32c(0,P,PLen);
-  if PLen<SYNLZCOMPRESS_SYNLZ_SIZETRIGGER then begin
+  if PLen<CompressionSizeTrigger then begin
     SetString(result,nil,PLen+9);
     R := pointer(result);
     PCardinal(R)^ := crc;
@@ -43329,12 +43332,13 @@ begin
   end;
 end;
 
-function SynLZCompressToBytes(const Data: RawByteString): TByteDynArray;
+function SynLZCompressToBytes(const Data: RawByteString;
+  CompressionSizeTrigger: integer): TByteDynArray;
 begin
-  result := SynLZCompressToBytes(pointer(Data),length(Data));
+  result := SynLZCompressToBytes(pointer(Data),length(Data),CompressionSizeTrigger);
 end;
 
-function SynLZCompressToBytes(P: PAnsiChar; PLen: integer): TByteDynArray; overload;
+function SynLZCompressToBytes(P: PAnsiChar; PLen,CompressionSizeTrigger: integer): TByteDynArray; overload;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
@@ -43342,7 +43346,7 @@ begin
   if PLen=0 then
     exit;
   crc := crc32c(0,P,PLen);
-  if PLen<SYNLZCOMPRESS_SYNLZ_SIZETRIGGER then begin
+  if PLen<CompressionSizeTrigger then begin
     SetLength(result,PLen+9);
     R := pointer(result);
     PCardinal(R)^ := crc;
