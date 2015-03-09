@@ -222,6 +222,7 @@ unit SynCrypto;
    - added AES encryption using official Microsoft AES Cryptographic Provider
      (CryptoAPI) via TAESECB_API, TAESCBC_API, TAESCFB_API and TAESOFB_API -
      our optimized asm version is faster, so is still our default/preferred
+   - added optional IVAtBeginning parameter to EncryptPKCS7/DecryptPKC7 methods
    - added CompressShaAes() and global CompressShaAesKey, CompressShaAesIV and
      CompressShaAesClass variables to be used by THttpSocket.RegisterCompress
    - introduce new TRC4 object for RC4 encryption algorithm
@@ -360,12 +361,16 @@ type
   protected
     fKeySize: cardinal;
     fKeySizeBytes: cardinal;
+    fKey: TAESKey;
+    fIV: TAESBlock;
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
     // - IV is the Initialization Vector
     constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); virtual;
+    /// compute a class instance similar to this one
+    function Clone: TAESAbstract; virtual;
 
     /// perform the AES cypher in the corresponding mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); virtual; abstract;
@@ -375,11 +380,15 @@ type
     /// encrypt a memory buffer using a PKCS7 padding pattern
     // - PKCS7 is described in RFC 5652 - it will add up to 16 bytes to
     // the input buffer
-    function EncryptPKCS7(const Input: RawByteString): RawByteString;
+    // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
+    // and stored at the beginning of the output binary buffer
+    function EncryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString;
     /// decrypt a memory buffer using a PKCS7 padding pattern
     // - PKCS7 is described in RFC 5652 - it will trim up to 16 bytes from
     // the input buffer
-    function DecryptPKCS7(const Input: RawByteString): RawByteString;
+    // - if IVAtBeginning is TRUE, the Initialization Vector will be taken
+    // from the beginning of the input binary buffer
+    function DecryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString;
 
     /// simple wrapper able to cypher/decypher any content
     // - here all data could be text or binary
@@ -400,20 +409,12 @@ type
   protected
     fIn, fOut: PAESBlock;
     AES: TAES;
-    fKey: TAESKey;
     fCount: Cardinal;
     fCV: TAESBlock;
     procedure EncryptInit;
     procedure DecryptInit;
     procedure EncryptTrailer;
   public
-    /// Initialize AES context for cypher
-    // - first method to call before using this class
-    // - KeySize is in bits, i.e. 128,192,256
-    // - IV is the Initialization Vector
-    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); override;
-    /// compute a class instance similar to this one
-    function Clone: TAESAbstractSyn; virtual;
     /// perform the AES cypher in the corresponding mode
     // - this abstract method will set CV from AES.Context, and fIn/fOut
     // from BufIn/BufOut
@@ -516,8 +517,7 @@ type
       aiKeyAlg: cardinal;
       dwKeyLength: cardinal;
     end;
-    fKey: TAESKey;
-    fIV: TAESBlock;
+    fKeyHeaderKey: TAESKey;
     fKeyCryptoAPI: pointer;
     fInternalMode: cardinal;
     procedure InternalSetMode; virtual; abstract;
@@ -5306,35 +5306,57 @@ begin
       [ClassName,aKeySize]);
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
+  move(aKey,fKey,fKeySizeBytes);
+  fIV := aIV;
 end;
 
-function TAESAbstract.DecryptPKCS7(const Input: RawByteString): RawByteString;
-var len: integer;
+function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
+  IVAtBeginning: boolean): RawByteString;
+var len,iv: integer;
 begin
   // validate input
   len := length(Input);
   if (len<AESBlockSize) or (len and (AESBlockSize-1)<>0) then
     raise ESynCrypto.Create('Invalid content');
   // decrypt
+  if IVAtBeginning then begin
+    fIV := PAESBlock(Input)^;
+    dec(len,AESBlockSize);
+    iv := AESBlockSize;
+  end else
+    iv := 0;
   SetString(result,nil,len);
-  Decrypt(pointer(Input),pointer(result),len);
+  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
   // delete right padding
   if ord(result[len])>AESBlockSize then
     raise ESynCrypto.Create('Invalid content');
   SetLength(result,len-ord(result[len]));
 end;
 
-function TAESAbstract.EncryptPKCS7(const Input: RawByteString): RawByteString;
-var len, padding: cardinal;
+function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
+  IVAtBeginning: boolean): RawByteString;
+var len, padding, iv, rnd: cardinal;
+    i: Integer;
+    P: Pointer;
 begin
   // use PKCS7 padding, so expects AESBlockSize=16 bytes blocks
   len := length(Input);
   padding := AESBlockSize-(len and (AESBlockSize-1));
-  SetString(result,nil,len+padding);
-  move(Pointer(Input)^,pointer(result)^,len);
-  FillChar(PByteArray(result)^[len],padding,padding);
+  if IVAtBeginning then
+    iv := AESBlockSize else
+    iv := 0;
+  SetString(result,nil,iv+len+padding);
+  if IVAtBeginning then begin
+    rnd := GetTickCount64*PtrInt(self)*len;
+    for i := 0 to 3 do
+      PCardinalArray(@fIV)[i] := PCardinalArray(@fIV)[i] xor rnd xor cardinal(Random(MaxInt));
+    PAESBlock(result)^ := fIV;
+  end;
+  move(Pointer(Input)^,PByteArray(result)^[iv],len);
+  FillChar(PByteArray(result)^[iv+len],padding,padding);
   // encryption
-  Encrypt(pointer(result),pointer(result),len+padding);
+  P := @PByteArray(result)^[iv];
+  Encrypt(P,P,len+padding);
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
@@ -5353,29 +5375,21 @@ begin
   end;
 end;
 
+function TAESAbstract.Clone: TAESAbstract;
+begin
+  result := ClassType.Create as TAESAbstract;
+  result.Create(fKey,fKeySize,fIV);
+end;
+
 
 { TAESAbstractSyn }
-
-constructor TAESAbstractSyn.Create(const aKey; aKeySize: cardinal;
-  const aIV: TAESBlock);
-begin
-  inherited Create(aKey,aKeySize,aIV);
-  TAESContext(AES.Context).IV := aIV;
-  move(aKey,fKey,fKeySizeBytes);
-end;
-
-function TAESAbstractSyn.Clone: TAESAbstractSyn;
-begin
-  result := ClassType.Create as TAESAbstractSyn;
-  result.Create(fKey,fKeySize,TAESContext(AES.Context).IV);
-end;
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   fIn := BufIn;
   fOut := BufOut;
   fCount := Count;
-  fCV := TAESContext(AES.Context).IV;
+  fCV := fIV;
 end;
 
 procedure TAESAbstractSyn.DecryptInit;
@@ -5389,7 +5403,7 @@ begin
   fIn := BufIn;
   fOut := BufOut;
   fCount := Count;
-  fCV := TAESContext(AES.Context).IV;
+  fCV := fIV;
 end;
 
 procedure TAESAbstractSyn.EncryptInit;
@@ -5682,7 +5696,6 @@ constructor TAESAbstract_API.Create(const aKey; aKeySize: cardinal;
 begin
   EnsureCryptoAPIAESProviderAvailable;
   inherited Create(aKey,aKeySize,aIV); // check and set fKeySize[Bytes]
-  fIV := aIV;
   InternalSetMode;
   fKeyHeader.bType := PLAINTEXTKEYBLOB;
   fKeyHeader.bVersion := CUR_BLOB_VERSION;
@@ -5692,7 +5705,7 @@ begin
   256: fKeyHeader.aiKeyAlg := CALG_AES_256;
   end;
   fKeyHeader.dwKeyLength := fKeySizeBytes;
-  move(aKey,fKey,fKeySizeBytes);
+  fKeyHeaderKey := fKey;
 end;
 
 destructor TAESAbstract_API.Destroy;
