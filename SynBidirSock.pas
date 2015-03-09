@@ -274,7 +274,7 @@ type
     function Count: integer;
   end;
 
-  TWebSocketServerRespProcessOne = (wspNone, wspDone, wspError, wspClosed);
+  TWebSocketServerRespProcessOne = (wspNone, wspPing, wspDone, wspError, wspClosed);
 
   /// an enhanced input/output structure used for HTTP and WebSockets requests
   // - this class will contain additional parameters used to maintain the
@@ -321,6 +321,7 @@ type
   protected
     fConnections: TObjectList;
     fProtocols: TWebSocketProtocolList;
+    fHeartbeatDelay: Cardinal;
     /// will validate the WebSockets handshake, then call WebSocketProcessLoop()
     function WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
       Context: TWebSocketServerResp): boolean; virtual;
@@ -347,6 +348,9 @@ type
     destructor Destroy; override;
     /// access to the protocol list handled by this server
     property Protocols: TWebSocketProtocolList read fProtocols;
+    /// time in milli seconds between each focPing commands sent by the server
+    // - default is 20000, i.e. 20 seconds
+    property HeartbeatDelay: Cardinal read fHeartbeatDelay write fHeartbeatDelay;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -396,6 +400,8 @@ type
   end;
 
 
+/// used to return the text corresponding to a specified WebSockets frame data
+function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
 
 
 { -------------- WebSockets Client classes for bidirectional remote access }
@@ -406,6 +412,12 @@ implementation
 
 
 { -------------- WebSockets shared classes for bidirectional remote access }
+
+
+function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode));
+end;
 
 { TWebSocketProtocol }
 
@@ -744,6 +756,7 @@ begin
   fThreadRespClass := TWebSocketServerResp;
   fConnections := TObjectList.Create(false);
   fProtocols := TWebSocketProtocolList.Create;
+  fHeartbeatDelay := 20000;
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -821,18 +834,32 @@ end;
 
 function TWebSocketServer.WebSocketProcessLoop(ClientSock: THttpServerSocket;
   Context: TWebSocketServerResp): boolean;
+var delay: cardinal;
+    last: Int64;
 begin
   result := false;
   if Context.fWebSocketProtocol=nil then
     exit;
   Context.ProcessStart;
+  last := GetTickCount64;
   while Context.ServerSock.KeepAliveClient and
         not (Terminated or Context.Terminated) do
     case Context.ProcessOne of
-    wspNone:
-      SleepHiRes(5); // leave some time for Context.NotifyCallback()
-    wspDone:
+    wspNone: begin
+      case GetTickCount64-last of
+      0..200:    delay := 1; // leave some time for Context.NotifyCallback()
+      201..500:  delay := 5;
+      501..2000: delay := 100;
+      else       delay := 500;
+      end;
+      SleepHiRes(delay);
+    end;
+    wspPing:
+      SleepHiRes(1);
+    wspDone: begin
       SleepHiRes(0);
+      last := GetTickCount64;
+    end;
     wspError:
       SleepHiRes(10);
     wspClosed:
@@ -930,9 +957,10 @@ begin
   try
     try // current implementation is blocking vs NotifyCallback
       if not GetFrame(request,5) then begin
-        if GetTickCount64-fLastPingTicks>5000 then begin
+        if GetTickCount64-fLastPingTicks>TWebSocketServer(fServer).fHeartbeatDelay then begin
           answer.opcode := focPing;
           SendFrame(answer);
+          result := wspPing;
         end;
         exit;
       end;
@@ -943,6 +971,11 @@ begin
       focPing: begin
         answer.opcode := focPong;
         answer.payload := request.payload;
+        result := wspPing;
+      end;
+      focPong: begin
+        result := wspPing;
+        exit;
       end;
       focText,focBinary:
         sendAnswer := WebSocketProtocol.ProcessFrame(self,request,answer);
@@ -950,7 +983,7 @@ begin
         answer := request;
         result := wspClosed;
       end;
-      else exit; // other commands (e.g. focPong) are just ignored
+      else exit; // reserved commands are just ignored
       end;
       if sendAnswer then
         SendFrame(answer);
@@ -976,7 +1009,7 @@ begin
       case ProcessOne of
       wspNone:
         break;
-      wspDone:
+      wspDone,wspPing:
         continue;
       wspError:
         exit;
@@ -1042,11 +1075,11 @@ begin
     hdr.len32 := hdr.len8 else
   if hdr.len8=FRAME_LEN2BYTES then begin
     fServerSock.SockInRead(@hdr.len32,2,true);
-    hdr.len32 := swap(hdr.len32); 
+    hdr.len32 := swap(hdr.len32);
   end else
   if hdr.len8=FRAME_LEN8BYTES then begin
     fServerSock.SockInRead(@hdr.len32,8,true);
-    if hdr.len32<>0 then // size is more than 32 bits -> reject 
+    if hdr.len32<>0 then // size is more than 32 bits -> reject
       hdr.len32 := maxInt else
       hdr.len32 := bswap32(hdr.len64);
     if hdr.len32>1 shl 28 then
@@ -1074,14 +1107,13 @@ begin
     GetHeader;
     if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
       raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
-        [self,GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode))^,
-         GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(Frame.opcode))^]);
+        [self,OpcodeText(opcode)^,OpcodeText(Frame.opcode)^]);
     GetData(data);
     Frame.payload := Frame.payload+data;
   end;
   {$ifdef UNICODE}
   if opcode=focText then
-    SetCodePage(Frame.payload,CP_UTF8,false); // ensure raw value is UTF-8
+    SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
   {$endif}
   result := true;
 end;
