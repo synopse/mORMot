@@ -413,7 +413,7 @@ function TWebSocketProtocolChat.ProcessFrame(
 begin
   if Assigned(OnInComingFrame) then
     OnIncomingFrame(Context,request);
-  result := false; // answer frame to be ignored
+  result := false; // no answer frame to be transmitted 
 end;
 
 function TWebSocketProtocolChat.SendFrame(Sender: TWebSocketServerResp;
@@ -435,16 +435,18 @@ function TWebSocketProtocolRest.ProcessFrame(Context: TWebSocketServerResp;
 var Ctxt: THttpServerRequest;
     status: cardinal;
 begin
+  result := true;
   Ctxt := THttpServerRequest.Create(Context.fServer,Context);
   try
     if not FrameToInput(request,Ctxt) then
       raise ESynBidirSocket.CreateUTF8('%.ProcessOne: unexpected frame',[self]);
     status := Context.fServer.Request(Ctxt);
-    OutputToFrame(Ctxt,status,answer);
+    if Ctxt.OutContentType=HTTP_RESP_NORESPONSE then // expects no answer
+      result := false else
+      OutputToFrame(Ctxt,status,answer);
   finally
     Ctxt.Free;
   end;
-  result := true;
 end;
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequest;
@@ -893,8 +895,10 @@ begin
       sendAnswer := true;
       fLastPingTicks := GetTickCount64;
       case request.opcode of
-      focPing:
+      focPing: begin
         answer.opcode := focPong;
+        answer.payload := request.payload;
+      end;
       focText,focBinary:
         sendAnswer := WebSocketProtocol.ProcessFrame(self,request,answer);
       focConnectionClose: begin
@@ -958,35 +962,53 @@ type
  TFrameHeader = packed record
    first: byte;
    len8: byte;
-   len: Int64;
+   len32: cardinal;
+   len64: cardinal;
+   mask: cardinal;
  end;
 
 function TWebSocketServerResp.GetFrame(
   out Frame: TWebSocketFrame; TimeOut: cardinal): boolean;
 var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
+    masked: boolean;
 procedure GetHeader;
 begin
-  fServerSock.SockInRead(@hdr.first,1,true);
-  fServerSock.SockInRead(@hdr.len8,1,true);
+  fillchar(hdr,sizeof(hdr),0);
+  fServerSock.SockInRead(@hdr.first,2,true);
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
-  hdr.len := 0;
-  if hdr.len8 and 128<>0 then
-     raise ESynBidirSocket.CreateUTF8('%.GetFrame: unsupported MASK',[self]);
+  masked := hdr.len8 and 128<>0;
+  if masked then
+    hdr.len8 := hdr.len8 and 127;
   if hdr.len8<FRAME_LEN2BYTES then
-    hdr.len := hdr.len8 else
+    hdr.len32 := hdr.len8 else
   if hdr.len8=FRAME_LEN2BYTES then
-    fServerSock.SockInRead(@hdr.len,2,true) else
+    fServerSock.SockInRead(@hdr.len32,2,true) else
   if hdr.len8=FRAME_LEN8BYTES then begin
-    fServerSock.SockInRead(@hdr.len,8,true);
-    if hdr.len>1 shl 28 then // maximum 128 MB of data allowed
-      raise ESynBidirSocket.CreateUTF8('%.GetFrame: invalid length',[self]);
+    fServerSock.SockInRead(@hdr.len32,8,true);
+    if (hdr.len64<>0) or (hdr.len32>1 shl 28) then
+      raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
   end;
+  if masked then
+    fServerSock.SockInRead(@hdr.mask,4,true);
 end;
 procedure GetData(var data: RawByteString);
+var i,maskCount: integer;
+    mask: cardinal;
 begin
-  SetString(data,nil,hdr.len);
-  fServerSock.SockInRead(pointer(data),hdr.len);
+  SetString(data,nil,hdr.len32);
+  fServerSock.SockInRead(pointer(data),hdr.len32);
+  mask := hdr.mask;
+  if mask<>0 then begin
+    maskCount := hdr.len32 shr 2;
+    for i := 0 to maskCount-1 do
+      PCardinalArray(data)^[i] := PCardinalArray(data)^[i] xor mask;
+    maskCount := maskCount*4;
+    for i := maskCount to maskCount+integer(hdr.len32 and 3)-1 do begin
+      PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
+      mask := mask shr 8;
+    end;
+  end;
 end;
 var data: RawByteString;
 begin
@@ -1019,21 +1041,22 @@ begin
   try
     result := true;
     hdr.first := byte(Frame.opcode) or FRAME_FIN;
-    hdr.len := Length(Frame.payload);
-    if hdr.len<FRAME_LEN2BYTES then begin
-      hdr.len8 := hdr.len;
+    hdr.len32 := Length(Frame.payload);
+    if hdr.len32<FRAME_LEN2BYTES then begin
+      hdr.len8 := hdr.len32;
       fServerSock.Snd(@hdr,2);
     end else
-    if hdr.len<65536 then begin
+    if hdr.len32<65536 then begin
       hdr.len8 := FRAME_LEN2BYTES;
       fServerSock.Snd(@hdr,3);
     end else begin
-      hdr.len8 := FRAME_LEN8BYTES; // huge data is sent in two parts
-      fServerSock.SndLow(@hdr,9);
-      fServerSock.SndLow(pointer(Frame.payload),hdr.len);
+      hdr.len8 := FRAME_LEN8BYTES;
+      hdr.len64 := 0;
+      fServerSock.SndLow(@hdr,9); // huge payload sent outside TCrtSock buffers
+      fServerSock.SndLow(pointer(Frame.payload),hdr.len32);
       exit;
     end;
-    fServerSock.Snd(pointer(Frame.payload),hdr.len);
+    fServerSock.Snd(pointer(Frame.payload),hdr.len32);
     fServerSock.SockSendFlush; // send at once up to 64 KB
   except
     result := false;
