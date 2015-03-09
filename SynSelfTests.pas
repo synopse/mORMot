@@ -166,6 +166,7 @@ uses
   mORMotMongoDB,
   mORMotMVC,
   {$endif}
+  SynBidirSock,
   mORMotDDD,
   dddDomUserTypes,
   dddInfraAuthRest,
@@ -800,6 +801,17 @@ type
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amMainThread
     procedure MainThread;
     {$endif}
+  end;
+
+  /// a test case for all bidirectional remote access, e.g. WebSockets
+  TTestBidirectionalRemoteConnection = class(TSynTestCase)
+  protected
+    procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
+  published
+    /// low-level test of our WebSockets JSON protocol
+    procedure WebsocketsJSONProtocol;
+    /// low-level test of our WebSockets binary protocol
+    procedure WebsocketsBinaryProtocol;
   end;
 
   /// a test case for all shared DDD types and services
@@ -12687,6 +12699,68 @@ begin
   fIterationCount := fTest.fOperationCount div fTest.fRunningThreadCount;
   fEvent.SetEvent;
   Sleep(0); // is expected for proper process
+end;
+
+
+{ TTestBidirectionalRemoteConnection }
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',''),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv'),focBinary);
+end;
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
+begin
+  WebsocketsLowLevel(TWebSocketProtocolJSON.Create,focText);
+end;
+
+type
+  TWebSocketProtocolRestHook = class(TWebSocketProtocolRest);
+
+procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
+  protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
+procedure TestOne(const content,contentType: RawByteString);
+var C1,C2: THttpServerRequest;
+    frame: TWebSocketFrame;
+begin
+  C1 := THttpServerRequest.Create(nil,nil);
+  C2 := THttpServerRequest.Create(nil,nil);
+  try
+    C1.Prepare('url','POST','headers',content,contentType);
+    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,frame);
+    Check(frame.opcode=opcode);
+    TWebSocketProtocolRestHook(protocol).FrameToInput(frame,C2);
+    Check(C2.URL='url');
+    Check(C2.Method='POST');
+    Check(C2.InHeaders='headers');
+    Check(C2.InContentType=contentType);
+    Check(C2.InContent=content);
+    C1.OutContent := content;
+    C1.OutContentType := contentType;
+    C1.OutCustomHeaders := 'outheaders';
+    frame.opcode := focContinuation;
+    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
+    Check(frame.opcode=opcode);
+    TWebSocketProtocolRestHook(protocol).FrameToOutput(frame,C2);
+    Check(C2.OutContent=content);
+    Check(C2.OutContentType=contentType);
+    Check(C2.OutCustomHeaders='outheaders');
+  finally
+    C2.Free;
+    C1.Free;
+  end;
+end;
+begin
+  try
+    TestOne('content',TEXT_CONTENT_TYPE);
+    TestOne('{"content":1234}',JSON_CONTENT_TYPE);
+    TestOne('"content"',JSON_CONTENT_TYPE);
+    TestOne('["json",2]','');
+    TestOne('binary'#0'data',BINARY_CONTENT_TYPE);
+  finally
+    protocol.Free;
+  end;
 end;
 
 
