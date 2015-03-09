@@ -1487,8 +1487,8 @@ begin
     s0 := t0 xor PK[0];
     s1 := t1 xor PK[1];
     s2 := t2 xor PK[2];
-      Inc(pK);
-    end;
+    Inc(pK);
+  end;
   TWA4(BO)[0] := ((SBox[s0        and $ff])        xor
                   (SBox[s1 shr  8 and $ff]) shl  8 xor
                   (SBox[s2 shr 16 and $ff]) shl 16 xor
@@ -4201,7 +4201,7 @@ type
 
 function AES(const Key; KeySize: cardinal; const s: RawByteString; Encrypt: boolean): RawByteString;
 begin
-  SetLength(result,length(s));
+  SetString(result,nil,length(s));
   if s<>'' then
     AES(Key,KeySize,pointer(s),pointer(result),length(s),Encrypt);
 end;
@@ -4491,7 +4491,7 @@ end;
 
 function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString;
 begin
-  SetLength(result,length(s));
+  SetString(result,nil,length(s));
   AESSHA256(pointer(s),pointer(result),length(s),Password,Encrypt);
 end;
 
@@ -5014,7 +5014,7 @@ function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 var P: PAnsiChar;
     I: Integer;
 begin
-  SetLength(result,sizeof(D)*2);
+  SetString(result,nil,sizeof(D)*2);
   P := pointer(result);
   for I := 0 to sizeof(D)-1 do begin
     P[0] := Digits[D[I] shr 4];
@@ -5027,7 +5027,7 @@ function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 var P: PAnsiChar;
     I: Integer;
 begin
-  SetLength(result,sizeof(D)*2);
+  SetString(result,nil,sizeof(D)*2);
   P := pointer(result);
   for I := 0 to sizeof(D)-1 do begin
     P[0] := Digits[D[I] shr 4];
@@ -5040,7 +5040,7 @@ function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 var P: PAnsiChar;
     I: Integer;
 begin
-  SetLength(result,sizeof(D)*2);
+  SetString(result,nil,sizeof(D)*2);
   P := pointer(result);
   for I := 0 to sizeof(D)-1 do begin
     P[0] := Digits[D[I] shr 4];
@@ -5316,7 +5316,7 @@ begin
   if (len<AESBlockSize) or (len and (AESBlockSize-1)<>0) then
     raise ESynCrypto.Create('Invalid content');
   // decrypt
-  SetLength(result,len);
+  SetString(result,nil,len);
   Decrypt(pointer(Input),pointer(result),len);
   // delete right padding
   if ord(result[len])>AESBlockSize then
@@ -5330,7 +5330,7 @@ begin
   // use PKCS7 padding, so expects AESBlockSize=16 bytes blocks
   len := length(Input);
   padding := AESBlockSize-(len and (AESBlockSize-1));
-  SetLength(result,len+padding);
+  SetString(result,nil,len+padding);
   move(Pointer(Input)^,pointer(result)^,len);
   FillChar(PByteArray(result)^[len],padding,padding);
   // encryption
@@ -5487,11 +5487,14 @@ var i: integer;
     tmp: TAESBlock;
 begin
   inherited; // CV := IV + set fIn,fOut,fCount
-  EncryptInit;
+  if not AES.Initialized then
+    EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
   for i := 1 to Count shr 4 do begin
     tmp := fIn^;
     AES.Encrypt(fCV,fCV);
-    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+    if fIn=fOut then
+      XorBlock16(pointer(fIn),pointer(@fCV)) else
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
     fCV := tmp;
     inc(fIn);
     inc(fOut);
@@ -5503,10 +5506,13 @@ procedure TAESCFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
   inherited; // CV := IV + set fIn,fOut,fCount
-  EncryptInit;
+  if not AES.Initialized then
+    EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
   for i := 1 to Count shr 4 do begin
     AES.Encrypt(fCV,fCV);
-    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+    if fIn=fOut then
+      XorBlock16(pointer(fIn),pointer(@fCV)) else
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
     fCV := fOut^;
     inc(fIn);
     inc(fOut);
@@ -5526,7 +5532,8 @@ procedure TAESOFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
   inherited; // CV := IV + set fIn,fOut,fCount
-  EncryptInit;
+  if not AES.Initialized then
+    EncryptInit; // OFB mode = only Encrypt -> allow prepare the key once
   for i := 1 to Count shr 4 do begin
     AES.Encrypt(fCV,fCV);
     XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
@@ -5549,7 +5556,8 @@ var i,j: integer;
     tmp: TAESBlock;
 begin
   inherited; // CV := IV + set fIn,fOut,fCount
-  EncryptInit;
+  if not AES.Initialized then
+    EncryptInit; // CTR mode = only Encrypt -> allow prepare the key once
   for i := 1 to Count shr 4 do begin
     AES.Encrypt(fCV,tmp);
     inc(fCV[7]);
