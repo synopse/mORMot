@@ -12706,10 +12706,10 @@ end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
 begin
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',false),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv',false),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',true),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass','iv',true),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass',false),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',true),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('pass',true),focBinary);
 end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
@@ -12746,7 +12746,7 @@ begin
     frame.opcode := focContinuation;
     TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
     Check(frame.opcode=opcode);
-    TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2);
+    Check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2)=200);
     Check(C2.OutContent=content);
     Check(C2.OutContentType=contentType);
     Check(C2.OutCustomHeaders='outheaders');

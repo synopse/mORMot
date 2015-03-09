@@ -233,7 +233,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsebinary
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
-    fEncryption: TAESAbstractSyn;
+    fEncryption: TAESAbstract;
     fCompressed: boolean;
     procedure FrameCompress(const Values: array of RawByteString;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
@@ -245,13 +245,13 @@ type
     destructor Destroy; override;
     /// initialize the WebSockets binary protocol
     // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used on on this protocol
-    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock;
+    constructor Create(const aKey; aKeySize: cardinal;
       aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol
     /// - AES-CFB 256 bit encryption will be enabled on this protocol if some
     // strings are supplied
     // - the supplied key and initialization vector will be hashed using SHA-256
-    constructor Create(const aKey,aIV: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
+    constructor Create(const aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
@@ -604,31 +604,29 @@ end;
 { TWebSocketProtocolBinary }
 
 constructor TWebSocketProtocolBinary.Create(
-  const aKey; aKeySize: cardinal; const aIV: TAESBlock; aCompressed: boolean);
+  const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
-  Create('synopsebinary');
+  inherited Create('synopsebinary');
   if aKeySize>=128 then
-    fEncryption := TAESCFB.Create(aKey,aKeySize,aIV);
+    fEncryption := TAESCFB.Create(aKey,aKeySize,PAESBlock(@aKey)^);
   fCompressed := aCompressed;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aKey, aIV: RawUTF8;
+constructor TWebSocketProtocolBinary.Create(const aKey: RawUTF8;
   aCompressed: boolean);
-var key,iv: TSHA256Digest;
+var key: TSHA256Digest;
 begin
-  if (aKey<>'') and (aIV<>'') then begin
+  if aKey<>'' then begin
     SHA256Weak(aKey,key);
-    if aIV='' then
-      iv := key else
-      SHA256Weak(aIV,iv);
-    Create(key,256,PAESBlock(@iv)^,aCompressed);
+    Create(key,256,aCompressed);
   end else
-    Create(key,0,PAESBlock(@iv)^,aCompressed);
+    Create(key,0,aCompressed);
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fName);
+  result := TWebSocketProtocolBinary.Create('');
+  result.fName := 'synopsebinary';
   TWebSocketProtocolBinary(result).fCompressed := fCompressed;
   if fEncryption<>nil then
     TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
@@ -653,7 +651,7 @@ begin
     SynLZCompress(pointer(tmp),length(tmp),value,512) else
     value := tmp;
   if fEncryption<>nil then
-    value := fEncryption.EncryptPKCS7(value);
+    value := fEncryption.EncryptPKCS7(value,true);
   frame.payload := Values[0]+#1+value;
 end;
 
@@ -671,7 +669,7 @@ begin
      not IdemPropNameU(hd,Head) then
     exit;
   if fEncryption<>nil then
-    tmp := fEncryption.DecryptPKCS7(tmp);
+    tmp := fEncryption.DecryptPKCS7(tmp,true);
   if fCompressed then
     SynLZDecompress(pointer(tmp),length(tmp),value) else
     value := tmp;
@@ -890,7 +888,7 @@ constructor TWebSocketServerRest.Create(const aPort: SockString;
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
 begin
   inherited Create(aPort);
-  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsEncryptionKey,''));
+  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsEncryptionKey));
   if aWebSocketsAJAX then
     fProtocols.Add(TWebSocketProtocolJSON.Create);
   fCallbackAcquireTimeOutMS := 5000;
@@ -1158,7 +1156,7 @@ begin
   InterlockedIncrement(fTryAcquireConnectionCount);
   try
     repeat
-      result := TryEnterCriticalSection(fAcquireConnectionLock);
+      result := boolean(TryEnterCriticalSection(fAcquireConnectionLock));
       if result or Terminated or TWebSocketServer(fServer).Terminated then
         exit;
       SleepHiRes(delay);
@@ -1174,4 +1172,4 @@ end;
 
 
 
-end.
+end.
