@@ -908,6 +908,8 @@ unit mORMot;
     - added GetInterfaceFromEntry() function to speed up interface execution,
       e.g. for TServiceFactoryServer (avoid the RTTI lookup of GetInterface)
     - added TPropInfo.ClassFromJSON() to properly unserialize TObject properties
+    - added TPropInfo.CopyToNewObject() method, to instantiate class published
+      properties from another instance (possibly one of its nested items)        
     - added TSQLPropInfo.SQLFieldTypeName and SQLDBFieldTypeName properties
     - introducing TSQLPropInfo.SetValueVar() method to avoid a call to StrLen()
     - TSQLPropInfo is now able to "flatten" nested properties, e.g. DDD's
@@ -2381,6 +2383,11 @@ type
     // therefore faster than a SetValue(Dest,GetValue(Source)) call
     // - if DestInfo is nil, it will assume DestInfo=@self
     procedure CopyValue(Source, Dest: TObject; DestInfo: PPropInfo=nil);
+    /// create a new instance of a published property
+    // - copying its properties values from a given instance of another class
+    // - if the destination property is not of the aFrom class, it will first
+    // search for any extact mach in the destination nested properties 
+    function CopyToNewObject(aFrom: TObject): TObject;
     /// compare two published properties
     function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return true if this property is a BLOB (TSQLRawBlob)
@@ -3537,6 +3544,18 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
+
+/// retrieve a Field property RTTI information searching for a Property class type
+// - this special version also search into parent properties 
+function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+
+/// retrieve a class instance property value matching a class type
+// - if aSearchedInstance is aSearchedClassType, will return aSearchedInstance
+// - if aSearchedInstance is not aSearchedClassType, it will try all nested
+// properties of aSearchedInstance for a matching aSearchedClassType: if no
+// exact match is found, will return aSearchedInstance
+function ClassFieldPropInstanceMatchingClass(aSearchedInstance: TObject;
+  aSearchedClassType: TClass): TObject;
 
 /// retrieve the total number of properties for a class, including its parents
 function ClassFieldCountWithParents(ClassType: TClass;
@@ -15830,6 +15849,21 @@ begin
   {$endif}
 end;
 
+function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+var i: integer;
+begin
+  if aSearchedClassType<>nil then
+  while aClassType<>nil do begin
+    for i := 1 to InternalClassPropInfo(aClassType,result) do
+      if (result^.PropType^.Kind=tkClass) and
+         (result^.PropType^.ClassType^.ClassType=aSearchedClassType) then
+        exit else
+        result := result^.Next;
+    aClassType := aClassType.ClassParent;
+  end;
+  result := nil;
+end;
+
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
   ComponentClass: TClass): pointer;
 var P: PPropInfo;
@@ -17022,16 +17056,8 @@ begin
 {$endif}
   if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
     CopyStrings(TStrings(S),TStrings(D)) else begin
-    D.Free; // release previous child
-    if S=nil then
-      D := nil else
-      try
-        D := ClassInstanceCreate(S.ClassType); // create new child instance
-        CopyObject(S,D); // copy child content
-      except
-        FreeAndNil(D); // avoid memory leak if error during new instance copy
-      end;
-    SetInstance(Dest,D);
+    D.Free; // release previous instance
+    SetInstance(Dest,TSQLPropInfoRTTIObject(DestInfo).PropInfo^.CopyToNewObject(S));
   end;
 end;
 
@@ -22595,6 +22621,40 @@ begin
   end;
 end;
 
+function ClassFieldPropInstanceMatchingClass(
+  aSearchedInstance: TObject; aSearchedClassType: TClass): TObject;
+var P: PPropInfo;
+begin
+  result := aSearchedInstance;
+  if (aSearchedInstance=nil) or 
+     aSearchedInstance.InheritsFrom(aSearchedClassType) then
+    exit;
+  P := ClassFieldPropWithParentsFromClassType(PPointer(aSearchedInstance)^,aSearchedClassType);
+  if P<>nil then begin
+    result := P^.GetObjProp(aSearchedInstance);
+    if result=nil then
+      result := aSearchedInstance;
+  end;
+end;
+
+function TPropInfo.CopyToNewObject(aFrom: TObject): TObject;
+var aClassInstanceCreate: TClassInstanceCreate;
+    aClass: TClass;
+begin
+  if aFrom=nil then begin
+    result := nil;
+    exit;
+  end;
+  aClass := PropType^.ClassType^.ClassType;
+  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass);
+  result := ClassInstanceCreate(aClass,aClassInstanceCreate);
+  try
+    CopyObject(ClassFieldPropInstanceMatchingClass(aFrom,aClass),result);
+  except
+    FreeAndNil(result); // avoid memory leak if error during new instance copy
+  end;
+end;
+
 procedure TPropInfo.CopyValue(Source, Dest: TObject; DestInfo: PPropInfo);
 var Value: RawByteString;
     WS: WideString;
@@ -22639,12 +22699,7 @@ dst:  if kD in tkOrdinalTypes then
               CopyCollection(TCollection(S),TCollection(D)) else
 {$endif}    begin
               D.Free; // release previous D instance then set a new copy of S
-              if S=nil then
-                D := nil else begin
-                D := ClassInstanceCreate(S.ClassType); 
-                CopyObject(S,D);
-              end;
-              DestInfo.SetOrdProp(Dest,PtrInt(D));
+              DestInfo.SetOrdProp(Dest,PtrInt(DestInfo^.CopyToNewObject(S)));
             end;
           end;
         end;
@@ -37137,12 +37192,13 @@ begin
 end;
 
 function ClassInstanceCreate(aClass: TClass): TObject;
+var aClassInstanceCreate: TClassInstanceCreate;
 {$ifdef LVCL}
 begin
-  result := ClassInstanceCreate(aClass,ClassToTClassInstanceCreate(aClass));
+  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass);
+  result := ClassInstanceCreate(aClass,aClassInstanceCreate);
 {$else}
 var aCollectionItemClass: TCollectionItemClass;
-    aClassInstanceCreate: TClassInstanceCreate;
 begin
   aClassInstanceCreate := ClassToTClassInstanceCreate(aClass,aCollectionItemClass);
   result := ClassInstanceCreate(aClass,aClassInstanceCreate,aCollectionItemClass);

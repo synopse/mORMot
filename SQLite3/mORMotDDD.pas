@@ -974,9 +974,17 @@ end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 { TODO:
-  T*ObjArray properties: Order.Line[] TOrderLineObjArray -> which one?
-  -> TSQLOrder.Line as variant (JSON) ?
-  -> TSQLOrder.Line as JSON dynarray (new feature request) ?
+  T*ObjArray published fields:
+    property Order.Line: TOrderLineObjArray;
+  In all cases, T*ObjArray should be accessible directly, using ObjArray*()
+  wrapper functions.
+  Storage at TSQLRecord level would very likely use JSON format, since it is
+  the single one natively usable by the framework (TDynArray.SaveTo raise an
+  exception for IsObjArray):
+  -> TSQLOrder.Line as variant? (JSON)
+  -> TSQLOrder.Line as JSON dynarray? (new feature request)
+  -> TSQLOrder.Line as binary dynarray?
+
 }
 procedure EnsureCompatible(agg,rec: TSQLPropInfo);
 begin
