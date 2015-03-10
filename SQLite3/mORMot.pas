@@ -40900,6 +40900,7 @@ end;
 
 const
   AD_SALT = '5aLt';
+  AD_PATTERN = '5a77e35';
 
 function TSQLRestServerAuthenticationActiveDirectory.Auth(Ctxt: TSQLRestServerURIContext): boolean;
 function CheckPassword(const UserName,Password: RawUTF8): Boolean;
@@ -40912,7 +40913,7 @@ begin
   if result then
     CloseHandle(hToken);
 end;
-var aUserName, aHashedPassWord, aPassword, aSalt: RawUTF8;
+var aUserName, aHashedPassWord, aPassword, aPattern: RawUTF8;
     User: TSQLAuthUser;
 begin
   result := true;
@@ -40925,12 +40926,12 @@ begin
     if User<>nil then
     try
       User.PasswordHashHexa := ''; // not needed, especially if from LogonName='*'
-      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(false)+AD_SALT,false,true);
-      split(aPassword,'\',aSalt,aPassword);
-      if aSalt<>AD_SALT then begin
-        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,Nonce(true)+AD_SALT,false,true);
-        split(aPassword,'\',aSalt,aPassword);
-        if aSalt<>AD_SALT then
+      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,AD_SALT+Nonce(false),false,true);
+      split(aPassword,#1,aPassword,aPattern);
+      if aPattern<>AD_PATTERN then begin // failed with current Nonce -> try previous
+        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,AD_SALT+Nonce(true),false,true);
+        split(aPassword,#1,aPassword,aPattern);
+        if aPattern<>AD_PATTERN then
           exit; // current and previous server nonce did not match -> fail
       end;
       if not CheckPassword(aUserName,aPassWord) then
@@ -40960,7 +40961,7 @@ begin
     exit;
   result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,
     'Password',BinToBase64(TAESCFB.SimpleEncrypt(
-    AD_SALT+'\'+User.PasswordHashHexa,aServerNonce+AD_SALT,true,true))]);
+    User.PasswordHashHexa+#1+AD_PATTERN,AD_SALT+aServerNonce,true,true))]);
 end;
 
 class function TSQLRestServerAuthenticationActiveDirectory.ClientSetUser(

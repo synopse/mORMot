@@ -5380,8 +5380,7 @@ end;
 
 function TAESAbstract.Clone: TAESAbstract;
 begin
-  result := ClassType.Create as TAESAbstract;
-  result.Create(fKey,fKeySize,fIV);
+  result := TAESAbstractClass(ClassType).Create(fKey,fKeySize,fIV);
 end;
 
 
