@@ -830,11 +830,8 @@ begin
   SHA.Full(pointer(key),length(key),Digest);
   hash := 'HTTP/1.1 101 Switching Protocols'#13#10+
     'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10+
-    'Sec-WebSocket-Accept: '+BinToBase64(@Digest,sizeof(Digest))+#13#10;
-  if protocol<>'' then
-    // note: we expect only a single protocol requested by the client now
-    hash := hash+'Sec-WebSocket-Protocol: '+protocol+#13#10#13#10 else
-    hash := hash+#13#10;
+    'Sec-WebSocket-Accept: '+BinToBase64(@Digest,sizeof(Digest))+#13#10+
+    'Sec-WebSocket-Protocol: '+Context.fWebSocketProtocol.Name+#13#10#13#10;
   ClientSock.SndLow(pointer(hash),length(hash));
   EnterCriticalSection(fProcessCS);
   fConnections.Add(Context);
