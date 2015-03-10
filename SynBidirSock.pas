@@ -146,16 +146,24 @@ type
   TWebSocketProtocol = class(TSynPersistent)
   protected
     fName: RawUTF8;
+    fURI: RawUTF8;
     function ProcessFrame(Context: TWebSocketServerResp;
       var request,answer: TWebSocketFrame): boolean; virtual; abstract;
     function Clone: TWebSocketProtocol; virtual; abstract;
   public
     /// abstract constructor to initialize the protocol
-    constructor Create(const aName: RawUTF8); reintroduce;
+    // - the protocol should be named, so that the client may be able to request
+    // for a given protocol
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
+    constructor Create(const aName,aURI: RawUTF8); reintroduce;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - is currently 'synopsejson' or 'synopsebinary'
     property Name: RawUTF8 read fName;
+    /// the optional URI on which this protocol would be enabled
+    // - leave to '' if any URI should match
+    property URI: RawUTF8 read fURI;
   end;
 
   /// callback event triggered by TWebSocketProtocolChat for any incoming message
@@ -224,7 +232,9 @@ type
     function Clone: TWebSocketProtocol; override;
   public
     /// initialize the WebSockets JSON protocol
-    constructor Create; reintroduce;
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
+    constructor Create(const aURI: RawUTF8); reintroduce;
   end;
 
   /// handle a REST application-level WebSockets protocol using compressed and
@@ -244,14 +254,18 @@ type
     /// finalize the encryption, if was used
     destructor Destroy; override;
     /// initialize the WebSockets binary protocol
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
     // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used on on this protocol
-    constructor Create(const aKey; aKeySize: cardinal;
+    constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
       aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
     /// - AES-CFB 256 bit encryption will be enabled on this protocol if some
     // strings are supplied
     // - the supplied key and initialization vector will be hashed using SHA-256
-    constructor Create(const aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
+    constructor Create(const aURI, aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
@@ -261,16 +275,18 @@ type
   TWebSocketProtocolList = class
   protected
     fProtocols: array of TWebSocketProtocol;
-    function FindIndex(const aName: RawUTF8): integer;
+    function FindIndex(const aName,aURI: RawUTF8): integer;
   public
     /// add a protocol to the internal list
     function Add(aProtocol: TWebSocketProtocol): boolean;
     /// erase a protocol from the internal list, specified by its name
-    function Remove(const ProtocolName: RawUTF8): boolean;
+    function Remove(const aProtocolName,aURI: RawUTF8): boolean;
     /// finalize the list storage
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
-    function CloneByName(const ProtocolName: RawUTF8): TWebSocketProtocol;
+    function CloneByName(const aProtocolName, aURI: RawUTF8): TWebSocketProtocol;
+    /// create a new protocol instance, from the internal list
+    function CloneByURI(const aURI: RawUTF8): TWebSocketProtocol;
     /// how many protocols are stored
     function Count: integer;
   end;
@@ -344,7 +360,7 @@ type
     // for any incoming connection
     // - note that this constructor will not register any protocol, so is
     // useless until you execute Protocols.Add()
-    constructor Create(const aPort: SockString); reintroduce;
+    constructor Create(const aPort: SockString); reintroduce; overload; virtual;
     /// close the server
     destructor Destroy; override;
     /// access to the protocol list handled by this server
@@ -367,16 +383,22 @@ type
     fCallbackAcquireTimeOutMS: cardinal;
     fCallbackAnswerTimeOutMS: cardinal;
   public
+    /// create a Server Thread, binded and listening on a port, with no
+    // default WebSockets protocol
+    // - you should call manually Protocols.Add() to register the expected protocols
+    constructor Create(const aPort: SockString); override;
     /// create a Server Thread, binded and listening on a port, with our
     // 'synopsebinary' and optionally 'synopsejson' modes
+    // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
+    // specify an URI to limit the protocol upgrade to a single resource
     // - TWebSocketProtocolBinary will always be registered by this constructor
-    // - if the encryption key text is not void, TWebSocketProtocolBinary will
+    // - if the encryption key text is not '', TWebSocketProtocolBinary will
     // use AES-CFB 256 bits encryption
     // - if aWebSocketsAJAX is TRUE, it will also register TWebSocketProtocolJSON
     // so that AJAX applications would be able to connect to this server
     constructor Create(const aPort: SockString;
-      const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean=false);
-      reintroduce; overload;
+      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
+      aWebSocketsAJAX: boolean=false); reintroduce; overload;
     /// server can send a request back to the client, when the connection has
     // been upgraded to WebSocket
     // - InURL/InMethod/InContent properties are input parameters (InContentType
@@ -422,9 +444,10 @@ end;
 
 { TWebSocketProtocol }
 
-constructor TWebSocketProtocol.Create(const aName: RawUTF8);
+constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8);
 begin
   fName := aName;
+  fURI := aURI;
 end;
 
 
@@ -432,7 +455,7 @@ end;
 
 function TWebSocketProtocolChat.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolChat.Create(fName);
+  result := TWebSocketProtocolChat.Create(fName,fURI);
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
 end;
 
@@ -518,14 +541,14 @@ end;
 
 { TWebSocketProtocolJSON }
 
-constructor TWebSocketProtocolJSON.Create;
+constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8);
 begin
-  inherited Create('synopsejson');
+  inherited Create('synopsejson',aURI);
 end;
 
 function TWebSocketProtocolJSON.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolJSON.Create;
+  result := TWebSocketProtocolJSON.Create(fURI);
 end;
 
 procedure TWebSocketProtocolJSON.FrameCompress(const Values: array of RawByteString;
@@ -603,31 +626,31 @@ end;
 
 { TWebSocketProtocolBinary }
 
-constructor TWebSocketProtocolBinary.Create(
+constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
-  inherited Create('synopsebinary');
+  inherited Create('synopsebinary',aURI);
   if aKeySize>=128 then
     fEncryption := TAESCFB.Create(aKey,aKeySize,PAESBlock(@aKey)^);
   fCompressed := aCompressed;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aKey: RawUTF8;
+constructor TWebSocketProtocolBinary.Create(const aURI, aKey: RawUTF8;
   aCompressed: boolean);
 var key: TSHA256Digest;
+    keySize: integer;
 begin
   if aKey<>'' then begin
     SHA256Weak(aKey,key);
-    Create(key,256,aCompressed);
+    keySize := 256;
   end else
-    Create(key,0,aCompressed);
+    keySize := 0;
+  Create(aURI,key,keySize,aCompressed);
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create('');
-  result.fName := 'synopsebinary';
-  TWebSocketProtocolBinary(result).fCompressed := fCompressed;
+  result := TWebSocketProtocolBinary.Create(fURI,'',fCompressed);
   if fEncryption<>nil then
     TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
 end;
@@ -687,13 +710,26 @@ end;
 
 { TWebSocketProtocolList }
 
-function TWebSocketProtocolList.CloneByName(const ProtocolName: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByName(const aProtocolName, aURI: RawUTF8): TWebSocketProtocol;
 var i: Integer;
 begin
-  i := FindIndex(ProtocolName);
+  i := FindIndex(aProtocolName,aURI);
   if i<0 then
     result := nil else
     result := fProtocols[i].Clone;
+end;
+
+function TWebSocketProtocolList.CloneByURI(
+  const aURI: RawUTF8): TWebSocketProtocol;
+var i: integer;
+begin
+  result := nil;
+  if self<>nil then
+    for i := 0 to length(fProtocols)-1 do
+      if IdemPropNameU(fProtocols[i].fURI,aURI) then begin
+        result := fProtocols[i].Clone;
+        exit;
+      end;
 end;
 
 function TWebSocketProtocolList.Count: integer;
@@ -709,11 +745,14 @@ begin
   inherited;
 end;
 
-function TWebSocketProtocolList.FindIndex(const aName: RawUTF8): integer;
+function TWebSocketProtocolList.FindIndex(const aName,aURI: RawUTF8): integer;
 begin
-  for result := 0 to high(fProtocols) do
-    if IdemPropNameU(fProtocols[result].fName,aName) then
-      exit;
+  if aName<>'' then
+    for result := 0 to high(fProtocols) do
+      with fProtocols[result] do
+      if IdemPropNameU(fName,aName) and
+         ((fURI='') or IdemPropNameU(fURI,aURI)) then
+        exit;
   result := -1;
 end;
 
@@ -723,17 +762,17 @@ begin
   result := false;
   if aProtocol=nil then
     exit;
-  i := FindIndex(aProtocol.Name);
+  i := FindIndex(aProtocol.Name,aProtocol.URI);
   if i<0 then begin
     ObjArrayAdd(fProtocols,aProtocol);
     result := true;
   end;
 end;
 
-function TWebSocketProtocolList.Remove(const ProtocolName: RawUTF8): Boolean;
+function TWebSocketProtocolList.Remove(const aProtocolName,aURI: RawUTF8): Boolean;
 var i: Integer;
 begin
-  i := FindIndex(ProtocolName);
+  i := FindIndex(aProtocolName,aURI);
   if i>=0 then begin
     ObjArrayDelete(fProtocols,i);
     result := true;
@@ -757,7 +796,7 @@ end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
   Context: TWebSocketServerResp): boolean;
-var upgrade,version,protocol,prot,key,hash: RawUTF8;
+var upgrade,uri,version,protocol,prot,key,hash: RawUTF8;
     P: PUTF8Char;
     SHA: TSHA1;
     Digest: TSHA1Digest;
@@ -771,17 +810,17 @@ begin
   version := ClientSock.HeaderValue('Sec-WebSocket-Version');
   if GetInteger(pointer(version))<13 then
     exit; // we expect WebSockets protocol version 13 at least
+  uri := Trim(RawUTF8(ClientSock.URL));
   protocol := ClientSock.HeaderValue('Sec-WebSocket-Protocol');
   if protocol<>'' then begin
     P := pointer(protocol);
     repeat
       prot := trim(GetNextItem(P));
-      Context.fWebSocketProtocol := fProtocols.CloneByName(prot);
+      Context.fWebSocketProtocol := fProtocols.CloneByName(prot,uri);
     until (P=nil) or (Context.fWebSocketProtocol<>nil);
   end else
-    // if no protocol is specified, expect a single one to be registered
-    if Protocols.Count=1 then
-      Context.fWebSocketProtocol := fProtocols.fProtocols[0];
+    // if no protocol is specified, try to match by URI
+    Context.fWebSocketProtocol := fProtocols.CloneByURI(uri);
   if Context.fWebSocketProtocol=nil then
     exit;
   key := ClientSock.HeaderValue('Sec-WebSocket-Key');
@@ -885,12 +924,17 @@ end;
 { TWebSocketServerRest }
 
 constructor TWebSocketServerRest.Create(const aPort: SockString;
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+  const aWebSocketsURI,aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+begin
+  Create(aPort);
+  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsURI,aWebSocketsEncryptionKey));
+  if aWebSocketsAJAX then
+    fProtocols.Add(TWebSocketProtocolJSON.Create(aWebSocketsURI));
+end;
+
+constructor TWebSocketServerRest.Create(const aPort: SockString);
 begin
   inherited Create(aPort);
-  fProtocols.Add(TWebSocketProtocolBinary.Create(aWebSocketsEncryptionKey));
-  if aWebSocketsAJAX then
-    fProtocols.Add(TWebSocketProtocolJSON.Create);
   fCallbackAcquireTimeOutMS := 5000;
   fCallbackAnswerTimeOutMS := 1000;
 end;

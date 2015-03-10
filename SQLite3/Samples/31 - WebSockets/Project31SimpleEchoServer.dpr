@@ -41,7 +41,7 @@ var Server: TWebSocketServer;
 begin
   Server := TWebSocketServer.Create('8888');
   try
-    protocol := TWebSocketProtocolEcho.Create('meow');
+    protocol := TWebSocketProtocolEcho.Create('meow','');
     protocol.OnIncomingFrame := protocol.EchoFrame;
     Server.Protocols.Add(protocol);
     TextColor(ccLightGreen);
