@@ -25445,7 +25445,7 @@ begin
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
   if aFormatSQLJoin<>'' then begin
     aSQLWhere := '';
-    JBeg := pointer(aFormatSQLJoin);
+    JBeg := pointer(FormatUTF8(aFormatSQLJoin, aParamsSQLJoin));
     repeat
       J := JBeg;
       while not (ord(J^) in IsIdentifier) do begin
@@ -25464,7 +25464,7 @@ begin
       if J^=#0 then break;
       aSQLWhere := aSQLWhere+ProcessField(JBeg);
     until JBeg^=#0;
-    SQL := SQL+' and ('+FormatUTF8(aSQLWhere,aParamsSQLJoin,aBoundsSQLJoin)+')';
+    SQL := SQL+' and ('+FormatUTF8(aSQLWhere,[],aBoundsSQLJoin)+')';
   end;
   // execute SQL statement and retrieve the matching data
   result := aClient.EngineList(SQL);
