@@ -29,6 +29,7 @@ unit mORMotSQLite3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Ondrej
   - Mario Moretti
   
   Alternatively, the contents of this file may be used under the terms of
@@ -218,8 +219,8 @@ unit mORMotSQLite3;
     - TSQLRestServerDB.GetAndPrepareStatement() will now recognize
       'INSERT INTO ... DEFAULT VALUES;' as a potential prepared statement
     - renamed TSQLRestServerDB.EngineExecute() as InternalExecute() and added
-      optional LastInsertedID parameter for proper multi-threaded execution -
-      used e.g. by EngineAdd()
+      optional LastInsertedID and LastChangeCount parameters for proper
+      multi-threaded execution - used e.g. by EngineAdd()
     - renamed TSQLRestServerDB.InternalExecute() as explicit StoredProcExecute()
     - added TSQLRestServerDB.PrepareVacuum() private method to fix ticket
       [9f3faa8e44] - since VACUUM is buggy in SQLite3, and disconnect all
@@ -401,9 +402,11 @@ type
     // - intercept any DB exception and return false on error, true on success
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
     // retrieve the proper ID when aSQL is an INSERT statement (thread safe)
+    // - optional LastChangeCount can be set (if ValueInt/ValueUTF8 are nil) to
+    // retrieve the modified row count when aSQL is an UPDATE statement (thread safe)
     function InternalExecute(const aSQL: RawUTF8; ForceCacheStatement: boolean;
       ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil; ValueInts: PIntegerDynArray=nil;
-      LastInsertedID: PInt64=nil): boolean;
+      LastInsertedID: PInt64=nil; LastChangeCount: PInteger=nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
     // will properly handle operations until InternalBatchStop is called
     function InternalBatchStart(Method: TSQLURIMethod;
@@ -1041,7 +1044,7 @@ end;
 
 function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
   ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUTF8;
-  ValueInts: PIntegerDynArray; LastInsertedID: PInt64): boolean;
+  ValueInts: PIntegerDynArray; LastInsertedID: PInt64; LastChangeCount: PInteger): boolean;
 var ValueIntsCount, Res: Integer;
     msg: RawUTF8;
 begin
@@ -1070,7 +1073,11 @@ begin
           repeat until fStatement^.Step<>SQLITE_ROW;
           if LastInsertedID<>nil then begin
             LastInsertedID^ := DB.LastInsertRowID;
-            msg := FormatUTF8('lastInsertedID=%',[LastInsertedID^]);
+            msg := FormatUTF8(' lastInsertedID=%',[LastInsertedID^]);
+          end;
+          if LastChangeCount<>nil then begin
+            LastChangeCount^ := DB.LastChangeCount;
+            msg := FormatUTF8(' lastChangeCount=%',[LastChangeCount^]);
           end;
         end else
           // get one row, and retrieve value

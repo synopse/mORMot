@@ -3658,10 +3658,6 @@ begin
     try
       Lock;
       result := sqlite3.changes(DB);
-      {$ifdef WITHLOG}
-      if fLog<>nil then
-        fLog.Add.Log(sllDB,'% LastChangeCount=%',[FileNameWithoutPath,result],self);
-      {$endif}
     finally
       UnLock;
     end;
