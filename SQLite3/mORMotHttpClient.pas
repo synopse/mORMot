@@ -6,7 +6,7 @@ unit mORMotHttpClient;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotHttpClient;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -98,8 +98,11 @@ unit mORMotHttpClient;
         TSQLite3HttpClientWinHTTP constructors
 		
     Version 1.18
-	   - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
-	   - classes TSQLite3HttpClient* renamed as TSQLHttpClient*
+     - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
+       (see mORMotHTTPServer.pas for the server side)
+     - TSQLite3HttpClient* classes renamed as TSQLHttpClient*
+     - introducing TSQLHttpClientCurl class, using cross-platform libcurl to
+       connect over HTTP or HTTPS (using system OpenSSL library, if available)
      - all TSQLHttpClient* classes are now thread-safe (i.e. protected by
        a global mutex, as other TSQLRestClientURI implementations already did)
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
@@ -112,8 +115,12 @@ unit mORMotHttpClient;
        not consistent in practice among clients
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
-        
-
+     - added TSQLHttpClientGeneric.CreateForRemoteLogging() constructor for
+       easy remote logging to our LogView tool, running as server process
+     - added TSQLHttpClientWinGeneric.IgnoreSSLCertificateErrors property
+       to set the corresponding parameter for the underlying connection
+     - added AuthScheme and AuthUserName/AuthPassword properties, for
+       authentication - only implemented at TSQLHttpClientWinHTTP level yet
 }
 
 interface
@@ -130,9 +137,11 @@ interface
 uses
 {$ifdef MSWINDOWS}
   Windows,
-  {$define USEWININET}
 {$else}
-  {$undef USEWININET}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  {$endif}
 {$endif}
   SysUtils,
   Classes,
@@ -141,6 +150,7 @@ uses
   SynLZ,
   SynCrtSock,
   SynCommons,
+  SynLog,
   mORMot;
 
 type
@@ -168,8 +178,14 @@ type
     fCompression: TSQLHttpCompressions;
     /// connection parameters as set by Create()
     fServer, fPort: AnsiString;
+    fHttps: boolean;
+    fProxyName, fProxyByPass: AnsiString;
+    fSendTimeout, fReceiveTimeout: DWORD;
+    fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TSQLHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
+    constructor RegisteredClassCreateFrom(aModel: TSQLModel;
+      aDefinition: TSynConnectionDefinition); override;
     /// process low-level HTTP/1.1 request
     // - call by URI() public method
     // - returns 200,202,204 if OK, http status error otherwise in result.Lo
@@ -181,7 +197,19 @@ type
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// connect to TSQLHttpServer on aServer:aPort
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; 
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; overload; virtual;
+    /// connnect to a LogView HTTP Server for remote logging
+    // - will associate the EchoCustom callback of the log class to this server
+    // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
+    // life time, until application is closed or Family.EchoRemoteStop is called
+    constructor CreateForRemoteLogging(const aServer: AnsiString;
+      aLogClass: TSynLogClass; aPort: Integer=8091; const aRoot: RawUTF8='LogService');
+    /// save the TSQLHttpClientGeneric properties into a persistent storage object
+    // - CreateFrom() will expect Definition.ServerName to store the URI as
+    // 'server:port' or 'https://server:port', Definition.User/Password to store
+    // the TSQLRestClientURI.SetUser() information, and Definition.DatabaseName
+    // to store the extended options as an URL-encoded string
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -199,6 +227,8 @@ type
     /// the Server IP port
     property Port: AnsiString read fPort;
   end;
+
+  TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
 
   /// HTTP/1.1 RESTFUL JSON mORMot Client class using SynCrtSock / WinSock
   // - will give the best performance on a local computer, but has been found
@@ -225,18 +255,14 @@ type
     property Socket: THttpClientSocket read fSocket;
   end;
 
-{$ifdef USEWININET}
-  /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet
-  // or WinHTTP API
+  /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet,
+  // WinHTTP or libcurl API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
-  // better) TSQLHttpClientWinHTTP overridden classes
-  TSQLHttpClientWinGeneric = class(TSQLHttpClientGeneric)
+  // better) TSQLHttpClientWinHTTP overridden classes under Windows
+  TSQLHttpClientRequest = class(TSQLHttpClientGeneric)
   protected
-    fWinAPI: TWinHttpAPI;
-    fWinAPIClass: TWinHttpAPIClass;
-    fProxyName, fProxyByPass: AnsiString;
-    fSendTimeout, fReceiveTimeout: DWORD;
-    fHttps: boolean;
+    fRequest: THttpRequest;
+    fRequestClass: THttpRequestClass;
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -245,9 +271,11 @@ type
     /// overridden protected method to handle HTTP connection
     function InternalCheckOpen: boolean; override;
     /// set the fWinAPI class
-    // - the overridden implementation should set the expected fWinAPIClass 
+    // - the overridden implementation should set the expected fWinAPIClass
     procedure InternalSetClass; virtual; abstract;
   public
+    /// connect to TSQLHttpServer on aServer:aPort with the default settings
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); overload; override;
     /// connect to TSQLHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
@@ -258,15 +286,32 @@ type
     // parameters, so we won't publish any properties to change those
     // initial values once created
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      aHttps: boolean=false; const aProxyName: AnsiString='';
+      aHttps: boolean; const aProxyName: AnsiString='';
       const aProxyByPass: AnsiString='';
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce;
+      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce; overload;
     /// internal class instance used for the connection
-    // - will return either a TWinINet, either a TWinHTTP class instance
-    property WinAPI: TWinHttpAPI read fWinAPI;
+    // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
+    property Request: THttpRequest read fRequest;
+    /// allows to ignore untrusted SSL certificates
+    // - similar to adding a security exception for a domain in the browser
+    property IgnoreSSLCertificateErrors: boolean
+      read fExtendedOptions.IgnoreSSLCertificateErrors
+      write fExtendedOptions.IgnoreSSLCertificateErrors;
+    /// optional Authentication Scheme
+    property AuthScheme: THttpRequestAuthentication
+      read fExtendedOptions.Auth.Scheme write fExtendedOptions.Auth.Scheme;
+    /// optional User Name for Authentication
+    property AuthUserName: SynUnicode
+      read fExtendedOptions.Auth.UserName write fExtendedOptions.Auth.UserName;
+    /// optional Password for Authentication
+    property AuthPassword: SynUnicode
+      read fExtendedOptions.Auth.Password write fExtendedOptions.Auth.Password;
   end;
 
+  TSQLHttpClientRequestClass = class of TSQLHttpClientRequest;
+
+  {$ifdef USEWININET}
   /// HTTP/1.1 RESTFUL JSON mORMot Client class using WinINet API
   // - this class is 15/20 times slower than TSQLHttpClient using SynCrtSock
   // on a local machine, but was found to be faster throughout local networks
@@ -276,40 +321,51 @@ type
   // - you can optionaly specify manual Proxy settings at constructor level
   // - by design, the WinINet API should not be used from a service
   // - is implemented by creating a TWinINet internal class instance
-  TSQLHttpClientWinINet = class(TSQLHttpClientWinGeneric)
-  protected
-    procedure InternalSetClass; override;
-  end;                
-
-  {{ HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
-   - has a common behavior as THttpClientSocket() but seems to be faster
-     over a network and is able to retrieve the current proxy settings
-     (if available) and handle secure HTTPS connection - so it seems to be used
-     in your client programs: TSQLHttpClient will therefore map to this class
-   - WinHTTP does not share directly any proxy settings with Internet Explorer.
-     The default WinHTTP proxy configuration is set by either
-     proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
-     netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
-     you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
-     the current user's proxy settings for Internet Explorer (under 64 bit
-     Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-     call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
-   - you can optionaly specify manual Proxy settings at constructor level
-   - by design, the WinHTTP API can be used from a service or a server
-   - is implemented by creating a TWinHTTP internal class instance }
-  TSQLHttpClientWinHTTP = class(TSQLHttpClientWinGeneric)
+  TSQLHttpClientWinINet = class(TSQLHttpClientRequest)
   protected
     procedure InternalSetClass; override;
   end;
 
-  /// HTTP/1.1 RESTFUL JSON default mORMot Client class
-  // - under Windows, maps the TSQLHttpClientWinHTTP class 
-  TSQLHttpClient = TSQLHttpClientWinHTTP;
-{$else}
+  /// HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
+  // - has a common behavior as THttpClientSocket() but seems to be faster
+  // over a network and is able to retrieve the current proxy settings
+  // (if available) and handle secure HTTPS connection - so it seems to be used
+  // in your client programs: TSQLHttpClient will therefore map to this class
+  // - WinHTTP does not share directly any proxy settings with Internet Explorer.
+  // The default WinHTTP proxy configuration is set by either
+  // proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
+  // netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
+  // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
+  // the current user's proxy settings for Internet Explorer (under 64 bit
+  // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // - you can optionaly specify manual Proxy settings at constructor level
+  // - by design, the WinHTTP API can be used from a service or a server
+  // - is implemented by creating a TWinHTTP internal class instance
+  TSQLHttpClientWinHTTP = class(TSQLHttpClientRequest)
+  protected
+    procedure InternalSetClass; override;
+  end;
+  {$endif USEWININET}
+
+  {$ifdef USELIBCURL}
+  /// HTTP/1.1 RESTFUL JSON Client class using libculr
+  // - will handle HTTP and HTTPS, if OpenSSL or similar libray is available
+  TSQLHttpClientCurl = class(TSQLHttpClientRequest)
+  protected                               
+    procedure InternalSetClass; override;
+  end;
+  {$endif USELIBCURL}
+
+  {$ifdef ONLYUSEHTTPSOCKET}
   /// HTTP/1.1 RESTFUL JSON deault mORMot Client class
-  // - not under Windows: maps the WinSock (raw socket) implementation class
+  // -  maps the raw socket implementation class
   TSQLHttpClient = TSQLHttpClientWinSock;
-{$endif}
+  {$else}
+  /// HTTP/1.1 RESTFUL JSON default mORMot Client class
+  // - under Windows, maps the TSQLHttpClientWinHTTP class
+  TSQLHttpClient = TSQLHttpClientWinHTTP;
+  {$endif ONLYUSEHTTPSOCKET}
 
 
 implementation
@@ -320,12 +376,9 @@ implementation
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P: PUTF8Char;
-{$ifdef WITHLOG}
-    Log: ISynLog;
-{$endif}
 begin
 {$ifdef WITHLOG}
-  Log := TSQLLog.Enter(self,nil,true);
+  fLogClass.Enter(self,nil,true);
 {$endif}
   Head := Call.InHead;
   Content := Call.InBody;
@@ -359,7 +412,8 @@ begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
 {$ifdef WITHLOG}
   with Call do
-    Log.Log(sllClient,'% % status=% state=%',[method,url,OutStatus,OutInternalState],self);
+    fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',
+      [method,url,OutStatus,OutInternalState],self);
 {$endif}
 end;
 
@@ -383,6 +437,64 @@ begin
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ];
+  fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
+  fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
+end;
+
+constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
+  aLogClass: TSynLogClass; aPort: Integer; const aRoot: RawUTF8);
+var aModel: TSQLModel;
+begin
+  if not Assigned(aLogClass) then
+    raise ECommunicationException.CreateUTF8('%.CreateForRemoteLogging(LogClass=nil)',[self]);
+  aModel := TSQLModel.Create([],aRoot);
+  Create(aServer,AnsiString(UInt32ToUtf8(aPort)),aModel);
+  aModel.Owner := self;
+  ServerRemoteLogStart(aLogClass,true);
+  fRemoteLogClass.Log(sllTrace,
+    'Echoing to remote server http://%/%/RemoteLog:%',[aServer,aRoot,aPort]);
+end;
+
+procedure TSQLHttpClientGeneric.DefinitionTo(Definition: TSynConnectionDefinition);
+begin
+  if Definition=nil then
+    exit;
+  inherited DefinitionTo(Definition); // save Kind + User/Password
+  if fHttps then
+    Definition.ServerName := 'https://';
+  Definition.ServerName := FormatUTF8('%%:%',[Definition.ServerName,fServer,fPort]);
+  if fExtendedOptions.IgnoreSSLCertificateErrors then
+  Definition.DatabaseName := UrlEncode([
+   'IgnoreSSLCertificateErrors',ord(fExtendedOptions.IgnoreSSLCertificateErrors),
+   'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout,
+   'ProxyName',fProxyName,'ProxyByPass',fProxyByPass]);
+  Definition.DatabaseName := copy(Definition.DatabaseName,2,MaxInt); // trim leading '?'
+end;
+
+constructor TSQLHttpClientGeneric.RegisteredClassCreateFrom(aModel: TSQLModel;
+  aDefinition: TSynConnectionDefinition);
+var URI: TURI;
+    P: PUTF8Char;
+    V: cardinal;
+    tmp: RawUTF8;
+begin
+  URI.From(aDefinition.ServerName);
+  Create(URI.Server,URI.Port,aModel);
+  fHttps := URI.Https;
+  P := Pointer(aDefinition.DataBaseName);
+  while P<>nil do begin
+    if UrlDecodeCardinal(P,'SENDTIMEOUT',V) then
+      fSendTimeout := V else
+    if UrlDecodeCardinal(P,'RECEIVETIMEOUT',V) then
+      fReceiveTimeout := V else
+    if UrlDecodeValue(P,'PROXYNAME',tmp) then
+      fProxyName := CurrentAnsiConvert.UTF8ToAnsi(tmp) else
+    if UrlDecodeValue(P,'PROXYBYPASS',tmp) then
+      fProxyByPass := CurrentAnsiConvert.UTF8ToAnsi(tmp);
+    if UrlDecodeCardinal(P,'IGNORESSLCERTIFICATEERRORS',V,@P) then
+      fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(V);
+  end;
+  inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser()
 end;
 
 
@@ -446,11 +558,9 @@ begin
 end;
 
 
-{$ifdef USEWININET}
+{ TSQLHttpClientRequest }
 
-{ TSQLHttpClientWinGeneric }
-
-constructor TSQLHttpClientWinGeneric.Create(const aServer, aPort: AnsiString;
+constructor TSQLHttpClientRequest.Create(const aServer, aPort: AnsiString;
   aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
   SendTimeout,ReceiveTimeout: DWORD);
 begin
@@ -462,32 +572,39 @@ begin
   fReceiveTimeout := ReceiveTimeout;
 end;
 
-function TSQLHttpClientWinGeneric.InternalCheckOpen: boolean;
+constructor TSQLHttpClientRequest.Create(const aServer,
+  aPort: AnsiString; aModel: TSQLModel);
+begin
+  Create(aServer,aPort,aModel,false); // will use default settings
+end;
+
+function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
   result := false;
-  if fWinAPI=nil then
+  if fRequest=nil then
   try
     EnterCriticalSection(fMutex);
     try
       InternalSetClass;
-      if fWinAPIClass=nil then
-        raise ECommunicationException.CreateFmt('fWinAPIClass=nil for %s',[ClassName]);
-      fWinAPI := fWinAPIClass.Create(fServer,fPort,fHttps,fProxyName,fProxyByPass,
-        fSendTimeout,fReceiveTimeout);
+      if fRequestClass=nil then
+        raise ECommunicationException.CreateUTF8('fRequestClass=nil for %',[self]);
+      fRequest := fRequestClass.Create(fServer,fPort,fHttps,
+        fProxyName,fProxyByPass,fSendTimeout,fReceiveTimeout);
+      fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
         // global SHA-256 / AES-256-CTR encryption + SynLZ compression
-        fWinAPI.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
+        fRequest.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
       if hcSynLz in Compression then
         // SynLZ is very fast and efficient, perfect for a Delphi Client
-        fWinAPI.RegisterCompress(CompressSynLZ);
+        fRequest.RegisterCompress(CompressSynLZ);
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
-        fWinAPI.RegisterCompress(CompressGZip);
+        fRequest.RegisterCompress(CompressGZip);
       result := true;
     except
       on Exception do
-        FreeAndNil(fWinAPI);
+        FreeAndNil(fRequest);
     end;
   finally
     LeaveCriticalSection(fMutex);
@@ -495,19 +612,19 @@ begin
     result := true;
 end;
 
-procedure TSQLHttpClientWinGeneric.InternalClose;
+procedure TSQLHttpClientRequest.InternalClose;
 begin
-  FreeAndNil(fWinAPI);
+  FreeAndNil(fRequest);
 end;
 
-function TSQLHttpClientWinGeneric.InternalRequest(const url, method: RawUTF8;
+function TSQLHttpClientRequest.InternalRequest(const url, method: RawUTF8;
   var Header, Data, DataType: RawUTF8): Int64Rec;
 var OutHeader, OutData: RawByteString;
 begin
-  if fWinAPI=nil then
+  if fRequest=nil then
     result.Lo := HTML_NOTIMPLEMENTED else begin
-    result.Lo := fWinAPI.Request(url,method,KeepAliveMS,Header,Data,DataType,
-      OutHeader,OutData);
+    result.Lo := fRequest.Request(url,method,KeepAliveMS,Header,Data,DataType,
+      SockString(OutHeader),SockString(OutData));
     result.Hi := GetCardinal(pointer(
       FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
     Header := OutHeader;
@@ -516,11 +633,13 @@ begin
 end;
 
 
+{$ifdef USEWININET}
+
 { TSQLHttpClientWinINet }
 
 procedure TSQLHttpClientWinINet.InternalSetClass;
 begin
-  fWinAPIClass := TWinINet;
+  fRequestClass := TWinINet;
   inherited;
 end;
 
@@ -529,10 +648,31 @@ end;
 
 procedure TSQLHttpClientWinHTTP.InternalSetClass;
 begin
-  fWinAPIClass := TWinHTTP;
+  fRequestClass := TWinHTTP;
   inherited;
 end;
 
 {$endif}
 
+{$ifdef USELIBCURL}
+
+{ TSQLHttpClientCurl}
+
+procedure TSQLHttpClientCurl.InternalSetClass;
+begin
+  fRequestClass := TCurlHTTP;
+  inherited;
+end;
+
+{$endif USELIBCURL}
+
+initialization
+  TSQLHttpClientWinSock.RegisterClassNameForDefinition;
+{$ifdef USELIBCURL}
+  TSQLHttpClientCurl.RegisterClassNameForDefinition;
+{$endif}
+{$ifdef USEWININET}
+  TSQLHttpClientWinINet.RegisterClassNameForDefinition;
+  TSQLHttpClientWinHTTP.RegisterClassNameForDefinition;
+{$endif}
 end.

@@ -6,7 +6,7 @@ program TestSQL3;
 (*
     This file is part of Synopse mORMot database framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ program TestSQL3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -58,12 +59,12 @@ program TestSQL3;
 
   Version 1.16
   - all tests are now implemented in a separated SQLite3SelfTests unit -
-    this is requested by Delphi XE2 background compiler issues 
-	
+    this is requested by Delphi XE2 background compiler issues
+
   Version 1.18
   - renamed SQLite3*.pas units to mORMot*.pas
   - included Windows 64 bit regression tests (and potential FullDebugMode)
-  - all tests passed with Delphi XE3 and XE4 for Win32 and Win64 platforms
+  - all tests passed with Delphi XE3 up to XE7 for Win32 and Win64 platforms
 
 
   this application has EnableMemoryLeakReporting conditional defined in its
@@ -82,18 +83,35 @@ program TestSQL3;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
+  {$ifdef KYLIX3}
+  FastMM4,
+  mORMotSelfTests;
+  {$else}
   {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
   FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
   FastMM4 in '..\RTL7\FastMM4.pas',
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   {$endif}
-  mORMotSelfTests in 'mORMotSelfTests.pas',
+  {$ifdef FPC}
+  {$ifdef Linux}
+  //cmem, // told to be faster in multi-thread, but triggers GPF! :(
+  cthreads, // we need it to use TThread
+  // widestring manager for Linux !!
+  // could also be put in another unit ... but doc states: as early as possible
+  cwstring,
+  {$endif}
+  {$endif}
+  SysUtils,
+  //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',
   SynCrypto in '..\SynCrypto.pas',
   SynCrtSock in '..\SynCrtSock.pas',
   SynCommons in '..\SynCommons.pas',
+  SynLog in '..\SynLog.pas',
+  SynTests in '..\SynTests.pas',
+  mORMotSelfTests in 'mORMotSelfTests.pas',
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',
@@ -106,41 +124,54 @@ uses
   {$endif CPU64}
   mORMotWrappers in 'mORMotWrappers.pas',
   {$endif FPC}
+  mORMotDDD in 'mORMotDDD.pas',
+  dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
+  dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
+  dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
   {$endif NOVARIANTS}
   {$endif LVCL}
+  {$ifdef MSWINDOWS}
   SynBigTable in '..\SynBigTable.pas',
+  {$ifndef LVCL}
+  SynZipFiles in '..\SynZipFiles.pas',
+  {$endif}
+  {$endif}
   SynSQLite3 in '..\SynSQLite3.pas',
   SynSQLite3Static in '..\SynSQLite3Static.pas',
-  {$ifndef FPC}
   mORMot in 'mORMot.pas',
   mORMotSQLite3 in 'mORMotSQLite3.pas',
-  mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
   mORMotHttpClient in 'mORMotHttpClient.pas',
   mORMotHttpServer in 'mORMotHttpServer.pas',
+  {$ifndef FPC}
+  mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
   mORMotService in 'mORMotService.pas',
   //mORMotBigTable,
   {$endif FPC}
 {$endif DELPHI5OROLDER}
-{$ifndef FPC}
 {$ifndef LVCL}
+{$ifndef FPC}
   SynPdf in '..\SynPdf.pas',
   SynGdiPlus in '..\SynGdiPlus.pas',
+{$endif FPC}
   SynDB in '..\SynDB.pas',
-  SynOleDB in '..\SynOleDB.pas',
-  SynDBOracle in '..\SynDBOracle.pas',
-  SynDBODBC in '..\SynDBODBC.pas',
   SynDBSQLite3 in '..\SynDBSQLite3.pas',
-{$ifndef FPC}
-{$ifndef DELPHI5OROLDER}
+  {$ifdef MSWINDOWS}
+  SynDBOracle in '..\SynDBOracle.pas',
+  SynOleDB in '..\SynOleDB.pas',
+  SynDBODBC in '..\SynDBODBC.pas',
+  {$ifdef USEZEOS}
+  SynDBZeos in '..\SynDBZeos.pas',
+  {$endif}
+  {$endif}
+{$ifndef DELPHI5OROLDER}      
+  SynDBRemote in '..\SynDBRemote.pas',
   mORMotDB in 'mORMotDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
-  SynZipFiles in '..\SynZipFiles.pas',
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 {$endif LVCL}
-{$endif FPC}
   SynZip in '..\SynZip.pas',
   SynSelfTests in '..\SynSelfTests.pas';
+{$endif KYLIX3}
 
 begin
   {$ifdef ISDELPHI2007ANDUP}
@@ -149,4 +180,10 @@ begin
   {$endif}
   {$endif}
   SQLite3ConsoleTests;
+  {$ifdef COMPUTEFPCINTERFACES}
+  ChDir(ExeVersion.ProgramFilePath);
+  ComputeFPCInterfacesUnit(
+    ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
+     '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
+  {$endif}
 end.

@@ -4,11 +4,14 @@ interface
 
 {$I Synopse.inc}
 
+// enable/disable third-party libraries
 {.$define USENEXUSDB}
 {.$define USEBDE}
 {.$define USEUNIDAC}
 {.$define USEZEOS}
 {.$define USEFIREDAC}
+
+// enable/disable database engines
 {.$define USEJET}
 {.$define ODBCSQLITEFIREBIRD}
 {.$define USELOCALMSSQLEXPRESS}    // SQL Server 2008 R2 Express locally
@@ -17,6 +20,7 @@ interface
 {.$define USELOCALPOSTGRESQL}
 {.$define USELOCALMYSQL}
 {.$define USEMONGODB}
+
 {$ifdef CPU64}
   {$undef USENEXUSDB} // official NexusDB is not yet 64 bit ready :(
   {$undef USEJET}     // MS Access / JET is not available under Win64
@@ -55,7 +59,8 @@ uses
   {$ifdef USEMONGODB}
     SynMongoDB, mORMotMongoDB,
   {$endif}
-  SynSQLite3, SynSQLite3Static;
+  SynSQLite3, SynSQLite3Static,
+  SynDBRemote;
 
 type
   TMainForm = class(TForm)
@@ -147,7 +152,7 @@ type
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  Ini := StringFromFile(ChangeFileExt(paramstr(0),'.ini'));
+  Ini := StringFromFile(ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
   OraTNSName.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','TNSName'));
   OraUser.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','User'));
   OraPass.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','Password'));
@@ -159,8 +164,9 @@ const
 
 procedure TMainForm.BtnRunTestsClick(Sender: TObject);
 var T,U,P: RawUTF8;
+    props: TSQLDBSQLite3ConnectionProperties;
+    server: TSQLDBServerAbstract;
 begin
-  ExeVersionRetrieve;
   //SynDBLog.Family.Level := LOG_VERBOSE;  // for debugging
   T := StringToUTF8(OraTNSName.Text);
   U := StringToUTF8(OraUser.Text);
@@ -168,11 +174,11 @@ begin
   UpdateIniEntry(Ini,'Oracle','TNSName',T);
   UpdateIniEntry(Ini,'Oracle','User',U);
   UpdateIniEntry(Ini,'Oracle','Password',P);
-  FileFromString(Ini,ChangeFileExt(paramstr(0),'.ini'));
+  FileFromString(Ini,ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
   LogMemo.Clear;
 {  FreeAndNil(sqlite3); sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll'); }
-//    Test(TODBCConnectionProperties,'','DRIVER=SQLite3 ODBC Driver','','',' SQLite3',true);
   // if false then
+  try
   try
     // -------- SQlite3
     //(*
@@ -186,6 +192,20 @@ begin
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off)',true,smOff);
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off exc)',true,smOff,lmExclusive);
     Test(TSQLDBSQLite3ConnectionProperties,SQLITE_MEMORY_DATABASE_NAME,'','','',' (ext mem)',true);
+    DeleteFile('SQLite3 (http).db3');
+    props := TSQLDBSQLite3ConnectionProperties.Create('sqlite3 (http).db3','','','');
+    server := {TSQLDBServerSockets}TSQLDBServerHttpApi.Create(props,'root','888','user','password');
+    try
+      props.MainSQLite3DB.Synchronous := smOff;
+      props.MainSQLite3DB.LockingMode := lmExclusive;
+      Test(TSQLDBWinHTTPConnectionProperties,
+        'localhost:888','root','user','password',' SQLite3 (off exc)',false);
+      Test(TSQLDBSocketConnectionProperties,
+        'localhost:888','root','user','password',' SQLite3 (off exc)',false);
+    finally
+      server.Free;
+      props.Free;
+    end;
     //*)
     {$ifdef USEMONGODB}
     Test(nil,'MongoDB','','','','MongoDB (ack)',false);
@@ -256,12 +276,11 @@ begin
       Test(TSQLDBBDEConnectionProperties,TSQLDBOracleConnectionProperties.ExtractTnsName(T),
         '',U,P,' Oracle',false);
       {$endif}
-      (* current ZDBC trunk or 7.2 is broken for Oracle statements reset 
+      // current ZDBC 7.2 handles array binding!
       {$ifdef USEZEOS}
       Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(dOracle,''
         {$ifdef CPU64},'oci64\oci.dll'{$endif}),T,U,P,' Oracle',false);
       {$endif}
-      *)
       //(*
       {$ifdef USEFIREDAC}
       {$ifdef CPU64}
@@ -287,8 +306,8 @@ begin
       FIREDAC_PROVIDER[dMSSQL]+'?server=(localDB)\v11.0;OSAuthent=Yes','','.','',' MSSQL2012',false);
     {$endif}
     {$ifdef USEUNIDAC}
-    Test(TSQLDBUniDACConnectionProperties,UNIDAC_PROVIDER[dMSSQL],
-      '(localdb)\v11.0','','',' MSSQL2012',false);
+    Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
+      dMSSQL,'(localdb)\v11.0'),'','',' MSSQL2012',false);
     {$endif}
     {$endif USELOCALDBMSSQLEXPRESS}
 
@@ -305,8 +324,8 @@ begin
       FIREDAC_PROVIDER[dMSSQL]+'?server=.\SQLEXPRESS;OSAuthent=Yes','','.','',' MSSQL2008',false);
     {$endif}
     {$ifdef USEUNIDAC}
-    Test(TSQLDBUniDACConnectionProperties,UNIDAC_PROVIDER[dMSSQL],
-      '.\SQLExpress','','',' MSSQL2008',false);
+    Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
+      dMSSQL,'.\SQLExpress'),'','',' MSSQL2008',false);
     {$endif}
     {$endif USELOCALMSSQLEXPRESS}
 
@@ -331,24 +350,24 @@ begin
     // direct ZDBC driver needs only libpq.dll and libintl.dll e.g. from
     // http://www.enterprisedb.com/products-services-training/pgbindownload
     Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(
-      dPostgreSQL,'localhost:5432'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
+      dPostgreSQL,'localhost:5433'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     // ODBC driver e.g. from http://ftp.postgresql.org/pub/odbc/versions/msi
     Test(TODBCConnectionProperties,'','Driver=PostgreSQL Unicode'+
       {$ifdef CPU64}'(x64)'+{$endif}';Database=postgres;'+
-      'Server=localhost;Port=5432;UID=postgres;Pwd=postgresPassword','','',' PostgreSQL',false);
+      'Server=localhost;Port=5433;UID=postgres;Pwd=postgresPassword','','',' PostgreSQL',false);
     {$ifdef USEFIREDAC}
     {$ifdef CPU64} // 64-bit server installed locally
     TADPhysPGDriverLink.Create(Application).VendorLib :=
       'c:\Program Files\PostgreSQL\9.2\bin\libpq.dll';
     {$endif}
     // direct FireDAC driver needs only libpq.dll and libintl.dll
-    Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5432',
+      Test(TSQLDBFireDACConnectionProperties,'PG?Server=localhost;Port=5433',
       'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     {$ifdef USEUNIDAC}
     Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
-      dPostgreSQL,'localhost:5432'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
+      dPostgreSQL,'localhost:5433'),'postgres','postgres','postgresPassword',' PostgreSQL',false);
     {$endif}
     {$endif USELOCALPOSTGRESQL}
 
@@ -386,11 +405,13 @@ begin
     on E: Exception do
       LogMemo.Lines.Add(E.Message);
   end;
-  Label3.Caption := '';
-  T := ObjectToJSON(Stats,[woHumanReadable]);
-  FileFromString(T,ChangeFileExt(paramstr(0),'.stats'));
-  FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
-  SaveStats;
+  finally
+    Label3.Caption := '';
+    T := ObjectToJSON(Stats,[woHumanReadable]);
+    FileFromString(T,ChangeFileExt(ExeVersion.ProgramFileName,'.stats'));
+    FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
+    SaveStats;
+  end;
 end;
 
 type
@@ -425,7 +446,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
     Stat: TStat;
     Start: TTimeLog;
     Timer: TPrecisionTimer;
-    Res: TIntegerDynArray;
+    Res: TIDDynArray;
     U, Server,DBName, MainDBName, Num, Time: RawUTF8;
     Rate, i: integer;
     {$ifdef USEMONGODB}
@@ -446,7 +467,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
       err := FormatUTF8('%Value.LastChange>=Start %>=%',
         [err,Value.LastChange,Start]);
     if Value.FirstName<>ValueFirstName[i] then
-      err := FormatUTF8('%Value.FirstName=ValueFirstName[i] "%"<>"%"',
+      err := FormatUTF8('%Value.FirstName="%" <> ValueFirstName[i]="%"',
         [err,Value.FirstName,ValueFirstName[i]]);
     assert(err='',string(Stat.fEngine+' read failure: '+err));
     Value.ClearProperties;
@@ -576,7 +597,10 @@ begin
         SetLength(ValueFirstName,Stat.fNumberOfElements);
         for i := 0 to Stat.fNumberOfElements-1 do begin
           ValueLastName[i] := Int32ToUtf8(i+1);
-          ValueFirstName[i] := U+ValueLastName[i];
+          {$ifndef UNIK}
+          if i<>100 then // test http://synopse.info/fossil/info/e8c211062e
+          {$endif}
+            ValueFirstName[i] := U+ValueLastName[i];
         end;
         Timer.Start;
         if aUseTransactions then
@@ -684,8 +708,10 @@ begin
             (Client.Server.StaticDataServer[TSQLRecordSample] as
               TSQLRestStorageMongoDB).Drop else
           {$endif}
-          if not DBIsFile then
-            Client.Server.EngineExecuteAll('drop table '+Value.SQLTableName);
+          if not DBIsFile then begin
+            Client.Server.FlushStatementCache;
+            Client.Server.ExecuteFmt('drop table %',[Value.SQLTableName]);
+          end;
         finally
           Client.Free;
         end;
@@ -878,8 +904,8 @@ begin
     txt := txt+Int32ToUtf8(Stat[i].ReadAllDirectRate)+',';
   PicEnd(Cat1);
 
-  FileFromString(Doc,ChangeFileExt(paramstr(0),'.txt'));
-  FileFromString('<html><body>'#13#10+s,ChangeFileExt(paramstr(0),'.htm'));
+  FileFromString(Doc,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+  FileFromString('<html><body>'#13#10+s,ChangeFileExt(ExeVersion.ProgramFileName,'.htm'));
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
@@ -898,7 +924,7 @@ end;
 
 procedure TMainForm.btnReportClick(Sender: TObject);
 begin
-  ShellExecute(0,'open',pointer(ChangeFileExt(paramstr(0),'.htm')),'','',SW_SHOWMAXIMIZED);
+  ShellExecute(0,'open',pointer(ChangeFileExt(ExeVersion.ProgramFileName,'.htm')),'','',SW_SHOWMAXIMIZED);
 end;
 
 end.

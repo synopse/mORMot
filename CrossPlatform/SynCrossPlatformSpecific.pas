@@ -6,7 +6,7 @@ unit SynCrossPlatformSpecific;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,12 +25,13 @@ unit SynCrossPlatformSpecific;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - danielkuettner
-  
+  - Stefan (itSDS)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -45,12 +46,12 @@ unit SynCrossPlatformSpecific;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - each operating system will have its own API calls in this single unit
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
 
 }
 
@@ -70,9 +71,11 @@ unit SynCrossPlatformSpecific;
       {$define USESYNCRT}
     {$endif}
     {$endif}
+    {$define USECRITICALSECTION}
   {$else}
     {$ifdef FPC}
       {$define USEFCL}
+      {$define USECRITICALSECTION}
     {$else}
       {$define USEINDY}
     {$endif}
@@ -88,6 +91,10 @@ uses
   w3c.date;
 {$else}
 uses
+  {$ifdef MSWINDOWS}
+  Windows,
+  {$else}
+  {$endif}
   SysUtils,
   Classes;
 {$endif}
@@ -95,7 +102,7 @@ uses
 type
   {$ifdef ISDWS}
 
-  // HTTP body may not match the string type, and could be binary 
+  // HTTP body may not match the string type, and could be binary
   THttpBody = string;
 
   // define some Delphi types not supported natively by DWS/SMS
@@ -119,10 +126,25 @@ type
                             rrsDone            = 4);
   {$else}
 
-  /// will store input and output HTTP body content 
-  // - HTTP body may not match the string type, and could be binary 
+  /// will store input and output HTTP body content
+  // - HTTP body may not match the string type, and could be binary
   // - this kind of variable is compatible with NextGen version of the compiler
   THttpBody = array of byte;
+
+  /// cross-platform thread safe locking
+  // - will use TMonitor on the newest Delphi platforms
+  TMutex = class
+  {$ifdef USECRITICALSECTION}
+  protected
+    fLock: TRTLCriticalSection;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  {$endif}
+  public
+    procedure Enter;
+    procedure Leave;
+  end;
 
   {$ifdef NEXTGEN}
   /// see TUTF8Buffer = TBytes in SynCrossPlatformJSON
@@ -132,11 +154,21 @@ type
   {$endif ISDWS}
 
   /// used to store the request of a REST call
+  {$ifdef FPC}
+  TSQLRestURIParams = object
+  {$else}
+  {$ifdef USESYNCRT}
+  TSQLRestURIParams = object
+  {$else}
   TSQLRestURIParams = record
+  {$endif}
+  {$endif}
     /// input parameter containing the caller URI
     Url: string;
+    /// caller URI, without any appended signature
+    UrlWithoutSignature: string;
     /// input parameter containing the caller method
-    {$ifdef ISDWS}&Method{$else}Method{$endif}: string;
+    Verb: string;
     /// input parameter containing the caller message headers
     InHead: string;
     /// input parameter containing the caller message body
@@ -155,6 +187,10 @@ type
     OnSuccess: TProcedureRef;
     OnError: TProcedureRef;
     {$endif}
+    /// set the caller content
+    procedure Init(const aUrl,aVerb,aUTF8Body: string);
+    /// get the response message body as UTF-8
+    function OutBodyUtf8: string;
   end;
 
   /// the connection parameters, as stored and used by TAbstractHttpConnection
@@ -170,6 +206,8 @@ type
     ProxyName: string;
     /// the optional proxy password to be used
     ProxyByPass: string;
+    /// the connection timeout, in ms
+    ConnectionTimeOut: integer;
     /// the timeout when sending data, in ms
     SendTimeout: cardinal;
     /// the timeout when receiving data, in ms
@@ -182,6 +220,7 @@ type
   protected
     fParameters: TSQLRestConnectionParams;
     fURL: string;
+    fOpaqueConnection: TObject; 
   public
     /// this is the main entry point for all HTTP clients
     // - connect to http://aServer:aPort or https://aServer:aPort
@@ -192,16 +231,19 @@ type
     /// perform the request
     // - this is the main entry point of this class
     // - inherited classes should override this abstract method
-    procedure URI(var Call: TSQLRestURIParams;
-      const InDataType: string; KeepAlive: integer); virtual; abstract;
+    procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
+      KeepAlive: integer); virtual; abstract;
 
     /// the remote server full URI
     // - e.g. 'http://myserver:888/'
     property Server: string read fURL;
     /// the connection parameters
     property Parameters: TSQLRestConnectionParams read fParameters;
+    /// opaque access to the effective connection class instance
+    // - which may be a TFPHttpClient, a TIdHTTP or a TWinHttpAPI
+    property ActualConnection: TObject read fOpaqueConnection;
   end;
-
+   
   /// define the inherited class for HTTP client connection
   TAbstractHttpConnectionClass = class of TAbstractHttpConnection;
 
@@ -281,8 +323,12 @@ function TextToHttpBody(const Text: string): THttpBody;
 /// convert a UTF-8 binary buffer into texts
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 
+/// will return the next CSV value from the supplied text 
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char=','; resultTrim: boolean=false): boolean;
 
 {$ifdef ISDWS}
+// some definitions implemented in SynCrossPlatformJSON.pas for Delphi+FPC
 
 procedure DoubleQuoteStr(var text: string);
 function IdemPropName(const PropName1,PropName2: string): boolean;
@@ -297,9 +343,8 @@ function DateTimeToIso8601(Value: TDateTime): string;
 function Iso8601ToDateTime(const Value: string): TDateTime;
 function TryStrToInt(const S: string; var Value: integer): Boolean;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean;
+function StrToInt64Def(const S: string; const def: Int64): Int64;
 function UpCase(ch: Char): Char; inline;
-function GetNextCSV(const str: string; var index: Integer; var res: string;
-  Sep: char): boolean;
 
 type
   /// which kind of document the TJSONVariantData contains
@@ -322,6 +367,17 @@ type
 /// guess the type of a supplied variant
 function VariantType(const Value: variant): TJSONVariantKind;
 
+/// faster than chr(c) when you are sure that c<=$ffff
+function DirectChr(c: Integer): string; external 'String.fromCharCode';
+
+/// compute the JSON representation of a variant value
+// - match function signature as defined in SynCrossPlatformJSON
+function ValueToJSON(Value: variant): string; external 'JSON.stringify';
+
+/// compute a variant from its JSON representation
+// - match function signature as defined in SynCrossPlatformJSON
+function JSONToValue(JSON: string): variant; external 'JSON.parse';
+
 {$endif}
 
 
@@ -334,15 +390,23 @@ uses
 
 {$ifdef USEINDY}
 uses
-  IdHTTP, IdCoderMIME, IdSSLOpenSSL;
+  IdHTTP, IdCoderMIME,
+  {$ifdef MACOS}
+  {$ifdef CPUARM}
+  IdSSLOpenSSLHeaders_Static, // for iOS ARM
+  {$else}
+  IdSSLOpenSSLHeaders,        // for OSX and iOS x86
+  {$endif}
+  {$endif}
+  IdSSLOpenSSL;
   // for SSL support with iOS and Android client, please follow instructions at
   // http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html and you may
   // download the *.a files from http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
+  // see also http://synopse.info/forum/viewtopic.php?id=2325
 {$endif}
 
 {$ifdef USESYNCRT}
 uses
-  Windows,
   SynCrtSock;
 {$endif}
 
@@ -371,6 +435,29 @@ begin
 end;
 {$endif}
 {$endif}
+
+function GetNextCSV(const str: string; var index: Integer; var res: string;
+  Sep: char=','; resultTrim: boolean=false): boolean;
+var i,j,L: integer;
+begin
+  L := length(str);
+  if index<=L then begin
+    i := index;
+    while i<=L do
+      if str[i]=Sep then
+        break else
+        inc(i);
+    j := index;
+    index := i+1;
+    if resultTrim then begin
+      while (j<L) and (ord(str[j])<=32) do inc(j);
+      while (i>j) and (ord(str[i-1])<=32) do dec(i);
+    end;
+    res := copy(str,j,i-j);
+    result := true;
+  end else
+    result := false;
+end;
 
 procedure HttpBodyToText(const Body: THttpBody; var Text: string);
 {$ifdef ISSMS}
@@ -443,6 +530,7 @@ constructor TFclHttpConnectionClass.Create(
 begin
   inherited Create(aParameters);
   fConnection := TFPHttpClient.Create(nil);
+  fOpaqueConnection := fConnection;
 end;
 
 procedure TFclHttpConnectionClass.URI(var Call: TSQLRestURIParams;
@@ -454,7 +542,7 @@ begin
   try
     fConnection.RequestHeaders.Text := Call.InHead;
     fConnection.RequestBody := InStr;
-    fConnection.HTTPMethod(Call.Method,fURL+Call.Url,OutStr,[]);
+    fConnection.HTTPMethod(Call.Verb,fURL+Call.Url,OutStr,[]);
     Call.OutStatus := fConnection.ResponseStatusCode;
     Call.OutHead := fConnection.ResponseHeaders.Text;
     Call.OutBody := OutStr.Bytes;
@@ -484,6 +572,7 @@ type
   TIndyHttpConnectionClass = class(TAbstractHttpConnection)
   protected
     fConnection: TIdHTTP;
+    fIOHandler: TIdSSLIOHandlerSocketOpenSSL; // here due to NextGen ARC model
   public
     constructor Create(const aParameters: TSQLRestConnectionParams); override;
     procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
@@ -498,8 +587,13 @@ constructor TIndyHttpConnectionClass.Create(
 begin
   inherited;
   fConnection := TIdHTTP.Create(nil);
-  if fParameters.Https then
-    fConnection.IOHandler:= TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+  fOpaqueConnection := fConnection;
+  fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
+  fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
+  if fParameters.Https then begin
+    fIOHandler := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+    fConnection.IOHandler := fIOHandler;
+  end;
   if fParameters.ProxyName<>'' then
     fConnection.ProxyParams.ProxyServer := fParameters.ProxyName;
 end;
@@ -507,6 +601,7 @@ end;
 destructor TIndyHttpConnectionClass.Destroy;
 begin
   fConnection.Free;
+  fIOHandler.Free;
   inherited;
 end;
 
@@ -541,15 +636,15 @@ begin
       InStr.Seek(0,soBeginning);
       fConnection.Request.Source := InStr;
     end;
-    if Call.Method='GET' then // allow 404 as valid Call.OutStatus
+    if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
       fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_NOTFOUND]) else
-    if Call.Method='POST' then
+    if Call.Verb='POST' then
       fConnection.Post(fURL+Call.Url,InStr,OutStr) else
-    if Call.Method='PUT' then
+    if Call.Verb='PUT' then
       fConnection.Put(fURL+Call.Url,InStr) else
-    if Call.Method='DELETE' then
+    if Call.Verb='DELETE' then
       fConnection.Delete(fURL+Call.Url) else
-      raise Exception.CreateFmt('Indy does not know method %s',[Call.Method]);
+      raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
     Call.OutStatus := fConnection.Response.ResponseCode;
     Call.OutHead := fConnection.Response.RawHeaders.Text;
     OutLen := OutStr.Size;
@@ -593,10 +688,12 @@ constructor TWinHttpConnectionClass.Create(
 begin
   inherited;
   InitializeCriticalSection(fLock);
-  fConnection := TWinHTTP.Create(RawByteString(fParameters.Server),
-    RawByteString(IntToStr(fParameters.Port)),fParameters.Https,
-    RawByteString(fParameters.ProxyName),RawByteString(fParameters.ProxyByPass),
-    fParameters.SendTimeout,fParameters.ReceiveTimeout);
+  fConnection := TWinHTTP.Create(SockString(fParameters.Server),
+    SockString(IntToStr(fParameters.Port)),fParameters.Https,
+    SockString(fParameters.ProxyName),SockString(fParameters.ProxyByPass),
+    fParameters.ConnectionTimeOut,fParameters.SendTimeout,fParameters.ReceiveTimeout);
+  fOpaqueConnection := fConnection;
+  fConnection.IgnoreSSLCertificateErrors := true; // do not be paranoid here
 end;
 
 destructor TWinHttpConnectionClass.Destroy;
@@ -608,15 +705,15 @@ end;
 
 procedure TWinHttpConnectionClass.URI(var Call: TSQLRestURIParams;
   const InDataType: string; KeepAlive: integer);
-var inb,outb,outh: RawByteString;
+var inb,outb,outh: SockString;
     n: integer;
 begin
   EnterCriticalSection(fLock);
   try
     SetString(inb,PAnsiChar(Call.InBody),length(Call.InBody));
-    Call.OutStatus := fConnection.Request(RawByteString(Call.Url),
-      RawByteString(Call.Method),KeepAlive,RawByteString(Call.InHead),
-      inb,RawByteString(InDataType),outh,outb);
+    Call.OutStatus := fConnection.Request(SockString(Call.Url),
+      SockString(Call.Verb),KeepAlive,SockString(Call.InHead),
+      inb,SockString(InDataType),outh,outb);
     Call.OutHead := string(outh);
     n := length(outb);
     SetLength(Call.OutBody,n);
@@ -634,7 +731,7 @@ end;
 {$endif}
 
 
-{$ifdef ISDWS}
+{$ifdef ISDWS} // some definitions usually made in SynCrossPlatformJSON.pas
 
 procedure DoubleQuoteStr(var text: string);
 var i,j: integer;
@@ -718,24 +815,6 @@ begin
   result := ch.UpperCase;
 end;
 
-function GetNextCSV(const str: string; var index: Integer; var res: string;
-  Sep: char): boolean;
-var i,L: integer;
-begin
-  L := length(str);
-  if index<=L then begin
-    i := index;
-    while i<=L do
-      if str[i]=Sep then
-        break else
-        inc(i);
-    res := copy(str,index,i-index);
-    index := i+1;
-    result := true;
-  end else
-    result := false;
-end;
-
 function TryStrToInt(const S: string; var Value: Integer): Boolean;
 begin
   try
@@ -750,6 +829,12 @@ end;
 function TryStrToInt64(const S: string; var Value: Int64): Boolean; inline;
 begin
   result := TryStrToInt(S,Value);
+end;
+
+function StrToInt64Def(const S: string; const def: Int64): Int64;
+begin
+  if not TryStrToInt(S,result) then
+      result := def;
 end;
 
 function NowToIso8601: string;
@@ -867,9 +952,9 @@ begin
       end;
     end;
     Call.XHR.onerror := Call.OnError;
-    Call.XHR.open(Call.Method,fURL+Call.Url,true);  // true for asynch call
+    Call.XHR.open(Call.Verb,fURL+Call.Url,true);  // true for asynch call
   end else
-    Call.XHR.open(Call.Method,fURL+Call.Url,false); // false for synch call
+    Call.XHR.open(Call.Verb,fURL+Call.Url,false); // false for synch call
   if Call.InHead<>'' then begin
     var i = 1;
     var line: string;
@@ -900,4 +985,90 @@ begin
 end;
 
 {$endif ISDWS}
+
+
+{ TSQLRestURIParams }
+
+procedure TSQLRestURIParams.Init(const aUrl,aVerb,aUTF8Body: string);
+begin
+  Url := aUrl;
+  Verb := aVerb;
+  if aUTF8Body='' then
+    exit;
+  {$ifdef ISSMS}
+  InBody := aUTF8Body;
+  {$else}
+  InBody := TextToHttpBody(aUTF8Body);
+  {$endif}
+end;
+
+function TSQLRestURIParams.OutBodyUtf8: String;
+begin
+  {$ifdef ISSMS}
+  result := OutBody; // XMLHttpRequest did convert UTF-8 into DomString
+  {$else}
+  HttpBodyToText(OutBody,result);
+  {$endif}
+end;
+
+
+{$ifndef ISDWS}
+
+{ TMutex }
+
+{$ifdef USETMONITOR}
+
+procedure TMutex.Enter;
+begin
+  TMonitor.Enter(self);
+end;
+
+procedure TMutex.Leave;
+begin
+  TMonitor.Exit(self);
+end;
+
+{$else}
+
+constructor TMutex.Create;
+begin
+  {$ifdef FPC}
+  InitCriticalSection(fLock);
+  {$else}
+  InitializeCriticalSection(fLock);
+  {$endif}
+end;
+
+destructor TMutex.Destroy;
+begin
+  {$ifdef FPC}
+  DoneCriticalSection(fLock);
+  {$else}
+  DeleteCriticalSection(fLock);
+  {$endif}
+end;
+
+procedure TMutex.Enter;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TMutex.Leave;
+begin
+  LeaveCriticalSection(fLock);
+end;
+
+{$endif}
+
+{$endif ISDWS}
+
+initialization
+{$ifdef USEINDY}
+  // see http://www.monien.net/delphi-xe5-ssl-https-on-different-platforms-with-tidhttp-and-trestclient
+  {$ifdef MACOS} // for OSX, iOS ARM and iOS x86
+  {$ifndef CPUARM}
+  IdOpenSSLSetLibPath('/usr/lib/');  // for OSX and iOS x86
+  {$endif}
+  {$endif}
+{$endif USEINDY}
 end.

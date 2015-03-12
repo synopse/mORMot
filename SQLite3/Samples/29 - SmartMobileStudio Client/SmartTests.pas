@@ -81,6 +81,7 @@ begin
   assert(VariantType(123)=jvUndefined);
   assert(VariantType(null)=jvUndefined);
   assert(VariantType(TVariant.CreateObject)=jvObject);
+  assert(VariantType(new JObject)=jvObject);
   assert(VariantType(TVariant.CreateArray)=jvArray);
   doc := TJSONVariantData.Create('{"a":1,"b":"B"}');
   assert(doc.Kind=jvObject);
@@ -233,7 +234,7 @@ begin
     for j := 0 to high(Rec.G) do
       assert(Rec.G[j]=IntToStr(j+1));
     assert(Rec.H.H1=i);
-    assert(length(Rec.J)=i);
+    assert(length(Rec.J)=i-1);
     for j := 0 to high(Rec.J) do begin
       assert(Rec.J[j].J1=j);
       assert(Rec.J[j].J2<>'');

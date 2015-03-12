@@ -9,16 +9,17 @@ uses
   SysUtils,
   WinSvc,
   SynCommons,
+  SynLog,
   mORMot,
   SynCrtSock,
   mORMotHTTPServer,
   RESTData,
-  RESTServerClass in 'RESTServerClass.pas';
+  RESTServerClass;
 
 var ORMServer: TNoteServer;
     HTTPServer: TSQLHttpServer;
 begin
-  ORMServer := TNoteServer.Create(ExtractFilePath(paramstr(0))+'data','root');
+  ORMServer := TNoteServer.Create(ExeVersion.ProgramFilePath+'data','root');
   try
     HTTPServer := TSQLHttpServer.Create(HTTP_PORT,[ORMServer]);
     try

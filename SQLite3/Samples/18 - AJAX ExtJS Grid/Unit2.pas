@@ -5,7 +5,8 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
-  SynCommons, mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer; 
+  SynCommons, SynLog,
+  mORMot, mORMotSQLite3, SynSQLite3Static, mORMotHttpServer; 
 
 type
   TSQLSampleRecord = class(TSQLRecord)
@@ -15,7 +16,8 @@ type
     fTimeD: TDateTime;
   public
     /// overridden to populate a blank database with some data
-    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8); override;
+    class procedure InitializeTable(Server: TSQLRestServer;
+      const FieldName: RawUTF8; Options: TSQLInitializeTableOptions); override;
   published
     /// underscored names, as defined in our ExtJS scripts
     property TimeD: TDateTime read fTimeD write fTimeD;
@@ -64,7 +66,7 @@ begin
   DB.URIPagingParameters.Results := 'LIMIT=';
   DB.URIPagingParameters.SendTotalRowsCountFmt := ',"total":%';
   // initialize and launch the server
-  DB.CreateMissingTables(0);
+  DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
 end;
@@ -85,9 +87,10 @@ end;
 { TSQLSampleRecord }
 
 class procedure TSQLSampleRecord.InitializeTable(Server: TSQLRestServer;
-  const FieldName: RawUTF8);
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var Rec: TSQLSampleRecord;
 begin
+  inherited;
   if FieldName<>'' then
     exit; // create database only if void
   Rec := TSQLSampleRecord.CreateAndFillPrepare(

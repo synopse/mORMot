@@ -6,7 +6,7 @@ unit mORMotUILogin;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUILogin;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -869,10 +869,8 @@ begin
     if C.InheritsFrom(TControl) then
     if not TButton(C).ParentFont then begin // trick to access TControl.FParentFont
       CL := PPointer(C)^;
-      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do
-      with InternalClassProp(CL)^ do begin
-        P := @PropList;
-        for f := 1 to PropCount do begin
+      while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do begin
+        for f := 1 to InternalClassPropInfo(CL,P) do begin
           with P^.PropType^^ do
           if (Kind=tkClass) and ClassType^.InheritsFrom(TFont) then begin
             Obj := pointer(P^.GetOrdValue(C));

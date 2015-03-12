@@ -6,7 +6,7 @@ unit SynWinSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,10 +27,11 @@ unit SynWinSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2014 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2015 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -556,6 +557,9 @@ const
 const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
+
+  SHUT_WR = 1;
+  
 type
   PWSAData = ^TWSAData;
   TWSAData = packed record
@@ -734,14 +738,15 @@ type
           AF_INET: (sin_port: u_short;
                     sin_addr: TInAddr;
                     sin_zero: array[0..7] of AnsiChar);
-          AF_INET6: (sin6_port:     u_short;
-                		sin6_flowinfo: u_long;
-      	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: u_long);
+          AF_INET6: (sin6_port:    u_short;
+                     sin6_flowinfo: u_long;
+                     sin6_addr:     TInAddr6;
+                     sin6_scope_id: u_long);
           );
   end;
 
 function SizeOfVarSin(const sin: TVarSin): integer;
+ {$ifdef UNICODE}inline;{$endif}
 
 function GetSockName(s: TSocket; var name: TVarSin): Integer;
 function GetPeerName(s: TSocket; var name: TVarSin): Integer;

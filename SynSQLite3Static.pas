@@ -1,4 +1,4 @@
-/// SQLite3 Database engine - statically linked .obj for Windows 32 bit
+/// SQLite3 Database engine - statically linked .obj for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -6,7 +6,7 @@ unit SynSQLite3Static;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,11 +25,12 @@ unit SynSQLite3Static;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+   Alfred Glaenzer (alf)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -46,22 +47,34 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 engine
-   **********************************
+    Statically linked SQLite3 3.8.8.3 engine
+   ******************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
   sqlite3 := TSQLite3LibraryStatic.Create; is called at unit initialization.
 
-  Will work only on Windows 32 bit (when the corresponding .obj are available)
+  Will work only on Windows 32 bit (with Delphi or FPC, with expected .obj / .o)
+  or Linux 32 bit (with FPC, with the corresponding .o)
   under other platforms, this unit will just do nothing (but compile).
+  
+  To compile our patched SQlite3.c version, available in this source folder:
+  - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
+  - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
+  - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
 
-  Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll).
+  Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
 
-
+  To retrieve and install the latest sqlite3 debian package on Ubuntu:
+  - retrieve latest .deb from https://launchpad.net/ubuntu/...
+  - for a 32 bit system, install e.g. as
+    sudo dpkg -i libsqlite3-0_3.8.7.4-1_i386.deb
+  - for a 64 bit system, you need to download and install both packages, e.g.
+    sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
+  - updated SQLite3 engine to latest version 3.8.8.3
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -77,15 +90,7 @@ unit SynSQLite3Static;
 
 interface
 
-{$ifdef CPU64}  // under Win64 e.g. this unit will do nothing, but compile
-  {$define NOSTATIC}
-{$endif}
-
-{$ifdef FPC}  // under FPC, .obj format is not the same -> use external
-  {$define NOSTATIC}
-{$endif}
-
-{$ifdef NOSTATIC}
+{$ifdef NOSQLITE3STATIC}
 uses
   SysUtils,
   SynSQLite3;
@@ -93,21 +98,40 @@ uses
 implementation
 
 
-initialization
+procedure DoInitialization;
+begin
   FreeAndNil(sqlite3);
   try
-    {$ifdef CPU64}
-    // see http://synopse.info/files/SQLite3-64.7z
-    sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3-64.dll');
-    {$else}
-    sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll');
-    {$endif}
+    sqlite3 := TSQLite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);        
+    sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
+    on E: Exception do  
+      {$ifdef LINUX}
+      writeln(SQLITE_LIBRARY_DEFAULT_NAME+' initialization failed with ',
+        E.ClassName,': ',E.Message);
+      {$endif}
   end;
+end;
+
+initialization
+  DoInitialization;
 
 {$else}
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  BaseUnix,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
+  {$endif}
+  Classes,
   SysUtils,
   SynCommons,
   SynSQLite3;
@@ -124,7 +148,7 @@ type
   /// access class to the static .obj SQLite3 engine
   // - the intialization section of this unit calls:
   // ! sqlite3 := TSQLite3LibraryStatic.Create;
-  // therefore, adding SynSQlite3Static to your uses clause is enough to use
+  // therefore, adding SynSQLite3Static to your uses clause is enough to use
   // the statically linked SQLite3 engine with SynSQLite3
   TSQLite3LibraryStatic = class(TSQLite3Library)
   public
@@ -135,6 +159,7 @@ type
   end;
 
 
+{$ifndef NOSQLITE3ENCRYPT}
 /// use this procedure to change the password for an existing SQLite3 database file
 // - use this procedure instead of the "classic" sqlite3.rekey() API call
 // - conversion is done in-place, therefore this procedure can handle very big files
@@ -151,7 +176,7 @@ type
 // 'database disk image is malformed' (SQLITE_CORRUPT) at database opening 
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
-
+{$endif}
 
 implementation
 
@@ -167,11 +192,19 @@ const
 {
   Code below will link all database engine, from amalgamation source file:
 
- - compiled with free Borland C++ compiler 5.5.1 from the command line:
+ - to compile with free Borland C++ compiler 5.5.1 from the command line:
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -u- sqlite3.c
- - FastCall use must be set with defining SQLITE3_FASTCALL above, and
+    FastCall use must be set with defining SQLITE3_FASTCALL above, and
      int __cdecl fts3CompareElemByTerm(const void *lhs, const void *rhs)
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -pr -u- sqlite3.c
+ - to compile for FPC using the MinGW compiler: run c-fpcmingw.bat
+    gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS sqlite3.c
+    and copy libgcc.a and libkernel32.a from your MinGW folders
+ - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
+    gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
+    and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
+    For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
+
  - the following defines must be added in the beginning of the sqlite3.c file:
 
 //#define SQLITE_ENABLE_FTS3
@@ -224,17 +257,55 @@ extern int winWrite(
   sqlite3.int64 offset      /* Offset into the file to begin writing at */
 );
 
+Under Linux (thanks Alf for the patch!), change the following lines of sqlite3.c:
+
+extern int unixRead(
+  sqlite3_file *id,
+  void *pBuf,
+  int amt,
+  sqlite3_int64 offset
+);
+
+extern int unixWrite(
+  sqlite3_file *id,
+  const void *pBuf,
+  int amt,
+  sqlite3_int64 offset
+);
+
 }
 
-{$ifdef INCLUDE_FTS3}
-{$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
+  {$ifdef MSWINDOWS}
+  {$L fpc-win32\sqlite3.o}
+  {$linklib fpc-win32\libkernel32.a}
+  {$linklib fpc-win32\libgcc.a}
+  {$else}
+  {$L fpc-linux32\sqlite3.o}
+  {$linklib fpc-linux32\gcc.a}
+  {$endif MSWINDOWS}
 {$else}
-{$L sqlite3.obj}       // link SQlite3 database engine
+  {$ifdef MSWINDOWS} // Delphi
+    {$ifdef INCLUDE_FTS3}
+    {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+    {$else}
+    {$L sqlite3.obj}       // link SQlite3 database engine
+    {$endif INCLUDE_FTS3}
+  {$else}
+  {$ifdef KYLIX3}
+  {$L kylix/sqlite3/sqlite3.o}
+  {$L kylix/sqlite3/_divdi3.o}
+  {$L kylix/sqlite3/_moddi3.o}
+  {$L kylix/sqlite3/_udivdi3.o}
+  {$L kylix/sqlite3/_umoddi3.o}
+  {$L kylix/sqlite3/_cmpdi2.o}
+  {$endif KYLIX3}
+  {$endif MSWINDOWS}
 {$endif}
-
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
+{$ifndef FPC}
 function _ftol: Int64;
 // Borland C++ float to integer (Int64) conversion
 asm
@@ -246,20 +317,26 @@ function _ftoul: Int64;
 asm
   jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
+{$endif FPC}
+
+// those functions will be called only under Windows
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_malloc';{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_free';{$endif}
 // the SQLite3 database engine will use the FastMM4 very fast heap manager
 begin
   FreeMem(P);
 end;
 
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_realloc';{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM very fast heap manager
 begin
   result := P;
@@ -267,6 +344,7 @@ begin
 end;
 
 function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memset';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   result := P;
@@ -274,16 +352,21 @@ begin
 end;
 
 procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memmove';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   Move(source^, dest^, count); // move() is overlapping-friendly
 end;
 
 procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memcpy';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   Move(source^, dest^, count);
 end;
+
+{$ifndef FPC}
+{$ifdef MSWINDOWS}
 
 var __turbofloat: word; { not used, but must be present for linking }
 
@@ -291,327 +374,32 @@ var __turbofloat: word; { not used, but must be present for linking }
 
 procedure _lldiv;
 asm
-{$ifdef FPC}
-  push    ebx                {save used registers}
-  push    esi
-  push    edi
-  mov     ebx, [esp+16]      {divisor-lo}
-  mov     ecx, [esp+20]      {divisor-hi}
-  mov     esi, edx
-  mov     edi, ecx
-  sar     esi, 31
-  xor     eax, esi
-  xor     edx, esi
-  sub     eax, esi
-  sbb     edx, esi           {edx:eax = abs(Dividend)}
-  sar     edi, 31
-  xor     esi, edi           {0 if Dividend and Divisor have same sign else -1}
-  xor     ebx, edi
-  xor     ecx, edi
-  sub     ebx, edi
-  sbb     ecx, edi           {ecx:ebx = abs(Divisor)}
-  jnz     @@BigDivisor       {jump if divisor >= 2^32}
-  cmp     edx, ebx           {divisor-hi = 0, dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     edx, ecx           {edx = quotient-hi}
-  @SetSign:                    {quotient in edx:eax}
-  xor     eax, esi           {if quotient < 0}
-  xor     edx, esi           { compute 1's complement of result}
-  sub     eax, esi           {if quotient < 0}
-  sbb     edx, esi           { compute 2's complement of result}
-  @Done:
-  pop     edi                {restore used registers}
-  pop     esi
-  pop     ebx
-  ret     8
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @BigDiv            {yes, big division needed}
-  xor     eax, eax           {no, result = 0}
-  xor     edx, edx
-  jmp     @Done
-  @BigDiv:
-  push    edx                {save dividend-hi}
-  push    eax                {save dividend-lo}
-  push    ebx                {save divisor-lo}
-  mov     edi, ecx           {with divisor (ecx:ebx) and dividend (edx:eax)}
-  shr     edx, 1             { shift both}
-  rcr     eax, 1             {  dividend and}
-  ror     edi, 1             {   divisor}
-  rcr     ebx, 1             {    right by 1 bit}
-  bsr     ecx, ecx           {get number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       { dividend such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  pop     ebx                {divisor-lo}
-  mul     ebx                {quotient * divisor-lo}
-  pop     ebx                {dividend-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {get quotient}
-  pop     ecx                {dividend-hi}
-  sbb     ecx, edx           {dividend - divisor * quotient}
-  sbb     eax, 0             {adjust quotient if remainder is negative}
-  xor     edx, edx           {clear hi-word of quotient}
-  jmp     @SetSign           {quotient in edx:eax}
-{$else}
   jmp System.@_lldiv
-{$endif}
 end;
 
 procedure _lludiv;
 asm
-{$ifdef FPC}
-  push    ebx
-  mov     ecx, [esp+12]      {divisor-hi}
-  mov     ebx, [esp+8]       {divisor-lo}
-  test    ecx, ecx           {divisor >= 2^32?}
-  jnz     @@BigDivisor       {yes, big divisor}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     edx, ecx           {edx = quotient-hi}
-  pop     ebx
-  ret     8                  {quotient in edx:eax}
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @@BigDiv           {yes, big division needed}
-  xor     eax, eax           {no, result = 0}
-  xor     edx, edx
-  pop     ebx
-  ret     8
-  @@BigDiv:
-  push    edi
-  push    edx                {dividend-hi}
-  push    eax                {dividend-lo}
-  mov     edi, ecx           {divisor-hi}
-  shr     edx, 1             {Shift both divisor and dividend right 1 bit}
-  rcr     eax, 1
-  ror     edi, 1
-  rcr     ebx, 1
-  bsr     ecx, ecx           {ecx = number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       { dividend such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  mul     dword ptr [esp+20] {quotient * divisor-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  pop     ebx                {dividend-lo}
-  pop     edi                {dividend-hi}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {Get quotient}
-  sbb     edi, edx           {dividend - (divisor * quotient)}
-  sbb     eax, 0             {adjust quotient if remainder negative}
-  xor     edx, edx           {Clear hi-word of quotient}
-  pop     edi
-  pop     ebx
-  ret     8
-{$else}
   jmp System.@_lludiv
-{$endif}
 end;
 
 procedure _llmod;
 asm
-{$ifdef FPC}
-  push    ebx                {save used registers}
-  push    esi
-  push    edi
-  mov     ebx, [esp+16]      {divisor-lo}
-  mov     ecx, [esp+20]      {divisor-hi}
-  mov     esi, edx
-  sar     esi, 31            {0 if Dividend < 0 else -1}
-  mov     edi, edx
-  sar     edi, 31
-  xor     eax, edi
-  xor     edx, edi
-  sub     eax, edi
-  sbb     edx, edi           {edx:eax = abs(Dividend)}
-  mov     edi, ecx
-  sar     edi, 31
-  xor     ebx, edi
-  xor     ecx, edi
-  sub     ebx, edi
-  sbb     ecx, edi           {ecx:ebx = abs(Divisor)}
-  jnz     @@BigDivisor       {jump if divisor >= 2^32}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  mov     eax, ecx           {eax = dividend-lo}
-  @@OneDiv:
-  div     ebx
-  mov     eax, edx           {eax = quotient-lo}
-  xor     edx, edx           {edx = quotient-hi = 0}
-  @@SetSign:                   {remainder in edx:eax}
-  xor     eax, esi           {if (remainder < 0)}
-  xor     edx, esi           {  compute 1's complement of result}
-  sub     eax, esi           {if (remainder < 0)}
-  sbb     edx, esi           {  compute 2's complement of result}
-  pop     edi                {restore used registers}
-  pop     esi
-  pop     ebx
-  ret     8
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi < divisor-hi?}
-  jb      @@SetSign          {yes, result = dividend}
-  @@BigDiv:
-  push    edx                {save dividend-hi}
-  push    eax                {save dividend-lo}
-  push    ebx                {save divisor-lo}
-  mov     edi, ecx           {with divisor (ecx:ebx) and dividend (edx:eax)}
-  shr     edx, 1             { shift both}
-  rcr     eax, 1             {  dividend and}
-  ror     edi, 1             {   divisor}
-  rcr     ebx, 1             {    right by 1 bit}
-  bsr     ecx, ecx           {get number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and}
-  shrd    eax, edx, cl       {  dividend such that divisor}
-  shr     edx, cl            {    is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, eax           {save quotient}
-  imul    edi, eax           {quotient * divisor-hi}
-  pop     ebx                {divisor-lo}
-  mul     ebx                {quotient * divisor-lo}
-  pop     ebx                {dividend-lo}
-  add     edx, edi           {edx:eax = quotient * divisor}
-  sub     ebx, eax           {dividend-lo - (quotient*divisor-lo)}
-  mov     eax, ecx           {get quotient}
-  pop     ecx                {dividend-hi}
-  sbb     ecx, edx           {divisor * quotient from dividend}
-  sbb     eax, eax           {if remainder < 0 then -1 else 0}
-  mov     edx, [esp+20]      {divisor-hi}
-  and     edx, eax           {if remainder < 0 then divisor-hi else 0}
-  and     eax, [esp+16]      {if remainder < 0 then divisor-lo else 0}
-  add     eax, ebx           {remainder-lo}
-  add     edx, ecx           {remainder-hi}
-  jmp @@SetSign
-{$else}
   jmp System.@_llmod
-{$endif}
 end;
 
 procedure _llmul;
 asm
-{$ifdef FPC}
-  mov     ecx, [esp+8]
-  imul    edx, [esp+4]
-  imul    ecx, eax
-  add     ecx, edx
-  mul     dword ptr [esp+4]
-  add     edx, ecx
-  ret     8
-{$else}
   jmp System.@_llmul
-{$endif}
 end;
 
 procedure _llumod;
 asm
-{$ifdef FPC}
-  push    ebx
-  mov     ecx, [esp+12]      {divisor-hi}
-  mov     ebx, [esp+8]       {divisor-lo}
-  test    ecx, ecx           {divisor >= 2^32?}
-  jnz     @@BigDivisor       {yes, big divisor}
-  cmp     edx, ebx           {dividend-hi < divisor-hi?}
-  jb      @@OneDiv           {yes, only one division needed}
-  mov     ecx, eax           {ecx = dividend-lo}
-  mov     eax, edx           {eax = dividend-hi}
-  xor     edx, edx           {zero extend it into edx:eax}
-  div     ebx                {eax = quotient-hi}
-  xchg    eax, ecx           {eax = dividend-lo, ecx = quotient-hi}
-  @@OneDiv:
-  div     ebx                {eax = quotient-lo}
-  mov     eax, edx           {eax = remainder_lo}
-  xor     edx, edx           {edx = remainder_hi = 0}
-  pop     ebx
-  ret     8                  {result in edx:eax}
-  @@BigDivisor:
-  cmp     edx, ecx           {dividend-hi >= divisor-hi?}
-  jae     @@BigDiv           {yes, big division needed}
-  pop     ebx
-  ret     8                  {result in edx:eax}
-  @@BigDiv:
-  push    edi
-  push    esi
-  push    edx                {dividend-hi}
-  push    ebx                {divisor-lo}
-  mov     edi, ecx           {divisor-hi}
-  mov     esi, eax           {dividend-lo}
-  shr     edx, 1             {Shift both divisor and dividend right 1 bit}
-  rcr     eax, 1
-  ror     edi, 1
-  rcr     ebx, 1
-  bsr     ecx, ecx           {number of remaining shifts}
-  shrd    ebx, edi, cl       {scale down divisor and dividend}
-  shrd    eax, edx, cl       { such that divisor}
-  shr     edx, cl            {  is less than 2^32}
-  rol     edi, 1             {restore original divisor-hi}
-  div     ebx                {compute quotient}
-  mov     ecx, edi           {divisor-hi}
-  pop     ebx                {divisor-lo}
-  imul    ecx, eax           {quotient * divisor-hi}
-  mul     ebx                {quotient * divisor-lo}
-  add     edx, ecx           {edx:eax = quotient * divisor}
-  sub     esi, eax           {dividend-lo - (quotient*divisor-lo)}
-  pop     ecx                {dividend-hi}
-  mov     eax, ebx           {divisor-lo}
-  sbb     ecx, edx           {dividend - (divisor * quotient)}
-  sbb     edx, edx           {-1 if remainder < 0 else 0}
-  and     eax, edx           {divisor-lo if remainder < 0 else 0}
-  and     edx, edi           {divisor-hi if remainder < 0 else 0}
-  add     eax, esi           {add ecx:esi to edx:eax}
-  adc     edx, ecx
-  pop     esi
-  pop     edi
-  pop     ebx
-  ret     8
-{$else}
   jmp System.@_llumod
-{$endif}
 end;
 
 procedure _llshl;
 asm
-  {$ifdef FPC}
-  shld    edx, eax, cl
-  shl     eax, cl
-  cmp     cl, 32
-  jl      @@Done
-  cmp     cl, 64
-  sbb     edx, edx
-  and     edx, eax
-  xor     eax, eax
-  {$ifndef NOAMD}ret{$endif}
-  @@Done:
-  {$ifndef NOAMD}db $f3{$endif} // rep ret AMD trick here
-{$else}
   jmp System.@_llshl
-{$endif}
 end;
 
 procedure _llshr;
@@ -638,30 +426,28 @@ end;
 
 procedure _llushr;
 asm
-{$ifdef FPC}
-  shrd    eax, edx, cl
-  shr     edx, cl
-  cmp     cl, 32
-  jl      @@Done
-  cmp     cl, 64
-  sbb     eax, eax
-  and     eax, edx
-  xor     edx, edx
-{$ifndef NOAMD}ret{$endif}
-@@Done:
-{$ifndef NOAMD}db $f3{$endif} // rep ret AMD trick here
-{$else}
   jmp System.@_llushr
-{$endif}
 end;
 
+{$endif MSWINDOWS}
+{$endif FPC}
+
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strlen';{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrLen(pointer(p));
 end;
 
+function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strcmp';{$endif}
+// a fast full pascal version of the standard C library function
+begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
+  result := SynCommons.StrComp(p1,p2);
+end;
+
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_memcmp';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -684,6 +470,7 @@ begin
 end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_strncmp';{$endif}
 // a fast full pascal version of the standard C library function
 var i: integer;
 begin
@@ -776,6 +563,7 @@ end;
 
 procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func);
   cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_qsort';{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
@@ -803,33 +591,100 @@ var
     __tm_zone: ^Char;           { Timezone abbreviation.}
   end;
 
-function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
+function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '__localtime64';{$endif}
 // a fast full pascal version of the standard C library function
-var uTm: TFileTime;
+var {$ifdef MSWINDOWS}
+    uTm: TFileTime;
     lTm: TFileTime;
+    {$endif}
     S: TSystemTime;
 begin
-  Int64(uTm) := (Int64(t^) + 11644473600)*10000000; // unix time to dos file time
+  {$ifdef MSWINDOWS}
+  Int64(uTm) := (t+11644473600)*10000000; // unix time to dos file time
   FileTimeToLocalFileTime(uTM,lTM);
   FileTimeToSystemTime(lTM,S);
-  with atm do begin
-    tm_sec := S.wSecond;
-    tm_min := S.wMinute;
-    tm_hour := S.wHour;
-    tm_mday := S.wDay;
-    tm_mon := S.wMonth-1;
-    tm_year := S.wYear-1900;
-    tm_wday := S.wDayOfWeek;
-  end;
+  atm.tm_sec := S.wSecond;
+  atm.tm_min := S.wMinute;
+  atm.tm_hour := S.wHour;
+  atm.tm_mday := S.wDay;
+  atm.tm_mon := S.wMonth-1;
+  atm.tm_year := S.wYear-1900;
+  atm.tm_wday := S.wDayOfWeek;
+  {$else}
+  GetNowUTCSystem(S);
+  atm.tm_sec := S.Second;
+  atm.tm_min := S.Minute;
+  atm.tm_hour := S.Hour;
+  atm.tm_mday := S.Day;
+  atm.tm_mon := S.Month-1;
+  atm.tm_year := S.Year-1900;
+  atm.tm_wday := S.Day;
+  {$endif}
   result := @atm;
 end;
 
+function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}alias : '_localtime';{$endif}
+begin
+  result := localtime64(t^);
+end;
+
+{$ifdef MSWINDOWS}
+function _beginthreadex(security: pointer; stksize: dword;
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
+  {$ifdef FPC}alias : '__beginthreadex';{$endif}
+begin
+  result := CreateThread(security,stkSize,start,arg,flags,threadid);
+end;
+
+procedure _endthreadex(ExitCode: DWORD); cdecl;
+  {$ifdef FPC}alias : '__endthreadex';{$endif}
+begin
+  ExitThread(ExitCode);
+end;
+
+{$else MSWINDOWS}
+
+{$ifdef FPC}
+function newstat64(path: pchar; buf: PStat): cint; cdecl;
+  alias: 'stat64'; export;
+begin
+  result := fpstat(path,buf^);
+end;
+
+function newfstat64(fd: cint; buf: PStat): cint; cdecl;
+  alias: 'fstat64'; export;
+begin
+  result := fpfstat(fd,buf^);
+end;
+{$endif FPC}
+
+{$ifdef KYLIX3}
+
+function close(Handle: Integer): Integer; cdecl;
+  external libcmodulename;
+function read(Handle: Integer; var Buffer; Count: size_t): ssize_t; cdecl;
+  external libcmodulename;
+function write(Handle: Integer; const Buffer; Count: size_t): ssize_t; cdecl;
+  external libcmodulename;
+
+function __fixunsdfdi(a: double): Int64; cdecl;
+begin
+  if a<0 then
+    result := 0 else
+    result := round(a);
+end;
+
+{$endif}
+
+{$endif MSWINDOWS}
 
 procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
 // very fast table (private key) computation from a given password
 // - use a simple prime-based random generator, strong enough for common use
-// - execution speed and code size was the goal here
-// - SynCrypto proposes SHA-256 and AES-256 for most secure encryption
+// - execution speed and code size was the goal here: can be easily broken
+// - SynCrypto proposes SHA-256 and AES-256 for more secure encryption
 var i, j, k, L: integer;
 begin
   L := length(Password)-1;
@@ -844,8 +699,9 @@ begin
   end;
 end;
 
-procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
-// XorOffset: fast and simple Cypher using Index (= offset in file):
+// XorOffset: fast and simple Cypher using Index (= offset in file)
+// -> not to be set as local proc for FPC
+// see http://bugs.freepascal.org/view.php?id=24061
 procedure Xor64(PI, P: PPtrIntArray; Count: cardinal); // fast xor
 {$ifdef PUREPASCAL}
 var i: cardinal;
@@ -873,6 +729,8 @@ asm // eax=PI edx=P ecx=bytes count
   pop ebx
 end;
 {$endif}
+
+procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
 var i, Len, L: integer;
 begin
   if Count>0 then
@@ -893,6 +751,9 @@ begin
   until Count=0;
 end;
 
+
+{$ifndef NOSQLITE3ENCRYPT}
+
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 var F: THandle;
@@ -906,7 +767,11 @@ begin
   F := FileOpen(FileName,fmOpenReadWrite);
   if F=INVALID_HANDLE_VALUE then
     exit;
+  {$ifdef MSWINDOWS}
   Size.Lo := GetFileSize(F,@Size.Hi);
+  {$else}
+  Int64(Size) := GetLargeFileSize(FileName);
+  {$endif}
   if (Size.Lo<=1024) and (Size.Hi=0) then begin
     FileClose(F); // file is to small to be modified
     exit;
@@ -916,7 +781,7 @@ begin
   if NewPassword<>'' then
     CreateSQLEncryptTableBytes(NewPassWord,@NewP);
   Int64(Posi) := 1024; // don't change first page, which is uncrypted
-  SetFilePointer(F,1024,nil,FILE_BEGIN); // move to first page after 1024
+  FileSeek(F,1024,soFromBeginning);
   while Int64(Posi)<Int64(Size) do begin
     R := FileRead(F,Buf,sizeof(Buf)); // read buffer
     if R<0 then
@@ -925,12 +790,14 @@ begin
       XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
     if NewPassword<>'' then
       XorOffset(@Buf,Posi.Lo,R,@NewP); // crypt with new key
-    SetFilePointer(F,Posi.Lo,@Posi.Hi,FILE_BEGIN); // rewind
+    FileSeek64(F,Int64(Posi),soFromBeginning);
     FileWrite(F,Buf,R); // update buffer
     inc(Int64(Posi),cardinal(R));
   end;
   FileClose(F);
 end;
+
+{$endif}
 
 // we override default WinRead() and WinWrite() functions below, in order
 // to add our proprietary (but efficient) encryption engine
@@ -940,9 +807,15 @@ end;
 
 type
 {$ifndef DELPHI5OROLDER} // Delphi 5 is already aligning records by 4 bytes
+{$ifdef FPC}
+{$PACKRECORDS C}
+{$else}
 {$A4} // bcc32 default alignment is 4 bytes
 {$endif}
-  TSQLFile = record // called winFile (expand sqlite3.file) in sqlite3.c
+{$endif}
+
+  {$ifdef MSWINDOWS}
+  TSQLFile = packed record // see struct winFile in 3.8.7 sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
@@ -957,18 +830,36 @@ type
     pMapRegion: PAnsiChar;
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
-  // those structures are used to retrieve the Windows file handle
-  TSQLPager = record
+  {$else}
+  TSQLFile = record             // see struct unixFile in 3.8.7 sqlite3.c
+    pMethods: pointer;          // sqlite3.io_methods_ptr
+    pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
+    unixInodeInfo: pointer;     // Info about locks on this inode
+    h: THandle;                 // Handle for accessing the file
+    eFileLock: cuchar;          // The type of lock held on this fd
+    ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
+    lastErrno: cint;            // The unix errno from the last I/O error
+    lockingContext : PAnsiChar; // Locking style specific state
+    UnixUnusedFd : pointer;     // unused
+    zPath: PAnsiChar;           // Name of the file
+    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
+    szChunk, nFetchOut: cint;
+    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
+    pMapRegion: PAnsiChar;
+  end;
+  {$endif}
+
+  // those structures are used to retrieve the Windows/Linux file handle
+  TSQLPager = record            // see struct Pager in 3.8.7 sqlite3.c
     pVfs: pointer;
     exclusiveMode, journalMode, useJournal, noSync, fullSync,
-    ckptSyncFlags, walsyncFlags, syncFlags, tempFile, readOnly, memDb: byte;
-    eState, eLock, changeCountDone, setMaster, doNotSpill, doNotSyncSpill,
-    subjInMemory: Byte;
+    ckptSyncFlags, walsyncFlags, syncFlags, tempFile, noLock, readOnly, memDb,
+    eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory: Byte;
     dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
     nSubRec: cardinal;
     pInJournal: pointer;
-    fd: ^TSQLFile; // File descriptor for database
-    jfd: ^TSQLFile; // File descriptor for main journal
+    fd: ^TSQLFile;   // File descriptor for database
+    jfd: ^TSQLFile;  // File descriptor for main journal
     sjfd: ^TSQLFile; // File descriptor for sub-journal
   end;
   TSQLBtShared = record
@@ -1043,8 +934,19 @@ begin
 end;
 
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
-
-function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$ifdef MSWINDOWS}
+function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+{$else}
+function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+{$endif}
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  {$ifdef FPC}
+    {$ifdef MSWINDOWS}
+    alias : '_winWrite';
+    {$else}
+    alias : 'unixWrite'; export;
+    {$endif}
+  {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
 // or some other error code on failure
 var n, i: integer;
@@ -1056,7 +958,7 @@ label err;
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
-      if offset.Lo+buflen<=F.mmapSize.Lo then begin // 32 bit arithmetic is OK
+      if off+buflen<=Int64(F.mmapSize) then begin
         Move(buf^,F.pMapRegion[offset.Lo],bufLen);
         result := SQLITE_OK;
         exit;
@@ -1070,8 +972,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
-  if result=-1 then begin
+  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -1090,8 +991,10 @@ begin
       end;
   b := buf;
   n := buflen;
+  result := 0;
   while n>0 do begin
-    if not WriteFile(F.h,b^,n,cardinal(result),nil) then begin
+    result := FileWrite(F.h,b^,n);
+    if result=-1 then begin
 err:  F.lastErrno := GetLastError;
       result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
@@ -1114,16 +1017,28 @@ const
   SQLITE_IOERR_READ       = $010A;
   SQLITE_IOERR_SHORT_READ = $020A;
 
-function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$ifdef MSWINDOWS}
+function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+{$else}
+function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+{$endif}
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  {$ifdef FPC}
+    {$ifdef MSWINDOWS}
+      alias : '_winRead';
+    {$else}
+      alias : 'unixRead'; export;
+    {$endif}
+  {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
 var offset: Int64Rec absolute off;
     nCopy: cardinal;
     i: integer;
 begin
-  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17) 
+  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
-      if offset.Lo+buflen<=F.mmapSize.Lo then begin // 32 bit arithmetic is OK
+      if off+buflen<=Int64(F.mmapSize) then begin
         Move(F.pMapRegion[offset.Lo],buf^,bufLen);
         result := SQLITE_OK;
         exit;
@@ -1137,8 +1052,7 @@ begin
       raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  result := SetFilePointer(F.h,offset.Lo,@offset.Hi,FILE_BEGIN);
-  if result=-1 then begin
+  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -1146,7 +1060,8 @@ begin
       exit;
     end;
   end;
-  if not ReadFile(F.h,buf^,buflen,cardinal(result),nil) then begin
+  result := FileRead(F.h,buf^,buflen);
+  if result=-1 then begin
     F.lastErrno := GetLastError;
     result := SQLITE_IOERR_READ;
     exit;
@@ -1172,6 +1087,10 @@ function sqlite3_initialize: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} e
 function sqlite3_shutdown: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
+  xFinal: TSQLFunctionFinal): Integer;
+  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
   xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
@@ -1180,6 +1099,7 @@ function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
   StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_libversion: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_errmsg(DB: TSQLite3DB): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_extended_errcode(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_last_insert_rowid(DB: TSQLite3DB): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_busy_timeout(DB: TSQLite3DB; Milliseconds: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_busy_handler(DB: TSQLite3DB;
@@ -1266,7 +1186,9 @@ function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; 
 function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-
+{$ifndef DELPHI5OROLDER}
+function sqlite3_config(operation: integer): integer; cdecl varargs; external;
+{$endif}
 {$ifdef INCLUDE_TRACE}
 function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
   UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
@@ -1289,6 +1211,8 @@ begin
   close                := @sqlite3_closeInternal;
   libversion           := @sqlite3_libversion;
   errmsg               := @sqlite3_errmsg;
+  extended_errcode     := @sqlite3_extended_errcode;
+  create_function      := @sqlite3_create_function;
   create_function_v2   := @sqlite3_create_function_v2;
   create_collation     := @sqlite3_create_collation;
   last_insert_rowid    := @sqlite3_last_insert_rowid;
@@ -1365,9 +1289,17 @@ begin
   backup_step          := @sqlite3_backup_step;
   backup_finish        := @sqlite3_backup_finish;
   backup_remaining     := @sqlite3_backup_remaining;
-  backup_pagecount     := @sqlite3_backup_pagecount;  
+  backup_pagecount     := @sqlite3_backup_pagecount;
+  {$ifndef DELPHI5OROLDER}
+  config               := @sqlite3_config;
+  {$endif}
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
+  {$ifdef FPC}
+  ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
+  {$else}
+  fUseInternalMM := true; // Delphi .obj are using FastMM4
+  {$endif}
   sqlite3_initialize;
 end;
 
@@ -1381,6 +1313,6 @@ end;
 initialization
   FreeAndNil(sqlite3);
   sqlite3 := TSQLite3LibraryStatic.Create;
-{$endif NOSTATIC}
+{$endif NOSQLITE3STATIC}
 
-end.
+end.

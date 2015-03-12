@@ -14,6 +14,7 @@ type
     lbledtNumberOfObjectAdded: TLabeledEdit;
     btnStart: TButton;
     mmoInfo: TMemo;
+    chkSocketAPI: TCheckBox;
     procedure lbledtClientPerThreadInstanceCountKeyPress(Sender: TObject;
       var Key: Char);
     procedure btnStartClick(Sender: TObject);
@@ -31,6 +32,8 @@ implementation
 
 uses
   SynCommons,
+  SynLog,
+  SynTests,
   mORMot,
   SynSelfTests;
 
@@ -84,8 +87,9 @@ begin
       mmoInfo.SelStart := length(txt);
       mmoInfo.SelLength := 0;
       Timer.Start;
-      Test._TSQLHttpClientWinHTTP_HTTPAPI;
-      //Test._TSQLHttpClientWinSock_WinSock;
+      if chkSocketAPI.Checked then
+        Test.SocketAPI else
+        Test.WindowsAPI;
       txt := mmoInfo.Text+Format(#13#10'Assertion(s) failed: %d / %d'+
         #13#10'Number of clients connected at once: %d'+
         #13#10'Time to process: %s'#13#10'Operation per second: %d',

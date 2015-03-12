@@ -4,7 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, mORMot, mORMotSQLite3, SynSQLite3Static, StdCtrls, SampleData;
+  Dialogs,
+  SynCommons, mORMot, mORMotSQLite3, SynSQLite3Static, StdCtrls, SampleData;
 
 type
   TForm1 = class(TForm)
@@ -36,7 +37,7 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   Model := CreateSampleModel;
-  Server := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'));
+  Server := TSQLRestServerDB.Create(Model,ChangeFileExt(ExeVersion.ProgramFileName,'.db3'));
   Server.CreateMissingTables;
   Server.ExportServerNamedPipe('03');
 end;

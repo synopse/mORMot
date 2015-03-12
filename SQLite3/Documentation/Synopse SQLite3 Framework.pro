@@ -24,13 +24,16 @@ NoConfidential=Yes
 ; so that no "Confidential" text will appear in page footer - seems convenient for a GPL document ;)
 HeaderWithLogo=Yes
 ; custom page header with the synopse logo
+HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,FAQ/Frequently Asked Questions:TITL_123,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate,Licence Terms/Either MPL, LGPL or GPL:TITL_34
+; the sidebar first links, for html export
 
 {\b Document License}
-THE ATTACHED DOCUMENTS DESCRIBE INFORMATION RELEASED BY SYNOPSE INFORMATIQUE UNDER A GPL 3.0 LICENSE.
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2014 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
-This document is free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
-The {\i Synopse mORMot Framework Documentation} is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-You should have received a copy of the GNU General Public License along with this documentation. If not, see @http://www.gnu.org/licenses
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2015 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
+;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
+;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+The {\i Synopse mORMot Framework Documentation} is a free document, released under a GPL 3.0 License, distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+;You should have received a copy of the GNU General Public License along with this documentation. If not, see @http://www.gnu.org/licenses
 {\b Trademark Notice}
 Rather than indicating every occurrence of a trademarked name as such, this document uses the names only in an editorial fashion and to the benefit of the trademark owner with no intention of infringement of the trademark.
 
@@ -133,7 +136,7 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 : Expected Use
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
-This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi} XE6.
+This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi} XE7.
 On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64 bit compiler included in latest {\i Delphi} XE2 and up).
 For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
@@ -461,7 +464,7 @@ The {\i Synopse mORMot Framework} shall provide User Interface and Report genera
 Such a ribbon-oriented interface shall be made available, in a per-table approach, and associated reports.
 Here is a sample of screen content, using proprietary TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE6:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE7:
 %synfilevcl.png
 
 [SRS-DI-2.3.1]
@@ -544,7 +547,7 @@ DocumentIndex=Pictures,Source,Index
 WithAllfields=Yes
 ; write all field properties of all object and classes: document is huge, but contains all available architecture intel
 
-:Introduction
+:Foreword
 The whole Software documentation process follows the typical steps of this diagram:
 %%FMEADI
 : Purpose
@@ -566,19 +569,73 @@ TitleOffset=0
 DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
-{\i Synopse mORMot} is a @*Client-Server@ @*ORM@ and Service Oriented Architecture framework (@*SOA@) for {\i Delphi} 6 up to XE6, targeting {\i Win32} and {\i Win64} platforms on the server, and any platform for clients (including mobile or AJAX).
 %IamLost.png
-The main two features of {\i mORMot} are therefore:
-- Client-Server {\i ORM/ODM}: objects persistence and remote access;
-- Client-Server {\i Services}: remote call of high-level data process.
-It provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
-- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views, or rich @*AJAX@ clients;
+{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to XE7 and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
+The main features of {\i mORMot} are therefore:
+- {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
+- {\i SOA}: organize your business logic into @*REST@ services;
+- {\i Clients}: consume your data or services from any platform, via ORM classes or SOA interfaces;
+- {\i Web MVC}: publish your ORM/SOA process as responsive @*Web Application@s.
+With local or remote access, via an auto-configuring Client-Server @*REST@ design.
+\graph mORMotDesignORMSOA General mORMot architecture
+subgraph cluster_0 {
+"SQLDB";
+label="SQL Databases";
+}
+subgraph cluster_1 {
+"NoSQLDB";
+label="NoSQL Databases";
+}
+subgraph cluster_2 {
+"Services";
+label="Services";
+}
+subgraph cluster_3 {
+\SQLDB\ORM
+\NoSQLDB\ODM
+\REST Server\MVC/MVVM上eb Server
+\ORM\REST Server
+\ODM\REST Server
+\Services\SOA
+\SOA\REST Server
+label=" mORMot\nServer";
+}
+\REST Server\Stand Alone乙pplication
+subgraph cluster_4 {
+label="REST   Clients";
+\REST Server\... any
+\REST Server\AJAX
+\REST Server\Mobile
+\REST Server\Delphi
+}
+subgraph cluster_5 {
+label="    Web   Clients";
+\MVC/MVVM上eb Server\Desktop
+\MVC/MVVM上eb Server\ Mobile
+}
+subgraph cluster_6 {
+label="         Featuring";
+"Featured";
+}
+=SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle
+=NoSQLDB=MongoDB\nIn-Memory\nFiles
+=Services=Method-based Services\nInterface-based Services\nRemote (Saas) Services
+=Featured=User Management - Security & Rights又essions - Logging - Performance - Profiling士ttp.sys - MultiCore - Unit Testing - Mocks/Stubs三emplates (MVC) - JavaScript Engine - JSON卜eporting - PDF - Automated UI
+\
+{\i mORMot} offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.
+For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
+For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
+For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
+If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
+The table content of this document makes it clear: this is no ordinary piece of software.
+The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
+- {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
-- {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, Jet/MSAccess, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
+- {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
-With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line This really makes the difference.
+With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line {\i mORMot} is not another ORM on which a transmission layer has been added, like almost everything existing in Delphi, C# or Java: this is a full Client-Server ORM/SOA from the ground up. This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in {\i Delphi} or any other mean, including AJAX).
 The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
 No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich {\i Delphi} clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Client authentication is performed via several secure methods, and communication can be encrypted via HTTS or with proprietary SHA/AES-256 algorithm. SOA endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.
@@ -637,26 +694,28 @@ At first, some points can be highlighted, which make this framework distinct to 
 - No @*RAD@ components, but true @*ORM@ and @*SOA@ approach;
 - Multi-@*Tier@ architecture, with integrated @*Business rules@ as fast ORM-based classes and {\i @*Domain-Driven@} design;
 - {\i Service-Oriented-Architecture} model, using custom RESTful JSON services - you can send as JSON any {\f1\fs20 TStrings, TCollection, TPersistent} or {\f1\fs20 TObject} (via registration of a custom serializer) instance, or even a {\i dynamic array}, or any record content, with integrated JSON @*serialization@, via an @*interface@-based contract shared on both client and server sides;
-- Truly RESTful authentication with a dual @*security@ model (session + per-query);
+- Truly RESTful @*authentication@ with a dual @*security@ model (session + per-query);
 - Very fast @*JSON@ producer and parser, with caching at SQL level;
-- Fastest available @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
-- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
+- Fast a configuration-less @*HTTP@  / @*HTTPS@ server using {\i @*http.sys@} kernel-mode server - but may communicate via named pipes, Windows Messages or in-process as lighter alternatives;
+- Using {\i @*SQLite3@} as its kernel, but able to connect to any other database (via @*OleDB@ / @*ODBC@ / @*Zeos@ or direct client library access e.g. for @*Oracle@) - the {\f1\fs20 SynDB.pas} classes are self-sufficient, and do not depend on the {\i Delphi} {\f1\fs20 DB.pas} unit nor any third-party (so even the {\i Delphi} Starter edition is enough) - but you {\f1\fs20 SynDBDataset} unit is also available to access any {\f1\fs20 DB.pas} based solution (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ or even the @*BDE@...);
 - RESTful ORM access to a @*NoSQL@ database engine like {\i @*MongoDB@} with the same code base;
 - Ability to use @*SQL@ and RESTful requests over multiple databases at once (thanks to {\i SQLite3} unique @*Virtual Table@s mechanism);
 - Full @*Text Search@ engine included, with enhanced Google-like ranking algorithm;
+- Server-side @*JavaScript@ engine, for defining your business intelligence;
 - Direct User Interface generation: grids are created on the fly, together with a modern Ribbon ('Office 2007'-like) screen layout - the code just has to define actions, and assign them to the tables, in order to construct the whole interface from a few lines of code, without any IDE usage;
 - Integrated @*Report@ing system, which could serve complex @*PDF@ reports from your application;
 - Designed to be as fast as possible (asm used when needed, buffered reading and writing avoid most memory consumption, multi-thread ready architecture...) so benchmarks sound impressive when compared to other solutions - see @59@;
-- More than 1500 pages of documentation;
+- More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from {\i Delphi} 6 up to XE6, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to XE7 and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
+%IamLost.png
 Of course, like many developers, you may suffer from the well-known NIH ("Not Invented Here") syndrome. On the other side, it is a commonly accepted fact that the use of standard and proven code libraries and components can save development time, minimize costs, reduce the use of precious test resources, and decrease the overall maintenance effort.
 Benefits of {\i mORMot} are therefore:
-- KISS design: you have all needed features at hand, but with only one way of doing it - less configuration and less confusion for the developer and its customers;
+- @*KISS@ {\i convention over configuration} design: you have all needed features at hand, but with only one way of doing it - less configuration and less confusion for the developer and its customers;
 - Pascal oriented: implementation is not following existing Java or C# patterns (with generics (ab)use, variable syntaxes and black-box approach), but try to unleash the object pascal genius;
 - Integrated: all crosscutting scenarios are coupled, so you benefit of consisting APIs and documentation, a lot of code-reuse, JSON/RESTful orientation from the ground up;
 - Tested: most of the framework is test-driven, and all regression tests are provided, including system-wide integration tests;
@@ -668,30 +727,33 @@ Even if {\i mORMot} will be more easily used in a project designed from scratch,
 Due to its modular design, you can integrate some framework bricks to your existing application:
 - You may add logging to your code - see @16@, to track unresolved issues, and add customer-side performance profiling;
 - Use low-level classes like {\f1\fs20 record} or {\i dynamic array} wrappers - see @48@, or our dynamic document storage via {\f1\fs20 variant} - see @80@, including @*JSON@ or binary persistence;
-- You can use the direct DB layers, including the {\f1\fs20 TQuery} emulation class, to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@, or switch to a @*NoSQL@ database - see @83@;
+- You can use the direct DB layers, including the {\f1\fs20 @*TQuery@} emulation class - see @133@ - to replace some @**BDE@ queries, or introduce nice unique features like direct database access or {\i @*array bind@ing} for very fast data insertion - see @27@, or switch to a @*NoSQL@ database - see @83@;
 - Reports could benefit of the {\f1\fs20 mORMotReport.pas} code-based system, which is very easy to use even on the server side (serving @*PDF@ files), when your business logic heavily relies on objects, not direct DB - see @67@;
 - HTTP requests may be made available using Client-Server services via methods - see @49@, e.g. for rendering HTML pages generated on the fly with {\i @*Mustache@} templates- see @81@, pictures or @*PDF@ reports;
 - You can little by little move your logic out of the client side code into some server services defined via interfaces, without the overhead of SOAP or WCF - see @63@; migration to @*SOA@ is IMHO the main benefit of {\i mORMot} for existing projects;
 - Make your application ready to offer a RESTful interface, e.g. for consuming JSON content via AJAX or mobile clients - see @86@;
 - New tables may be defined via the ORM/ODM features of {\i mORMot}, still hosted in your external SQL server - see @27@, as any previous data; in particular, mixed pure-ORM and regular-SQL requests may coexist; or {\i mORMot}'s data modeling may balance your storage among several servers (and technologies, like NoSQL);
+- Sharing the same tables between legacy code SQL and {\i mORMot} ORM is possible, but to avoid consistency problems, you should better follow some rules detailed @106@;
 - You may benefit from our very fast in-memory engine, a dedicated {\i @*SQLite3@}-based consolidation database or even the caching features - see @38@, shared on the server side, when performance is needed - it may help integrating some @*CQRS@ pattern ({\i Command Query Responsibility Segregation}) into your application via a @*REST@ful interface, and delegate some queries from your main database;
 - If you are still using an old version of {\i Delphi}, and can't easily move up due to some third party components or existing code base, {\i mORMot} will offer all the needed features to start ORM, N-Tier and SOA, starting with a {\i Delphi} 6 edition.
 {\i mORMot} implements the needed techniques for introducing what Michael Feathers calls, in his book {\i Working Effectively With Legacy Code}, a @**seam@. A seam is an area where you can start to cleave off some legacy code and begin to introduce changes. Even mocking abilities of {\i mORMot} - see @62@ - will help you in this delicate task - see @http://www.infoq.com/articles/Utilizing-Logging
 Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit and support for such a migration. The sooner, the better.
 \page
-: FAQ
+:123 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
 First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries targets the main article about a given concept or technical term.
-Feel free to give your feedback in the very same forum, asking new questions or improving answers!
-{\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes!
+Feel free to give your feedback at @http://synopse.info/forum asking new questions or improving answers!
+{\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes! Consider also the  slides available at @https://drive.google.com/folderview?id=0B0r8u-FwvxWdeVJVZnBhSEpKYkE
+{\b Where should I start?}\line Take a look at the {\i Architecture principles} @40@, then download and install the sources and compile and run the {\f1\fs20 TestSQL3.dpr} program as stated @113@. Check about @*ORM@ @3@, @*SOA@ @63@ and @*MVC@ @108@, then test the various samples (from the {\f1\fs20 SQLite3\\Samples} folder), especially 01, 02, 04, 11, 12, 14, 17, 26, 28, 30 and the {\f1\fs20 MainDemo}.
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
 {\b I am not a great fan of ORM, sorry, I still like SQL and have some experience of that. Some times sophisticated SQL query is hard to change to ORM code.}\line ORM can make development much easier; but you can use e.g. interface-based services and "manual" SQL statements - in this case, you have at hand @27@ classes in {\i mORMot}, which allow very high performance and direct export to JSON.
-{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can use standard {\i Delphi} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
+{\b I am tempted by using an ORM, but {\i mORMot} forces you to inherit from a root {\f1\fs20 @*TSQLRecord@} type, whereas I'd like to use any kind of object.}\line Adding attributes to an existing class is tempting, but would pollute your code at the end, mixing persistence and business logic: see {\i @*Persistence Ignorance@} and {\i @*Aggregates@} @124@. Our ORM does not rely on {\i generics}, but on the power of the object pascal {\f1\fs20 class} used with {\i @*convention over configuration@} - so our code is faster, and works with older versions of Delphi, or FreePascal.
+{\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document.
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation. Then you can still use RAD for UI design, but let business be abstracted in pure code.
-{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than method-based pattern, and will avoid generating any client class via a wizard - and additional security - see @77@ or @72@.\line If you used {\i DataSnap} to access a remote database and linked to VCL components, you would find in the {\f1\fs20 mORMotVCL.pas} unit a way to map JSON results, as returned by a {\i mORMot} server, to a {\f1\fs20 TDataSet} fast in-memory instance. See also sample "{\i 17 - TClientDataset use}".
+{\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} would be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see @77@ or @72@. If you used {\i DataSnap} to access a remote database and linked to VCL components, see the {\f1\fs20 mORMotVCL.pas} unit which can publish a data source for your UI.
 {\b What is the SMS? Do you know any advantage compared to JQuery?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
-{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line See {\i Client-Server process} @35@ - and sample {\i 09 - HttpApi web server} - and integrated {\i @*Mustache@} logic-less templates rendering - see @81@.
-{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a KISS approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
+{\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see @81@ - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See @108@ for more details, and discovering a sample "blog" application.
+{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 :40Architecture principles
@@ -709,21 +771,11 @@ All those points render possible any project implementation, up to complex {\i @
 : General design
 A general design of the {\i mORMot} architecture is shown in the following diagram:
 \graph mORMotDesign3 General mORMot architecture - Client Server implementation
+\ RESTful Client\RESTful Server\REST入SON
 \RESTful Client\RESTful Server\REST入SON
-subgraph cluster_0 {
-label="Client (Delphi)";
-\Services\RESTful Client
-\RESTful Client\Business rules\uses
-\User Interface\Business rules\uses
-\Reporting\ORM methods寸ver TSQLRecord\asks
-\ORM methods寸ver TSQLRecord\RESTful Client\requests
-\User Interface\ORM methods寸ver TSQLRecord\asks
-\User Interface\Services
-\User Interface\Reporting\runs
-\Services=ORM methods寸ver TSQLRecord
-}
 subgraph cluster_1 {
-label="              Server";
+label=" mORMot Server";
+\MVC/MVVM上eb Server\RESTful Server
 \RESTful Server\Business尸ules\uses
 \Business尸ules\ORM
 \Services夕mplementation\ORM
@@ -741,20 +793,61 @@ label="              Server";
 \ORM\in-memory tables入SON or binary files
 \ORM\external tables
 \ORM\NoSQL叉ngine
+\ORM\Redirected三SQLRestServer力RM
+\ORM\Redirected三SQLRestClient
 }
 \external tables\External乃atabase 1\SQL
 \external tables\External乃atabase 2
-\NoSQL叉ngine\MongoDB\direct兀ccess
+\NoSQL叉ngine\MongoDB
 subgraph cluster_2 {
 "External\nDatabase 1";
 }
 subgraph cluster_3 {
 "External\nDatabase 2";
 }
-subgraph cluster_ {
+subgraph cluster_4 {
 "MongoDB";
 }
 subgraph cluster_5 {
+\Redirected三SQLRestClient\Remote孑ORMot又erver\REST入SON
+}
+\Desktop Browser\MVC/MVVM上eb Server\HTTP人TML
+\Mobile Browser\MVC/MVVM上eb Server
+subgraph cluster_6 {
+label="Web Clients";
+"Desktop Browser";
+"Mobile Browser";
+}
+subgraph cluster_7 {
+label="REST Client (FPC/FMX/Smart/Java/C#..)";
+\ Services\ RESTful Client
+\ORM methods 寸ver TSQLRecord\ RESTful Client\requests
+\User Interface \ORM methods 寸ver TSQLRecord\asks
+\User Interface \ Services
+}
+subgraph cluster_8 {
+label="mORMot Client (Delphi)";
+\Services\RESTful Client
+\RESTful Client\Business rules\uses
+\User Interface\Business rules\uses
+\Reporting\ORM methods寸ver TSQLRecord\asks
+\ORM methods寸ver TSQLRecord\RESTful Client\requests
+\User Interface\ORM methods寸ver TSQLRecord\asks
+\User Interface\Services
+\User Interface\Reporting\runs
+\Services=ORM methods寸ver TSQLRecord
+}
+\
+;subgraph cluster_8 {
+;label="Client (Java/C#/JavaScript)";
+;\  Services\RESTful  Client
+;\REST Resources\RESTful  Client\requests
+;\User  Interface\REST Resources\uses
+;\User  Interface\  Services
+;}
+In addition, you may use the following transversal features:
+\graph mORMotDesign4 General mORMot architecture - Cross-Cutting features
+subgraph cluster_9 {
 label="Cross-Cutting features";
 "File process\nCompression";
 "Security\nCryptography";
@@ -765,19 +858,21 @@ label="Cross-Cutting features";
 \
 Don't be afraid. Such a drawing may sound huge and confusing, especially when you have a RAD background, and did not work much with modern design patterns.
 Following pages will detail and explain how the framework implements this architecture, and sample code is available to help you discovering the amazing {\i mORMot} realm.
-\page
 In the previous diagram, you can already identify some key concepts of {\i mORMot}:
-- Client-Server architecture;
-- Transmitting some JSON content over a RESTful architecture;
+- Cross-Platform, multi clients, and multi devices;
+- Can integrate to an existing code base or architecture;
+- Client-Server RESTful design;
 - Layered (multi-tier) implementation;
-- Process can be defined via a set of Services;
-- Business rules and data model are shared on both Client and Server sides;
-- Data is mapped by objects (ORM);
-- Databases can be one or several standard RDBMS (with auto-generated SQL), or fast in-memory objects lists;
+- Process can be defined via a set of Services (SOA);
+- Business rules and data model are shared by Clients and Server;
+- Data is mapped by objects (ORM/ODM);
+- Databases can be an embedded {\i SQLite3}, one or several standard RDBMS (with auto-generated SQL), a {\i MongoDB} NoSQL engine, fast in-memory objects lists, or another {\i mORMot} server;
 - Security (authentication and authorization) is integrated to all layers;
 - User interface and reporting classes are available;
+- You can write a MVC/MVVM AJAX or Web Application from your ORM/SOA methods;
+- Based on simple and proven patterns (REST, JSON, MVC, SOLID);
 - A consistent testing and debugging API is integrated;
-- Optimized low-level process of binary and text content.
+- Optimized for both scaling and stability.
 \page
 : Architecture Design Process
 First point is to state that you can't talk about architecture in isolation. Architecture is always driven by the actual needs of the application, not by whatever the architect read about last night and is dying to see how it works in the real world. There is no such "one architecture fits all" nor "one framework fits all" solution. Architecture is just a thinking of {\i how} you are building your own software.
@@ -848,7 +943,7 @@ rankdir=LR;
 In the framework, the {\i model} is not necessarily merely a database; the {\i model} in MVC is both the data and the business/domain logic needed to manipulate the data in the application. In our ORM, a model is implemented via a {\f1\fs20 @*TSQLModel@} class, which centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
 The {\i views} can be implemented using:
 - For Desktop clients, a full set of User-Interface units of the framework, which is mostly auto-generated from code - they will consume the {\i model} as reference for rendering the data;
-- For Web clients, an integrated high-speed {\i @*Mustache@} rendering engine - see @81@ - is able to render HTML pages with logic-less templates;
+- For Web clients, an integrated high-speed {\i @*Mustache@} rendering engine - see @81@ - is able to render HTML pages with logic-less templates, and {\i controller} methods written in Delphi - see @108@;
 - For @*AJAX@ clients, the server side is easy to be reached from @*REST@ful @*JSON@ services.
 The {\i controller} is mainly already implemented in our framework, within the RESTful commands, and will interact with both the associated {\i view} (e.g. for refreshing the User Interface) and {\i model} (for data handling). Some custom actions, related to the business logic, can be implemented via some custom {\f1\fs20 TSQLRecord} classes or via custom RESTful @*Service@s - see @11@.
 \page
@@ -860,7 +955,7 @@ Both @*ORM@ and @*SOA@ aspects of our @*REST@ful framework make it easy to devel
 \Logic Tier\Data Tier
 \
 The {\i Synopse mORMot Framework} follows this development pattern:
-- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from {\i Delphi} classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
+- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from {\i Delphi} classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
 - {\i Logic Tier} is performed by pure ORM aspect and SOA implementation: you write {\i Delphi} classes which are mapped by the {\i Data Tier} into the database, and you can write your business logic as Services called as {\i Delphi} {\f1\fs20 interface}, up to a {\i @*Domain-Driven@} design - see @54@ - if your project reaches some level of complexity;
 - {\i Presentation Tier} is either a {\i Delphi} Client, or an @*AJAX@ application, because the framework can communicate using @*REST@ful @*JSON@ over @*HTTP@/1.1 (the {\i Delphi} Client User Interface is generated from Code, by using @*RTTI@ and structures, not as a RAD - and the Ajax applications need to be written by using your own tools and @*JavaScript@ framework, there is no "official" Ajax framework included yet).
 In fact, {\i mORMot} can scales up to a {\i @*Domain-Driven@} Design four-tier architecture - see @54@ - as such:
@@ -973,10 +1068,10 @@ Our {\i Delphi} {\f1\fs20 class} instances are not directly usable with a relati
 Sometimes, there will be nothing better than a tuned SQL statement, able to aggregate and join information from several tables. But most of the time, you will need just to perform some basic operations, known as @**CRUD@ (for {\i Create Retrieve Update Delete} actions) on well identified objects: this is where ORM may give you a huge hint, since it is able to generate the SQL statements for you.
 The ORM works in fact as such:
 \graph mORMotORMprocess ORM Process
-\object instance\ORM\CRUD寸perations
+\object夕nstance\ORM\CRUD寸perations
 \ORM\SQL\mapping
-\SQL\RDBMS
-\ORM\object instance
+\SQL\RDBMS\DB client
+\ORM\object夕nstance
 \SQL\ORM
 \RDBMS\SQL
 \
@@ -1161,9 +1256,9 @@ With {\i mORMot}, your software solution will never be stuck in a dead-end. You'
 
 [SAD-Main]
 SourcePath=Lib\SQLite3
-IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Zeos\src
+IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Lib\SQLite3\DDD\dom;Lib\SQLite3\DDD\infra;Zeos\src
 ;Lib\SQLite3\Samples\MainDemo
-SourceFile=TestSQL3.dpr;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
+SourceFile=TestSQL3.dpr;SynLog.pas;SynTests.pas;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
 Version=1.18
 TitleOffset=0
@@ -1176,6 +1271,8 @@ The {\i Synopse mORMot} framework consists in a huge number of units, so we will
 node [shape="box"];
 rankdir=LR;
 \mORMot.pas\SynCommons.pas
+\mORMot.pas\SynTests.pas
+\mORMot.pas\SynLog.pas
 \mORMotDB.pas\mORMot.pas
 \mORMotDB.pas\SynCommons.pas
 \mORMotDB.pas\SynDB.pas
@@ -1186,10 +1283,11 @@ rankdir=LR;
 \mORMotSQlite3.pas\SynSQLite3.pas又ynSQLite3Static.pas
 \SynSQLite3.pas又ynSQLite3Static.pas\SynCommons.pas
 \SynDB.pas\SynCommons.pas
+\SynDB.pas\SynLog.pas
 \SynDBSQlite3.pas\SynDB.pas
 \SynDBSQlite3.pas\SynCommons.pas
 \SynDBSQlite3.pas\SynSQLite3.pas又ynSQLite3Static.pas
-\SynDBOracle.pas又ynDBODBC.pas又ynOleDB.pas又ynDBZEOS.pas又ynDBDataset.pas又ynDBFireDAC.pas又ynDBUniDAC.pas又ynDBNexusDB.pas又ynDBBDE.pas\SynDB.pas
+\SynDBOracle.pas又ynDBODBC.pas又ynOleDB.pas又ynDBZEOS.pas又ynDBDataset.pas又ynDBFireDAC.pas又ynDBUniDAC.pas又ynDBNexusDB.pas又ynDBBDE.pas又ynDBRemote.pas\SynDB.pas
 \mORMotDB.pas\SynSQLite3.pas又ynSQLite3Static.pas
 \mORMotReport.pas\SynCommons.pas
 \mORMotReport.pas\SynPdf.pas
@@ -1200,7 +1298,11 @@ rankdir=LR;
 \HTTP\SynCommons.pas
 \mORMotMongoDB.pas\SynMongoDB.pas
 \mORMotMongoDB.pas\mORMot.pas
+\mORMotMVC.pas\mORMot.pas
+\mORMotMVC.pas\SynCommons.pas
+\mORMotMVC.pas\SynMustache.pas
 \SynMongoDB.pas\SynCommons.pas
+\SynMongoDB.pas\SynLog.pas
 \SynMongoDB.pas\SynCrtSock.pas
 =UI=mORMotUI.pas孑ORMotToolBar.pas孑ORMoti18n.pas孑ORMotUILogin.pas孑ORMotUIEdit.pas孑ORMotUIQuery.pas孑ORMotUIOptions.pas
 =HTTP=mORMotHttpClient.pas孑ORMotHttpServer.pas
@@ -1212,16 +1314,16 @@ rankdir=LR;
 The main units you have to be familiar with are the following:
 |%30%70
 |\b Unit name|Description\b0
-|{\f1\fs20 SynCommons.pas}|Common types, classes and functions
+|{\f1\fs20 SynCommons.pas}\line {\f1\fs20 SynLog.pas}\line {\f1\fs20 SynTests.pas}|Common types, classes and functions
 |{\f1\fs20 mORMot.pas}|Main unit of the @*ORM@ / @*SOA@ framework
 |{\f1\fs20 SynSQLite3.pas\line SynSQLite3Static.pas}|{\i @*SQLite3@} database engine
-|{\f1\fs20 SynSM*.pas}|{\i SpiderMonkey} JavaScript engine
 |{\f1\fs20 mORMotSQLite3.pas}|Bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 @*SynDB@.pas\line SynDB*.pas}|Direct RDBMS access classes
 |{\f1\fs20 mORMotDB.pas}|ORM external {\f1\fs20 SynDB.pas} access, via {\i SQlite3} virtual tables
 |{\f1\fs20 SynMongoDB.pas\line mORMotMongoDB.pas}|Direct access to a {\i @*MongoDB@} server
-|{\f1\fs20 SynCrtSock.pas}|Implements @*HTTP@/1.1 client and server protocol
-|{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas}|@*REST@ful HTTP/1.1 Client and Server
+|{\f1\fs20 SynSM.pas}\line {\f1\fs20 SynSMAPI.pas}|{\i SpiderMonkey} JavaScript engine
+|{\f1\fs20 mORMotHttpClient.pas\line mORMotHttpServer.pas\line SynCrtSock.pas}|@*REST@ful HTTP/1.1 Client and Server
+|{\f1\fs20 mORMotMVC.pas\line SynMustache.pas}|@*MVC@ classes for writing @*Web Application@s
 |{\f1\fs20 mORMotUI*.pas}|Grid and Forms User Interface generation
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotReport.pas}|Integrated Reporting engine
@@ -1234,10 +1336,10 @@ Then detailed information will be available in the second part of this document 
 First of all, let us introduce some cross-cutting features, used everywhere in the {\i Synopse} source code. Even if you do not need to go deeply into the implementation details, it will help you not be disturbed with some classes and types you may encounter in the framework source, and its documentation.
 It was a design choice to use some custom low-level types, classes and functions instead of calling the official {\i Delphi} RTL.\line Benefits could be:
 - Cross-platform and cross-compiler support (e.g. leverage specificities, about memory model or RTTI);
-- Unicode support for all version of {\i Delphi}, even before {\i Delphi} 2009, or with @*FPC@;
+- Unicode support for all versions of {\i Delphi}, even before {\i Delphi} 2009, or with @*FPC@;
 - Optimized for process speed, multi-thread friendliness and re-usability;
 - Sharing of most common features (e.g. for text/data processing);
-- KISS design.
+- @*KISS@ and consistent design.
 In order to use {\i Synopse mORMot framework}, you should better be familiar with some of those definitions.
 First of all, a {\f1\fs20 @*Synopse.inc@} include file is provided, and appears in most of the framework units:
 !{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
@@ -1246,10 +1348,10 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - Unicode and @*UTF-8@;
 - {\f1\fs20 @*Currency@} type;
 - {\i @*Dynamic array@} wrappers ({\f1\fs20 TDynArray} and {\f1\fs20 TDynArrayHashed});
-- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage;
-- @*Log@ging.
+- {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage.
+Other shared features available in {\f1\fs20 SynTests.pas} and {\f1\fs20 SynLog.pas} would be detailed later, i.e. @*Test@ing and @*Log@ging - see @12@.
 :32 Unicode and UTF-8
-Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE6 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
+Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE7 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
 Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
@@ -1257,7 +1359,7 @@ Some string types have been defined, and used in the code for best cross-compile
 - Generic {\f1\fs20 string} for {\i @*i18n@} (e.g. in unit {\f1\fs20 mORMoti18n}), i.e. text ready to be used within the VCL, as either {\f1\fs20 AnsiString} (for {\i Delphi} 2 to 2007) or {\f1\fs20 UnicodeString} (for {\i Delphi} 2009 and later);
 - {\f1\fs20 RawUnicode} in some technical places (e.g. direct Win32 *W() API call in {\i Delphi} 7) - note: this type is NOT compatible with {\i Delphi} 2009 and later {\f1\fs20 UnicodeString};
 - {\f1\fs20 @**RawByteString@} for byte storage (e.g. for {\f1\fs20 FileFromString()} function);
-- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @*WideString@} before {\i Delphi} 2009, and {\f1\fs20 UnicodeString} since);
+- {\f1\fs20 @**SynUnicode@} is the fastest available Unicode {\i native} string type, depending on the compiler used (i.e. {\f1\fs20 @**WideString@} before {\i Delphi} 2009, and {\f1\fs20 UnicodeString} since);
 - Some special conversion functions to be used for {\i Delphi} 2009+ {\f1 UnicodeString} (defined inside {\f1\fs20 \{$ifdef UNICODE\}...\{$endif\}} blocks);
 - Never use {\f1\fs20 AnsiString} directly, but one of the types above.
 Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used in our framework when defining textual properties in a {\f1\fs20 @*TSQLRecord@} and for all internal data processing. It is only when you're reaching the User Interface layer that you may convert explicitly the {\f1\fs20 RawUTF8} content into the generic VCL {\f1\fs20 string} type, using either the {\f1\fs20 Language. UTF8ToString} method (from {\f1\fs20 mORMoti18n.pas} unit) or the following function from {\f1\fs20 SynCommons.pas}:
@@ -1271,6 +1373,7 @@ Note that {\f1\fs20 RawUTF8} is the preferred {\f1\fs20 string} type to be used 
 !function UTF8ToString(const Text: RawUTF8): string;
 Of course, the {\f1\fs20 StringToUTF8} method or function are available to send back some text to the @*ORM@ layer.\line A lot of dedicated conversion functions (including to/from numerical values) are included in {\f1\fs20 SynCommons.pas}. Those were optimized for speed and multi-thread capabilities, and to avoid implicit conversions involving a temporary {\f1\fs20 string} variable.
 Warning during the compilation process are not allowed, especially under Unicode version of {\i Delphi} (e.g. {\i Delphi} 2010): all string conversion from the types above are made explicitly in the framework's code, to avoid any unattended data loss.
+If you are using older version of Delphi, and have an existing code base involving a lot of {\f1\fs20 @*WideString@} variables, you may take a look at the {\f1\fs20 @*SynFastWideString.pas@} unit. Adding this unit in the top of your {\f1\fs20 .dpr} uses clauses would let all {\f1\fs20 WideString} process use the Delphi heap and its very efficient {\i @*FastMM4@} memory manager, instead of the much slower BSTR Windows API. Performance gain can be more than 50 times, if you existinc code use a lot of {\f1\fs20 WideString} variables. Note that using this unit would break the compatibility with BSTR/COM/OLE kind of string, so is not to be used with COM objects. In all cases, if you need {\i Unicode} support with older versions of Delphi, consider using our {\f1\fs20 RawUTF8} type instead, which is much better integrated with our framework.
 :33 Currency handling
 Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly to map the variables to their internal {\f1\fs20 Int64} binary representation, as such:
 !function CompCurrency(var A,B: currency): Int64;
@@ -1347,7 +1450,7 @@ Here is how those new methods work:
 !  if GroupA.Find(v)<0 then // fast binary search
 !    ShowMessage('Error: 1500 not found!');
 Some unique methods like {\f1\fs20 Slice, Reverse} or {\f1\fs20 AddArray} are also available, and mimic well-known Python methods.
-Still closer to the generic paradigm, working for {\i Delphi} 6 up to XE6, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
+Still closer to the generic paradigm, working for {\i Delphi} 6 up to XE7, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
 :  Capacity handling via an external Count
 One common speed issue with the default usage of {\f1\fs20 TDynArray} is that the internal memory buffer is reallocated when you change its length, just like a regular {\i Delphi} {\i dynamic array}.
 That is, whenever you call {\f1\fs20 Add} or {\f1\fs20 Delete} methods, an internal call to {\f1\fs20 SetLength(DynArrayVariable)} is performed. This could be slow, because it always executes some extra code, including a call to {\f1\fs20 ReallocMem}.
@@ -1392,7 +1495,7 @@ The {\f1\fs20 TDynArrayHashed} wrapper allow implementation of a dictionary usin
 !    procedure ReleaseAllDBStatements;
 !  end;
 Those definitions will prepare a {\i dynamic array} storing a {\f1\fs20 TSQLRequest} and {\i SQL statement} association, with an external {\f1\fs20 Count} variable, for better speed.
-It will be used as such in {\f1\fs20 TSQLRestServerDB}:
+It will be used as such in {\f1\fs20 @*TSQLRestServerDB@}:
 !constructor TSQLRestServerDB.Create(aModel: TSQLModel; aDB: TSQLDataBase);
 !begin
 !  fStatementCache.Init(aDB);
@@ -1473,7 +1576,7 @@ With {\f1\fs20 _Obj()}, an {\i object} {\f1\fs20 variant} instance will be initi
 !  V1 := _Obj(['name','John','year',1972]);
 !  V2 := _Obj(['name','John','doc',_Obj(['one',1,'two',2.5])]); // with nested objects
 Then you can convert those objects into JSON, by two means:
-- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one UTF-8 content;
+- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one @*UTF-8@ content;
 - Or by trans-typing the {\f1\fs20 variant} instance into a string (this will be slower, but is possible).
 ! writeln(VariantSaveJson(V1)); // explicit conversion into RawUTF8
 ! writeln(V1);                  // implicit conversion from variant into string
@@ -1521,7 +1624,7 @@ You may also trans-type your {\f1\fs20 variant} instance into a {\f1\fs20 TDocVa
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
 By definition, trans-typing via a {\f1\fs20 TDocVariantData record} is slightly faster than using late-binding.
-But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} function, which works even for members returned as {\f1\fs20 varByRef} via late binding:
+But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 DocVariantDataSafe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
 ! if DocVariantType.IsOfType(V1) then
 ! with TDocVariantData(V1) do             // direct transtyping
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
@@ -1536,6 +1639,7 @@ But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 T
 !  // will write to the console:
 !  //  one=1
 !  //  two=2.5
+In practice, {\f1\fs20 DocVariantDataSafe(aVariant)^} may be preferred, since {\f1\fs20 DocVariantData(aVariant)^} would raise an {\f1\fs20 EDocVariant} exception if {\f1\fs20 aVariant} is not a {\f1\fs20 TDocVariant}, but {\f1\fs20 DocVariantDataSafe(aVariant)^} would return a "fake" void {\f1\fs20 DocVariant} instance, in which {\f1\fs20 Count=0} and {\f1\fs20 Kind=dbUndefined}.
 You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack, if you do not need any {\f1\fs20 variant}-oriented access to the object, but just some local storage:
 !var Doc1,Doc2: TDocVariantData;
 ! ...
@@ -1566,7 +1670,7 @@ With {\f1\fs20 _Arr()}, an {\i array} {\f1\fs20 variant} instance will be initia
 !  V1 := _Arr(['John','Mark','Luke']);
 !  V2 := _Obj(['name','John','array',_Arr(['one','two',2.5])]); // as nested array
 Then you can convert those objects into JSON, by two means:
-- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one UTF-8 content;
+- Using the {\f1\fs20 VariantSaveJson()} function, which return directly one @*UTF-8@ content;
 - Or by trans-typing the {\f1\fs20 variant} instance into a string (this will be slower, but is possible).
 ! writeln(VariantSaveJson(V1));
 ! writeln(V1);  // implicit conversion from variant into string
@@ -1697,286 +1801,35 @@ In all cases, be aware that, like any {\f1\fs20 class} type, the {\f1\fs20 const
 :   Integration with other mORMot units
 In fact, whenever a dynamic {\i schema-less} storage structure is needed, you may use a {\f1\fs20 TDocVariant} instance instead of {\f1\fs20 class} or {\f1\fs20 record} strong-typed types:
 - Client-Server ORM - see @3@ - will support {\f1\fs20 TDocVariant} in any of the {\f1\fs20 TSQLRecord variant} published properties (and store them as @*JSON@ in a text column);
-- Interface-based services - see  @63@ - will support {\f1\fs20 TDocVariant} as {\f1\fs20 variant} parameters of any method, which make them as perfect {\i DTO};
+- Interface-based services - see @63@ - will support {\f1\fs20 TDocVariant} as {\f1\fs20 variant} parameters of any method, which make them as perfect {\i DTO};
 - Since JSON support is implemented with any {\f1\fs20 TDocVariant} value from the ground up, it makes a perfect fit for working with AJAX clients, in a script-like approach;
 - If you use our {\f1\fs20 SynMongoDB.pas mORMotMongoDB.pas} units to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access nested @*BSON@ arrays or objects documents - that is, it will allow proper @*ODM@ storage;
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
 We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like {\i Python} or {\i JavaScript}: {\i Delphi} is perfectly able to handle dynamic coding!
 \page
-:16 Enhanced logging
-A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
-Here are some of its features:
-- Logging with a {\i set} of levels, not only a level scale;
-- Fast, low execution overhead;
-- Can load {\f1\fs20 .map} file symbols to be displayed in logging (i.e. source code file name and line numbers are logged instead of a hexadecimal value);
-- Compression of {\f1\fs20 .map} into binary {\f1\fs20 .mab} (900 KB -> 70 KB);
-- Inclusion of the {\f1\fs20 .map/.mab} into the {\f1\fs20 .exe}, with very slow size increase;
-- Exception logging ({\i Delphi} or low-level exceptions) with unit names and line numbers;
-- Optional stack trace with units and line numbers;
-- Methods or procedure recursive tracing, with {\i Enter} and {\i auto-Leave} (using a fake {\f1\fs20 interface} instance);
-- High resolution time stamps, for customer-side profiling of the application execution;
-- Set / enumerates / {\f1\fs20 TList} / {\f1\fs20 TPersistent} / {\f1\fs20 TObjectList} / dynamic array JSON serialization;
-- Per-thread or global logging;
-- Optional multiple log files on the same process;
-- Optional rotation when main log reaches a specified size, with compression of the rotated logs;
-- Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
-- Optional colored echo to a console window, for interactive debugging;
-- Fast log viewer tool available, including thread filtering and customer-side execution profiling.
-:  Setup logging
-Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
-For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
-In short, you can add logging to your program, just by using the {\f1\fs20 TSynLog} class, as such:
-!  TSynLog.Add.Log(sllInfo,Stats.DebugMessage);
-This line will log the {\f1\fs20 Stats.DebugMessage} text, with a {\f1\fs20 sllInfo} notification level. See the description of all {\f1\fs20 Log()} overloaded methods of the {\f1\fs20 ISynLog} interface, to find out how your project can easily log events.
-First of all, you need to define your logging setup via code:
-!  with TSynLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    //Level := [sllException,sllExceptionOS];
-!    //HighResolutionTimeStamp := true;
-!    //AutoFlushTimeOut := 5;
-!    OnArchive := EventArchiveSynLZ;
-!    //OnArchive := EventArchiveZip;
-!    ArchiveAfterDays := 1; // archive after one day
-!  end;
-The main setting here is {\f1\fs20 TSynLog.Family.Level := ...} which defines which levels are to be logged. That is, if {\f1\fs20 sllInfo} is part of {\f1\fs20 TSynLog.Family.Level}, any {\f1\fs20 TSynLog.Add.Log(sllInfo,...)} command will log the corresponding content - otherwise, it will be a no-operation. {\f1\fs20 LOG_VERBOSE} is a constant setting all levels at once.
-You have several debugging levels available, and even 4 custom types:
-!  TSynLogInfo = (
-!    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
-!    sllEnter, sllLeave,
-!    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-!    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-!    sllServiceCall, sllServiceReturn, sllUserAuth,
-!    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
-Here are the purpose of each logging level:
-- {\f1\fs20 sllInfo} will log general information events;
-- {\f1\fs20 sllDebug} will log detailed debugging information;
-- {\f1\fs20 sllTrace} will log low-level step by step debugging information;
-- {\f1\fs20 sllWarning} will log unexpected values (not an error);
-- {\f1\fs20 sllError} will log errors;
-- {\f1\fs20 sllEnter} will log every method start;
-- {\f1\fs20 sllLeave} will log every method quit;
-- {\f1\fs20 sllLastError} will log the {\f1\fs20 GetLastError} OS message;
-- {\f1\fs20 sllException} will log all exception raised - available since Windows XP;
-- {\f1\fs20 sllExceptionOS} will log all OS low-level exceptions ({\f1\fs20 EDivByZero, ERangeError, EAccessViolation}...);
-- {\f1\fs20 sllMemory} will log memory statistics;
-- {\f1\fs20 sllStackTrace} will log caller's stack trace (it is by default part of {\f1\fs20 TSynLogFamily. LevelStackTrace} like {\f1\fs20 sllError, sllException, sllExceptionOS, sllLastError} and {\f1\fs20 sllFail});
-- {\f1\fs20 sllFail} was defined for {\f1\fs20 TSynTestsLogged. Failed} method, and can be used to log some customer-side assertions (may be notifications, not errors);
-- {\f1\fs20 sllSQL} is dedicated to trace the SQL statements;
-- {\f1\fs20 sllCache} should be used to trace any internal caching mechanism (it is used for instance by our SQL statement caching);
-- {\f1\fs20 sllResult} could trace the SQL results, JSON encoded;
-- {\f1\fs20 sllDB} is dedicated to trace low-level database engine features;
-- {\f1\fs20 sllHTTP} could be used to trace HTTP process;
-- {\f1\fs20 sllClient/sllServer} could be used to trace some Client or Server process;
-- {\f1\fs20 sllServiceCall/sllServiceReturn} to trace some remote service or library;
-- {\f1\fs20 sllUserAuth} to trace user authentication (e.g. for individual requests);
-- {\f1\fs20 sllCustom1..sllCustom4} items can be used for any purpose by your programs;
-- {\f1\fs20 sllNewRun} will be written when a process re-opens a rotated log.
-Logging is not using directly a {\f1\fs20 TSynLogInfo} level, but the following {\f1\fs20 set}:
-!  /// used to define a logging level
-!  // - i.e. a combination of none or several logging event
-!  // - e.g. use LOG_VERBOSE constant to log all events
-!  TSynLogInfos = set of TSynLogInfo;
-Most logging tools in the wild use a level scale, i.e. with a hierarchy, excluding the lower levels when one is selected.
-Our logging classes use a {\i set}, and not directly a particular level, so you are able to select which exact events are worth recording. In practice, we found this pattern to make a lot of sense and to be much more efficient for support.
-:  Call trace
-The logging mechanism can be used to trace recursive calls. It can use an interface-based mechanism to log when you enter and leave any method:
-!procedure TMyDB.SQLExecute(const SQL: RawUTF8);
-!var ILog: ISynLog;
-!begin
-!  ILog := TSynLogDB.Enter(self,'SQLExecute');
-!  // do some stuff
-!  ILog.Log(sllInfo,'SQL=%',[SQL]);
-!end; // when you leave the method, it will write the corresponding event to the log
-It will be logged as such:
-$20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
-$20110325 19325801 info   SQL=SELECT * FROM Table;
-$20110325 19325801  -
-Note that by default you have human-readable {\i time and date} written to the log, but it is also possible to replace this timing with {\i high-resolution timestamps}. With this, you'll be able to profile your application with data coming from the customer side, on its real computer. Via the {\f1\fs20 Enter} method (and its {\i auto-Leave} feature), you have all information needed for this.
-:  Including symbol definitions
-In the above logging content, the method name is set in the code (as {\f1\fs20 'SQLExecute'}). But if the logger class is able to find a {\f1\fs20 .map} file associated to the {\f1\fs20 .exe}, the logging mechanism is able to read this symbol information, and write the exact line number of the event.
-By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the {\i Delphi} IDE.
-In the following log entries, you'll see both high-resolution time stamp, and the entering and leaving of a {\f1\fs20 TTestCompression.TestLog} method traced with no additional code (with accurate line numbers, extracted from the {\f1\fs20 .map} content):
-$0000000000000B56  +    TTestCompression(00AB3570).000E6C79 SynSelfTests.TTestCompression.TestLog (376)
-$0000000000001785  -
-There is already a dedicated {\f1\fs20 TSynLogFile} class able to read the {\f1\fs20 .log} file, and recognize its content.
-The first time the {\f1\fs20 .map} file is read, a {\f1\fs20 .mab} file is created, and will contain all symbol information needed. You can send the {\f1\fs20 .mab} file with the {\f1\fs20 .exe} to your client, or even embed its content to the {\f1\fs20 .exe} (see the {\f1\fs20 Map2Mab.dpr} sample file located in the {\f1\fs20 Samples\\11 - Exception logging\\} folder).
-This {\f1\fs20 .mab} file is very optimized: for instance, a {\f1\fs20 .map} of 927,984 bytes compresses into a 71,943 {\f1\fs20 .mab} file.
-:  Exception handling
-Of course, this @*log@ging mechanism is able to intercept the raise of exceptions, including the worse (e.g. {\f1\fs20 EAccessViolation}), to be logged automatically in the log file, as such:
-$000000000000090B EXCOS EAccessViolation (C0000005) at 000E9C7A SynSelfTests.Proc1 (785)  stack trace 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9E2E SynSelfTests.TestsLog (818) 000EA0FB SynSelfTests (853) 00003BF4 System.InitUnits 00003C5B System.@StartExe 000064AB SysInit.@InitExe 000EA3EC TestSQL3 (153)
-The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level {\i Delphi} exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
-For instance, if you add to your program:
-!uses
-!  SynCommons;
-!(...)
-!  TSynLog.Family.Level := [sllExceptionOS];
-all OS exceptions (excluding pure {\i Delphi} exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
-!TSynLog.Family.Level := [sllException,sllExceptionOS];
-will trace also {\i Delphi} exceptions, for instance.
-You can specify some {\f1\fs20 Exception} class to be ignored, by adding them to {\f1\fs20 Family.ExceptionIgnore} internal list. It could make sense to add this setting, if your code often triggers some non-breaking exceptions, e.g. with {\f1\fs20 StrToInt()}:
-!  TSynLog.Family.ExceptionIgnore.Add(EConvertError);
-If your {\i Delphi} code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
-You can set the following global variable to assign a customized callback, and be able to customize the logging content associated to any exception:
-!type
-!  /// global hook callback to customize exceptions logged by TSynLog
-!  // - should return FALSE if Context.EAddr and Stack trace is to be appended
-!  TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
-!
-!var
-!  /// allow to customize the Exception logging message
-!  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
-The {\f1\fs20 Context: TSynLogExceptionContext} content is to be used to append some text to the specified {\f1\fs20 TTextWriter} instance.
-An easier possibility is to inherit your custom exception class from {\f1\fs20 ESynException}, and override its unique virtual method:
-!  /// generic parent class of all custom Exception types of this unit
-!  ESynException = class(Exception)
-!  public
-!    /// can be used to customize how the exception is logged
-!    // - this default implementation will call the DefaultSynLogExceptionToStr()
-!    // callback or TSynLogExceptionToStrCustom, if defined
-!    // - override this method to provide a custom logging content
-!    // - should return TRUE if Context.EAddr and Stack trace is not to be
-!    // written (i.e. as for any TSynLogExceptionToStr callback)
-!!    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
-!  end;
-See {\f1\fs20 TSynLogExceptionContext} to check the execution context, and the implementation of the {\f1\fs20 function DefaultSynLogExceptionToStr()} function.
-:  Serialization
-{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynCommons} unit - see @48@.
-The {\f1\fs20 TSQLLog} class (using the enhanced @*RTTI@ methods defined in {\f1\fs20 mORMot.pas} unit) is even able to serialize {\f1\fs20 @*TSQLRecord@, @*TPersistent@, TList} and {\f1\fs20 @*TCollection@} instances as JSON, or any other class instance, after call to {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@}.
-For instance, the following code:
-!procedure TestPeopleProc;
-!var People: TSQLRecordPeople;
-!    Log: ISynLog;
-!begin
-!  Log := TSQLLog.Enter;
-!  People := TSQLRecordPeople.Create;
-!  try
-!    People.ID := 16;
-!    People.FirstName := 'Louis';
-!    People.LastName := 'Croiv嶵aton';
-!    People.YearOfBirth := 1754;
-!    People.YearOfDeath := 1793;
-!    Log.Log(sllInfo,People);
-!  finally
-!    People.Free;
-!  end;
-!end;
-will result in the following log content:
-$0000000000001172  +    000E9F67 SynSelfTests.TestPeopleProc (784)
-$000000000000171B info      {"TSQLRecordPeople(00AB92E0)":{"ID":16,"FirstName":"Louis","LastName":"Croiv嶵aton","Data":"","YearOfBirth":1754,"YearOfDeath":1793}}
-$0000000000001731  -
-:  Multi-threaded applications
-You can define several @*log@ files per process, and even a per-thread log file, if needed (it could be sometimes handy, for instance on a server running the same logic in parallel in several threads).
-The logging settings are made at the logging class level. Each logging class (inheriting from {\f1\fs20 TSynLog}) has its own {\f1\fs20 TSynLogFamily} instance, which is to be used to customize the logging class level. Then you can have several instances of the individual {\f1\fs20 TSynLog} classes, each class sharing the settings of the {\f1\fs20 TSynLogFamily}.
-You can therefore initialize the "family" settings before using logging, like in this code which will force to log all levels ({\f1\fs20 LOG_VERBOSE}), and create a per-thread log file, and write the {\f1\fs20 .log} content not in the {\f1\fs20 .exe} folder, but in a custom directory:
-! with TSynLogDB.Family do
-! begin
-!   Level := LOG_VERBOSE;
-!!   PerThreadLog := ptOneFilePerThread;
-!   DestinationPath := 'C:\Logs';
-! end;
-If you specifies {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} for the family, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} - the supplied {\f1\fs20 LogView} tool will handle it as expected. This can be very useful for a multi-threaded server process, e.g. as implement with {\i mORMot}'s Client-Server classes @35@.
-:  Log to the console
-For debugging purposes, it could be very handy to output the logging content to a console window. It enables interactive debugging of a Client-Server process, for instance: you can interact with the Client, then look in real time at the server console window, and inspect which requests are processed, without the need to open the log file.
-The {\f1\fs20 EchoToConsole} property enable you to select which events are to be echoed on the console (perhaps you expect only errors to appear, for instance).
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!!    EchoToConsole := LOG_VERBOSE; // log all events to the console
-!  end;
-Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
-Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and flushes each row to the log file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
-:  Automated log archival
-Log archives can be created with the following settings:
-! with TSynLogDB.Family do
-! begin
-!  (...)
-!  OnArchive := EventArchiveZip;
-!  ArchivePath := '\\Remote\WKS2302\Archive\Logs'; // or any path
-! end;
-The {\f1\fs20 ArchivePath} property can be set to several functions, taking a timeout delay from the {\f1\fs20 ArchiveAfterDays} property value:
-- {\f1\fs20 nil} is the default value, and won't do anything: the {\f1\fs20 .log} will remain on disk until they will be deleted by hand;
-- {\f1\fs20 EventArchiveDelete} in order to delete deprecated {\f1\fs20 .log} files;
-- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
-- {\f1\fs20 SynZip.EventArchiveZip} will archive the {\f1\fs20 .log} files in {\f1\fs20 ArchivePath\\log\\YYYYMM.zip} files, grouping every .
-{\i SynLZ} files are less compressed, but created much faster than {\f1\fs20 .zip} files. However, {\f1\fs20 .zip} files are more standard, and on a regular application, compression speed won't be an issue for the application.
-:  Log files rotation
-You can set {\f1\fs20 TSynLogFamily.RotateFileCount} and {\f1\fs20 RotateFileSizeKB} properties, to enable log file rotation:
-- If both values are > 0, the log file will have a fixed name, without any time-stamp within;
-- {\f1\fs20 RotateFileSizeKB} will define the maximum size of the main uncompressed log file
-- {\f1\fs20 RotateFileCount} will define how many files are kept on disk - note that rotated files are compressed using {\i SynLZ}, so compression will be very fast.
-Log file rotation is as easy as:
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!    RotateFileCount := 5;
-!    RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
-!  end;
-Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
-- {\f1\fs20 TestSQL3.log} which will be the latest log file, uncompressed;
-- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i LogViewer} tool is able to uncompress those {\f1\fs20 .synlz} files directly.
-Note that in this case, {\f1\fs20 PerThreadLog} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single process to run.
-:  Integration within tests
-Logging is integrated within the unit @*test@ing classes, so that any failure will create an entry in the log with the source line, and stack trace:
-$C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-13)
-$Host=Laptop User=MyName CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
-$TSynLogTest 1.13 2011-04-13 05:40:25
-$
-$20110413 05402559 fail  TTestLowLevelCommon(00B31D70) Low level common: TDynArray "dynamic array failure" stack trace 0002FE0B SynCommons.TDynArray.Init (15148) 00036736 SynCommons.Test64K (18206) 0003682F SynCommons.TTestLowLevelCommon._TDynArray (18214) 000E9C94 TestSQL3 (163)
-The difference between a test suit without logging ({\f1\fs20 TSynTests}) and a test suit with logging ({\f1\fs20 TSynTestsLogged}) is only this overridden method:
-!procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
-!begin
-!  inherited;
-!  with TestCase[fCurrentMethod] do
-!    fLogFile.Log(sllFail,'%: % "%"',
-!      [Ident,TestName[fCurrentMethodIndex],msg],aTest);
-!end;
-In order to enable tests logging, you have just to enable it, e.g. with:
-! TSynLogTestLog.Family.Level := LOG_VERBOSE;
-You can optionally redirect the following global variable at program initialization, to share testing events with the main {\i mORMot} logs:
-!  with TSQLLog.Family do begin
-!    Level := LOG_VERBOSE;
-!!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
-!  end;
-:  Log Viewer
-Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 14,000,000 test cases do create a huge log file), a log viewer was definitively in need.
-The log-viewer application is available as source code in the "{\i Samples}" folder, in the "{\i 11 - Exception logging}" sub-folder.
-:   Open log files
-You can run it with a specified log file on the command line, or use the "{\i Browse}" button to browse for a file. That is, you can associate this tool with your {\f1\fs20 .log} files, for instance, and you'll open it just by double-clicking on such files.
-Note that if the file is not in our {\f1\fs20 TSynLog} format, it will still be opened as plain text. You'll be able to browse its content and search within, but all the nice features of our logging won't be available, of course.
-It is worth saying that the viewer was designed to be {\i fast}.\line In fact, it takes no time to open any log file. For instance, a 390 MB log file is opened in less than one second on my laptop. Under Windows Seven, it takes more time to display the "Open file" dialog window than reading and indexing the 390 MB content.\line It uses internally memory mapped files and optimized data structures to access to the data as fast as possible - see {\f1\fs20 TSynLogFile} class.
-:   Log browser
-The screen is divided into three main spaces:
-- On the left side, the panel of commands;
-- On the right side, the log events list;
-- On the middle, an optional list of method calls, and another list of threads (not shown by default).
-The command panel allows to {\i Browse} your disk for a {\f1\fs20 .log} file. This button is a toggle of an optional {\i Drive / Directory / File} panel on the leftmost side of the tool. When a {\f1\fs20 .log / .synlz / .txt} file is selected, its content is immediately displayed. You can specify a directory name as a parameter of the tool (e.g. in a {\f1\fs20 .lnk} desktop link), which will let the viewer be opened in "Browse" mode, starting with the specified folder.
-A button gives access to the global {\i Stats} about its content (customer-side hardware and software running configuration, general numbers about the log), and even ask for a source code line number and unit name from a hexadecimal address available in the log, by browsing for the corresponding {\f1\fs20 .map} file (could be handy if you did not deliver the {\f1\fs20 .map} content within your main executable - which you should have to, IMHO).
-Just below the "{\i Browse}" button, there is an edit field available, with a ? button. Enter any text within this edit field, and it will be searched within the log events list. Search is case-insensitive, and was designed to be fast. Clicking on the ? button (or pressing the {\f1\fs20 F3} key) allows to repeat the last search.
-In the very same left panel, you can see all existing events, with its own color and an associated check-box. Note that only events really encountered in the {\f1\fs20 .log} file appear in this list, so its content will change between log files. By selecting / un-selecting a check-box, the corresponding events will be instantaneously displayed / or not on the right side list of events. You can right click on the events check-box list to select a predefined set of events.
-The right colored event list follows the events appended to the log, by time order. When you click on an event, its full line content is displayed at the bottom on the screen, in a memo.
-Having all @*SQL@ / @*NoSQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
-:   Customer-side profiler
-One distinctive feature of the {\f1\fs20 TSynLog} logging class is that it is able to map methods or functions entering/leaving (using the {\f1\fs20 Enter} method), and trace this into the logs. The corresponding timing is also written within the "{\i Leave}" event, and allows application profiling from the customer side. Most of the time, profiling an application is done during the testing, with a test environment and database. But this is not, and will never reproduce the exact nature of the customer use: for instance, hardware is not the same (network, memory, CPU), nor the software (Operating System version, [anti-]virus installed)... By enabling customer-side method profiling, the log will contain all relevant information. Those events are named "{\i Enter}" / "{\i Leave}" in the command panel check-box list, and written as + and - in the right-sided event list.
-The "{\i Methods profiler}" options allow to display the middle optional method calls list. Several sort order are available: by name (alphabetical sort), by occurrence (in running order, i.e. in the same order than in the event log), by time (the full time corresponding to this method, i.e. the time written within the "{\i Leave}" event), and by proper time (i.e. excluding all time spent in the nested methods).
-The "{\i Merge method calls}" check-box allows to regroup all identical method calls, according to their name. In fact, most methods are not called once, but multiple time. And this is the accumulated time spent in the method which is the main argument for code profiling.
-I'm quite sure that the first time you'll use this profiling feature on a huge existing application, you'll find out some bottlenecks you would have never thought about before.
-:   Per-thread inspection
-If the {\f1\fs20 TSynLog} family has specified {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} property, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} of the logged action.
-The log-viewer application will identify this column, and show a "{\i Thread}" group below the left-side commands. It will allow to go to the next thread, or toggle the optional {\i Thread view} list. By checking / un-checking any thread of this list, you are able to inspect the execution log for a given process, very easily. A right-click on this thread list will display a pop-up menu, allowing to select all threads or no thread in one command.
 :3Object-Relational Mapping
 %cartoon02.png
-The @**ORM@ part of the framework - see @13@ - is implemented in @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
+The @**ORM@ part of the framework - see @13@ - is mainly implemented in the @!Lib\mORMot.pas@ unit. Then it will use other units (like @!Lib\mORMotSQLite3.pas@, @!Lib\mORMotDB.pas@, @!Lib\SynSQLite3.pas@ or @!Lib\SynDB.pas@) to access to the various database back-ends.
 Generic access to the data is implemented by defining high-level objects as {\i Delphi} classes, descendant from a main {\f1\fs20 @**TSQLRecord@} class.
 In our @*Client-Server@ ORM, those {\f1\fs20 TSQLRecord} classes can be used for at least three main purposes:
-- Map the Database tables;
-- Define business logic in {\i Delphi} code;
-- Auto-generate the User Interface (grids, edition screens and menus).
-This allows to truly implement a Multi-tier architecture - see @7@.
-All @*published properties@ of the {\f1\fs20 TSQLRecord} descendant classes are then accessed via @*RTTI@ in a Client-Server @*REST@ful architecture.
-Following the three previous purposes, these properties will be used:
-- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way;
-- To have business logic objects accessible for both the Client and Server side, in a RESTful approach;
-- To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way.
-Our ORM engine has genuine advanced features like convention-over-configuration, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, authentication...).
+- To store and retrieve data from any database engine - for most common usage, you can forget about writing @*SQL@ queries: @*CRUD@ data access statements ({\f1\fs20 SELECT / INSERT / UPDATE /DELETE}) are all created on the fly by the {\i Object-relational mapping} (ORM) core of {\i mORMot} - see @27@ - a @*NoSQL@ engine like {\i @*MongoDB@} can even be accessed the same way - see @84@;
+- To have business logic objects accessible for both the Client and Server side, in a @*REST@ful approach - see @114@;
+- To fill a grid content with the proper field type (e.g. grid column names are retrieved from property names after translation, enumerations are displayed as plain text, or {\f1\fs20 boolean} as a checkbox); to create menus and reports directly from the field definition; to have edition window generated in an automated way - see @31@.
+Our ORM engine has genuine advanced features like {\i @*convention over configuration@}, integrated security, local or remote access, REST JSON publishing (for AJAX or mobile clients), direct access to the database (by-passing slow {\f1\fs20 DB.pas} unit), content in-memory cache, optional audit-trail (change tracking), and integration with other parts of the framework (like @*SOA@, logging, @*authentication@...).
+\page
 :26 TSQLRecord fields definition
+All the framework @*ORM@ process relies on the {\f1\fs20 TSQLRecord} class. This abstract {\f1\fs20 TSQLRecord} class features a lot of built-in methods, convenient to do most of the ORM process in a generic way, at record level.
+It first defines a {\i @**primary key@} field, defined as {\f1\fs20 ID: @**TID@}, i.e. as {\f1\fs20 Int64} in {\f1\fs20 mORMot.pas}:
+!type
+!  TID = type Int64;
+!  ...
+!  TSQLRecord = class(TObject)
+!  ...
+!    property ID: TID read GetID write fID;
+!  ...
+In fact, our ORM relies on a {\f1\fs20 Int64} primary key, matching the {\i SQLite3} {\f1\fs20 ID}/{\f1\fs20 RowID} primary key.
+You may be disappointed by this limitation, which is needed by the {\i SQLite3}'s implementation of @*Virtual Table@s - see @20@. We won't debate about a composite primary key (i.e. several fields), which is not a good idea for an ORM. In your previous RDBMS data modeling, you may be used to define a TEXT primary key, or even a GUID primary key: those kinds of keys are somewhat less efficient than an INTEGER, especially for ORM internals, since they are not monotonic. You can always define a secondary key, as {\f1\fs20 string} or {\f1\fs20 TGUID} field, if needed - using {\f1\fs20 stored @*AS_UNIQUE@} attribute as explained below.
+All @*published properties@ of the {\f1\fs20 TSQLRecord} descendant classes are then accessed via @*RTTI@ in a Client-Server @*REST@ful architecture.
 For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !/// some enumeration
 !// - will be written as 'Female' or 'Male' in our UI Grid
@@ -1998,6 +1851,7 @@ For example, a database {\f1\fs20 Baby} Table is defined in {\i Delphi} code as:
 !    property Sex: TSex read fSex write fSex;
 !end;
 By adding this {\f1\fs20 TSQLBaby} class to a {\f1\fs20 @*TSQLModel@} instance, common for both Client and Server, the corresponding {\i Baby} table is created by the Framework in the database engine ({\i @*SQLite3@} natively or any external database). All @*SQL@ work ('{\f1\fs20 CREATE TABLE ...}') is done by the framework. Just code in Pascal, and all is done for you. Even the needed indexes will be created by the ORM. And you won't miss any ' or ; in your SQL query any more.
+\page
 The following {\f1\fs20 @**published properties@} types are handled by the @*ORM@, and will be converted as specified to database content (in {\i SQLite3}, an INTEGER is an {\f1\fs20 Int64}, FLOAT is a double, TEXT is an @*UTF-8@ encoded text):
 |%24%14%64
 |\b Delphi|SQLite3|Remarks\b0
@@ -2010,7 +1864,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |enumeration|INTEGER|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
 |set|INTEGER|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
 |{\f1\fs20 single}|FLOAT|
-|{\f1\fs20 double}|FLOAT|
+|{\f1\fs20 @*double@}|FLOAT|
 |{\f1\fs20 extended}|FLOAT|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|FLOAT|safely converted to/from {\f1\fs20 currency} type with fixed decimals, without rounding error
 |{\f1\fs20 @*RawUTF8@}|TEXT|this is the {\b preferred} field type for storing some textual content in the ORM
@@ -2023,10 +1877,10 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 TTimeLog}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|INTEGER|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
+|{\f1\fs20 @*TSQLRecord@}|INTEGER|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64 bit under {\i Win64}
+|{\f1\fs20 @*TID@}|INTEGER|64 bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
-|{\f1\fs20 TRecordReference}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically reset all occurences of this field to 0
-|{\f1\fs20 TRecordReferenceToBeDeleted}|INTEGER|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content)\line When the pointed record will be deleted, the ORM will automatically delete all {\f1\fs20 TSQLRecord} containing a reference to it
+|{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|INTEGER|able to join any row on any table of the model, by storing both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} class type in a {\f1\fs20 @*RecordRef@}-like {\f1\fs20 Int64} value, with automatic reset to 0 (for {\f1\fs20 TRecordReference}) or row deletion (for {\f1\fs20 TRecordReferenceToBeDeleted}) when the pointed record is deleted
 |{\f1\fs20 @*TPersistent@}|TEXT|@*JSON@ object ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|TEXT|JSON array of objects ({\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -2036,12 +1890,13 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TSQLRawBlob@}|@*BLOB@|This type is an alias to {\f1\fs20 @*RawByteString@}
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
-|{\f1\fs20 record}|TEXT|JSON string or object\line directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} for prior versions
+|{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
 |%
+\page
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
-- If the property is marked as {\f1\fs20 stored AS_UNIQUE} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. an index will be created and uniqueness of the value will be checked at insert/update);
+- If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. a SQL index will be created and uniqueness of the value will be checked at insert/update);
 - For a dynamic array field, the {\f1\fs20 index} number can be used for the {\f1\fs20 TSQLRecord. DynArray(DynArrayFieldIndex)} method to create a {\f1\fs20 TDynArray} wrapper mapping the dynamic array data;
-- For a {\f1\fs20 WinAnsiString / RawUTF8} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@}-based database - see @27@, the {\f1\fs20 index} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ does not have any such size limit).
+- For a {\f1\fs20 RawUTF8 / string / WideString / WinAnsiString} field of an "external" class - i.e. a TEXT field stored in a remote {\f1\fs20 @*SynDB@.pas}-based database - see @145@, the {\f1\fs20 @*index@} number will be used to define the maximum character size of this field, when creating the corresponding column in the database (@*SQLite3@ or {\i @*PostgreSQL@} does not have any such size expectations).
 For instance, the following {\f1\fs20 class} definition will create an index for its {\f1\fs20 SerialNumber} property (up to 30 characters long if stored in an external database), and will expect a link to a model of diaper ({\f1\fs20 TSQLDiaperModel}) and the baby which used it ({\f1\fs20 TSQLBaby}). An {\f1\fs20 ID} / {\f1\fs20 RowID} column will be always available (from {\f1\fs20 TSQLRecord}), so in this case, you would be able to make a fast lookup for a particular diaper from either its internal {\i mORmot} ID, or its official unique serial number:
 !/// table used for the Diaper queries
 !TSQLDiaper = class(TSQLRecord)
@@ -2059,8 +1914,21 @@ For instance, the following {\f1\fs20 class} definition will create an index for
 !end;
 :  Text fields
 In practice, the generic {\f1\fs20 string} type is handled (as {\f1\fs20 UnicodeString} under {\i Delphi} 2009 and later), but you may loose some content if you're working with pre-Unicode version of {\i Delphi} (in which {\f1\fs20 string = AnsiString} with the current system code page). So we won't recommend its usage.
-The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @**RawUTF8@}. All business process should be made using {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters.
+The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @*RawUTF8@} as introduced for @32@. All business process should better use {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slightly slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters, so an explicit call to {\f1\fs20 StringToUTF8 / UTF8ToString} functions is required.
 You will find in {\f1\fs20 SynCommons.pas} unit all low-level {\f1\fs20 RawUTF8} processing functions and classes, to be used instead of any {\f1\fs20 SysUtils.pas} functions. The {\f1\fs20 mORMot} core implementation about {\f1\fs20 RawUTF8} is very optimized for speed and multi-threading, so it is recommended not to use {\f1\fs20 string} in your code, unless you access to the VCL / User Interface layer.
+Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are not leaking your domain from its business layer to the presentation layer, as defined with @7@:
+\graph ArchiStringTier Strings in Domain Driven Design n-Tier Architecture
+\Presentation Tier\Application Tier
+\Application Tier\Business Logic Tier
+\Business Logic Tier\Data Tier
+\string\RawUTF8
+\RawUTF8\ RawUTF8
+\ RawUTF8\  RawUTF8
+\Presentation Tier=string
+\Application Tier=RawUTF8
+\Business Logic Tier= RawUTF8
+\Data Tier=  RawUTF8
+\
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :  Date and time fields
 {\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database.
@@ -2095,28 +1963,80 @@ In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exc
 {\i Enumerations} should be mapped as INTEGER, i.e. via {\f1\fs20 ord(aEnumValue)} or {\f1\fs20 TEnum(aIntegerValue)}.
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
 :  Floating point and Currency fields
-For standard floating-point values, the framework natively handles the {\f1\fs20 double} and {\f1\fs20 @**currency@} kind of variables.
+For standard floating-point values, the framework natively handles the {\f1\fs20 @*double@} and {\f1\fs20 @**currency@} kind of variables.
 In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
 The {\f1\fs20 currency} type is the standard {\i Delphi} type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
 As stated by the official {\i Delphi} documentation:
 {\i {\f1\fs20 Currency} is a fixed-point data type that minimizes rounding errors in monetary calculations. On the Win32 platform, it is stored as a scaled 64-bit integer with the four least significant digits implicitly representing decimal places. When mixed with other real types in assignments and expressions, {\f1\fs20 Currency} values are automatically divided or multiplied by 10000.}
 In fact, this type matches the corresponding {\f1\fs20 OLE} and {\f1\fs20 .Net} implementation of {\f1\fs20 currency}. It is still implemented the same in the {\i Win64} platform (since XE 2). The {\f1\fs20 Int64} binary representation of the {\f1\fs20 currency} type (i.e. {\f1\fs20 value*10000} as accessible via a typecast like {\f1\fs20 PInt64(@aCurrencyValue)^}) is a safe and fast implementation pattern.
-In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB} units will try to avoid any conversion to/from double for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
+In our framework, we tried to avoid any unnecessary conversion to float values when dealing with {\f1\fs20 currency} values. Some dedicated functions have been implemented - see @33@ - for fast and secure access to {\f1\fs20 currency} published properties via @*RTTI@, especially when converting values to or from @*JSON@ text. Using the {\f1\fs20 Int64} binary representation can be not only faster, but also safer: you will avoid any rounding problem which may be introduced by the conversion to a float type. For all database process, especially with external engines, the {\f1\fs20 SynDB.pas} units will try to avoid any conversion to/from {\f1\fs20 @*double@} for the dedicated {\f1\fs20 ftCurrency} columns.\line Rounding issues are a nightmare to track in production - it sounds safe to have a framework handling natively a {\f1\fs20 currency} type from the ground up.
 :  TSQLRecord fields
-It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After runing {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
-In fact, their definition is used to define a "@*one to many@" or "@*one to one@" relationship between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
-Only exception to this rule is {\f1\fs20 TSQLRecordMany} kind of published properties, which, by design, are true instances, needed to access the pivot table data of "@*many to many@" relationship. {\i auto-instantiate} all {\f1\fs20 TSQLRecordMany} published properties (then release them at {\f1\fs20 Destroy}).
-Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor to {\i auto-instantiate} and load all {\f1\fs20 TSQLRecord} published properties at once.
+It is worth saying that {\f1\fs20 @*TSQLRecord@} published properties are not by default {\f1\fs20 class} instances, as with regular {\i Delphi} code. After running {\f1\fs20 TSQLRecord.Create()} or {\f1\fs20 CreateAndFillPrepare()} constructors, you should never call {\f1\fs20 aMyRecord.AnotherRecord.Property} directly, or you will raise an {\i Access Violation}.
+In fact, {\f1\fs20 TSQLRecord} published properties definition is used to define "@*one to many@" or "@*one to one@" relationships between tables. As a consequence, the nested {\f1\fs20 AnotherRecord} property won't be a true {\f1\fs20 class} instance, but one ID trans-typed as {\f1\fs20 TSQLRecord}.
+Only exception to this rule is {\f1\fs20 TSQLRecordMany} kind of published properties, which, by design, are true instances, needed to access the pivot table data of "@*many to many@" relationship. The ORM will {\i auto-instantiate} all {\f1\fs20 TSQLRecordMany} published properties, then release them at {\f1\fs20 Destroy} - so you do not need to maintain their life time.
+Note that you may use e.g. {\f1\fs20 TSQLRecord.@*CreateJoined@()} constructor to {\i auto-instantiate} and load all {\f1\fs20 TSQLRecord} published properties at once, then release them at {\f1\fs20 Destroy}. - see @129@.
+The ORM will automatically perform the following optimizations for {\f1\fs20 TSQLRecord} published fields:
+- An {\i index} will be created on the database, for the corresponding column;
+- When a referenced record is deleted, the ORM will detect it and automatically set all published properties pointing to this record to 0.
+In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but emulated {\i at ORM level}.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
+:  TID fields
+{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
+You can define a published property as {\f1\fs20 TID} to store any value of our @*primary key@, i.e. up to 9,223,372,036,854,775,808. Note that in this case, there is no information about the joined table.
+As a consequence, the ORM will perform the following optimizations for {\f1\fs20 TID} fields:
+- An {\i index} will be created on the database, for the corresponding column;
+- When a referenced record is deleted, the ORM {\i won't do anything}, since it has no information about the table to track - this is the main difference with {\f1\fs20 TSQLRecord} published property.
+You can optionally specify the associated table, using a custom {\f1\fs20 TID} type for the published property definition. In this case, you would sub-class {\f1\fs20 TID}, using {\f1\fs20 {\i tableName}ID} as naming convention.\line For instance, if you define:
+! type
+!   TSQLRecordClientID = type TID;
+!   TSQLRecordClientToBeDeletedID = type TID;
+!
+!   TSQLOrder = class(TSQLRecord)
+!   ...
+!   published Client: TID
+!     read fClient write fClient;
+!   published OrderedBy: TSQLRecordClientID
+!     read fOrderedBy write fOrderedBy;
+!   published OrderedByCascade: TSQLRecordClientToBeDeletedID
+!     read fOrderedByCascade write fOrderedByCascade;
+!   ...
+Those three published fields would be able to store a {\f1\fs20 Int64} foreign key, and will botall have one {\i index} created on the database.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or TSQLRecordClientToBeDeletedID - will define how the deletion process will be processed.
+By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so no deletion tracking would take place.
+On the other hand, {\i following the type naming convention}, the others {\f1\fs20 OrderedBy} and {\f1\fs20 OrderedByCascade} properties will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model.\line In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} or {\f1\fs20 'TSQLRecordClientToBeDeletedID'}  type names, and search for a {\f1\fs20 TSQLRecord} associated by trimming {\f1\fs20 *[ToBeDeleted]ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will be able to track any {\f1\fs20 TSQLRecordClient} deletion: for any row pointing to the deleted record, it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0, or that the row containing the {\f1\fs20 OrderedByCascade} property will be deleted. Note that the framework won't define a {\f1\fs20 ON DELETE SET DEFAULT} or {\f1\fs20 ON DELETE CASCADE} foreign key via SQL, but emulate them {\i at ORM level}.
+:  TRecordReference and TRecordReferenceToBeDeleted
+{\f1\fs20 TSQLRecord} or {\f1\fs20 TID} published properties are associated with a single {\f1\fs20 TSQLRecord} joined table. You could use {\f1\fs20 @**TRecordReference@} or {\f1\fs20 @**TRecordReferenceToBeDeleted@} published properties to store a reference to any record on any table of the data model.
+In fact, such properties will store in a {\f1\fs20 Int64} value a reference to both a {\f1\fs20 TSQLRecord} class (therefore defining a table), and one {\f1\fs20 ID} (to define the row).
+You could later on use e.g. {\f1\fs20 @*TSQLRest@.Retrieve(Reference)} to get a record content in one step.
+One {\b important note} is to remember that the table reference is stored as an index to the {\f1\fs20 TSQLRecord} class in the associated {\f1\fs20 TSQLModel}.\line As a consequence, for such {\f1\fs20 TRecordReference*} properties to work as expected, you should ensure:
+- That the order of {\f1\fs20 TSQLRecord} classes in the {\f1\fs20 TSQLModel} {\b do not change} after any model modification: otherwise, all previously stored {\f1\fs20 TRecordReference*} values would point to a wrong record;
+- That both Client and Server side {\b share the same model} - at least for the {\f1\fs20 TSQLRecord} classes which are used with {\f1\fs20 TRecordReference*}.
+Depending on the type, the ORM will track the deletion of the pointed record:
+- {\f1\fs20 TRecordReference} fields will be reset to 0 - emulating {\f1\fs20 ON DELETE SET DEFAULT} foreign key SQL declaration;
+- {\f1\fs20 TRecordReferenceToBeDeleted} will delete the whole record - emulating {\f1\fs20 ON DELETE CASCADE} foreign key SQL declaration.
+Just like with {\f1\fs20 TSQLRecord} or {\f1\fs20 {\i TSQLRecordClassName}[ToBeDeleted]ID} fields, this deletion tracking is not defined at RDBMS level, but emulated {\i at ORM level}.
+In order to work easily with {\f1\fs20 TRecordReference} values (which are in fact plain {\f1\fs20 Int64} values), you could transtype them into the {\f1\fs20 @**RecordRef@()} record, and access the stored information via a set of helper methods. See @128@ for an example of use of such {\f1\fs20 TRecordReference} in a data model, e.g. the {\f1\fs20 AssociatedRecord} property of {\f1\fs20 TSQLAuditTrail}.
+:  TSQLRecord, TID, TRecordReference deletion tracking
+To sum up all possible foreign key reference available by the framework, check out this table:
+|%35%8%9%20%28
+|\b Type Definition|Index|Tables|Deletion Tracking|Emulated SQL\b0
+|{\f1\fs20 TSQLRecord}|Yes|One|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 TID}|Yes|No|None|None
+|{\f1\fs20 T{\i ClassName}ID}|Yes|One|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 T{\i ClassName}ToBeDeletedID}|Yes|One|Row deleted|ON DELETE CASCADE
+|{\f1\fs20 TRecordReference}|Yes|All|Field reset to 0|ON DELETE SET DEFAULT
+|{\f1\fs20 TRecordReferenceToBeDeleted}|Yes|All|Row deleted|ON DELETE CASCADE
+|%
+It is worth saying that this deletion tracking is not defined at RDBMS level, but {\i at ORM level}.\line As a consequence, it will work with any kind of databases, including @82@. In fact, RDBMS engines do not allow defining such {\f1\fs20 ON DELETE} trigger on several tables, whereas {\i mORMot} handles such composite references as expected for {\f1\fs20 TRecordReference}.\line Since this is not a database level tracking, but only from a {\i mORMot} server, if you still use the database directly from legacy code, ensure that you would take care of this tracking, perhaps by using a @*SOA@ service instead of direct SQL statements.
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
 - If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with extended syntax, if applying);
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
-- It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 double}) if the stored text has the corresponding layout;
+- It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 @*double@}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
 Since all data is stored as TEXT in the column, your queries shall ensure that any SQL WHERE statement handles it as expected (e.g. with a conversion to number before comparison). Even if {\i SQLite3} is able to affect a column type for each row (i.e. store a {\f1\fs20 variant} as in {\i Delphi} code), we did not use this feature, since we wanted our framework to work with all databases - and {\i @*SQLite3@} is quite alone having this feature.
 At JSON level, {\f1\fs20 variant} fields will be transmitted as JSON text or number, depending on the stored value.
+If you use a {\i MongoDB} external @*NoSQL@ database - see @84@, such {\f1\fs20 variant} field will not be stored as JSON text, but as true BSON documents. So you would be able to apply all the advanced search and indexing abilities of this database engine, if needed.
 :  Record fields
 Since {\i Delphi} XE5, you can define and work directly with published record properties of {\f1\fs20 @*TSQLRecord@}:
 !  TSQLMyRecord = class(TSQLRecordPeople)
@@ -2125,7 +2045,7 @@ Since {\i Delphi} XE5, you can define and work directly with published record pr
 !  published
 !    property GUID: TGUID read fGUID write fGUID index 38;
 !  end;
-The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.
+The record will be serialized as JSON - here @*TGUID@ will be serialized as a JSON string - then will be stored as TEXT column in the database.\line We specified an {\f1\fs20 @*index@ 38} attribute to state that this column will contain up to 38 characters, when stored on an external database - see @145@.
 Published properties of {\i records} are handled by our code, but {\i Delphi} doesn't create the corresponding @*RTTI@ for such properties before {\i Delphi} XE5.\line So {\f1\fs20 record} published properties, as defined in the above class definition, won't work directly for older versions of {\i Delphi}, or {\i @*FreePascal@}.
 You could use a {\i @*dynamic array@} with only one element, in order to handle records within your {\f1\fs20 TSQLRecord} class definition - see @21@. But it may be confusing.
 If you want to work with such properties before {\i Delphi} XE5, you can override the {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties()} virtual method of a given table, to explicitly define a {\f1\fs20 record} property.
@@ -2162,23 +2082,24 @@ You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
 : Working with Objects
-To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@:
-!var Baby: TSQLBaby;
-!  ID: integer;
+To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@, and using the {\f1\fs20 ID} @*primary key@ as resource identifier:
+!!procedure Test(Client: TSQLRest);  // we will use CRUD operations on a REST instance
+!var Baby: TSQLBaby;   // store a record
+!    ID: TID;          // store a reference to a record
 !begin
-!  // create a new record, since Smith, Jr was just born
+!  // create and save a new record, since Smith, Jr was just born
 !  Baby := TSQLBaby.Create;
 !  try
 !    Baby.Name := 'Smith';
 !    Baby.Address := 'New York City';
-!    Baby.BirthDate := Now;
+!    Baby.BirthDate := Date;
 !    Baby.Sex := sMale;
-!!    ID := Client.Add(Baby);
+!!    ID := Client.Add(Baby,true);
 !  finally
-!    Baby.Free;
+!    Baby.Free; // manage memory as usual
 !  end;
 !  // update record data
-!  Baby := TSQLBaby.Create(Client,ID);
+!!  Baby := TSQLBaby.Create(Client,ID); // retrieve from ID
 !  try
 !    assert(Baby.Name='Smith');
 !    Baby.Name := 'Smeeth';
@@ -2200,7 +2121,7 @@ To access a particular record, the following code can be used to handle @*CRUD@ 
 !end;
 Of course, you can have a {\f1\fs20 TSQLBaby} instance alive during a longer time. The same {\f1\fs20 TSQLBaby} instance can be used to access several record content, and call {\f1\fs20 Retrieve / Add / Delete / Update} methods on purpose.
 No @*SQL@ statement to write, nothing to care about database engine expectations (e.g. for date or numbers processing): just accessing objects via high-level methods. It could even work with @*NoSQL@ databases, like a fast {\f1\fs20 TObjectList} or @*MongoDB@. This is the magic of @*ORM@.
-To be honnest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little but the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
+To be honest, the REST pattern does not match directly the CRUD operations exactly. We had to tied a little bit the REST verbs - as defined @9@ - to fit our ORM purpose. But all you have to know is that those {\i Add/Update/Delete/Retrieve} methods are able to define the full persistence lifetime of your precious objects.
 : Queries
 :  Return a list of objects
 You can query your table with the {\f1\fs20 FillPrepare} or {\f1\fs20 @**CreateAndFillPrepare@} methods, for instance all babies with balls and a name starting with the letter 'A':
@@ -2221,7 +2142,7 @@ You could also create a {\f1\fs20 TObjectList}, or - even better for newer versi
 !var aList: TObjectList<TSQLBaby>;
 !    aMale: TSQLBaby;
 !...
-!!aList := Client.RetrieveObjectList<TSQLBaby>(
+!!aList := Client.RetrieveList<TSQLBaby>(
 !!  'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !try
 !!  for aMale in aList do
@@ -2232,7 +2153,7 @@ You could also create a {\f1\fs20 TObjectList}, or - even better for newer versi
 Note that this method will use more memory and resources than a {\f1\fs20 *FillPrepare} call followed by a {\f1\fs20 while ...FillOne do} loop, since the later will only allocate one instance of the {\f1\fs20 TSQLRecord}, then fill the properties of this single instance directly from the returned JSON content, one at a time. For huge lists, or in multi-threaded environement, it may make a difference.\line But the generics syntax can make cleaner code, or more integrated with your business logic.
 :36  Query parameters
 For safer and faster database process, the WHERE clause of the request expects some parameters to be specified. They are bound in the {\f1\fs20 ?} appearance order in the WHERE clause of the {\f1\fs20 [CreateAnd]FillPrepare} query method.
-Standard simple kind of parameters ({\f1\fs20 RawUTF8, integer, double}..) can be bound directly - as in the sample code above for {\f1\fs20 Name} or {\f1\fs20 Sex} properties. The first parameter will be bound as {\f1\fs20 'A%' RawUTF8} TEXT, and the second as the {\f1\fs20 1} INTEGER value.
+Standard simple kind of parameters ({\f1\fs20 @*RawUTF8@, integer, @*double@, @*currency@}..) can be bound directly - as in the sample code above for {\f1\fs20 Name} or {\f1\fs20 Sex} properties. The first parameter will be bound as {\f1\fs20 'A%' RawUTF8} TEXT, and the second as the {\f1\fs20 1} INTEGER value.
 Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1\fs20 @*DateToSQL@()}, {\f1\fs20 @*DateTimeToSQL@()} or {\f1\fs20 @*TimeLogToSQL@()} functions, as such:
 ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(EncodeDate(2012,5,4))]);
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
@@ -2240,7 +2161,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
 For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
-Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.EngineExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
+Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 :  Introducing TSQLTableJSON
 As we stated above, {\f1\fs20 [CreateAnd]FillPrepare} / {\f1\fs20 FillOne} methods are implemented via an internal {\f1\fs20 @**TSQLTableJSON@} instance.
 In short, {\f1\fs20 TSQLTableJSON} will expect some {\i @*JSON@} content as input, will parse it in rows and columns, associate it with one or more optional {\f1\fs20 @*TSQLRecord@} class types, then will let you access the data via its {\f1\fs20 Get*} methods.
@@ -2345,6 +2266,64 @@ or
 In both cases, the parameters will be inlined, in order to prepare the statements, and improve execution speed.
 We used the {\f1\fs20 QuotedStr} standard function to embrace the {\f1\fs20 Letters} parameter with quotes, as expected per the @*SQL@ syntax.
 Of course, using '?' and bounds parameters is much easier than '%' and manual {\f1\fs20 :(%):} in-lining with a {\f1\fs20 QuotedStr()} function call. In your client code, you should better use '?' - but if you find some {\f1\fs20 ':(%):'} in the framework source code and when a WHERE clause is expected within the transmitted JSON content, you won't be surprised.
+:130 Automatic TSQLRecord memory handling
+Working with objects is pretty powerful, but requires to handle manually the created instances life time, via {\f1\fs20 try} .. {\f1\fs20 finally} blocks. Most of the time, the {\f1\fs20 TSQLRecord} life time would be very short: we allocate one instance on a local variable, then release it when it goes out of scope.
+If we take again the {\f1\fs20 TSQLBaby} sample, we may write:
+!!function NewMaleBaby(Client: TSQLRest; const Name,Address: RawUTF8): TID;
+!var Baby: TSQLBaby;   // store a record
+!begin
+!  Baby := TSQLBaby.Create;
+!  try
+!    Baby.Name := Name;
+!    Baby.Address := Address;
+!    Baby.BirthDate := Date;
+!    Baby.Sex := sMale;
+!!    result := Client.Add(Baby,true);
+!  finally
+!    Baby.Free;
+!  end;
+!end;
+To ease this pretty usual pattern, the framework offers some kind of automatic memory management at {\f1\fs20 TSQLRecord} level:
+!!function NewMaleBaby(Client: TSQLRest; const Name,Address: RawUTF8): TID;
+!var Baby: TSQLBaby;   // store a record
+!begin
+!!  TSQLBaby.AutoFree(Baby);  // no try..finally needed!
+!  Baby.Name := Name;
+!  Baby.Address := Address;
+!  Baby.BirthDate := Date;
+!  Baby.Sex := sMale;
+!!  result := Client.Add(Baby,true);
+!end; // local Baby instance will be released here
+It may also be useful for queries.\line Instead of writing:
+!var aMale: TSQLBaby;
+!...
+!  aMale := TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
+!  try
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
+!  finally
+!    aMale.Free;
+!  end;
+We may write:
+!var aMale: TSQLBaby;
+!...
+!  TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  while aMale.FillOne do
+!    DoSomethingWith(aMale);
+Without the need to write the {\f1\fs20 try ... finally} block.
+See the {\f1\fs20 TSQLRecord.AutoFree()} overloaded methods in {\f1\fs20 mORMot.pas} for the several use cases, and the associated {\f1\fs20 TAutoFree} / {\f1\fs20 IAutoFree} types as defined in {\f1\fs20 SynCommons.pas}. Note that you can handle several local variables in a single {\f1\fs20 TSQLRecord.AutoFree()} or {\f1\fs20 TAutoFree.Create()} initialization.
+Be aware that it does not introduce some kind of magic @*garbage collector@, as available in C# or Java. It is not even similar to the {\f1\fs20 ARC} memory model used by {\i Apple} and the {\i Delphi} {\i NextGen} compiler. It is just some syntaxic sugar creating a local hidden {\f1\fs20 IAutoFree} interface, which would be released at the end of the local method by the compiler, and also release all associated class instances. So the local class instances should stay in the local scope, and should not be sent and stored in another process: in such cases, you may encounter access violation issues.
+Due to an issue in the @*FPC@ implementation of interfaces - see issue @http://bugs.freepascal.org/view.php?id=26602 - the above code would not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
+!var aMale: TSQLBaby;
+!!    auto: IAutoFree;
+!...
+!  auto := TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  while aMale.FillOne do
+!    DoSomethingWith(aMale);
+If you want your code to cross-compile with both Delphi and FPC, consider this expectation of the FPC compiler.
 : Objects relationship: cardinality
 All previous code is fine if your application requires "flat" data. But most of the time, you'll need to define master/child relationship, perhaps over several levels. In data modeling, the {\i @**cardinality@} of one data table with respect to another data table is a critical aspect of database design. Relationships between data tables define {\i cardinality} when explaining how each table links to another.
 In the relational model, tables can have the following {\i cardinality}, i.e. can be related as any of:
@@ -2392,7 +2371,7 @@ When creating such records, use temporary instances for each detail object, as s
 !    Two.MyFileDate := ....
 !    Two.MyFileSize := ...
 !!    MyFile.SecondOne:= TSQLMyFileInfo(MyDataBase.Add(Two,True)); // add Two and store ID in MyFile.SecondOne
-!    MyDataBase.Add(MyFile);
+!    MyDataBase.Add(MyFile,true);
 !  finally
 !     MyFile.Free;
 !     Two.Free;
@@ -2443,10 +2422,10 @@ Or with a {\f1\fs20 with} statement:
 !  end;
 !end;
 Mapping a {\f1\fs20 TSQLRecord} field into an {\f1\fs20 integer} ID is a bit difficult to learn at first. It was the only way we found out in order to define a "one to one" or "one to many" relationship within the class definition, without any property attribute features of the {\i Delphi} compiler (only introduced in newer versions). The main drawback is that the compiler won't be able to identify at compile time some potential GPF issues at run time. This is up to the developer to write correct code, when dealing with {\f1\fs20 TSQLRecord} properties. Using {\f1\fs20 AsTSQLRecord} property and overloaded {\f1\fs20 TSQLRecord. Create(aPublishedRecord)} constructor will help a lot.
-:   Automatic instantiation and JOINed query
+:129   Automatic instantiation and JOINed query
 Having to manage at hand all nested {\f1\fs20 TSQLRecord} instances can be annoying, and error-prone.
 As an alternative, if you want to retrieve a whole {\f1\fs20 TSQLRecord} instance including its nested {\f1\fs20 TSQLRecord} published properties, you can use either of those two constructors:
-- {\f1\fs20 TSQLRecord.@*CreateJoined@(aClient,aID)};
+- {\f1\fs20 TSQLRecord.@**CreateJoined@(aClient,aID)};
 - {\f1\fs20 TSQLRecord.CreateAndFillPrepareJoined()}, followed by a {\f1\fs20 while FillOne do ....} loop.
 Both constructors:
 - Will {\i auto-instantiate} all {\f1\fs20 TSQLRecord} published properties;
@@ -2467,7 +2446,7 @@ So you can safely write:
 Note that this will work as expected when retrieving some data from the database, but, in the current implementation of the ORM, any {\f1\fs20 Update()} call will manage only the main {\f1\fs20 TSQLRecord} properties, and the nested {\f1\fs20 TSQLRecord} properties {\f1\fs20 ID}, not the nested properties values. For instance, in code above, {\f1\fs20 aClient.Update(MyFile)} will update the {\f1\fs20 TSQLMyFile} table, but won't reflect any modification to {\f1\fs20 MyFile.FirstOne} or {\f1\fs20 MyFile.SecondOne} properties. This limitation may be removed in the future - you may ask explicitly for this feature request.
 :  "Has many" and "has many through"
 As @http://en.wikipedia.org/wiki/Many-to-many_(data_model) wrote:
-{\i In systems analysis, a many-to-many relationship is a type of cardinality that refers to the relationship between two entities (see also Entity-Relationship Model) A and B in which A may contain a parent row for which there are many children in B and vice versa. For instance, think of A as Authors, and B as Books. An Author can write several Books, and a Book can be written by several Authors. Because most database management systems only support one-to-many relationships, it is necessary to implement such relationships physically via a third and fourth junction table, say, AB with two one-to-many relationships A -> AB and B -> AB. In this case the logical primary key for AB is formed from the two foreign keys (i.e. copies of the primary keys of A and B).}
+{\i In systems analysis, a many-to-many relationship is a type of cardinality that refers to the relationship between two entities (see also Entity-Relationship Model) A and B in which A may contain a parent row for which there are many children in B and vice versa. For instance, think of A as Authors, and B as Books. An Author can write several Books, and a Book can be written by several Authors. Because most database management systems only support one-to-many relationships, it is necessary to implement such relationships physically via a third and fourth junction table, say, AB with two one-to-many relationships A -> AB and B -> AB. In this case the logical @*primary key@ for AB is formed from the two foreign keys (i.e. copies of the primary keys of A and B).}
 From the record point of view, and to follow the @*ORM@ vocabulary (in Ruby on Rails, Python, or other {\i ActiveRecord} clones), we could speak of "@**has many@" relationship. In the classic RDBMS implementation, a pivot table is created, containing two references to both related records. Additional information can be stored within this pivot table. It could be used, for instance, to store association time or corresponding permissions of the relationship. This is called a "@**has many through@" relationship.
 In fact, there are several families of ORM design, when implementing the "many to many" @*cardinality@:
 - Map collections into {\f1\fs20 @*JOIN@}ed query from the ORM (i.e. pivot tables are abstracted from object lists or collections by the framework, to implement "has many" relationship, but you will have to define @*lazy loading@ and won't have "has many through" relationship at hand);
@@ -2512,8 +2491,8 @@ You may define:
 !!   property Data: variant read fData write fData;
 ! end;
 Here, we defined two indexed keys, ready to access any data record:
-- Via the {\f1\fs20 ID: integer} property defined at {\f1\fs20 TSQLRecord} level, which will map the {\i SQLite3} {\f1\fs20 RowID} primary key;
-- Via the {\f1\fs20 Name: RawUTF8} property, which will was marked to be indexed by setting the "{\f1\fs20 stored AS_UNIQUE}" attribute.
+- Via the {\f1\fs20 ID: @*TID@} property defined at {\f1\fs20 TSQLRecord} level, which will map the {\i SQLite3} {\f1\fs20 RowID} @*primary key@;
+- Via the {\f1\fs20 Name: RawUTF8} property, which will was marked to be indexed by setting the "{\f1\fs20 stored @*AS_UNIQUE@}" attribute.
 Then, any kind of data may be stored in the {\f1\fs20 Data: variant} published property. In the database, it will be stored as @*JSON@ @*UTF-8@ text, ready to be retrieved from any client, including AJAX / HTML5 applications. {\i Delphi} clients or servers will access those data via {\i @*late-binding@}, from its {\f1\fs20 TDocVariant} instance.
 You just reproduced the {\i @**schema-less@} approach of the @*NoSQL@ database engines, in a few lines of code! Thanks to the {\i mORMot}'s @6@ design, your applications are able to store any kind of document, and easily access to them via HTTP.
 The documents stored in such a database can have varying sets of fields, with different types for each field.  One could have the following objects in a single collection of our {\f1\fs20 Data: variant} rows:
@@ -2525,7 +2504,7 @@ Of course, when using the database for real problems, the data does have a fairl
 ! { name : "Kate", age : 25 }
 Generally, there is a direct analogy between this {\i schema-less} style and dynamically typed languages. Constructs such as those above are easy to represent in {\i PHP}, {\i Python} and {\i Ruby}. And, thanks to our {\f1\fs20 TDocVariant} {\i late-binding} magic, even our good {\i Delphi} is able to handle those structures in our code. What we are trying to do here is make this mapping to the database natural, like:
 !var aRec: TSQLRecordData;
-!    aID: integer;
+!    aID: TID;
 !begin
 !  // initialization of one record
 !  aRec := TSQLRecordData.Create;
@@ -2538,13 +2517,13 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !  writeln(aRec.Data);     // will write '{"name":"Joe","age":30}' (auto-converted to JSON string)
 !  aRec.Data.age := aRec.Data.age+1;    // one year older
 !  aRec.Data.interests := 'football';   // add a property to the schema
-!  aID := aClient.Add(aRec);            // will store {"name":"Joe","age":31,"interests":"footbal"}
+!  aID := aClient.Add(aRec,true);       // will store {"name":"Joe","age":31,"interests":"footbal"}
 !  aRec.Free;
 !  // now we can retrieve the data either via the aID created integer, or via Name='Joe'
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i Full Text Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
 :     Dynamic arrays fields
 :      Dynamic arrays from Delphi Code
 For instance, here is how the regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\i @*dynamic array@s} fields:
@@ -2599,7 +2578,7 @@ We could have used normal access to {\f1\fs20 VVA} and {\f1\fs20 FV} {\i dynamic
 !     VA.Ints[high(VA.Ints)] := n;
 But the {\f1\fs20 DynArray} method is used instead, to allow direct access to the {\i dynamic array} via a {\f1\fs20 TDynArray} wrapper. Those two lines behave therefore the same as this code:
 !      VA.DynArray('Ints').Add(n);
-Note that the {\f1\fs20 DynArray} method can be used via two overloaded set of parameters: either the field name ({\f1\fs20 'Ints'}), or an {\f1\fs20 index} value, as was defined in the class definition. So we could have written:
+Note that the {\f1\fs20 DynArray} method can be used via two overloaded set of parameters: either the field name ({\f1\fs20 'Ints'}), or an {\f1\fs20 @*index@} value, as was defined in the class definition. So we could have written:
 !      VA.DynArray(1).Add(n);
 since the {\f1\fs20 Ints} published property has been defined as such:
 !    property Ints: TIntegerDynArray
@@ -2637,7 +2616,7 @@ Those functions allow direct access to the BLOB content like this:
 In the above code, the WHERE clause of the {\f1\fs20 OneFieldValues} method will use the dedicated {\f1\fs20 IntegerDynArrayContains} @*SQL function@ to retrieve all records containing the specified {\f1\fs20 integer} value {\f1\fs20 k} in its {\f1\fs20 Ints} BLOB column. With such a function, all the process is performed Server-side, with no slow data transmission nor JSON/@*Base64@ @*serialization@.
 For instance, using such a SQL function, you are able to store multiple {\f1\fs20 @*TSQLRecord@. ID} field values into one {\f1\fs20 TIntegerDynArray} property column, and have direct search ability inside the SQL statement. This could be a very handy way of implementing "one to many" or "many to many" relationship, without the need of a pivot table.
 Those functions were implemented to be very efficient for speed. They won't create any temporary dynamic array during the search, but will access directly to the BLOB raw memory content, as returned by the {\i SQlite} engine. The {\f1\fs20 RawUTF8DynArrayContainsCase / RawUTF8DynArrayContainsNoCase} functions also will search directly inside the BLOB. With huge number of requests, this could be slower than using a {\f1\fs20 @*TSQLRecordMany@} pivot table, since the search won't use any index, and will have to read all BLOB field during the request. But, in practice, those functions behave nicely with a relative small amount of data (up to about 50,000 rows). Don't forget that BLOB column access are very optimized in {\i @*SQlite3@}.
-For more complex dynamic array content handling, you'll have either to create your own @*SQL function@ using the {\f1\fs20 TSQLDataBase. RegisterSQLFunction} method and an associated {\f1\fs20 TSQLDataBaseSQLFunction} class, or via a dedicated @*Service@ or a @*stored procedure@ - see @22@ on how to implement it.
+For more complex dynamic array content handling, you'll have either to create your own @*SQL function@ using the {\f1\fs20 TSQLDataBase. RegisterSQLFunction} method and an associated {\f1\fs20 TSQLDataBaseSQLFunction} class, or via a dedicated @*Service@ or a @*stored procedure@ - see @23@ on how to implement it.
 :     TPersistent/TCollection fields
 For instance, here is the way regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\f1\fs20 @**TPersistent@}, {\f1\fs20 @**TCollection@} or {\f1\fs20 @*TRawUTF8List@} fields ({\f1\fs20 TRawUTF8List} is just a {\f1\fs20 TStringList}-like component, dedicated to handle {\f1\fs20 @*RawUTF8@} kind of {\f1\fs20 string}):
 !  TSQLRecordPeopleObject = class(TSQLRecordPeople)
@@ -2943,6 +2922,125 @@ After the statement has been prepared, you can use the standard {\f1\fs20 FillOn
 !!  MS.FillClose;
 Note that in our case, an explicit call to {\f1\fs20 FillClose} has been added in order to release all {\f1\fs20 Dest} instances created in {\f1\fs20 FillPrepareMany}. This call is not mandatory if you call {\f1\fs20 MS.Free} directly, but it is required if the same {\f1\fs20 MS} instance is about to use some regular many-to-many methods, like {\f1\fs20 MS.DestList.ManySelect()} - it will prevent any GPF exception to occur with code expecting the {\f1\fs20 Dest} property not to be an instance, but a {\f1\fs20 pointer(DestID)} value.
 \page
+:110 ORM Data Model
+:  Creating an ORM Model
+The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
+In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestStorageInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
+Each {\f1\fs20 TSQLModel} instance is in fact associated with a {\f1\fs20 TSQLRest} instance. An {\f1\fs20 Owner} property gives access to the current running client or server {\f1\fs20 @*TSQLRest@} instance associated with this model.
+By design, models are used on both Client and Server sides. It is therefore a good practice to use a common unit to define all {\f1\fs20 TSQLRecord} types, and have a common function to create the related {\f1\fs20 TSQLModel} class.
+For instance, here is the corresponding function as defined in the first samples available in the source code repository (unit {\f1\fs20 SampleData.pas}):
+!function CreateSampleModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLSampleRecord]);
+!end;
+For a more complex model including link to User Interface, see @64@.
+:  Several Models
+In practice, a same {\f1\fs20 TSQLRecord} can be used in several models: this is typically the case for {\f1\fs20 TSQLAuthUser} tables, or if client and server instances are running in the same process. So, for accessing the model properties, you have two structures available:
+|%37%68
+|\b Class|Description\b0
+|{\f1\fs20 @**TSQLModelRecordProperties@}|Model-specific ORM parameters, like dedicated SQL auto-generation and external DB settings.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[]} array
+|{\f1\fs20 @**TSQLRecordProperties@}|Low-level table properties, as retrieved from @5@ by the ORM kernel of {\i mORMot}.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[].Props}
+|%
+So you may use code like this:
+!var i: integer;
+!    ModelProps: TSQLModelRecordProperties;
+!    Props: TSQLRecordProperties;
+!begin
+!  ...
+!  for i := 0 to high(Model.TableProps) do begin
+!    ModelProps := Model.TableProps[i];
+!    // now you can access ModelProps.ExternalDB.TableName ...
+!    Props := ModelProps.Props;
+!    // now you can use Props.SQLTableName or Props.Fields[]
+!  end;
+!end;
+:56  Filtering and Validating
+According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
+If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
+In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
+\graph HierTSynFilter Filtering and Validation classes hierarchy
+\TSynValidate\TSynFilterOrValidate
+\TSynFilter\TSynFilterOrValidate
+\
+{\f1\fs20 @*TSQLRecord@} field content validation is handled in the new {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes.
+{\f1\fs20 TSQLRecord} field content filtering is handled in the new {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes.
+Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
+\graph HierTSynFilters Default filters and Validation classes hierarchy
+\TSynValidatePassWord\TSynValidateText
+\TSynValidateNonVoidText\TSynValidate
+\TSynValidateText\TSynValidate
+\TSynValidateTableUniqueField\TSynValidateTable
+\TSynValidateTable\TSynValidate
+\TSynValidateUniqueField\TSynValidateRest
+\TSynValidateRest\TSynValidate
+\TSynValidatePatternI\TSynValidatePattern
+\TSynValidatePattern\TSynValidate
+\TSynValidateIPAddress\TSynValidate
+\TSynValidateEmail\TSynValidate
+\TSynValidate\TSynFilterOrValidate
+\TSynFilterUpperCaseU\TSynFilter
+\TSynFilterUpperCase\TSynFilter
+\TSynFilterTrim\TSynFilter
+\TSynFilterLowerCaseU\TSynFilter
+\TSynFilterLowerCase\TSynFilter
+\TSynFilterTruncate\TSynFilter
+\TSynFilter\TSynFilterOrValidate
+rankdir=LR;
+\
+You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
+Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
+Of course, the {\f1\fs20 mORMotUIEdit} unit handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (via the {\f1\fs20 TSQLValidate} classes).
+The field validation process is run in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
+To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
+!function CreateFileModel(Owner: TSQLRest): TSQLModel;
+!begin
+!  result := TSQLModel.Create(Owner,
+!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
+!    TypeInfo(TFileAction),TypeInfo(TFileEvent),'synfile');
+!  TSQLFile.AddFilterOrValidate('Name',TSQLFilterLowerCase);
+!  TSQLUser.AddFilterOrValidate('Email',TSQLValidateEmail);
+!end;
+As an alternative, you can override the following method:
+!  TSQLRecordAuthInfo = class(TSQLRecord)
+!  protected
+!!    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+!  ...
+!
+!class procedure TSQLRecordAuthInfo.InternalDefineModel(
+!  Props: TSQLRecordProperties);
+!begin
+!  AddFilterNotVoidText(['Logon','HashedPassword']);
+!end;
+It does make sense to define this behavior within the {\f1\fs20 TSQLRecord} definition, so that it would be shared by all models.
+If you want to perform some text field length validation or filter at ORM level, you may use {\f1\fs20 TSQLRecordProperties}'s {\f1\fs20 SetMaxLengthValidatorForTextFields()} or {\f1\fs20 SetMaxLengthFilterForTextFields()} method, or at model level:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLMyRecord1,TSQLMyRecord2]);
+!  result.SetMaxLengthValidatorForAllTextFields(true); // "index n" is in UTF-8 bytes
+!end;
+In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
+For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
+!procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
+! (...)
+!  // perform all registered filtering
+!!  Rec.Filter(ModifiedFields);
+!  // perform content validation
+!  FieldIndex := -1;
+!!  ErrMsg := Rec.Validate(Client,ModifiedFields,@FieldIndex);
+!  if ErrMsg<>'' then begin
+!    // invalid field content -> show message, focus component and abort saving
+!    if cardinal(FieldIndex)<cardinal(length(fFieldComponents)) then begin
+!      C := fFieldComponents[FieldIndex];
+!      C.SetFocus;
+!      Application.ProcessMessages;
+!      ShowMessage(ErrMsg,format(sInvalidFieldN,[fFieldCaption[FieldIndex]]),true);
+!    end else
+!      ShowMessage(ErrMsg,format(sInvalidFieldN,['?']),true);
+!  end else
+!    // close window on success
+!    ModalResult := mrOk;
+!end;
+It is up to your code to filter and validate the record content. By default, the {\i mORMot} @*CRUD@ operations won't call the registered filters or validators.
 :38 ORM Cache
 Here is the definition of "cache", as stated by {\i Wikipedia}:
 {\i In computer engineering, a @**cache@ is a component that transparently stores data so that future requests for that data can be served faster. The data that is stored within a cache might be values that have been computed earlier or duplicates of original values that are stored elsewhere. If requested data is contained in the cache (cache hit), this request can be served by simply reading the cache, which is comparatively faster. Otherwise (cache miss), the data has to be recomputed or fetched from its original storage location, which is comparatively slower. Hence, the greater the number of requests that can be served from the cache, the faster the overall system performance becomes.}
@@ -2957,13 +3055,13 @@ Thanks to those specific caching abilities, our framework is able to minimize th
 : Calculated fields
 It is often useful to handle some calculated fields. That is, having some field values computed when you set another field value. For instance, if you set an error code from an enumeration (stored in an INTEGER field), you may want the corresponding text (to be stored on a TEXT field). Or you may want a total amount to be computed automatically from some detailed records.
 This should not be done on the Server side. In fact, the framework expects the transmitted JSON transmitted from client to be set directly to the database layer, as stated by this code from the {\f1\fs20 mORMotSQLite3} unit:
-!function TSQLRestServerDB.EngineUpdate(Table: TSQLRecordClass; ID: integer;
+!function TSQLRestServerDB.EngineUpdate(Table: TSQLRecordClass; ID: TID;
 !  const SentData: RawUTF8): boolean;
 !begin
 !  if (self=nil) or (Table=nil) or (ID<=0) then
 !    result := false else begin
 !    // this SQL statement use :(inlined params): for all values
-!    result := EngineExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
+!    result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
 !!      [Table.RecordProps.SQLTableName,GetJSONObjectAsSQL(SentData,true,true),ID]);
 !    if Assigned(OnUpdateEvent) then
 !       OnUpdateEvent(self,seUpdate,Table,ID);
@@ -3045,20 +3143,21 @@ Since all content changes will be stored in this single table by default (note t
 Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
 :  A true Time Machine for your objects
 Once the object changes are tracked, you can later on browse the history of the object, by using the {\f1\fs20 TSQLRecordHistory.CreateHistory()}, then {\f1\fs20 HistoryGetLast}, {\f1\fs20 HistoryCount}, and {\f1\fs20 HistoryGet()} methods:
-!var aHist: TSQLRecordSecondaryHistory;
+!var aHist: TSQLRecordHistory;
 !    aInvoice: TSQLInvoice;
 !    aEvent: TSQLHistoryEvent; // would be either heAdd, heUpdate or heDelete
 !    aTimeStamp: TModTime;
 !(...)
 !aInvoice := TSQLInvoice.Create;
-!aHist := TSQLRecordSecondaryHistory.CreateHistory(aClient,TSQLRecordPeopleExt,400);
+!aHist := TSQLRecordHistory.CreateHistory(aClient,TSQLInvoice,400);
 !try
 !  writeln('Number of items in the record history: ',aHist.HistoryCount);
 !  for i := 0 to aHist.HistoryCount-1 do begin
 !    aHist.HistoryGet(i,aEvent,aTimeStamp,aInvoice);
 !    writeln;
 !    writeln('Event: ',GetEnumName(TypeInfo(TSQLHistoryEvent),ord(aEvent))^);
-!    writeln('TimeStamp: ',TTimeLogBits(TimeStamp).ToText);
+!    writeln('TimeStamp: ',TTimeLogBits(aTimeStamp).ToText);
+!    writeln('Identifier: ',aInvoice.Number);
 !    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect));
 !  end;
 !finally
@@ -3073,7 +3172,7 @@ This {\f1\fs20 TSQLRecordHistory} class will in fact create a {\f1\fs20 History}
 \graph DBHistory History Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime|ID : integer"];
+struct1 [label="ID : TID|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime"];
 \
 In short, any modification via the ORM will be stored in the {\f1\fs20 TSQLRecordHistory} table, as a JSON object of the changed fields, in {\f1\fs20 TSQLRecordHistory.SentDataJSON}.
 By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB trigger to track low-level changes: it would slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
@@ -3101,7 +3200,7 @@ The database is just one way of your objects persistence:
 - Don't think "@*SQL@", think about classes;
 - Don't wonder "How will I store it?", but "Which data do I need?".
 For instance, don't be tempted to always create a pivot table (via a {\f1\fs20 @*TSQLRecordMany@} property), but consider using a {\i @*dynamic array@}, {\f1\fs20 @*TPersistent@, @*TStrings@} or {\f1\fs20 @*TCollection@} @*published properties@ instead.
-Or consider that you can use a {\f1\fs20 TRecordReference} property pointing to any registered class of the {\f1\fs20 @*TSQLModel@}, instead of creating one {\f1\fs20 @*TSQLRecord@} property per potential table.
+Or consider that you can use a {\f1\fs20 @*TRecordReference@} property pointing to any registered class of the {\f1\fs20 @*TSQLModel@}, instead of creating one {\f1\fs20 @*TSQLRecord@} property per potential table.
 The {\i mORMot} framework is even able to persist the object without any SQL database, e.g. via {\f1\fs20 TSQLRestStorageInMemory}. In fact, its ORM core is optimized but not tied to SQL.
 :  Objects, not tables
 With an @*ORM@, you should usually define fewer tables than in a "regular" relational database, because you can use the high-level type of the {\f1\fs20 @*TSQLRecord@} properties to handle some per-row data.
@@ -3200,13 +3299,13 @@ Another possibility to access your high-level type, is to use either custom {\i 
 : One ORM to rule them all
 Just before entering deeper into the {\i mORMot} material in the following pages (Database layer, Client-Server, Services), you may find out that this implementation may sounds restricted.
 Some common (and founded) criticisms are the following (quoting from our forum):
-- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing {\i Delphi} constructs like "{\f1\fs20 index n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
+- "One of the things I don't like so much about your approach to the @*ORM@ is the mis-use of existing {\i Delphi} constructs like "{\f1\fs20 @*index@ n}" attribute for the maximum length of a string-property. Other ORMs solve this i.e. with official {\f1\fs20 Class}-attributes";
 - "You have to inherit from {\f1\fs20 TSQLRecord}, and can't persist any plain class";
 - "There is no way to easily map an existing complex database".
 Those concerns are pretty understandable. Our {\i mORMot} framework is not meant to fit any purpose, but it is worth understanding why it has been implemented as such, and why it may be quite unique within the family of ORMs - which almost all are following the {\i Hibernate} way of doing.
 :  Rude class definition
 Attributes do appear in {\i Delphi} 2010, and it is worth saying that @*FPC@ has an alternative syntax. Older versions of {\i Delphi} (still very deployed) do not have attributes available in the language, so it was not possible to be compatible with {\i Delphi} 6 up to latest versions (as we wished for our units).
-It is perfectly right to speak about 'mis-use of {\f1\fs20 index}' - but this was the easiest and only way we found out to have such information, just using RTTI. Since this parameter was ignored and not used for most classes, it was re-used (also for dynamic array properties, to have faster lookup).\line There is another "mis-use" for the "{\f1\fs20 stored AS_UNIQUE}" property, which is used to identify unique mandatory columns.
+It is perfectly right to speak about 'mis-use of {\f1\fs20 index}' - but this was the easiest and only way we found out to have such information, just using RTTI. Since this parameter was ignored and not used for most classes, it was re-used (also for dynamic array properties, to have faster lookup).\line There is another "mis-use" for the "{\f1\fs20 stored @*AS_UNIQUE@}" property, which is used to identify unique mandatory columns.
 Using attributes is one of the most common ways of describing tables in most ORMs.\line On the other hand, some coders have a concern about such class definitions. They are mixing DB and logic: you are somewhat polluting the business-level class definition with DB-related stuff.
 That is why other kind of ORMs provide a way of mapping classes to tables using external files (some ORMs provide both ways of definition). And why those days, even code gurus identified the attributes overuse as a potential weakness of code maintainability.\line Attributes do have a huge downsize, when you are dealing with a Client-Server ORM, like ours: on the Client side, those attributes are pointless (client does not need to know anything about the database), and you need to link to all the DB plumbing code to your application. For {\i mORMot}, it was some kind of strong argument.
 For the very same reasons, the column definitions (uniqueness, indexes, required) are managed in {\i mORMot} at two levels:
@@ -3214,7 +3313,7 @@ For the very same reasons, the column definitions (uniqueness, indexes, required
 - At {\i Model level} for {\i Business related stuff} (like uniqueness, validators and filters).
 When you take a look at the supplied validators and filters - see @56@ - you'll find out that this is much powerful than the attributes available in "classic" ORMs: how could you validate an entry to be an email, or to match a pattern, or to ensure that it will be stored in uppercase within the DB?
 Other question worth asking is about the security. If you access the data remotely, a global access to the DB is certainly not enough. Our framework handle per-table @*CRUD@ level access for its ORM, above the DB layer (and has also complete security attributes for services) - see @43@. It works however the underneath DB grants are defined (even an DB with no user rights - like in-memory or {\i SQLite3} is able to do it).
-The {\i mORMot} point of view (which is not the only one), is to let the DB persist the data, as safe and efficient as possible, but rely on higher levels layers to implement the business logic. The framework favors {\i convention over configuration}, which is known to save a lot of time (if you use WCF on a daily basis, as I do, you and your support team know about the {\f1\fs20 .config} syndrome). It will make it pretty database-agnostic (you can even not use a SQL database at all), and will make the framework code easier to debug and maintain, since we don't have to deal with all the DB engine particularities. In short, this is the @*REST@ point of view, and main cause of success: @*CRUD@ is enough in our KISS-friendly design.
+The {\i mORMot} point of view (which is not the only one), is to let the DB persist the data, as safe and efficient as possible, but rely on higher levels layers to implement the business logic. The framework favors {\i @*convention over configuration@}, which is known to save a lot of time (if you use WCF on a daily basis, as I do, you and your support team know about the {\f1\fs20 .config} syndrome). It will make it pretty database-agnostic (you can even not use a SQL database at all), and will make the framework code easier to debug and maintain, since we don't have to deal with all the DB engine particularities. In short, this is the @*REST@ point of view, and main cause of success: @*CRUD@ is enough in any @*KISS@-friendly design.
 :  Persist TSQLRecord, not any class
 About the fact that you need to inherit from {\f1\fs20 @*TSQLRecord@}, and can't persist anything, our purpose was in fact very similar to the "@**Layer Supertype@" pattern of @*Domain-Driven@-Design, as explained by Martin Fowler:\line {\i It is not uncommon for all the objects in a layer to have methods you don't want to have duplicated throughout the system. You can move all of this behavior into a common Layer Supertype.}
 In fact, for {\f1\fs20 TSQLRecord} / {\f1\fs20 TSQLRest} / @*ORM@ remote access, you have already all @*Client-Server@ @*CRUD@ operations available. Those classes are abstract common Supertypes, ready to be used in your projects. It has been optimized a lot (e.g. with a cache and other nice features), so I do not think reinventing a CRUD / database service is worth the prize. You have secure access to the ORM classes, with user/group attributes. Almost everything is created by code, just from the {\f1\fs20 TSQLRecord} class definition, via @*RTTI@. So it may be faster (and safer) to rely on it, than defining all your class hierarchy by hand.
@@ -3225,8 +3324,8 @@ From the {\i @*Domain-Driven@} / @*SOA@ point of view, it is now an established 
 :  Several ORMs at once
 To be clear, {\i mORMot} offers several kind of table definitions:
 - Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
-- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} function, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / ZDBC provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
-- Via {\f1\fs20 @*TSQLRecord@} "external @*ODM@-managed" classes: after registration via a call to the {\f1\fs20 @*StaticMongoDBRegister@()} function, external {\i @*MongoDB@} collections are created and managed via @82@. In this case, no {\f1\fs20 index} attribute for setting text column length is necessary.
+- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} / {\f1\fs20 @*VirtualTableExternalMap@()} functions, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / @*ZDBC@ provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
+- Via {\f1\fs20 @*TSQLRecord@} "external @*ODM@-managed" classes: after registration via a call to the {\f1\fs20 @*StaticMongoDBRegister@()} or {\f1\fs20 @*StaticMongoDBRegisterAll@()} functions, external {\i @*MongoDB@} collections are created and managed via @82@. In this case, no {\f1\fs20 index} attribute for setting text column length is necessary.
 - Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
 Why have several database back-end at the same time?
 Most of the existing software architecture rely on one dedicated database per domain, since it is more convenient to administrate one single server.\line But there are some cases when it does make sense to have several databases at once.
@@ -3234,468 +3333,41 @@ In practice, when your data starts to grow, you may need to {\i archive} older d
 Another pattern is to use dedicated consolidation DBs for any analysis. In fact, SQL {\i @*normalization@} is good for most common relation work, but sometimes {\i @*denormalization@} is necessary, e.g. for statistic or business analyse purposes. In this case, dedicated consolidation databases, containing the data already prepared and indexed in a ready-to-use denormalized layout.
 Last but not least, some @*Event Sourcing@ architectures even {\i expect} several DB back-end at once:
 - It will store the status on one database (e.g. high-performance in-memory) for most common requests to be immediate;
-- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} or {\i @*NexusDB@}), even a high-speed @*NoSQL@ engine like {\i @*MongoDB@}.
+- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} or {\i @*NexusDB@}), even a high-speed @*NoSQL@ engine like {\i @*MongoDB@}.
 It is possible to directly access ORM objects remotely (e.g. the consolidation DB), mostly in a read-only way, for dedicated reporting, e.g. from consolidated data - this is one potential @*CQRS@ implementation pattern with {\i mORMot}. Thanks to the framework security, remote access will be safe: your clients won't be able to change the consolidation DB content!
 As can be easily guessed, such design models are far away from a basic ORM built only for class persistence. And {\i mORMot}'s ORM/ODM offers you all those possibilities.
 :  The best ORM is the one you need
 Therefore, we may sum up some potential use of ORM, depending of your intent:
 - If your understanding of ORM is just to persist some {\i existing} objects with a lot of existing business code, {\i mORMot} won't help you directly, since it expects objects to inherit from {\f1\fs20 TSQLRecord} - but note that most ORMs, even those allowing to persist any {\f1\fs20 class}, would not be so easy to work with;
 - If you want a very fast low-level Client-Server layer, {\i mORMot} is a first class candidate: we identified that some users are using the built-in JSON serialization and HTTP server features to create their application;
-- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestStorageInMemory@} class which is able to persist its content with small files - see @57@;
+- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestStorageInMemory@} class which is able to persist its content with small files - see @57@;
 - If you need (perhaps not now, but probably in the future) to create some kind of scalable {\i @*Domain-Driven@} design architecture, you'll have all needed features at hand with {\i mORMot};
 - If your expectation is to map an existing complex DB, {\i mORMot} will handle it soon (it is planned and prepared within the framework architecture).
 Therefore, {\i mORMot} is not just an ORM, nor just a "classic" ORM.
 About how to use {\i mORMot} with existing code, see @66@.
-:MVC pattern
-%cartoon04.png
-: Creating a Model
-According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
-The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
-In order to follow the @*MVC@ pattern, the {\f1\fs20 TSQLModel} instance is to be used when you have to deal at table level. For instance, do not try to use low-level {\f1\fs20 TSQLDataBase.GetTableNames} or {\f1\fs20 TSQLDataBase.GetFieldNames} methods in your code. In fact, the tables declared in the Model may not be available in the {\i @*SQLite3@} database schema, but may have been defined as {\f1\fs20 @*TSQLRestStorageInMemory@} instance via the {\f1\fs20 TSQLRestServer.StaticDataCreate} method, or being external tables - see @27@. You could even have a {\f1\fs20 mORMot} server running without any {\i @*SQLite3@} engine at all, but pure in-memory tables!
-Each {\f1\fs20 TSQLModel} instance is in fact associated with a {\f1\fs20 TSQLRest} instance. An {\f1\fs20 Owner} property gives access to the current running client or server {\f1\fs20 @*TSQLRest@} instance associated with this model.
-By design, models are used on both Client and Server sides. It is therefore a good practice to use a common unit to define all {\f1\fs20 TSQLRecord} types, and have a common function to create the related {\f1\fs20 TSQLModel} class.
-For instance, here is the corresponding function as defined in the first samples available in the source code repository (unit {\f1\fs20 SampleData.pas}):
-!function CreateSampleModel: TSQLModel;
-!begin
-!  result := TSQLModel.Create([TSQLSampleRecord]);
-!end;
-For a more complex model including link to User Interface, see @64@.
-In practice, a same {\f1\fs20 TSQLRecord} can be used in several models: this is typically the case for {\f1\fs20 TSQLAuthUser} tables, or if client and server instances are running in the same process. So, for accessing the model properties, you have two structures available:
-|%37%68
-|\b Class|Description\b0
-|{\f1\fs20 @**TSQLModelRecordProperties@}|Model-specific ORM parameters, like dedicated SQL auto-generation and external DB settings.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[]} array
-|{\f1\fs20 @**TSQLRecordProperties@}|Low-level table properties, as retrieved from @5@ by the ORM kernel of {\i mORMot}.\line Access these instances from {\f1\fs20 TSQLModel.TableProps[].Props}
-|%
-So you may use code like this:
-!var i: integer;
-!    ModelProps: TSQLModelRecordProperties;
-!    Props: TSQLRecordProperties;
-!begin
-!  ...
-!  for i := 0 to high(Model.TableProps) do begin
-!    ModelProps := Model.TableProps[i];
-!    // now you can access ModelProps.ExternalDB.TableName ...
-!    Props := ModelProps.Props;
-!    // now you can use Props.SQLTableName or Props.Fields[]
-!  end;
-!end;
-\page
-:56 Filtering and Validating
-According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
-If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
-In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
-\graph HierTSynFilter Filtering and Validation classes hierarchy
-\TSynValidate\TSynFilterOrValidate
-\TSynFilter\TSynFilterOrValidate
-\
-{\f1\fs20 @*TSQLRecord@} field content validation is handled in the new {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes.
-{\f1\fs20 TSQLRecord} field content filtering is handled in the new {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes.
-Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
-\graph HierTSynFilters Default filters and Validation classes hierarchy
-\TSynValidatePassWord\TSynValidateText
-\TSynValidateText\TSynValidate
-\TSynValidateTableUniqueField\TSynValidateTable
-\TSynValidateTable\TSynValidate
-\TSynValidateUniqueField\TSynValidateRest
-\TSynValidateRest\TSynValidate
-\TSynValidatePatternI\TSynValidatePattern
-\TSynValidatePattern\TSynValidate
-\TSynValidateIPAddress\TSynValidate
-\TSynValidateEmail\TSynValidate
-\TSynValidate\TSynFilterOrValidate
-\TSynFilterUpperCaseU\TSynFilter
-\TSynFilterUpperCase\TSynFilter
-\TSynFilterTrim\TSynFilter
-\TSynFilterLowerCaseU\TSynFilter
-\TSynFilterLowerCase\TSynFilter
-\TSynFilter\TSynFilterOrValidate
-rankdir=LR;
-\
-You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
-Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
-Of course, the {\f1\fs20 mORMotUIEdit} unit now handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (using one of the {\f1\fs20 TSQLValidate} classes).
-The unique field validation is now in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
-To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
-!function CreateFileModel(Owner: TSQLRest): TSQLModel;
-!begin
-!  result := TSQLModel.Create(Owner,
-!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
-!    TypeInfo(TFileAction),TypeInfo(TFileEvent),'synfile');
-!  TSQLFile.AddFilterOrValidate('Name',TSQLFilterLowerCase);
-!  TSQLUser.AddFilterOrValidate('Email',TSQLValidateEmail);
-!end;
-In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
-For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
-!procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
-! (...)
-!  // perform all registered filtering
-!!  Rec.Filter(ModifiedFields);
-!  // perform content validation
-!  FieldIndex := -1;
-!!  ErrMsg := Rec.Validate(Client,ModifiedFields,@FieldIndex);
-!  if ErrMsg<>'' then begin
-!    // invalid field content -> show message, focus component and abort saving
-!    if cardinal(FieldIndex)<cardinal(length(fFieldComponents)) then begin
-!      C := fFieldComponents[FieldIndex];
-!      C.SetFocus;
-!      Application.ProcessMessages;
-!      ShowMessage(ErrMsg,format(sInvalidFieldN,[fFieldCaption[FieldIndex]]),true);
-!    end else
-!      ShowMessage(ErrMsg,format(sInvalidFieldN,['?']),true);
-!  end else
-!    // close window on success
-!    ModalResult := mrOk;
-!end;
-It is up to your code to filter and validate the record content. By default, the {\i mORMot} @*CRUD@ operations won't call the registered filters or validators.
-\page
-: Views
-The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
-- For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
-- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
-:  Desktop clients
-:5   RTTI
-The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
-In short, it allows the software logic to be extracted from the code itself. Here are the places where this technology was used:
-- All database structures are set in the code by normal classes definition, and most of the needed @*SQL@ code is created on the fly by the framework, before calling the {\i @*SQLite3@} database engine, resulting in a true Object-relational mapping (@*ORM@) framework;
-- All User Interface is generated by the code, by using some simple data structures, relying on enumerations (see next paragraph);
-- Most of the text displayed on the screen does rely on RTTI, thanks to the @*Camel@ approach (see below), ready to be translated into local languages;
-- All internal Event process (such as Button press) relies on enumerations RTTI;
-- Options and program parameters are using RTTI for data persistence and screen display (e.g. the Settings window of your program can be created by pure code): adding an option is a matter of a few code lines.
-In {\i Delphi}, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
-For example, some tool-bar actions can be defined with:
-!type
-!  /// item toolbar actions
-!  TBabyAction = (
-!    paCreateNew, paDelete, paEdit, paQuit);
-Then this {\f1\fs20 TBabyAction} @*enumerated@ type is used to create the User Interface ribbon of the main window, just by creating an array of set of this kind:
-!BarEdit: array[0..1] of set of TBabyAction = (
-!    [paCreateNew, paDelete, paEdit],
-!    [paQuit] );
-The caption of the buttons to be displayed on the screen is then extracted by the framework using "@**Camel@ Case": the second button, defined by the {\f1\fs20 paCreateNew} identifier in the source code, is displayed as "{\i Create new}" on the screen, and this "{\i Create new}" is used for direct @*i18n@ of the software. For further information about "Camel Case" and its usage in Object Pascal, Java, Dot Net, Python see @http://en.wikipedia.org/wiki/CamelCase
-Advantages of the RTTI can therefore by sum up:
-- Software maintainability, since the whole program logic is code-based, and the User Interface is created from it. It therefore avoid RAD (Rapid Application Development) abuse, which mix the User Interface with data logic, and could lead into "write fast, try to maintain" scenarios;
-- Enhanced code @*security@, thanks to Object Pascal @*strong type@ syntax;
-- Direct database access from the language object model, without the need of writing @*SQL@ or use of a @*MVC@ framework;
-- User Interface coherency, since most screen are created on the fly;
-- Easy @*i18n@ of the software, without additional components or systems.
-:64   User Interface
-User Interface generation from RTTI and the integrated reporting features will be described @31@, during presentation of the Main Demo application design.
-In short, such complex model including User Interface auto-creation could be written as such - extracted from unit {\f1\fs20 FileTables.pas}:
-!function CreateFileModel(Owner: TSQLRest): TSQLModel;
-!begin
-!  result := TSQLModel.Create(Owner,
-!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
-!    TypeInfo(TFileAction),TypeInfo(TFileEvent));
-!end;
-All needed {\f1\fs20 TSQLRecord} classes are declared in a
-! FileTabs: array[0..4] of TFileRibbonTabParameters = ( ...
-constant array, and will use {\f1\fs20 TFileAction / TFileEvent} enumeration types to handle the User Interface activity and Business Logic.
-\page
-:  Web clients
-:81   Mustache template engine
-{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure {\i Delphi} implementation of it, with a perfect integration with other bricks of the framework.
-Generally speaking, a @**Template@ system can be used to separate output formatting specifications, which govern the appearance and location of output text and data elements, from the executable logic which prepares the data and makes decisions about what appears in the output.
-Most template systems (e.g. PHP, smarty, Razor...) feature in fact a full scripting engine within the template content. It allows powerful constructs like variable assignment or conditional statements in the middle of the HTML content. It makes it easy to modify the look of an application within the template system exclusively, without having to modify any of the underlying "application logic". They do so, however, at the cost of separation, turning the templates themselves into part of the application logic.
-{\i Mustache} inherits from Google's {\i ctemplate} library, and is used in many famous applications, including the "main" Google web search, or the Twitter web site.\line The {\i Mustache} template system leans strongly towards preserving the separation of logic and presentation, therefore ensures a perfect  @*MVC@ - @10@ - design, and ready to consume @*SOA@ services.
-{\i Mustache} is intentionally constrained in the features it supports and, as a result, applications tend to require quite a bit of code to instantiate a template: all the application logic will be defined within the {\i Controller} code, not in the {\i View} source. This may not be to everybody's tastes. However, while this design limits the power of the template language, it does not limit the power or flexibility of the template system. This system supports arbitrarily complex text formatting.
-Finally, {\i Mustache} is designed with an eye towards efficiency. Template instantiation is very quick, with an eye towards minimizing both memory use and memory fragmentation. As a result, it sounds like a perfect template system for our {\i mORMot} framework.
-:   Mustache principles
-There are two main parts to the {\i Mustache} template system:
-- Templates (which are plain text files);
-- Data dictionaries (aka {\i Context}).
-For instance, given the following template:
-$$<h1>{{header}}</h1>
-$$
-$${{#items}}
-$$  {{#first}}
-$$    <li><strong>{{name}}</strong></li>
-$$  {{/first}}
-$$  {{#link}}
-$$    <li><a href="{{url}}">{{name}}</a></li>
-$$  {{/link}}
-$${{/items}}
-$$
-$${{#empty}}
-$$  <p>The list is empty.</p>
-$${{/empty}}
-and the following data context:
-#{
-#  "header": "Colors",
-#  "items": [
-#      {"name": "red", "first": true, "url": "#Red"},
-#      {"name": "green", "link": true, "url": "#Green"},
-#      {"name": "blue", "link": true, "url": "#Blue"}
-#  ],
-#  "empty": true
-#}
-The {\i Mustache} engine will render this data as such:
-$$<h1>Colors</h1>
-$$<li><strong>red</strong></li>
-$$<li><a href="#Green">green</a></li>
-$$<li><a href="#Blue">blue</a></li>
-$$<p>The list is empty.</p>
-In fact, you did not see any "{\f1\fs20 if}" nor "{\i for}" loop in the template, but {\i Mustache} conventions make it easy to render the supplied data as the expected HTML output. It is up to the MVC {\i Controller} to render the data as expected by the template, e.g. for formatting dates or currency values.
-:   Mustache templates
-The {\i Mustache} template logic-less language has five types of tags:
-- Variables;
-- Sections;
-- Inverted Sections;
-- Comments;
-- Partials.
-All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. Anything found in a template of this form is interpreted as a template marker. All other text is considered formatting text and is output verbatim at template expansion time.
-|%20%80
-|\b Marker|Description\b0
-|{\f1\fs20 \{\{variable\}\}}|The {\f1\fs20 variable} name will be searched recursively within the current context (possibly with dotted names), and, if found, will be written as escaped HTML.\line If there is no such key, nothing will be rendered.
-|{\f1\fs20 \{\{\{variable\}\}\}\line {\f1\fs20 \{\{& variable\}\}}}|The {\f1\fs20 variable} name will be searched recursively within the current context, and, if found, will be written directly, {\i without any HTML escape}.\line If there is no such key, nothing will be rendered.
-|{\f1\fs20 \{\{#section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i section}, which will be rendered depending of the {\f1\fs20 section} variable value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list} {\f1\fs20 []}, the whole block won't be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} but not a list, it will be used as the context for a single rendering of the block;\line - If {\f1\fs20 section} is a non-empty list, the text in the block will be rendered once for each item in the list - the context of the block will be set to the current item for each iteration.
-|{\f1\fs20 \{\{^section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i inverted section}, which will be rendered depending of the {\f1\fs20 section} variable {\i inverted }value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list}, the whole block {\i will} be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} or a non-empty list, it won't be rendered.
-|{\f1\fs20 \{\{! comment\}\}}|The comment text will just be ignored.
-|{\f1\fs20 \{\{>partial\}\}}|The {\f1\fs20 partial} name will be searched within the registered {\i partials list}, then will be executed at run-time (so recursive partials are possible), with the current execution context.
-|{\f1\fs20 \{\{=...=\}\}}|The delimiters (i.e. by default {\f1\fs20 \{\{...\}\}}) will be replaced by the specified characters (may be convenient when double-braces may appear in the text).
-|%
-In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
-|%20%80
-|\b Marker|Description\b0
-|{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
-|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
-|{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
-|{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
-|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
-|{\f1\fs20 \{\{<partial\}\}}\line ...\line {\f1\fs20 \{\{/partial\}\}}|Defines an in-lined {\i partial} - to be called later via {\f1\fs20 \{\{>partial\}\}} - within the scope of the current template
-|{\f1\fs20 \{\{"some text\}\}}|This pseudo-variable will supply the given text to a callback, which will for instance transform its content (e.g. translate it), before writing it to the output
-|%
-This set of markers will allow to easily write any kind of content, without any explicit logic nor nested code. As a major benefit, the template content could be edited and verified without the need of any {\i Mustache} compiler, since all those {\f1\fs20 \{\{...\}\}} markers will identify very clearly the resulting layout.
-:    Variables
-A typical Mustache template:
-$Hello {{name}}
-$You have just won {{value}} dollars!
-$Well, {{taxed_value}} dollars, after taxes.
-Given the following hash:
-#{
-#  "name": "Chris",
-#  "value": 10000,
-#  "taxed_value": 6000
-#}
-Will produce the following:
-$Hello Chris
-$You have just won 10000 dollars!
-$Well, 6000 dollars, after taxes.
-You can note that {\f1\fs20 \{\{variable\}\}} tags are escaped for HTML by default. This is a mandatory security feature. In fact, all web applications which create HTML documents can be vulnerable to Cross-Site-Scripting (XSS) attacks unless data inserted into a template is appropriately sanitized and/or escaped. With Mustache, this is done by default. Of course, you can override it and force to {\i not-escape} the value, using {\f1\fs20 \{\{\{variable\}\}\} or {\f1\fs20 \{\{& variable\}\}}}.
-For instance:
-|%24%38%38
-|\b Template|Context|Output\b0
-|{\f1\fs20 * \{\{name\}\}\line * \{\{age\}\}\line * \{\{company\}\}\line * \{\{\{company\}\}\}|\{\line   "name": "Chris",\line   "company": "<b>GitHub</b>"\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
-|%
-Variables resolve names within the current context with an optional dotted syntax, for instance:
-|%29%37%36
-|\b Template|Context|Output\b0
-|{\f1\fs20 * \{\{people.name\}\}\line * \{\{people.age\}\}\line * \{\{people.company\}\}\line * \{\{\{people.company\}\}\}|\{\line  "people": \{\line   "name":"Chris",\line   "company":"<b>GitHub</b>"\line  \}\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
-|%
-:    Sections
-{\i Sections} render blocks of text one or more times, depending on the value of the key in the current context.
-In our "wining template" above, what happen if we do want to hide the tax details?\line In most script languages, we may write an {\f1\fs20 if ... } block within the template. This is what {\i Mustache} avoids. So we define a section, which will be rendered on need.
-The template becomes:
-$Hello {{name}}
-$You have just won {{value}} dollars!
-${{#in_ca}}
-$Well, {{taxed_value}} dollars, after taxes.
-${{/in_ca}}
-Here, we created a new section, named {\f1\fs20 in_ca}.
-Given the hash value of {\f1\fs20 in_ca} (and its presence), the section will be rendered, or not:
-|%40%55
-|\b Context|Output\b0
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": true\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": false\line \}|Hello Chris\line You have just won 10000 dollars!}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
-|%
-Sections also change the context of its inner block. It means that the section variable content becomes the top-most context which will be used to identify any supplied variable key.
-Therefore, the following context will be perfectly valid: we can define {\f1\fs20 taxed_value} as a member of {\f1\fs20 in_ca}, and it will be rendered directly, since it is part of the new context.
-|%40%55
-|\b Context|Output\b0
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
-|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 3000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
-|%
-In the latest context above, there are two {\f1\fs20 taxed_value} variables. The engine will use the one defined by the context in the {\f1\fs20 in_ca} section, i.e. {\f1\fs20 in_ca.taxed_value}; the one defined at the root context level (which equals 3000) is just ignored.
-If the variable pointed by the section name is a list, the text in the block will be rendered once for each item in the list. The context of the block will be set to the current item for each iteration.\line In this way we can loop over collections. {\i Mustache} allows any depth of nested loops (e.g. any level of master/details information).
-|%24%38%38
-|\b Template|Context|Output\b0
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{name\}\}</b>\line \{\{/repo\}\}|\{\line   "repo": [\line     { "name": "resque" },\line     { "name": "hub" },\line     { "name": "rip" }\line   ]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}|\{\line   "repo":\line      ["resque", "hub", "rip"]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
-|%
-The latest template makes use of the {\f1\fs20 \{\{.\}\}} pseudo-variable, which allows to render the current item of the list.
-:    Inverted Sections
-An inverted section begins with a caret ({\f1\fs20 ^}) and ends as a standard (non-inverted) section. They may render text once, based on the {\i inverse} value of the key. That is, the text block will be rendered if the key doesn't exist, is false, or is an empty list.
-Inverted sections are usually defined after a standard section, to render some message in case no information will be written in the non-inverted section:
-|%30%30%30
-|\b Template|Context|Output\b0
-|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}\line \{\{^repo\}\}\line No repos :(\line \{\{/repo\}\}|\{\line   "repo":\line      []\line \}|No repos :(}
-|%
-:    Partials
-Partials are some kind of external sub-templates which can be included within a main template, for instance to follow the same rendering at several places. Just like functions in code, they do ease template maintainability and spare development time.
-Partials are rendered at runtime (as opposed to compile time), so recursive partials are possible. Just avoid infinite loops. They also inherit the calling context, so can easily be re-used within a list section, or together with plain variables.
-In practice, partials shall be supplied together with the data context - they could be seen as "template context".
-For example, this "main" template uses a {\f1\fs20 \{\{> user\}\}} partial:
-$$<h2>Names</h2>
-$${{#names}}
-$$  {{> user}}
-$${{/names}}
-With the following template registered as "user":
-$$<strong>{{name}}</strong>
-Can be thought of as a single, expanded template:
-$$<h2>Names</h2>
-$${{#names}}
-$$  <strong>{{name}}</strong>
-$${{/names}}
-In {\i mORMot}'s implementations, you can also create some {\i internal} partials, defined as {\f1\fs20 \{\{<partial\}\} ... \{\{/partial\}\}} pseudo-sections. It may decrease the need of maintaining multiple template files, and refine the rendering layout.
-For instance, the previous template may be defined at once:
-$$<h2>Names</h2>
-$${{#names}}
-$$  {{>user}}
-$${{/names}}
-$$
-$${{<user}}
-$$<strong>{{name}}</strong>
-$${{/user}}
-The same file will define both the partial and the main template. Note that we defined the internal partial after the main template, but we may have defined it anywhere in the main template logic: internal partials definitions are ignored when rendering the main template, just like comments.
-:   SynMustache unit
-Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} template engine in the {\f1\fs20 SynMustache} unit:
-- It is the first {\i Delphi} implementation of {\i Mustache};
-- It has a separate parser and renderer (so you can compile your templates ahead of time);
-- The parser features a shared cache of compiled templates;
-- It passes all official {\i Mustache} specification tests, as defined at @http://github.com/mustache/spec - including all weird whitespace process;
-- External partials can be supplied as {\f1\fs20 TSynMustachePartials} dictionaries;
-- {\f1\fs20 \{\{.\}\}}, {\f1\fs20 \{\{-index\}\}} and {\f1\fs20 \{\{"some text\}\}} pseudo-variables were added to the standard {\i Mustache} syntax;
-- {\f1\fs20 \{\{#-first\}\}}, {\f1\fs20 \{\{#-last\}\}} and {\f1\fs20 \{\{#-odd\}\}} pseudo-sections were added to the standard {\i Mustache} syntax;
-- Internal partials can be defined via {\f1\fs20 \{\{<partial\}\}} - also a nice addition to the standard {\i Mustache} syntax;
-- It allows the data context to be supplied as JSON or our @80@;
-- Almost no memory allocation is performed during the rendering;
-- It is natively UTF-8, from the ground up, with optimized conversion of any string data;
-- Performance has been tuned and grounded in {\f1\fs20 SynCommons}'s optimized code;
-- Each parsed template is thread-safe and re-entrant;
-- It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
-- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
-- API is flexible and easy to use.
-:    Variables
-Now, let's see some code.\line First, we define our needed variables:
-!var mustache: TSynMustache;
-!    doc: variant;
-In order to parse a template, you just need to call:
-!  mustache := TSynMustache.Parse(
-!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
-It will return a compiled instance of the template.\line The {\f1\fs20 Parse()} class method will use the shared cache, so you won't need to release the {\f1\fs20 mustache} instance once you are done with it: no need to write a {\f1\fs20 try ... finally mustache.Free; end} block.
-You can use a {\f1\fs20 TDocVariant} to supply the context data (with late-binding):
-!  TDocVariant.New(doc);
-!  doc.name := 'Chris';
-!  doc.value := 10000;
-As an alternative, you may have defined the context data as such:
-!  doc := _ObjFast(['name','Chris','value',1000]);
-Now you can render the template with this context:
-!  html := mustache.Render(doc);
-!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-If you want to supply the context data as JSON, then render it, you may write:
-!  mustache := TSynMustache.Parse(
-!    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
-!  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
-!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
-As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into UTF-8):
-!  mustache := TSynMustache.Parse(
-!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
-!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
-!  html='Hello Chris'#13#10'You have just won 10000 dollars!'
-You can find in the {\f1\fs20 mORMot.pas} unit the {\f1\fs20 ObjectToJSON()} function which is able to transform any {\f1\fs20 TPersistent} instance into valid JSON content, ready to be supplied to a {\f1\fs20 TSynMustache} compiled instance.\line If the object's published properties have some getter functions, they will be called on the fly to process the data (e.g. returning 'FirstName Name' as FullName by concatenating both sub-fields).
-:    Sections
-Sections are handled as expected:
-!  mustache := TSynMustache.Parse('Shown.{{#person}}As {{name}}!{{/person}}end{{name}}');
-!  html := mustache.RenderJSON('{person:{age:?,name:?}}',[10,'toto']);
-!  // now html='Shown.As toto!end'
-Note that the sections change the data context, so that within the {\f1\fs20 #person} section, you can directly access to the data context {\f1\fs20 person} member, i.e. writing directly {\f1\fs20 \{\{name\}\}}
-It supports also inverted sections:
-!  mustache := TSynMustache.Parse('Shown.{{^person}}Never shown!{{/person}}end');
-!  html := mustache.RenderJSON('{person:true}');
-!  // now html='Shown.end'
-To render a list of items, you can write for instance (using the {\f1\fs20 \{\{.\}\}} pseudo-variable):
-!  mustache := TSynMustache.Parse('{{#things}}{{.}}{{/things}}');
-!  html := mustache.RenderJSON('{things:["one", "two", "three"]}');
-!  // now html='onetwothree'
-The {\f1\fs20 \{\{-index\}\}} pseudo-variable allows to numerate the list items, when rendering:
-!  mustache := TSynMustache.Parse(
-!    'My favorite things:'#$A'{{#things}}{{-index}}. {{.}}'#$A'{{/things}}');
-!  html := mustache.RenderJSON('{things:["Peanut butter", "Pen spinning", "Handstands"]}');
-!  // now html='My favorite things:'#$A'1. Peanut butter'#$A'2. Pen spinning'#$A+
-!  //          '3. Handstands'#$A,'-index pseudo variable'
-:    Partials
-External partials (i.e. standard {\i Mustache} partials) can be defined using {\f1\fs20 TSynMustachePartials}. You can define and maintain a list of {\f1\fs20 TSynMustachePartials} instances, or you can use a one-time partial, for a given rendering process, as such:
-!  mustache := TSynMustache.Parse('{{>partial}}'#$A'3');
-!  html := mustache.RenderJSON('{}',TSynMustachePartials.CreateOwned(['partial','1'#$A'2']));
-!  // now html='1'#$A'23','external partials'
-Here {\f1\fs20 TSynMustachePartials.CreateOwned()} expects the partials to be supplied as name/value pairs.
-Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined directly in the main template:
-!  mustache := TSynMustache.Parse('{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
-!  html := mustache.RenderJSON('{name:3}');
-!  // now html='1'#$A'234','internal partials'
-:    Internationalization
-You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
-By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
-!procedure TTestLowLevelTypes.MustacheTranslate(var English: string);
-!begin
-!  if English='Hello' then
-!    English := 'Bonjour' else
-!  if English='You have just won' then
-!    English := 'Vous venez de gagner';
-!end;
-Of course, in a real application, you may assign one {\f1\fs20 TLanguageFile.Translate(var English: string)} method, as defined in the {\f1\fs20 mORMoti18n.pas} unit.
-Then, you will be able to define your template as such:
-!  mustache := TSynMustache.Parse(
-!    '{{"Hello}} {{name}}'#13#10'{{"You have just won}} {{value}} {{"dollars}}!');
-!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
-!  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
-All text has indeed been translated as expected.
-\page
-:   Integration with the ORM
-You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
-For instance, you may write:
-!var template: TSynMustache;
-!    html: RawUTF8;
-! ...
-!  template := TSynMustache.Parse(
-!    '<ul>{{#items}}<li>{{Name}} was born on {{BirthDate}}</li>{{/items}}</ul>');
-!  html := template.Render(
-!    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
-!  // now html will contain a ready-to-be-displayed unordered list
-Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
-In conjunction with method-based services - see @49@ - which can return directly HTML content to a HTTP client, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern:
-|%20%80
-|\b MVC|mORMot\b0
-|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
-|{\i View}|@81@\line (may be stored as separated files or within the database)
-|{\i Controller}|Method-based services - see @49@
-|%
-In the future, this MVC design will probably be enhanced, and benefit from interface-based services - see @63@ - to write:
-- Some part of the {\i Model} (i.e. the business logic);
-- Some part of the {\i Controller} (i.e. the application logic).
-Both {\i Model} and {\i Controller} logic, even if defined via {\f1\fs20 interface}, may be implemented in {\i Delphi} or even in {\i JavaScript} - see @79@. {\i Delphi} code would gives strong typing, full integration to the framework, and the best performance possible. {\i JavaScript} code may be changed on the fly, and even stored as separated files.
 :42Database layer
-%cartoon05.png
+%cartoon04.png
 : SQLite3-powered, not SQLite3-limited
 The core database of this framework uses the {\i @**SQLite3@} library, which is a Free, Secure, Zero-Configuration, Server-less, Single Stable Cross-Platform Database File database engine.
 As stated below, you can use any other database access layer, if you wish:
 - A fast in-memory engine is included, which outperforms any SQL-based solution in terms of speed - but to the price of a non ACID behavior on disk (but ACID in RAM);
 - An integrated {\i SQLite3} engine, which is the best candidate for an embedded solution, even on server side;
-- Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects;
+- Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects;
+- Any other {\f1\fs20 TSQLRest} instance (either another {\f1\fs20 TSQLRestServer}, or a remote {\f1\fs20 TSQLRestClientHTTP}) - see @93@;
 - Direct access to a {\i @*MongoDB@} database, which implements a true @82@ design.
 \graph mORMotDBDesign mORMot Persistence Layer Architecture
 \ORM\SQLite3\direct
-\ORM\TObjectList\direct
-\ORM\External DB\direct
-\SQLite3\TObjectList\virtual
-\SQLite3\External DB
-\External DB\Oracle SQLite3 ODBC力leDB ZDBC\direct
-\External DB\FireDAC AnyDAC UniDAC丁DE DBExpress NexusDB\DB.pas三DataSet
-\ORM\MongoDB\direct
+\ORM\TObjectList刁oSQL\direct
+\ORM\RDBMS\direct
+\SQLite3\TObjectList刁oSQL\virtual
+\SQLite3\RDBMS
+\RDBMS\Oracle SQLite3 ODBC力leDB ZDBC\direct
+\RDBMS\FireDAC AnyDAC UniDAC丁DE DBExpress NexusDB\DB.pas三DataSet
+\ORM\MongoDB刁oSQL\direct
+\ORM\TSQLRest尸edirection\direct
 =ORM=mORMot力RM
-\TObjectList=External DB=MongoDB
+=RDBMS=External SQL卜DBMS
+\TObjectList刁oSQL=RDBMS=MongoDB刁oSQL=TSQLRest尸edirection
 \
 {\i SQlite3} will be used as the main SQL engine, able to @*JOIN@ all those tables, thanks to its {\i @*Virtual Table@} unique feature. You can in fact {\i mix} internal and external engines, in the same database model, and access all data in one unique SQL statement.
 :  SQLite3 as core
@@ -3709,7 +3381,7 @@ This framework uses a compiled version of the official {\i SQLite3} library sour
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
 - Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@});
 - {\i SQLite3} library unit was compiled including @*RTREE@ extension for doing very fast range queries;
-- It can include @*FTS@3/FTS4 full text search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
+- It can include @*FTS@3/FTS4 @*full text@ search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
 - Additional {\i @*collation@s} (i.e. sorting functions) were added to handle efficiently not only @*UTF-8@ text, but also e.g. @*ISO 8601@ time encoding, fast {\i Win1252} diacritic-agnostic comparison and native slower but accurate Windows UTF-16 functions;
 - Additional @*SQL@ functions like {\i Soundex} for English/French/Spanish phonemes, {\f1\fs20 MOD} or {\f1\fs20 CONCAT}, and some dedicated functions able to directly search for data within @*BLOB@ fields containing an {\i Delphi} high-level type (like a serialized dynamic array);
@@ -3718,17 +3390,17 @@ From the technical point of view, here are the current compilation options used 
 - Automatic SQL statement parameter preparation, for execution speed up;
 - {\f1\fs20 TSQLDatabase} can cache the last results for SELECT statements, or use a tuned client-side or server-side per-record caching, in order to speed up most read queries, for lighter web server or client User Interface e.g.;
 - User @*authentication@ handling ({\i SQLite3} is user-free designed);
-- {\i SQLite3} source code was compiled without thread mutex: the caller has to be @*thread-safe@ aware; this is faster on most configurations, since mutex has to be acquired once): low level {\f1\fs20 sqlite3_*()} functions are not thread-safe, as {\f1\fs20 TSQLRequest} and {\f1\fs20 TSQLBlobStream} which just wrap them; but {\f1\fs20 TSQLDataBase} is thread-safe, as {\f1\fs20 TSQLTableDB}/{\f1\fs20 TSQLRestServerDB}/{\f1\fs20 TSQLRestClientDB} which call {\f1\fs20 TSQLDataBase};
+- {\i SQLite3} source code was compiled without thread mutex: the caller has to be @*thread-safe@ aware; this is faster on most configurations, since mutex has to be acquired once): low level {\f1\fs20 sqlite3_*()} functions are not thread-safe, as {\f1\fs20 TSQLRequest} and {\f1\fs20 TSQLBlobStream} which just wrap them; but {\f1\fs20 TSQLDataBase} is thread-safe, as {\f1\fs20 TSQLTableDB}/{\f1\fs20 @*TSQLRestServerDB@}/{\f1\fs20 TSQLRestClientDB} which call {\f1\fs20 TSQLDataBase};
 - Compiled with {\f1\fs20 SQLITE_OMIT_SHARED_CACHE} define, since with the new @*Client-Server@ approach of this framework, no concurrent access could happen, and an internal efficient caching algorithm is added, avoiding most call of the {\i SQLite3} engine in multi-user environment (any @*AJAX@ usage should benefit of it);
 - The embedded {\i SQLite3} database engine can be easily updated from the official {\i SQLite3} source code available at @http://sqlite.org - use the amalgamation C file with a few minor changes (documented in the {\f1\fs20 SynSQLite3Static.pas} unit) - the resulting C source code delivered as {\f1\fs20 .obj} is also available in the official {\i Synopse} source code repository.
 The overhead of including {\i SQlite3} in your server application will be worth it: just some KB to the executable, but with so many nice features, even if only external databases are used.
 :  Extended by SQLite3 virtual tables
 Since the framework is truly object oriented, another database engine could be used instead of the framework. You could easily write your own {\f1\fs20 TSQLRestServer} descendant (as an example, we included a fast in-memory database engine as {\f1\fs20 @*TSQLRestServerFullMemory@}) and link to a another engine (like {\i @*FireBird@}, or a private one). You can even use our framework without any link to the {\i @*SQLite3@} engine itself, via our provided very fast in memory dataset (which can be made persistent by writing and reading @*JSON@ files on disk). The {\i SQLite3} engine is implemented in a separate unit, named {\f1\fs20 SynSQLite3.pas}, and the main unit of the framework is {\f1\fs20 mORMot.pas}. A bridge between the two units is made with {\f1\fs20 mORMotSQLite3.pas}, which will found our ORM framework using {\i SQLite3} as its core.
-The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@}-based dedicated units, as stated @27@.
-As a result, the framework has several potential database back-ends, in addition to the default {\i SQLite3} file-based engine. Each engine may have its own purpose, according to the application expectations. Currently {\i SQLite3, Oracle, @*Jet@/MSAccess, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled by our ORM.
+The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@.pas}-based dedicated units, as stated @27@.
+As a result, the framework has several potential database back-ends, in addition to the default {\i SQLite3} file-based engine. Each engine may have its own purpose, according to the application expectations. Currently {\i SQLite3, Oracle, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled by our ORM.
 :59  Data access benchmark
 Purpose here is not to say that one library or database is better or faster than another, but publish a snapshot of {\i mORMot} persistence layer abilities, depending on each access library.
-In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs20 SynDB} units), but the whole @*Client-Server@ ORM of our framework.
+In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs20 SynDB.pas} units), but the whole @*Client-Server@ ORM of our framework.
 Process below includes all aspects of our ORM:
 - Access via high level @*CRUD@ methods ({\i Add/Update/Delete/Retrieve}, either per-object or in BATCH mode);
 - Read and write access of {\f1\fs20 TSQLRecord} instances, via optimized RTTI;
@@ -3737,7 +3409,7 @@ Process below includes all aspects of our ORM:
 - Virtual cross-database layer using its {\i SQLite3} kernel;
 - SQL on-the-fly generation and translation (in {\i virtual} mode);
 - Access to the database engines via several libraries or providers.
-In those tests, we just bypassed the communication layer, since {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} are run in-process, in the same thread - as a {\f1\fs20 TSQLRestServerDB} instance. So you have here some raw performance testimony of our framework's ORM and RESTful core, and may expect good scaling abilities when running on high-end hardware, over a network.
+In those tests, we just bypassed the communication layer, since {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} are run in-process, in the same thread - as a {\f1\fs20 @*TSQLRestServerDB@} instance. So you have here some raw performance testimony of our framework's ORM and RESTful core, and may expect good scaling abilities when running on high-end hardware, over a network.
 On a recent notebook computer ({\i Core i7} and SSD drive), depending on the back-end database interfaced, {\i mORMot} excels in speed, as will show the following @**benchmark@:
 - You can persist up to 570,000 objects per second, or retrieve 870,000 objects per second (for our pure {\i Delphi} in-memory engine);
 - When data is retrieved from server or client @38@, you can read more than 900,000 objects per second, whatever the database back-end is;
@@ -3751,8 +3423,9 @@ In these tables:
 - 'SQLite3 (mem)' stands for the internal {\i SQLite3} engine running in memory;
 - 'SQLite3 (ext ...)' is about access to a {\i SQLite3} engine as external database - see @27@, either as file or memory;
 - '{\f1\fs20 TObjectList}' indicates a {\f1\fs20 TSQLRestStorageInMemory} instance - see @57@ - either static (with no SQL support) or virtual (i.e. SQL featured via {\i SQLite3} virtual table mechanism) which may persist the data on disk as JSON or compressed binary;
+- 'WinHTTP SQLite3' and 'Sockets SQLite3' stands for a {\i SQLite3} engine published over HTTP using our {\f1\fs20 SynDBRemote.pas} unit using the {\f1\fs20 WinHTTP} API or plain sockets on the client side - see @131@, then accessed as an external database by our ORM;
 - '@*NexusDB@' is the free embedded edition, available from official site;
-- '@*Jet@' stands for a {\i MSAccess} database engine, accessed via OleDB.
+- 'Jet' stands for a {\i @*Jet/MSAccess@} database engine, accessed via OleDB.
 - 'Oracle' shows the results of our direct OCI access layer ({\f1\fs20 SynDBOracle.pas});
 - '@*Zeos@ *' indicates that the database was accessed directly via the @*ZDBC@ layer;
 - 'FireDAC *' stands for {\i @*FireDAC@} library;
@@ -3772,7 +3445,7 @@ Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a sta
 - {\i @*Firebird@} embedded in revision 2.5.2;
 - {\i @*NexusDB@} 3.11 in Free Embedded Version;
 - {\i MongoDB} 2.6 in 64 bit mode.
-So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i Linux} configuration, you can expect even better numbers.
+So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i @*Linux@} configuration, you can expect even better numbers.
 Tests were compiled with the {\i Delphi} XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
 From our tests, the UniDAC version we were using had huge stability issues when used with DB2: the tests did not pass, and the DB2 server just hang processing the queries, whereas there was no problem with other libraries. It may have been fixed since, but you won't find any "UniDAC DB2" results in the benchmark below in the meanwhile.
@@ -3784,29 +3457,32 @@ Here we insert 5,000 rows of data, with diverse scenarios:
 Here are some insertion speed values, in objects/second:
 |%30%15%15%15%15
 ||\b Direct|Batch|Trans|Batch Trans\b0
-|{\b SQLite3 (file full)}|462|356|95377|130086
-|{\b SQLite3 (file off)}|844|821|100389|136675
-|{\b SQLite3 (file off exc)}|28847|35316|102599|144258
-|{\b SQLite3 (mem)}|89456|120513|104249|146933
+|{\b SQLite3 (file full)}|462|28123|84823|181455
+|{\b SQLite3 (file off)}|2102|83093|88006|202667
+|{\b SQLite3 (file off exc)}|28847|193453|89451|207615
+|{\b SQLite3 (mem)}|89456|236540|104249|239165
 |{\b TObjectList (static)}|314465|543892|326370|542652
 |{\b TObjectList (virtual)}|325393|545672|298846|545018
-|{\b SQLite3 (ext full)}|424|11297|102049|164636
-|{\b SQLite3 (ext off)}|830|21406|109706|189250
+|{\b SQLite3 (ext full)}|424|14523|102049|164636
+|{\b SQLite3 (ext off)}|2245|47961|109706|189250
 |{\b SQLite3 (ext off exc)}|41589|180759|108481|192071
-|{\b SQLite3 (ext mem)}|101440|234576|113530|190142
+|{\b SQLite3 (ext mem)}|101440|211389|113530|209713
+|{\b WinHTTP SQLite3}|2165|36464|2079|38478
+|{\b Sockets SQLite3}|8118|75251|8553|80550
 |{\b MongoDB (ack)}|10081|84585|9800|85232
-|{\b MongoDB (no ack)}|33223|189186|27974|226355
+|{\b MongoDB (no ack)}|33223|273672|34665|274393
 |{\b ODBC SQLite3}|492|11746|35367|82425
 |{\b ZEOS SQlite3}|494|11851|56206|85705
-|{\b FireDAC SQlite3}|26369|50306|49755|155115
+|{\b FireDAC SQlite3}|20605|38853|40042|113752
 |{\b UniDAC SQlite3}|477|8725|26552|38756
 |{\b ODBC Firebird}|1495|18056|13485|17731
-|{\b ZEOS Firebird}|9733|13429|26348|30616
-|{\b FireDAC Firebird}|24233|52021|24791|52111
+|{\b ZEOS Firebird}|10452|62851|22003|63708
+|{\b FireDAC Firebird}|18147|46877|18922|46353
 |{\b UniDAC Firebird}|5986|14809|6522|14948
 |{\b Jet}|4235|4424|4954|5094
 |{\b NexusDB}|5998|15494|7687|18619
 |{\b Oracle}|226|56112|1133|52367
+|{\b ZEOS Oracle}|210|32725|1027|31982
 |{\b ODBC Oracle}|236|1664|1515|7709
 |{\b FireDAC Oracle}|118|48575|1519|12566
 |{\b UniDAC Oracle}|164|5701|1215|2884
@@ -3817,23 +3493,23 @@ Here are some insertion speed values, in objects/second:
 |{\b UniDAC MSSQL}|4392|29768|8649|33464
 |{\b ODBC DB2}|4792|48387|14085|70104
 |{\b FireDAC DB2}|4452|48635|11014|52781
-|{\b ZEOS PostgreSQL}|4196|26663|9689|38735
-|{\b ODBC PostgreSQL}|4068|19515|5130|27843
-|{\b FireDAC PostgreSQL}|4181|37000|10111|36483
-|{\b UniDAC PostgreSQL}|2705|18563|4442|22317
+|{\b ZEOS PostgreSQL}|4196|31409|9689|41225
+|{\b ODBC PostgreSQL}|4068|26262|5130|30435
+|{\b FireDAC PostgreSQL}|4181|26635|10111|36483
+|{\b UniDAC PostgreSQL}|2705|18563|4442|28337
 |{\b ODBC MySQL}|3160|38309|10856|47630
 |{\b ZEOS MySQL}|3426|34037|12217|40186
 |{\b FireDAC MySQL}|3078|43053|10955|45781
 |{\b UniDAC MySQL}|3119|27772|11246|33288
 |%
 Due to its ACID implementation, {\i SQLite3} process on file waits for the hard-disk to have finished flushing its data, therefore it is the reason why it is slower than other engines at individual row insertion (less than 10 objects per second with a mechanical hard drive instead of a SDD) outside the scope of a transaction.
-So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows.
-For both our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit and {\i FireDAC} library , BATCH process benefits of the @*array bind@ing feature a lot (known as {\i Array DML} in {\i FireDAC/AnyDAC}).
+So if you want to reach the best writing performance in your application with the default engine, you should better use transactions and regroup all writing into services or a BATCH process. Another possibility could be to execute {\f1\fs20 DB.Synchronous := smOff} and/or {\f1\fs20 DB.LockingMode := lmExclusive} at {\i @*SQLite3@} engine level before process: in case of power loss at wrong time it may corrupt the database file, but it will increase the rate by a factor of 50 (with hard drive), as stated by the "{\i off}" and "{\i off exc}" rows of the table - see @60@. Note that by default, the {\i @*FireDAC@} library set both options, so results above are to be compared with "{\i SQLite3 off exc}" rows. In {\i SQLite3} direct mode, BATCH process benefits of multi-INSERT statements (just llike external databases): it explain why {\f1\fs20 BatchAdd()} is faster than plain {\f1\fs20 Add()}, even in the slowest and safest "{\i file full}" mode.
+For our direct {\i @*Oracle@} access {\f1\fs20 SynDBOracle.pas} unit, and for {\f1\fs20 SynDBZeos.pas} or {\f1\fs20 SynDBFireDAC.pas} (known as {\i Array DML} in {\i FireDAC/AnyDAC}) libraries, BATCH process benefits of the @*array bind@ing feature a lot.
 For most engines, our ORM kernel is able to generate the appropriate SQL statement for speeding up bulk insertion. For instance:
 - {\i SQlite3, @*MySQL@, @*PostgreSQL@, MSSQL 2008, @*DB2@, @*MySQL@} or {\i @*NexusDB@} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 INSERT INTO .. VALUES (..),(..),(..)..};
 - {\i Oracle} handles {\f1\fs20 INSERT INTO .. INTO .. SELECT 1 FROM DUAL} (weird syntax, isn't it?);
 - {\i @*Firebird@} implements {\f1\fs20 EXECUTE BLOCK}.
-As a result, some engines show a nice speed boost when {\f1\fs20 BatchAdd()} is used. Even {\i SQLite3} is faster when used as external engine, in respect to direct execution! This feature is at ORM/SQL level, so it benefits to any external database library. Of course, if a given library has a better implementation pattern (e.g. our direct {\i Oracle} or {\i FireDAC} with native array binding), it is used instead.
+As a result, some engines show a nice speed boost when {\f1\fs20 BatchAdd()} is used. Even {\i SQLite3} is faster when used as external engine, in respect to direct execution! This feature is at ORM/SQL level, so it benefits to any external database library. Of course, if a given library has a better implementation pattern (e.g. our direct {\i Oracle}, {\i Zeos} or {\i FireDAC} with native array binding), it is used instead.
 {\i @*MongoDB@} bulk insertion has been implemented, which shows an amazing speed increase in Batch mode. Depending on the {\i MongoDB} {\i write concern} mode, insertion speed can be very high: by default, every write process will be acknowledge by the server, but you can by-pass this request if you set the {\f1\fs20 wcUnacknowledged} mode - note that in this case, any error (e.g. an unique field duplicated value) will never be notified, so it should not be used in production, unless you need this feature to quickly populate a database, or consolidate some data as fast as possible.
 :   Reading speed
 Now the same data is retrieved via the ORM layer:
@@ -3842,8 +3518,8 @@ Now the same data is retrieved via the ORM layer:
 Here are some reading speed values, in objects/second:
 |%30%15%15%15
 ||\b By one|All Virtual|All Direct\b0
-|{\b SQLite3 (file full)}|27284|558721|550842
-|{\b SQLite3 (file off)}|26896|549450|526149
+|{\b SQLite3 (file full)}|127284|558721|550842
+|{\b SQLite3 (file off)}|126896|549450|526149
 |{\b SQLite3 (file off exc)}|128077|557537|535905
 |{\b SQLite3 (mem)}|127106|557537|563316
 |{\b TObjectList (static)}|300012|912408|913742
@@ -3852,6 +3528,8 @@ Here are some reading speed values, in objects/second:
 |{\b SQLite3 (ext off)}|133696|262977|543065
 |{\b SQLite3 (ext off exc)}|134698|264186|558596
 |{\b SQLite3 (ext mem)}|137487|259713|557475
+|{\b WinHTTP SQLite3}|2198|209231|340460
+|{\b Sockets SQLite3}|8524|210260|387687
 |{\b MongoDB (ack)}|8002|262353|271268
 |{\b MongoDB (no ack)}|8234|272079|274582
 |{\b ODBC SQLite3}|19461|136600|201280
@@ -3859,12 +3537,13 @@ Here are some reading speed values, in objects/second:
 |{\b FireDAC SQlite3}|7683|83532|112470
 |{\b UniDAC SQlite3}|2522|74030|96420
 |{\b ODBC Firebird}|3446|69607|97585
-|{\b ZEOS Firebird}|20296|91974|107229
+|{\b ZEOS Firebird}|20296|114676|117210
 |{\b FireDAC Firebird}|2376|46276|56269
 |{\b UniDAC Firebird}|2189|66886|88102
 |{\b Jet}|2640|166112|258277
 |{\b NexusDB}|1413|120845|208246
 |{\b Oracle}|1558|120977|159861
+|{\b ZEOS Oracle}|1420|110367|137982
 |{\b ODBC Oracle}|1620|43441|45764
 |{\b FireDAC Oracle}|1231|42149|54795
 |{\b UniDAC Oracle}|688|27083|30093
@@ -3885,8 +3564,8 @@ Here are some reading speed values, in objects/second:
 |{\b UniDAC MySQL}|4798|99940|146968
 |%
 The {\i @*SQLite3@} layer gives amazing reading results, which makes it a perfect fit for most typical ORM use. When running with {\f1\fs20 DB.LockingMode := lmExclusive} defined (i.e. "off exc" rows), reading speed is very high, and benefits from exclusive access to the database file - see @60@. External database access is only required when data is expected to be shared with other processes, or for better scaling: e.g. for physical n-Tier installation with dedicated database server(s).
-In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling.
-For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestStorageInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored AS_UNIQUE} properties.
+In the above table, it appears that all libraries based on {\f1\fs20 DB.pas} are slower than the others for reading speed. In fact, {\f1\fs20 TDataSet} sounds to be a real bottleneck, due to its internal data marshalling. Even {\i @*FireDAC@}, which is known to be very optimized for speed, is limited by the {\f1\fs20 TDataSet} structure. Our direct classes, or even ZEOS/ZDBC performs better, since they are able to output JSON content with no additional marshalling, via a dedicated {\f1\fs20 ColumnsToJSON()} method.
+For both writing and reading, {\f1\fs20 TObjectList} / {\f1\fs20 TSQLRestStorageInMemory} engine gives impressive results, but has the weakness of being in-memory, so it is not ACID by design, and the data has to fit in memory. Note that indexes are available for IDs and {\f1\fs20 stored @*AS_UNIQUE@} properties.
 As a consequence, search of non-unique values may be slow: the engine has to loop through all rows of data. But for unique values (defined as {\f1\fs20 stored AS_UNIQUE}), both insertion and search speed is awesome, due to its optimized O(1) hash algorithm - see the following benchmark, especially the "{\i By name}" row for "{\i TObjectList}" columns, which correspond to a search of an unique {\f1\fs20 RawUTF8} property value via this hashing method.
 |%9%10%10%10%10%10%10%10%10%9%9
 | |\b SQLite3 (file full)|SQLite3 (file off)|SQLite3 (mem)|TObjectList (static) |TObjectList (virt.)|SQLite3 (ext file full)|SQLite3 (ext file off)|SQLite3 (ext mem)|Oracle|Jet\b0
@@ -3901,13 +3580,14 @@ During the tests, internal caching - see @37@ and @38@ - was disabled, so you ma
 When declared as virtual table (via a {\f1\fs20 VirtualTableRegister} call), you have the full power of SQL (including @*JOIN@s) at hand, with incredibly fast @*CRUD@ operations: 100,000 requests per second for objects read and write, including serialization and Client-Server communication!
 Some providers are first-class citizens to {\i mORMot}, like {\i @*SQLite3@}, {\i @*Oracle@}, {\i @*MS SQL@}, @*PostgreSQL@, @*MySQL@ or IBM @*DB2@. You can connect to them without the bottleneck of the {\f1\fs20 DB.pas} unit, nor any restriction of your {\i Delphi} license (a {\i Starter edition} is enough).
 First of all, {\i SQLite3} is still to be considered, even for a production server. Thanks to {\i mORMot}'s architecture and design, this "embedded" database could be used as main database engine for a client-server application with heavy concurrent access - if you have doubts about its scaling abilities, see @25@. Here, "embedded" is not restricted to "mobile", but sounds like a self-contained, zero-configuration proven engine.
+The remote access via HTTP gives pretty good results, and in this local benchmark, plain socket client (i.e. {\f1\fs20 TSQLDBSocketConnectionProperties} class) gives better results that the {\f1\fs20 WinHTTP} API (using {\f1\fs20 TSQLDBWinHTTPConnectionProperties} on the client side). But in real use, e.g. over the Internet, the {\f1\fs20 WinHTTP} API has been reported as more stable, so may be preferred on production. With a {\i SQlite3} backend, this offers pretty good performance, and the benefit of using standard HTTP for its transport.
 Most recognized {\i closed source} databases are available:
 - Direct access to {\i Oracle} gives impressive results in BATCH mode (aka @*array bind@ing). It may be an obligation if your end-customer stores already its data in such a server, for instance, and want to leverage the licensing cost of its own IT solution. {\i Oracle Express} edition is free, but somewhat heavy and limited in terms of data/hardware size (see its licensing terms);
 - {\i MS SQL Server}, directly accessed via {\i OleDB} (or {\i ODBC}) gives pretty good timing. A {\i MS SQL Server 2008 R2 Express} instance is pretty well integrated with the {\i Windows} environment, for a very affordable price (i.e. for free) - the {\i LocalDB} (MSI installer) edition is enough to start with, but also with data/hardware size limitation, just like {\i Oracle Express};
 - IBM {\i DB2} is another good candidate, and the {\i Express-C} ("C" standing for Community) offers a no-charge opportunity to run an industry standard engine, with no restriction on the data size, and somewhat high hardware limitations (16 GB of RAM and 2 CPU cores for the latest 10.5 release) or enterprise-level features;
 - {\i @*NexusDB@} may be considered, if you have existing {\i Delphi} code and data - but it is less known and recognized as the its commercial competitors.
 {\i Open Source} databases are worth considering, especially in conjunction with an Open Source framework like {\i mORMot}:
-- {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i Linux Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
+- {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i @*Linux@ Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
 - {\i PostgreSQL} is an Enterprise class database, with amazing features among its Open Source alternatives, and really competes with commercial solutions. Even under Windows, we think it is easy to install and administrate, and uses less resource than the other commercial engines.
 - {\i @*Firebird@} gave pretty consistent timing, when accessed via Zeos/ZDBC. We show here the embedded version, but the server edition is worth considering, since a lot of {\i Delphi} programmers are skilled with this free alternative to {\i Interbase};
 - {\i @*MongoDB@} appears as a serious competitor to SQL databases, with the potential benefit of horizontal scaling and installation/administration ease - performance is very high, and its document-based storage fits perfectly with {\i mORMot}'s advanced ORM features like @29@.
@@ -3923,7 +3603,7 @@ Therefore, the typical use may be the following:
 |external SQLite3 in-memory|Created with {\f1\fs20 VirtualTableExternalRegister} and {\f1\fs20 ':memory:'}\line Fast external back-end (e.g. for testing)
 |external @*Oracle@ / @*MS SQL@ / @*DB2@ / @*PostgreSQL@ / @*MySQL@ / @*Firebird@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Fast, secure and industry standard back-ends; data can be shared outside {\i mORMot}
 |external @*NexusDB@|Created with {\f1\fs20 VirtualTableExternalRegister}\line The free embedded version let the whole engine be included within your executable, and use any existing code, but {\i SQlite3} sounds like a better option
-|external Jet|Created with {\f1\fs20 VirtualTableExternalRegister}\line Could be used as a data exchange format (e.g. with Office applications)
+|external @*Jet/MSAccess@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Could be used as a data exchange format (e.g. with Office applications)
 |external Zeos|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, with direct @*Zeos@/@*ZDBC@ access which will by-pass the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck - and we will also prefer an active Open Source project!
 |external @*FireDAC@/@*UniDAC@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, including the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck
 |external {\i MongoDB}|Created with {\f1\fs20 @*StaticMongoDBRegister@()}\line High-speed document-based storage, with horizontal scaling and advanced query abilities of nested sub-documents
@@ -3934,7 +3614,7 @@ Whatever database back-end is used, don't forget that {\i mORMot} design will al
 Beginning with the revision 1.15 of the framework, the {\i @**SQLite3@} engine itself has been separated from our {\f1\fs20 mORMotSQLite3.pas} unit, and defined as a stand-alone unit named {\f1\fs20 SynSQLite3.pas}. See @SDD-DI-2.2.1@.
 It can be used therefore:
 - Either stand-alone with direct access of all its features, even using its lowest-level C API, via {\f1\fs20 SynSQLite3.pas} - but you won't be able to switch to another database engine easily;
-- Or stand-alone with high-level SQL access, using our {\f1\fs20 @*SynDB@} generic access classes, via {\f1\fs20 SynDBSQLite3.pas} - so you will be able to change to any other database engine (e.g. @*MS SQL@, @*PostgreSQL@, @*MySQL@ or @*Oracle@) when needed;
+- Or stand-alone with high-level SQL access, using our {\f1\fs20 @*SynDB@.pas} generic access classes, via {\f1\fs20 SynDBSQLite3.pas} - so you will be able to change to any other database engine (e.g. @*MS SQL@, @*PostgreSQL@, @*MySQL@ or @*Oracle@) when needed;
 - Or Client-Server based access with all our @*ORM@ features - see {\f1\fs20 mORMotSQLite3.pas}.
 We'll define here some highlights specific to our own implementation of the {\i SQLite3} engine, and let you consult the official documentation of this great Open Source project at @http://sqlite.org for general information about its common features.
 :  Statically linked or using external dll
@@ -4063,12 +3743,12 @@ and the integer value 10 will be bounded to the prepared statement before execut
 Example of possible inlined values are (note double " @*quotes@ are allowed for the text parameters, whereas SQL statement should only use single ' quotes):
 $:(1234): :(12.34): :(12E-34): :("text"): :('It''s great'):
 All internal SQL statement generated by the @*ORM@ are now using this new parameter syntax.
-For instance, here is how an object deletion is implemented:
-!function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: integer): boolean;
+For instance, here is how an object deletion is implemented for the {\i SQlite3} engine:
+!function TSQLRestServerDB.EngineDelete(Table: TSQLRecordClass; ID: TID): boolean;
 !begin
 !  if Assigned(OnUpdateEvent) then
 !    OnUpdateEvent(self,seDelete,Table,ID); // notify BEFORE deletion
-!  result := EngineExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',[Table.SQLTableName,ID]);
+!  result := ExecuteFmt('DELETE FROM % WHERE RowID=:(%):;',[Table.SQLTableName,ID]);
 !end;
 Using {\f1\fs20 :(%):} will let the {\f1\fs20 DELETE FROM table_name WHERE RowID=?} statement be prepared and reused between calls.
 In your code, you should better use, for instance:
@@ -4079,7 +3759,7 @@ In your code, you should better use, for instance:
 ! aName := OneFieldValue(TSQLMyRecord,'Name','ID=%',[aID]);
  or instead of a plain
 ! aName := OneFieldValue(TSQLMyRecord,'Name','ID='+Int32ToUtf8(aID));
-In fact, from your client code, you may not use directly the {\f1\fs20 :(...):} expression in your request, but would rather use the overloaded {\f1\fs20 TSQLRecord.Create, TSQLRecord.FillPrepare, TSQLRecord.CreateAndFillPrepare, TSQLRest.OneFieldValue, TSQLRest.MultiFieldValues, TQLRestClient.EngineExecuteFmt} and {\f1\fs20 TSQLRestClient.ListFmt} methods, available since revision 1.15 of the framework, which will accept both '%' and '?' characters in the SQL WHERE format text, in-lining '?' parameters with proper {\f1\fs20 :(...):} encoding and quoting the {\f1\fs20 @*RawUTF8@} / strings parameters on purpose.
+In fact, from your client code, you may not use directly the {\f1\fs20 :(...):} expression in your request, but would rather use the overloaded {\f1\fs20 TSQLRecord.Create, TSQLRecord.FillPrepare, TSQLRecord.CreateAndFillPrepare, TSQLRest.OneFieldValue, TSQLRest.MultiFieldValues, TQLRestClient.ExecuteFmt} and {\f1\fs20 TSQLRestClient.ListFmt} methods, available since revision 1.15 of the framework, which will accept both '%' and '?' characters in the SQL WHERE format text, in-lining '?' parameters with proper {\f1\fs20 :(...):} encoding and quoting the {\f1\fs20 @*RawUTF8@} / strings parameters on purpose.
 I found out that this SQL format enhancement is much easier to use (and faster) in the {\i Delphi} code than using parameters by name or by index, like in this classic VCL code:
 $SQL.Text := 'SELECT Name FROM Table WHERE ID=:Index';
 $SQL.ParamByName('Index').AsInteger := aID;
@@ -4089,7 +3769,7 @@ It is also worth noting that external databases (see next paragraph) will also b
 Since the 2010-06-25 source code repository update, the @*RTREE@ extension is now compiled by default within all supplied {\f1\fs20 .obj} files.
 An R-Tree is a special index that is designed for doing range queries. R-Trees are most commonly used in geospatial systems where each entry is a rectangle with minimum and maximum X and Y coordinates. Given a query rectangle, an R-Tree is able to quickly find all entries that are contained within the query rectangle or which overlap the query rectangle. This idea is easily extended to three dimensions for use in CAD systems. R-Trees also find use in time-domain range look-ups. For example, suppose a database records the starting and ending times for a large number of events. A R-Tree is able to quickly find all events, for example, that were active at any time during a given time interval, or all events that started during a particular time interval, or all events that both started and ended within a given time interval. And so forth. See @http://www.sqlite.org/rtree.html
 A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS3}).
-Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 double}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: integer} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
+Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 @*double@}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: @*TID@} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
 Queries against the ID or the coordinate ranges are almost immediate: so you can e.g. extract some coordinates box from the main regular {\f1\fs20 TSQLRecord} table, then use a {\f1\fs20 TSQLRecordRTree}-joined query to make the process faster; this is exactly what the {\f1\fs20 TSQLRestClient. RTreeMatch} method offers: for instance, running with {\f1\fs20 aMapData. @*Blob@Field} filled with {\f1\fs20 [-81,-79.6,35,36.2]} the following lines:
 ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
 !   aMapData.BlobField,ResultID);
@@ -4169,6 +3849,41 @@ The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
 The {\f1\fs20 rank} internal @*SQL function@ has been implemented in {\i Delphi}, following the guidelines of the official {\i SQLite3} documentation - as available from their Internet web site at @http://www.sqlite.org/fts3.html#appendix_a - to implement the most efficient way of implementing ranking. It will return the {\f1\fs20 RowID} of documents that match the full-text query sorted from most to least relevant. When calculating relevance, query term instances in the '{\i subject}' column are given twice the weighting of those in the '{\i body}' column.
+:144   FTS4 index tables without content
+Just as {\i SQlite3} allows, the framework permits FTS4 to forego storing the text being indexed, letting the indexed documents be stored in a database table created and managed by the user (an "external content" FTS4 table).
+Because the indexed documents themselves are usually much larger than the full-text index, this option can be used to achieve significant storage space savings. Contentless FTS4 tables still support {\f1\fs20 SELECT} statements. However, it is an error to attempt to retrieve the value of any table column other than the {\f1\fs20 docid} column. The auxiliary function {\f1\fs20 matchinfo()} may be used - so {\f1\fs20 TSQLRest.FTSMatch} method will work as expected, but {\f1\fs20 snippet()} and {\f1\fs20 offsets()} would cause an exception at execution.
+For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
+!  TSQLArticle = class(TSQLContent)
+!  private
+!    fContent: RawUTF8;
+!    fTitle: RawUTF8;
+!    fAbstract: RawUTF8;
+!    fPublishedMonth: Integer;
+!    fTags: TIntegerDynArray;
+!  published
+!    property Title: RawUTF8 index 80 read fTitle write fTitle;
+!    property Content: RawUTF8 read fContent write fContent;
+!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!    property Tags: TIntegerDynArray index 1 read fTags write fTags;
+!  end;
+!
+!  TSQLArticleSearch = class(TSQLRecordFTS4Porter)
+!  private
+!    fText: RawUTF8;
+!  published
+!    property Text: RawUTF8 read fText write fText;
+!  end;
+And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an expression to compute the indexed text from the concatenation of the {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
+!    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
+!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+!!    TSQLArticle,['title','abstract','content']);
+!  ...
+The {\f1\fs20 TSQLModelRecordProperties.FTS4WithoutContent()} will in fact create the needed {\i SQLite3} triggers, to automatically populate the {\f1\fs20 ArticleSearch} Full Text indexes when the main {\f1\fs20 Article} row changes.
+Since this FTS4 feature is specific to {\i SQlite3}, and triggers do not work on virtual tables (by now), this method won't do anything if the {\f1\fs20 TSQLArticleSearch} or {\f1\fs20 TSQLArticle} are on an external database - see @27@. Both need to be stored in the main {\i SQLite3} DB.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
@@ -4180,7 +3895,7 @@ In the {\i mORMot} ORM, we defined some additional kind of collations, via some 
 |\b TSQLFieldType|Default collation\b0
 |{\f1\fs20 sftAnsiText}|NOCASE
 |{\f1\fs20 sftUTF8Text}|SYSTEMNOCASE, i.e. using {\f1\fs20 UTF8ILComp()}, which will ignore {\i Win-1252} Latin accents
-|{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
+|{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftTID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
 |{\f1\fs20 {\f1\fs20 sftDateTime}}|ISO8601, i.e. decoding the text into a date/time value before comparison
 |{\f1\fs20 sftObject\line sftVariant}|NOCASE, since it is stored as plain JSON content
 |{\f1\fs20 sftBlob\line sftBlobDynArray\line sftBlobCustom}|BINARY
@@ -4230,7 +3945,7 @@ The above code will execute the following SQL statement (with a prepared paramet
 That is, it will find all objects where {\f1\fs20 TSQLRecordPeople.FirstName} will contain the {\f1\fs20 'Finley'} word - in a regular expression, {\f1\fs20 \\b} defines a word {\f1\fs20 b}oundary search.
 In fact, the {\f1\fs20 REGEXP} operator is a special syntax for the {\f1\fs20 regexp()} user function. No {\f1\fs20 regexp()} user function is defined by default and so use of the {\f1\fs20 REGEXP} operator will normally result in an error message. Calling {\f1\fs20 CreateRegExFunction()} for a given connection will add a SQL function named "{\f1\fs20 regexp()}" at run-time, which will be called in order to implement the {\f1\fs20 REGEXP} operator.
 It will use the statically linked PCRE library as available since {\i Delphi} XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of {\i Delphi}.
-This unit will call directly the UTF-8 API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
+This unit will call directly the @*UTF-8@ API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
 :  NULL handling
 Since you access {\i Delphi} properties, NULL doesn't exist as such (it is a @*SQL@ concept). So you will have {\f1\fs20 0} for an integer field, {\f1\fs20 nil} for a field referring to another record, and {\f1\fs20 ''} for a string field. At the SQL and @*JSON@ levels, the NULL value does exist and are converted as expected. At higher level ({\i Delphi} code or {\i @*JavaScript@}/@*AJAX@ code) the NULL value is to be handled explicitly. In fact, no null-oriented ORM methods are implemented in our framework, since the object pascal language does not allow defining a nullable type (yet).
 In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).
@@ -4251,7 +3966,7 @@ So depending on your application requirements, you may switch Synchronous settin
 To change the main {\i SQLite3} engine synchronous parameter, you may code for instance:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!Client.Server.DB.Synchronous := smOff;
-Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 TSQLRestServerDB} instance.
+Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 @*TSQLRestServerDB@} instance.
 But if you defined some {\i SQLite3} external tables - see @27@, you can define the setting for a particular external connection, for instance:
 !Props := TSQLDBSQLite3ConnectionProperties.Create(DBFileName,'''','');
 !VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
@@ -4263,7 +3978,7 @@ You can overwrite the first default ACID behavior by setting the {\f1\fs20 TSQLD
 To change the main {\i SQLite3} engine locking mode parameter, you may code for instance:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!Client.Server.DB.LockingMode := lmExclusive;
-Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 TSQLRestServerDB} instance.
+Note that this setting is common to a whole {\f1\fs20 TSQLDatabase} instance, so will affect all tables handled by the {\f1\fs20 @*TSQLRestServerDB@} instance.
 But if you defined some {\i SQLite3} external tables - see @27@, you can define the setting for a particular external connection, for instance:
 !Props := TSQLDBSQLite3ConnectionProperties.Create(DBFileName,'''','');
 !VirtualTableExternalRegister(Model,TSQLRecordSample,Props,'SampleRecord');
@@ -4286,8 +4001,12 @@ If you can afford loosing some data in very rare border case, or if you are sure
 :  Database backup
 In all cases, do not forget to perform @*backup@s of your {\i SQlite3} database as often as possible (at least several times a day). Adding a backup feature on the server side is as simple as running:
 ! Server.DB.BackupBackground('backup.db3',1024,10,nil);
-The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 page sizes (it would be processing 1 MB per step, since default page size is 1024), performing a little sleep of 10 milliseconds between each step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specifies an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
-Note that {\f1\fs20 TSQLRestServerDB.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
+The above line will perform a background live backup of the main {\i SQLite3} database, by steps of 1024 pages (i.e. it would process 1 MB per step, since default page size is 1024 bytes), performing a little sleep of 10 milliseconds between each 1 MB copy step, allowing main CRUD / ORM operations to continue uninterrupted during the backup.\line You can even specify an {\f1\fs20 OnProgress: TSQLDatabaseBackupEvent} callback event, to monitor the backup process.
+Note that {\f1\fs20 @*TSQLRestServerDB@.Backup} or {\f1\fs20 TSQLRestServerDB.BackupGZ} methods are not recommended any more on a running {\i mORMot} database, due to some potential issues with virtual tables, especially on the {\i Win64} platform. You should definitively use {\f1\fs20 TSQLDatabase.BackupBackground()} instead.
+The same backup process can be used e.g. to save an in-memory {\i SQLite3} database into a {\i SQLite3} file, as such:
+! if aInMemoryDB.BackupBackground('backup.db3',-1,0,nil) then
+!   aInMemoryDB.BackupBackgroundWaitUntilFinished;
+Above code will save the {\f1\fs20 aInMemoryDB} database into the '{\f1\fs20 backup.db3}' file.
 \page
 :20 Virtual Tables magic
 The {\i @*SQlite3@} engine has the unique ability to create @**Virtual Table@s from code. From the perspective of an @*SQL@ statement, the virtual table object looks like any other table or view. But behind the scenes, queries from and updates to a virtual table invoke callback methods on the virtual table object instead of reading and writing to the database file.
@@ -4311,7 +4030,7 @@ For instance, here are the default Virtual Table classes deriving from those cla
 \TSQLVirtualTableCursorJSON\TSQLVirtualTableCursorIndex
 \TSQLVirtualTableCursorLog\TSQLVirtualTableCursorIndex
 \
-{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestStorageInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as UTF-8 @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
+{\f1\fs20 @*TSQLVirtualTableJSON@, @*TSQLVirtualTableBinary@} and {\f1\fs20 TSQLVirtualTableCursorJSON} classes will implement a Virtual Table using a {\f1\fs20 @*TSQLRestStorageInMemory@} instance to handle fast in-memory @*static@ databases. Disk storage will be encoded either as @*UTF-8@ @*JSON@ (for the {\f1\fs20 TSQLVirtualTableJSON} class, i.e. the '{\f1\fs20 JSON}' module), or in a proprietary @*SynLZ@ compressed format (for the {\f1\fs20 TSQLVirtualTableBinary} class, i.e. the '{\f1\fs20 Binary}' module). File extension on disk will be simply {\f1\fs20 .json} for the '{\f1\fs20 JSON}' module, and {\f1\fs20 .data} for the '{\f1\fs20 Binary}' module. Just to mention the size on disk difference, the 502 KB {\f1\fs20 People.json} content (as created by included regression tests) is stored into a 92 KB {\f1\fs20 People.data} file, in our proprietary optimized format.
 Note that the virtual table module name is retrieved from the class name. For instance, the {\f1\fs20 TSQLVirtualTableJSON} class will have its module named as 'JSON' in the SQL code.
 To handle external databases, two dedicated classes, named {\f1\fs20 TSQLVirtualTableExternal} and {\f1\fs20 TSQLVirtualTableCursorExternal} will be defined in a similar manner - see @%%HierExternalTables@ @30@.
 As you probably have already stated, all those Virtual Table mechanism is implemented in {\f1\fs20 mORMot.pas}. Therefore, it is independent from the {\i @*SQLite3@} engine, even if, to my knowledge, there is no other SQL database engine around able to implement this pretty nice feature.
@@ -4429,7 +4148,7 @@ Each column value is retrieved by this method:
 !  result := true;
 !end;
 As stated by the documentation of the {\f1\fs20 TSQLVirtualTableCursor} class, {\f1\fs20 -1} is the column index for the {\f1\fs20 RowID}, and then will follow the columns as defined in the text returned by the {\f1\fs20 Structure} method (in our case, the {\f1\fs20 DateTime, Level, Content} fields of {\f1\fs20 TSQLRecordLogFile}).
-The {\f1\fs20 SetColumn} overloaded methods can be used to set the appropriate result to the {\f1\fs20 aResult} variable. For UTF-8 text, it will use a temporary in-memory space, to ensure that the text memory will be still available at least until the next {\f1\fs20 Column} method call.
+The {\f1\fs20 SetColumn} overloaded methods can be used to set the appropriate result to the {\f1\fs20 aResult} variable. For @*UTF-8@ text, it will use a temporary in-memory space, to ensure that the text memory will be still available at least until the next {\f1\fs20 Column} method call.
 :  Using a Virtual Table module
 From the low-level {\i @*SQLite3@} point of view, here is how this "{\f1\fs20 Log}" @virtual table@ module can be used, directly from the {\i SQLite3} engine.
 First we will register this module to a DB connection (this method is to be used only in case of such low-level access - in our @*ORM@ you should never call this method, but {\f1\fs20 TSQLModel. VirtualTableRegister} instead, {\i cf.} next paragraph):
@@ -4553,10 +4272,69 @@ The exact process of these in-memory tables is that each time you write some new
 - ROLLBACK process won't do anything, so won't be ACID - but since your code may later use a real RDBMS, it is a good habit to always write the command, like in the sample code above, as {\f1\fs20 except aClient.RollBack}.
 When you write the data to file, the whole file is rewritten: it seems not feasible to write the data to disk at every write - in this case, SQLite3 in exclusive mode will be faster, since it will write only the new data, not the whole table content.
 This may sound like a limitation, but on our eyes, it could be seen more like a feature. For a particular table, we do not need nor want to have a whole RDBMS/SQL engine, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestStorageInMemory} storage is too limited for your process.
+:93  Redirect to an external TSQLRest
+Sometimes, having all database process hosted in a single process may not be enough. You can use the {\f1\fs20 TSQLRestServer.RemoteDataCreate()} method to instantiate a {\f1\fs20 TSQLRestStorageRemote} class which will redirect all ORM operation to a specified {\f1\fs20 TSQLRest} instance, may be remote (via {\f1\fs20 TSQLRestClientHttp}) or in-process ({\f1\fs20 TSQLRestServer}).
+For instance, in {\f1\fs20 TTestExternalDatabase} regression tests, you would find the following code:
+!  aExternalClient := TSQLRestClientDB.Create(fExternalModel,nil,'testExternal.db3',TSQLRestServerDB);
+!!  historyDB := TSQLRestServerDB.Create(
+!!    TSQLModel.Create([TSQLRecordMyHistory],'history'),
+!!    'history.db3',false);
+!historyDB.Model.Owner := historyDB;
+!  historyDB.DB.Synchronous := smOff;
+!  historyDB.DB.LockingMode := lmExclusive;
+!  historyDB.CreateMissingTables;
+!    'history.db3',false);
+!!  aExternalClient.Server.RemoteDataCreate(TSQLRecordMyHistory,historyDB);
+!  aExternalClient.Server.DB.Synchronous := smOff;
+!  aExternalClient.Server.DB.LockingMode := lmExclusive;
+!  aExternalClient.Server.CreateMissingTables;
+!...
+It will create two {\f1\fs20 SQLite3} databases, one main "{\f1\fs20 testExternal.db3}", and a separated "{\f1\fs20 history.db3}" database. Both will use {\i synch off} and {\i lock exclusive} access mode - see @60@ just above.
+In the "{\f1\fs20 history.db3}" file, there will be the {\f1\fs20 MyHistory} table, whereas in {\f1\fs20 testExternal.db3}", there won't be any {\f1\fs20 MyHistory} table. All {\f1\fs20 TSQLRecordMyHistory} CRUD process will be transparently redirected to {\f1\fs20 historyDB}.
+Then any ORM access from the main {\f1\fs20 aExternalClient} to the {\f1\fs20 TSQLRecordMyHistory} table via will be redirected, via an hidden {\f1\fs20 TSQLRestStorageRemote} instance, to {\f1\fs20 historyDB}. There won't be any noticeable performance penalty - on the contrary a separated database would be much better.
+An alternative would have been to use the {\f1\fs20 ATTACH TABLE} statement at {\i SQLite3} level, but it would have been only locally, and you would not be able to switch to another database engine. Whereas the {\f1\fs20 RemoteDataCreate()} method is generic, and will work with external databases - see @27@, even {\i @*NoSQL@} databases - see @84@, or remote {\i mORMot} servers, accessible via a {\f1\fs20 TSQLRestClientHTTP} instance. The only prerequirement is that all {\f1\fs20 TSQLRecord} classes in the main model do exist in the redirected database model.
+Note that the redirected {\f1\fs20 TSQLRest} instance can have its own model, its own authentication and authorization scheme, its own caching policy. It would be of great interrest when tuning your application.\line Be aware that if you use {\f1\fs20 @*TRecordReference@} published fields, the model should better be shared among the local and redirected {\f1\fs20 TSQLRest} instances, or at least the {\f1\fs20 TSQLRecord} classes should have the same order - otherwise the {\f1\fs20 TRecordReference} values would point to the wrong table, depending on the side the query is run.
+See @%%mORMotDesign3@ and  @%%ArchServerFull@ for some explanation about how this redirection feature would interact with other abilities of the framework.
+One practical application of this redirection pattern may be with a typical corporate business.\line There may be a main {\i mORMot} server, at corporation headquarters, then local {\i mORMot} servers at each branch office, hosting applications for end users on the local network:
+\graph HostingRedirection Corporate Servers Redirection
+subgraph cluster_0 {
+label="Main Office";
+\Main又erver\External DB
+}
+subgraph cluster_1 {
+label="           Office A";
+\Main又erver\Local又erver A\HTTP
+\Local又erver A\Client 1
+\Local又erver A\Client 2
+\Local又erver A\Client 3\local孓etwork
+}
+subgraph cluster_2 {
+label="          Office B";
+\Main又erver\Local又erver B\HTTP
+\Local又erver B\Client  1
+\Local又erver B\Client  2
+\Local又erver B\Client  3
+\Local又erver B\Client  4\local孓etwork
+}
+\
+Each branch office may have its own {\f1\fs20 TSQLRecord} dedicated table, with all its data. Some other tables would be shared among local offices, like global configuration.\line Creating a dedicated table can be done in Delphi code by creating your own class type:
+!type
+!  TSQLRecordCustomerAbstract = class // never declared in Model
+!  .... // here the fields used for Customer business
+!  end;
+!  TSQLRecordCustomerA = class(TSQLRecordCustomerAbstract); // for office A
+!  TSQLRecordCustomerB = class(TSQLRecordCustomerAbstract); // for office B
+!
+!  TSQLRecordCustomerClass = class of TSQLRecordCustomerAbstract;
+Here, {\f1\fs20 TSQLRecordCustomerA} may be part only of the Office A server's {\f1\fs20 TSQLModel}, and {\f1\fs20 TSQLRecordCustomerB} only of the Office B server's {\f1\fs20 TSQLModel}. It will increase security, and, in the main headequarters server, both {\f1\fs20 TSQLRecordCustomerA} and {\f1\fs20 TSQLRecordCustomerB} classes will be part of the {\f1\fs20 TSQLModel}, and dedicated interface-based services would be able to publish some high-level data and statistics about all stored tables.\line Then you can use a {\f1\fs20 TSQLRecordCustomerClass} variable in your client code, which will contain either {\f1\fs20 TSQLRecordCustomerA} or {\f1\fs20 TSQLRecordCustomerB}, depending on the place it runs on, and the server it is connected to.\line On the main server, each office will have its own storage table in the (external) database, named {\f1\fs20 CustomerA} or {\f1\fs20 CustomerB}.
+You will benefit of the caching abilities - see @39@ - of each {\f1\fs20 TSQLRest} instance. You may have some cache tuned at a local site, whereas the cache in the main database would remain less aggressive, but safer.
+Furthermore, even on a single-siter server, a {\f1\fs20 TSQLRecordHistory} table, or more generaly any aggregation data may benefit to be hosted locally or on cheap storage, whereas the main database would stay on SSD or SAS. Thanks to this redirection feature, you can tune your hosting as expected.
+Finally, if your purpose is to redirect all tables of a given {\f1\fs20 TSQLRestServer} to another remote {\f1\fs20 TSQLRestServer} (for security or hosting purpose), you may consider using {\f1\fs20 TSQLRestServerRemoteDB} instead. This class will redirect all tables to one external instance.
+Note that both {\f1\fs20 TSQLRestStorageRemote} and {\f1\fs20 TSQLRestServerRemoteDB} classes do not support yet the {\i Virtual Tables} mechanism of {\i SQlite3}. So if you use those features, you may not be able to run JOINed queries from the redirected instance: in fact, the main SQlite3 engine will complain about a missing {\f1\fs20 MyHistory} table in "{\f1\fs20 testExternal.db3}". We will eventually define the needed {\f1\fs20 TSQLVirtualTableRemote} and {\f1\fs20 TSQLVirtualTableCursorRemote} classes to implement this feature.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
 The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
-In order to define such {\i external} tables, you define your regular {\f1\fs20 @*TSQLRecord@} classes as usual, then a call to the {\f1\fs20 @**VirtualTableExternalRegister@()} function will define this class to be managed as a virtual table, from an external database engine. Using a dedicated external database server may allow better response time or additional features (like data sharing with other applications or languages). Server-side may omit a call to {\f1\fs20 VirtualTableExternalRegister()} if the need of an internal database is expected: it will allow custom database configuration at runtime, depending on the customer's expectations (or license).
+In order to define such {\i external} tables, you define your regular {\f1\fs20 @*TSQLRecord@} classes as usual, then a call to the {\f1\fs20 @**VirtualTableExternalRegister@()}  or {\f1\fs20 @**VirtualTableExternalMap@()} functions will define this class to be managed as a virtual table, from an external database engine. Using a dedicated external database server may allow better response time or additional features (like data sharing with other applications or languages). Server-side may omit a call to {\f1\fs20 VirtualTableExternalRegister()} if the need of an internal database is expected: it will allow custom database configuration at runtime, depending on the customer's expectations (or license).
 :  Virtual tables from the client side
 For external databases - see @27@ - the SQL conversion will be done on the fly in a more advanced way, so you should be able to work with such virtual tables from the client side without any specific model notification. In this case, you can safely define your tables as {\f1\fs20 TSQLValue1 = class(TSQLRecord)}, with no further code on client side.
 When working with {\i static} (in-memory / {\f1\fs20 TObjectList}) storage, if you expect all ORM features to work remotely, you need to notify the Client-side model that a table is implemented as virtual. Otherwise you may encounter some SQL errors when executing requests, like "{\i no such column: ID}".
@@ -4624,24 +4402,42 @@ Or, in case the table is defined as {\f1\fs20 TSQLValue1 = class(TSQLRecord)}, p
 !end;
 The easiest is definitively to let your static in-memory tables inherit from {\f1\fs20 TSQLRecordVirtualTableAutoID}. Just use the framework by the book - see @76@.
 Once again, this restriction does not apply to @27@.
-:27External database access
-%cartoon06.png
-: Database agnosticism
-Since revision 1.15, our @*ORM@ @*REST@ful framework is able to access any available database engine, via a set of generic units and classes.
-The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mix those tables content with the native ORM tables of the framework. Thanks to the unique @*Virtual Table@s mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements. See @%%mORMotDesign3@.
-The current list of available external RDBMS database classes is:
-- Any {\i @*OleDB@} provider (including {\i @*MS SQL@, Jet} or others);
-- Any {\i @*ODBC@} provider (including {\i MS SQL, @*FireBird@, @*MySQL@, @*PostgreSQL@}, @*MySQL@, IBM @*DB2@ or others);
-- Any {\i @*Zeos@Lib} provider (direct {\f1\fs20 @*ZDBC@} access without {\f1\fs20 DB.pas} overhead);
-- Any {\f1\fs20 DB.pas} / {\f1\fs20 @**TDataset@} based provider (including @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...);
-- {\i @*Oracle@} direct access (via OCI);
-- {\i SQLite3} database file.
+:27External SQL database access
+%cartoon05.png
+Our @*ORM@ @*REST@ful framework is able to access most available database engines, via a set of generic units and classes. Both @*SQL@ and @*NoSQL@ engines could be accessed - quite a unique feature in the ORM landscape (in {\i Delphi}, of course, but also in Java or C# environments).
+Remember the diagram introducing {\i mORMot}'s @42@:
+%%mORMotDBDesign
+\page
+The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mixes those tables content with the native ORM tables of the framework. Thanks to the unique @20@ mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements, even for NoSQL engines.
+|%10%90
+|\b Mode|Engines\b0
+|SQL|{\i @*SQLite3@, @*Oracle@, @*NexusDB@, @*MS SQL@, @*Jet/MSAccess@, @*FireBird@, @*MySQL@, @*PostgreSQL@, IBM @*DB2@}\line See @126@
+|NoSQL|{\i @*MongoDB@}, {\f1\fs20 TObjectList} with JSON or binary disk persistence\line See @83@ and @57@
+|%
+You can even mix databases, i.e. the same {\i mORMot} ORM could persist, at the same time, its data in several databases, some {\f1\fs20 TSQLRecord} as fast internal {\i SQLite3} tables or as {\f1\fs20 TObjectList}, others in a {\i PostgreSQL} database (tied to an external reporting/SAP engine), and e.g. flat consolidated data in a {\i MongoDB} instance.
+\page
+:126 SynDB direct RDBMS access
+External {\i Relational Database Management System} (@*RDBMS@) can be accessed via our {\f1\fs20 @*SynDB@.pas} units. Then, the framework ORM is able to access them via the {\f1\fs20 mORMotDB.pas} bridge unit. But you can use the {\f1\fs20 SynDB.pas} units directly, without any link to our ORM.
+The current list of handled data access libraries is:
+|%13%25%62
+|\b Provider|{\f1\fs20 SynDB} Unit|RDBMS Engines\b0
+|{\i SQLite3}|{\f1\fs20 SynDBSQLite3.pas}|direct {\i SQLite3} access (as dll or linked to the exe)\line See @127@
+|{\i Oracle}|{\f1\fs20 SynDBOracle.pas}|direct {\i Oracle} access (via OCI)\line See @117@
+|{\i @*OleDB@}|{\f1\fs20 SynOleDB.pas}|{\i MS SQL, Jet/MSAccess} or others\line See @118@
+|{\i @*ODBC@}|{\f1\fs20 SynDBODBC.pas}|{\i MS SQL, FireBird, MySQL, PostgreSQL, IBM DB2} or others\line See @118@
+|{\i @*Zeos@Lib}|{\f1\fs20 SynDBZeos.pas}|{\i MS SQL, SQLite3, FireBird, MySQL, PostgreSQL}\line See @94@
+|{\f1\fs20 DB.pas}/\line {\f1\fs20 @**TDataset@}|{\f1\fs20 SynDBDataset.pas}|@*NexusDB@ and databases supported by @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...\line See @119@
+|HTTP|{\f1\fs20 SynDBRemote.pas}|remote access to any {\f1\fs20 SynDB} database, over HTTP
+|%
 This list is not closed, and may be completed in the near future. Any help is welcome here: it is not difficult to implement a new unit, following the patterns already existing. You may start from an existing driver (e.g. {\i Zeos} or {\i Alcinoe} libraries). Open Source contribution are always welcome!
+Thanks to the design of our {\f1\fs20 SynDB.pas} classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
+An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
 In fact, {\i OleDB} is a good candidate for database access with good performance, Unicode native, with a lot of available providers. Thanks to {\i OleDB}, we are already able to access to almost any existing database. The code overhead in the server executable will also be much less than with adding any other third-party {\i Delphi} library. And we will let Microsoft or the {\i OleDB} provider perform all the testing and debugging for each driver.
 Since revision 1.17, direct access to the {\i ODBC} layer has been included to the framework database units. It has a wider range of free providers (including e.g. {\i MySQL} or {\i FireBird}), and is the official replacement for {\i OleDB} (next version of {\i MS SQL Server} will provide only ODBC providers, as far as {\i Microsoft} warned its customers).
-Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used and {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
-An {\i Oracle} dedicated direct access was added, because all available OleDB providers for Oracle (i.e. both Microsoft's and Oracle's) do have problems with handling BLOB, and we wanted our Clients to have a light-weight and as fast as possible access to this great database.
-Thanks to the design of our classes, it was very easy (and convenient) to implement {\i SQLite3} direct access. It is even used for our regression tests, in order to implement stand-alone unitary testing.
+Since revision 1.18, any {\i ZeosLib} / {\i ZDBC} driver can be used, with fast direct access to the underlying RDBMS client library. Since the {\i ZDBC} library does not rely on {\f1\fs20 DB.pas}, and by-passes the slow {\f1\fs20 TDataSet} component, its performance is very high. The {\i ZDBC} maintainers did a lot of optimizations, especially to work with {\i mORMot}, and this library is a first-class citizen to work with our framework.
+Since the same 1.18 revision, {\f1\fs20 DB.pas} can be used with our {\f1\fs20 SynDB.pas} classes. Of course, using {\f1\fs20 TDataset} as intermediate layer will be slower than the {\f1\fs20 SynDB.pas} direct access pattern. But it will allow you to re-use any existing (third-party) database connection driver, which could make sense in case of evolution of an existing application, or to use an unsupported database engine.
+Last but not least, the {\f1\fs20 SynDBRemote.pas} unit allows you to  create database applications that perform SQL operations on a remote {\f1\fs20 SynDB} HTTP server, instead of a database server. You can create connections just like any other {\f1\fs20 SynDB} database, but the transmission would take place over HTTP, with no need to install a database client with your application - see @131@.
+The following connections are therefore possible:
 \graph SynDBLayers SynDB Architecture
 \SynDB\Zeos
 =Zeos=ZDBC�(Zeos)
@@ -4650,6 +4446,8 @@ Thanks to the design of our classes, it was very easy (and convenient) to implem
 \SynDB\Oracle
 \SynDB\SQLite3
 \SynDB\DB
+\SynDB\SynDB卜emote
+\SynDB卜emote\any RDBMS
 =DB=DB.pas三Dataset
 \Zeos\Oracle
 \Zeos\MS SQL
@@ -4718,36 +4516,68 @@ Thanks to the design of our classes, it was very easy (and convenient) to implem
 \NexusDB=Oracle=Sybase=Advantage=Paradox=Informix
 \AnyDAC=UniDAC=BDE=DBExpress
 \
-This diagram is a bit difficult to follow at the latest level - but you got the general layered design, I guess. It will be split into smaller peaces later.
-:  Direct access to any Database engine
-The {\f1\fs20 @**SynDB@} units have the following features:
-- Direct fast access to {\i @*OleDB@, @*ODBC@, @*ZDBC@, @*Oracle@} (via OCI) or {\i @*SQLite3@} (statically linked or via external {\f1\fs20 dll}) databases;
+This diagram is a bit difficult to follow at the latest level - but you got the general layered design, I guess. It will be split into smaller focused diagrams later.
+:  Direct access to any RDBMS engine
+The {\f1\fs20 @**SynDB@.pas} units have the following features:
+- Direct fast access via {\i @*OleDB@, @*ODBC@, @*ZDBC@, @*Oracle@} (OCI) or {\i @*SQLite3@} (statically linked or via external {\f1\fs20 dll});
 - Thin wrapper around any {\f1\fs20 DB.pas} / {\f1\fs20 TDataset} based components (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@, @*BDE@...);
-- Generic abstract @*OOP@ layout, able to work with any SQL-based database engine;
-- Tested with {\i @*MS SQL@ Server 2008, @*Firebird@ 2.5.1, @PostgreSQL 9.2@, @*MySQL@ 5.6, IBM @*DB2@ 10.5, Oracle 11g}, and the latest {\i SQLite3} engine;
+- Generic abstract @*OOP@ layout, with a restricted set of data types, but able to work with any SQL-based database engine;
+- Tested with {\i @*MS SQL@ Server 2008/2012, @*Firebird@ 2.5.1, @PostgreSQL@ 9.2/9.3, @*MySQL@ 5.6, IBM @*DB2@ 10.5, Oracle 11g}, and the latest {\i SQLite3} engine;
 - Could access any local or remote Database, from any edition of {\i Delphi} (even {\i Delphi 7 personal}, the {\i Turbo Explorer} or {\i Starter edition}), just for free (in fact, it does not use the {\f1\fs20 DB.pas} standard unit and all its dependencies);
-- Ability to be truly Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007) - use internally UTF-8 encoding;
+- Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007), since it uses internally @*UTF-8@ encoding;
 - Handle NULL or BLOB content for parameters and results, including stored procedures;
 - Avoid most memory copy or unnecessary allocation: we tried to access the data directly from the retrieved data buffer, just as given from {\i OleDB / ODBC} or the low-level database client (e.g. OCI for Oracle, or the {\i SQLite3} engine);
 - Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
 - Could be safely used in a multi-threaded application/server (with dedicated thread-safe methods, usable even if the database client is not officially multi-thread);
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
-- Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / WideString};
+- Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
 - Available {\f1\fs20 ISQLDBRows} interface - to avoid typing {\f1\fs20 try...finally Query.Free end;} and allow one-line SQL statement;
-- @*Late-binding@ column access, via a custom variant type;
-- Direct @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
+- @*Late-binding@ column access, via a custom variant type when accessing the result sets;
+- two kind of optimized {\f1\fs20 @*TDataSet@} result sets: one read-write based on {\f1\fs20 @*TClientDataSet@}, and a much faster read-only {\f1\fs20 @*TSynSQLStatementDataSet@}
+- Direct UTF-8 @*JSON@ content creation, with no temporary data copy nor allocation (this feature will be the most used in our JSON-based ORM server);
 - High-level catalog / database layout abstract methods, able to retrieve the table and column properties (including indexes), for database reverse-engineering; provide also SQL statements to create a table or an index in a database-abstract manner; those features will be used directly by our ORM;
-- Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 TQuery}-like wrapper;
-- {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to the deprecated @*BDE@ technology;
-- Free {\f1\fs20 @*SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, about all available engines; it is also a good sample program of a stand-alone usage of those libraries.
+- Designed to be used with our ORM, but could be used stand-alone (a full {\i Delphi} 7 client executable is just about 200 KB), or even in any existing {\i Delphi} application, thanks to a {\f1\fs20 @*TQuery@}-like wrapper;
+- {\f1\fs20 TQuery} {\i emulation class}, for direct re-use with existing code, in replacement to {\f1\fs20 DB.pas} based code (including the deprecated @*BDE@ technology), with huge speed improvement for result sets (since we bypass the slow {\f1\fs20 TDataSet} component);
+- Fast and safe remote access over HTTP to any {\f1\fs20 SynDB} engine, without the need to deploy the RDBMS client library with the application;
+- Free {\f1\fs20 @**SynDBExplorer@} tool provided, which is a small but efficient way of running queries in a simple User Interface, on all supported engines, and publish as server or consume as client {\f1\fs20 SynDB} remote access over HTTP - see @131@; it is also a good sample program of a stand-alone usage of those libraries.
 :  Data types
 Of course, our ORM does not need a whole feature set (do not expect to use this database classes with your VCL DB RAD components), but handles directly the basic SQL column types, as needed by our ORM (derived from SQLite's internal column types): {\f1\fs20 NULL, Int64, Double, @*Currency@, DateTime, @*RawUTF8@} and {\f1\fs20 BLOB}.
-They are defined as such in {\f1\fs20 @*SynDB@}:
+They are defined as such in {\f1\fs20 @*SynDB@.pas}:
 !  TSQLDBFieldType =
 !    (ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
+|%25%65
+|\b {\f1\fs20 TSQLDBFieldType}|Content\b0
+|{\f1\fs20 ftNull}|Maps the SQL {\f1\fs20 NULL} value
+|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64 bit resolution
+|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64 bit ({\f1\fs20 @*double@}) resolution
+|{\f1\fs20 ftCurrency}|Fixed {\i financial} type, with up to 4 fixed decimal digits ({\f1\fs20 @*currency@})
+|{\f1\fs20 ftDate}|Date and time, mapping the Delphi {\f1\fs20 TDateTime} type
+|{\f1\fs20 ftUTF8}|Unicode text, encoded as @*UTF-8@, with or without size limit
+|{\f1\fs20 ftBlob}|Binary content, stored as a {\f1\fs20 RawByteString}
+|%
 Those types will map low-level database-level access types, not high-level {\i Delphi} types as {\f1\fs20 TSQLFieldType} defined in {\f1\fs20 mORMot.pas}, or the generic huge {\f1\fs20 TFieldType} as defined in the standard VCL {\f1\fs20 DB.pas} unit. In fact, it is more tied to the standard {\i @*SQLite3@} generic types, i.e. NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a {\f1\fs20 ftCurrency} and {\f1\fs20 ftDate} type, for better support of most DB engines) see @http://www.sqlite.org/datatype3.html
-You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-{\i Delphi} true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding.
+You can note that the only {\f1\fs20 string} type handled here uses UTF-8 encoding (implemented using our {\f1\fs20 RawUTF8} type), for cross-{\i Delphi} true Unicode process. Code can access to the textual data via {\f1\fs20 variant, string} or {\f1\fs20 widestring} variables and parameters, but our units will use UTF-8 encoding internally - see @32@. It will therefore interface directly with our ORM, which uses the same encoding. Of course, if the column was not defined as Unicode text in the database, any needed conversion to/from the corresponding charset would take place at the data provider level; but in your user code, you would have always access to the Unicode content.
 BLOB columns or parameters are accessed as {\f1\fs20 @*RawByteString@} variables, which may be mapped to a standard {\f1\fs20 TStream} via our {\f1\fs20 TRawByteStringStream}.
+:  Database types
+In addition to raw data access, the {\f1\fs20 SynDB.pas} unit handles some SQL-level generation, which would be used by our @3@ kernel.
+The following RDBMS database engines are defined as such in {\f1\fs20 SynDB.pas}:
+! TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet,
+!   dMySQL, dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2);
+|%25%75
+|\b {\f1\fs20 TSQLDBDefinition}|RDBMS tested\b0
+|{\f1\fs20 dDefault}|Any database, following the SQL-92 standard
+|{\f1\fs20 dOracle}|@*Oracle@ 11g
+|{\f1\fs20 dMSSQL}|@*MS SQL@ Server 2008/2012
+|{\f1\fs20 dJet}|@*Jet/MSAccess@ (under {\i Win32} only)
+|{\f1\fs20 dMySQL}|@*MySQL@ 5.6
+|{\f1\fs20 dSQLite}|@SQLite3@ 3.7.11 and up (we supply the latest version for static linking)
+|{\f1\fs20 dFirebird}|@*Firebird@ 2.5.1
+|{\f1\fs20 dNexusDB}|@*NexusDB@ 3.11
+|{\f1\fs20 dPostgreSQL}|@PostgreSQL@ 9.2/9.3
+|{\f1\fs20 dDB2}|IBM @*DB2@ 10.5
+|%
+The above versions have been tested, but newer or older revisions may also work. Your feedback is welcome: we cannot achieve to test all possible combinations of databases and clients on our own!
+The {\f1\fs20 SynDB.pas} unit is able to generate the SQL statements of those engines, for a {\f1\fs20 CREATE TABLE} / {\f1\fs20 CREATE INDEX} command, retrieve metadata (e.g. the tables and fields information), compute the right limit/offset syntax for a {\f1\fs20 SELECT}, compute multi-{\f1\fs20 INSERT} statements - see @99@, check the SQL keywords, define specific schema/owner naming conventions, process date and time values, handle errors and exceptions, or even create a database.
 :  SynDB Units
 Here are the units implementing the external database-agnostic features:
 |%30%70
@@ -4759,16 +4589,19 @@ Here are the units implementing the external database-agnostic features:
 |{\f1\fs20 SynDBOracle.pas}|@*Oracle@ DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|@*SQLite3@ direct access classes
 |{\f1\fs20 SynDBDataset.pas}\line {\f1\fs20 SynDBFireDAC.pas}\line {\f1\fs20 SynDBUniDAC.pas}\line {\f1\fs20 SynDBNexusDB.pas}\line {\f1\fs20 SynDBBDE.pas}|{\f1\fs20 @*TDataset@} ({\f1\fs20 DB.pas}) access classes
+|{\f1\fs20 SynDBRemote.pas}|remote access over HTTP
+|{\f1\fs20 SynDBVCL}|read/only {\f1\fs20 @*TSynSQLStatementDataSet@} result sets
+|{\f1\fs20 SynDBMidasVCL}|read/write {\f1\fs20 @*TClientDataSet@} result sets
 |%
-It is worth noting that those units only depend on {\f1\fs20 SynCommons}, therefore are independent of the ORM part of our framework. They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB}, switching from one database engine to another is just a matter of changing a class type.
-:  Classes
+It is worth noting that those units only depend on {\f1\fs20 SynCommons.pas}, therefore are independent of the ORM part of our framework (even the remote access). They may be used separately, accessing all those external databases with regular SQL code. Since all their classes inherit from abstract classes defined in {\f1\fs20 SynDB.pas}, switching from one database engine to another (even a remote HTTP access) is just a matter of changing one class type.
+:  SynDB Classes
 The data is accessed via three families of classes:
 - {\i Connection properties}, which store the database high-level properties (like database implementation classes, server and database name, user name and password);
 - {\i Connections}, which implements an actual connection to a remote database, according to the specified {\i Connection properties} - of course, there can be multiple {\i connections} for the same {\i connection properties} instance;
 - {\i Statements}, which are individual SQL queries or requests, which may be multiple for one existing {\i connection}.
 In practice, you define a {\f1\fs20 TSQLDBConnectionProperties} instance, then you derivate {\f1\fs20 TSQLDBConnection} and {\f1\fs20 TSQLDBStatement} instances using dedicated {\f1\fs20 NewConnection} / {\f1\fs20 ThreadSafeConnection} / {\f1\fs20 NewStatement} methods.
 Here is the general class hierarchy, for all available remote {\i connection properties}:
-\graph HierTSQLDBConnectionPropertiesThreadSafe TSQLDBConnectionPropertiesThreadSafe classes hierarchy
+\graph HierTSQLDBConnectionProperties TSQLDBConnectionProperties classes hierarchy
 rankdir=LR;
 \TSQLDBSQLite3ConnectionProperties\TSQLDBConnectionProperties
 \TSQLDBZEOSConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
@@ -4790,8 +4623,14 @@ rankdir=LR;
 \TODBCConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
 \TSQLDBNexusDBConnectionProperties\TSQLDBConnectionPropertiesThreadSafe
 \TSQLDBConnectionPropertiesThreadSafe\TSQLDBConnectionProperties
+\TSQLDBHTTPConnectionPropertiesAbstract\TSQLDBConnectionProperties
+\TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBHttpRequestConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBCurlConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinINetConnectionProperties\TSQLDBHttpRequestConnectionProperties
 \
-Those classes are the root classes of the {\f1\fs20 SynDB} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
+Those classes are the root classes of the {\f1\fs20 SynDB.pas} units, by which most of your database process will be implemented. For instance, the {\i mORMot} framework @*ORM@ only needs a given {\f1\fs20 TSQLDBConnectionProperties} instance to access any external database.
 Then the following {\i connection} classes are defined:
 \graph HierTSQLDBSQLite3Connection TSQLDBSQLite3Connection classes hierarchy
 rankdir=LR;
@@ -4805,6 +4644,7 @@ rankdir=LR;
 \TSQLDBZEOSConnection\TSQLDBConnectionThreadSafe
 \TSQLDBNexusDBConnection\TSQLDBConnectionThreadSafe
 \TSQLDBSQLite3Connection\TSQLDBConnection
+\TSQLDBProxyConnection\TSQLDBConnection
 \
 Each connection may create a corresponding {\i statement} instance:
 \graph HierTOleDBStatement TOleDBStatement classes hierarchy
@@ -4821,6 +4661,7 @@ Each connection may create a corresponding {\i statement} instance:
 \TSQLDBStatementWithParams\TSQLDBStatement
 \TSQLDBSQLite3Statement\TSQLDBStatement
 \TOleDBStatement\TSQLDBStatement
+\TSQLDBProxyStatement\TSQLDBStatement
 \
 In the above hierarchy, {\f1\fs20 TSQLDBDatasetStatementAbstract} is used to allow the use of custom classes for parameter process, e.g. {\f1\fs20 TADParams} for @*FireDAC@ (which features {\i Array DML}).
 Some dedicated {\f1\fs20 Exception} classes are also defined:
@@ -4833,13 +4674,14 @@ Some dedicated {\f1\fs20 Exception} classes are also defined:
 \EODBCException\ESQLDBException
 \EOleDBException\ESQLDBException
 \ESQLDBZEOS\ESQLDBException
+\ESQLDBRemote\ESQLDBException
 \ESQLDBOracle\Exception
 \ESQLQueryException\Exception
 \
 Check the {\f1\fs20 TestOleDB.dpr} sample program, located in {\f1\fs20 SQlite3} folder, using our {\f1\fs20 SynOleDB} unit to connect to a local {\i @*MS SQL@ Server 2008 R2 Express edition}, which will write a file with the JSON representation of the {\f1\fs20 Person.Address} table of the sample database {\i AdventureWorks2008R2}.
-:  ISQLDBRows interface
+:137  ISQLDBRows interface
 The easiest is to stay at the {\f1\fs20 TSQLDBConnectionProperties} level, using the {\f1\fs20 Execute()} methods of this instance, and access any returned data via an {\f1\fs20 @**ISQLDBRows@} interface. It will automatically use a thread-safe connection to the database, in an abstracted way.
-Typical use of {\f1\fs20 SynDB} classes could be:
+Typical use of {\f1\fs20 SynDB.pas} classes could be:
 - Initialize a shared {\f1\fs20 TSQLDBConnectionProperties} instance;
 - Execute statements directly from this instance's {\f1\fs20 Execute*()} methods.
 Defining a database connection is as easy as:
@@ -4862,8 +4704,8 @@ Then any sub-code is able to execute any SQL request, with optional bound parame
 !end;
 In this procedure, no {\f1\fs20 TSQLDBStatement} is defined, and there is no need to add a {\f1\fs20 try ... finally Query.Free; end;} block.
 In fact, the {\f1\fs20 MyConnProps.Execute} method returns a {\f1\fs20 TSQLDBStatement} instance as a {\f1\fs20 ISQLDBRows}, which methods can be used to loop for each result row, and retrieve individual column values. In the code above, {\f1\fs20 I['FirstName']} will in fact call the {\f1\fs20 I.Column[]} default property, which will return the column value as a {\f1\fs20 variant}. You have other dedicated methods, like {\f1\fs20 ColumnUTF8} or {\f1\fs20 ColumnInt}, able to retrieve directly the expected data.
-Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @16@.
-:  Late-binding
+Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @73@.
+:136  Late-binding
 We implemented @*late-binding@ access of column values, via a custom variant time. It uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties.
 The resulting {\i Delphi} code to write is just clear and obvious:
 !procedure UseProps(Props: TSQLDBConnectionProperties);
@@ -4883,7 +4725,7 @@ In practice, this code is slower than using a standard property based access, li
 But the first version, using late-binding of column name, just sounds more natural.
 Of course, since it is {\i late}-binding, we are not able to let the compiler check at compile time for the column name. If the column name in the source code is wrong, an error will be triggered at runtime only.
 First of all, let's see the fastest way of accessing the row content.
-In all cases, using the textual version of the column name ({\f1\fs20 'AccountNumber'}) is slower than using directly the column index. Even if our {\f1\fs20 @*SynDB@} library uses a fast lookup using hashing, the following code will always be faster:
+In all cases, using the textual version of the column name ({\f1\fs20 'AccountNumber'}) is slower than using directly the column index. Even if our {\f1\fs20 @*SynDB@.pas} library uses a fast lookup using hashing, the following code will always be faster:
 !var Customer: Integer;
 !begin
 !  with Props.Execute(
@@ -4896,10 +4738,69 @@ In all cases, using the textual version of the column name ({\f1\fs20 'AccountNu
 !end;
 But to be honest, after profiling, most of the time is spend in the {\f1\fs20 Step} method, especially in {\f1\fs20 fRowSet.GetData}. In practice, I was not able to notice any speed increase worth mentioning, with the code above.
 Our name lookup via a hashing function (i.e. {\f1\fs20 TDynArrayHashed}) just does its purpose very well.
-On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
+On the contrary the {\i Ole-Automation} based late-binding was found out to be slower, after profiling. In fact, the {\f1\fs20 Row.AccountNumber} expression calls an hidden {\f1\fs20 DispInvoke} function, which is slow when called multiple times. Our {\f1\fs20 SynCommons.pas} unit is able to hack the VCL, and by patching the VCL code in-memory, will call an optimized version of this function. Resulting speed is very close to direct {\f1\fs20 Column['AccountNumber']} call. See @SDD-DI-2.2.3@.
+:134  TDataset and SynDB
+Since our {\f1\fs20 SynDB.pas} unit does not rely on the Delphi's {\f1\fs20 DB.pas} unit, its result sets do not inherit from the {\f1\fs20 @**TDataset@}.
+As a benefit, those result sets would be much faster, when accessed from your object code.\line But as a drawback, you won't be able to use them in your regular VCL applications.
+In order to easily use the {\f1\fs20 SynDB.pas} unit with VCL components, you can create {\f1\fs20 TDataSet} results sets from any {\f1\fs20 SynDB} query.\line You have access to two kind of optimized {\f1\fs20 @*TDataSet@} result sets:
+|%30%15%25%30
+|\b TDataSet class|Operation|Unit|Remark\b0
+|{\f1\fs20 @*TClientDataSet@}|read write|{\f1\fs20 SynDBMidasVCL.pas}|Slow due to memory copy
+|{\f1\fs20 @*TSynSQLStatementDataSet@}|read only|{\f1\fs20 SynDBVCL.pas}|Fast due to direct mapping
+|%
+You can therefore assign the result of a {\f1\fs20 SynDB} request to any {\f1\fs20 TDataSource}, as such for our fast {\f1\fs20 TSynSQLStatementDataSet} read/only storage:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToDataSet(ds1,aProps.Execute('select * from people',[]));
+or for a {\f1\fs20 TClientDataSet} kind of in-memory storage:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToClientDataSet(ds1,aProps.Execute('select * from people',[]));
+See sample "{\f1\fs20 17 - TClientDataset use}" to find out more about using such {\f1\fs20 TDataSet}, including some speed information. You need to have run the {\f1\fs20 TestSQL3.dpr} set of regression tests before, to have the expected {\i SQlite3} data file.
+:133  TQuery emulation class
+The {\f1\fs20 SynDB.pas} unit offers a {\f1\fs20 @**TQuery@}-like class. This class emulates regular {\f1\fs20 TQuery} classes, without inheriting from {\f1\fs20 DB.pas} nor its slow {\f1\fs20 TDataSet}.
+It mimics basic {\f1\fs20 TQuery} VCL methods, with the following benefits:
+- Does not inherit from {\f1\fs20 TDataset}, but has its own light implementation over {\f1\fs20 SynDB.pas} {\f1\fs20 ISQLDBStatement} result sets, so is usually much faster;
+- Will be also faster for field and parameters access by name - or even index;
+- Is Unicode-ready, even with older pre-Unicode version of Delphi, able to return the data as {\f1\fs20 WideString}, independently from the current system charset;
+- You can still create a {\f1\fs20 TDataSet} from {\f1\fs20 SynDB}'s {\f1\fs20 TQuery}, via the {\f1\fs20 ToDataSet()} function defined in {\f1\fs20 SynDBVCL.pas}.
+Of course, since it is not a {\f1\fs20 TDataSet} component, you can not use it directly as a regular replacement for your RAD code.\line But if your application is data-centric and tried to encapsulate its business logic with some classes - i.e. if it tried to properly implement @*OOP@, not RAD - you can still replace directly your existing code with the {\f1\fs20 TQuery} emulator:
+!  Q := TQuery.Create(aSQLDBConnection);
+!  try
+!    Q.SQL.Clear; // optional
+!    Q.SQL.Add('select * from DOMAIN.TABLE');
+!    Q.SQL.Add('  WHERE ID_DETAIL=:detail;');
+!    Q.ParamByName('DETAIL').AsString := '123420020100000430015';
+!    Q.Open;
+!    Q.First;    // optional
+!    while not Q.Eof do begin
+!      assert(Q.FieldByName('id_detail').AsString='123420020100000430015');
+!      Q.Next;
+!    end;
+!    Q.Close;    // optional
+!  finally
+!    Q.Free;
+!  end;
+You should better use {\f1\fs20 TSQLDBStatement} instead of this wrapper, but having such code-compatible {\f1\fs20 TQuery} replacement could make easier some existing code upgrade, especially for @66@.\line For instance, it would help to avoid deploying the deprecated BDE, generate (much) smaller executable, access any database without paying a big fee, avoid rewriting a lot of existing code lines of a big legacy application, or let your old application communicate with the database over plain HTTP, without the need to install any RDBMS client - see @131@.
+:  Storing connection properties as JSON
+You can use a {\f1\fs20 TSynConnectionDefinition} storage to persist the connection properties as a @*JSON@ content, in memory or file.
+Typical stored content could be:
+$ {
+$   "Kind": "TSQLDBSQLite3ConnectionProperties",
+$   "ServerName": "database.db3",
+$   "DatabaseName": "",
+$   "UserID": "",
+$   "Password": "PtvlPA=="
+$ }
+The {\f1\fs20 "Kind"} parameter will be used to store the actual {\f1\fs20 TSQLDBConnectionProperties} class name. So switching from one database to another could be easily done at runtime, by modifying a setting stored e.g. in a JSON text file, without the need to recompile the application. Note that the {\f1\fs20 SynDB*} units implementing the class should be compiled within the executable, e.g. {\f1\fs20 SynDBSQLite3.pas} for {\f1\fs20 TSQLDBSQLite3ConnectionProperties}, or {\f1\fs20 SynDBZeos.pas} for {\f1\fs20 TSQLDBZeosConnectionProperties}.
+To create a new {\f1\fs20 TSQLDBConnectionProperties} instance from a local JSON file, you could simply write:
+!var Props: TSQLDBConnectionProperties;
+! ...
+!  Props := TSQLDBConnectionProperties.CreateFromFile('localDBsettings.json');
+The password will be encrypted and encoded as {\i Base64} in the file, for safety. You could use {\f1\fs20 TSynConnectionDefinition}'s {\f1\fs20 Password} and {\f1\fs20 PasswordPlain} properties to compute the value to be written on disk.
+Since {\f1\fs20 TSynConnectionDefinition} is a {\f1\fs20 TSynPersistent} class, you can nest it into a {\f1\fs20 TSynAutoCreateFields} instance containing all settings of your application.\line Then {\f1\fs20 mORMot.pas}' {\f1\fs20 ObjectToJSON}/{\f1\fs20 ObjectToJSONFile} and {\f1\fs20 JSONToObject}/{\f1\fs20 JSONFileToObject} functions could be used for persistence as a file or in a database, of those global settings.
+See also {\f1\fs20 TSQLRest.CreateFrom()} for a similar feature at ORM/REST level, and {\f1\fs20 function TSQLRestCreateFrom( aDefinition: TSynConnectionDefinition  )} as defined in {\f1\fs20 mORMotDB.pas} which is able to create a regular local ORM if {\f1\fs20 aDefinition.Kind} is a {\f1\fs20 TSQLRest} class name, but also an ORM with external DB storage - see @146@ - if {\f1\fs20 aDefinition.Kind} is a {\f1\fs20 TSQLDBConnectionProperties} class name.
 \page
-: Database access
-From the {\f1\fs20 SynDB} logical point of view, here is how databases can be accessed:
+: SynDB clients
+From the {\f1\fs20 SynDB.pas} logical point of view, here is how databases can be accessed:
 \graph SynDB1stLevel SynDB First Level Providers
 \SynDB\ZDBC
 \SynDB\ODBC
@@ -4914,8 +4815,8 @@ From the {\f1\fs20 SynDB} logical point of view, here is how databases can be ac
 \DB.pas三Dataset\UniDAC
 \
 Of course, the physical implementation is more complicated, as was stated in @%%SynDBLayers@.
-We will now detail how these available database connections are interfaced as {\f1\fs20 SynDB} classes.
-:  OleDB or ODBC to rule them all
+We will now detail how these available database connections are interfaced as {\f1\fs20 SynDB.pas} classes.
+:118  OleDB or ODBC to rule them all
 {\i @**OleDB@} (Object Linking and Embedding, Database, sometimes written as OLE DB or OLE-DB) is an API designed by Microsoft for accessing data from a variety of sources in a uniform manner.
 \graph SynDBOleDB SynDB and OleDB
 \SynDB\OleDB
@@ -4929,7 +4830,8 @@ We will now detail how these available database connections are interfaced as {\
 \OleDB\Sybase
 \
 ;It was designed as a higher-level replacement for, and successor to, ODBC, extending its feature set to support a wider variety of non-relational databases, such as object databases and spreadsheets that do not necessarily implement SQL.
-Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS SQL@ Server 2005/2008, but {\i @*Oracle@} provides a native OleDB provider (even if we found out that this Oracle provider, including the Microsoft's version, have problems with BLOBs). Do not forget about the {\i Advantage Sybase OleDB} driver and such...
+Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS SQL@ Server 2005/2008/2012, but {\i @*Oracle@} provides a native OleDB provider (even if we found out that this Oracle provider, including the Microsoft's version, have problems with BLOBs). Do not forget about the {\i Advantage Sybase OleDB} driver and such...
+If you plan to connect to a MS SQL Server, we highly recommend using the {\f1\fs20 TOleDBMSSQL2012ConnectionProperties} class, corresponding to {\f1\fs20 SQLNCLI11}, part of the {\i Microsoft� SQL Server� 2012 Native Client}, it is able to connect to any revision of MS SQL Server (event MS SQL Server 2008), and was found to be the more stable. You can get it from @http://www.microsoft.com/en-us/download/details.aspx?id=29065 by downloading the {\f1\fs20 sqlncli.msi} corresponding to your Operating System. Most of the time, you should download the {\f1\fs20 X64 Package} of {\f1\fs20 sqlncli.msi}, which will also install the 32-bit version of SQL {\i Server Native Client}, so would work for a 32-bit Delphi executable - the {\f1\fs20 X86 Package} is for a 32-bit Windows system only.
 {\i @**ODBC@} ({\i Open DataBase Connectivity}) is a standard C programming language middle-ware API for accessing database management systems (DBMS). {\i ODBC} was originally developed by Microsoft during the early 1990s, then was deprecated in favor to {\i OleDB}. More recently, Microsoft is officially deprecating {\i OleDB}, and urge all developers to switch to the open and cross-platform {\i ODBC} API for native connection. Back & worse strategy from Micro$oft... one more time!\line @http://blogs.msdn.com/b/sqlnativeclient/archive/2011/08/29/microsoft-is-aligning-with-odbc-for-native-relational-data-access.aspx
 \graph SynDBODBC SynDB and ODBC
 \SynDB\ODBC
@@ -4944,12 +4846,14 @@ Of course, you have got the {\i Microsoft SQL Native Client} to access the @**MS
 \ODBC\Jet/Access
 \ODBC\Advantage
 \
-By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/AnyDAC component sets.
+By using our own {\i OleDB} and {\i ODBC} implementations, we will for instance be able to convert directly the {\i OleDB} or {\i ODBC} binary rows to @*JSON@, with no temporary conversion into the {\i Delphi} high-level types (like temporary {\f1\fs20 string} or {\f1\fs20 variant} allocations). The resulting performance is much higher than using standard {\f1\fs20 @*TDataSet@} or other components, since we will bypass most of the layers introduced by BDE/dbExpress/FireDAC/AnyDAC component sets.
 Most {\i OleDB / ODBC} providers are free (even maintained by the database owner), others would need a paid license.
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i OleDB} or {\i ODBC} remote access expects only the database instance to be reachable on the Server side. Clients could communicate via standard HTTP, so won't need any specific port forwarding or other IT configuration to work as expected.
-:  ZEOS via direct ZDBC
-{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i@*FreePascal@}. It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API.
-Since revision 1.18 of the framework, we included direct integration of {\i ZeosLib} into {\i mORMot} persistence layer, with direct acces to the {\i ZDBC} layer. That is, it does not references {\f1\fs20 DB.pas} unit, and does not need to marshall all incoming data into a {\f1\fs20 TDataSet} compatible layout.
+:94  ZEOS via direct ZDBC
+:   The mORMot's best friend
+{\i ZeosLib}, aka {\i @**Zeos@}, is a Open Source library which provides native access to many database systems, developed for {\i Delphi}, {\i Kylix} and {\i @*Lazarus@} / {\i @*FreePascal@}.\line It is fully object-oriented and with a totally modular design. It connects to the databases by wrapping their native client libraries, and makes them accessible via its abstract layer, named {\f1\fs20 @**ZDBC@}. Originally, ZDBC was a port of JDBC 2.0 (Java Database Connectivity API) to Object Pascal. Since that time the API was slightly extended but the main ideas remain unchanged, so official JDBC 2.0 specification is the main entry point to the ZDBC API.
+The latest 7.x branch was deeply re-factored, and new methods and performance optimization were introduced. In fact, we worked hand by hand with Michael (the main contributor of {\i ZeosLib}) to ensure that the maximum performance would be achieved. The result is an impressive synergy of {\i mORMot} and {\i ZeosLib}, for both reading or writing data.
+Since revision 1.18 of the framework, we included direct integration of {\i ZeosLib} into {\i mORMot} persistence layer, with direct access to the {\i ZDBC} layer. That is, our {\f1\fs20 SynDBZeos} unit does not reference {\f1\fs20 DB.pas}, but access directly to the {\i ZDBC} interfaces.
 \graph SynDBZeos SynDB and Zeos / ZDBC
 \SynDB\ZDBC
 \ZDBC\Oracle
@@ -4961,19 +4865,42 @@ Since revision 1.18 of the framework, we included direct integration of {\i Zeos
 \ZDBC\Sybase
 \ZDBC\SQLite3
 \
-Such direct access, by-passing the VCL DB additional layer, is very close to our {\f1\fs20 SynDB} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}.
+Such direct access, by-passing the VCL {\f1\fs20 DB.pas} layer and its {\f1\fs20 TDataSet} bottleneck, is very close to our {\f1\fs20 SynDB.pas} design. As such, {\i ZeosLib} is a first class citizen library for {\i mORMot}. The {\f1\fs20 SynDBZeos} unit is intended to be a privileged access point to external SQL databases.
+:   Recommended version
+We recommend that you download the 7.2 branch of {\i Zeos}/ZDBC, which is the current {\i trunk}, at the time of this writing.
+A deep code refactoring has been made by the {\i Zeos}/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for @*UTF-8@ content processing.\line In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database back-end and use case!
+When writing data (i.e. {\i Add/Update/Delete} operations), {\i @*Array bind@ing} suport has been added to the {\i Zeos}/ZDBC 7.2 branch, and our {\f1\fs20 SynDBZeos} unit will use it if available, detecting if {\f1\fs20 IZDatabaseInfo.SupportsArrayBindings} property is {\f1\fs20 true} - which will be the case for {\i @*Oracle@} and {\i @FireBird@} providers by now. Our ORM would benefit from it, when processing in BATCH mode, even letting ZDBC creates the optimized SQL - see @99@.\line Performance at reading is very high, much higher than any other {\f1\fs20 DB.pas} based library, in case of single record retrieval. For instance, {\f1\fs20 TSQLDBZEOSStatement.ColumnsToJSON()} will avoid most temporary memory allocation, and is able to create the JSON directly from the low-level ZDBC binary buffers.
+If you need to stick to a version prior to 7.2, and want to work as expected with a {\i @*SQlite3@} back-end (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}?), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
+:   Connection samples
 If you want e.g. to connect to @*MySQL@ via Zeos/ZDBC, follow those steps:
 - Download "{\i Windows (x86, 32-bit), ZIP Archive}" from @http://dev.mysql.com/downloads/connector/c - then extract the archive: only {\f1\fs20 libmysql.dll} is needed and should be placed either in the executable folder, either in the system PATH;
 - Connect as usual e.g. via
 ! fConnection := TSQLDBZEOSConnectionProperties.Create(
-!   'zdbc:mysql://192.168.2.60:3306/world?username=root;password=dev', '', '', '').
-We recommend that you download the 7.2 branch of Zeos/ZDBC, which is the current {\i trunk}, at the time of this writing. A deep code refactoring has been made by the Zeos/ZDBC authors (thanks a lot Michael, aka {\i EgonHugeist}!), even taking care of {\i mORMot} expectations, to provide the best performance and integration, e.g. for UTF-8 content processing. In comparison with the previous 7.1 release, speed increase can be of more than 10 times, depending on the database backend and use case!
-If you need to stick to a previous version, and want to work as expected with a {\i @*SQlite3@} backend (but how would need to do it, since {\i Zeos} will be MUCH slower compared to {\i SynDBSQlite3}), you need to apply some patches for Zeos < 7.2, in methods {\f1\fs20 TZSQLiteCAPIPreparedStatement. ExecuteQueryPrepared()} and {\f1\fs20 TZSQLiteResultSet. FreeHandle}, as stated as comment at the beginning of {\f1\fs20 SynDBZeos.pas}.
-:  Oracle via OCI
-For our framework, and in completion to our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows direct access to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
-{\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@}.
+!   'zdbc:mysql://192.168.2.60:3306/world?username=root;password=dev', '', '', '');
+- Or using the {\f1\fs20 URI()} method:
+! fConnection := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),'root','dev');
+For {\i @*PostgreSQL@}, the {\i Zeos} driver needs only {\f1\fs20 libpq.dll} and {\f1\fs20 libintl.dll} e.g. from @http://www.enterprisedb.com/products-services-training/pgbindownload
+! PropsPostgreSQL := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dPostgreSQL,'localhost:5432'),
+!   'dbname','username','password');
+You may therefore use the {\f1\fs20 TSQLDBZEOSConnectionProperties.URI()} method to compute the expected ZDBC connection string:
+! PropsOracle := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
+!   'tnsname','user','pass');
+! PropsFirebirdEmbedded := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dFirebird,'','Firebird\fbembed.dll')
+!   'databasefilename','',');
+! PropsFirebirdRemote := TSQLDBZEOSConnectionProperties.Create(
+!   TSQLDBZEOSConnectionProperties.URI(dFirebird,'192.168.1.10:3055',
+!     'c:\Firebird_2_5\bin\fbclient.dll',false),
+!  '3camadas', 'sysdba', 'masterkey');
+See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further information about the expected syntax, and available abilities of this great open source library.
+:117  Oracle via OCI
+For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
+{\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@.pas}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
-Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection. We noted also that our implementation is 10 times faster than the one provided with ZEOS/ZDBC, which is far from optimized (it retrieves the rows one by one from OCI, for instance).
+Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection.
 You can use the latest version of the {\i Oracle Instant Client} (OIC) provided by Oracle - see @http://www.oracle.com/technetwork/database/features/instant-client - which allows to run client applications without installing the standard (huge) Oracle client or having an {\f1\fs20 ORACLE_HOME}. Just deliver the few {\f1\fs20 dll} files in the same directory than the application (probably a {\i mORMot} server), and it will work at amazing speed, with all features of Oracle (other stand-alone direct Oracle access library rely on deprecated Oracle 8 protocol).
 \graph SynDBOCIdirect Oracle Connectivity with SynDBOracle
 \RAD Application\DBExpress寸r BDE
@@ -4989,20 +4916,21 @@ Here are the main features of this unit:
 - Dedicated to work with {\i any version} of the Oracle OCI interface, starting from revision 8;
 - {\i Optimized for the latest features} of Oracle 11g (e.g. using native {\f1\fs20 Int64} for retrieving NUMBER fields with no decimal);
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
-- {\i Natively Unicode} (uses internal UTF-8 encoding), for all version of {\i Delphi}, with special handling of each database char-set;
+- {\i Natively Unicode} (uses internal @*UTF-8@ encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
 - Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32 bit for this current version);
 - {\i @*Late-binding@} access to column names, using a new dedicated {\f1\fs20 Variant} type (similar to Ole Automation runtime properties);
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
 - Use {\i Rows Array} and {\i BLOB fetching}, for best performance (ZEOS/ZDBC did not handle this, for instance);
-- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once - see @59@;
 - Handle {\i Prepared Statements} - on both client and server side, if available;
+- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once - see @59@;
+- Implements binding of a {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} as parameter, e.g. within a {\f1\fs20 SELECT .. IN} where clause;
 - Native {\i export to @*JSON@} methods, which will be the main entry point for our @*ORM@ framework;
 - {\i Cursor support}, which is pretty common when working with stored procedures and legacy code.
-:  SQLite3
+:127  SQLite3
 For our ORM framework, we implemented an efficient {\i @*SQLite3@} wrapper, joining the {\i SQLite3} engine either statically (i.e. within the main {\f1\fs20 exe}) or from external {\f1\fs20 sqlite3.dll}.
-It was an easy task to let the {\f1\fs20 SynSQLite3.pas} unit be called from our {\f1\fs20 @*SynDB@} database abstract classes. Adding such another Database is just a very thin layer, implemented in the {\f1\fs20 SynDBSQLite3.pas} unit.
+It was an easy task to let the {\f1\fs20 SynSQLite3.pas} unit be called from our {\f1\fs20 @*SynDB@.pas} database abstract classes. Adding such another Database is just a very thin layer, implemented in the {\f1\fs20 SynDBSQLite3.pas} unit.
 If you want to link the {\i SQLite3} engine to your project executable, ensure you defined the {\f1\fs20 SynSQLite3Static.pas} unit in your {\f1\fs20 uses} clause. Otherwise, define a {\f1\fs20 TSQLite3LibraryDynamic} instance to load an external {\f1\fs20 sqlite3.dll} library:
 ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
 ! sqlite3 := TSQLite3LibraryDynamic.Create;
@@ -5017,8 +4945,8 @@ When used within the {\i mORMot} ORM, you have therefore two ways of accessing t
 \SynDB\SQLite3
 \
 If your {\i mORMot}-based application purpose is to only use one centralized {\i SQLite3} database, it does not make sense to use {\f1\fs20 SynDBSQLite3} external tables. But if you want, in the future, to be able to connect to any external database, or to split your data in several database files, using those external {\i SQLite3} tables do make sense. Of course, the {\i SQlite3} engine library itself will be shared with both internal and external process.
-:  DB.pas libraries
-Since revision 1.18 of the framework, a new {\f1\fs20 SynDBDataset.pas} unit has been introduced, able to interface any {\f1\fs20 DB.pas} based library to our {\f1\fs20 SynDB} classes, using {\f1\fs20 TDataset} to retrieve the results. Due to the {\f1\fs20 TDataset} design, performance is somewhat degraded in respect to direct {\f1\fs20 SynDB} connection (e.g. results for {\i SQLite3} or {\i @*Oracle@}), but it also opens the potential database access.
+:119  DB.pas libraries
+Since revision 1.18 of the framework, a new {\f1\fs20 SynDBDataset.pas} unit has been introduced, able to interface any {\f1\fs20 DB.pas} based library to our {\f1\fs20 SynDB.pas} classes, using {\f1\fs20 TDataset} to retrieve the results. Due to the {\f1\fs20 TDataset} design, performance is somewhat degraded in respect to direct {\f1\fs20 SynDB.pas} connection (e.g. results for {\i SQLite3} or {\i @*Oracle@}), but it also opens the potential database access.
 Some dedicated providers have been published in the {\f1\fs20 SynDBDataset} sub-folder of the {\i mORMot} source code repository. Up to now, {\i @*FireDAC@} (formerly {\i @*AnyDAC@}), {\i @*UniDAC@} and {\i @*BDE@} libraries are interfaced, and a direct connection to the {\i @*NexusDB@} engine is available.
 Since there are a lot of potential combinations here - see @%%SynDBLayers@ - feedback is welcome. Due to our Agile process, we will first stick to the providers we need and use. It is up to {\i mORMot} users to ask for additional features, and provide wrappers, if possible, or at least testing abilities. Of course, {\i DBExpress} would benefit to be integrated, even if {\i Embarcadero} just acquired {\i AnyDAC} and revamped/renamed it as {\i FireDAC} - to make it the new official platform.
 :   NexusDB access
@@ -5093,7 +5021,7 @@ For instance, to access to a @*MySQL@ remote database, you should be able to con
 !  'world', 'root', 'dev');
 This library gives pretty stable results, but lack of the array binding feature, in comparison to {\i FireDAC}.
 :   BDE engine
-{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of {\i Delphi}. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB} provider.
+{\i Borland Database Engine} (@**BDE@) is the Windows-based core database engine and connectivity software shipped with earlier versions of {\i Delphi}. Even if it is deprecated, and replaced by DBExpress since 2000, it is a working solution, easy to interface as a {\f1\fs20 SynDB.pas} provider.
 \graph SynDBBDE SynDB and BDE
 \SynDB\DB
 =DB=DB.pas三Dataset
@@ -5118,13 +5046,140 @@ This library gives pretty stable results, but lack of the array binding feature,
 \
 Please do not use the BDE on any new project!\line You should better switch to another access layer.
 \page
-: ORM Integration
+:131  Remote access via HTTP
+The {\f1\fs20 SynDBRemote.pas} unit allows you to create database applications that perform SQL operations on a remote HTTP server, instead of a database server. You can create connections just like any other {\f1\fs20 SynDB.pas} database, but the transmission would take place over HTTP. As a result, no database client is to be deployed on the end user application: it will just use HTTP requests, even over Internet. You can use all the features of {\f1\fs20 SynDB.pas} classes, with the ease of one optimized HTTP connection.
+\graph SynDBRemoteOverview SynDB Remote access Overview
+node [shape=box];
+subgraph cluster_0 {
+"Client 1";
+label="Office 1";
+}
+subgraph cluster_1 {
+"Client 2";
+label="Remote A";
+}
+subgraph cluster_3 {
+"Client 3";
+label="Office 2";
+}
+subgraph cluster_4 {
+"Client 4";
+label="Remote B";
+}
+subgraph cluster_2 {
+\Client 1\DB\direct
+\Client 3\DB
+\SynDBRemote又erver\DB\local孓etwork
+\Client 2\SynDBRemote又erver\HTTP人TTPS儿nternet
+\Client 4\SynDBRemote又erver
+label="Server";
+}
+\
+This feature is {\i not} part of our @*REST@ful @*ORM@, so does not use the {\f1\fs20 mORMot.pas} unit, but its own optimized protocol, using enhanced security (transmission encryption with user authentication and optional HTTPS) and automatic data compression. Only the HTTP client and server classes, from the {\f1\fs20 SynCrtSock.pas} unit, are used.
+Since your application can use both {\f1\fs20 @*TDataSet@} - see @134@ - and emulated {\f1\fs20 @*TQuery@} - see @133@, this new mean of transmission may make it easy to convert existing Delphi client-server applications into @7@ with minimal changes in source code. Then, for your new code, you may switch to a @*SOA@ / @*ORM@ design, using {\i mORMot}'s @*REST@ful abilities - see @6@.
+The transmission protocol uses an optimized binary format, which is compressed, encrypted and digitally signed on both ends, and the remote user authentication will be performed via a challenge validation scheme. You can also publish your server over HTTPS, if needed, in {\f1\fs20 http.sys} kernel mode.
+:   Server and Client classes
+To publish your {\f1\fs20 SynDB.pas} connection, you just need to initialize one of the {\f1\fs20 TSQLDBServer*} classes defined in {\f1\fs20 SynDBRemote.pas}:
+\graph HierTSQLDBServerSockets SynDB Remote access Server classes hierarchy
+\TSQLDBServerHttpApi\TSQLDBServerAbstract
+\TSQLDBServerSockets\TSQLDBServerAbstract
+\
+You can define either a HTTP server based on the socket API - {\f1\fs20 TSQLDBServerSockets} - or the more stable and fast {\f1\fs20 TSQLDBServerHttpApi} class (under {\i Windows} only), which uses the {\f1\fs20 http.sys} kernel mode HTTP server available since Windows XP - see @88@.
+For the client side, you could use one of the following classes also defined in {\f1\fs20 SynDBRemote.pas}:
+\graph HierTSQLDBWinINetConnectionProperties SynDB Remote access Client classes hierarchy
+\TSQLDBSocketConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBHttpRequestConnectionProperties\TSQLDBHTTPConnectionPropertiesAbstract
+\TSQLDBWinHTTPConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBWinINetConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\TSQLDBCurlConnectionProperties\TSQLDBHttpRequestConnectionProperties
+\
+Note that {\f1\fs20 TSQLDBHttpRequestConnectionProperties} is an abstract parent class, so you should not instantiate it directly, but one of its inherited implementations.
+As you can see, you may choose between a pure socket API client, others using {\f1\fs20 WinINet} or {\f1\fs20 WinHTTP} (under {\i Windows}), or the {\f1\fs20 libcurl} API (especially on {\i @*Linux@}). The {\f1\fs20 TSQLDBWinHTTPConnectionProperties} class is the more stable over the {\i Internet} on {\i Windows}, even if plain sockets tend to give better numbers on {\f1\fs20 localhost} as stated by our @59@. Please read @135@ for a comparison of the diverse APIs.
+:   Publish a SynDB connection over HTTP
+To define a HTTP server, you may write:
+!uses SynDB, // RDBMS core
+!     SynDBSQLite3, SynSQLite3Static, // static SQLite3 engine
+!     SynDBRemote; // for HTTP server
+! ...
+!var Props: TSQLDBConnectionProperties;
+!    HttpServer: TSQLDBServerAbstract;
+! ...
+!  Props := TSQLDBSQLite3ConnectionProperties.Create('data.db3','','','');
+!!  HttpServer := TSQLDBServerHttpApi.Create(Props,'syndbremote','8092','user','pass');
+The above code will initialize a connection to a local {\f1\fs20 data.db3} {\i SQlite3} database (in the {\f1\fs20 Props} variable), and then publish it using the {\f1\fs20 http.sys} kernel mode HTTP server to the {\f1\fs20 http://1.2.3.4:8092/syndbremote} URI - if the server's IP is {\f1\fs20 1.2.3.4}.
+A first user is defined, with '{\f1\fs20 user}' / '{\f1\fs20 pass}' credentials. Note that in our remote access, user management {\i does not} match the RDBMS user rights: you should better have your own set of users at application level, for higher security, and a better integration with your business logic. If creating a new user on a RDBMS could be painful, managing remote user @*authentication@ is pretty easy on the {\f1\fs20 SynDBRemote.pas} side, by using the {\f1\fs20 Protocol.Authenticate} property of the server:
+!HttpServer.Protocol.Authenticate.AuthenticateUser('toto','pipo');
+!HttpServer.Protocol.Authenticate.AuthenticateUser('toto2','pipo2');
+!...
+You could also share {\i mORMot}'s REST authentication users @139@, by replacing the default {\f1\fs20 TSynAuthentication} class instance with {\f1\fs20 TSynAuthenticationRest}, as defined in {\f1\fs20 mORMot.pas}. Note using at the same time {\f1\fs20 SynDBRemote} and {\i mORMot}'s ORM/SOA sounds like a weak design, but may have its benefits when dealing with legacy code, and a lot of existing SQL statements.
+The URI should be registered to work as expected, just as expected by the {\f1\fs20 http.sys} API - see @109@. You may either run the server once with the system Administrator rights, or call the following method (as we do in {\f1\fs20 TestSQL3Register.dpr}) in your setup application:
+!THttpApiServer.AddUrlAuthorize('syndbremote','8092',false,'+');
+:   SynDB client access via HTTP
+On the client side, you can then write:
+!uses SynDB, // RDBMS core
+!     SynDBRemote; // for HTTP client
+! ...
+!var Props: TSQLDBConnectionProperties;
+! ...
+!!  Props := TSQLDBWinHTTPConnectionProperties.Create('1.2.3.4:8092','syndbremote','user','pass');
+As you can see, there is no link to {\f1\fs20 SynDBSQLite3.pas} nor {\f1\fs20 SynSQLite3Static.pas} on the client side. Just the HTTP link is needed. No need to deploy the RDBMS client libraries with your application, nor setup the local network firewall.
+We defined here a single user, with 'user' / 'pass' credentials, but you may manage more users on the server side, using the {\f1\fs20 Protocol.Authenticate} property of {\f1\fs20 TSQLDBServerAbstract}.
+Then, you execute your favorite SQL using the connection just as usual:
+!procedure Test(Props: TSQLDBConnectionProperties);
+!var Stmt: ISQLDBRows;
+!begin
+!  Stmt := Props.Execute('select * from People where YearOfDeath=?',[1519]);
+!  while Stmt.Step do begin
+!    assert(Stmt.ColumnInt('ID')>0);
+!    assert(Stmt.ColumnInt('YearOfDeath')=1519);
+!   end;
+!end;
+Or you may use it with VCL components, using the {\f1\fs20 SynDBVCL.pas} unit:
+!  ds1.DataSet.Free; // release previous TDataSet
+!  ds1.DataSet := ToDataSet(ds1,Props.Execute('select * from people',[]));
+The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshaling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
+If you defined you own {\f1\fs20 TSynAuthentication} class on the server class (e.g. to use REST users and groups via {\f1\fs20 TSynAuthenticationRest}), you should create you own class, and override the following method:
+!procedure TSQLDBWinHTTPConnectionPropertiesRest.SetInternalProperties;
+!begin
+!  if fProtocol=nil then
+!    fProtocol := TSQLDBRemoteConnectionProtocol.Create(
+!!      TSynAuthenticationRest.Create(nil,[]));
+!  inherited;
+!end;
+This overriden method would inherit from {\f1\fs20 TSQLDBWinHTTPConnectionProperties} all its behavior, but use the ORM/SOA authentication scheme for validating its users on the server side.
+:   Advanced use cases
+You may use this remote connection feature e.g. to mutate a stand-alone shared {\i SQLite3} database into a high performance but low maintenance client-server database engine. You may create it as such on the server side:
+!var props: TSQLDBSQLite3ConnectionProperties;
+!    server: TSQLDBServerHttpApi;
+!...
+!  props := TSQLDBSQLite3ConnectionProperties.Create('database.db3','','','');
+!  props.MainSQLite3DB.Synchronous := smOff;
+!  props.MainSQLite3DB.LockingMode := lmExclusive; // tune the performance
+!  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
+!...
+You could share an existing {\i SQlite3} database instance (e.g. a {\f1\fs20 @*TSQLRestServerDB@} used for our @*REST@ful ORM - see @42@) by creating the properties as such:
+!!  props := TSQLDBSQLite3ConnectionProperties.Create(aRestServerDB.DB);
+!  server := TSQLDBServerHttpApi.Create(props,'syndbremote','8092','user','password');
+If you use the {\f1\fs20 http.sys} kernel-mode server, you could share the same IP port between regular ORM/SOA operations (which may be 80 for a "pure" HTTP server), and remote {\f1\fs20 SynDB} access, if the database name (i.e. here '{\f1\fs20 syndbremote}') does not conflict with a ORM table nor a method service.
+Note that you can also customize the transmission protocol by setting your own {\f1\fs20 TSQLDBProxyConnectionProtocol} class on both server and server sides.
+:   Integration with SynDBExplorer
+Our {\f1\fs20 @*SynDBExplorer@} tool is able to publish in one click any {\f1\fs20 SynDB} connection as a HTTP server, or connect to it via HTTP. It could be very handy, even for debugging purposes.
+To serve an existing database, just connect to it as usual. Then click on the "{\f1\fs20 HTTP Server}" button below the table lists (on left side). You can tune the server properties (HTTP port, database name used for URI, user credentials), then click on the "{\f1\fs20 Start}" button.
+To connect to this remote connection, run another instance of {\f1\fs20 SynDBExplorer}. Create a new connection, using "{\f1\fs20 Remote HTTP}" as connection type, and set the other options with the values matching the server side, e.g. with the default "{\f1\fs20 localhost:8092}" (replacing {\f1\fs20 localhost} with the server IP for an access over the network) for the server name, "{\f1\fs20 syndbremote}" for the database name, and "{\f1\fs20 synopse}" for both user name and password.
+You would be able to access the main server instance remotely, just as if the database was accessed via a regular client.
+If the server side database is {\i SQLite3}, you just mutated this local engine into a true client-server database - you may be amazed by the resulting performance.
+:   Do not forget the mORMot!
+Even if you may be tempted to use such remote access to implement a {\i n-Tier architecture}, you should rather use {\i mORMot}'s Client-Server @*ORM@ instead - see @114@ - which offers much better client-server integration - due to the {\i @*Persistence Ignorance@} pattern of @54@, a better @*OOP@ and @*SOLID@ modeling design - see @47@, and even higher performance than raw SQL operations - see e.g. @28@ or @39@. Our little {\i mORMot} is not an ORM on which we added a data transmission layer: it is a full @*REST@ful system, with a true @*SOA@ design.
+But for integrating some legacy SQL code into a new architecture, {\f1\fs20 SynDBRemote.pas} may have its benefits, used in conjunction with {\i mORMot}'s higher level features.
+Note that for cross-platform clients, {\i mORMot}'s ORM/SOA patterns are a much better approach: do not put SQL in your mobile application, but use services, so that you would not need to re-validate and re-publish the app to the store after any small fix of your business logic!
+\page
+:146 SynDB ORM Integration
 :  Code-first or database-first
-When working with any @13@, you have mainly two possibilites:
+When working with any @13@, you have mainly two possibilities:
 - Start from scratch, i.e. write your classes and let the ORM create all the database structure, which will reflect directly the object properties - it is also named "@*code-first@";
 - Use an existing database, and then define in your model how your classes map the existing database structure - this is the "@*database-first@" option.
 Our {\i mORMot} framework implements both paths, even if, like for other ORMs, code-first sounds like a more straight option.
-:  Code-first ORM
+:145  Code-first ORM
 An {\i external} record can be defined as such, as expected by {\i mORMot}'s @*ORM@:
 !type
 !  TSQLRecordPeopleExt = class(TSQLRecord)
@@ -5146,11 +5201,12 @@ An {\i external} record can be defined as such, as expected by {\i mORMot}'s @*O
 !    property CreatedAt: TCreateTime read fCreatedAt write fCreatedAt;
 !  end;
 As you can see, there is no difference with an {\i internal} ORM class: it inherits from {\f1\fs20 @*TSQLRecord@}, but you may want it to inherit from {\f1\fs20 TSQLRecordMany} to use @58@ for instance.
-The only difference is this {\f1\fs20 index 40} attribute in the definition of {\f1\fs20 FirstName} and {\f1\fs20 LastName} @*published properties@: this will define the length (in {\f1\fs20 WideChar}) to be used when creating the external field for TEXT column. See above e.g.:
+The only difference is this {\f1\fs20 @**index@ 40} attribute in the definition of {\f1\fs20 FirstName} and {\f1\fs20 LastName} @*published properties@: this will define the length (in {\i UTF-16} {\f1\fs20 WideChar} or {\i UTF-8} bytes) to be used when creating the external field for TEXT column. See above e.g.:
 !    property FirstName: RawUTF8
 !!      index 40
 !      read fFirstName write fFirstName;
-In fact, {\i @*SQLite3@} does not care about textual field length, but almost all other database engines expect a maximum length to be specified when defining a {\f1\fs20 VARCHAR} column in a table. If you do not specify any length in your field definition (i.e. if there is no {\f1\fs20 index ???} attribute), the ORM will create a column with an unlimited length (e.g. {\f1\fs20 varchar(max)} for {\i @*MS SQL@ Server}). In this case, code will work, but performance and disk usage may be highly degraded, since access via a CLOB is known to be notably slower.
+In fact, {\i @*SQLite3@} does not care about textual field length, but almost all other database engines expect a maximum length to be specified when defining a {\f1\fs20 VARCHAR} column in a table. If you do not specify any length in your field definition (i.e. if there is no {\f1\fs20 index ???} attribute), the ORM will create a column with an unlimited length (e.g. {\f1\fs20 varchar(max)} for {\i @*MS SQL@ Server}). In this case, code will work, but performance and disk usage may be highly degraded, since access via a CLOB is known to be notably slower. The only exceptions to this performance penalty are {\i SQlite3} and {\i PostgreSQL}, for which the size unlimited {\f1\fs20 TEXT} columns are as fast to process than {\f1\fs20 varchar(#)}.
+By default, no check will be performed by the ORM to ensure that the field length is compliant with the column size expectation in the external database. You can use {\f1\fs20 TSQLRecordProperties}'s {\f1\fs20 SetMaxLengthValidatorForTextFields()} or {\f1\fs20 SetMaxLengthFilterForTextFields()} method to create a validation or filter rule to be performed before sending the data to the external database - see @56@.
 Here is an extract of the regression test corresponding to external databases:
 !var RExt: TSQLRecordPeopleExt;
 !  (...)
@@ -5223,7 +5279,7 @@ The resulting table layout on the external database will be the following:
 \graph TSQLRecordPeopleExtDefaultMapping TSQLRecordPeopleExt Code-First Field/Column Mapping
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="<id>ID : integer|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
+struct1 [label="<id>ID : TID|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
 struct2 [label="<id>ID : INTEGER|<data>Data : BLOB|<fn>FirstName : NVARCHAR(40)|<ln>LastName : NVARCHAR(40)|<yob>YearOfBirth : INTEGER|<yod>YearOfDeath : INTEGER"];
 struct1:id -> struct2:id;
 struct1:data -> struct2:data;
@@ -5236,11 +5292,11 @@ The only specific instruction is the global {\f1\fs20 @*VirtualTableExternalRegi
 In order to work as expected, {\f1\fs20 VirtualTableExternalRegister()} shall be called {\i before} {\f1\fs20 TSQLRestServer.Create} constructor: when the server initializes, the ORM server must know whenever an {\i internal} or {\i external} database shall be managed. In the above code, {\f1\fs20 TSQLRestClientDB.Create()} will instantiate its own embedded {\f1\fs20 TSQLRestServerDB} instance.
 Note that the {\f1\fs20 TSQLRecordExternal.LastChange} field was defined as a {\f1\fs20 TModTime}: in fact, the current date and time will be stored each time the record is updated, i.e. for each {\f1\fs20 aExternalClient.Add} or {\f1\fs20 aExternalClient.Update} calls. This is tested by both {\f1\fs20 RExt.LastChange>=Start} and {\f1\fs20 RExt.LastChange<=Updated} checks in the latest loop. The time used is the "server-time", i.e. the current time and date on the server (not on the client), and, in the case of external databases, the time of the remote server (it will execute e.g. a {\f1\fs20 select getdate()} under @*MS SQL@ to synchronize the date to be inserted for {\f1\fs20 LastChange}). In order to retrieve this server-side time stamp, we use {\f1\fs20 Start := aExternalClient.ServerTimeStamp} instead of the local {\f1\fs20 TimeLogNow} function.
 A similar feature is tested for the {\f1\fs20 CreatedAt} published field, which was defined as {\f1\fs20 TCreateTime}: it will be set automatically to the current server time at record creation (and not changed on modifications). This is the purpose of the {\f1\fs20 RExt.CreatedAt<=Updated} check in the above code.
-:  Database-first ORM
+:120  Database-first ORM
 As we have just seen, the following line initializes the ORM to let {\f1\fs20 TSQLRecordPeopleExt} data be accessed via SQL, over an external database connection {\f1\fs20 fProperties}:
 !VirtualTableExternalRegister(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal');
 We also customized the name of the external table, from its default {\f1\fs20 'PeopleExt'} (computed by timing {\f1\fs20 TSQLRecord} prefix from {\f1\fs20 TSQLRecordPeopleExt}) into {\f1\fs20 'PeopleExternal'}.
-In addition to table name mapping, the ORM is also able to map the {\f1\fs20 TSQLRecord} published properties names to any custom database column name. It is in fact very common that most tables on existing databases to not have very explicit column naming, which may sounds pretty weird when mapped directly as {\f1\fs20 TSQLRecord} property names. Even the primary keys of your existing database won't match the ORM's requirement of naming it as {\f1\fs20 ID}. All this should be setup as expected.
+In addition to table name @**mapping@, the ORM is also able to map the {\f1\fs20 TSQLRecord} published properties names to any custom database column name. It is in fact very common that most tables on existing databases to not have very explicit column naming, which may sounds pretty weird when mapped directly as {\f1\fs20 TSQLRecord} property names. Even the @*primary key@s of your existing database won't match the ORM's requirement of naming it as {\f1\fs20 ID}. All this should be setup as expected.
 By default, for a {\i code-driven} approach, internal property names will match the external table column names - see @%%TSQLRecordPeopleExtDefaultMapping@
 You can customize this default mapping, writing e.g.
 !fProperties := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
@@ -5249,6 +5305,11 @@ You can customize this default mapping, writing e.g.
 !!  MapField('ID','Key').
 !!  MapField('YearOfDeath','YOD');
 ! (...) // the remaining code stays the same
+As an alternative, you can use the {\f1\fs20 @*VirtualTableExternalMap@} function and its fluent interface:
+!fProperties := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
+!!VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal').
+!!  MapField('ID','Key').
+!!  MapField('YearOfDeath','YOD');
 Then you use your {\f1\fs20 TSQLRecordPeopleExt} table as usual from {\i Delphi} code, with {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} fields.
 But, under the hood, the mORMot ORM will do the mapping when creating all needed SQL statements:
 - The "internal" {\f1\fs20 TSQLRecord} class will be stored within the {\f1\fs20 PeopleExternal} external table;
@@ -5259,7 +5320,7 @@ The resulting mapping will therefore be the following:
 \graph TSQLRecordPeopleExtCustomMapping TSQLRecordPeopleExt Database-First Field/Column Mapping
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="<id>ID : integer|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
+struct1 [label="<id>ID : TID|<data>Data : TSQLRawBlob|<fn>FirstName : RawUTF8|<ln>LastName : RawUTF8|<yob>YearOfBirth : integer|<yod>YearOfDeath : word"];
 struct2 [label="<id>Key : INTEGER|<data>Data : BLOB|<fn>FirstName : NVARCHAR(40)|<ln>LastName : NVARCHAR(40)|<yob>YearOfBirth : INTEGER|<yod>YOD : INTEGER"];
 struct1:id -> struct2:id;
 struct1:data -> struct2:data;
@@ -5269,10 +5330,38 @@ struct1:yob -> struct2:yob;
 struct1:yod -> struct2:yod;
 \
 Note that only the {\f1\fs20 ID} and {\f1\fs20 YearOfDeath} column names were customized.
-Due to the design of {\i SQLite3} virtual tables, and mORMot internals in its current state, the database primary key must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM.
+Due to the design of {\i SQLite3} virtual tables, and {\i mORMot} internals in its current state, the database @*primary key@ must be an {\f1\fs20 INTEGER} field to be mapped as expected by the ORM. But you can specify any secondary key, e.g. a {\f1\fs20 TEXT} field, via {\f1\fs20 stored @*AS_UNIQUE@} definition in code.
+:106  Sharing the database with legacy code
+It is pretty much possible that you would have to maintain and evolve a legacy project, based on an existing database, with a lot of already written SQL statements - see @66@. For instance, you would like to use {\i mORMot} for new features, and/or add mobile or HTML clients - see @86@.\line In this case, the @*ORM@ advanced features - like @38@ or BATCH process, see @28@ - may conflict with the legacy code, for the tables which may have to be shared. Here are some guidelines when working on such a project.
+To be exhaustive about this question, we need to consider each ORM @*CRUD@ operation. We may have to divide them in three kinds: read queries, insertions, and modifications of existing data.
+About {\b ORM read queries}, i.e. {\f1\fs20 Retrieve()} methods, the ORM cache can be tuned per table, and you will definitively lack of some cache, but remember :
+- That you can set a "time out" period for this cache, so that you may still benefit of it in most cases;
+- That you have a cache at server level and another at client level, so you can tune it to be less aggressive on the client, for instance;
+- That you can tune the ORM cache {\i per ID}, so some items which are not likely to change can still be cached.
+About {\b ORM insertions}, i.e. {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, when using the external engine, if any external process is likely to INSERT new rows, ensure you set the {\f1\fs20 TSQLRestStorageExternal} {\f1\fs20 EngineAddUseSelectMaxID} property to TRUE, so that it will compute the next maximum ID by hand.\line But it still may be an issue, since the external process may do an INSERT {\i during} the ORM insertion.\line So the best is perhaps to NOT use the ORM {\f1\fs20 Add()} or {\f1\fs20 BatchAdd()} methods, but rely on dedicated INSERT SQL statement, e.g. hosted in an interface-based service on the server side.
+About {\b ORM modifications}, i.e. {\f1\fs20 Update() Delete() BatchUpdate() BatchDelete()} methods, they sound safe to be used in conjunction with external process modifying the DB, as soon as you use transactions to let the modifications be atomic, and won't conflict any concurrent modifications in the legacy code.
+Perhaps the safer pattern, when working with external tables which are to be modified in the background by some legacy code, may be to by-pass those ORM methods, and define server-side {\i interface-based services} - see @63@. Those services may contain manual SQL, instead of using the ORM "magic". But it will depend on your business logic, and you will fail to benefit from the ORM features of the framework.\line Nevertheless, introducing @17@ into your application would be very beneficial: ORM is not mandatory, especially if you are "fluent" in SQL queries, know how to make them as standard as possible, and have a lot of legacy code, perhaps with already tuned SQL statements.
+Introducing @*SOA@ is mandatory to interface new kind of clients to your applications, like mobile apps or AJAX modern sites. To be fair, you should not access directly the database any more, as you did with your legacy Delphi application and @*RAD@ DB components.\line All new features, involving new tables to store new data, would still benefit of the {\i mORMot}'s ORM, and could still be hosted in the very same external database, shared by your existing code.\line Then, you will be able to identify {\i seams} - see @66@ - in your legacy code, and move them to your new {\i mORMot} services, then let your application evolve into a newer SOA/MVC architecture, without breaking anything, nor starting from scratch.
+:  Auto-mapping of SQL conflictual field names
+If your application is likely to be run on several databases, it may be difficult to handle any potential field name conflict, when you switch from one engine to another. The ORM allows you therefore to ensure that no field name would conflict with a SQL keyword of the underlying database.
+In code-first mode, you can use the following method to ensure that no such conflict would occur:
+!  fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB.MapAutoKeywordFields;
+For a database-first database, the following syntax is to be used so that field names would be checked:
+!  fExternalModel.Props[TSQLRecordPeopleExt].ExternalDB. // custom field mapping
+!    MapField('ID','Key').
+!    MapField('YearOfDeath','YOD').
+!!    MapAutoKeywordFields;
+or, if you want to full fluent interface definition:
+!  VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,fProperties,'PeopleExternal').
+!    MapField('ID','Key').
+!    MapField('YearOfDeath','YOD').
+!!    MapAutoKeywordFields
+It is a good idea to call the {\f1\fs20 @**MapAutoKeywordFields@} method after any manual field mapping for a database-first database, since even your custom field names may conflict with a SQL keyword.
+If any field name is likely to conflict with a SQL keyword, it will be mapped with a trailing '_'. For instance, a {\f1\fs20 'Select'} published property would be mapped into a {\f1\fs20 SELECT_} column in the table.
+Even if this option is disabled by default, a warning message will appear in the log proposing to use this {\f1\fs20 MapAutoKeywordFields} method, and would help you to identify such issues.
 :30  External database ORM internals
-The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@}-based external database for the framework.
-In fact, the {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes will implement this feature:
+The {\f1\fs20 mORMotDB.pas} unit implements @*Virtual Table@s access for any {\f1\fs20 @*SynDB@.pas}-based external database for the framework.
+In fact, this feature will use {\f1\fs20 TSQLRestStorageExternal, TSQLVirtualTableCursorExternal} and {\f1\fs20 TSQLVirtualTableExternal} classes, defined as such:
 \graph HierExternalTables External Databases classes hierarchy
 \TSQLRecordVirtual\TSQLRecord
 \TSQLRecordVirtualTableAutoID\TSQLRecordVirtual
@@ -5283,7 +5372,7 @@ The registration of the class is done by a call to the following new global proc
 !procedure VirtualTableExternalRegister(aModel: TSQLModel; aClass: TSQLRecordClass;
 !  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8);
 This procedure will register on the Server-side an external database for an ORM class:
-- It will define the supplied class to behave like a {\f1\fs20 TSQLRecordVirtualTableAutoID} class (i.e. its {\f1\fs20 @*TSQLModelRecordProperties@.Kind} property will be ovewritten to {\f1\fs20 rCustomAutoID} in this ORM model);
+- It will define the supplied class to behave like a {\f1\fs20 TSQLRecordVirtualTableAutoID} class (i.e. its {\f1\fs20 @*TSQLModelRecordProperties@.Kind} property will be overwritten to {\f1\fs20 rCustomAutoID} in this ORM model);
 - It will associate the supplied class with a {\f1\fs20 TSQLVirtualTableExternal} module;
 - The {\f1\fs20 TSQLDBConnectionProperties} instance should be shared by all classes, and released globally when the ORM is no longer needed;
 - The full table name, as expected by the external database, should be provided here ({\f1\fs20 SQLTableName} will be used internally as table name when called via the associated {\i SQLite3} Virtual Table) - if no table name is specified (''), will use {\f1\fs20 SQLTableName} (e.g. 'Customer' for a class named {\f1\fs20 TSQLCustomer});
@@ -5328,21 +5417,43 @@ $  - External via virtual table: 133,666 assertions passed  1.12s
 The first run is made with {\f1\fs20 TSQLRestServer.StaticVirtualTableDirect} set to TRUE (which is the default) - i.e. it will call directly {\f1\fs20 TSQLRestStorageExternal} for RESTful commands, and the second will set this property to FALSE - i.e. it will call the {\i SQLite3} engine and let its virtual table mechanism convert it into another SQL calls.
 It is worth saying that this test is using an in-memory {\i SQLite3} database (i.e. instantiated via {\f1\fs20 SQLITE_MEMORY_DATABASE_NAME} as pseudo-file name) as its external DB, so what we test here is mostly the ORM overhead, not the external database speed. With real file-based or remote databases (like @*MS SQL@), the overhead of remote connection won't make noticeable the use of Virtual Tables.
 In all cases, letting the default {\f1\fs20 StaticVirtualTableDirect=true} will ensure the best possible performance. As stated by @59@, using a virtual or direct call won't affect the CRUD operation speed: it will by-pass the virtual engine whenever possible.
+:  Tuning the process
+@*Multi-thread@ing abilities of the server, and all available settings, will be detailed @25@.\line By default, all @*ORM@ read operations will be run in concurrent mode, and all ORM write operations will be executed in blocking mode. This is expected to be both safe and fast, with our internal {\i SQLite3} engine, or most of the external databases. But you may need to change this default behavior, depending on the external engine you are connected to.
+Most {\f1\fs20 TSQLDBConnectionProperties} will inherit from {\f1\fs20 TSQLDBConnectionPropertiesThreadSafe}, so will create one connection per thread. This is efficient, but some providers may have issues with it.
+First of all, some database client libraries may not allow transactions to be shared among several threads - for instance @*MS SQL@. Other clients may consume a lot of resources for each connection, or may not have good multi-thread scaling abilities. Some database servers do fork their process for each connected client - for instance {\i @*PostgreSQL@}: you may want to reduce the server resources by using only one connection, so only one process on the server. To avoid such problems, you can force all ORM write operations to be executed in a dedicated thread, i.e. by setting {\f1\fs20 amMainThread} (which is not very opportune on a server without UI), or even better via {\f1\fs20 amBackgroundThread} or a {\f1\fs20 amBackgroundORMSharedThread}:
+! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread;
+Secondly, especially on a long-running @*n-Tier@ {\i mORMot} server, you may suffer from broken connection exceptions. For instance, after a night without any activity, the attempts to access to the external database may fail in the morning, since the connection may have been disconnected by the database server in the meanwhile.\line You can use the {\f1\fs20 TSQLDBConnectionProperties.ConnectionTimeOutMinutes} property to specify a maximum period of inactivity after which all connections will be flushed and recreated, to avoid potential broken connections issues.\line In practice, recreating the connections after a while is safe and won't slow done the process - on the contrary, it may help reducing the consumed resources, and stabilize long running n-Tier servers.\line {\f1\fs20 ThreadSafeConnection} method will check for the last activity on its {\f1\fs20 TSQLDBConnectionProperties} instance, and then call {\f1\fs20 ClearConnectionPool} to release all active connections if the idle time elapsed was too long.
+As a consequence, if you use this {\f1\fs20 ConnectionTimeOutMinutes} property, you should ensure that no other connection is still active on the background, otherwise some unexpected issues may occur.\line For instance, you should ensure that your {\i mORMot} ORM server runs all its statements in blocking mode for both read and write:
+! aServer.AcquireExecutionMode[execORMGet] := am***;
+! aServer.AcquireExecutionMode[execORMWrite] := am***;
+Here above, safe blocking {\f1\fs20 am***} modes are any mode {\i but} {\f1\fs20 amUnlocked}, i.e. either {\f1\fs20 amLocked}, {\f1\fs20 amBackgroundThread}, {\f1\fs20 amBackgroundORMSharedThread} or {\f1\fs20 amMainThread}.
 \page
-:83 MongoDB database access
-{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in April 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
+:83External NoSQL database access
+%cartoon06.png
+Our @*ORM@ @*REST@ful framework is able to access not only regular @*SQL@ database engines, via @126@, but also @*NoSQL@ engines - see @82@.
+Remember the diagram introducing {\i mORMot}'s @42@:
+%%mORMotDBDesign
+\page
+The following {\i NoSQL} engines can be accessed from {\i mORMot}'s {\i Object Document Mapping} (ODM) abilities:
+|%20%80
+|\b NoSQL Engine|Description\b0
+|{\f1\fs20 TObjectList}|In memory storage, with JSON or binary disk persistence
+|{\i @*MongoDB@}|#1 NoSQL database engine
+|%
+We can in fact consider our {\f1\fs20 @**TSQLRestStorageInMemory@} instance, and its {\f1\fs20 TObjectList} storage, as a {\i NoSQL} very fast in-memory engine, written in pure Delphi. See @57@ for details about this feature.
+{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
 - Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
-{\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which matches perfectly {\i mORMot}'s @*REST@ful approach.
-:  MongoDB client
+{\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which match perfectly {\i mORMot}'s @*REST@ful approach.
+: SynMongoDB client
 The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
 It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex or {\i Javascript}):
 - For instance, a {\f1\fs20 TBSONObjectID} can be used to create some genuine document identifiers on the client side ({\i MongoDB} does not generate the IDs for you: a common way is to generate unique IDs on the client side);
 - Generation of BSON content from any {\i Delphi} types (via {\f1\fs20 TBSONWriter});
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
 - A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
-- Interaction with the {\f1\fs20 SynCommons}' @80@ as document storage and late-binding access;
+- Interaction with the {\f1\fs20 SynCommons.pas}' @80@ as document storage and late-binding access;
 - Marshalling BSON to and from @*JSON@, with the {\i MongoDB} extended syntax for handling its custom types.
 This unit defines some objects able to connect and manage databases and collections of documents on any {\i MongoDB} servers farm:
 - Connection to one or several servers, including secondary hosts, via the {\f1\fs20 TMongoClient} class;
@@ -5350,7 +5461,7 @@ This unit defines some objects able to connect and manage databases and collecti
 - Access to any collection, via the {\f1\fs20 TMongoCollection} class;
 - It features some nice abilities about speed, like BULK insert or delete mode, and explicit {\i Write Concern} settings.
 At collection level, you can have direct access to the data, with high level structures like {\f1\fs20 TDocVariant}/{\f1\fs20 TBSONVariant}, with easy-to-read JSON, or low level BSON content.\line You can also tune most aspects of the client process, e.g. about error handling or {\i write concerns} (i.e. how remote data modifications are acknowledged).
-:   Connecting to a server
+:  Connecting to a server
 Here is some sample code, which is able to connect to a {\i MongoDB} server, and returns the server time:
 !var Client: TMongoClient;
 !    DB: TMongoDatabase;
@@ -5375,7 +5486,7 @@ Note that for this low-level command, we used a {\f1\fs20 TDocVariant}, and its 
 In fact, if you put your mouse over the {\f1\fs20 res} variable during debugging, you will see the following JSON content:
 程"system":{"currentTime":"2014-05-06T15:24:25","hostname":"Acer","cpuAddrSize":64,"memSizeMB":3934,"numCores":4,"cpuArch":"x86_64","numaEnabled":false},"os":{"type":"Windows","name":"Microsoft Windows 7","version":"6.1 SP1 (build 7601)"},"extra":{"pageSize":4096},"ok":1}
 And we simply access to the server time by writing {\f1\fs20 res.system.currentTime}.
-:   Adding some documents to the collection
+:  Adding some documents to the collection
 We will now explain how to add documents to a given collection.
 We assume that we have a {\f1\fs20 DB: TMongoDatabase} instance available. Then we will create the documents with a {\f1\fs20 TDocVariant} instance, which will be filled via late-binding, and via a {\f1\fs20 doc.Clear} pseudo-method used to flush any previous property value:
 !var Coll: TMongoCollection;
@@ -5440,8 +5551,8 @@ $Inserted with _id=7
 $Inserted with _id=8
 $Inserted with _id=9
 $Inserted with _id=10
-Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} primary key property.
-The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
+Note that the {\i mORMot} ORM will compute a genuine series of integers in a similar way, which will be used as expected by the {\f1\fs20 TSQLRecord.ID} @*primary key@ property.
+The {\f1\fs20 TMongoCollection} class can also write a list of documents, and send them at once to the {\i MongoDB} server: this BULK insert mode - close to the {\i Array Binding} feature of some SQL providers, and implemented in our {\i SynDB.pas} classes - see @28@ - can increase the insertion by a factor of 10 times, even when connected to a local instance: imagine how much time it may save over a physical network!
 For instance, you may write:
 !var docs: TVariantDynArray;
 !...
@@ -5456,7 +5567,7 @@ For instance, you may write:
 !  Coll.Insert(docs); // insert all values at once
 !...
 You will find out later for some numbers about the speed increase due to such BULK insert.
-:   Retrieving the documents
+:  Retrieving the documents
 You can retrieve the document as a {\f1\fs20 TDocVariant} instance:
 !var doc: variant;
 !...
@@ -5487,6 +5598,10 @@ $Name: Name 8  Number: 7
 $Name: Name 9  Number: 8
 $Name: Name 10  Number: 9
 $Name: Name 11  Number: 10
+In a GUI application, you could fill a VCL grid using a {\f1\fs20 TDocVariantArrayDataSet} as defined in {\f1\fs20 SynVirtualDataSet.pas}, for instance:
+! ds1.DataSet.Free; // release previous TDataSet
+! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
+This overloaded {\f1\fs20 FindDocs()} method takes a query filter as JSON and parameters (following the {\f1\fs20 MongoDB} syntax), and a {\f1\fs20 Projection} mapping ({\f1\fs20 null} to retrieve all properties). Its returns a {\f1\fs20 TVariantDynArray} result, which was mapped to an optimized read-only {\f1\fs20 TDataSet} using the overloaded {\f1\fs20 ToDataSet()} function. So in our case, the DB grid has been filled with all people named '{\f1\fs20 John}', with age greater than 21.
 If you want to retrieve the documents directly as JSON, we can write:
 !var json: RawUTF8;
 !...
@@ -5504,7 +5619,7 @@ You can note that {\f1\fs20 FindJSON()} has two properties, which are the {\f1\f
 !  writeln(json);
 Which would output:
 $[{"_id":5,"Name":"Name 6","Number":5}]
-Note here than we used an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
+We used here an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
 We can specify a projection:
 !  json := Coll.FindJSON('{_id:?}',[5],'{Name:1}');
 !  writeln(json);
@@ -5553,7 +5668,7 @@ $Before: {"_id":2,"Name":"Name 3","Number":2}
 $After:  {"_id":2,"Name":"NEW","Number":2}
 You can refer to the documentation of the {\f1\fs20 SynMongoDB.pas} unit, to find out all functions, classes and methods available to work with {\i MongoDB}.
 Some very powerful features are available, including @**Aggregation@ (available since {\i MongoDB} 2.2), which offers a good alternative to standard @**Map/Reduce@ pattern.\line See @http://docs.mongodb.org/manual/reference/command/aggregate for reference.
-:   Write Concern and Performance
+:  Write Concern and Performance
 You can take a look at the {\f1\fs20 MongoDBTests.dpr} sample - located in the {\f1\fs20 SQLite3\\Samples\\24 - MongoDB} sub-folder of the source code repository, and the {\f1\fs20 TTestDirect} classes, to find out some performance information.
 In fact, this {\f1\fs20 TTestDirect} is inherited twice, to run the same tests with diverse write concern:
 \graph HierTTestDirect MongoDB TTestDirect classes hierarchy
@@ -5608,12 +5723,12 @@ $  Total failed: 0 / 56,527  - Direct without acknowledge PASSED  3.77s
 As you can see, the reading speed is not affected by the {\i Write Concern} settings.\line But data writing can be multiple times faster, when each write command is not acknowledged.
 Since there is no error handling, {\f1\fs20 wcUnacknowledged} is not to be used on production. You may use it for replication, or for data consolidation, e.g. feeding a database with a lot of existing data as fast as possible.
 \page
-:84  MongoDB + ORM = ODM
+:84 MongoDB + ORM = ODM
 The {\f1\fs20 mORMotMongoDB.pas} unit is able to let any {\f1\fs20 TSQLRecord} class be persisted on a remote {\i MongoDB} server.
 As a result, our @*ORM@ is able to be used as a @82@ framework, with almost no code change. Any {\i MongoDB} database can be accessed via @*REST@ful commands, using @*JSON@ over @*HTTP@ - see @6@.
 This integration benefits from the other parts of the framework (e.g. our @*UTF-8@ dedicated process, which is also the native encoding for @*BSON@), so you can easily mix @*SQL@ and @*NoSQL@ databases with the exact same code, and are still able to tune any SQL or {\i MongoDB} request in your code, if necessary.
 From the client point of view, there is no difference between a ORM or an @*ODM@: you may use a SQL engine as a storage for ODM - via @29@ - or even a NoSQL database as a regular ORM, with @*denormalization@ (even if it may void most advantages of NoSQL).
-:   Register the TSQLRecord class
+:  Define the TSQLRecord class
 In the database model, we define a {\f1\fs20 TSQLRecord} class, as usual:
 !  TSQLORM = class(TSQLRecord)
 !  private
@@ -5645,11 +5760,11 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 boolean}|boolean|{\i MongoDB} has a {\f1\fs20 boolean} type
 |enumeration|int32|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)
 |set|int64|each bit corresponding to an enumerated item (therefore a set of up to 64 elements can be stored in such a field)
-|{\f1\fs20 single}|double|
+|{\f1\fs20 single}|{\f1\fs20 @*double@}|
 |{\f1\fs20 double}|double|
 |{\f1\fs20 extended}|double|stored as {\f1\fs20 double} (precision lost)
 |{\f1\fs20 @*currency@}|double|stored as {\f1\fs20 double} ({\i MongoDB} does not have a BSD type)
-|{\f1\fs20 @*RawUTF8@}|UTF-8|this is the {\b preferred} field type for storing some textual content in the ORM
+|{\f1\fs20 @*RawUTF8@}|@*UTF-8@|this is the {\b preferred} field type for storing some textual content in the ORM
 |{\f1\fs20 WinAnsiString}|UTF-8|{\i WinAnsi} char-set (code page 1252) in {\i Delphi}
 |{\f1\fs20 RawUnicode}|UTF-8|{\i UCS2} char-set in {\i Delphi}, as {\f1\fs20 AnsiString}
 |{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
@@ -5659,9 +5774,10 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 TTimeLog}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|int32|{\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()}
+|{\f1\fs20 @*TSQLRecord@}|int32|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64 bit on {\i Win64}
+|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64 bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
-|{\f1\fs20 TRecordReference}\line {\f1\fs20 TRecordReferenceToBeDeleted}|int32|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 RecordRef}-like value (use e.g. {\f1\fs20 @*TSQLRest@. Retrieve(Reference)} to get a record content) - with proper synchronization when the record is deleted
+|{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|int32/int64|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 @*RecordRef@}-like value - with proper synchronization when the record is deleted
 |{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TCollection@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON})
 |{\f1\fs20 @*TObjectList@}|array|BSON array of objects (from {\f1\fs20 ObjectToJSON}) - see {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} @71@
@@ -5674,6 +5790,9 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID})
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} to produce true JSON
 |%
+You can share the same {\f1\fs20 TSQLRecord} definition with {\i MongoDB} and other storage means, like external SQL databases. Unused information (like the {\f1\fs20 index} attribute) will just be ignored.
+Note that {\f1\fs20 TSQLRecord}, {\f1\fs20 TID} and {\f1\fs20 TRecordReference*} published properties will automatically create an index on the corresponding field, and that a kind of {\f1\fs20 ON DELETE SET DEFAULT} tracking will take place for {\f1\fs20 TSQLRecord} and {\f1\fs20 TRecordReference} properties, and {\f1\fs20 ON DELETE CASCADE} for {\f1\fs20 TRecordReferenceToBeDeleted} - but not for {\f1\fs20 TID}, since we do not know which table to track.
+:  Register the TSQLRecord class
 On the server side (there won't be any difference for the client), you define a {\f1\fs20 TMongoDBClient}, and assign it to a given {\f1\fs20 TSQLRecord} class, via a call to {\f1\fs20 StaticMongoDBRegister()}:
 !  MongoClient := TMongoClient.Create('localhost',27017);
 !  DB := MongoClient.Database['dbname'];
@@ -5682,15 +5801,19 @@ On the server side (there won't be any difference for the client), you define a 
 !!  if StaticMongoDBRegister(TSQLORM,fClient.Server,fDB,'collectionname')=nil then
 !    raise Exception.Create('Error');
 And... that's all!
-You can then use any ORM command, as usual:
+If all the tables of a {\i mORMot} server should be hosted on a {\i MongoDB} server, you could call the {\f1\fs20 @*StaticMongoDBRegisterAll@()} function instead:
+! StaticMongoDBRegisterAll(aServer,aMongoClient.Open(colllectionname'));
+If you want {\f1\fs20 TSQLRecord.InitializeTable} method to be called for void tables (and for instance create {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} default content), you can execute the following command:
+! Client.Server.InitializeTables(INITIALIZETABLE_NOINDEX);
+You can then execute any ORM command, as usual:
 !  writeln(Client.TableRowCount(TSQLORM)=0);
-As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using for instance:
+As with external databases, you can specify the field names mapping between the objects and the {\i MongoDB} collection.\line By default, the {\f1\fs20 TSQLRecord.ID} property is mapped to the {\i MongoDB}'s {\f1\fs20 _id} field, and the ORM will populate this {\f1\fs20 _id} field with a sequence of integer values, just like any {\f1\fs20 TSQLRecord} table.\line You can specify your own mapping, using e.g.:
 ! aModel.Props[aClass].ExternalDB.MapField(..)
 Since the field names are stored within the document itself, it may be a good idea to use shorter naming for the {\i MongoDB} collection. It may save some storage space, when working with a huge number of documents.
-Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the {\f1\fs20 TMongoCollection} instance later on, by calling:
+Once the {\f1\fs20 TSQLRecord} is mapped to a {\i MongoDB} collection, you can always have direct access to the corresponding {\f1\fs20 TMongoCollection} instance later on, using a simple transtyping:
 ! (aServer.StaticDataServer[aClass] as TSQLRestStorageMongoDB).Collection
 This may allow any specific task, including any tuned query or process.
-:   ORM/ODM CRUD methods
+:  ORM/ODM CRUD methods
 You can add documents with the standard CRUD methods of the ORM, as usual:
 !  R := TSQLORM.Create;
 !  try
@@ -5706,7 +5829,7 @@ You can add documents with the standard CRUD methods of the ORM, as usual:
 !  finally
 !    R.Free;
 !  end;
-As we already saw, the framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 index 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
+As we already saw, the framework is able to handle any kind of properties, including complex types like {\i @*dynamic array@s} or {\f1\fs20 variant}.\line In the above code, a {\f1\fs20 TDocVariant} document has been stored in {\f1\fs20 R.Value}, and a dynamic array of {\f1\fs20 integer} values is accessed via its {\f1\fs20 @*index@ 1} shortcut and the {\f1\fs20 TSQLRecord.DynArray()} method.
 The usual {\f1\fs20 Retrieve} / {\f1\fs20 Delete} / {\f1\fs20 Update} methods are available:
 !  R := TSQLORM.Create;
 !  try
@@ -5721,9 +5844,9 @@ You can define a WHERE clause, as if the back-end where a regular SQL database:
 !    R := TSQLORM.CreateAndFillPrepare(Client,'ID=?',[i]);
 !    try
 !    ...
-Current implementation understand one condition over one single field, with {\f1\fs20 = > >= < <= IN} clauses. More advanced queries are possible, but won't be handled as SQL, but via direct access to the {\f1\fs20 TMongoDBCollection}.
+:  ODM complex queries
 To perform a query and retrieve the content of several documents, you can use regular {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods:
-!!  R := TSQLORM.CreateAndFillPrepare(Client,'');
+!!  R := TSQLORM.CreateAndFillPrepare(Client,WHERE_CLAUSE,[WHERE_PARAMETERS]);
 !  try
 !    n := 0;
 !!    while R.FillOne do begin
@@ -5734,8 +5857,39 @@ To perform a query and retrieve the content of several documents, you can use re
 !  finally
 !    R.Free;
 !  end;
-A WHERE clause can also be defined for {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods.
-:   BATCH mode
+A WHERE clause can also be defined for {\f1\fs20 CreateAndFillPrepare} or {\f1\fs20 FillPrepare} methods. This WHERE clause could contain several expressions, joined with {\f1\fs20 AND} / {\f1\fs20 OR}.\line Each of those expressions could use:
+- The simple comparators {\f1\fs20 = < <= <> > >=},
+- An {\f1\fs20 IN (....)} clause,
+- {\f1\fs20 IS NULL} / {\f1\fs20 IS NOT NULL} tests,
+- A {\f1\fs20 LIKE} operation,
+- Or even any {\f1\fs20 ...DynArrayContains()} specific function.
+The {\i mORMot} ODM will convert this SQL-like statement into the optimized {\f1\fs20 MongoDB} query expression, using e.g. a regular expression for the {\f1\fs20 LIKE} operator.
+The {\f1\fs20 LIMIT}, {\f1\fs20 OFFSET} and {\f1\fs20 ORDER BY} clauses will also be handled as expected. A special care would be taken for an {\f1\fs20 ORDER BY} on textual values: by design, {\i MongoDB} will always sort text with case-sensitivity, which is not what we expect: so our ODM will sort such content on client side, after having been retrieved from the {\i MongoDB} server. For numerical fields, {\i MongoDB} sorting features would be processed on the server side.
+The {\f1\fs20 COUNT(*)} function would also be converted into the proper {\i MongoDB} API call, so that such operations would be as costless as possible. {\f1\fs20 DISTINCT() MAX() MIN() SUM() AVG()} functions and the {\f1\fs20 GROUP BY} clause would also be converted into optimized {\i MongoDB} aggregation pipelines, on the fly. You could even set aliases for the columns (e.g. {\f1\fs20 max(RowID) as first}) and perform simple addition/substraction of an integer value.
+Here are some typical WHERE clauses, and the corresponding {\i MongoDB} query document as generated by the ODM:
+|%50%50
+|\b WHERE clause|{\i MongoDB} Query\b0
+|{\f1\fs20 'Name=?',['Name 43']}|{\f1\fs20 \{Name:"Name 43"\}}
+|{\f1\fs20 'Age<?',[51]}|{\f1\fs20 \{Age:\{$lt:51\}\}}
+|{\f1\fs20 'Age in (1,10,20)'}|{\f1\fs20 \{Age:\{$in:[1,10,20]\}\}}
+|{\f1\fs20 'Age in (1,10,20) and ID=?',[10]}|{\f1\fs20 \{Age:\{$in:[1,10,20]\},_id:10\}}
+|{\f1\fs20 'Age in (10,20) or ID=?',[30]}|{\f1\fs20 \{$or:[\{Age:\{$in:[10,20]\}\},\{_id:30\}]\}}
+|{\f1\fs20 'Name like ?',['name 1%']}|{\f1\fs20 \{Name:/^name 1/i\}}
+|{\f1\fs20 'Name like ?',['name 1']}|{\f1\fs20 \{Name:/^name 1$/i\}}
+|{\f1\fs20 'Name like ?',['%ame 1%']}|{\f1\fs20 \{Name:/ame 1/i\}}
+|{\f1\fs20 'Data is null'}|{\f1\fs20 \{Data:null\}}
+|{\f1\fs20 'Data is not null'}|{\f1\fs20 \{Data:\{$ne:null\}\}}
+|{\f1\fs20 'Age<? limit 10',[51]}|{\f1\fs20 \{Age:\{$lt:51\}\}} + limit 10
+|{\f1\fs20 'Age in (10,20) or ID=? order by ID desc',[30]}|{\f1\fs20 \{$query:\{$or:[\{Age:\{$in:[10,20]\}\},\{_id:30\}]\},$orderby:\{_id:-1\}\}}
+|{\f1\fs20 'order by Name'}|{\f1\fs20 \{\}} + client side text sort by {\f1\fs20 Name}
+|{\f1\fs20 'Age in (1,10,20) and IntegerDynArrayContains(Ints,?)',[10])}|{\f1\fs20 \{Age:\{$in:[1,10,20]\},Ints:\{$in:[10]\}\}}
+|{\f1\fs20 Distinct(Age),max(RowID) as first,count(Age) as count\line group by age}|{\f1\fs20 \{$group:\{_id:"$Age",f1:\{$max:"$_id"\},f2:\{$sum:1\}\}\},\{$project:\{_id:0,"Age":"$_id","first":"$f1","count":"$f2"\}\}}
+|{\f1\fs20 min(RowID),max(RowID),Count(RowID)}|{\f1\fs20 \{$group:\{_id:null,f0:\{$min:"$_id"\},f1:\{$max:"$_id"\},f2:\{$sum:1\}\}\},\{$project:\{_id:0,"min(RowID)":"$f0","max(RowID)":"$f1","Count(RowID)":"$f2"\}\}}
+|{\f1\fs20 min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c}|{\f1\fs20 \{$group:\{_id:null,f0:\{$min:"$_id"\},f1:\{$max:"$_id"\},f2:\{$sum:1\}\}\},\{$project:\{_id:0,"a":"$f0","b":\{$add:["$f1",1]\},"c":"$f2"\}\}}
+|%
+Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex {\i NoSQL} query (e.g. using aggregation functions or the {\i Map/Reduce} pattern) by using directly the {\f1\fs20 TMongoCollection} methods.
+But for most business code, {\i mORMot} allows to share the same exact code between your regular SQL databases or NoSQL engines. You do not need to learn the {\i MongoDB} query syntax: the ODM would compute the right expression for you, depending on the database engine it runs on.
+:  BATCH mode
 In addition to individual @*CRUD@ operations, our {\i MongoDB} is able to use BATCH mode for adding or deleting documents.
 You can write the exact same code as with any SQL back-end:
 !  Client.BatchStart(TSQLORM);
@@ -5761,7 +5915,7 @@ Or for deletion:
 !      assert(fClient.BatchDelete(i)>=0);
 !  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
 Speed benefit may be huge in regard to individual Add/Delete operations, even on a local {\i MongoDB} server. We will see some benchmark numbers now.
-:   ORM/ODM performance
+:  ORM/ODM performance
 You can take a look at @59@ to compare {\i MongoDB} as back-end for our ORM classes.
 In respect to external @*SQL@ engines, it features very high speed, low CPU use, and almost no difference in use. We interfaced the {\f1\fs20 BatchAdd()} and {\f1\fs20 BatchDelete()} methods to benefit of {\i MongoDB} BULK process, and avoided most memory allocation during the process.
 Here are some numbers, extracted from the {\f1\fs20 MongoDBTests.dpr} sample, which reflects the performance of our ORM/ODM, depending on the {\i Write Concern} mode used:
@@ -5822,7 +5976,7 @@ As we just stated, the @**JSON@ format is used internally in this framework. By 
 JSON's basic types are - as retrieved from @http://en.wikipedia.org/wiki/JSON
 |%15%85
 |\b Type|Description\b0
-|Number|{\f1\fs20 Double} precision floating-point format in {\i JavaScript}, generally depends on implementation. There is no specific {\f1\fs20 integer} type
+|Number|{\f1\fs20 @*Double@} precision floating-point format in {\i JavaScript}, generally depends on implementation. There is no specific {\f1\fs20 integer} type
 |String|Double-quoted Unicode, with backslash escaping
 |Boolean|{\f1\fs20 true} or {\f1\fs20 false}
 |Array|An ordered sequence of values, comma-separated and enclosed in square brackets; the values do not need to be of the same type
@@ -5865,7 +6019,7 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 JSON @**serialization@  will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
-Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 double} values are stored as their corresponding floating-point representation.
+Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 @*double@} values are stored as their corresponding floating-point representation.
 All {\f1\fs20 string} content is serialized as standard JSON text field, i.e. nested with double quotes ({\f1\fs20 "}). Since JSON uses @*UTF-8@ encoding, it is one of the reasons why we introduced the {\f1\fs20 @*RawUTF8@} type, and use it everywhere in our framework.
 :51  Record serialization
 In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
@@ -5873,11 +6027,11 @@ In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
 - {\f1\fs20 record} can contain any other {\f1\fs20 record} or {\i dynamic array}, so are very convenient to work with (no need to define sub-classes or lists);
 - {\f1\fs20 record} variables can be allocated on stack, so won't solicited the global heap;
 - {\f1\fs20 record} instances automatically freed by the compiler when they come out of scope, so you won't need to write any {\f1\fs20 try..finally Free; end} block.
-Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}.
+Serialization of {\f1\fs20 record} values are therefore a must-have for a framework like {\i mORMot}. In practice, the {\f1\fs20 record} types should be defined as {\f1\fs20 packed record}, so that low-level access would be easier to manage by the serializers.
 :   Automatic serialization via Enhanced RTTI
 Since {\i Delphi} 2010, the compiler generates additional RTTI at compilation, so that all {\f1\fs20 record} fields are described, and available at runtime.\line By the way, this @**enhanced RTTI@ is one of the reasons why executables did grow so much in newer versions of the compiler.
 Our {\f1\fs20 SynCommons.pas} unit is able to use this enhanced information, and let any {\f1\fs20 record} be serialized via {\f1\fs20 RecordLoad()} and {\f1\fs20 RecordSave()} functions, and all internal JSON marshalling process.
-In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with {\i Delphi} 2010 and up, they will be serialized as valid JSON objects.
+In short, you have nothing to do. Just use your {\f1\fs20 record} as parameters, and, with {\i Delphi} 2010 and up, they will be serialized as valid JSON objects. The only restriction is that the records should be defined as {\f1\fs20 packed record}.
 :   Serialization for older Delphi versions
 Sadly, the information needed to serialize a {\f1\fs20 record} is available only since {\i Delphi} 2010.
 If your application is developped on any older revision (e.g. {\i Delphi} 7, {\i Delphi} 2007 or {\i Delphi} 2009), you won't be able to automatically serialize {\f1\fs20 records} as plain JSON objects directly.
@@ -5888,9 +6042,9 @@ You have several paths available:
 Note that any custom serialization (either via callbacks, or via text definition), will override any previous registered method, even the mechanism using the enhanced RTTI. You can change the default serialization to easily meet your requirements. For instance, this is what {\f1\fs20 SynCommons.pas} does for any {\f1\fs20 TGUID} content, which is serialized as the standard JSON text layout (e.g.  {\f1\fs20 "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633"}), and not following the {\f1\fs20 TGUID record} layout as defined in the RTTI , i.e. {\f1\fs20 \{"D1":12345678,"D2":23023,"D3":9323,"D4":"0123456789ABCDEF"\}} - which is far from convenient.
 :    Default Binary/Base64 serialization
 On any version of the compiler prior to {\i Delphi} 2010, any {\f1\fs20 @*record@} value will be serialized by default with a proprietary binary (and optimized) layout - i.e. via {\f1\fs20 @*RecordLoad@} and {\f1\fs20 @*RecordSave@} functions - then encoded as {\i @**Base64@}, to be stored as plain text within the JSON stream.
-A special UTF-8 prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
+A special @*UTF-8@ prefix (which does not match any existing {\i Unicode} glyph) is added at the beginning of the resulting JSON string to identify this content as a BLOB, as such:
 $ { "MyRecord": "嚙針6nDoMOnYQ==" }
-You will find in {\f1\fs20 SynCommons} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
+You will find in {\f1\fs20 SynCommons.pas} unit both {\f1\fs20 BinToBase64} and {\f1\fs20 Base64ToBin} functions, very optimized for speed. {\i Base64} encoding was chosen since it is standard, much more efficient than hexadecimal, and still JSON compatible without the need to escape its content.
 When working with most part of the framework, you do not have anything to do: any record will by default follow this {\i Base64} serialization, so you will be able e.g. to publish or consume interface-based services with records.
 :    Custom serialization
 {\i Base64} encoding is pretty convenient for a computer (it is a compact and efficient format), but it is very limited about its interoperability. Our format is proprietary, and will use the internal {\i Delphi} serialization scheme: it means that it won't be readable nor writable outside the scope of your own {\i mORMot} applications. In a @*REST@ful/@*SOA@ world, this sounds not like a feature, but a limitation.
@@ -5904,7 +6058,7 @@ Then the {\f1\fs20 Reader} and {\f1\fs20 Writer} callbacks can be defined by two
 :    Defining callbacks
 For instance, if you want to serialize the following {\f1\fs20 record}:
 !  TSQLRestCacheEntryValue = record
-!    ID: integer;
+!    ID: TID;
 !    TimeStamp: cardinal;
 !    JSON: RawUTF8;
 !  end;
@@ -5931,7 +6085,7 @@ On the other side, the corresponding reader callback would be like:
 !  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
 !  if result=nil then
 !    aValid := false else begin
-!    V.ID := GetInteger(Values[0]);
+!    V.ID := GetInt64(Values[0]);
 !    V.TimeStamp := GetCardinal(Values[1]);
 !    V.JSON := Values[2];
 !    aValid := true;
@@ -5939,13 +6093,13 @@ On the other side, the corresponding reader callback would be like:
 !end;
 :    Text-based definition
 Writing those callbacks by hand could be error-prone, especially for the {\f1\fs20 Reader} event.
-You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the record layout in a convenient text-based format.
+You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the {\f1\fs20 record} layout in a convenient text-based format. Once more, those types need to be defined as {\f1\fs20 packed record}, so that the text layout definition would not depend on compiler-specific field alignment.
 The very same {\f1\fs20 TSQLRestCacheEntryValue} can be defined as with a typical {\i pascal} {\f1\fs20 record}:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID: integer; TimeStamp: cardinal; JSON: RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp: cardinal; JSON: RawUTF8';
 Or with a shorter syntax:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID integer TimeStamp cardinal JSON RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID Int64 TimeStamp cardinal JSON RawUTF8';
 Both declarations will do the same definition. Note that the supplied text should match {\i exactly} the original {\f1\fs20 record} type definition: do not swap or forget any property!
 By convention, we use two underscore characters ({\f1\fs20 __}) before the {\f1\fs20 record} type name, to easily identify the layout definition. It may indeed be convenient to write it as a constant, close to the {\f1\fs20 record} type definition itself, and not in-lined at {\f1\fs20 RegisterCustomJSONSerializerFromText()} call level.
 Then you register your type as such:
@@ -6063,8 +6217,8 @@ The following types are handled by this feature:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Serialized as JSON boolean
-|{\f1\fs20 byte word integer cardinal Int64 single double}|Serialized as JSON number
-|{\f1\fs20 string RawUTF8 SynUnicode WideString}|Serialized as JSON string
+|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@}|Serialized as JSON number
+|{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
 |{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
 |{\f1\fs20 RawJSON}|Stored as un-serialized raw JSON content\line (e.g. any value, object or array)
@@ -6414,7 +6568,7 @@ $ [{"ID":1},{"ID":2},{"ID":3},{"ID":4},{"ID":5},{"ID":6},{"ID":7}]
 will be transfered as shorter:
 $ {"fieldCount":1,"values":["ID",1,2,3,4,5,6,7]}
 :37  JSON global cache
-A global @*cache@ is used to enhance the framework scaling, and will use @*JSON@ for its result encoding.
+A global @*cache@, at {\i SQlite3} level, is used to enhance the framework scaling, featuring @*JSON@ storage for its result encoding.
 In order to speed-up the server response time, especially in a concurrent client access, the internal database engine is not to be called on every request. In fact, a global cache has been introduced to store in memory the latest @*SQL@ {\f1\fs20 SELECT} statements results, directly in JSON.
 The {\i @*SQLite3@} engine access is protected at SQL/JSON cache level, via {\f1\fs20 DB.LockJSON()} calls in most {\f1\fs20 @*TSQLRestServerDB@} methods.
 A {\f1\fs20 TSynCache} instance is instantiated within the {\f1\fs20 TSQLDataBase} internal global instance, with the following line:
@@ -6440,7 +6594,7 @@ Abilities will depend on the protocol used. For instance, HTTP may sounds slower
 Here are some general information about available communication layers:
 |%18%20%20%25%18
 | |\b In-process|Windows Messages|Named pipes|HTTP\b0
-|Unit|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMotHttp Server/Client}
+|Unit|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMot.pas}|{\f1\fs20 mORMotHttpServer.pas}{\f1\fs20 mORMotHttpClient.pas}
 |Speed|****|***|**|*
 |Scaling|****|*|*|***
 |Hosting|In-process|Local|Local|Remote
@@ -6459,7 +6613,7 @@ This architecture is implemented by a hierarchy of classes, implementing the @*R
 \
 All ORM operations (aka @*CRUD@ process) are available from the abstract {\f1\fs20 TSQLRest} class definition, which is overridden to implement either a Server (via {\f1\fs20 TSQLRestServer} classes), or a Client (via {\f1\fs20 TSQLRestClientURI} classes) access to the data.
 You should instantiate the classes corresponding to the needed transmission protocol, but should better rely on abstraction, i.e. implement your whole code logic relying on abstract {\f1\fs20 TSQLRestClient / TSQLRestServer} classes. It will then help changing from one protocol or configuration at runtime, depending on your customer's expectations.
-:  Server classes
+:138  Server classes
 The following classes are available to implement a {\i Server} instance:
 \graph ServerRESTClasses RESTful Server classes
 \TSQLRestServerDB\TSQLRestServer
@@ -6468,21 +6622,23 @@ The following classes are available to implement a {\i Server} instance:
 \TSQLRestServer\TSQLRest
 \
 In practice, in order to implement the business logic, you should better create a new {\f1\fs20 class}, inheriting from one of the above {\f1\fs20 TSQLRestServer} classes. Having your own inherited class does make sense, especially for implementing your own method-based services - see @49@, or {\f1\fs20 override} internal methods.
-The {\f1\fs20 TSQLRestServerDB} class is the main kingn of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
+The {\f1\fs20 @**TSQLRestServerDB@} class is the main kind of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
 If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
 If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
 :  Storage classes
-In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 TSQLRestStorage}:
+In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 @*TSQLRestStorage@}:
 \graph StorageRESTClasses RESTful storage classes
 \TSQLRestStorageExternal\TSQLRestStorage
 \TSQLRestStorageMongoDB\TSQLRestStorage
 \TSQLRestStorageRecordBased\TSQLRestStorage
 \TSQLRestStorageInMemory\TSQLRestStorageRecordBased
 \TSQLRestStorageInMemoryExternal\TSQLRestStorageInMemory
+\TSQLRestStorageRemote\TSQLRestStorage
 \
 In the above class hierarchy, the {\f1\fs20 TSQLRestStorage[InMemory][External]} classes are in fact used to store some {\f1\fs20 TSQLRecord} tables in any non-SQL backend:
 - {\f1\fs20 TSQLRestStorageExternal} maps tables stored in an external database - see @27@;
 - {\f1\fs20 TSQLRestStorageInMemory} stores the data in a {\f1\fs20 TObjectList} - see @57@;
+- {\f1\fs20 TSQLRestStorageRemote} will redirect the CRUD operations of a given table to an external {\f1\fs20 TSQLRest} instance (client or server) - see @93@;
 - {\f1\fs20 TSQLRestStorageMongoDB} will connect to a remote {\i @*MongoDB@} server to store the tables as a @*NoSQL@ collection of documents - see @83@.
 Those classes are used within a main {\f1\fs20 TSQLRestServer} to host some given {\f1\fs20 TSQLRecord} classes, either in-memory, or on external databases. They do not enter in account in our Client-Server presentation, but are implementation details, on the server side.
 :  Client classes
@@ -6497,6 +6653,7 @@ rankdir=LR;
 \TSQLHttpClientWinHTTP\TSQLHttpClientWinGeneric
 \TSQLHttpClientWinGeneric\TSQLHttpClientGeneric
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
+\TSQLHttpClientCurl\TSQLHttpClientWinGeneric
 \TSQLHttpClientGeneric\TSQLRestClientURI
 \TSQLRestClientURI\TSQLRestClient
 \TSQLRestClient\TSQLRest
@@ -6513,19 +6670,30 @@ The Windows Messages layer has the lowest overhead and is the fastest transport 
 A named pipe communication is able to be served from a Windows service, and is known to be more efficient when transmitting big messages. So it is the preferred mean of communication for a local application sharing data between clients.
 Due to security restriction of newer versions of Windows (i.e. starting with Vista), named pipes are not available by default over a network. This is the reason why this protocol is listed as local access mean only.
 \page
-: Network and Internet access via HTTP
+:140 Network and Internet access via HTTP
 For publishing a server via @*HTTP@/1.1 over TCP/IP, creates a {\f1\fs20 TSQLHttpServer} instance, and associate your running {\f1\fs20 TSQLRestServerDB} to it.
-In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate firewall settings.
+Typical initialization code, as extracted from sample "{\f1\fs20 04 - HTTP Client-Server}", may be:
+!  Model := CreateSampleModel;
+!  DBServer := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'),true);
+!  DBServer.CreateMissingTables;
+!!  HttpServer := TSQLHttpServer.Create('8080',[DBServer],'+',HTTP_DEFAULT_MODE);
+The following options is usually defined:
+!  HttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
+And you can optionally define some per domain / per sub-domain hosting redirection:
+!  HttpServer.DomainHostRedirect('project.com','root');           // 'root' is current Model.Root
+!  HttpServer.DomainHostRedirect('blog.project.com','root/blog'); // MVC application
+In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate @*firewall@ settings.
 :  HTTP server(s)
+The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit:
+- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern;
+- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API.
 \graph HTTPServers THttpServerGeneric classes hierarchy
 \THttpApiServer\THttpServerGeneric
 \THttpServer\THttpServerGeneric
 \THttpServerGeneric\TThread
 \
-The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit:
-- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern;
-- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API.
 On production, {\f1\fs20 THttpApiServer} seems to give the best results, and has a proven and secure implementation. It is also the only one class implementing @*HTTPS@ / @*SSL@ secure communication, if needed. That's why {\f1\fs20 TSQLHttpServer} will first try to use fastest {\i http.sys} kernel-mode server, then fall-back to the generic WinSock-based {\f1\fs20 THttpServer} class in case of failure. You can also force to use the second server if {\f1\fs20 useHttpSocket} is set at constructor level.
+You can specify which kind of HTTP server class is to be used, via the {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} of the {\f1\fs20 TSQLHttpServer.Create} constructor. By default, it would be {\f1\fs20 HTTP_DEFAULT_MODE} (i.e. {\f1\fs20 useHttpApi} over Windows), but you may specify {\f1\fs20 useHttpApiRegisteringURI} for automatic registration of the URI - see @109@ - or {\f1\fs20 useHttpSocket} to use the socket-based {\f1\fs20 THttpServer}.
 The {\f1\fs20 THttpServerGeneric} abstract class provides one {\f1\fs20 OnRequest} property event, in which all high level process is to take place - it expects some input parameters, then will compute the output content to be sent as response:
 !TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 This event handler prototype is shared by both {\f1\fs20 TThread} classes instances able to implement a {\f1\fs20 HTTP/1.1} server.
@@ -6549,8 +6717,8 @@ In fact, two steps are performed by the {\f1\fs20 TSQLHttpServer} constructor:
 As we already stated, if any of those two steps fails (e.g. if {\f1\fs20 http.sys} is not available, or if it was not possible to register the URLs), the {\f1\fs20 TSQLHttpServer} class will fall back into using the other {\f1\fs20 THttpServer} class, which is a plain {\i Delphi} multi-threaded server. It won't be said that we will let you down!
 Inside {\f1\fs20 http.sys} all the magic is made... it will listen to any incoming connection request, then handle the headers, then check against any matching URL.
 {\f1\fs20 http.sys} will handle all the communication by itself, leaving the server threads free to process the next request.
-You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the UTF-8 file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
-:   URI authorization as Administrator
+You can even use a special feature of {\i http.sys} to serve a file content as fast as possible. In fact, if you specify {\f1\fs20 @**HTTP_RESP_STATICFILE@} as {\f1\fs20 Ctxt.OutContentType}, then {\f1\fs20 Ctxt.OutContent} is the @*UTF-8@ file name of a file which must be sent to the client. Note that it will work only with {\f1\fs20 THttpApiServer} kind of server (i.e. using high performance {\i http.sys} API). But whole file access and sending will occur in background, at the kernel level, so with best performance. See sample "{\i 09 - HttpApi web server}" and {\f1\fs20 HttpApiServer.dpr} file.\line If you use a {\f1\fs20 TSQLHttpServer}, the easiest is to define a method-based service - see @49@ - and call {\f1\fs20 Ctxt.ReturnFile()} to return a file content from its name. We will see details about this below. Another possibility may be to override {\f1\fs20 TSQLHttpServer.Request()} method, as stated by {\f1\fs20 Project04ServerStatic.dpr} sample: but we think that a method-based service and {\f1\fs20 Ctxt.ReturnFile()} is preferred.
+:109   URI authorization as Administrator
 This works fine under XP. Performances are very good, and stability is there. But... here comes the UAC nightmare again.
 Security settings have changed since XP. Now only applications running with Administrator rights can register URLs to {\f1\fs20 http.sys}. That is, no real application. So the URI registration step will always fail with the default settings, under Vista and Seven.
 The only case when authorization will be possible is when the application launched as a Windows Service, with default services execution user. By default, Windows services are launched with a User which has the Administrator rights.
@@ -6573,21 +6741,47 @@ Here is a sample program which can be launched to allow our {\f1\fs20 TestSQL3.d
 !!  THttpApiServer.AddUrlAuthorize('root','888',false,'+'));
 !end.
 Take also a look at the {\f1\fs20 Project04ServerRegister.dpr} sample, in the context of a whole client/server RESTful solution over HTTP.
+Note that you still need to open the IP port for incoming TCP traffic, in the Windows @**firewall@, if you want your server to be accessible to the outer world, as usual.
 :    Automatic authorization
 An easier possibility could be to run the server application at least once as system Administrator.
 The {\f1\fs20 TSQLHttpServer.Create()} constructor has a {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} parameter. By default, it will be set to {\f1\fs20 @*useHttpApi@}. If you specify {\f1\fs20 useHttpApiRegisteringURI}, the class will register the URI before launching the server process.
 All {\i mORMot} samples are compiled with this flag, as such:
 ! aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
 Note this does not follow default security policy of Windows. But it will make your application development easier.
-:  HTTP client(s)
+:    Manual URI authorization
+If you configured several {\f1\fs20 http.sys} servers on a given computer, you may have URI registration conflicts after some time.
+You can use the {\f1\fs20 netsh} tool to list all registered URL with:
+$ netsh http show urlacl
+You can optionally specify the fully qualified URL, for instance:
+$ netsh http show urlacl url=http://+:80/MyUrl
+$ netsh http show urlacl url=http://www.contoso.com:80/MyUrl
+Then you can delete any url registration with:
+$ netsh http delete urlacl http://host:port/[URI]
+The {\f1\fs20 [URI]} is the registered URL path or domain. For instance:
+$ netsh delete urlacl url=http://+:80/MyUri
+$ netsh delete urlacl url=http://www.contoso.com:80/MyUri
+Note that all those commands should be run with administrator user rights.
+You can consult the corresponding documentation of {\f1\fs20 netsh http} commands for HTTP context available to query and configure {\f1\fs20 http.sys} settings and parameters at @https://msdn.microsoft.com/en-us/library/windows/desktop/cc307236
+:   HTTP API 2.0 Features
+Some {\f1\fs20 THttpApiServer} methods are available with the HTTP Server 2.0 API, provided since Windows Vista and Windows Server 2008:
+|%40%60
+|\b Method|Description\b0
+|{\f1\fs20 HasAPI2}|check if the HTTP API 2.0 is available
+|{\f1\fs20 SetTimeOutLimits()}|advanced timeout settings
+|{\f1\fs20 LogStart()} and {\f1\fs20 LogStop}|HTTP level standard logging
+|{\f1\fs20 SetAuthenticationSchemes()}|kernel-mode authentication
+|%
+Please see the corresponding documentation of {\f1\fs20 SynCrtSock.pas} for further details, and @https://msdn.microsoft.com/en-us/library/windows/desktop/aa364703 as low-level reference of these features. Note that our implementation of {\f1\fs20 http.sys} is more complete than the one currently included in the official .Net WCF framework. Not bad for a third-party library, isn't it?
+:135  HTTP client(s)
 In fact, there are several implementation of a @**HTTP@/1.1 clients, according to this class hierarchy:
 \graph ClientRESTHttpClasses HTTP/1.1 Client RESTful classes
 \TSQLHttpClientWinINet\TSQLHttpClientWinGeneric
 \TSQLHttpClientWinHTTP\TSQLHttpClientWinGeneric
 \TSQLHttpClientWinGeneric\TSQLHttpClientGeneric
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
+\TSQLHttpClientCurl\TSQLHttpClientGeneric
 \
-So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client.
+So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @**libcurl@} library is installed, especially if you want to use HTTPS.
 Each class has its own architecture, and attaches itself to a Windows communication library, all based on {\i WinSock} API. As stated by their name, {\f1\fs20 TSQLHttpClientWinSock} will call directly the {\i WinSock} API, {\f1\fs20 TSQLHttpClientWinINet} will call {\i WinINet} API (as used by IE 6) and {\f1\fs20 TSQLHttpClientWinHTTP} will cal the latest {\i WinHTTP} API:
 - {\i WinSock} is the common user-space API to access the sockets stack of Windows, i.e. IP connection - it's able to handle any IP protocol, including TCP/IP, UDP/IP, and any protocol over it (including HTTP);
 - {\i WinINet} was designed as an HTTP API client platform that allowed the use of interactive message dialogs such as entering user credentials - it's able to handle HTTP and FTP protocols;
@@ -6599,7 +6793,7 @@ Each class has its own architecture, and attaches itself to a Windows communicat
 \WinHTTP\WinSock
 \AutoProxy APIs\WinHTTP
 \
-Here are some PROs and CONs of those solutions:
+Here are some PROs and CONs of the available solutions, under {\i Windows}:
 |%25%20%30%25
 |\b Criteria|WinSock|WinINet|WinHTTP\b0
 |API Level|Low|High|Medium
@@ -6612,15 +6806,17 @@ Here are some PROs and CONs of those solutions:
 |%
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
-Note that even if {\i WinHTTP} does not share by default any proxy settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
+Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a global lock. See @25@.
-:  HTTPS server
+:122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL encryption yet.
-In order to let the SSL layer work as expected, you need first to create and import a set of certificates. Here are the needed steps, as detailed in @http://www.codeproject.com/Articles/24027/SSL-with-Self-hosted-WCF-Service and @http://msdn.microsoft.com/en-us/library/ms733791.aspx
+In order to let the SSL layer work as expected, you need first to create and import a set of certificates.
 :   Certificates
-You need one {\i certificate} (cert) to act as your root authority, and one to act as the actual certificate to be used for the SSL, which needs to be signed by your root authority. If you don't set up the root authority your single certificate won't be trusted, and you will start to discover this through a series of extremely annoying exceptions, long after the fact.
-The following command (run in a Visual Studio command prompt) will create your root certificate:
+You need one {\i certificate} (cert) to act as your root authority, and one to act as the actual certificate to be used for the SSL, which needs to be signed by your root authority. If you don't set up the root authority your single certificate won't be trusted, and you will start to discover this through a series of extremely annoying exceptions, long after the fact. To get a free certificate, i.e. for testing purposes, you may use an online service like @http://www.startssl.com
+Depending on the {\i Windows} revision you are using, you can run the {\i Internet Information Services (IIS) Manager}: from the {\i Windows} Start menu, click {\f1\fs20 Administrative Tools > Internet Information Services (IIS) Manager}. See @http://support.microsoft.com/kb/299875
+You could also install the needed certificate by using some command lines - this may be handy for fast installation using a {\f1\fs20 .bat} file. Here are the needed steps, as detailed in @http://www.codeproject.com/Articles/24027/SSL-with-Self-hosted-WCF-Service and @http://msdn.microsoft.com/en-us/library/ms733791
+The following command (run in a {\i Visual Studio} command prompt) will create your root certificate:
 $makecert -sv SignRoot.pvk -cy authority -r signroot.cer -a
 $    sha1 -n "CN=Dev Certification Authority" -ss my -sr localmachine
 Take a look at the above links to see what each of these arguments mean, it isn't terribly important, but it's nice to know.
@@ -6656,7 +6852,7 @@ To delete an SSL certificate from a port number previously registered, you can u
 $httpcfg delete ssl -i 0.0.0.0:8005 -h 0000000000003ed9cd0c315bbb6dc1c08da5e6
 $httpcfg delete ssl -i 0.0.0.0:8005
 (under XP)
-$Netsh http delete sslcert ipport=0.0.0.0:8005
+$netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
 :  AES encryption over HTTP
@@ -6670,13 +6866,14 @@ Once those parameters have been set, a new proprietary encoding will be defined 
 $ ACCEPT-ENCODING: synshaaes
 Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CTR/256 encryption.
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
+On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
 As a result, on the Server side, our framework was designed to be @**thread-safe@.
-On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This KISS design ensure better test coverage.
+On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This @*KISS@ design ensure better test coverage.
 On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex (critical section), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
-:  By design
+:  Thread safe design
 We will now focus on the server side, which is the main strategic point (and potential bottleneck or point of failure) of any {\i Client-Server} architecture.
 In order to achieve this thread-safety without sacrificing performance, the following rules were applied in {\f1\fs20 TSQLRestServer.URI}:
 - Most of this method's logic is to process the URI and parameters of the incoming request (in {\f1\fs20 TSQLRestServerURIContext.URIDecode*} methods), so is thread-safe by design (e.g. {\f1\fs20 Model} and {\f1\fs20 RecordProps} access do not change during process);
@@ -6689,7 +6886,11 @@ In order to achieve this thread-safety without sacrificing performance, the foll
 - Remote external tables - see @27@ - use thread-safe connections and statements when accessing the databases via SQL;
 - Access to {\f1\fs20 fStats} was not made thread-safe, since this data is indicative only: a {\i mutex} was not used to protect this resource.
 We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
-This default behavior can be tuned, using {\f1\fs20 TSQLRestServerURI.AcquireExecutionMode[]} property and {\f1\fs20 AcquireExecutionLockedTimeOut[]} when {\f1\fs20 amLocked} is set:
+At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
+From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
+:  Advanced threading settings
+You can use {\f1\fs20 TSQLRestServerURI.AcquireExecutionMode[]} property to refine the server-side threading mode. When {\f1\fs20 amLocked} is set, you can also set the {\f1\fs20 AcquireExecutionLockedTimeOut[]} property to specify a wait time to acquire the lock.
+The default threading behavior is the following:
 |%25%50%25
 |\b Command|Description|Default\b0
 |{\f1\fs20 execSOAByMethod}|for method-based services|{\f1\fs20 amUnlocked}
@@ -6697,14 +6898,20 @@ This default behavior can be tuned, using {\f1\fs20 TSQLRestServerURI.AcquireExe
 |{\f1\fs20 execORMGet}|for ORM reads i.e. {\i Retrieve*} methods|{\f1\fs20 amUnlocked}
 |{\f1\fs20 execORMWrite}|for ORM writes i.e. {\i Add Update Delete TransactionBegin Commit Rollback} methods|{\f1\fs20 amLocked} +\line timeout of 2000 ms
 |%
-For instance, some external databases (like @*MS SQL@) expect any transaction to be executed within the same connection, so in the same thread context for {\f1\fs20 SynOleDB.pas}, since it uses a per-thread connection pool. When the server is remotely access via HTTP, the incoming requests will be executed from any thread of the HTTP server thread pool. As a result, you won't be able to manage a transaction over MS SQL from the client-side with the default settings.\line To fix it, you can ensure all ORM write operations will be executed in a dedicated background thread, by setting either:
-! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
-! AcquireWriteMode := amBackgroundThread; // same as previous
+On need, you can change those settings, to define a particular execution scheme.\line For instance, some external databases (like @*MS SQL@) expect any transaction to be executed within the same connection, so in the same thread context for {\f1\fs20 SynOleDB.pas}, since it uses a per-thread connection pool. When the server is remotely access via HTTP, the incoming requests will be executed from any thread of the HTTP server thread pool. As a result, you won't be able to manage a transaction over MS SQL from the client-side with the default settings.\line To fix it, you can ensure all ORM write operations will be executed in a dedicated background thread, by setting either:
+! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread;
+! aServer.AcquireWriteMode := amBackgroundThread; // same as previous
 The same level of thread-safety can be defined for all kind of commands, even if you should better know what you are doing when changing the default settings, since it may create some {\i giant locks} on the server side, therefore voiding any attempt to performance scaling via multi-threading - which is what {\i mORMot} excels in.
+At ORM level, with external databases, your {\i mORMot} server may suffer from broken connection to the remote database. To avoid this, you may use {\f1\fs20 ConnectionTimeOutMinutes} property to specify a maximum period of inactivity after which all connections will be flushed and recreated, to avoid potential broken connections issues.\line In this case, you should ensure that all ORM process is blocked so that clearing the connection pool won't break anything in your multi-threaded server. As such, you may set a blocking mode for both {\f1\fs20 execORMGet} and {\f1\fs20 execORMWrite}, for instance:
+! aServer.AcquireExecutionMode[execORMGet] := amBackgroundThread;
+! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundThread;
+The above commands will create one thread for all read operations ({\f1\fs20 execORMGet}), and another thread for all write operations ({\f1\fs20 execORMWrite}). If you want all database access to take place in a {\i single} thread, for both read and write operations, you could write:
+! aServer.AcquireExecutionMode[execORMGet] := amBackgroundORMSharedThread;
+! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundORMSharedThread;
+For instance, this sounds mandatory when using @*Jet/MSAccess@ as external database, since its implementation seems not thread-safe: if you write in one thread, then read immedially in another thread, the Jet engine is not able to find the just written data from the 2nd thread. This is clearly a bug of the Jet engine - but setting {\f1\fs20 amBackgroundORMSharedThread} option to circumvent the issue.
+During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 ServiceContext threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
 In practice, {\f1\fs20 execSOAByMethod} may benefit of a per-method locking, {\f1\fs20 execSOAByInterface} of using its own execution options - see @72@, and {\f1\fs20 execORMGet} to be let unlocked to allow concurrent reads of all connected clients.
-At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
-From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
-:  By proof
+:  Proven behavior
 When we are talking about thread-safety, nothing compares to a dedicated stress test program. An average human brain (like ours) is not good enough to ensure proper design of such a complex process. So we have to prove the abilities of our little {\i mORMot}.
 In the supplied regression tests, we designed a whole class of multi-thread testing, named {\f1\fs20 TTestMultiThreadProcess}. Its methods will run every and each Client-Server protocols available (direct access via {\f1\fs20 TSQLRestServerDB} or {\f1\fs20 TSQLRestCLientDB}, Windows Messages, named pipes, and both HTTP servers - i.e. {\f1\fs20 http.sys} based or WinSock-based)- see @35@.
 Each protocol will execute in parallel a list of INSERTs - i.e. {\f1\fs20 TSQLRest.Add()} - followed by a list of SELECTs - i.e. {\f1\fs20 TSQLRest.Retrieve()}. Those requests will be performed in 1 thread, then 2, 5, 10, 30 and 50 concurrent threads. The very same {\i SQLite3} database (in {\f1\fs20 lmExclusive} locking mode) is accessed at once by all those clients. Then the IDs generated by each thread are compared together, to ensure no cross-insertion did occur during the process.
@@ -6821,7 +7028,7 @@ Typical results are the following:
 During all tests, no assertion failed, meaning that no concurrency problem did occur, nor any remote command lost. The {\i @*SQlite3@} core, exposes via the {\i mORMot} server, outputs data at an amazing pace of 6000 op/sec - i.e. comparable to most high-end databases. It is worth noting that when run several times in a row, the same set of input parameters give the very same speed results: it indicates that the architecture is pretty stable and could be considered as safe. The system is even {\i able to serve 50000 connected clients at once}, with no data loss - in this case, performance is lower (2152 insert/second in the above table), but we clearly reached the CPU and network limit of our client hardware configuration; in the meanwhile, server CPU resources on the Notebook server did have still some potential, and RAM consumption was pretty slow.
 Average performance is pretty good, even more if we consider that we are inserting one object per request, with no transaction. In fact, it sounds like if our little {\i SQLite3} server is faster than most database servers, even when accessed in highly concurrent mode! In batch mode - see @28@ - we may achieve amazing results.
 Feel free to send your own benchmark results and feedback, e.g. with concurrent clients on several workstations, or long-running tests, on our forums.
-:Client-Server ORM
+:114Client-Server ORM
 %cartoon01.png
 As stated above, all ORM features can be accessible either stand-alone, or remotely via some dedicated @35@.
 That is, CRUD operations can be executed either at the database level, or remotely, from the same methods defined in {\f1\fs20 TSQLRest} abstract class.
@@ -6948,7 +7155,9 @@ subgraph cluster {
 \TSQLRestStorage.九ngine*\TSQLRestStorageExternal.九ngine*\Is an external丈irtual Table?
 \TSQLRestStorage.九ngine*\TSQLRestStorageInMemory.九ngine*\Is an in-memory table?�(Virtual or static)
 \TSQLRestStorage.九ngine*\TSQLRestStorageMongoDB.九ngine*\Is a MongoDB table?
+\TSQLRestStorage.九ngine*\TSQLRestStorageRemote.九ngine*\Is a redirected table?
 \TSQLRestStorageExternal.九ngine*\TSQLDBConnectionProperties三SQLDBStatement\compute SQL
+\TSQLRestStorageRemote.九ngine*\Remote TSQLRestClientHTTP几ocal TSQLRestServerDB
 \TSQLDBConnectionProperties三SQLDBStatement\OleDB/ODBC寸r other\execute SQL
 \OleDB/ODBC寸r other\TSQLRestServer.URI
 \OleDB/ODBC寸r other\Database七lient\handle data
@@ -6973,7 +7182,7 @@ On the server side, you can use this method prototype:
 !  // - see TSQLRestServer.OnUpdateEvent property
 !  // - returns true on success, false if an error occured (but action must continue)
 !  TNotifySQLEvent = function(Sender: TSQLRestServer; Event: TSQLEvent;
-!    aTable: TSQLRecordClass; aID: integer): boolean of object;
+!    aTable: TSQLRecordClass; aID: TID): boolean of object;
 !
 !  TSQLRestServer = class(TSQLRest)
 ! (...)
@@ -7020,7 +7229,7 @@ You can find in the {\f1\fs20 mORMotUILogin} unit two methods matching this call
 !    class procedure OnIdleProcess(Sender: TSynBackgroundThreadAbstract; ElapsedMS: Integer);
 !    class procedure OnIdleProcessForm(Sender: TSynBackgroundThreadAbstract; ElapsedMS: Integer);
 !  end;
-The first {\f1\fs20 OnIdleProcess()} callback will change the mouse cursor shape to {\f1\fs20 crHourClass} after a defined period of time. The {\f1\fs20 OnIdleProcessForm()} callback will not only change the mouse cursor, but also display a pop-up window with a {\i 'Please wait...'} message, if the request takes even more time. Both will call {\f1\fs20 Application.ProcessMessages} to ensure the application User Interface is still responsive.
+The first {\f1\fs20 OnIdleProcess()} callback will change the mouse cursor shape to {\f1\fs20 crHourClass} after a defined period of time. The {\f1\fs20 OnIdleProcessForm()} callback won't only change the mouse cursor, but also display a pop-up window with a {\i 'Please wait...'} message, if the request takes even more time. Both will call {\f1\fs20 Application.ProcessMessages} to ensure the application User Interface is still responsive.
 Some global variable were also defined to tune the behavior of those two callbacks:
 !var
 !  /// define when TLoginForm.OnIdleProcess() has to display the crHourGlass cursor
@@ -7036,8 +7245,9 @@ Some global variable were also defined to tune the behavior of those two callbac
 !  /// define the message text displayed by TLoginForm.OnIdleProcessForm()
 !  // - default is sOnIdleProcessFormMessage resourcestring, i.e. 'Please wait...'
 !  OnIdleProcessTemporaryFormMessage: string;
-You can therefore change those settings to customize the user experience. We tested it with a 3 second artificial temporizer for each request, and the applications were running smoothly, even if slowly - but comparable to most web applications, in fact. The {\i SynFile} main demo (available in the {\f1\fs20 SQlite3\\Samples\\MainDemo} folder) defines such a callback.
+You can therefore change those settings to customize the user experience. We tested it with a 3 second artificial temporizer for each request, and the applications were running smoothly, even if slowly - but comparable to most @*Web Application@s, in fact. The {\i SynFile} main demo (available in the {\f1\fs20 SQlite3\\Samples\\MainDemo} folder) defines such a callback.
 Note that this {\f1\fs20 OnIdle} feature is defined at {\f1\fs20 TSQLRestClientURI} class level, so is available for all communication protocols, not only HTTP but named pipes or in-process, so could be used to enhance user experience in case of some time consuming process.
+\page
 :28 BATCH sequences for adding/updating/deleting records
 :  BATCH process
 When use the so-called @**BATCH@ sequences?
@@ -7054,16 +7264,16 @@ If you are making a number of such calls (e.g. add 1000 records), you'll have 10
 \
 The BATCH sequence allows you to regroup those statements into just ONE remote call. Internally, it builds a @*JSON@ stream, then post this stream at once to the server. Then the server answers at once, after having performed all the modifications.
 Some new {\f1\fs20 TSQLRestClientURI} methods have been added to implement BATCH sequences to speed up database modifications: after a call to {\f1\fs20 BatchStart}, database modification statements are added to the sequence via {\f1\fs20 BatchAdd / BatchUpdate / BatchDelete}, then all statements are sent as one to the remote server via {\f1\fs20 BatchSend} - this is MUCH faster than individual calls to {\f1\fs20 Add / Update / Delete} in case of a slow remote connection (typically @*HTTP@ over Internet).
-Since the statements are performed at once, you can't receive the result (e.g. the ID of the added row) on the same time as you append the request to the BATCH sequence. So you'll have to wait for the {\f1\fs20 BatchSend} method to retrieve all results, {\i at once}, in a {\i dynamic} {\f1\fs20 array of integer}.
+Since the statements are performed at once, you can't receive the result (e.g. the ID of the added row) on the same time as you append the request to the BATCH sequence. So you'll have to wait for the {\f1\fs20 BatchSend} method to retrieve all results, {\i at once}, in a {\i dynamic} {\f1\fs20 array of TID}.
 As you may guess, it's also a good idea to use a @*transaction@ for the whole process. By default, the BATCH sequence is not embedded into a transaction.
 You have two possibilities to add a transaction:
 - Either let the caller use an explicit {\f1\fs20 TransactionBegin} ... {\f1\fs20 try}... {\f1\fs20 Commit  except RollBack} block;
-- Or specify a number of rows as {\f1\fs20 AutomaticTransactionPerRow} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emmited (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
+- Or specify a number of rows as {\f1\fs20 @*AutomaticTransactionPerRow@} parameter to {\f1\fs20 BatchStart()}: in this case, a transaction will be emitted (up to the specified number of rows) on the server side. You can just set {\f1\fs20 maxInt} if you want all rows to be modified in a single transaction.
 This second method is preferred, since defining transactions from the client side is not a good idea: it may block other clients attempts to create their own transaction.
 Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelfTests.pas}:
 !  // start the BATCH sequence
 !!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));
-!  // now a transaction will be created by block of 1000 modifications
+!  // now a transaction will be created by chunk of 1000 modifications
 !  // delete some elements
 !  for i := 0 to n-1 do
 !!    Check(ClientDist.BatchDelete(IntArray[i])=i);
@@ -7093,42 +7303,79 @@ Here is typical use (extracted from the regression @*test@s in {\f1\fs20 SynSelf
 !  // Results[0] to Results[n-1] should be 200 = deletion OK
 !  // Results[n] to Results[n+nupd-1] should be 200 = update OK
 !  // Results[n+nupd] to Results[high(Results)] are the IDs of each added record
+!  for i := 0 to high(Results) do
+!    if i<nupd+n then
+!      Check(Results[i]=200) else
+!    begin
+!      Check(Results[i]>0);
+!      ndx := aStatic.IDToIndex(Results[i]);
+!      Check(ndx>=0);
+!      with TSQLRecordPeople(aStatic.Items[ndx]) do
+!      begin
+!        Check(LastName='New','BatchAdd');
+!        Check(YearOfBirth=1000+i-nupd-n);
+!      end;
+!    end;
+!  // check ClientDist.BatchDelete(IntArray[i]) did erase the record
 !  for i := 0 to n-1 do
 !    Check(not ClientDist.Retrieve(IntArray[i],V),'BatchDelete');
-!    for i := 0 to high(Results) do
-!      if i<nupd+n then
-!        Check(Results[i]=200) else
-!      begin
-!        Check(Results[i]>0);
-!        ndx := aStatic.IDToIndex(Results[i]);
-!        Check(ndx>=0);
-!        with TSQLRecordPeople(aStatic.Items[ndx]) do
-!        begin
-!          Check(LastName='New','BatchAdd');
-!          Check(YearOfBirth=1000+i-nupd-n);
-!        end;
-!      end;
-In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 Batch*()} methods instead of plain {\f1\fs20 Add / Delete / Update}. The ORM will take care of all internal process, including serialization.
-:  Implementation details
-As described above, all {\f1\fs20 Batch*()} methods are serialized as JSON on the client side, then sent as once to the server, where it will be processed without any client-server {\i round-trip }and slow latency.
-Here is typical JSON stream sent to the server:
-${"People":["DELETE":2,"DELETE":13,"DELETE":24,
+In the above code, all @*CRUD@ operations are performed as usual, using {\f1\fs20 BatchAdd BatchDelete BatchUpdate} methods instead of plain {\f1\fs20 Add Delete Update} methods. The ORM will take care of all the low-level data process, including JSON serialization, automatic per-chunk transactions creation, and SQL statements generation, with several optimizations - see @78@ and @99@.
+In the above example, we started the batch process involving only {\f1\fs20 TSQLRecordPeople} kind of objects:
+!  Check(ClientDist.BatchStart(TSQLRecordPeople,1000));
+But you could mix any kind of {\f1\fs20 TSQLRecord} content, if you set the class to {\f1\fs20 nil}, as such:
+!  Check(ClientDist.BatchStart(nil,1000));
+or use the {\f1\fs20 BatchStartAny()} method:
+!  Check(ClientDist.BatchStartAny(1000));
+In practice, you should better create and maintain your own instance of {\f1\fs20 TSQLRestBatch}, so that you would be able to implement any number of simultaneous batch process - see @100@.
+:  Transmitted JSON
+As described above, all {\f1\fs20 Batch*()} methods do serialize the objects values as JSON on the client side, then send this JSON at once to the server, where it will be processed without any client-server {\i round-trip} and slow latency.
+Here is some extract of typical JSON stream as sent to the server:
+${"People":["DELETE",2,"DELETE",13,"DELETE",24,
 $   (...)  all DELETE actions
-$  ,"DELETE":11010,
-$  "PUT":{"RowID":3,"FirstName":"Sergei1","LastName":"Rachmaninoff","YearOfBirth":1800, "YearOfDeath":1943},
-$  "PUT":{"RowID":4,"FirstName":"Alexandre1","LastName":"Dumas","YearOfBirth":1801, "YearOfDeath":1870},
+$  ,"DELETE",11010,
+$  "PUT",{"RowID":3,"FirstName":"Sergei1","LastName":"Rachmaninoff","YearOfBirth":1800, "YearOfDeath":1943},
+$  "PUT",{"RowID":4,"FirstName":"Alexandre1","LastName":"Dumas","YearOfBirth":1801, "YearOfDeath":1870},
 $   (...)  all PUT = update actions
-$  "PUT":{"RowID":11012,"FirstName":"Leonard","LastName":"da Vin癟i","YearOfBirth":9025, "YearOfDeath":1519},
-$  "POST":{"FirstName":"���@��〣"H�� m瞿� g","LastName":"New","YearOfBirth":1000, "YearOfDeath":1519},
-$  "POST":{"FirstName":"@���,KA翻� #繞f","LastName":"New","YearOfBirth":1001, "YearOfDeath":1519},
+$  "PUT",{"RowID":11012,"FirstName":"Leonard","LastName":"da Vin癟i","YearOfBirth":9025, "YearOfDeath":1519},
+$  "POST",{"FirstName":"���@��〣"H�� m瞿� g","LastName":"New","YearOfBirth":1000, "YearOfDeath":1519},
+$  "POST",{"FirstName":"@���,KA翻� #繞f","LastName":"New","YearOfBirth":1001, "YearOfDeath":1519},
 $   (...)  all POST = add actions
-$ "POST":{"FirstName":"+��tqCXW3��\"","LastName":"New","YearOfBirth":2000, "YearOfDeath":1519}
+$ "POST",{"FirstName":"+��tqCXW3��\"","LastName":"New","YearOfBirth":2000, "YearOfDeath":1519}
 $  ]}
-Here is typical JSON stream receiver from the server, on success:
+On success, the following JSON stream will be received from the server:
 $ [200,200,...]
-All the JSON generation (client-side) and parsing (server-side) is very optimized and fast. With the new internal {\i @*SynLZ@} compression (available by default in our @*HTTP@ Client-Server classes), used bandwidth is minimal.
-Thanks to these methods, most time is now spent into the database engine itself, and not in the communication layer.
-Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}). For instance, in the following code, {\f1\fs20 V.FillPrepare} will retrieve only {\f1\fs20 ID} and {\f1\fs20 YearOfBirth} fields of the {\f1\fs20 TSQLRecordPeople} table, so subsequent {\f1\fs20 BatchUpdate(V)} calls will only update the {\f1\fs20 YearOfBirth} field:
+This array of results is either the HTTP status codes (here 200 means OK), or the inserted new ID (for a {\f1\fs20 BatchAdd} command).
+All the JSON generation (client-side) and parsing (server-side) has been optimized to minimize the resource needed. With the new internal {\i @*SynLZ@} compression (available by default in our @*HTTP@ Client-Server classes), used bandwidth is minimal.
+Thanks to this BATCH process, most time is now spent into the database engine itself, and not in the communication layer.
+:100  Unit Of Work pattern
+:   Several Batches
+On the {\f1\fs20 TSQLRestClientURI} side, all {\i BatchStart/BatchAdd/BatchUpdate/BatchDelete} methods are using a single temporary storage during the BATCH preparation. This may be safe only if one single thread is accessing the methods - which is usually the case for a @*REST@ Client application.
+In fact, all BATCH process is using a {\f1\fs20 @*TSQLRestBatch@} class, which can be created on the fly, and safely coexist as multiple instances for the same {\f1\fs20 TSQLRest}. As a result, you can create your own local {\f1\fs20 TSQLRestBatch} instances, for safe batch process. This is in fact mandatory on the {\f1\fs20 TSQLRestServer} side, which do not have the {\f1\fs20 Batch*()} methods, since they would not be thread safe.
+On the server side, you may write for instance:
+!var Batch: TSQLRestBatch;
+!    IDs: TIntegerDynArray;
+!...
+!  Batch := TSQLRestBatch.Create(Server,TSQLRecordTest,30);
+!  try
+!    for i := 10000 to 10099 do begin
+!      R.Int := i;
+!      R.Test := Int32ToUTF8(i);
+!      Check(Batch.Add(R,true)=i-10000);
+!    end;
+!    Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
+!  finally
+!    Batch.Free;
+!  end;
+The ability to handle several {\f1\fs20 TSQLRestBatch} classes in the same time will allow to implement the {\i @**Unit Of Work@} pattern. It can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems, especially in a complex @*SOA@ application with a huge number of connected clients.
+In a way, you can think of the {\i Unit of Work} as a place to dump all transaction-handling code.\line The responsibilities of the {\i Unit of Work} are to:
+- Manage transactions;
+- Order the database inserts, deletes, and updates;
+- Prevent concurrency problems;
+- Group requests to maximize the database performance.
+The value of using a {\i Unit of Work} pattern is to free the rest of your code from these concerns so that you can otherwise concentrate on business logic.
+:   Updating only the mapped fields
+In practice, the {\f1\fs20 BatchUpdate} method will only update the mapped fields if called on a record in which a {\f1\fs20 FillPrepare} was performed, and not unmapped (i.e. with no call to {\f1\fs20 FillClose}). This is required for coherency of the retrieval/modification process.
+For instance, in the following code, {\f1\fs20 V.FillPrepare} will retrieve only {\f1\fs20 ID} and {\f1\fs20 YearOfBirth} fields of the {\f1\fs20 TSQLRecordPeople} table, so subsequent {\f1\fs20 BatchUpdate(V)} calls will only update the {\f1\fs20 YearOfBirth} field:
 !  // test BATCH update from partial FillPrepare
 !!  V.FillPrepare(ClientDist,'LastName=:("New"):','ID,YearOfBirth');
 !  if ClientDist.TransactionBegin(TSQLRecordPeople) then
@@ -7144,9 +7391,40 @@ Beginning with revision 1.16 of the framework, the {\f1\fs20 BatchUpdate} method
 !      inc(n);
 !    end;
 !  (...)
-:78  Array binding
-When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} implementation implements the feature (only {\f1\fs20 SynDBOracle} and {\f1\fs20 SynDBFireDAC} units implement it by now).
-In fact, when using a remote database on a physical network, you won't be able to achieve more than 500-600 requests per second when performing {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements: the same {\f1\fs20 round-trip} occurs, this time between the ORM server side and the external Database engine.
+The transmitted JSON will be computed as such on the client side:
+$  ....,"PUT",{"RowID":324,"YearOfBirth":1000},...
+And the generated SQL on the server side would be:
+$ UPDATE People SET YearOfBirth=? WHERE RowID=?
+$ ... with bound parameters: [1000,324]
+As a result, BATCH process could be seen as a good way of implementing {\i @*Unit Of Work@} for your business layer - see @102@.\line You will be able to modify all your objects as requested, with high-level OOP methods, then have all data transmitted and processed at once when {\f1\fs20 BatchSend()} is called. The {\f1\fs20 BatchStart} - {\f1\fs20 BatchSend} - {\f1\fs20 BatchAbort} commands will induce a safe transactional model, relying on the client side for tracking the object modifications, and optimizing the database process on the server side as a simple "save and forget" task, to any SQL or @*NoSQL@ engine.
+Note that if several {\f1\fs20 ClientDist.BatchUpdate(V)} commands are executed within the same {\f1\fs20 FillPrepare()} context, they will contain the same fields ({\f1\fs20 RowID} and {\f1\fs20 YearOfBirth}). They will therefore generate the same statement ({\f1\fs20 UPDATE People SET YearOfBirth=? WHERE RowID=?}), which would benefit of {\i Array Binding} on the database side - see @78@ - if available.
+Here is some code, extracted from "web blog" sample "{\i 30 - MVC Server}", which will update an integer array mapped into a table. All {\f1\fs20 TSQLTag.Occurence} integers are stored in a local {\f1\fs20 TSQLTags.Lookup[].Occurence} dynamic array, which will be used to display the occurence count of each tag of the articles.\line The following method will first retrieve ID and Occurence from the database, and update the {\f1\fs20 TSQLTag.Occurence} if the internal dynamic array contains a new value.
+!procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
+!var tag: TSQLTag;
+!    batch: TSQLRestBatch;
+!begin
+!  Lock.ProtectMethod;
+!  TAutoFree.Several([
+!    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
+!    @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
+!  while tag.FillOne do begin
+!    if tag.ID<=length(Lookup) then
+!      if Lookup[tag.ID-1].Occurence<>tag.Occurence then begin
+!        tag.Occurence := Lookup[tag.ID-1].Occurence;
+!        batch.Update(tag); // will update only Occurence field
+!      end;
+!  end;
+!  aRest.BatchSend(batch);
+!end;
+In the above code, you can identify:
+- {\f1\fs20 CreateAndFillPrepare} + {\f1\fs20 FillOne} methods are able to retrieve all values of the {\f1\fs20 TSQLTag} class, and iterate easily over them;
+- A local {\f1\fs20 TSQLRestBatch} is prepared, and will store locally - via {\f1\fs20 batch.Update()} - any modification; as we already stated, only the retrieved field (i.e. {\f1\fs20 'Occurence'}) will be marked as to be updated;
+- {\f1\fs20 aRest.BatchSend(batch)} will send all new values (if any) to the server, in a single network round trip, and a single transaction;
+- This method is made thread safe by using {\f1\fs20 Lock.ProtectMethod} ({\f1\fs20 Lock} is a mutex private to the {\f1\fs20 TSQLTags} instance);
+- Local variables are allocated and automatically relased when the method exits, using {\f1\fs20 TAutoFree.Several()} - see @130@ - which avoid to write two nested {\f1\fs20 try .. finally Free end} loops.
+Such a pattern is very common in {\i mORMot}, and illustrate how high-level ORM methods can be used instead of manual SQL. With the potential benefit of a much better performance, and cleaner code.
+:  Local network as bottleneck
+When using a remote database on a physical network, a {\i round-trip} delay occurs for each request, this time between the ORM server side and the external Database engine.
 \graph BATCHRoundTrip2 BATCH mode latency issue on external DB
 \ORM CRUD operation\ORM HTTP Client\In-process孓o latency
 \ORM HTTP Client\ORM CRUD operation
@@ -7157,18 +7435,53 @@ In fact, when using a remote database on a physical network, you won't be able t
 \ORM database core\External DB\Local Network�1 ms latency
 \External DB\ORM database core
 \
-Of course, this 1 ms latency due to the external database additional round-trip may sounds negligible, but in @17@ when most process is done on the server side, it may introduce a huge performance difference. Your customers would not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for.
-Our {\f1\fs20 SynDB} unit has been enhanced to introduce new {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing {\i array binding} for faster database batch modifications. It is working in conjunction with our BATCH methods, so CRUD modification actions are grouped within one {\i round-trip} over the network.
+At first, the 1 ms latency due to the external database round-trip may sound negligible. @28@ did already shortcut the Internet latency, which was much higher.
+But in a @17@, most of the process is done on the server side: the slightest execution delay would induce a noticeable performance penalty. In practice, you won't be able to achieve more than 500-600 requests per second when performing individual {\f1\fs20 INSERT}, {\f1\fs20 DELETE} or {\f1\fs20 UPDATE} statements over any SQL database. Even if run locally on the same server, most SQL databases would suffer from the overhead of inter-process communications, achieving 6,000-7,000 update requests per second at best.
+Your customers may not understand why using a {\i @*SQLite3@} engine would be much faster than a dedicated {\i @*Oracle@} instance they do pay for, since {\i SQLite3} runs locally in the ORM server process. One common solution is to use stored procedures, or tune the SQL for your database - but you would loose most of the ORM and SOA benefits - see @101@.
+Of course, {\i mORMot} can do better than that. Its ORM will automatically use two ways of diminishing the number of round-trips to the database:
+- Using {\i Array Binding} - see @78@;
+- Or {\i multi-INSERT statements} - see @99@.
+Both methods will group all the transmitted data in chunks, as much as possible. Performance will therefore increase, reaching 50,000-60,000 writes per second, depending on the database abilities.
+Those features are enabled by default, and the fastest method will always be selected by the ORM core, as soon as it is available on the database back-end. You do not have to worry about configuring your application. Just enjoy its speed.
+:78   Array binding
+:    For faster BATCH mode
+When used in conjunction with @27@, BATCH methods can be implemented as {\i @**array bind@ing} if the corresponding {\f1\fs20 TSQLDBConnection} class implements the feature. By now, only {\f1\fs20 SynDBOracle}, {\f1\fs20 SynDBZeos} and {\f1\fs20 SynDBFireDAC} units implement it.
+Our {\f1\fs20 SynDB.pas} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
-The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature around all available {\i Delphi} libraries. This feature (known as {\i Array DML} in the {\i FireDAC} documentation) gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
-In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure with statements within a loop.
-:  Optimized SQL for bulk insert
-Sadly, array binding is not available for all databases or libraries. In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once.
-It induces a noticeable speed increase when saving several objects into an external database.
-This feature is available for {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*MySQL@} and {\i @*NexusDB@}.
-Since it is working at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@}.
-It means that even properties not implementing array binding (like {\i OleDB, Zeos} or {\i UniDAC}) are able to have a huge boost at data insertion, ready to compete with the (until now) more optimized libraries.
-{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2, MySQL} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
+The great maintainers of the {\i ZEOS Open Source} library did especially tune its internals to support {\i mORMot} at its full speed, directly accessing the {\i ZDBC} layer - see @94@. The {\i ZEOS 7.2} branch did benefit of a huge code refactoring, and also introduced {\i array binding} abilities. This feature will be recognized and handled by our ORM, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature. But the list is growing.
+The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
+In practice, when accessing {\i Oracle}, our own direct implementation in {\f1\fs20 SynDBOracle} still gives better performance results than the {\i ZDBC} / {\i FireDAC} implementation.
+In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure executing individual statements within a loop.
+:    For faster IN clause
+Sometimes, you want to write {\f1\fs20 SELECT} statements with a huge {\f1\fs20 IN} clause. If the number of the items in the {\f1\fs20 IN} expression is stable, you may benefit for a prepared statement, e.g.
+$ SELECT * FROM MyTable WHERE ID IN [?,?,?,?,?]
+But if the IDs are not fixed, you should have to create an expression without any parameter, or use a temporary table:
+$ SELECT * FROM MyTable WHERE ID IN [1,4,8,12,24,27]
+As an alternative, {\f1\fs20 SynDBOracle} provides the ability to bind an array of parameters which may be cast to an {\i Oracle} Object, so that you could use it as a single parameter.\line Current implementation support either {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} values, as such:
+!var
+!  arr: TInt64DynArray = [1, 2, 3];
+!Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+!  'select * from table where table.id in'+
+!    '(select column_value from table(cast(? as SYS.ODCINUMBERLIST)))');
+!Query.BindArray(1, arr);
+!Query.ExecutePrepared;
+{\f1\fs20 RawUTF8} arrays are also supported (which can be used as fall back in case {\f1\fs20 Int64} arrays are not supported by the client, e.g. with {\i Oracle} 10):
+!var
+!  arr: TRawUTF8DynArray = ['123123423452345', '3124234454351324', '53567568578867867'];
+!Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+!  'select * from table where table.id in'+
+!    '(select column_value from table(cast(? as SYS.ODCIVARCHAR2LIST)))');
+!Query.BindArray(1, arr);
+!Query.ExecutePrepared;
+From tests on production, this implementation is 2-100 times faster (depending on array and table size) and also simpler, compared to temporary table solution.\line Drawback is that it is supported by {\f1\fs20 SynDBOracle} only by now.
+:99   Optimized SQL for bulk insert
+Sadly, array binding is not available for all databases or libraries.\line In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once. It induces a noticeable speed increase when saving several objects into an external database.
+Automatic multi-INSERT statement generation is available for:
+- Our internal {\i SQLite3} engine (in the {\f1\fs20 mORMotSQLite3.pas} unit);
+- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
+- And, in the {\i @*NoSQL@} form of "documents array" insertion, for the {\i @*MongoDB@} database (in the {\f1\fs20 mORMotMongoDB.pas} unit).
+It means that even providers not implementing array binding (like {\i OleDB}, {\i ODBC} or {\i UniDAC}) are able to have a huge boost at data insertion.
+{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
 $INSERT INTO TABLE (column-a, [column-b, ...])
 $VALUES ('value-1a', ['value-1b', ...]),
 $       ('value-2a', ['value-2b', ...]),
@@ -7185,13 +7498,15 @@ $begin
 $  INSERT INTO phone_book VALUES ('John Doe', '555-1212');
 $  INSERT INTO phone_book VALUES ('Peter Doe', '555-2323');
 $end
-As a result, most engines show a nice speed boost when using the {\f1\fs20 BatchInsert()} method. See @59@ and for details, and the article (including performance charts) available at @http://blog.synopse.info/post/2014/03/03/ORM-enhanced-for-BATCH-insert
-Even {\i SQLite3} is faster when used as external engine, in respect to direct execution of individual prepared statements in loop!
-If you want to use a {\i @*map/reduce@} algorithm in your application, or the @13@ {\i @*Unit Of Work@} pattern, in addition to ORM data access, all those enhancements may speed up a lot your process. Reading and writing huge amount of data has never been so fast and easy: you may even be tempted to replace stored-procedure process by high-level code implemented in your Domain service. N-tier separation would benefit from it.
+As a result, most engines show a nice speed boost when using the {\f1\fs20 BatchAdd()} method. See @59@ for numbers and details.
+If you want to use a {\i @*map/reduce@} algorithm in your application, or the @100@ - in addition to ORM data access - all those enhancements would speed up a lot your data process. Reading and writing huge amount of data has never been so fast and easy: it is time to replace stored-procedure process by high-level code implemented in your {\i Domain} service.
+\page
 :39 CRUD level cache
+Starting with revision 1.16 of the framework, tuned record @*cache@ has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides.
+See @38@ for the other data cache patterns available in the framework, mainly @37@ at {\i SQlite3} level, on the server side. All {\i mORMot}'s data caches are using @2@ as storage format, which was found to be simple and efficient for this purpose.
 :  Where to cache
-Starting with revision 1.16 of the framework, tuned record cache has been implemented at the @*CRUD@/@*REST@ful level, for specific tables or records, on both the {\i server} and {\i client} sides. See @38@ for the other cache patterns available in the framework.
-In fact, a unique caching mechanism is shared at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
+In fact, a unique caching mechanism is available at the {\f1\fs20 TSQLRest} level, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} kind of classes. Therefore, {\i Delphi} clients can have their own cache, and the Server can also have its own cache. A client without any cache (e.g. a rough AJAX client) will take advantage of the server cache, at least.
+By default, there is no caching at REST level. Then you can use the {\f1\fs20 TSQLRest.Cache} property to tune your cache policy for each {\f1\fs20 TSQLRest} instance.
 \graph mORMotCaching CRUD caching in mORMot
 \Internet (VPN)\Local Network
 node [shape=box];
@@ -7228,7 +7543,7 @@ label="PC n";
 \
 When caching is set {\i on the server} for a particular record or table, in-memory values could be retrieved from this cache instead of calling the database engine each time. When properly used, this would increase global server responsiveness and allow more clients to be served with the same hardware.
 {\i On the client} side, a local in-memory cache could be first checked when a record is to be retrieved. If the item is found, the client uses this cached value. If the data item is not in the local cache, the query is then sent to the server, just as usual. Due to the high latency of a remote client-server request, adding caching on the client side does make sense. Client caching properties can be tuned in order to handle properly remote HTTP access via the Internet, which may be much slower than a local Network.
-Our caching implementation is transparent to the CRUD code. The very same usual ORM methods are to be called to access a record ({\f1\fs20 Retrieve  / Update / Add}), then either client or server cache will be used, if available. For applications that frequently access the same data - a large category - record-level caching improves both performance and scalability.
+Our caching implementation is transparent to the CRUD code. The very same usual ORM methods are to be called to access a record ({\f1\fs20 Retrieve Update Add}), then either client or server cache will be used, if available. For applications that frequently access the same data - a large category - record-level caching improves both performance and scalability.
 :  When to cache
 The main problem with cache is about data that both changes and is accessed simultaneously by multiple clients.
 In the current implementation, a "pessimistic" concurrency control is used by our framework, relying on explicit locks, and (ab)use of its @15@ general design. It is up to the coder to ensure that no major confusion could arise from concurrency issues.
@@ -7239,51 +7554,108 @@ The main rules may be simply:
 - {\i Not to cache unless you need to} (see Knuth's wisdom);
 - {\i Ensure that caching is worth it} (if a value is likely to be overridden often, it could be even slower to cache it);
 - Test once, test twice, always test and do not forget to test even more.
+In practice, caching issues could be difficult to track. So in case of doubt (why was this data not accurate? it sounds like an old revision?), you may immediately disable caching, then ensure that you were not too optimistic about your cache policy.
 :  What to cache
-Typical content of these two tuned caches can be any global configuration settings, or any other kind of unchanging data which is not likely to vary often, and is accessed simultaneously by multiple clients, such as catalog information for an online retailer.
+Typical content of these two tuned caches can be any global configuration settings, or any other kind of unchanging data which is not likely to vary often, and is accessed simultaneously by multiple clients, such as catalog information for an on-line retailer.
 Another good use of caching is to store data that changes but is accessed by only one client at a time. By setting a cache at the client level for such content, the server won't be called often to retrieve the client-specific data. In such case, the problem of handling concurrent access to the cached data doesn't arise.
-Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @16@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
+Profiling can be necessary to identify which data is to be registered within those caches, either at the client and/or the server side. The logging feature - see @73@ - integrated to {\i mORMot} can be very handy to tune the caching settings, due to its unique customer-side profiling ability.
 But most of the time, an human guess at the business logic level is enough to set which data is to be cached on each side, and ensure content coherency.
 :  How to cache
-A dedicated {\f1\fs20 TSQLRestCache} instance can be created, and will maintain such a tuned caching mechanism, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes.
-A call to {\f1\fs20 TSQLRest.Cache}'s {\f1\fs20 SetCache()} and {\f1\fs20 SetTimeOut()} methods is enough to specify which table(s) or record(s) are to be cached, either at the client or the server level.
+A tuned caching mechanism can be defined, for both {\f1\fs20 TSQLRestClient} and {\f1\fs20 TSQLRestServer} classes, at ID level.
+By default, REST level cache is disabled, until you call {\f1\fs20 TSQLRest.Cache}'s {\f1\fs20 SetCache()} and {\f1\fs20 SetTimeOut()} methods. Those methods will define the caching policy, able to specify which table(s) or record(s) are to be cached, either at the client or the server level.
+Once enabled for a table and a set of IDs on a given table, any further call to {\f1\fs20 TSQLRest.Retrieve(aClass,aID)} or {\f1\fs20 TSQLRecord.Create(aRest,aID)} will first attempt to retrieve the {\f1\fs20 TSQLRecord} of the given {\f1\fs20 aID} from the internal {\f1\fs20 TSQLRestCache} instance's in-memory cache, if available.\line Note that more complex requests, like queries on other fields than the ID @*primary key@, or JOINed queries, won't be cached at REST level. But such requests may benefit of the @37@, at {\i SQLite3} level, on the server side.
 For instance, here is how the Client-side caching is tested about one individual record:
 !    (...)
 !!    Client.Cache.SetCache(TSQLRecordPeople); // cache whole table
 !    TestOne;
-!    Client.Cache.Clear; // reset cache settings
+!!    Client.Cache.Clear; // reset cache settings
 !!    Client.Cache.SetCache(Rec); // cache one record
 !    // same as Client.Cache.SetCache(TSQLRecordPeople,Rec.ID);
 !    TestOne;
 !    (...)
 !!    Database.Cache.SetCache(TSQLRecordPeople); // server-side
 !    (...)
-Note that in the above code, {\f1\fs20 Client.Cache.Clear} is used to reset all cache settings (i.e. not only flush the cache content, but delete all settings previously made with {\f1\fs20 Cache.SetCache()} or {\f1\fs20 Cache.SetTimeOut()} calls. So in the above code, a global cache is first enabled for the whole {\f1\fs20 TSQLRecordPeople} table, then the cache settings are reset, then cache is enabled for only the particular {\f1\fs20 Rec} record.
-It's worth warning once again that it's up to the code responsibility to ensure that these caches are consistent over the network. Server side and client side have their own coherency profile to be ensured.
+In the above code, {\f1\fs20 Client.Cache.Clear} is used to reset all cache settings (i.e. not only flush the cache content, but delete all settings previously made with {\f1\fs20 Cache.SetCache()} or {\f1\fs20 Cache.SetTimeOut()} calls. So in the above code, a global cache is first enabled for the whole {\f1\fs20 TSQLRecordPeople} table, then the cache settings are reset, then cache is enabled for only the particular {\f1\fs20 Rec} record.\line To reset the cache content (e.g. if you consider some values may be deprecated), just call the {\f1\fs20 Cache.Flush} methods (able to flush the in-memory cache for all tables, a given table, or a given record).
+It's worth warning once again that it's up to the code responsibility to ensure that these caches are consistent over the network. Server side and client side have their own coherency profile to be ensured. The caching policy has to match your data model, and application use cases.
 {\i On the Client side}, only local CRUD operations are tracked. According to the stateless design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
 %cartoon02.png
-The framework is able to handle a custom type of "@**stored procedure@" at SQL level in pure {\i Delphi} code, like any powerful @*Client-Server@ RDBMS solution.
-In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the server side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature will be much faster than a pure client-sided solution.
-The Server-Side services - see @49@ and @63@ - appear to be the more @*REST@ful compatible way of implementing a stored procedure mechanism in our framework. But custom SQL WHERE statements may improve the client code, and therefore ORM CRUD requests could be optimized via some server-side process.
+In your developer background and history, you may have been used to write your business code as {\i @**stored procedure@s}, to be executed on the server side.\line In short, a {\i stored procedure} is a way of moving some data-intensive SQL process on the database side. A client will ask for some data to be retrieved or processed on the server, and all actions will be taken on the server: since no data has to be exchanged between the client and the server, such a feature is usually much faster than a pure client-sided solution.
+Since {\i mORMot} is {\i Client/Server} from the ground up, it features some unique ways of improving data-intensive process on the client or server sides, without necessary relying on proprietary {\i stored procedures}.
+This chapter is worth reading, if you start a new {\i mORMot} project, and wonder about the architecture of your upcoming applications, or if you are integrating a {\i mORMot} server in an existing application... in which you or your predecessors may have (ab)used of stored procedures.\line It is time to sit down first, and take counsel how your project may be optimized enough to scale and profit.
+\page
+: Optimize for performance
+So, let's do it the {\i mORMot}'s way.
+As we discussed, the main point about {\i stored procedures} is performance. But they are not magic bullet either: we all have seen slow and endless process in {\i stored procedures}, almost killing a database server in production. Just as with regular client-side process.
+And don't be fooled by performance: {\i make it right, then make it fast}.\line We could make ourself a motto of this Martin Fowler's remark:
+{\i One of the first questions people consider with this kind of thing is performance. Personally I don't think performance should be the first question. My philosophy is that most of the time you should focus on writing maintainable code. Then use a profiler to identify hot spots and then replace only those hot spots with faster but less clear code. The main reason I do this is because in most systems only a very small proportion of the code is actually performance critical, and it's much easier to improve the performance of well factored maintainable code.}
+See @http://www.martinfowler.com/articles/dblogic.html - nice link by the way, if you want to identify some best practice about implementing a persistence layer for our business code.
+If you are using a {\i mORMot} server for the first time, you may be amazed by how most common process would sound just immediate. You can capitalize on the framework optimizations, which are able to unleash the computing power of your hardware, then refine your code only when performance matters.
+In order to speed up our data processing, we first have to consider the classic architecture of a {\i mORMot} application - see @%%mORMotDesign3@.\line A {\i mORMot} client would have two means of accessing its data:
+- Either from CRUD / ORM methods;
+- Or via services, most probably {\i interface-based services} - see @63@.
+Our optimization goals would therefore be leaded into those two directions.
+:  Profiling your application
+If you worry about performance, first reflex may be to enable the framework logging, even on customer sites.
+The profiling abilities of the {\f1\fs20 TSynLog} class, used everywhere in our framework, will allow you to identify the potential bottlenecks of your client applications. See @16@ about this feature.\line From our experiment, we can assure you that the first time you may run logging on a real {\i mORMot} application, you may find issues you would never have think off by yourself.
+Fight against any duplicated queries, unnecessary returned information (do not forget to specify the fields to be retrieved to your {\f1\fs20 CreateAndFillPrepare()} request), unattended requests triggered by the User Interface (typically a {\f1\fs20 TEdit}'s {\f1\fs20 OnChange} event may benefit of using a {\f1\fs20 TTimer} before asking for auto-completion)...
+Once you have done this cleaning, you may be proud of you, and it may be enough for your customers to enjoy your application. You deserve a coffee or a drink.
+:  Client-side caching
+You may have written most of your business logic on the client side, and use CRUD / ORM methods to retrieve the information from your {\i mORMot} server.\line This is perfectly valid, but may be slow, especially if a lot of individual requests are performed over the network, which may be with high latency (e.g. over the Internet).
+A new step of optimization, once you did identify your application bottlenecks via profiling, may be to tune your ORM client cache. In fact, there are several layers of caching available in a {\i mORMot} application. See @39@ for details about these features.\line Marking some tables as potentially cached on the client side may induce a noticeable performance boost, with no need of changing your client code.
+:  Write business logic as Services
+A further step of optimization may be to let the business logic be processed on the server side, within a @*service@.\line In fact, you would then switch your mind from a classic @7@ to a @17@.
+As a result, your process may take much less time, and you may also be able to benefit from some other optimization tricks, like dedicated caching in your service.\line For instance, consider writing your service in {\f1\fs20 sicShared} mode instead of the default {\f1\fs20 sicSingle} mode - see @92@ - and let some intangible objects be stored as implementation class fields: the next request from a client would not need to load this data from the database, but instead retrieve the information directly from memory, with no latency.\line You may also consider using {\f1\fs20 sicClientDriven} mode, and cache some client-specific information as implementation class fields.
+Beside optimization, your code would probably become easier to maintain and scale, when running as services. SOA is indeed a very convenient pattern, and will induce nice side effects, like the ability to switch to multi-platform clients, including mobile or AJAX, since your business logic would stay on the application server.
+:  Using ORM full power
+On the server side, your business code, written using CRUD / ORM methods, could be optimized.
+First of all, ORM caching may also be used. Any unneeded round-trip to the database - even more with @27@ - could impact your application responsiveness. Then your business logic, written as services, would benefit from it.
+Then you may regroup all your database modifications using @28@.\line This would offer several benefits:
+- Transaction support (nothing is written to the database until {\f1\fs20 BatchSend} method is executed) similar to the @100@;
+- Faster insertion, update or deletion - via @78@ and @99@;
+- Perfect integration with the ORM.
+In fact, we found out that {\i Array DML} or {\i optimized INSERT} could be much faster than a regular {\i stored procedure}, with individual SQL statements run in a loop.
+: Stored procedures
+:101  Why to avoid stored procedures
+In practice, {\i stored procedures} have some huge drawbacks:
+- Your business logic is tied to the data layout used for storage - and the {\i Relational Model} is far away from natural language - see @91@;
+- Debugging is somewhat difficult, since stored procedures will be executed on the database server, far away from your application;
+- Each developer would probably need its own database instance to be able to debug its own set of {\i stored procedures};
+- Project deployment becomes complex, since you have to synchronize your application and database server;
+- Cursors and temporary tables, as commonly used in {\i stored procedures}, may hurt performance;
+- They couple you with a particular database engine: you are tied to use {\i Java}, {\i C#} or a P/SQL variant to write your business code, then switching from {\i @*Oracle@} to {\i @*PostgreSQL@} or {\i @*MS SQL@} would be error prone, if not impossible;
+- They may consume some precious hardware resources on your database server, which may be limited (e.g. proprietary engines like {\i Oracle} or {\i MS SQL} would force you to use only one CPU or a limited amount of RAM, unless you need to spend a lot of money to increase your license abilities);
+- You will probably have limitations in the virtual environment running in your database engine: deprecated VM or libraries, restricted access to files or network due to security requirements, missing libraries;
+- Inefficiency of parameters passing, especially when compared with class OOP programming - you are back to the procedural mode of the 80s;
+- Parameters passing would probably result in sub-optimal SQL statements, handling all passed values even if not used;
+- Flat design of stored procedures interfaces, far away from the interface segregation principle - see @47@;
+- Let several versions of your business logic coexist on the same server is a nightmare to maintain;
+- Unit testing is made difficult, since you won't be able to mock or stub - see @62@ - your {\i stored procedures} or your data;
+- No popular SQL engine does allow {\i stored procedures} to be written in Delphi, so you won't be able to share code with your other projects;
+- If you use an ORM in your main application, you need to manually maintain the table schema used in your stored procedures in synch with your object model - so you are loosing most of ORM benefits;
+- What if you want to switch to {\i @*NoSQL@} storage, or a simple stand-alone version of your application?
+We do not want to say, dogmatically, that {\i stored procedures} are absolute evil. Of course, you are free to use them, even with {\i mORMot}.\line All we wanted to point out is the fact that they are perhaps not the best fit with the design we would like to follow.
+:  Stored procedures, anyway
+There may be some cases where this ORM point of view, may be not enough for your project.\line Do not worry, as usual {\i mORMot} will allow you to do what you need.
+The Server-Side services - see @49@ and @63@ - appear to be the more @*REST@ful compatible way of implementing a {\i @*stored procedure@} mechanism in our framework, then consume them from a {\i mORMot} client.
 According to the current state of our framework, there are several ways of handling such a server-side SQL/ORM process:
 - Write your own @*SQL function@ to be used in {\i @*SQLite3@} WHERE statements;
 - Low-level dedicated {\i Delphi} stored procedures;
 - External databases stored procedures.
-\page
-:22 Custom SQL functions
+We will discuss those options.\line The first two will in fact implement two types of "@*stored procedure@" at SQL level in pure {\i Delphi} code, making our {\i SQlite3} kernel as powerful as other @*Client-Server@ RDBMS solutions. The latest option may be considered, especially when moving from legacy applications, still relying on stored procedures for their business logic.
+:22   Custom SQL functions
 The {\i @*SQLite3@} engine defines some standard @**SQL function@s, like {\f1\fs20 abs() min() max()} or {\f1\fs20 upper()}. A complete list is available at @http://www.sqlite.org/lang_corefunc.html
 One of the greatest {\i SQLite3} feature is the ability to define custom SQL functions in high-level language. In fact, its C API allows implementing new functions which may be called within a SQL query. In other database engine, such functions are usually named UDF (for {\i User Defined Functions}).
-Some custom already defined SQL functions are defined by the framework. You may have to use, on the Server-side:
+Some custom already defined SQL functions are defined by the framework.\line You may have to use, on the Server-side:
 - {\f1\fs20 Rank} used for page ranking in @24@;
 - {\f1\fs20 Concat} to process fast string concatenation;
 - {\f1\fs20 Soundex SoundexFR SoundexES} for computing the English / French / Spanish soundex value of any text;
-- {\f1\fs20 @*IntegerDynArrayContains@, ByteDynArrayContains, WordDynArrayContains, CardinalDynArrayContains, Int64DynArrayContains, CurrencyDynArrayContains, RawUTF8DynArrayContainsCase, RawDynArrayContainsNoCase, } for direct search inside a BLOB column containing some @*dynamic array@ binary content (expecting either an INTEGER or a TEXT search value as 2nd parameter).
+- {\f1\fs20 @*IntegerDynArrayContains@, ByteDynArrayContains, WordDynArrayContains, CardinalDynArrayContains, Int64DynArrayContains, CurrencyDynArrayContains, RawUTF8DynArrayContainsCase, RawDynArrayContainsNoCase} for direct search inside a BLOB column containing some @*dynamic array@ binary content (expecting either an INTEGER or a TEXT search value as 2nd parameter).
 Those functions are no part of the {\i SQlite3} engine, but are available inside our ORM to handle BLOB containing @*dynamic array@ properties, as stated in @21@.
 Since you may use such SQL functions in an {\f1\fs20 UPDATE} or {\f1\fs20 INSERT} SQL statement, you may have an easy way of implementing server-side process of complex data, as such:
 $ UPDATE MyTable SET SomeField=0 WHERE IntegerDynArrayContains(IntArrayField,:(10):)
-: Implementing a function
+:    Implementing a function
 Let us implement a {\f1\fs20 CharIndex()} SQL function, defined as such:
 ! CharIndex ( SubText, Text [ , StartPos ] )
 In here, {\f1\fs20 SubText} is the string of characters to look for in {\f1\fs20 Text}. {\f1\fs20 StartPos} indicates the starting index where {\f1\fs20 charindex()} should start looking for {\f1\fs20 SubText} in {\f1\fs20 Text}. Function shall return the position where the match occurred, 0 when no match occurs. Characters are counted from 1, just like in {\f1\fs20 PosEx()} {\i Delphi} function.
@@ -7317,15 +7689,15 @@ Here is typical implementation code of the {\f1\fs20 CharIndex()} SQL function, 
 This code just get the parameters values using {\f1\fs20 sqlite3.value_*()} functions, then call the {\f1\fs20 PosEx()} function to return the position of the supplied text, as an INTEGER, using {\f1\fs20 sqlite3.result_int64()}.
 The local {\f1\fs20 StartPos} variable is used to check for an optional third parameter to the SQL function, to specify the character index to start searching from.
 The special case of a {\f1\fs20 NULL} parameter is handled by checking the incoming argument type, calling {\f1\fs20 sqlite3.value_type(argv[])}.
-: Registering a function
-:  Direct low-level SQLite3 registration
+:    Registering a function
+:     Direct low-level SQLite3 registration
 Since we have a {\f1\fs20 InternalSQLFunctionCharIndex()} function defined, we may register it with direct {\i SQLite3} API calls, as such:
 !  sqlite3.create_function_v2(Demo.DB,
 !    'CharIndex',2,SQLITE_ANY,nil,InternalSQLFunctionCharIndex,nil,nil,nil);
 !  sqlite3.create_function_v2(Demo.DB,
 !    'CharIndex',3,SQLITE_ANY,nil,InternalSQLFunctionCharIndex,nil,nil,nil);
 The function is registered twice, one time with 2 parameters, then with 3 parameters, to add an overloaded version with the optional {\f1\fs20 StartPos} parameter.
-:  Class-driven registration
+:     Class-driven registration
 It is possible to add some custom SQL functions to the {\i SQlite3} engine itself, by creating a {\f1\fs20 TSQLDataBaseSQLFunction} custom class and calling the {\f1\fs20 TSQLDataBase.RegisterSQLFunction} method.
 The standard way of using this is to override the {\f1\fs20 @*TSQLRestServerDB@.InitializeEngine virtual} method, calling {\f1\fs20 DB.RegisterSQLFunction()} with an defined {\f1\fs20 TSQLDataBaseSQLFunction} custom class.
 So instead of calling low-level {\f1\fs20 sqlite3.create_function_v2()} API, you can declare the {\f1\fs20 CharIndex} SQL function as such:
@@ -7335,7 +7707,7 @@ The two lines above will indeed wrap the following code:
 !  Demo.RegisterSQLFunction(TSQLDataBaseSQLFunction.Create(InternalSQLFunctionCharIndex,2,'CharIndex'));
 !  Demo.RegisterSQLFunction(TSQLDataBaseSQLFunction.Create(InternalSQLFunctionCharIndex,3,'CharIndex'));
 The {\f1\fs20 RegisterSQLFunction()} method is called twice, one time with 2 parameters, then with 3 parameters, to add an overloaded version with the optional {\f1\fs20 StartPos} parameter, as expected.
-:  Custom class definition
+:     Custom class definition
 The generic function definition may be completed, in our framework, with a custom class definition, which is handy to have some specific context, not only relative to the current SQL function context, but global and static to the whole application process.
 \graph HierTSQLDataBaseSQLFunctionDynArray TSQLDataBaseSQLFunction classes hierarchy
 \TSQLDataBaseSQLFunction\TObject
@@ -7406,15 +7778,16 @@ Note that we did not use here the overloaded {\f1\fs20 OneFieldValues} method ex
 !      FormatUTF8('MyIntegerDynArrayContains(Ints,?)',[],
 !        [BinToBase64WithMagic(@k,sizeof(k))]),IDs);
 Since the {\f1\fs20 MyIntegerDynArrayContains} function will create a temporary dynamic array in memory from each row (stored in {\f1\fs20 fDummyDynArrayValue}), the dedicated {\f1\fs20 IntegerDynArrayContains} SQL function is faster.
-: Low-level Delphi stored procedure
-To implement a more complete request, and handle any kind of stored data in a column (for instance, some TEXT format to be parsed), a {\f1\fs20 TOnSQLStoredProc} event handler can be called for every row of a prepared statement, and is able to access directly to the database request. Code inside this event handler should not use the @*ORM@ methods of the framework, but direct low-level {\i SQLite} access. This event handler should be specified to the corresponding overloaded {\f1\fs20 @*TSQLRestServerDB@. EngineExecute} method.
-This will allow direct content modification during the {\f1\fs20 SELECT} statement. Be aware that, up to now, @20@ {\f1\fs20 TSQLVirtualTableCursorJSON} cursors are not safe to be used if the Virtual Table data is modified.
-See the description of the {\f1\fs20 TOnSQLStoredProc} event handler and associated method in the next pages.
-: External stored procedure
+:   Low-level SQLite3 stored procedure in Delphi
+To implement a more complete request, and handle any kind of stored data in a column (for instance, some TEXT format to be parsed), a {\f1\fs20 TOnSQLStoredProc} event handler can be called for every row of a prepared statement, and is able to access directly to the database request.\line This event handler can be specified to the {\f1\fs20 @*TSQLRestServerDB@.StoredProcExecute()} method.\line Be aware that code inside this event handler should not use the @*ORM@ methods of the framework, but direct low-level {\i SQLite3} access (to avoid re-entrance issues).
+This will allow direct content modification during the {\f1\fs20 SELECT} statement. Be aware that, up to now, @20@ {\f1\fs20 TSQLVirtualTableCursorJSON} cursors are not safe to be used if the {\i Virtual Table} data is modified.
+See the description of the {\f1\fs20 TOnSQLStoredProc} event handler and associated {\f1\fs20 StoredProcExecute()} method in the second part of this document.
+:   External stored procedure
 If the application relies on external databases - see @27@ - the external database may be located on a remote computer.
 In such situation, all RESTful Server-sided solutions could produce a lot of network traffic. In fact, custom SQL functions or stored procedures both use the {\i @*SQLite3@} engine as root component.
-In order to speed up the process, you may define some RDMS stored procedures in the external database format (.Net, Java, P/SQL or whatever), then define some @11@ to launch those functions. Note that in this case, you'll loose the database-independence of the framework, and switching to another database engine may cost.
-:11Server side Services
+In order to speed up the process, you may define some RDMS stored procedures in the external database syntax (P/SQL, {\i .Net}, {\i Java} or whatever), then define some @11@ to launch those functions.\line Note that in this case, you'll loose the database independence of the framework, and most of the benefits of using an ORM/ODM - later on, switching to another database engine may become impossible. Such RDBMS stored procedures may be envisaged only during the transition phase of an existing application. @28@ has almost all the speed advantages of stored procedures, with the benefit of a pure object oriented code, easy to debug and maintain.
+\page
+:11 Server side Services
 %cartoon03.png
 In order to follow a @17@ design, your application's business logic can be implemented in several ways using {\i mORMot}:
 - Via some {\f1\fs20 @*TSQLRecord@} inherited classes, inserted into the database {\i model}, and accessible via some @*REST@ful URI - this is implemented by our @*ORM@ architecture - see @35@;
@@ -7422,8 +7795,8 @@ In order to follow a @17@ design, your application's business logic can be imple
 - Defining some RESTful {\i service @*contract@s} as standard {\i Delphi} {\f1\fs20 interface}, and then run it seamlesly on both client and client sides.
 The first is similar to {\i RemObject's DataAbstract} product, which allows remote access to database, over several protocols. There are some similarities with {\i mORMot} (like on-the-fly SQL translation for external databases), but also a whole diverse use case (RAD/components and wizards versus ORM/MVC) and implementation ({\i mORMot} takes advantages of the {\i @*SQLite3@} SQL core and is much more optimized for speed and scaling).
 If you paid for a {\i Delphi Architect} edition, the first two items can be compared to the {\i DataSnap} Client-Server features. Since {\i Delphi} 2010, you can in fact define @*JSON@-based RESTful services, in addition to the original {\i DCOM/DBExpress} remote data broker. It makes uses of the new RTTI available since {\i Delphi} 2010, but it has some known stability and performance issues, and lack of strong security. It is also RAD/Wizard based, whereas {\i mORMot} uses a code approach.
-The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a KISS manner.
-So {\i mORMot} is quite unique, in the fact that it features, in an unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a Domain-Driven Design, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
+The last item is purely interface-based, so matches the "designed by contract" principle - see @47@ - as implemented by Microsoft's @*WCF@ technology - see @65@. We included most of the nice features made available in WCF in {\i mORMot}, in a @*KISS@ {\i @*convention over configuration@} manner.
+So {\i mORMot} is quite unique, in the fact that it features, in one unique code base, all three ways of implementing a @*SOA@ application. And it is an Open Source project, existing since years - you won't be stucked with proprietary code nor licenses. You can move your existing code base into a {\i Domain-Driven Design}, on your management pace (and money), without the need of upgrading to the latest version of the IDE.
 :49Client-Server services via methods
 %cartoon04.png
 To implement a service in the {\i Synopse mORMot framework}, the first method is to define @**published method@ Server-side, then use easy functions about JSON or URL-parameters to get the request encoded and decoded as expected, on Client-side.
@@ -7446,7 +7819,7 @@ Then we implement this method:
 !  with Ctxt do
 !    Results([Input['a']+Input['b']]);
 !end;
-The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 double}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
+The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
 Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
 Those methods would raise an {\f1\fs20 EParsingException} exception if the parameter is not available at the URI. So you may want to use {\f1\fs20 InputExists[]} or even {\f1\fs20 InputIntOrVoid[] InputDoubleOrVoid[] InputUTF8OrVoid[] InputOrVoid[]} methods, which won't raise any exception but return a void value (i.e. either {\f1\fs20 0}, {\f1\fs20 ""} or {\f1\fs20 Unassigned}).
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
@@ -7496,11 +7869,11 @@ This Client-Server protocol uses JSON here, as encoded server-side via {\f1\fs20
 We have used above the {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
 Here is how we may implement the fastest possible parameters parsing:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
-!var a,b: Extended;
+!var a,b: double;
 !  if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
 !    while Ctxt.Parameters<>nil do begin
-!      UrlDecodeExtended(Ctxt.Parameters,'A=',a);
-!      UrlDecodeExtended(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
+!      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
+!      UrlDecodeDouble(Ctxt.Parameters,'B=',b,@Ctxt.Parameters);
 !    end;
 !    Ctxt.Results([a+b]);
 !  end else
@@ -7509,7 +7882,7 @@ Here is how we may implement the fastest possible parameters parsing:
 The only not obvious part of this code is the parameters marshaling, i.e. how the values are retrieved from the incoming {\f1\fs20 Ctxt.Parameters} text buffer, then converted into native local variables.
 On the Server side, typical implementation steps are therefore:
 - Use the {\f1\fs20 UrlDecodeNeedParameters} function to check that all expected parameters were supplied by the caller in {\f1\fs20 Ctxt.Parameters};
-- Call {\f1\fs20 UrlDecodeInteger / UrlDecodeInt64 / UrlDecodeExtended / UrlDecodeValue / UrlDecodeObject} functions (all defined in {\f1\fs20 SynCommons.pas}) to retrieve each individual parameter from standard JSON content;
+- Call {\f1\fs20 UrlDecodeInteger / UrlDecodeInt64 / UrlDecodeDouble / UrlDecodeExtended / UrlDecodeValue / UrlDecodeObject} functions (all defined in {\f1\fs20 SynCommons.pas}) to retrieve each individual parameter from standard JSON content;
 - Implement the service (here it is just the {\f1\fs20 a+b} expression);
 - Then return the result calling {\f1\fs20 Ctxt.Results()} method or {\f1\fs20 Ctxt.Error()} in case of any error.
 The powerful {\f1\fs20 UrlDecodeObject} function (defined in {\f1\fs20 mORMot.pas}) can be used to un-serialize most class instance from its textual JSON representation ({\f1\fs20 @*TPersistent@, @*TSQLRecord@, TStringList}...).
@@ -7544,6 +7917,7 @@ The corresponding client method may be defined as such:
 !  if CallBackGet('GetFile',['filename',aFileName],RawUTF8(result))<>HTML_SUCCESS then
 !    raise Exception.CreateFmt('Impossible to get file: %s',[result]);
 !end;
+Note that the {\f1\fs20 Ctxt.ReturnFile()} method - see @95@ - is preferred than manual file retrieval as implemented in this {\f1\fs20 TSQLRestServer.GetFile()} method. It is shown here for demonstration purposes only.
 If you use HTTP as communication protocol, you can consume these services, implemented Server-Side in fast {\i Delphi} code, with any @*AJAX@ application on the client side.
 Using {\f1\fs20 GetMimeContentType()} when sending non JSON content (e.g. picture, pdf file, binary...) will be interpreted as expected by any standard Internet browser: it could be used to serve some good old HTML content within a page, not necessary consume the service via {\i JavaScript} .
 \page
@@ -7570,15 +7944,17 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 ! aRemoteIP := FindIniNameValue(pointer(Ctxt.Call.InHead),'REMOTEIP: ');
 ! aUserAgent := FindIniNameValue(pointer(Ctxt.Call.InHead),'USER-AGENT: ');
 \page
-: Browser speed-up for unmodified requests
+:96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
 In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
-: Returning file content
+This stateless @9@ model, would enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
+:95 Returning file content
 Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
-Note that this is the preferred way of returning some static file content within {\i mORMot}.
+Another possibility may be to use the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method, which is able to efficiently return any file specified by its URI, from a local folder. It may be very handy to
+return some static web content from a {\i mORMot} HTTP server.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.
@@ -7727,7 +8103,7 @@ More on this later on... first we'll take a look at good principles of playing w
 The acronym @**SOLID@ is derived from the following @*OOP@ principles (quoted from the corresponding {\i Wikipedia} article):
 - {\i Single responsibility principle}: the notion that an object should have only a single responsibility;
 - {\i Open/closed principle}: the notion that �software entities ... should be open for extension, but closed for modification�;
-- {\i Liskov substitution principle}: the notion that �objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program� - also named as "{\i design by contract}";
+- {\i @Liskov substitution principle@}: the notion that �objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program� - also named as "{\i design by contract}";
 - {\i @*Interface@ segregation principle}: the notion that �many client specific interfaces are better than one general purpose interface.�;
 - {\i Dependency inversion principle}: the notion that one should �Depend upon Abstractions. Do not depend upon concretions.�. {\i Dependency injection} is one method of following this principle.
 If you have some programming skills, those principles are general statements you may already found out by yourself. If you start doing serious object-oriented coding, those principles are best-practice guidelines you would gain following.
@@ -7773,7 +8149,7 @@ Some other guidelines may be added, but you got the main idea. Conformance to th
 Following this principle will make your code far away from a regular RAD style. But benefits will be huge.
 :  Liskov substitution principle
 Even if her name is barely unmemorable, {\i Barbara Liskov} is a great computer scientist, we should better learn from.
-Her "substitution principle" states that, if {\f1\fs20 TChild} is a subtype of {\f1\fs20 TParent}, then objects of type {\f1\fs20 TParent} may be replaced with objects of type {\f1\fs20 TChild} (i.e., objects of type {\f1\fs20 TChild} may be substitutes for objects of type {\f1\fs20 TParent}) without altering any of the desirable properties of that program (correctness, task performed, etc.).
+The "{\i @**Liskov substitution principle@}" states that, if {\f1\fs20 TChild} is a subtype of {\f1\fs20 TParent}, then objects of type {\f1\fs20 TParent} may be replaced with objects of type {\f1\fs20 TChild} (i.e., objects of type {\f1\fs20 TChild} may be substitutes for objects of type {\f1\fs20 TParent}) without altering any of the desirable properties of that program (correctness, task performed, etc.).
 For our framework, it would signify that {\f1\fs20 TSQLRestServer} or {\f1\fs20 TSQLRestClient} instances can be substituted to a {\f1\fs20 TSQLRest} object. Most @*ORM@ methods expect a {\f1\fs20 TSQLRest} parameter to be supplied.
 Your code shall refer to abstractions, not to implementations. By using only methods and properties available at classes parent level, your code won't need to change because of a specific implementation.
 The main advantages of this coding pattern are the following:
@@ -7802,7 +8178,7 @@ By defining {\i Delphi} {\f1\fs20 interface} instead of plain {\f1\fs20 class}, 
 Another form of decoupling is to invert the dependency between high and low level of a software design:
 - High-level modules should not depend on low-level modules. Both should depend on abstractions;
 - Abstractions should not depend upon details. Details should depend upon abstractions.
-In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the Liskov's substitution principle.
+In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the {\i @Liskov substitution principle@}.
 The goal of the {\i dependency inversion principle} is to decouple high-level components from low-level components such that reuse with different low-level component implementations becomes possible. A simple implementation pattern could be to use only @*interface@s owned by, and existing only with the high-level component package.
 In other languages (like Java or .Net), various patterns such as {\i Plug-in, Service Locator}, or {\i Dependency Injection} are then employed to facilitate the run-time provisioning of the chosen low-level component implementation to the high-level component.
 Our @*Client-Server@ architecture facilitated this decoupling pattern, and allows the use of native {\i Delphi} {\f1\fs20 interface} to call services from an abstract @*factory@.
@@ -7812,10 +8188,10 @@ Our @*Client-Server@ architecture facilitated this decoupling pattern, and allow
 The memory allocation model of the {\i Delphi} {\f1\fs20 interface} type uses some kind of {\i Automatic Reference Counting} (@*ARC@). In order to avoid memory and resource leaks and potential random errors in the applications (aka the terrible {\f1\fs20 EAccessViolation} exception on customer side) when using @46@, a @*SOA@ framework like {\i mORMot} has to offer so-called {\i @**Weak pointers@} and {\i @**Zeroing Weak pointers@} features.
 By default in {\i Delphi}, all references are defined:
 - as {\i weak references} for pointer and class instances;
-- with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, currency, double} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
-- via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, widestring, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
+- with {\i explicit copy} for low-level value types like {\f1\fs20 integer, Int64, @*currency@, @*double@} or {\f1\fs20 record} (and old deprecated {\f1\fs20 object} or {\f1\fs20 shortstring});
+- via {\i copy-on-write} with {\i reference counting} for high-level value types (e.g. {\f1\fs20 string, @*widestring@, variant} or a {\i dynamic array} - with the exception of tuned memory handling for @80@);
 - as {\i strong reference} with {\i reference counting} for {\f1\fs20 interface} instances.
-The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and will not be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
+The main issue with {\i strong reference counting} is the potential {\i circular reference} problem.\line This occurs when an {\f1\fs20 interface} has a strong pointer to another, but the target {\f1\fs20 interface} has a strong pointer back to the original. Even when all other references are removed, they still will hold on to one another and won't be released. This can also happen indirectly, by a chain of objects that might have the last one in the chain referring back to an earlier object.
 See the following {\f1\fs20 interface} definition for instance:
 !  IParent = interface
 !    procedure SetChild(const Value: IChild);
@@ -7841,7 +8217,7 @@ The following implementation will definitively leak memory:
 !end;
 In {\i Delphi}, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not value objects, but reference objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
 One common solution is to use {\i Weak pointers}, by which the {\f1\fs20 interface} is assigned to a property without incrementing the reference count.
-Note that garbage collector based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
+Note that @*garbage collector@ based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
 :  Handling weak pointers
 In order to easily create a weak pointer, the following function was added to {\f1\fs20 mORMot.pas}:
 !procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);
@@ -7937,7 +8313,7 @@ The {\f1\fs20 constructor} will indeed {\i inject} its dependencies into its own
 !  fUserRepository := aUserRepository;
 !  fSmsSender := aSmsSender;
 !end;
-The dependencies are defined with the following two interfaces(only the needed methods are listed here, but a real interface may have much more members, but not too much, to follow the {\i interface segregation} SOLID principle):
+The dependencies are defined with the following two interfaces(only the needed methods are listed here, but a real interface may have much more members, but not too much, to follow the {\i interface segregation} @*SOLID@ principle):
 !  IUserRepository = interface(IInvokable)
 !    ['{B21E5B21-28F4-4874-8446-BD0B06DAA07F}']
 !    function GetUserByName(const Name: RawUTF8): TUser;
@@ -7952,7 +8328,7 @@ Note also that all those code will use a plain {\f1\fs20 record} as {\i @**Data 
 !    Name: RawUTF8;
 !    Password: RawUTF8;
 !    MobilePhoneNumber: RawUTF8;
-!    ID: Integer;
+!    ID: TID;
 !  end;
 Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistency layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in {\i Delphi} ensure it won't be part of a complex business logic, but will remain used as value objects.
 Now, let's come back to our {\f1\fs20 TLoginController} class.\line Here is the method we want to test:
@@ -8018,16 +8394,36 @@ That is, we run the actual implementation method, which will call our fake metho
 Let's put all this together.
 \page
 : Stubs and Mocks in mORMot
-:  Features and motivations
 Our {\i mORMot} framework is therefore able to @*stub@ or @*mock@ any {\i Delphi} {\f1\fs20 interface}.
-As usual, the best way to explain what a library does is to look at the code using it. Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario, we remembered to call the {\f1\fs20 Save()} method properly:
+We will now detail how it is expected to work.
+:141  Direct use of interface types without TypeInfo()
+First of all, it is a good practice to always register your service interfaces in the unit which define their type, as such:
+!unit MyServiceInterfaces;
+!...
+!type
+!  ISmsSender = interface(IInvokable)
+!  ...
+!  IUserRepository = interface(IInvokable)
+!  ...
+!
+!initialization
+!  TInterfaceFactory.RegisterInterfaces(
+!    [TypeInfo(ISmsSender),TypeInfo(IUserRepository)]);
+!end.
+Then creating a stub or a mock could be done directly from the interface name, which will be transmitted as its {\f1\fs20 TGUID}, without the need of using the {\f1\fs20 TypeInfo()} pseudo-function:
+!  TInterfaceStub.Create(ISmsSender,SmsSender);
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self);
+In the code below, we will assume that the {\f1\fs20 interface} type information has been registered, so that we may be able to use directly {\f1\fs20 I*} without the {\f1\fs20 TypeInfo(I*)} syntax
+:  Sample with manual dependency injection
+As usual, the best way to explain what a library does is to look at the code using it.
+Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario as implemented by the {\f1\fs20 TLoginController} class, we actually called the {\f1\fs20 Save()} method:
 !procedure TMyTest.ForgotMyPassword;
 !var SmsSender: ISmsSender;
 !    UserRepository: IUserRepository;
 !begin
-!  TInterfaceStub.Create(TypeInfo(ISmsSender),SmsSender).
+!  TInterfaceStub.Create(ISmsSender,SmsSender).
 !    Returns('Send',[true]);
-!  TInterfaceMock.Create(TypeInfo(IUserRepository),UserRepository,self).
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self).
 !    ExpectsCount('Save',qoEqualTo,1);
 !  with TLoginController.Create(UserRepository,SmsSender) do
 !  try
@@ -8043,9 +8439,9 @@ If you want to follow the "test spy" pattern (i.e. no expectation defined {\i a 
 !    UserRepository: IUserRepository;
 !    Spy: TInterfaceMockSpy;
 !begin
-!  TInterfaceStub.Create(TypeInfo(ISmsSender),SmsSender).
+!  TInterfaceStub.Create(ISmsSender,SmsSender).
 !    Returns('Send',[true]);
-!  Spy := TInterfaceMockSpy.Create(TypeInfo(IUserRepository),UserRepository,self);
+!  Spy := TInterfaceMockSpy.Create(IUserRepository,UserRepository,self);
 !  with TLoginController.Create(UserRepository,SmsSender) do
 !  try
 !    ForgotMyPassword('toto');
@@ -8056,13 +8452,13 @@ If you want to follow the "test spy" pattern (i.e. no expectation defined {\i a 
 !end;
 This is something unique with our library: you can decide if you want to use the classic "expect-run-verify" pattern, or the somewhat more direct "run-verify" / "test spy" pattern. With {\i mORMot}, you pick up your mocking class (either {\f1\fs20 TInterfaceMock} or {\f1\fs20 TInterfaceMockSpy}), then use it as intended. You can even mix the two aspects in the same instance! It is just a matter of taste and opportunity for you to use the right pattern.
 For another easier pattern, like the one in the {\i Mockito} home page:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),ICalc,self).
+!  TInterfaceMock.Create(ICalculator,ICalc,self).
 !    ExpectsCount('Multiply',qoEqualTo,1).
 !    ExpectsCount('Add',[10,20],qoEqualTo,1);
 !  ICalc.Add(10,20);
 !  ICalc.Multiply(10,30)
 If you want to follow the "test spy" pattern, you can use:
-!  Mock := TInterfaceMockSpy.Create(TypeInfo(ICalculator),ICalc,self);
+!  Mock := TInterfaceMockSpy.Create(ICalculator,ICalc,self);
 !  ICalc.Add(10,20);
 !  ICalc.Multiply(10,30)
 !  Mock.Verify('Add');
@@ -8081,7 +8477,7 @@ If you compare with existing mocking frameworks, even in other languages / platf
 - Most common parameters and results can be defined as simple {\f1\fs20 array of const} in the {\i Delphi} code, or by supplying JSON arrays (needed e.g. for more complex structures like {\f1\fs20 record} values);
 - Execution trace retrieval in easy to read or write text format (and not via complex "fluent" interface e.g. with {\f1\fs20 When} clauses);
 - Auto-release of the {\f1\fs20 TInterfaceStub TInterfaceMock TInterfaceMockSpy} generator instance, when the interface is no longer required, to minimize the code to type, and avoid potential memory leaks;
-- Works from {\i Delphi} 6 up to XE6 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
+- Works from {\i Delphi} 6 up to XE7 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
 - Very good performance (the faster {\i Delphi} mocking framework, for sure), due to very low overhead and its reuse of {\i mORMot}'s low-level interface-based services kernel using JSON serialization, which does not rely on the slow and limited {\f1\fs20 TVirtualInterface}.
 :  Stubbing complex return values
 Just imagine that the {\f1\fs20 ForgotMyPassword} method does perform an internal test:
@@ -8100,7 +8496,7 @@ Here is how we may enhance our stub, to ensure it will return a {\f1\fs20 TUser}
 !    U: TUser;
 !  (...)
 !!  U.Name := 'toto';
-!  TInterfaceMock.Create(TypeInfo(IUserRepository),UserRepository,self).
+!  TInterfaceMock.Create(IUserRepository,UserRepository,self).
 !!    Returns('GetUserByName','"toto"',RecordSaveJSON(U,TypeInfo(TUser))).
 !    ExpectsCount('Save',qoEqualTo,1);
 The only trick in the above code is that we use {\f1\fs20 RecordSaveJSON()} function to compute the internal JSON representation of the record, as expected by {\i mORMot}'s data marshaling.
@@ -8117,7 +8513,7 @@ Let's emulate the following behavior:
 !end;
 :   Delegate with named variant parameters
 You can stub a method using a the {\f1\fs20 Named[] variant} arrays as such:
-!  TInterfaceStub.Create(TypeInfo(ICalculator),ICalc).
+!  TInterfaceStub.Create(ICalculator,ICalc).
 !!    Executes('Subtract',IntSubtractVariant);
 !  (...)
 !  Check(ICalc.Substract(10.5,1.5)=9);
@@ -8156,7 +8552,7 @@ In case of additional {\f1\fs20 var} or {\f1\fs20 out} parameters, those should 
 If the method is defined as a {\f1\fs20 procedure} and not as a {\f1\fs20 function}, of course there is no last {\f1\fs20 Output[]} item, but only {\f1\fs20 var} or {\f1\fs20 out} parameters.
 :   Delegate with JSON parameters
 You can stub a method using a JSON array as such:
-!  TInterfaceStub.Create(TypeInfo(ICalculator),ICalc).
+!  TInterfaceStub.Create(ICalculator,ICalc).
 !!    Executes('Subtract',IntSubtractJSON);
 !  (...)
 !  Check(ICalc.Substract(10.5,1.5)=9);
@@ -8181,7 +8577,7 @@ This method could have been written as such, if you prefer to return directly th
 This may sound somewhat convenient here in case of double values, but it would be error prone if types are more complex. In all cases, using {\f1\fs20 Ctxt.Returns([])} is the preferred method.
 :   Accessing the test case when mocking
 In case of mocking, you may add additional verifications within the implementation callback, as such:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),ICalc,self).
+!  TInterfaceMock.Create(ICalculator,ICalc,self).
 !    Executes('Subtract',IntSubtractVariant,'toto');
 ! (...)
 !procedure TTestServiceOrientedArchitecture.IntSubtractVariant(
@@ -8192,14 +8588,14 @@ In case of mocking, you may add additional verifications within the implementati
 !end;
 Here, an additional callback-private parameter containing {\f1\fs20 'toto'} has been specified at {\f1\fs20 TInterfaceMock} definition. Then its content is checked on the associated test case via {\f1\fs20 Ctxt.Sender} instance. If the caller is not a {\f1\fs20 TInterfaceMock}, it will raise an exception when accessing the {\f1\fs20 Ctxt.TestCase} property.
 :  Calls tracing
-As stated above, {\i mORMot} is able to log all interface calls into internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
-!  Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
+As stated above, {\i mORMot} is able to log all interface calls into its internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
+!  Stub := TInterfaceStub.Create(ICalculator,I).
 !!    SetOptions([imoLogMethodCallsAndResults]);
 !  Check(I.Add(10,20)=0,'Default result');
 !!  Check(Stub.LogAsText='Add(10,20)=[0]');
-Here above, we retrieved the whole call stack, including returned results, as an easy to read text content. We found out that JSON is a very convenient way of defining method trace, both efficient for the computer and the human being hardly testing the code.
+Here above, we retrieved the whole call stack, including input parameters and returned results, as an easy-to-read JSON content. We found out that JSON is a very convenient way of tracing the method calls, both efficient for the computer and the human being hardly testing the code.
 A more complex trace verification could be defined for instance, in the context of an interface {\i mock}:
-!  TInterfaceMock.Create(TypeInfo(ICalculator),I,self).
+!  TInterfaceMock.Create(ICalculator,I,self).
 !    Returns('Add','30').
 !    Returns('Multiply',[60]).
 !    Returns('Multiply',[2,35],[70]).
@@ -8220,8 +8616,8 @@ A more complex trace verification could be defined for instance, in the context 
 !  Check(I.Multiply(2,35)=70);
 !  Check(I.Subtract(2.3,1.2)=0,'Default result');
 !  Check(I.ToTextFunc(2.3)='default');
-The {\f1\fs20 ExpectsTrace()} methods are able to add some checks non only about the number of calls of a method, but the order of the command executed, and all retrieved result values. They can check one the trace of one specific method (optionally with a filter against the incoming parameters), or globally for the whole mocked interface.
-Note that internally, those methods will internally call the {\f1\fs20 Hash32()} function to compute the hash value of the expected trace, which is a good way of minimizing data in memory or re-use a value retrieved at execution time for further regression testing. Some {\i overloaded} signatures are indeed available to directly specify the expected {\f1\fs20 Hash32()} value.
+The overloaded {\f1\fs20 ExpectsTrace()} methods are able to add some checks not only about the number of calls of a given method, but the exact order of the executed commands, with associated parameters and all retrieved result values. They can validate the trace of one specific method (optionally with a filter against the incoming parameters), or globally for the whole mocked interface.
+Note that internally, those methods will compute a {\f1\fs20 Hash32()} hash value of the expected trace, which is a good way of minimizing data in memory or re-use a value retrieved at execution time for further regression testing. Some {\i overloaded} signatures are indeed available to directly specify the expected {\f1\fs20 Hash32()} value, in case of huge regression scenarios: run the test once, debugging all expected behavior by hand, then store the hash value to ensure that no expected step would be broken in the future.
 You have even a full access to the internal execution trace, via the two {\f1\fs20 TInterfaceStub.Log} and {\f1\fs20 LogCount} properties. This will allow any validation of mocked {\f1\fs20 interface} calls logic, beyond {\f1\fs20 ExpectsTrace()} possibilities.
 You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs} regression tests, for a whole coverage of all the internal features.
 :63Client-Server services via interfaces
@@ -8244,7 +8640,7 @@ Here are the key features of the current implementation of services using interf
 |Server factory|You can get an implementation on the server side
 |Client factory|You can get a "fake" implementation on the client side, remotely calling the server to execute the process
 |Cross-platform clients|A {\i mORMot} server is able to generate cross-platform client code via a set of templates - see @86@
-|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE6
+|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE7
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
 |Stateless|Following a standard request/reply pattern
@@ -8300,7 +8696,7 @@ Handled types of parameters are:
 |{\f1\fs20 integer cardinal Int64 double currency TDateTime}|Transmitted as JSON numbers
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
-|{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (UTF-8 encoded)
+|{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
 |{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
 |{\f1\fs20 @*TPersistent@}|Published properties will be transmitted as JSON object
@@ -8460,14 +8856,16 @@ Here the class inherits from {\f1\fs20 TInterfacedObject}, but you could use any
 :  Set up the Server factory
 In order to have a working service, you'll need to initialize a server-side @*factory@, as such:
 ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+You may prefer @141@, if the type has previously been registered:
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 The {\f1\fs20 Server} instance can be any {\f1\fs20 TSQLRestServer} inherited class, implementing any of the supported protocol of {\i mORMot}'s @35@, embedding a full {\i @*SQLite3@} engine (i.e. a {\f1\fs20 @*TSQLRestServerDB@} class) or a lighter in-memory engine (i.e. a {\f1\fs20 @*TSQLRestServerFullMemory@} class - which is enough for @*hosting@ services with authentication).
 The code line above will register the {\f1\fs20 TServiceCalculator} class to implement the {\f1\fs20 ICalculator} service, with a single shared instance life time (specified via the {\f1\fs20 sicShared} parameter). An optional time out value can be specified, in order to automatically release a deprecated instance after some inactivity.
 Whenever a service is executed, an implementation class is to be available. The life time of this implementation class is defined on both client and server side, by specifying a {\f1\fs20 TServiceInstanceImplementation} value. This setting must be the same on both client and server sides (it will be checked by the framework).
-:  Instances life time implementation
+:92  Instances life time implementation
 The available instance management options are the following:
 |%24%76
 |\b Lifetime|Description\b0
-|{\f1\fs20 sicSingle}|One class instance is created per call:\line - This is the most expensive way of implementing the service, but is safe for simple workflows (like a one-type call);\line - This is the default setting for {\f1\fs20 TSQLRestServer.ServiceRegister} method.
+|{\f1\fs20 sicSingle}|One class instance is created per call:\line - This is the most expensive way of implementing the service, but is safe for simple workflows (like a one-type call);\line - This is the default setting for {\f1\fs20 TSQLRestServer.ServiceRegister}/{\f1\fs20 ServiceDefine} methods.
 |{\f1\fs20 sicShared}|One object instance is used for all incoming calls and is not recycled subsequent to the calls
 |{\f1\fs20 sicClientDriven}|One object instance will be created in synchronization with the client-side lifetime of the corresponding interface: when the interface will be released on client (either when it comes out of scope or set to {\f1\fs20 nil}), it will be released on the server side - a numerical identifier will be transmitted with all JSON requests
 |{\f1\fs20 sicPerSession}|One object instance will be maintained during the whole running @*session@
@@ -8557,9 +8955,9 @@ This interface is implemented on the server side by the following class:
 !  fReal := Value;
 !end;
 This interface is registered on the server side as such:
-! Server.ServiceRegister(TServiceComplexNumber,[TypeInfo(IComplexNumber)],sicClientDriven);
-Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven garbage collector will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
-:  Accessing low-level execution context
+! Server.ServiceDefine(TServiceComplexNumber,[IComplexNumber],sicClientDriven);
+Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven @*garbage collector@ will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
+:107  Accessing low-level execution context
 When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
 You will have access to the following information, which could be useful for {\f1\fs20 sicPerSession, sicPerUser} and {\f1\fs20 sicPerGroup} instance life time modes:
 !  TServiceRunningContext = record
@@ -8596,7 +8994,7 @@ That is, you may code:
 or, for a more complex service:
 !var CN: IComplexNumber;
 !begin
-!  if not Server.Services.Info(TypeInfo(IComplexNumber)).Get(CN) then
+!  if not Server.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -8621,10 +9019,12 @@ In fact, a hidden "fake" {\f1\fs20 TInterfaceObject} class will be created by th
 :  Set up the Client factory
 On the client side, you have to register the corresponding interface to initialize its associated @*factory@, as such:
 ! Client.ServiceRegister([TypeInfo(ICalculator)],sicShared);
+You may prefer @141@, if the type has previously been registered:
+! Client.ServiceDefine([ICalculator],sicShared);
 It is very close to the Server-side registration, despite the fact that we do not provide any implementation class here. Implementation will remain on the server side.
 Note that the implementation mode (here {\f1\fs20 sicShared}) shall match the one used on the server side. An error will occur if this setting is not coherent.
 The other interface we talked about, i.e. {\f1\fs20 IComplexNumber}, is registered as such for the client:
-! Client.ServiceRegister([TypeInfo(IComplexNumber)],sicClientDriven);
+! Client.ServiceDefine([IComplexNumber],sicClientDriven);
 This will create the corresponding {\f1\fs20 TServiceFactoryClient} instance, ready to serve fake implementation classes to the client process.
 To be more precise, this registration step is indeed not mandatory on the client side. If you use the {\f1\fs20 TServiceContainerClient.Info()} method, the client-side implementation will auto-register the supplied interface, in {\f1\fs20 sicClientDriven} implementation mode.
 :  Using services on the Client side
@@ -8646,7 +9046,7 @@ For {\i Delphi} 2010 and up, you can use a generic-based method, which enables c
 For a more complex service, initialized as {\f1\fs20 sicClientDriven}:
 !var CN: IComplexNumber;
 !begin
-!  if not Client.Services.Info(TypeInfo(IComplexNumber)).Get(CN) then
+!  if not Client.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -8656,7 +9056,7 @@ For a more complex service, initialized as {\f1\fs20 sicClientDriven}:
 !end; // here CN will be released on both client AND SERVER sides
 The code is just the same as on the server. The only functional change is that the execution will take place on the server side (using the registered {\f1\fs20 TServiceComplexNumber} implementation class), and the corresponding class instance will remain active until the {\f1\fs20 CN} local interface will be released on the client.
 You can of course cache your {\f1\fs20 TServiceFactory} instance within a local field, if you wish. On the client side, even if the service has been defined as {\f1\fs20 sicPerThread}, you can safely cache and reuse the same instance, since the {\i per-thread} process will take place on the server side only.
-As we stated in the previous paragraph, since the {\f1\fs20 IComplexNumber} is to be executed as {\f1\fs20 sicClientDriven}, it is not mandatory to call the {\f1\fs20 Client.ServiceRegister} method for this interface. In fact, during {\f1\fs20 Client.Services.Info(TypeInfo(IComplexNumber))} method execution, the registration will take place, if it has not been done explicitly before. For code readability, it may be a good idea to explicitly register the interface on the client side also, just to emphasize that this interface is about to be used, and in which mode.
+As we stated in the previous paragraph, since the {\f1\fs20 IComplexNumber} is to be executed as {\f1\fs20 sicClientDriven}, it is not mandatory to call the {\f1\fs20 Client.ServiceRegister} or {\f1\fs20 ServiceDefine} method for this interface. In fact, during {\f1\fs20 Client.Services.Info(TypeInfo(IComplexNumber))} method execution, the registration will take place, if it has not been done explicitly before. For code readability, it may be a good idea to explicitly register the interface on the client side also, just to emphasize that this interface is about to be used, and in which mode.
 \page
 :89 Sample code
 You can find in the "{\f1\fs20 SQLite3/Samples/14 - Interface based services}" folder of the supplied source code distribution, a dedicated sample about this feature.
@@ -8680,8 +9080,13 @@ First, you'll find a common unit, shared by both client and server applications:
 !
 !implementation
 !
+!uses mORMot;
+!
+!initialization
+!  TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator)]);
 !end.
 Unique purpose of this unit is to define the service {\f1\fs20 interface}, and the {\f1\fs20 ROOT_NAME} used for the ORM Model (and therefore RESTful URI scheme), and the {\f1\fs20 APPLICATION_NAME} used for named-pipe communication.
+This {\f1\fs20 ICalculator} type is also registered for the internal {\f1\fs20 interface} factory system, so that you could use the framework methods directly with {\f1\fs20 ICalculator} instead of {\f1\fs20 TypeInfo(ICalculator)}.
 :  The server sample application
 The server is implemented as such:
 !program Project14Server;
@@ -8713,7 +9118,7 @@ The server is implemented as such:
 !    with TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'),true) do
 !    try
 !      CreateMissingTables; // we need AuthGroup and AuthUser tables
-!!      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!!      ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      if ExportServerNamedPipe(APPLICATION_NAME) then
 !        writeln('Background server is running.'#10) else
 !        writeln('Error launching the server'#10);
@@ -8727,13 +9132,13 @@ The server is implemented as such:
 !  end;
 !end.
 It will instantiate a {\f1\fs20 @*TSQLRestServerDB@} class, containing a {\i @*SQLite3@} database engine. In fact, since we need authentication, both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables are expected to be available.
-Then a call to {\f1\fs20 ServiceRegister()} will define the {\f1\fs20 ICalculator} contract, and the {\f1\fs20 TServiceCalculator} class to be used as its implementation. The {\f1\fs20 sicShared} mode is used, since the same implementation class can be shared during all calls (there is no shared nor private data to take care).
+Then a call to {\f1\fs20 ServiceDefine()} will define the {\f1\fs20 ICalculator} contract, and the {\f1\fs20 TServiceCalculator} class to be used as its implementation. The {\f1\fs20 sicShared} mode is used, since the same implementation class can be shared during all calls (there is no shared nor private data to take care).
 Note that since the database expectations of this server are basic (only CRUD commands are needed to handle authentication tables), we may use a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}. This is what is the purpose of the {\f1\fs20 Project14ServerInMemory.dpr} sample:
 !program Project14ServerInMemory;
 !  (...)
 !!    with TSQLRestServerFullMemory.Create(aModel,'test.json',false,true) do
 !    try
-!!      ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!!      ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      if ExportServerNamedPipe(APPLICATION_NAME) then
 !  (...)
 Using this class will include the {\f1\fs20 CreateMissingTables} call to create both {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables needed for authentication. But the resulting executable will be lighter: only 200 KB when compiled with {\i Delphi} 7 and our LVCL classes, for a full service provider.
@@ -8759,7 +9164,7 @@ The client is just a simple form with two {\f1\fs20 TEdit} fields ({\f1\fs20 edt
 !!      Model := TSQLModel.Create([],ROOT_NAME);
 !!    Client := TSQLRestClientURINamedPipe.Create(Model,APPLICATION_NAME);
 !!    Client.SetUser('User','synopse');
-!!    Client.ServiceRegister([TypeInfo(ICalculator)],sicShared);
+!!    Client.ServiceDefine([ICalculator],sicShared);
 !  end;
 !!  if Client.Services['Calculator'].Get(I) then
 !!    lblResult.Caption := IntToStr(I.Add(a,b));
@@ -8771,7 +9176,7 @@ The client code is initialized as such:
 Once the client is up and ready, the local {\f1\fs20 I: ICalculator} variable instance is retrieved, and the remote service is called directly via a simple {\f1\fs20 I.Add(a,b)} statement.
 You can imagine how easy and safe it will be to implement a @17@ for your future applications, using {\i mORMot}.
 :74  Enhanced sample: remote SQL access
-You will find in the {\f1\fs20 SQLite3\\Samples\\16 - Execute SQL via services} folder of {\i mORMot} source code a @*Client-Server@ sample able to access any external database via @*JSON@ and HTTP. It is a good demonstration of how to use a non-trivial @*interface@-based service between a client and a server. It will also show how our {\f1\fs20 SynDB} classes have a quite abstract design, and are easy to work with, whatever database provider you need to use.
+You will find in the {\f1\fs20 SQLite3\\Samples\\16 - Execute SQL via services} folder of {\i mORMot} source code a @*Client-Server@ sample able to access any external database via @*JSON@ and HTTP. It is a good demonstration of how to use a non-trivial @*interface@-based service between a client and a server. It will also show how our {\f1\fs20 SynDB.pas} classes have a quite abstract design, and are easy to work with, whatever database provider you need to use.
 The corresponding service contract has been defined:
 !  TRemoteSQLEngine = (rseOleDB, rseODBC, rseOracle, rseSQlite3, rseJet, rseMSSQL);
 !
@@ -8789,7 +9194,7 @@ Purpose of this service is:
 Of course, this service will be defined in {\f1\fs20 sicClientDriven} mode. That is, the framework will be able to manage a client-driven {\f1\fs20 TSQLDBProperties} instance life time.
 Benefit of this service is that no database connection is required on the client side: a regular HTTP connection is enough. No need to neither install nor configure any database provider.
 Due to {\i mORMot} optimized JSON serialization, it will probably be faster to work with such plain HTTP / JSON services, instead of a database connection through a VPN. In fact, database connections are made to work on a local network, and do not like high-latency connections, which are typical on the Internet. On the contrary, the {\i mORMot} Client-Server process is optimized for such kind of connection.
-Note that the {\f1\fs20 Execute()} method returns a {\f1\fs20 RawJSON} kind of variable, which is in fact a sub-type of {\f1\fs20 RawUTF8}. Its purpose is to transmit the UTF-8 encoded content directly, with no translation to a JSON string, as would be the case with a {\f1\fs20 RawUTF8} variable. In fact, escaping some JSON array within a JSON string is quite verbose. Using {\f1\fs20 RawJSON} in this case ensure the best client-side and server-side speed, and also reduce the transmission bandwidth.
+Note that the {\f1\fs20 Execute()} method returns a {\f1\fs20 RawJSON} kind of variable, which is in fact a sub-type of {\f1\fs20 RawUTF8}. Its purpose is to transmit the @*UTF-8@ encoded content directly, with no translation to a JSON string, as would be the case with a {\f1\fs20 RawUTF8} variable. In fact, escaping some JSON array within a JSON string is quite verbose. Using {\f1\fs20 RawJSON} in this case ensure the best client-side and server-side speed, and also reduce the transmission bandwidth.
 The server part is quite easy to follow:
 !type
 !  TServiceRemoteSQL = class(TInterfacedObject, IRemoteSQL)
@@ -8842,7 +9247,7 @@ The server part is quite easy to follow:
 !  FreeAndNil(fProps);
 !  inherited;
 !end;
-Any exception during {\f1\fs20 SynDB} process, or raised manually in case of wrong use case will be transmitted to the client, just as expected. The {\f1\fs20 fProps} instance life-time is handled by the client, so all we need is to release its pointer in the service implementation {\f1\fs20 destructor}.
+Any exception during {\f1\fs20 SynDB.pas} process, or raised manually in case of wrong use case will be transmitted to the client, just as expected. The {\f1\fs20 fProps} instance life-time is handled by the client, so all we need is to release its pointer in the service implementation {\f1\fs20 destructor}.
 The services are initialized on the server side with the following code:
 !var
 !  aModel: TSQLModel;
@@ -8885,7 +9290,7 @@ The services are initialized on the server side with the following code:
 !  end;
 !end.
 This is a typical {\i mORMot} server initialization, published over the HTTP communication protocol (with auto-registration feature, if possible, as stated by the {\f1\fs20 useHttpApiRegisteringURI} flag). Since we won't use ORM for any purpose but authentication, a fast {\f1\fs20 TObjectList}-based engine (i.e. {\f1\fs20 TSQLRestServerFullMemory}) is enough for this sample purpose.
-In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshaling and communication will be multi-threaded in the framework units).
+In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB.pas} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshaling and communication will be multi-threaded in the framework units).
 From the client point of view, it will be consumed as such:
 !procedure TMainForm.FormShow(Sender: TObject);
 !  (...)
@@ -8989,8 +9394,8 @@ In this code, the {\f1\fs20 GroupID} value was retrieved as such:
 !  GroupID := fClient.MainFieldID(TSQLAuthGroup,'User');
 And the current authenticated user on the client side has been defined to be a member of the {\f1\fs20 'User'} group:
 !  fClient.SetUser('User','synopse'); // default user for Security tests
-Since {\f1\fs20 TSQLRestServer.ServiceRegister} method returns the first created {\f1\fs20 TServiceFactoryServer} instance, and since all {\f1\fs20 Allow* / AllowAll* / Deny* / DenyAll*} methods return also a {\f1\fs20 TServiceFactoryServer} instance, you can use some kind of "fluent interface" in your code to set the security policy, as such:
-!  Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+Since {\f1\fs20 TSQLRestServer.ServiceRegister} and {\f1\fs20 TSQLRestServer.ServiceDefine} methods return the first created {\f1\fs20 TServiceFactoryServer} instance, and since all {\f1\fs20 Allow* / AllowAll* / Deny* / DenyAll*} methods return also a {\f1\fs20 TServiceFactoryServer} instance, you can use some kind of "fluent interface" in your code to set the security policy, as such:
+!  Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !    DenyAll.AllowAllByName(['Supervisor']);
 This will allow access to the {\f1\fs20 ICalculator} methods only for the {\i Supervisor} group of users.
 :  Implementation class types
@@ -9016,14 +9421,15 @@ The following execution options are available:
 Of course, {\f1\fs20 SetOption()} accepts an optional list of method names, if you want to tune the execution at the method level.
 Setting {\f1\fs20 optExecLockedPerInterface} option will {\i lock} the specified method(s) execution at the interface level. That is, it won't be possible to have two methods of the same interface be executed concurrently. This option uses a {\f1\fs20 TRTLCriticalSection} mutex, so is at the same time safe and using very little resources. But it won't guaranty that the method execution will always take place in the same thread: so if you need some per-thread initialization/finalization (e.g. for COM objects), you should better use the other options.
 Setting {\f1\fs20 optExecInMainThread} option will force the specified method(s) to be called within a {\f1\fs20 RunningThread.Synchronize()} call - it can be used e.g. if your implementation rely heavily on COM objects, or if you want to ensure that your code will work correctly, without the need to worry about thread safety, which can be quite difficult to deal with. The {\f1\fs20 optFreeInMainThread} option will also ensure that the service class instance will be released in the main thread (i.e. its {\f1\fs20 Free} method called via {\f1\fs20 Synchronize}). Since the main thread will be used by all interfaces, it could result into an execution bottleneck.
-Setting {\f1\fs20 optExecInPerInterfaceThread} option will force the specified method(s) to be called within a thread (to be more precise, a {\f1\fs20 TSynBackgroundThreadSQLRestServerProcedure} class, which will notify the {\f1\fs20 TSQLSQLRestServer} for the thread context) dedicated to the interface. An associated {\f1\fs20 optFreeInPerInterfaceThread} option will also ensure that the service class instance will be released in the same thread: it is pretty convenient to use this threading model, for instance if you want to maintain a dedicated {\f1\fs20 SynDB}-based database connection, or initialize some COM objects.
+Setting {\f1\fs20 optExecInPerInterfaceThread} option will force the specified method(s) to be called within a thread (to be more precise, a {\f1\fs20 TSynBackgroundThreadSQLRestServerProcedure} class, which will notify the {\f1\fs20 TSQLSQLRestServer} for the thread context) dedicated to the interface. An associated {\f1\fs20 optFreeInPerInterfaceThread} option will also ensure that the service class instance will be released in the same thread: it is pretty convenient to use this threading model, for instance if you want to maintain a dedicated {\f1\fs20 SynDB.pas}-based database connection, or initialize some COM objects.
 For instance, if you want all the methods of your {\f1\fs20 TServiceCalculator} class to be executed in the main thread, you can define:
-! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !  SetOptions([],[optExecInMainThread]);
 Or if only the {\f1\fs20 TServiceCalculator.Add} method has to be protected, you can write:
-! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared).
+! Server.ServiceDefine(TServiceCalculator,[ICalculator],sicShared).
 !  SetOptions(['Add'],[optExecInMainThread]);
 In fact, the {\f1\fs20 SetOptions()} method follows a call signature similar to the one used for defining the service security.
+For best performance, you may define your service methods be called without any locking, but rely on some convenient classes defined in {\f1\fs20 SynCommons.pas} - as the {\f1\fs20 @*TAutoLocker@} class or the {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process.\line A similar thread safety concern also applies to @*MVVM@ methods - see @111@.
 :  Transmission content
 All data is transmitted as @*JSON@ arrays or objects, according to the requested URI.
 We'll discuss how data is expected to be transmitted, at the application level.
@@ -9040,9 +9446,11 @@ The corresponding description may be:
 |Default|Yes|No
 |URI scheme|{\f1\fs20 /Model/Interface.Method[/ClientDrivenID]}\line or {\f1\fs20 /Model/Interface/Method[/ClientDrivenID]}\line + optional URI-encoded params|{\f1\fs20 /Model/Interface}
 |Body content|JSON array of parameters\line or void if parameters were encoded at URI|{\f1\fs20 \{"method":"{\i MethodName}",\line  "params":[...]\line [,"id":{\i ClientDrivenID}]\}}
+|Body content\line (alternative)|JSON object of parameters\line or void if parameters were encoded at URI|{\f1\fs20 \{"method":"{\i MethodName}",\line  "params":{...}\line [,"id":{\i ClientDrivenID}]\}}
 |Security|RESTful @*authentication@ for each method\line or for the whole service (interface)|RESTful authentication for the whole service (interface)
 |Speed|10% faster|10% slower
 |%
+Most of the time, the input parameters will be transmitted as a JSON array of values, following the exact order of {\f1\fs20 const} / {\f1\fs20 var} method parameters.\line As an alternative, a JSON object storing the input parameters by name will be accepted. This would be slightly slower than a JSON array of parameters, but could be handy, depending on the client side.\line Last but not least, {\f1\fs20 TSQLRestRoutingREST} is able to decode parameters encoded at URI level, as most regular historic HTTP requests.
 The routing to be used is defined globally in the {\f1\fs20 TSQLRest.ServiceRouting} property, and should match on both client and server side, of course. By design, you should {\i never} assign the abstract {\f1\fs20 TSQLRestServerURIContext} to this property.
 The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following methods, which will be overridden by inherited implementations to reflect the expected behavior on all aspects of the RESTful routing and transmission:
 !  TSQLRestServerURIContext = class
@@ -9067,6 +9475,7 @@ The {\f1\fs20 TSQLRestServerURIContext} abstract class defines the following met
 ! ...
 Most of the time, the supplied {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes will meet your requirements.
 :    REST mode
+:     Parameters transmitted as JSON array
 In the default {\f1\fs20 TSQLRestRoutingREST} mode, both service and operation (i.e. interface and method) are identified within the URI. And the message body is a standard JSON array of the supplied parameters (i.e. all {\f1\fs20 const} and {\f1\fs20 var} parameters).
 Here is typical request for {\f1\fs20 ICalculator.Add}:
 $ POST /root/Calculator.Add
@@ -9078,6 +9487,30 @@ $ POST /root/ComplexNumber.Add/1234
 $ (...)
 $ [20,30]
 Here, {\f1\fs20 1234} is the identifier of the server-side instance ID, which is used to track the instance life-time, in {\f1\fs20 sicClientDriven} mode.  One benefit of transmitting the Client Session ID within the URI is that it will be more secure in our RESTful authentication scheme - see @18@: each method (and even any client driven session ID) will be signed properly.
+:     Parameters transmitted as JSON object
+The {\i mORMot} server will also accept the incoming parameters to be encoded as a JSON object of named values, instead of a JSON array:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n1":1,"n2":2}
+Of course, order of the values is not mandatory in a JSON object, since parameters will be lookup by name. As a result, the following request will be the same as the previous one:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n2":2,"n1":1}
+For a {\f1\fs20 sicClientDriven} mode service, the needed instance ID is appended to the URI:
+$ POST /root/ComplexNumber.Add/1234
+$ (...)
+$ {"aReal":20,"aImaginary":30}
+In some cases, naming the parameters could be useful, on the client side. But this should not be the default, since it will be slightly slower (for parsing and checking the names), and use more bandwidth at transmission.
+Any missing parameter in the incoming JSON object will be replaced by its default value. For instance, the following will run {\f1\fs20 IComplexNumber.Add(0,2)}:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n2":2}
+Any unknown parameter in the incoming JSON object will just be ignored. It could be handy, if you want to transmit some generic execution context (e.g. a global "data scope" in a MVC model), and let the service use only the values it needs.
+$ POST /root/ComplexNumber.Add/1234
+$ (...)
+$ {"Session":"1234","aImaginary":30,"aReal":20,"UserLogged":"Nikita"}
+Of course, the extra values would consume some bandwidth for nothing, but the process cost on the server side will be negligible, since our implementation will just ignore those unexpected properties, without allocating any memory for them.
+:     Parameters encoded at URI level
 In this {\f1\fs20 TSQLRestRoutingREST} mode, the server is also able to retrieve the parameters from the URI, if the message body is left void. This is not used from a {\i Delphi} client (since it will be more complex and therefore slower), but it can be used for a client, if needed:
 $ POST root/Calculator.Add?+%5B+1%2C2+%5D
 $ GET root/Calculator.Add?+%5B+1%2C2+%5D
@@ -9085,7 +9518,7 @@ In the above line, {\f1\fs20 +%5B+1%2C2+%5D} will be decoded as {\f1\fs20 [1,2]}
 As an alternative, you can encode and name the parameters at URI level, in a regular HTML fashion:
 $ GET root/Calculator.Add?n1=1&n2=2
 Since parameters are named, they can be in any order. And if any parameter is missing, it will be replaced by its default value (e.g. {\f1\fs20 0} for a number or {\f1\fs20 ''} for a {\f1\fs20 string}).
-This may be pretty convenient for simple services, consummed from any kind of client.
+This may be pretty convenient for simple services, consumed from any kind of client.
 Note that there is a known size limitation when passing some data with the URI over HTTP. Official RFC 2616 standard advices to limit the URI size to 255 characters, whereas in practice, it sounds safe to transmit up to 2048 characters within the URI. If you want to get rid of this limitation, just use the default transmission of a JSON array as request body.
 As an alternative, the URI can be written as {\f1\fs20 /RootName/InterfaceName/MethodName}. It may be more RESTful-compliant, depending on your client policies. The following URIs will therefore be equivalent to the previous requests:
 $ POST /root/Calculator/Add
@@ -9095,6 +9528,7 @@ $ GET root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?n1=1&n2=2
 From a {\i Delphi} client, the {\f1\fs20 /RootName/InterfaceName.MethodName} scheme will always be used.
 :    JSON-RPC
+:     Parameters transmitted as JSON array
 If {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is used, the URI will define the interface, and then the method name will be inlined with parameters, e.g.
 $ POST /root/Calculator
 $ (...)
@@ -9104,8 +9538,19 @@ For a {\f1\fs20 sicClientDriven} mode service:
 $ POST /root/ComplexNumber
 $ (...)
 $ {"method":"Add","params":[20,30],"id":1234}
-This mode will be a little bit slower, but will probably be more AJAX ready.
-It's up to you to select the right routing scheme to be used.
+:     Parameters transmitted as JSON object
+As an alternative, you may let the values be transmitted as a JSON object containing the named parameters values, instead of a JSON array:
+$ POST /root/Calculator
+$ (...)
+$ {"method":"Add","params":{"n1":1,"n2":2},"id":0}
+Here, the same rules applies than in {\f1\fs20 TSQLRestRoutingREST} mode:
+- Any missing parameter will be replaced by its default value;
+- Properties order is not sensitive anymore;
+- Unexpected parameters will just be ignored.
+Note that by definition, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is not able to handle URI-encoded parameters. In fact, the JSON-RPC mode expects the URI to be used only for identifying the service, and have the whole execution context transmitted as body.
+:    REST mode or JSON-RPC mode?
+For a standard {\i mORMot} Delphi client, or any supported {\i Cross-Platform} client - see @86@ - {\f1\fs20 TSQLRestRoutingREST} is preferred. The supplied libraries, even for {\i @*Smart Mobile Studio@}, fully implement this routing scheme. It is the faster, safer and most modular mode available.\line In practice, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode has been found to be a little bit slower. Since the method name will be part of the URI, the signature will have a bigger extent than in JSON-RPC mode, so it will be more secure. Its ability to retrieve URI-encoded parameters could be also useful, e.g. to server some dynamic HTML pages in addition to the SOA endpoints, with proper HTTP caching abilities.
+Of course, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode may be used as an alternative, depending on the client expectations, and technology limitations, e.g. if your client expect a JSON-RPC compatible communication.\line It's up to you to select the right routing scheme to be used, depending on your needs.
 :   Response format
 :    Standard answer as JSON object
 :     JSON answers
@@ -9189,7 +9634,7 @@ For instance, if you define such a method:
 !!    result := res.FetchAllAsJSON(aExpanded);
 !end;
 The {\f1\fs20 FetchAllAsJSON()} method will return a JSON array content, but will be escaped as a JSON string when transmitted via a {\f1\fs20 RawUTF8} variable.
-A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the UTF-8 text is a valid JSON content, and should not be escaped.
+A dedicated {\f1\fs20 @**RawJSON@} type has been defined, and will specify to the {\f1\fs20 mORMot} core that the @*UTF-8@ text is a valid JSON content, and should not be escaped.
 That is, defining the method as followed will increase process speed and reduce used bandwidth:
 !function TServiceRemoteSQL.Execute(const aSQL: RawUTF8; aExpectResults, aExpanded: Boolean): RawJSON;
 See sample "{\i 16 - Execute SQL via services}" for some working code using this feature.
@@ -9330,10 +9775,10 @@ Regression tests will make the following process:
 !    Check(Content=FormatUTF8('%,%',[C3.Real,C3.Imaginary]));
 !  end;
 Note that since there is only one BLOB content returned, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed to be defined for this method. If this is the case, an exception will be raised during the {\f1\fs20 interface} registration step. But you can define any {\f1\fs20 const} parameter needed, to specify your request.
-You may also be able to use this feature to implement custom UTF-8 HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
+You may also be able to use this feature to implement custom @*UTF-8@ HTML creation, setting the {\f1\fs20 Header} value to {\f1\fs20 HTML_CONTENT_TYPE_HEADER} constant, and using our fast @81@ for the rendering.\line Remember that in {\f1\fs20 TSQLRestRoutingJSON} mode, you can encode any simple parameter value at URI level, to transmit your browsing context.
 \page
 :65 Comparison with WCF
-Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications - see @http://msdn.microsoft.com/en-us/library/dd456779
+Microsoft {\i Windows Communication Foundation} is the unified programming model provided by Microsoft for building service-oriented applications.\line See @http://msdn.microsoft.com/en-us/library/dd456779
 Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and implementation of the @*REST@ful pattern.
 |%30%35%35
 |\b Feature|WCF|mORMot\b0
@@ -9352,7 +9797,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Sequence|attributes on methods|{\f1\fs20 interface} life time
 |Transactional|fully transactional|on implementation side
 |Instance life time|per call, per session, single|per call, per session, per user, per group, per thread, single, client-driven
-|Configuration|{\f1\fs20 .config} file or code|code or any custom file
+|Configuration|{\f1\fs20 .config} file or code|{\i @*convention over configuration@}\line optionally tuned by code
 |Client acccess|Layer source should be generated|No layer, but direct registration
 |End points|One end-point per contract|Unique or shared end-point
 |Operation|synchronous/asynchronous|synchronous (REST)
@@ -9368,7 +9813,7 @@ Here is a short reference table of @**WCF@ / {\i mORMot} @*SOA@ features and imp
 |Weight|middle (GC, JIT, .dll)|low
 |Speed|good|high
 |Extensibility|verbose but complete|customizable
-|Standard|de facto|KISS design (e.g. JSON, HTTP)
+|Standard|de facto|@*KISS@ design (e.g. JSON, HTTP)
 |Source code|closed|published
 |License|proprietary|Open
 |Price|depends|Free
@@ -9382,17 +9827,17 @@ If you need to communicate with an external service provider, you can easily cre
 - Import the WSDL (Web Service Definition Language) definition of a web service and turn it into a {\i Delphi} import unit;
 - Publish the interface as a {\i mORMot} server-side implementation class.
 Since SOAP features a lot of requirements, and expects some plumping according to its format (especially when services are provided from C# or Java), we choose to not re-invent the wheel this time, and rely on existing {\i Delphi} libraries (available within the {\i Delphi} IDE) for this purpose. If you need a cross-platform SOAP 1.1 compatible solution, or if you version of {\i Delphi} does not include SOAP process, you may take a look at @http://wiki.freepascal.org/Web_Service_Toolkit which is a web services package for FPC, Lazarus and {\i Delphi}.
-But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
+But for service communication within the {\i mORMot} application domain, the RESTful / JSON approach gives much better performance and ease of use. You do not have to play with WSDL or unit wrappers, just share some {\f1\fs20 interface} definition between clients and servers. Once you have used the {\f1\fs20 ServiceRegister()} or {\f1\fs20 ServiceDefine()} methods of {\i mORMot}, you will find out how the WCF plumbing is over-sized and over-complicated: imagine that WCF allows only one end-point per interface/contract - in a @47@ world, where {\i interface segregation} should reign, it is not the easier way to go!
 Optionally, {\i mORMot}'s interface based services allow to publish their result as XML, and encode the incoming parameters at URI level. It makes it a good alternative to SOAP, in the XML world.
 At this time, the only missing feature of {\i mORMot}'s SOA is transactional process, which must be handled on server side, within the service implementation (e.g. with explicit commit or rollback).
-{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
+;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon07.png
-Current version of the main framework units target only {\i Win32} and {\i Win64} systems.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the {\i Windows} world, especially mobile devices.
+Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
-- {\i @*FreePascal@} Compiler 2.7.1;
-- {\i @*Smart Mobile Studio@} 2.1, to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
+- {\i @*FreePascal@} Compiler (in 2.6.4, 2.7.1 or 3.1.1 branches);
+- {\i @*Smart Mobile Studio@} (2.1 and up), to create AJAX or mobile applications (via {\i @*PhoneGap@}, if needed).
 The units are the following:
 |%37%63
 |\b Unit Name|Description\b0
@@ -9413,6 +9858,7 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - @63@ with parameters marshaling and instance-life time;
 - Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
+- Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server - see @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
 In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
 In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client source file for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially for targeting Java or C# clients.
@@ -9436,7 +9882,7 @@ $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- Super object properties: 41,136 assertions passed  2.20s  3,739/s  6.3 MB
 $- dwsJSON: 41,136 assertions passed  32.05ms  256,628/s  4.7 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
-The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized UTF-8 functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory. Some tricks used by {\f1\fs20 Synopse ORM} rely on pointers and are not compatible with the {\i NextGen} compiler or the official {\i Delphi} road-map, so the {\f1\fs20 Synopse crossplatform} uses diverse algorithm, but offers still pretty good performance.
+The "{\f1\fs20 Synopse ORM}" lines stand for the {\f1\fs20 TSQLTableJSON} class as implemented in {\f1\fs20 mORMot.pas}. It uses our optimized @*UTF-8@ functions and classes, in-place escaping together with our {\f1\fs20 @*RawUTF8@} custom string type as implemented in {\f1\fs20 SynCommons.pas}, so that it is 3 times faster than our cross-platform units, and 40 times than {\f1\fs20 DBXJSON}, using much less memory. Some tricks used by {\f1\fs20 Synopse ORM} rely on pointers and are not compatible with the {\i NextGen} compiler or the official {\i Delphi} road-map, so the {\f1\fs20 Synopse crossplatform} uses diverse algorithm, but offers still pretty good performance.
 This unit features a {\f1\fs20 TJSONVariantData} custom variant type, similar to @80@, available in the main {\i mORMot} framework.\line It allows writing such nice and readable code, with late-binding:
 !var doc: variant;
 !    json,json2: string;
@@ -9500,7 +9946,7 @@ In order to be compliant with the {\i NextGen} revision, our {\f1\fs20 SynCrossP
 On {\i Delphi}, the {\i @*Indy@} library is used for HTTP requests. It is cross-platform by nature, so should work on any supported system. For SSL support with {\i iOS} and {\i Android} clients, please follow instructions at @http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html you may also download the needed {\f1\fs20 libcrypto.a} and {\f1\fs20 libssl.a} files from @http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
 Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for our own projects on {\i @*Smart Mobile Studio@} for our mobile applications, so the {\i Synopse} team did not test {\i Delphi NextGen} platforms (i.e. {\i iOS} and {\i Android}) as deep as other systems. Your input would be very valuable and welcome, here!
 :   FreePascal clients
-{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 revision.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
+{\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 / 3.1.1 branches.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
 Some restrictions apply, though.
 Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
 !  doc.name2 := 3.1415926;
@@ -9510,7 +9956,8 @@ Under {\i FreePascal}, you have to write:
 !  TJSONVariantData(doc)['name'] := 'John';
 In fact, the way late-binding properties are implemented in the {\i FreePascal} RTL forbid to modify the content of the associated {\f1\fs20 variant}. A private copy of the {\f1\fs20 variant} is made, which is not only slower, but disallows modification of its stored value.\line Any feedback and help from the {\i FreePascal} maintainers may be welcome!
 As a result, direct access to {\f1\fs20 TJSONVariantData} instances, and not a {\f1\fs20 variant} variable, would be faster and less error-prone when using this compiler, until the issue is fixed.
-Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an UTF-8 encoded text, then the following line would reset the result code page to the system code page:
+In the Lazarus IDE, we also observed that the debugger is not able to handle our custom {\f1\fs20 variant} type. If you look at any {\f1\fs20 TJSONVariantData} instance with the debugger, an error message "{\i unsupported variant type}" would appear. As far as we found out, this is a Lazarus bug. Delphi, on its side, is able to display any custom {\f1\fs20 variant} type in its debugger, after conversion to {\f1\fs20 string}, i.e. its JSON representation.
+Another issue with the 2.7.1 / 3.1.1 revisions is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an @*UTF-8@ encoded text, then the following line would reset the result code page to the system code page:
 !function StringToJSON(const Text: string): string;
 !  ...
 !  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
@@ -9518,6 +9965,20 @@ Another issue with the 2.7.1 revision is how the new {\f1\fs20 string} type is i
 It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With {\i Delphi}, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and {\i @*Lazarus@}). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
 We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with {\i Delphi}. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
+:105   Local or remote logging
+You can use the {\f1\fs20 TSQLRest.Log()} overloaded methods to log any content into a file or a remote server.
+All ORM and SOA functions of the {\f1\fs20 TSQLRest} instance will create the expected log, just with the main {\i mORMot} units running on Win32/Win64 - see @104@.\line For instance, here are some log entries created during the {\f1\fs20 RegressionTest.dpr} process:
+$16:47:15 Trace  POST root/People status=201 state=847 in=92 out=0
+$16:47:15 DB  People.ID=200 created from {"FirstName":"First200","LastName":"Last200","YearOfBirth":2000,"YearOfDeath":2025,"Sexe":0}
+$16:47:15 SQL  select RowID,FirstName,LastName,YearOfBirth,YearOfDeath,Sexe from People
+$16:47:15 Trace  GET root?sql=select+RowID%2CFirstName%2CLastName%2CYearOfBirth%2CYearOfDeath%2CSexe+from+People status=200 state=847 in=0 out=21078
+$16:47:15 SQL  select RowID,YearOfBirth,YearOfDeath from People
+$16:47:15 Trace  GET root?sql=select+RowID%2CYearOfBirth%2CYearOfDeath+from+People status=200 state=847 in=0 out=10694
+$16:47:15 SQL  select RowID,FirstName,LastName,YearOfBirth,YearOfDeath,Sexe from People where yearofbirth=:(1900):
+$16:47:15 Trace  GET root?sql=select+RowID%2CFirstName%2CLastName%2CYearOfBirth%2CYearOfDeath%2CSexe+from+People+where+yearofbirth%3D%3A%281900%29%3A status=200 state=847 in=0 out=107
+$16:47:15 Trace  DELETE root/People/16 status=200 state=848 in=0 out=0
+$16:47:15 DB  Delete People.ID=16
+Then, our {\i Log View} tool is able to run as a remote log server, and display the incoming events in real-time - see @103@.\line Having such logs available would be pretty convenient, especially when debugging applications on a mobile device, or a remote computer.
 :90  Smart Mobile Studio support
 {\i @**Smart Mobile Studio@} - see @http://www.smartmobilestudio.com - is a complete RAD environment for writing cutting edge HTML5 mobile applications. It ships with a fully fledged compiler capable of compiling {\i Object Pascal} (in a modern dialect call {\i @*SmartPascal@}) into highly optimized and raw {\i @*JavaScript@}.
 There are several solutions able to compile to {\i JavaScript}.\line In fact, we can find several families of compilers:
@@ -9530,7 +9991,7 @@ Of course, from our point of view, use of modern {\i object pascal} is of great 
 The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
 The resulting HTML5 project is self-sufficient with no external {\i JavaScript} library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debug your application directly within the IDE (since revision 2.1 - even if it is not yet always stable) or within your browser (IE, Chrome or FireBug have great debuggers), with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
-Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, Linux, BSD, MacOS) architectures.
+Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, @*Linux@, BSD, MacOS) architectures.
 {\i @*Smart Mobile Studio@} is therefore a great platform for implementing rich client-side AJAX or {\i Mobile} applications, to work with our client-server {\i mORMot} framework.
 :   Using Smart Mobile Studio with mORMot
 There is no package to be installed within the {\i Smart Mobile Studio} IDE. The client units will be generated directly from the {\i mORMot} server.\line Any edition of {\i Smart} - see @http://smartmobilestudio.com/feature-matrix - is enough: you do not need to pay for the {\i Enterprise} edition to consume {\i mORMot} services. But of course, the {\i Professionnal} edition is recommended, since the {\i Basic} edition does not allow to create forms from the IDE, which is the main point for an AJAX application.
@@ -9541,6 +10002,10 @@ $xcopy SynCrossPlatformCrypto.pas "c:\ProgramData\Optimale Systemer AS\Smart Mob
 $xcopy SynCrossPlatformREST.pas "c:\ProgramData\Optimale Systemer AS\Smart Mobile Studio\Libraries" /Y
 You can find a corresponding BATCH file in the {\f1\fs20 CrossPlatform} folder, and in {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client\\CopySynCrossPlatformUnits.bat}.
 In fact, the {\f1\fs20 SynCrossPlatformJSON.pas} unit is not used under {\i Smart Mobile Studio}: we use the built-in JSON serialization features of {\i JavaScript}, using {\f1\fs20 variant} dynamic type, and the standard {\f1\fs20 JSON.Stringify()} and {\f1\fs20 JSON.Parse()} functions.
+:  Remote logging
+Since there is no true file system API available under a HTML5 sand-boxed application, logging to a local file is not an option. Even when packaged with {\i PhoneGap}, local log files are not convenient to work with.
+Generated logs will have the same methods and format as with {\i Delphi} or {\i FreePascal} - see @105@. {\f1\fs20 TSQLRest.Log(E: Exception)} method will also log the stack trace of the exception!  Our {\f1\fs20 LogView} tool - see @103@ - is able to run as a simple but efficient remote log server and viewer, shared with regular or cross-platform units of the framework.
+A dedicated {\i asynchronous} implementation has been refined for {\i Smart Mobile Studio} clients, so that several events would be gathered and sent at once to the remote server, to maximize bandwidth use and let the application be still responsive.\line It allows even complex mobile applications to be debugged with ease, on any device, even over WiFi or 3G/4G networks. Your support could ask your customer to enable logging for a particular case, then see in real time what is wrong with your application.
 \page
 : Generating client wrappers
 Even if it is feasible to write the client code by hand, your {\i mORMot} server is able to create the source code needed for client access, via a dedicated method-based service, and a set of {\i @*Mustache@}-based templates - see @81@.
@@ -9594,7 +10059,7 @@ We will start from the interface-based service @89@ as defined in the\line "{\f1
 !!      AddToServerWrapperMethod(aServer,
 !!        ['..\..\..\CrossPlatform\templates','..\..\..\..\CrossPlatform\templates']);
 !      // register our ICalculator service on the server side
-!      aServer.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+!      aServer.ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
 !      // launch the HTTP server
 !      aHTTPServer := TSQLHttpServer.Create(PORT_NAME,[aServer],'+',useHttpApiRegisteringURI);
 !      try
@@ -9624,6 +10089,7 @@ You can also retrieve the corresponding {\ul template context}.\line
 Each of the {\f1\fs20 *.mustache} template available in the specified folder is listed here. Links above will allow downloading a client source code unit, or displaying it as text in the browser. The template can also be displayed un-rendered, for reference. As true {\i Mustache} templates, the source code files are generated from a {\i data context}, which can be displayed, as JSON, from the "{\ul template context}" link. It may help you when debugging your own templates. Note that if you modify and save a {\f1\fs20 .mustache} template file, just re-load the "{\ul see as text}" browser page and your modification is taken in account immediately (you do not need to restart the server).
 Generated source code will follow the template name, and here will always be downloaded as {\f1\fs20 mORMotClient.pas}. Of course, you can change the unit name for your end-user application. It could be even mandatory if the same client would access to several {\i mORMot} servers at once, which could be the case in a @17@ project.
 Just ensure that you will never change the {\f1\fs20 mORMotClient.pas} generated content by hand. If necessary, you can create and customize your own {\i Mustache} template, to be used for your exact purpose. By design, such automated code generation will require to re-create the client unit each time the server ORM or SOA structure is modified. In fact, as stated in the {\f1\fs20 mORMotClient.pas} comment, any manual modification of this file may be lost after regeneration. You have been warned!
+For publishing the wrappers for a REST / ORM oriented program, take a look at the '{\f1\fs20 28 - Simple RESTful ORM Server}' sample.
 If you feel that the current templates have some issues or need some enhancements, you are very welcome to send us your change requests on our forums. Once you are used at it, {\i Mustache} templates are fairly easy to work with. Similarly, if you find out that some information is missing in the generated {\i data context}, e.g. for a new platform or language, we would be pleased to enhance the official {\f1\fs20 mORMotWrapper.pas} process.
 :  Delphi / FreePascal client samples
 The "{\f1\fs20 27 - CrossPlatform Clients\RegressionTests.dpr}" sample creates a {\i mORMot} server with its own ORM data model, containing a {\f1\fs20 TSQLRecordPeople} class, and a set of interface-based SOA services, some including complex types like a record.
@@ -9788,7 +10254,7 @@ As we already stated, @*BATCH@ mode is also supported, with the classic {\i mORM
 !    check(res[i-1]=i); // server returned the IDs of the newly created records
 Those {\f1\fs20 BatchAdd} / {\f1\fs20 BatchDelete} / {\f1\fs20 BatchUpdate} methods of {\f1\fs20 TSQLRest} have the benefit to introduce at client level:
 - Much higher performance, especially on multi-insertion or multi-update of data;
-- Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 AutomaticTransactionPerRow} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, and an ACID rollback in case of any failure.
+- Transactional support: {\f1\fs20 TSQLRest.BatchStart()} has an optional {\f1\fs20 @*AutomaticTransactionPerRow@} parameter, set to {\f1\fs20 10000} by default, which will create a server-side transaction during the write process, enable @78@ or @99@ on the server side if available, and an ACID rollback in case of any failure.
 You can note that all above code has exactly the same structure and methods than standard {\i mORMot} clients.
 The generated {\f1\fs20 mORMotClient.pas} unit contains all needed {\f1\fs20 TSQLRecord} types, and its used properties, including enumerations or complex records. The only dependency of this unit are {\f1\fs20 SynCrossPlatform*} units, so would be perfectly cross-platform (whereas our main {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units do target only {\i Win32} and {\i Win64}).
 As a result, you are able to {\i share} server and client code between a Windows project and any supported platform, even AJAX (see "{\i Smart Mobile Studio client samples}" below). A shared unique code base would eventually reduce both implementation and debugging time, which is essential to unleash your business code potential and maximize your ROI.
@@ -9819,7 +10285,7 @@ Here is an extract of the {\f1\fs20 mORMotClient.pas} unit as generated for the 
 !    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
 !    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
 !  end;
-As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as UTF-8 for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
+As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as @*UTF-8@ for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
 The supplied regression tests show how to use remotely those services:
 !!var calc: ICalculator;
 !    i,j: integer;
@@ -9843,10 +10309,10 @@ As with regular {\i mORMot} client code, a {\f1\fs20 TServiceCalculator} instanc
 The service-side contract of the {\f1\fs20 ICalculator} signature is retrieved and checked within {\f1\fs20 TServiceCalculator.Create}, and would raise an {\f1\fs20 ERestException} if it does not match the contract identified in {\f1\fs20 mORMotClient.pas}.
 The cross-platform clients are able to manage the service instance life-time, especially the {\f1\fs20 sicPerClient} mode. In this case, an implementation class instance will be created on the server for each client, until the corresponding {\f1\fs20 interface} instance will released (i.e. out of scope or assigned to {\f1\fs20 nil}), which will release the server-side instance - just like with a regular {\i mORMot} client code.
 Note that all process here is executed {\i synchronously}, i.e. in blocking mode. It is up to you to ensure that your application is able to still be responsive, even if the server does a lot of process, so may be late to answer. A dedicated thread may help in this case.
-:  Smart Mobile Studio client samples
+:116  Smart Mobile Studio client samples
 In addition to {\i Delphi} and {\i FreePascal} clients, our framework is able to access any {\i mORMot} server from HTML5 / AJAX rich client, thanks to {\i @*Smart Mobile Studio@}.
 :   Adding two numbers in AJAX
-You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 web application, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i Linux}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
+You can find in {\f1\fs20 SQLite3\\Samples\\27 - CrossPlatform Clients\\SmartMobileStudio} a simple client for the {\f1\fs20 TServiceCalculator.Add()} interface-based service.\line If your {\f1\fs20 Project14ServerHttpWrapper} server is running, you can just point to the supplied {\f1\fs20 www\\index.html} file in the sub-folder.\line You would then see a web page with a "{\f1\fs20 Server Connect}" button, and if you click on it, you would be able to add two numbers. This a full HTML5 @*web application@, connecting securely to your {\i mORMot} server, which will work from any desktop browser (on {\i Windows}, {\i Mac OS X}, or {\i @*Linux@}), or from any mobile device (either {\i @*iPhone@} / {\i @*iPad@} / {\i @*Android@} / {\i Windows 8 Mobile}).
 In order to create the application, we just clicked on "{\ul download as file}" in the {\b SmartMobileStudio} link in the web page, and copied the generated file in the source folder of a new {\i Smart Mobile} project.\line Of course, we did copy the needed {\f1\fs20 SynCrossPlatform*.pas} units from the {\i mORMot} source code tree into the Smart library folder, as stated above. Just ensure you run {\f1\fs20 CopySynCrossPlatformUnits.bat} from the {\f1\fs20 CrossPlatform} folder at least once from the latest revision of the framework source code.
 Then, on the form visual editor, we added a {\f1\fs20 BtnConnect} button, then a {\f1\fs20 PanelCompute} panel with two edit fields named {\f1\fs20 EditA} and {\f1\fs20 EditB}, and two other buttons, named {\f1\fs20 BtnComputeAsynch} and {\f1\fs20 BtnComputeSynch}. A {\f1\fs20 LabelResult} label will be used to display the computation result. The {\f1\fs20 BtnConnect} is a toggle which will show or display the {\f1\fs20 PanelCompute} panel, which is hidden by default, depending on the connection status.
 %SmartCalculator.png
@@ -10053,22 +10519,921 @@ Your AJAX client can then access to this {\f1\fs20 TSQLRecordPeople} content eas
 Here, the {\f1\fs20 client} variable is a {\f1\fs20 TSQLRestClientURI} instance, as returned by the {\f1\fs20 GetClient() onSuccess} callback generated in {\f1\fs20 mORMotClient.pas}.\line You have {\f1\fs20 Add() Delete() Update() FillPrepare() CreateAndFillPrepare()} and {\f1\fs20 Batch*()} methods available, ready to safely access your data from your AJAX client.
 If you update your data model on the server, just re-generate your {\f1\fs20 mORMotClient.pas} unit from {\f1\fs20 http://localhost:888/root/wrapper}, then rebuild your {\i Smart Mobile Studio} project to reflect all changes made to your ORM data model, or your SOA available services.
 Thanks to the {\i SmartPascal} strong typing, any breaking change of the server expectations would immediately be reported at compilation, and not at runtime, as it would with regular {\i JavaScript} clients.
-:75Hosting
+:MVC pattern
 %cartoon08.png
+The {\i mORMot} framwork allows writing rich and/or web MVC applications, relying on regular ORM and SOA methods to implement its business model and its application layer, with an optional dedicated MVC model for the HTML rendering.
+: Model
+According to the {\i @*Model@-View-Controller} (@*MVC@) pattern - see @10@ - the database schema should be handled separately from the User Interface.
+The {\f1\fs20 @**TSQLModel@} class centralizes all {\f1\fs20 @*TSQLRecord@} inherited classes used by an application, both database-related and business-logic related.
+See @110@ for how to define the model of your application.
+: Views
+The {\i mORMot} framework also features two kinds of {\i User Interface} generation, corresponding to the @*MVC@ {\i Views}:
+- For Desktop clients written in {\i Delphi}, it allows creation of Ribbon-like interfaces, with full data view and navigation as visual Grids. Reporting and edition windows can be generated in an automated way. The whole User Interface is designed in code, by some constant definitions.
+- For Web clients, an optimized @*Mustache@ @*Template@ engine in pure {\i Delphi} has been integrated, and allows easy creation of HTML views, with a clear MVC design.
+\graph MVCWebClients MVC Web and Rich Clients
+subgraph cluster_0 {
+label="Web client 1";
+"HTML Browser";
+}
+subgraph cluster_3 {
+label="Web client 2";
+"HTML Browser ";
+}
+subgraph cluster_4 {
+label="Rich Client 3";
+"FMX\nPresentation Tier";
+}
+subgraph cluster_1 {
+label=" Server";
+\HTML Browser \Web匕resentation Tier
+\HTML Browser\Web匕resentation Tier
+\Web匕resentation Tier\Application Tier
+\Application Tier\Business Logic Tier
+}
+\FMX匕resentation Tier\Application Tier
+subgraph cluster_2 {
+label="  DB     Server";
+\Business Logic Tier\Data Tier
+}
+\
+The {\i Web Presentation Tier} will be detailed @108@, but we will now present the project-wide implementation proposal.
+:  Desktop clients
+:5   RTTI
+The {\i Delphi} language (aka Object Pascal) provided Runtime Type Information (@**RTTI@) more than a decade ago. In short, Runtime Type Information is information about an object's data type that is set into memory at run-time. The RTTI support in {\i Delphi} has been added first and foremost to allow the design-time environment to do its job, but developers can also take advantage of it to achieve certain code simplifications. Our framework makes huge use of RTTI, from the database level to the User Interface. Therefore, the resulting program has the advantages of very fast development (Rails-like), but with the robustness of @*strong type@ syntax, and the speed of one of the best compiler available.
+In short, it allows the software logic to be extracted from the code itself. Here are the places where this technology was used:
+- All database structures are set in the code by normal classes definition, and most of the needed @*SQL@ code is created on the fly by the framework, before calling the {\i @*SQLite3@} database engine, resulting in a true Object-relational mapping (@*ORM@) framework;
+- All User Interface is generated by the code, by using some simple data structures, relying on enumerations (see next paragraph);
+- Most of the text displayed on the screen does rely on RTTI, thanks to the @*Camel@ approach (see below), ready to be translated into local languages;
+- All internal Event process (such as Button press) relies on enumerations RTTI;
+- Options and program parameters are using RTTI for data persistence and screen display (e.g. the Settings window of your program can be created by pure code): adding an option is a matter of a few code lines.
+In {\i Delphi}, enumeration types or {\i Enum} provides a way of to define a list of values. The values have no inherent meaning, and their ordinality follows the sequence in which the identifiers are listed. These values are written once in the code, then used everywhere in the program, even for User Interface generation.
+For example, some tool-bar actions can be defined with:
+!type
+!  /// item toolbar actions
+!  TBabyAction = (
+!    paCreateNew, paDelete, paEdit, paQuit);
+Then this {\f1\fs20 TBabyAction} @*enumerated@ type is used to create the User Interface ribbon of the main window, just by creating an array of set of this kind:
+!BarEdit: array[0..1] of set of TBabyAction = (
+!    [paCreateNew, paDelete, paEdit],
+!    [paQuit] );
+The caption of the buttons to be displayed on the screen is then extracted by the framework using "@**Camel@ Case": the second button, defined by the {\f1\fs20 paCreateNew} identifier in the source code, is displayed as "{\i Create new}" on the screen, and this "{\i Create new}" is used for direct @*i18n@ of the software. For further information about "Camel Case" and its usage in Object Pascal, Java, Dot Net, Python see @http://en.wikipedia.org/wiki/CamelCase
+Advantages of the RTTI can therefore by sum up:
+- Software maintainability, since the whole program logic is code-based, and the User Interface is created from it. It therefore avoid RAD (Rapid Application Development) abuse, which mix the User Interface with data logic, and could lead into "write fast, try to maintain" scenarios;
+- Enhanced code @*security@, thanks to Object Pascal @*strong type@ syntax;
+- Direct database access from the language object model, without the need of writing @*SQL@ or use of a @*MVC@ framework;
+- User Interface coherency, since most screen are created on the fly;
+- Easy @*i18n@ of the software, without additional components or systems.
+:64   User Interface
+User Interface generation from RTTI and the integrated reporting features will be described @31@, during presentation of the Main Demo application design.
+In short, such complex model including User Interface auto-creation could be written as such - extracted from unit {\f1\fs20 FileTables.pas}:
+!function CreateFileModel(Owner: TSQLRest): TSQLModel;
+!begin
+!  result := TSQLModel.Create(Owner,
+!    @FileTabs,length(FileTabs),sizeof(FileTabs[0]),[],
+!    TypeInfo(TFileAction),TypeInfo(TFileEvent));
+!end;
+All needed {\f1\fs20 TSQLRecord} classes are declared in a
+! FileTabs: array[0..4] of TFileRibbonTabParameters = ( ...
+constant array, and will use {\f1\fs20 TFileAction / TFileEvent} enumeration types to handle the User Interface activity and Business Logic.
+\page
+:  Web clients
+:81   Mustache template engine
+{\i @**Mustache@} - see @http://mustache.github.io - is a well-known {\i logic-less} template engine.\line There is plenty of Open Source implementations around (including in {\i @*JavaScript@}, which can be very convenient for AJAX applications on client side, for instance). For {\i mORMot}, we created the first pure {\i Delphi} implementation of it, with a perfect integration with other bricks of the framework.
+Generally speaking, a @**Template@ system can be used to separate output formatting specifications, which govern the appearance and location of output text and data elements, from the executable logic which prepares the data and makes decisions about what appears in the output.
+Most template systems (e.g. PHP, smarty, Razor...) feature in fact a full scripting engine within the template content. It allows powerful constructs like variable assignment or conditional statements in the middle of the HTML content. It makes it easy to modify the look of an application within the template system exclusively, without having to modify any of the underlying "application logic". They do so, however, at the cost of separation, turning the templates themselves into part of the application logic.
+{\i Mustache} inherits from Google's {\i ctemplate} library, and is used in many famous applications, including the "main" Google web search, or the Twitter web site.\line The {\i Mustache} template system leans strongly towards preserving the separation of logic and presentation, therefore ensures a perfect  @*MVC@ - @10@ - design, and ready to consume @*SOA@ services.
+{\i Mustache} is intentionally constrained in the features it supports and, as a result, applications tend to require quite a bit of code to instantiate a template: all the application logic will be defined within the {\i Controller} code, not in the {\i View} source. This may not be to everybody's tastes. However, while this design limits the power of the template language, it does not limit the power or flexibility of the template system. This system supports arbitrarily complex text formatting.
+Finally, {\i Mustache} is designed with an eye towards efficiency. Template instantiation is very quick, with an eye towards minimizing both memory use and memory fragmentation. As a result, it sounds like a perfect template system for our {\i mORMot} framework.
+:   Mustache principles
+There are two main parts to the {\i Mustache} template system:
+- Templates (which are plain text files);
+- Data dictionaries (aka {\i Context}).
+For instance, given the following template:
+$$<h1>{{header}}</h1>
+$$
+$${{#items}}
+$$  {{#first}}
+$$    <li><strong>{{name}}</strong></li>
+$$  {{/first}}
+$$  {{#link}}
+$$    <li><a href="{{url}}">{{name}}</a></li>
+$$  {{/link}}
+$${{/items}}
+$$
+$${{#empty}}
+$$  <p>The list is empty.</p>
+$${{/empty}}
+and the following data context:
+#{
+#  "header": "Colors",
+#  "items": [
+#      {"name": "red", "first": true, "url": "#Red"},
+#      {"name": "green", "link": true, "url": "#Green"},
+#      {"name": "blue", "link": true, "url": "#Blue"}
+#  ],
+#  "empty": true
+#}
+The {\i Mustache} engine will render this data as such:
+$$<h1>Colors</h1>
+$$<li><strong>red</strong></li>
+$$<li><a href="#Green">green</a></li>
+$$<li><a href="#Blue">blue</a></li>
+$$<p>The list is empty.</p>
+In fact, you did not see any "{\f1\fs20 if}" nor "{\i for}" loop in the template, but {\i Mustache} conventions make it easy to render the supplied data as the expected HTML output. It is up to the MVC {\i Controller} to render the data as expected by the template, e.g. for formatting dates or currency values.
+:   Mustache templates
+The {\i Mustache} template logic-less language has five types of tags:
+- Variables;
+- Sections;
+- Inverted Sections;
+- Comments;
+- Partials.
+All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. Anything found in a template of this form is interpreted as a template marker. All other text is considered formatting text and is output verbatim at template expansion time.
+|%20%80
+|\b Marker|Description\b0
+|{\f1\fs20 \{\{variable\}\}}|The {\f1\fs20 variable} name will be searched recursively within the current context (possibly with dotted names), and, if found, will be written as escaped HTML.\line If there is no such key, nothing will be rendered.
+|{\f1\fs20 \{\{\{variable\}\}\}\line {\f1\fs20 \{\{& variable\}\}}}|The {\f1\fs20 variable} name will be searched recursively within the current context, and, if found, will be written directly, {\i without any HTML escape}.\line If there is no such key, nothing will be rendered.
+|{\f1\fs20 \{\{#section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i section}, which will be rendered depending of the {\f1\fs20 section} variable value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list} {\f1\fs20 []}, the whole block won't be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} but not a list, it will be used as the context for a single rendering of the block;\line - If {\f1\fs20 section} is a non-empty list, the text in the block will be rendered once for each item in the list - the context of the block will be set to the current item for each iteration.
+|{\f1\fs20 \{\{^section\}\}}\line ...\line {\f1\fs20 \{\{/section\}\}}|Defines a block of text, aka {\i inverted section}, which will be rendered depending of the {\f1\fs20 section} variable {\i inverted }value, as searched in the current context:\line - If {\f1\fs20 section} equals {\f1\fs20 false} or is an {\i empty list}, the whole block {\i will} be rendered;\line - If {\f1\fs20 section} is non-{\f1\fs20 false} or a non-empty list, it won't be rendered.
+|{\f1\fs20 \{\{! comment\}\}}|The comment text will just be ignored.
+|{\f1\fs20 \{\{>partial\}\}}|The {\f1\fs20 partial} name will be searched within the registered {\i partials list}, then will be executed at run-time (so recursive partials are possible), with the current execution context.
+|{\f1\fs20 \{\{=...=\}\}}|The delimiters (i.e. by default {\f1\fs20 \{\{...\}\}}) will be replaced by the specified characters (may be convenient when double-braces may appear in the text).
+|%
+In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
+|%20%80
+|\b Marker|Description\b0
+|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
+|{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
+|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
+|{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
+|{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
+|{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
+|{\f1\fs20 \{\{<partial\}\}}\line ...\line {\f1\fs20 \{\{/partial\}\}}|Defines an in-lined {\i partial} - to be called later via {\f1\fs20 \{\{>partial\}\}} - within the scope of the current template
+|{\f1\fs20 \{\{"some text\}\}}|This pseudo-variable will supply the given text to a callback, which will for instance transform its content (e.g. translate it), before writing it to the output
+|%
+This set of markers will allow to easily write any kind of content, without any explicit logic nor nested code. As a major benefit, the template content could be edited and verified without the need of any {\i Mustache} compiler, since all those {\f1\fs20 \{\{...\}\}} markers will identify very clearly the resulting layout.
+:    Variables
+A typical Mustache template:
+$Hello {{name}}
+$You have just won {{value}} dollars!
+$Well, {{taxed_value}} dollars, after taxes.
+Given the following hash:
+#{
+#  "name": "Chris",
+#  "value": 10000,
+#  "taxed_value": 6000
+#}
+Will produce the following:
+$Hello Chris
+$You have just won 10000 dollars!
+$Well, 6000 dollars, after taxes.
+You can note that {\f1\fs20 \{\{variable\}\}} tags are escaped for HTML by default. This is a mandatory security feature. In fact, all @*web application@s which create HTML documents can be vulnerable to Cross-Site-Scripting (XSS) attacks unless data inserted into a template is appropriately sanitized and/or escaped. With Mustache, this is done by default. Of course, you can override it and force to {\i not-escape} the value, using {\f1\fs20 \{\{\{variable\}\}\} or {\f1\fs20 \{\{& variable\}\}}}.
+For instance:
+|%24%38%38
+|\b Template|Context|Output\b0
+|{\f1\fs20 * \{\{name\}\}\line * \{\{age\}\}\line * \{\{company\}\}\line * \{\{\{company\}\}\}|\{\line   "name": "Chris",\line   "company": "<b>GitHub</b>"\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
+|%
+Variables resolve names within the current context with an optional dotted syntax, for instance:
+|%29%37%36
+|\b Template|Context|Output\b0
+|{\f1\fs20 * \{\{people.name\}\}\line * \{\{people.age\}\}\line * \{\{people.company\}\}\line * \{\{\{people.company\}\}\}|\{\line  "people": \{\line   "name":"Chris",\line   "company":"<b>GitHub</b>"\line  \}\line \}|* Chris\line *\line * &lt;b&gt;GitHub&lt;/b&gt;\line * <b>GitHub</b>}
+|%
+:    Sections
+{\i Sections} render blocks of text one or more times, depending on the value of the key in the current context.
+In our "wining template" above, what happen if we do want to hide the tax details?\line In most script languages, we may write an {\f1\fs20 if ... } block within the template. This is what {\i Mustache} avoids. So we define a section, which will be rendered on need.
+The template becomes:
+$Hello {{name}}
+$You have just won {{value}} dollars!
+${{#in_ca}}
+$Well, {{taxed_value}} dollars, after taxes.
+${{/in_ca}}
+Here, we created a new section, named {\f1\fs20 in_ca}.
+Given the hash value of {\f1\fs20 in_ca} (and its presence), the section will be rendered, or not:
+|%40%55
+|\b Context|Output\b0
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": true\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000,\line   "in_ca": false\line \}|Hello Chris\line You have just won 10000 dollars!}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
+|%
+Sections also change the context of its inner block. It means that the section variable content becomes the top-most context which will be used to identify any supplied variable key.
+Therefore, the following context will be perfectly valid: we can define {\f1\fs20 taxed_value} as a member of {\f1\fs20 in_ca}, and it will be rendered directly, since it is part of the new context.
+|%40%55
+|\b Context|Output\b0
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 6000\line \}|Hello Chris\line You have just won 10000 dollars!}
+|{\f1\fs20 \{\line   "name": "Chris",\line   "value": 10000,\line   "taxed_value": 3000,\line   "in_ca": \{\line      "taxed_value": 6000\line   \}\line \}|Hello Chris\line You have just won 10000 dollars!\line Well, 6000 dollars, after taxes.}
+|%
+In the latest context above, there are two {\f1\fs20 taxed_value} variables. The engine will use the one defined by the context in the {\f1\fs20 in_ca} section, i.e. {\f1\fs20 in_ca.taxed_value}; the one defined at the root context level (which equals 3000) is just ignored.
+If the variable pointed by the section name is a list, the text in the block will be rendered once for each item in the list. The context of the block will be set to the current item for each iteration.\line In this way we can loop over collections. {\i Mustache} allows any depth of nested loops (e.g. any level of master/details information).
+|%24%38%38
+|\b Template|Context|Output\b0
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{name\}\}</b>\line \{\{/repo\}\}|\{\line   "repo": [\line     { "name": "resque" },\line     { "name": "hub" },\line     { "name": "rip" }\line   ]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}|\{\line   "repo":\line      ["resque", "hub", "rip"]\line \}|<b>resque</b>\line <b>hub</b>\line <b>rip</b>}
+|%
+The latest template makes use of the {\f1\fs20 \{\{.\}\}} pseudo-variable, which allows to render the current item of the list.
+:    Inverted Sections
+An inverted section begins with a caret ({\f1\fs20 ^}) and ends as a standard (non-inverted) section. They may render text once, based on the {\i inverse} value of the key. That is, the text block will be rendered if the key doesn't exist, is false, or is an empty list.
+Inverted sections are usually defined after a standard section, to render some message in case no information will be written in the non-inverted section:
+|%30%30%30
+|\b Template|Context|Output\b0
+|{\f1\fs20 \{\{#repo\}\}\line  <b>\{\{.\}\}</b>\line \{\{/repo\}\}\line \{\{^repo\}\}\line No repos :(\line \{\{/repo\}\}|\{\line   "repo":\line      []\line \}|No repos :(}
+|%
+:    Partials
+Partials are some kind of external sub-templates which can be included within a main template, for instance to follow the same rendering at several places. Just like functions in code, they do ease template maintainability and spare development time.
+Partials are rendered at runtime (as opposed to compile time), so recursive partials are possible. Just avoid infinite loops. They also inherit the calling context, so can easily be re-used within a list section, or together with plain variables.
+In practice, partials shall be supplied together with the data context - they could be seen as "template context".
+For example, this "main" template uses a {\f1\fs20 \{\{> user\}\}} partial:
+$$<h2>Names</h2>
+$${{#names}}
+$$  {{> user}}
+$${{/names}}
+With the following template registered as "user":
+$$<strong>{{name}}</strong>
+Can be thought of as a single, expanded template:
+$$<h2>Names</h2>
+$${{#names}}
+$$  <strong>{{name}}</strong>
+$${{/names}}
+In {\i mORMot}'s implementations, you can also create some {\i internal} partials, defined as {\f1\fs20 \{\{<partial\}\} ... \{\{/partial\}\}} pseudo-sections. It may decrease the need of maintaining multiple template files, and refine the rendering layout.
+For instance, the previous template may be defined at once:
+$$<h2>Names</h2>
+$${{#names}}
+$$  {{>user}}
+$${{/names}}
+$$
+$${{<user}}
+$$<strong>{{name}}</strong>
+$${{/user}}
+The same file will define both the partial and the main template. Note that we defined the internal partial after the main template, but we may have defined it anywhere in the main template logic: internal partials definitions are ignored when rendering the main template, just like comments.
+:   SynMustache unit
+Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} template engine in the {\f1\fs20 SynMustache} unit:
+- It is the first {\i Delphi} implementation of {\i Mustache};
+- It has a separate parser and renderer (so you can compile your templates ahead of time);
+- The parser features a shared cache of compiled templates;
+- It passes all official {\i Mustache} specification tests, as defined at @http://github.com/mustache/spec - including all weird whitespace process;
+- External partials can be supplied as {\f1\fs20 TSynMustachePartials} dictionaries;
+- {\f1\fs20 \{\{.\}\}}, {\f1\fs20 \{\{-index\}\}} and {\f1\fs20 \{\{"some text\}\}} pseudo-variables were added to the standard {\i Mustache} syntax;
+- {\f1\fs20 \{\{#-first\}\}}, {\f1\fs20 \{\{#-last\}\}} and {\f1\fs20 \{\{#-odd\}\}} pseudo-sections were added to the standard {\i Mustache} syntax;
+- Internal partials can be defined via {\f1\fs20 \{\{<partial\}\}} - also a nice addition to the standard {\i Mustache} syntax;
+- It allows the data context to be supplied as JSON or our @80@;
+- Almost no memory allocation is performed during the rendering;
+- It is natively @*UTF-8@, from the ground up, with optimized conversion of any string data;
+- Performance has been tuned and grounded in {\f1\fs20 SynCommons.pas}'s optimized code;
+- Each parsed template is thread-safe and re-entrant;
+- It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
+- It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
+- API is flexible and easy to use.
+:    Variables
+Now, let's see some code.\line First, we define our needed variables:
+!var mustache: TSynMustache;
+!    doc: variant;
+In order to parse a template, you just need to call:
+!  mustache := TSynMustache.Parse(
+!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
+It will return a compiled instance of the template.\line The {\f1\fs20 Parse()} class method will use the shared cache, so you won't need to release the {\f1\fs20 mustache} instance once you are done with it: no need to write a {\f1\fs20 try ... finally mustache.Free; end} block.
+You can use a {\f1\fs20 TDocVariant} to supply the context data (with late-binding):
+!  TDocVariant.New(doc);
+!  doc.name := 'Chris';
+!  doc.value := 10000;
+As an alternative, you may have defined the context data as such:
+!  doc := _ObjFast(['name','Chris','value',1000]);
+Now you can render the template with this context:
+!  html := mustache.Render(doc);
+!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
+If you want to supply the context data as JSON, then render it, you may write:
+!  mustache := TSynMustache.Parse(
+!    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
+!  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
+!  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
+Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
+As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into @*UTF-8@):
+!  mustache := TSynMustache.Parse(
+!    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
+!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
+!  html='Hello Chris'#13#10'You have just won 10000 dollars!'
+You can find in the {\f1\fs20 mORMot.pas} unit the {\f1\fs20 ObjectToJSON()} function which is able to transform any {\f1\fs20 TPersistent} instance into valid JSON content, ready to be supplied to a {\f1\fs20 TSynMustache} compiled instance.\line If the object's published properties have some getter functions, they will be called on the fly to process the data (e.g. returning 'FirstName Name' as FullName by concatenating both sub-fields).
+:    Sections
+Sections are handled as expected:
+!  mustache := TSynMustache.Parse('Shown.{{#person}}As {{name}}!{{/person}}end{{name}}');
+!  html := mustache.RenderJSON('{person:{age:?,name:?}}',[10,'toto']);
+!  // now html='Shown.As toto!end'
+Note that the sections change the data context, so that within the {\f1\fs20 #person} section, you can directly access to the data context {\f1\fs20 person} member, i.e. writing directly {\f1\fs20 \{\{name\}\}}
+It supports also inverted sections:
+!  mustache := TSynMustache.Parse('Shown.{{^person}}Never shown!{{/person}}end');
+!  html := mustache.RenderJSON('{person:true}');
+!  // now html='Shown.end'
+To render a list of items, you can write for instance (using the {\f1\fs20 \{\{.\}\}} pseudo-variable):
+!  mustache := TSynMustache.Parse('{{#things}}{{.}}{{/things}}');
+!  html := mustache.RenderJSON('{things:["one", "two", "three"]}');
+!  // now html='onetwothree'
+The {\f1\fs20 \{\{-index\}\}} pseudo-variable allows to numerate the list items, when rendering:
+!  mustache := TSynMustache.Parse(
+!    'My favorite things:'#$A'{{#things}}{{-index}}. {{.}}'#$A'{{/things}}');
+!  html := mustache.RenderJSON('{things:["Peanut butter", "Pen spinning", "Handstands"]}');
+!  // now html='My favorite things:'#$A'1. Peanut butter'#$A'2. Pen spinning'#$A+
+!  //          '3. Handstands'#$A,'-index pseudo variable'
+:    Partials
+External partials (i.e. standard {\i Mustache} partials) can be defined using {\f1\fs20 TSynMustachePartials}. You can define and maintain a list of {\f1\fs20 TSynMustachePartials} instances, or you can use a one-time partial, for a given rendering process, as such:
+!  mustache := TSynMustache.Parse('{{>partial}}'#$A'3');
+!  html := mustache.RenderJSON('{}',TSynMustachePartials.CreateOwned(['partial','1'#$A'2']));
+!  // now html='1'#$A'23','external partials'
+Here {\f1\fs20 TSynMustachePartials.CreateOwned()} expects the partials to be supplied as name/value pairs.
+Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined directly in the main template:
+!  mustache := TSynMustache.Parse('{{<partial}}1'#$A'2{{name}}{{/partial}}{{>partial}}4');
+!  html := mustache.RenderJSON('{name:3}');
+!  // now html='1'#$A'234','internal partials'
+:    Expression Helpers
+{\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
+The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC @*web application@ using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
+For instance, you may write:
+! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
+This will define two {\i Expression Helpers} for the specified table:
+- Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag would read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
+- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
+:    Internationalization
+You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
+By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
+!procedure TTestLowLevelTypes.MustacheTranslate(var English: string);
+!begin
+!  if English='Hello' then
+!    English := 'Bonjour' else
+!  if English='You have just won' then
+!    English := 'Vous venez de gagner';
+!end;
+Of course, in a real application, you may assign one {\f1\fs20 TLanguageFile.Translate(var English: string)} method, as defined in the {\f1\fs20 mORMoti18n.pas} unit.
+Then, you will be able to define your template as such:
+!  mustache := TSynMustache.Parse(
+!    '{{"Hello}} {{name}}'#13#10'{{"You have just won}} {{value}} {{"dollars}}!');
+!  html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,MustacheTranslate);
+!  // now html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!'
+All text has indeed been translated as expected.
+:   Low-level integration with method-based services
+You can easily integrate the {\i @*Mustache@} template engine with the framework's @*ORM@. To avoid any unneeded temporary conversion, you can use the {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method, and provide its {\f1\fs20 TDocVariant} result as the data context of {\f1\fs20 TSynMustache.Render()}.
+For instance, you may write, in any method-based service - see @49@:
+!var template: TSynMustache;
+!    html: RawUTF8;
+! ...
+!  template := TSynMustache.Parse(
+!    '<ul>{{#items}}<li>{{Name}} was born on {{BirthDate}}</li>{{/items}}</ul>');
+!  html := template.Render(
+!    aClient.RetrieveDocVariantArray(TSQLBaby,'items','Name,BirthDate'));
+!  // now html will contain a ready-to-be-displayed unordered list
+Of course, this {\f1\fs20 TSQLRest.RetrieveDocVariantArray()} method accepts an optional WHERE clause, to be used according to your needs. You may even use paging, to split the list in smaller pieces.
+Following this low-level method-based services process, you can easily create a high performance web server using {\i mORMot}, following the @*MVC@ pattern as such:
+|%20%80
+|\b MVC|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i Controller}|Method-based services - see @49@
+|%
+But still, a lot of code is needed to glue the MVC parts.
+:   MVC/MVVM Design
+In practice, the method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshaling, rendering or routing.
+The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
+|%20%80
+|\b MVVM|mORMot\b0
+|{\i Model}|@13@ and its {\f1\fs20 TSQLModel} / {\f1\fs20 TSQLRecord} definitions
+|{\i View}|@81@\line (may be stored as separated files or within the database)
+|{\i ViewModel}|{\f1\fs20 Interface} services - see also @63@
+|%
+In the MVVM pattern, both {\i Model} and {\i View} components do match the classic @10@ layout. But the {\i ViewModel} will define some kind of "model for the view", i.e. the data context to be sent and retrieved from the view.
+In the {\i mORMot} implementation, {\f1\fs20 interface} methods are used to define the execution context of any request, following the {\i @*convention over configuration@} pattern of our framework.\line In fact, the following conventions are used to define the {\i ViewModel}:
+|%23%77
+|\b ViewModel|mORMot\b0
+|{\i Route}|From the {\f1\fs20 interface} name and its method name
+|{\i Command}|Defined by the method name
+|{\i Controller}|Defined by the method implementation
+|{\i ViewModel Context}|Transmitted {\i by representation}, as @*JSON@, including complex values like {\f1\fs20 @*TSQLRecord@}, records, @*dynamic array@s or @*variant@s (including {\f1\fs20 @*TDocVariant@})
+|{\i Input Context}|Transmitted as method input parameters ({\f1\fs20 const}/{\f1\fs20 var}) from the {\i View}
+|{\i Output Context}|Method output parameters ({\f1\fs20 var}/{\f1\fs20 out}) are sent to the {\i View}
+|{\i Actions}|A method will render the associated view with the output parameters, or go to another command (optionally via {\f1\fs20 EMVCApplication})
+|%
+This may sound pretty unusual (if you are coming from a {\i RubyOnRails}, {\i AngularJS}, {\i Meteor} or {\i .Net} implementations), but it has been identified to be pretty convenient to use. Main benefit is that you do not need to define explicit data structures for the {\i ViewModel} layer. The method parameters will declare the execution context for you at {\f1\fs20 interface} level, ready to be implemented in a {\f1\fs20 TMVCApplication} class. In practice, this implementation uses the {\f1\fs20 interface} input and output parameters are an alternate way to define the {\f1\fs20 $scope} content of an {\i AngularJS} application.
+The fact that the {\i ViewModel} data context is transmitted as JSON content - {\i by representation} just like @*REST@ - see @9@ - allows nice side effects:
+- {\i Views} do not know anything about the execution context, so are very likely to be uncoupled from any business logic - this will enhance security and maintainability of your applications;
+- You can optionally see in real time the JSON data context (by using a fake {\f1\fs20 root/methodname{\f1\fs20 /json}} URI) of a running application, for easier debugging of the {\i Controller} or the {\i Views};
+- You can test any {\i View} by using fake static JSON content, without the need of a real server;
+- In fact, {\i Views} could be even not tied to the web model, but run in a classic rich application, with VCL/FMX User Interface (we still need to automate the binding process to UI components, but this is technically feasible, whereas almost no other MVC web framework do support this);
+- Since {\f1\fs20 interface} are used to define the {\i Controller}, you could @*mock@ and @*stub@ them - see @62@ - for proper unit testing;
+- In the {\i Controller} code, you have access to the {\i mORMot} ORM methods and services to write the various commands, making it pretty easy to implement a web front-end to any @*SOA@ project (also sharing a lot of high-level {\i Domain} types);
+- The associated data {\i Model} is {\i mORMot}'s ORM, which is also optimized for JSON processing, so most of memory fragmentation is reduced to the minimum during the rendering (see e.g. the use of {\f1\fs20 RawJSON} below);
+- The {\i Controller} would be most of the time hosted within the web server application, but {\i may} be physically hosted in another remote process - this remote {\i Controller} service may even be shared between web and VCL/FMX clients;
+- Several levels of @*cache@ could be implemented, based on the JSON content, to leverage the server resources and scale over a huge number of clients.
+The next chapter will uncover how to build such solid MVC / MVVM @*Web Application@s using {\i mORMot}.
+:108MVC/MVVM Web applications
+%cartoon01.png
+We will now explain how to build a @*MVC@/@*MVVM@ @**web application@ using {\i mORMot}, starting from the "{\i 30 - MVC Server}" sample. Following explanations may be a bit unsynchronized from the current state of the sample source code in the "unstable" branch of the framework repository, but you will get here below the main intangible points.
+This little web application publishes a simple BLOG, not fully finished yet (this is a {\i Sample}, remember!). But you can still execute it in your desktop browser, or any mobile device (thanks to a simple {\i @*Bootstrap@}-based @*responsive design@), and see the articles list, view one article and its comments, view the author information, log in and out.
+This sample is implemented as such:
+|%15%22%63
+|\b MVVM|Source|mORMot\b0
+|{\i Model}|{\f1\fs20 MVCModel.pas}|{\f1\fs20 TSQLRestServerDB} ORM over a {\i SQlite3} database
+|{\i View}|{\f1\fs20 *.html}|@81@ in the {\i Views} sub-folder
+|{\i ViewModel}|{\f1\fs20 MVCViewModel.pas}|Defined as one {\f1\fs20 IBlogApplication} interface
+|%
+For the sake of the simplicity, the sample will create some fake data in its own local {\i SQlite3} database, the first time it is executed.
+: MVCModel
+:  Data Model
+The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you would find the following type definitions:
+!  TSQLContent = class(TSQLRecordTimeStamped)
+!  private ...
+!  published
+!    property Title: RawUTF8 index 80 read fTitle write fTitle;
+!    property Content: RawUTF8 read fContent write fContent;
+!    property Author: TSQLAuthor read fAuthor write fAuthor;
+!    property AuthorName: RawUTF8 index 50 read fAuthorName write fAuthorName;
+!  end;
+!
+!  TSQLArticle = class(TSQLContent)
+!  private ...
+!  public
+!    class function CurrentPublishedMonth: Integer;
+!    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+!      Options: TSQLInitializeTableOptions); override;
+!    procedure TagsAddOrdered(aTagID: integer; var aTags: TSQLTags);
+!  published
+!    property PublishedMonth: Integer read fPublishedMonth write fPublishedMonth;
+!    property Abstract: RawUTF8 index 1024 read fAbstract write fAbstract;
+!    property Tags: TIntegerDynArray index 1 read fTags write fTags;
+!  end;
+!
+!  TSQLComment = class(TSQLContent)
+!  private ...
+!  published
+!    property Article: TSQLArticle read fArticle write fArticle;
+!  end;
+Then the whole database model will be created in this function:
+!function CreateModel: TSQLModel;
+!begin
+!  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
+!    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
+!  TSQLArticle.AddFilterNotVoidText(['Title','Content']);
+!  TSQLComment.AddFilterNotVoidText(['Title','Content']);
+!  TSQLTag.AddFilterNotVoidText(['Ident']);
+!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
+!    TSQLArticle,['title','abstract','content']);
+!end;
+As you can discover:
+- We used {\f1\fs20 class} inheritance to gather properties for similar tables;
+- Some classes are {\i not} part of the model, since they are just {\f1\fs20 abstract} parents, e.g. {\f1\fs20 TSQLContent} is not part of the model, but {\f1\fs20 TSQLArticle} and {\f1\fs20 TSQLComment} are;
+- We defined some regular {\i one-to-one} relationships, e.g. every {\f1\fs20 Content} (which may be either an {\f1\fs20 Article} or a {\f1\fs20 Comment}) will be tied to one {\f1\fs20 Author} - see @70@;
+- We defined some regular {\i one-to-many} relationships, e.g. every {\f1\fs20 Comment} will be tied to one {\f1\fs20 Article};
+- {\f1\fs20 Article} tags are stored as a dynamic array of integer within the record, and not in a separated pivot table: it would make the database smaller, and queries faster (since we avoid a JOIN);
+- Some properties are defined (and stored) twice, e.g. {\f1\fs20 TSQLContent} defines one {\f1\fs20 AuthorName} field in addition to the {\f1\fs20 Author} ID field, as a convenient direct access to the author name, therefore avoiding a JOINed query at each {\f1\fs20 Article} or a {\f1\fs20 Comment} display - see @29@;
+- We defined the maximum expected width for text fields (e.g. via {\f1\fs20 Title: RawUTF8 {\b @*index@ 80}}), even if it won't be used by {\i SQLite3} - it would ease any eventual migration to an external database, in the future - see @145@;
+- Some validation rules are set using {\f1\fs20 TSQLArticle.AddFilterNotVoidText()} method, which would be applied before an article is stored in the controller's code (in {\f1\fs20 TBlogApplication. ArticleCommit});
+- The whole application would run without writing any SQL, but just high-level ORM methods;
+- Even if we want to avoid writing SQL, we tried to modelize the data to fit regular RDBMS expectations, e.g. for most used queries (like the one run from the main page of the BLOG);
+- @*Full Text@ indexation data, implemented as @8@ in the {\i SQLite3} engine, is stored in a dedicated {\f1\fs20 TSQLArticleSearch} table - see @144@ for details about this powerful feature.
+Foreign keys and indexes are managed as such:
+- The {\f1\fs20 TSQLRecord.ID} @*primary key@ of any ORM class will be indexed;
+- For both {\i one-to-one} and {\i one-to-many} relationships, indexes are created by the ORM: for instance, {\f1\fs20 TSQLArticle.Author} and {\f1\fs20 TSQLComment.Author} will be indexed, just as {\f1\fs20 TSQLComment.Article};
+- A SQL index would be needed for {\f1\fs20 TSQLArticle.PublishedMonth} field, which is used to display a list of publication months in the main BLOG page, and link to the corresponding articles.\line The following code will take care of it:
+!class procedure TSQLArticle.InitializeTable(Server: TSQLRestServer;
+!  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+!begin
+!  inherited;
+!  if (FieldName='') or (FieldName='PublishedMonth') then
+!    Server.CreateSQLIndex(TSQLArticle,'PublishedMonth',false);
+!end;
+:  Hosted in a REST server over HTTP
+The ORM is defined to run over a {\i SQLite3} database in the main {\f1\fs20 MVCServer.dpr} program, then served via a HTTP server as defined in {\f1\fs20 MVCServer.dpr}:
+!  aModel := CreateModel;
+!  try
+!    aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(paramstr(0),'.db'));
+!    try
+!      aServer.DB.Synchronous := smNormal;
+!      aServer.DB.LockingMode := lmExclusive;
+!      aServer.CreateMissingTables;
+!!      aApplication := TBlogApplication.Create;
+!      try
+!!        aApplication.Start(aServer);
+!        aHTTPServer := TSQLHttpServer.Create('8092',aServer,'+',useHttpApiRegisteringURI);
+!        try
+!!          aHTTPServer.RootRedirectToURI('blog/default'); // redirect server:8092
+!          writeln('"MVC Blog Server" launched on port 8092');
+!  ....
+In comparison to a regular @35@, we instantiated a {\f1\fs20 TBlogApplication}, which will {\i inject} the MVC behavior to {\f1\fs20 aServer} and {\f1\fs20 aHTTPServer}. The same {\i mORMot} program could be used as a @*REST@ful server for remote @13@ and @17@, and also for publishing a web application, sharing the same data and business logic, over a single HTTP URI and port.\line A call to {\f1\fs20 RootRedirectToURI()} will let any @http://server:8092 HTTP request be redirected to @http://server:8092/blog/default which is our BLOG application main page. The other URIs could be used as usual, as any {\i mORMot}'s @6@.
+You could also use sub-domain hosting, as defined for @140@, to make a difference between the REST methods and the MVC web site. For instance, you may define some per domain / per sub-domain hosting redirection:
+! aHttpServer.DomainHostRedirect('rest.project.com','root');      // 'root' is current Model.Root
+! aHttpServer.DomainHostRedirect('project.com','root/html');      // call the Html() method
+! aHttpServer.DomainHostRedirect('www.project.com','root/html');  // call the Html() method
+! aHttpServer.DomainHostRedirect('blog.project.com','root/blog'); // MVC application
+All ORM/SOA activity should be accessed remotely via {\f1\fs20 rest.project.com}, then would be handled as expected by the ORM/SOA methods of the {\f1\fs20 TSQLRestServer} instance.\line For proper AJAX / JavaScript process, you may have to write:
+! aHttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
+Any attempt to access to the {\f1\fs20 project.com} or {\f1\fs20 www.project.com} URI would be redirected to the following method-based service:
+!procedure TMyServer.Html(Ctxt: TSQLRestServerURIContext);
+!begin
+!  if fMyFileCache='' then
+!    fMyFileCache := StringFromFile(ChangeFileExt(paramstr(0),'.html'));
+!  Ctxt.Returns(fMyFileCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,true);
+!end;
+This method would serve some static HTML content as the main front end page of this server connected to the Internet. For best performance, this UTF-8 content is cached in memory, and the HTTP 304 command would be handled, if the browser supports it. Of course, your application may return some more complex content, even serving a set of files hosted in a local folder, e.g. by calling {\f1\fs20 Ctxt.ReturnFile()} or {\f1\fs20 Ctxt.ReturnFileFromFolder()} methods in this {\f1\fs20 Html()} service:
+!procedure TMyServer.Html(Ctxt: TSQLRestServerURIContext);
+!begin
+!  Ctxt.ReturnFileFromFolder('c:\www');
+!end;
+This single method will search for any matching file in the local {\f1\fs20 c:\\www} folder and its sub-directories, returning the default {\f1\fs20 index.html} content if no file is specified at URI level. See the optional parameters to the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method for proper tuning, e.g. to change the default file name or disable the HTTP 304 answers. In all cases, the file content will be served by the @88@ directly from the kernel mode, so would be very fast.
+In order to have the BLOG content hosted in {\f1\fs20 root/blog} URI, you should specify the expected sub-URI when initializing your {\f1\fs20 TMVCApplication}:
+!procedure TBlogApplication.Start(aServer: TSQLRestServer);
+!begin
+! ...
+! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog').
+! ...
+Here, any request to {\f1\fs20 blog.project.com} will be redirected to {\f1\fs20 root/blog}, so will match the expected {\f1\fs20 TBlogApplication} URIs. Note that by default, {\f1\fs20 TMVCRunOnRestServer.RunOnRestServerSub} will redirect any {\f1\fs20 root/blog} request to {\f1\fs20 root/blog/default}, so this URI would be transparent for the user.
+: MVCViewModel
+:  Defining the commands
+The {\f1\fs20 MVCViewModel.pas} unit defines the {\i Controller} (or {\i ViewModel}) of the "{\i 30 - MVC Server}" sample application.\line It uses the {\f1\fs20 mORMotMVC.pas} unit , which is the main @*MVC@ kernel for the framework, allowing to easily create {\i Controllers} binding the ORM/SOA features ({\f1\fs20 mORMot.pas}) to the {\i @*Mustache@} Views ({\f1\fs20 SynMustache.pas}).
+First of all, we defined an {\f1\fs20 interface}, with the expected methods corresponding to the various {\i commands} of the @*web application@:
+!!  IBlogApplication = interface(IMVCApplication)
+!!    procedure ArticleView(
+!      ID: integer; var WithComments: boolean; Direction: integer;
+!      out Article: TSQLArticle; out Author: TSQLAuthor;
+!      out Comments: TObjectList);
+!!    procedure AuthorView(
+!      var ID: integer; out Author: variant; out Articles: variant);
+!!    function Login(
+!      const LogonName,PlainPassword: RawUTF8): TMVCAction;
+!!    function Logout: TMVCAction;
+!!    procedure ArticleEdit(
+!      var ID: integer; const Title,Content: RawUTF8;
+!      const ValidationError: variant;
+!      out Article: TSQLArticle);
+!!    function ArticleCommit(
+!      ID: integer; const Title,Content: RawUTF8): TMVCAction;
+!  end;
+In fact, {\f1\fs20 IMVCApplication} is defined as such in {\f1\fs20 mORMotMVC.pas}:
+!  IMVCApplication = interface(IInvokable)
+!    ['{C48718BF-861B-448A-B593-8012DB51E15D}']
+!    procedure Default(var Scope: variant);
+!    procedure Error(var Msg: RawUTF8; var Scope: variant);
+!  end;
+As such, the {\f1\fs20 IBlogApplication} will define the following web pages, corresponding to each of its methods: {\i Default, Error, ArticleView, AuthorView, Login, Logout, ArticleEdit} and {\i ArticleCommit}. Each command of this application will map an URI, e.g. {\f1\fs20 /blog/default} or {\f1\fs20 /blog/login} - remember that our model defined {\f1\fs20 'blog'} as its root URI. You may let all commands be accessible from a sub-URI (e.g. {\f1\fs20 /blog/web/default}), but here this is not needed, since we are creating a "pure web" application.
+Each command will have its own {\i View}. For instance, you will find {\f1\fs20 Default.html}, {\f1\fs20 Error.html} or {\f1\fs20 ArticleView.html} in the {\i "Views"} sub-folder of the sample. If you did not supply any file in this folder, some void files would be created.
+Incoming method parameters of each method (i.e. defined as {\f1\fs20 const} or {\f1\fs20 var}) will be transmitted on the URI, encoded as regular HTTP parameters, whereas outgoing method parameters (i.e. defined as {\f1\fs20 var} or {\f1\fs20 out}) would be transmitted to the {\i View}, as data context for the rendering. Simple types are transmitted (like {\f1\fs20 integer} or {\f1\fs20 RawUTF8}); but you would also find ORM classes (like {\f1\fs20 TSQLAuthor}), an outgoing {\f1\fs20 TObjectList}, or some {\f1\fs20 variant} - which may be either values or a complex @80@.
+In fact, you may find out that the {\i Login, Logout} and {\i ArticleCommit} methods do not have any outgoing parameters, but were defined as {\f1\fs20 function} returning a {\f1\fs20 TMVCAction} record.\line This type is declared as such in {\f1\fs20 mORMotMVC.pas}:
+!  TMVCAction = record
+!    RedirectToMethodName: RawUTF8;
+!    RedirectToMethodParameters: RawUTF8;
+!    ReturnedStatus: cardinal;
+!  end;
+Any method returning a {\f1\fs20 TMVCAction} content won't render directly any view, but will allow to go directly to another method, for proper rendering, just by providing a method name and some optional parameters.\line Note that even the regular views, i.e. the methods which do not have this {\f1\fs20 TMVCAction} parameter, may break the default rendering process on any error, raising an {\f1\fs20 EMVCApplication} exception which will in fact redirect the view to another page, mainly the {\f1\fs20 Error} page.
+To better understand how it works, run the "{\i 30 - MVC Server}" sample. Remember that to be able to register the port #8092 for the {\f1\fs20 http.sys} server, you would need to run the {\f1\fs20 MVCServer.exe} program at least once with {\i Windows Administrator} rights - see @109@. Then point your browser to @http://localhost:8092/ - you will see the main page of the BLOG, filled with some random data. Quite some "blabla", to be sincere!
+What you see is the {\f1\fs20 Default} page rendered. The {\f1\fs20 IBlogApplication.Default()} method has been called, then the outgoing {\f1\fs20 Scope} data has been rendered by the {\f1\fs20 Default.html} {\i Mustache} template.
+If you click on an article title, it will go to @http://localhost:8092/blog/articleView?id=99 - i.e. calling {\f1\fs20 IBlogApplication.ArticleView()} with the {\f1\fs20 ID} parameter containing 99, and other incoming parameters (i.e. {\f1\fs20 WithComments} and {\f1\fs20 Direction}) set to their default value (i.e. respectively {\f1\fs20 false} and {\f1\fs20 0}). The {\f1\fs20 ArticleView()} method will then read the {\f1\fs20 TSQLArticle} data from the ORM, then send it to the {\f1\fs20 ArticleView.html} {\i Mustache} template.
+Now, just change in your browser the URI from @http://localhost:8092/blog/articleView?id=99 (here we clicked on the {\f1\fs20 Article} with ID=99) into @http://localhost:8092/blog/articleView/json?id=99 (i.e. entering {\f1\fs20 /articleView{\b /json}} instead of {\f1\fs20 /articleView}, as a fake sub-URI).\line Now the browser is showing you the JSON data context, as transmitted to the {\f1\fs20 ArticleView.html} template. Just check both the JSON content and the corresponding {\i Mustache} template: I think you will find out how it works. Take a look at @81@ as reference.
+From any blog article view, click on the "{\f1\fs20 Show Comments}" button: you are redirected to a new page, at URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true#comments and now the comments corresponding to the article are displayed. If you click on the "{\f1\fs20 Previous}" or "{\f1\fs20 Next}" buttons, a new URI @http://localhost:8092/blog/ArticleView?id=99&withComments=true&direction=1 will be submitted: in fact, {\f1\fs20 direction=1} will search for the previous article, and we still have the {\f1\fs20 withComments=true} parameter set, so that the user would be able to see the comments, as expected. If you click on the "{\f1\fs20 Hide Comments}" button, the URI would change to be without any {\f1\fs20 withComments=true} parameter - i.e. @http://localhost:8092/blog/ArticleView?id=98#comments : now the comments won't be displayed.
+The sequence is rendered as such:
+\graph mORMotMVCSequence mORMot MVC/MVVM URI - Commands sequence
+\/blog/default URI\Default()\routing + decode夕ncoming params川o controller method
+\Default()\defaultjson\outgoing params叉ncoded as JSON
+\defaultjson\default.html川emplate\rendering千ata context
+\default.html川emplate\main blog web page已ith list of articles\Mustache叉ngine
+\/blog/articleView?id=99\ArticleView(ID=99)\routing + decode夕ncoming params川o controller method
+\ArticleView(ID=99)\articlejson\outgoing params叉ncoded as JSON
+\articlejson\articleView.html川emplate\rendering千ata context
+\articleView.html川emplate\web page已ith one article已ithout comments\Mustache叉ngine
+\/blog/articleView?id=99&withcomments=true\ArticleView(ID=99,WithComments=true)\routing + decode夕ncoming params川o controller method
+\ArticleView(ID=99,WithComments=true)\articlecomment\outgoing params叉ncoded as JSON
+\articlecomment\ articleView.html川emplate\rendering千ata context
+\ articleView.html川emplate\web page已ith one article兀nd its comments\Mustache叉ngine
+=defaultjson={Scope:{articles:[....
+=articlejson={WithComments=false,乙rticle={ID=99,Author:1,...七omments:[],...
+=articlecomment={WithComments=true,乙rticle={ID=99,Author:1,...七omments:[廾ID:163],...
+\
+In this diagram, we can see that each HTTP request is stateless, uncoupled from the previous. The user experience is created by changing the URI with additional parameters (like {\f1\fs20 withComments=true}).\line This is how the web works.
+Then try to go to @http://localhost:8092/blog/mvc-info - and check out the page which appears.\line You will get all the information corresponding to your application, especially a list of all available commands:
+$/blog/Default?Scope=..[variant]..
+$/blog/Error?Msg=..[string]..&Scope=..[variant]..
+$/blog/ArticleView?ID=..[integer]..&WithComments=..[boolean]..&Direction=..[integer]..
+$/blog/AuthorView?ID=..[integer]..
+$/blog/Login?LogonName=..[string]..&PlainPassword=..[string]..
+$/blog/Logout
+$/blog/ArticleEdit?ID=..[integer]..&Title=..[string]..&Content=..[string]..&ValidationError=..[variant]..
+$/blog/ArticleCommit?ID=..[integer]..&Title=..[string]..&Content=..[string]..
+And every view, including its data context, e.g.
+$/blog/AuthorView?ID=..[integer]..
+${{Main}}: variant
+${{ID}}: integer
+${{Author}}: TSQLAuthor
+${{Articles}}: variant
+You may use this page as reference when writing your {\i Mustache} Views. It will reflect the exact state of the running application.
+:  Implementing the Controller
+To build the application {\i Controller}, we would need to implement our {\f1\fs20 IBlogApplication interface}.
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  ...
+!  public
+!    procedure Start(aServer: TSQLRestServer); reintroduce;
+!    procedure Default(var Scope: variant);
+!    procedure ArticleView(ID: integer; var WithComments: boolean;
+!      Direction: integer;
+!      out Article: TSQLArticle; out Author: variant;
+!      out Comments: TObjectList);
+!    ...
+!  end;
+We defined a new class, inheriting from {\f1\fs20 TMVCApplication} - as defined in {\f1\fs20 mORMotMVC.pas}, and implementing our expected interface. {\f1\fs20 TMVCApplication} will do all the low-level plumbing for you, using a set of implementation classes.
+Let's implement a simple command:
+!procedure TBlogApplication.AuthorView(var ID: integer; out Author: TSQLAuthor;
+!  out Articles: variant);
+!begin
+!  RestModel.Retrieve(ID,Author);
+!  if Author.ID<>0 then
+!    Articles := RestModel.RetrieveListJSON(
+!      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 TDocVariant}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances, but with the {\f1\fs20 Tags} dynamic array published property returned as an array of integers (you may have used {\f1\fs20 TObjectList} or {\f1\fs20 RawJSON} instead, as will be detailed below).\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, which will return an error page, using the {\f1\fs20 Error.html} view template.
+Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: TObjectList);
+!var newID: TID;
+!const WHERE: array[1..2] of PUTF8Char = (
+!  'ID<? order by id desc','ID>? order by id');
+!begin
+!  if Direction in [1,2] then // allows fast paging using index on ID
+!    if RestModel.OneFieldValue(TSQLArticle,'ID',WHERE[Direction],[],[ID],newID) and
+!      (newID<>0) then
+!      ID := newID;
+!  RestModel.Retrieve(ID,Article);
+!  if Article.ID<>0 then begin
+!    Author := RestModel.RetrieveDocVariant(
+!      TSQLAuthor,'ID=?',[Article.Author.ID],'FirstName,FamilyName');
+!    if WithComments then begin
+!      Comments.Free; // we will override the TObjectList created at input
+!      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
+!    end;
+!  end else
+!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!end;
+This method has to manage several use cases:
+- Display an {\f1\fs20 Article} from the database;
+- Retrieve the {\f1\fs20 Author} first name and family name;
+- Optionally display the associated {\f1\fs20 Comment}s;
+- Optionally get the previous or next {\f1\fs20 Article};
+- Trigger an error in case of an invalid request.
+Reading the above code is enough to understand how those 5 features are implemented in this method. The incoming parameters, as triggered by the {\i Views}, are used to identify the action to be taken. Then {\f1\fs20 TMVCApplication.RestModel} methods are used to retrieve the needed information directly from the ORM. Outgoing parameters ({\f1\fs20 Article,Author,Comments}) are transmitted to the {\i Mustache} {\i View}, for rendering.
+In fact, there are several ways to retrieve your data, using the {\f1\fs20 RestModel} ORM methods. For instance, in the above code, we used a {\f1\fs20 TObjectList} to transmit our comments.\line But we may have used a @80@ parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: variant);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveDocVariantArray(TSQLComment,'','Article=?',[Article.ID],'');
+In this case, data will be returned {\i per representation}, as {\f1\fs20 variant} values. Any {\i @*dynamic array@} properties would be identified in the {\f1\fs20 TSQLRecord}, and converted as proper array of values.
+Or with a {\f1\fs20 RawJSON} kind of output parameter:
+!procedure TBlogApplication.ArticleView(
+!  ID: integer; var WithComments: boolean; Direction: integer;
+!  out Article: TSQLArticle; out Author: variant; out Comments: RawJSON);
+! ...
+!    if WithComments then
+!      Comments := RestModel.RetrieveListJSON(TSQLComment,'Article=?',[Article.ID],'');
+Using a {\f1\fs20 RawJSON} will be in fact the fastest way of processing the information on the server side. But it will return the data directly from the database - as a consequence, dynamic arrays would be returned as a Base64-encoded blob.
+It is up to you to choose the method and encoding needed for your exact context.\line If your purpose is just to retrieve some data and push it back to the view, {\f1\fs20 RawJSON} is fast, but a {\f1\fs20 TDocVariant} would also convert dynamic arrays to a proper JSON array. If you want to process the returned information with some business code, returning a {\f1\fs20 TObjectList} may be convenient if you need to run some {\f1\fs20 TSQLRecord} methods on the returned list.
+ or a {\f1\fs20 TDocVariant} array may have its needs, if you want to create some meta-object gathering all information, e.g. for {\f1\fs20 Scope} as returned by the {\f1\fs20 Default} method:
+!procedure TBlogApplication.Default(var Scope: variant);
+! ...
+!  if not fDefaultData.AddExistingProp('Archives',Scope) then
+!    fDefaultData.AddNewProp('Archives',RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 12',[],
+!      'distinct(PublishedMonth),max(ID)+1 as FirstID'),Scope);
+!end;
+You can notice how the calendar months are retrieved from the database, using a safe {\f1\fs20 fDefaultData: ILockedDocVariant} private field to store the value as cache, in a thread-safe manner (we will see later more about how to implement thread-safety). If the {\f1\fs20 'Archives'} value is in the {\f1\fs20 fDefaultData} cache, it will be returned immediately as part of the {\f1\fs20 Scope} returned document. Otherwise, it will use {\f1\fs20 RestModel.RetrieveDocVariantArray} to retrieve the last 12 available months. When a new {\f1\fs20 Article} is created, or modified, {\f1\fs20 TBlogApplication.FlushAnyCache} will call {\f1\fs20 fDefaultData.Clear} to ensure that the updated information will be retrieved from the database on next {\f1\fs20 Default()} call.
+The above ORM request will generate the following SQL statement:
+$ SELECT distinct(PublishedMonth),max(ID)+1 as FirstID FROM Article
+$  group by PublishedMonth order by PublishedMonth desc limit 12
+The {\f1\fs20 Default()} method will therefore return the following JSON context:
+${
+$  "Scope": {
+$    ...
+$    "Archives":
+$    [
+$      {
+$        "PublishedMonth": 24178,
+$        "FirstID": 101
+$      },
+$      {
+$        "PublishedMonth": 24177,
+$        "FirstID": 100
+$      },
+$      ...
+... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
+I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
+:  Using Services in the Controller
+Any controller method could retrieve and execute any dependency from its {\f1\fs20 interface}, following the {\i IoC} pattern - see @62@.\line You have two ways of performing the dependency resolution:
+- From the associated {\f1\fs20 TSQLRest.Services} container;
+- From its own protected {\f1\fs20 Resolve()} method, since {\f1\fs20 TMVCApplication} inherits from {\f1\fs20 TInjectableObject}.
+In fact, you can set up your {\f1\fs20 TMVCApplication} instance to use any external dependencies, including stubs and mocks, or high-level DDD services (e.g. respository or modelization process), using its {\f1\fs20 CreateInjected()} constructor instead of plain {\f1\fs20 Create}.
+:111  Controller Thread Safety
+When run from a {\f1\fs20 TSQLRestServer} instance, our {\i MVC} application commands will be executed by default without any thread protection. When hosted within a {\f1\fs20 TSQLHttpServer} instance - see @88@ - several threads may execute the same {\i Controller} methods at the same time. It is therefore up to your application code to ensure that your {\f1\fs20 TMVCApplication} process is thread safe.
+Note that by design, all {\f1\fs20 TMVCApplication.RestModel} ORM methods are thread-safe.\line If your {\i Controller} business code only uses ORM methods, sending back the information to the {\i Views}, without storing any data locally, it will be perfectly thread safe.\line See for instance the {\f1\fs20 TBlogApplication.AuthorView} method we described above.
+But consider this method (simplified from the real "{\i 30 - MVC Server}" sample):
+!type
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  protected
+!    fDefaultArticles: variant;
+!   ...
+!
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!  if VarIsEmpty(fDefaultArticles) then
+!    fDefaultArticles := RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS);
+!  _ObjAddProps(['Articles',fDefaultArticles],Scope);
+!end;
+In fact, even if this method may sound safe, we have an issue when it is executed by several threads: one thread may be assigning a value to {\f1\fs20 fDefaultArticles}, whereas another thread may be using the {\f1\fs20 fDefaultArticles} content. This may result into random runtime errors, very difficult to solve. Even creating a local variable may not be safe, since any access to {\f1\fs20 fDefaultArticles} should be protected.
+A first - and brutal - solution could be to force the {\f1\fs20 TSQLRestServer} instance to execute all method-based services (including our {\i MVC} commands) in a giant lock, as stated about @25@:
+! aServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // or amBackgroundThread
+But this may slow down the whole server process, and reduce its scaling abilities.
+You could also lock explictly the {\i Controller} method, for instance:
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!!  Locker.ProtectMethod;
+!  if VarIsEmpty(fDefaultData) then
+! ...
+Using the {\f1\fs20 TMVCApplication.Locker: IAutoLocker} is a simple and efficient way of protecting your method. In fact, {\f1\fs20 @*TAutoLocker@} class' {\f1\fs20 ProtectMethod} will return an {\f1\fs20 IUnknown} variable, which will let the compiler create an hidden {\f1\fs20 try .. finally} block in the method body, to release the lock when it quits. But this locker would be shared by the whole {\f1\fs20 TMVCApplication} instance, so will be like a giant lock on your {\i Controller} process.
+A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant} instead of a plain {\f1\fs20 TDocVariant} for caching the data. You may therefore write:
+!type
+!  TBlogApplication = class(TMVCApplication,IBlogApplication)
+!  protected
+!    fDefaultData: ILockedDocVariant;
+!   ...
+!procedure TBlogApplication.Start(aServer: TSQLRestServer);
+!begin
+!  fDefaultData := TLockedDocVariant.Create;
+!  ...
+!
+!procedure TBlogApplication.Default(var Scope: variant);
+!begin
+!  if not fDefaultData.AddExistingProp('Articles',Scope) then
+!    fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'','order by ID desc limit 20',[],ARTICLE_FIELDS),Scope);
+!end;
+Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) would take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample. Even @63@ may benefit from this {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process - see @72@.
+:  Web Sessions
+@*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the @*web application@, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows creating such sessions.
+You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
+For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
+!  TCookieData = packed record
+!    AuthorName: RawUTF8;
+!    AuthorID: cardinal;
+!    AuthorRights: TSQLAuthorRights;
+!  end;
+This record will be serialized in two ways:
+- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
+- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
+In order to have proper JSON serialization of the {\f1\fs20 record}, you would need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
+Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
+!function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
+!var Author: TSQLAuthor;
+!!    SessionInfo: TCookieData;
+!begin
+!!  if CurrentSession.CheckAndRetrieve<>0 then begin
+!    GotoError(result,HTML_BADREQUEST);
+!    exit;
+!  end;
+!!  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
+!  try
+!!    if (Author.ID<>0) and Author.CheckPlainPassword(PlainPassword) then begin
+!      SessionInfo.AuthorName := Author.LogonName;
+!      SessionInfo.AuthorID := Author.ID;
+!      SessionInfo.AuthorRights := Author.Rights;
+!!      CurrentSession.Initialize(@SessionInfo,TypeInfo(TCookieData));
+!!      GotoDefault(result);
+!    end else
+!      GotoError(result,sErrorInvalidLogin);
+!  finally
+!    Author.Free;
+!  end;
+!end;
+As you can see, this {\f1\fs20 Login()} method will be trigerred from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
+The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI would have been requested.
+When a web page is computed, the following overriden method will be executed:
+!function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
+!begin
+!  result := inherited GetViewInfo(MethodIndex);
+!!  _ObjAddProps(['blog',fBlogMainInfo,
+!!    'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
+!end;
+It will append the session information from the cookie to the returned {\i View} data context, as such:
+${
+$  "Scope": {
+$    "articles":
+$    ...
+$  },
+$  "main": {
+$    "pageName": "Default",
+$    "blog": {
+$      "Title": "mORMot BLOG",
+$      ...
+$    },
+$!    "session": {
+!$      "AuthorName": "synopse",
+!$      "AuthorID": 1,
+!$      "AuthorRights": {
+!$        "canComment": true,
+!$        "canPost": true,
+!$        "canDelete": true,
+!$        "canAdministrate": true
+!$      },
+$      "id": 1
+$    }
+$  }
+$}
+Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
+When the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
+!function TBlogApplication.Logout: TMVCAction;
+!begin
+!!  CurrentSession.Finalize;
+!  GotoDefault(result);
+!end;
+The session cookie will then be deleted on the browser side.
+: Writing the Views
+See @81@ for a description of how rendering take place in this MVC/MVVM application. You would find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
+You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
+Here is how {\f1\fs20 Default.html} is defined:
+$$!{{>header}}
+$$!{{>masthead}}
+$$      <div class="blog-header">
+$$!        <h1 class="blog-title">{{main.blog.title}}</h1>
+$$!        <p class="lead blog-description">{{main.blog.description}}</p>
+$$      </div>
+$$      <div class="row">
+$$        <div class="col-sm-8 blog-main">
+$$!{{#Scope}}
+$$!{{>articlerow}}
+$$!        {{#lastID}}
+$$!        <p><a href="default?scope={{.}}" class="btn btn-primary btn-sm">Previous Articles</a></p>
+$$!        {{/lastID}}
+$$        </div>
+$$        <div class="col-sm-3 col-sm-offset-1 blog-sidebar">
+$$          <div class="sidebar-module sidebar-module-inset">
+$$            <h4>About</h4>
+$$!            {{{WikiToHtml main.blog.about}}}
+$$          </div>
+$$          <div class="sidebar-module">
+$$            <h4>Archives</h4>
+$$            <ol class="list-unstyled">
+$$!              {{#Archives}}
+$$!              <li><a href="default?scope={{FirstID}}">{{MonthToText PublishedMonth}}</a></li>
+$$!              {{/Archives}}
+$$            </ol>
+$$          </div>
+$$  </div>
+$$   </div>
+$$!{{/Scope}}
+$$!{{>footer}}
+The {\f1\fs20 \{\{>partials\}\}} are easily identified, as other {\f1\fs20 \{\{...\}\}} value tags. The main partial is {\f1\fs20 \{\{>articlerow\}\}}, which will display all articles list.\line {\f1\fs20 \{\{\{WikiToHtml main.blog.about\}\}\}} is an {\i Expression Block} able to render some simple text into proper HTML, using a simple Wiki syntax.\line {\f1\fs20 \{\{MonthToText PublishedMonth\}\}} will execute a custom {\i Expression Block}, defined in our {\f1\fs20 TBlogApplication}, which will convert the obfuscated {\f1\fs20 TSQLArticle.PublishedMonth} integer value into the corresponding name and year:
+!procedure TBlogApplication.MonthToText(const Value: variant;
+!  out result: variant);
+!const MONTHS: array[0..11] of string = (
+!  'January','February','March','April','May','June','July','August',
+!  'September','October','November','December');
+!var month: integer;
+!begin
+!  if VariantToInteger(Value,month) and (month>0) then
+!    result := MONTHS[month mod 12]+' '+IntToStr(month div 12);
+!end;
+The page displaying the {\f1\fs20 Author} information is in fact quite simple:
+$${{>header}}
+$${{>masthead}}
+$$      <div class="blog-header">
+$$        <h1 class="blog-title">User {{Author.LogonName}}</h1>
+$$  <div class="lead blog-description">{{Author.FirstName}} {{Author.FamilyName}}
+$$  </div>
+$$      </div>
+$$   <div class="panel panel-default">
+$$   <div class="panel-heading">Information about <strong>{{Author.LogonName}}</strong></div>
+$$   <div class="panel-body">
+$$!      {{{TSQLAuthor.HtmlTable Author}}}
+$$   </div>
+$$   </div>
+$$!{{>articlerow}}
+$${{>footer}}
+It will share the same {\f1\fs20 \{\{>partials\}\}}, for a consistent and maintainable web site design, but in fact most of the process would take place by the magic of two tags:
+- {\f1\fs20 \{\{\{TSQLAuthor.HtmlTable Author\}\}\}} is an {\i Expression Block} linked to {\f1\fs20 TMVCApplication.RestModel} @*ORM@, which will create a HTML table - with the syntax expected by our {\i @*BootStrap@} {\f1\fs20 CSS} - for a {\f1\fs20 TSQLAuthor} record, identifying the property types and display them as expected (e.g. for dates or time stamps, or for enumerates or sets).
+- {\f1\fs20 \{\{>articlerow\}\}} is a partial also shared with {\f1\fs20 ArticleView.html}, which will render a list of {\f1\fs20 TSQLArticle} encoded as {\f1\fs20 \{\{#Articles\}\}}...{\f1\fs20 \{\{/Articles\}\}} sections.
+Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every aspect of the MVC process has been divided into small classes, so that the framework is able to create web applications, but also any kind of MVC applications, including mobile or VCL/FMX apps, and/or reporting - using {\f1\fs20 mORMotReport.pas}.
+:75Hosting
+%cartoon02.png
 We could identify several implementation patterns of a {\i mORMot} server and its clients:
 - Stand-alone application, either in the same process or locally on the same computer;
 - Private self-hosting, e.g. in a corporate network, with a {\i mORMot} executable or service publishing some content to clients locally or over the Internet (directly from a DMZ or via a VPN);
-- Cloud hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization.
+- Cloud hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization;
+- Mixed hosting, using @*CDN@ network services to cache most of the requests of your {\i mORMot} server.
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
-: Windows hosted
-The current version of the framework only supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable. For the client side, there is no limitation, thanks to our @86@.\line We may allow {\i Linux} server hosting in the future, but we would probably wait for official support of this operating system from the {\i Delphi} compiler (which is planned, but not scheduled).
+:112 Windows and Linux hosted
+The current version of the framework fully supports deploying the {\i mORMot} servers on the {\i @**Windows@} platform, either as a {\i Win32} executable, or - for latest versions of the {\i Delphi} compiler - as a {\i Win64} executable.
+Preliminary {\i @**Linux@} support (via @**FPC@ 2.7.1 / 3.1.1) is available, but we face some FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774 - so that the SOA and MVC features are not working directly, but need to generate the RTTI from a Delphi compiler, as stated @125@. For the client side, there is no limitation, thanks to our @86@, which is perfectly supported by the FPC compiler under {\i Linux}. We hope that a {\i Linux} backend would be made available in Delphi, for servers - even if it sadly sounds not like the highest priority of Embarcadero.
 In practice, a {\i mORMot} server expects much lower hardware requirements (in CPU, storage and RAM terms) than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack. And it requires almost no maintenance.
 As a consequence, the potential implementation schemes could be hosted as such:
-- Windows stand-alone application, without any explicit server;
-- Self-hosted Windows service running on the corporate file server, or on a small dedicated VM or recycled computer (for best performance, just put your data on a new SSD on the old hardware PC);
-- Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients.
-If you want to minimize RAM use, take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
+- Stand-alone application, without any explicit server;
+- Self-hosted service running on the corporate file server, or on a small dedicated VM or recycled computer (for best performance, just put your data on a new SSD on the old hardware PC);
+- Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients;
+- {\i Linux} servers, with no dependency (even latest version of {\i SQlite3} is statically linked to the executables), using even less hardware resource - but remember that this platform is very new to the framework.
+In the cloud, since every resource used is monitored and billed, you would like to minimize RAM use: you should better take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
 About the edition of {\i Windows} to be used, of course IT people will ensure you that {\i Windows Server} is mandatory. But from our tests, you will obtain pretty good results, even with a regular Windows 7 or 8 version of the operating system. On the other side, it is not serious to envisage hosting a server on Windows XP, which is not supported any more by Microsoft - even if technically a {\i mORMot} server will work very well on this deprecated platform.
 Of course, if you use @27@, the hardware and hosting expectations may vary. It will depend on the database back-end used, and will necessarily be much more demanding than our internal {\i SQLite3} database engine. In practice, a {\i mORMot} server using a {\i SQLite3} engine running on a SSD hardware, in {\f1\fs20 lmExclusive} mode - see @60@ - runs faster than most @*SQL@ or @*NoSQL@ engines available, since it will be hosted within the {\i mORMot} server process itself - see @4@.
 : Deployment Architecture
@@ -10081,6 +11446,7 @@ But you may find out some (good?) reasons which main induce another design:
 - Your main data would be hosted on high performance SSD / NAS drives with safe RAID, but some data should better be hosted on cheaper storage (e.g. @85@);
 - You are selling one product, to be run on several environments (debugging / production, starter / corporate editions, centralized / P2P design...), depending on your clients demand;
 - Whatever your IT people or managers want {\i mORMot} to.
+Also consider per-table redirection - see @93@ - for even more advanced hosting abilities. See for instance @%%HostingRedirection@ diagram.
 The possibilities are endless, so we would here below only present some typical use-cases.
 :  Shared server
 This is the easiest configuration: one HTTP server instance, which serves both ORM and Services. On practice, this is perfectly working and scalable.
@@ -10179,8 +11545,54 @@ label="PC Server";
 \
 Of course, you can make any combination of the protocols and servers, to tune hosting for a particular purpose. You can even create several ORM servers or Services servers (grouped per features family or per product), which will cooperate for better scaling and performance.
 If you consider implementing a @*stand-alone@ application for hosting your services, and has therefore basic ORM needs (e.g. you may need only CRUD statements for handling authentication), you may use the lighter {\f1\fs20 TSQLRestServerFullMemory} kind of server instead of a full {\f1\fs20 TSQLRestServerDB}, which will embed a {\i @*SQLite3@} database engine, perhaps not worth it in this case.
+:97  Scaling via CDN
+Our beloved stateless @9@ model, in conjunction with @96@ would enable several levels of caching, from a local proxy cache - see e.g. @http://www.squid-cache.org or @http://www.varnish-cache.org - or an external {\i Content Delivery Network} (@**CDN@) service - e.g. @http://www.cloudflare.com
+Your {\i mORMot} server may be able to publish some dynamic HTML pages, or simple generic JSON services, and then let the CDN do the caching. An expiration time out of 30 seconds, configured at CDN level, would definitively help your @*web application@ to scale to thousands of visitors.
+\graph mORMotServices4 Service Hosting on mORMot - Content Delivery Network (CDB)
+\Local Network A\Internet
+\Local Network B\Internet
+\3G/4G Network\Internet
+node [shape=box];
+subgraph cluster_0 {
+\Client A1�(Delphi)\Local Network A
+\Client A2�(Delphi)\Local Network A
+\Client A3�(AJAX)\Local Network A
+label="Office A";
+}
+subgraph cluster_1 {
+\Client B1�(Delphi)\Local Network B
+\Client B2�(Delphi)\Local Network B
+label="Office B";
+}
+subgraph cluster_2 {
+\Client C�(Mobile AJAX)\3G/4G Network
+label="Mobile";
+}
+\Internet\CDN US
+\Internet\CDN UK
+subgraph cluster_3 {
+\CDN US\Cache
+label="  US";
+}
+subgraph cluster_4 {
+\CDN UK\ Cache
+label="       UK";
+}
+subgraph cluster_5 {
+\CDN UK\mORMot又erver
+\CDN US\mORMot又erver
+\mORMot又erver\Database
+label=" Data Center";
+}
+\Internet\mORMot又erver
+\
+In practice, static content - see @95@ - or some simple JSON requests - returned via {\f1\fs20 Ctxt.Results()} or an interface-based service - would benefit of using such a CDN.
+When any client requests the {\i mORMot} server URI, it would be in fact redirected to the closest CDN node available. For instance, some client in Canada would be redirected to the "CDN US" server, or one mobile client in France would be redirected to the "CDN UK" server.
+Then each CDN will check if the requested URI is already in its cache, according to its settings, and the expiration parameters which may be set within the HTTP headers of the cache header. If the resource is in local cache, it will be returned to the client immediately. If the resource is not in its cache, the CDN node will ask the {\i mORMot} server, cache the returned content, then return this content to the client. Any further attempt to this URI, compatible with the expiration parameters, won't trigger any request to the {\i mORMot} server.
+Of course, you can define some URI patterns to never be cached, and point directly to the {\i mORMot} server. All authenticated services, for instance would need direct access to the {\i mORMot} server, since the @98@ will append a session-private signature to each URI. Just ensure that you disabled authentication - using {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} for method-based services, or {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property for interface-based services. The per-session signature appended at each URI would indeed void any attempt of third-party cache.
+If your project starts to have success, using a CDN is an easy and cheap way of increasing your number of clients. Your {\i mORMot} server would focus on its own purpose, which may be safe storage, authentication and high-level SOA, then let the remaining content be served by such a third-party caching system.
 :43Security
-%cartoon01.png
+%cartoon03.png
 The framework tries to implement @**security@ via:
 - Process safety;
 - Authentication;
@@ -10252,10 +11664,10 @@ If authentication is enabled for the Client-Server process (i.e. if the {\f1\fs2
 - On the Server side, a dedicated service, accessible via the {\f1\fs20 ModelRoot/Auth} URI is to be called to register an User, and create an in-memory session;
 - Client {\i should} open a session to access to the Server, and after authentication validation (e.g. via {\f1\fs20 UserName / Password} pair, or Windows credentials);
 - Each @*CRUD@ statement is checked against the authenticated User security group, via the {\f1\fs20 AccessRights} column and its {\f1\fs20 GET / POST / PUT / DELETE} per-table bit sets;
-- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing {\f1\fs20 AllowRemoteExecute=true};
+- Thanks to {\i Per-User} authentication, any SQL statement commands may be available via the RESTful {\i POST} verb for an user with its {\f1\fs20 AccessRights} group field containing a {\f1\fs20 reSQL} flag in its {\f1\fs20 AllowRemoteExecute};
 - Each REST request will expect an additional parameter, named {\f1\fs20 session_signature}, to every URL. Using the URI instead of {\i cookies} allows the signature process to work with all communication protocols, not only @*HTTP@;
 - Of course, you have the opportunity to tune or even by-pass the security for a given service (method-based or interface-based), on need: e.g. to allow some methods only to your system administrators, or to serve public HTML content.
-:   Per-User authentication
+:139   Per-User authentication
 On the Server side, two tables, defined by the {\f1\fs20 @**TSQLAuthGroup@} and {\f1\fs20 @**TSQLAuthUser@} classes, will handle respectively per-group access rights (authorization), and user validation (authentication). In the database, they will be persisted as {\f1\fs20 AuthGroup} and {\f1\fs20 AuthUser} tables.
 The Server will search for any class inheriting from {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} in its @*Model@. By default, you can use plain {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser} classes - and if none is defined in the model, and authentication is enabled, those mandatory classes will be added. But you can inherit from {\f1\fs20 TSQLAuthGroup} and {\f1\fs20 TSQLAuthUser}, and define e.g. your own fields, for any custom purpose at {\i Group} or {\i User} level. The exact class types are available from {\f1\fs20 SQLAuthUserClass} and {\f1\fs20 SQLAuthGroupClass} properties of {\f1\fs20 TSQLRestServer}.
 Since the whole records will be loaded and persisted in memory at every authentication, do not store too much data in those tables: for instance, do not put historical data (like previous client activity), or huge BLOBs (like detailed pictures) - a dedicated table or set of tables would be a better idea.
@@ -10263,29 +11675,30 @@ Here is the layout of the default {\f1\fs20 AuthGroup} table, as defined by the 
 \graph DBAuthGroup AuthGroup Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|AccessRights : RawUTF8|Ident : RawUTF8|SessionTimeout : integer"];
+struct1 [label="ID : TID|AccessRights : RawUTF8|Ident : RawUTF8|SessionTimeout : integer"];
 \
 The {\f1\fs20 AccessRights} column is a textual CSV serialization of the {\f1\fs20 TSQLAccessRights} record content, as expected by the {\f1\fs20 TSQLRestServer.URI} method. Using a CSV serialization, instead of a binary serialization, will allow the change of the {\f1\fs20 MAX_SQLTABLES} constant value.
 The {\f1\fs20 AuthUser} table, as defined by the {\f1\fs20 TSQLAuthUser} class type, is defined as such:
 \graph DBAuthUser AuthUser Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRights : TSQLAuthGroup|LogonName : RawUTF8|PasswordHashHexa : RawUTF8"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRights : TSQLAuthGroup|LogonName : RawUTF8|PasswordHashHexa : RawUTF8"];
 struct2 [label="AuthGroup"];
 struct1:f0 -> struct2;
 \
 Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a SHA-256 hash of its registered password. A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
 By default, the following security groups are created on a void database:
-|%20%16%16%16%16%16
-|\b AuthGroup|POST SQL|Auth Read|Auth Write|Tables R|Tables W\b0
-|Admin|Yes|Yes|Yes|Yes|Yes
-|Supervisor|No|Yes|No|Yes|Yes
-|User|No|No|No|Yes|Yes
-|Guest|No|No|No|Yes|No
+|%14%12%14%11%11%12%12%12
+|\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
+|Admin|Yes|Yes|Yes|Yes|Yes|Yes|Yes
+|Supervisor|Yes|No|Yes|No|Yes|Yes|Yes
+|User|No|No|No|No|Yes|Yes|Yes
+|Guest|No|No|No|No|Yes|No|No
 |%
+'{\i Admin}' will be the only able to execute remote not SELECT SQL statements for POST commands ({\f1\fs20 reSQL} flag in {\f1\fs20 TSQLAccessRights. AllowRemoteExecute}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}).\line  '{\i Admin}' and '{\i Supervisor}' will allow any SELECT SQL statements to be executed, even if the table can't be retrieved and checked (corresponding to the {\f1\fs20 reSQLSelectWithoutTable} flag).\line '{\i User}' won't have the {\f1\fs20 reSQLSelectWithoutTable} flag, nor the right to retrieve the {\f1\fs20 Auth*} tables data for other users.\line '{\i Guest}' won't have access to the interface-based remote JSON-RPC service (no {\f1\fs20 reService} flag), nor perform any modification to a table: in short, this is an ORM read-only limited user.
+Please see @19@ and the {\f1\fs20 TSQLAccessRights} documentation for all available options and use cases.
 Then the corresponding '{\i Admin}', '{\i Supervisor}' and '{\i User}' {\f1\fs20 AuthUser} accounts are created, with the default '{\i synopse}' password.
 {\b You MUST override those default '{\i synopse}' passwords for each {\f1\fs20 AuthUser} record to a custom genuine value.}
-'{\i Admin}' will be the only group able to execute remote not SELECT SQL statements for POST commands (i.e. to have {\f1\fs20 TSQLAccessRights. AllowRemoteExecute = true}) and modify the {\f1\fs20 Auth*} tables (i.e. {\f1\fs20 AuthUser} and {\f1\fs20 AuthGroup}) content.
 A typical JSON representation of the default security user/group definitions are the following:
 $[{"AuthUser": [
 ${"RowID":1, "LogonName":"Admin", "DisplayName":"Admin", "PasswordHashHexa":"67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd", "GroupRights":1, "Data":null},
@@ -10303,9 +11716,10 @@ A dedicated RESTful service, available from the {\f1\fs20 ModelRoot/Auth} URI, i
 In {\i mORMot}, a very light in-memory set of sessions is implemented:
 - The unique {\f1\fs20 ModelRoot/Auth} URI end-point will create a session after proper authorization;
 - {\i In-memory} session allows very fast process and reactivity, on Server side;
+- Sessions could be optionally persisted on disk at server shutdown, to avoid breaking existing client connections;
 - An {\f1\fs20 integer} {\i session identifier} is used for all authorization process, independently from the underlying authentication scheme (i.e. {\i mORMot} is not tied to cookies, and its session process is much more generic).
 Those sessions are in-memory {\f1\fs20 TAuthSession} class instances. Note that this class does not inherit from a {\f1\fs20 TSQLRecord} table so won't be remotely accessible, for performance and security reasons.
-The server methods should not have to access those {\f1\fs20 TAuthSession} instances directly, but rely on the {\f1\fs20 SessionID} identifier.\line You should rather use methods like {\f1\fs20 TSQLRestServer.SessionGetUser(): TSQLAuthUser}.
+The server methods should not have to access those {\f1\fs20 TAuthSession} instances directly, but rely on the {\f1\fs20 SessionID} identifier. But you can still access the current session properties, e.g. the remote user, thanks to methods like {\f1\fs20 TSQLRestServer.SessionGetUser(): TSQLAuthUser}.
 When the Client is about to close (typically in {\f1\fs20 TSQLRestClientURI.Destroy}), a {\f1\fs20 GET ModelRoot/auth?UserName=...&Session=...} request is sent to the remote server, in order to explicitly close the corresponding session in the server memory (avoiding most {\i re-play} attacks).
 Note that each opened session has an internal {\i TimeOut} parameter (retrieved from the associated {\f1\fs20 TSQLAuthGroup} table content): after some time of inactivity, sessions are closed on the Server Side.
 In addition, sessions are used to manage safe cross-client @**transaction@s:
@@ -10314,7 +11728,8 @@ In addition, sessions are used to manage safe cross-client @**transaction@s:
 - If a transaction began and another client session try to write on the DB, it will wait until the current transaction is released - a timeout may occur if the server is not able to acquire the write status within some time;
 - This global write locking is defined by the {\f1\fs20 TSQLRest.AcquireWriteMode / AcquireWriteTimeOut} properties, and used on the Server-Side by {\f1\fs20 TSQLRestServer.URI} - you can change this behavior by setting e.g. {\f1\fs20 AcquireWriteMode := amBackgroundThread} which will lock any write process to be executed in a dedicated thread: this may be mandatory is your database client expects the transaction process to take place in the same thread (e.g. @*MS SQL@);
 - If the server do not handle Session/Authentication, transactions can be unsafe, in a multi-client concurrent architecture.
-For performance reasons in a multi-client environment, it's mandatory to release a transaction (via commit or rollback) as soon as possible, using e.g. @28@, or - even better - write dedicated @63@ which will process the whole transaction in one step, following the {\i @*Unit Of Work@} pattern.
+For performance reasons in a multi-client environment, it's mandatory to release a transaction (via commit or rollback) as soon as possible, using e.g. @28@, or - even better - write dedicated @63@ which will process the whole transaction in one step, following the @100@.
+You can specify an optional file name parameter to the {\f1\fs20 TSQLRestServer.Shutdown()} method, which will save the current server state into a local file. Then, if you restart the server in a short time, you may be able to restore all session information by using {\f1\fs20 TSQLRestServer.SessionsLoadFromFile()}. This feature would enable e.g. a quick and transparent ORM Server executable upgrade, in production. But note that even if sessions are persisted and able to be restored, any session-dependent complex data - like server-side temporary @92@ as generated by interface-based services - won't be available. This session temporary backup/restore would make sense only when the server is in @*ORM@ mode, {\i not} when used as @*SOA@.
 :  Authentication schemes
 :   Class-driven authentication
 Authentication is implemented in {\i mORMot} via the following classes:
@@ -10347,7 +11762,7 @@ If you set the {\f1\fs20 aHandleUserAuthentication} parameter to {\f1\fs20 true}
 !!      TSQLRestServerAuthenticationDefault,TSQLRestServerAuthenticationSSPI]);
 !  (...)
 In order to define one or several authentication scheme, you can call the {\f1\fs20 AuthenticationRegister()} and {\f1\fs20 AuthenticationUnregister()} methods of {\f1\fs20 TSQLRestServer}.
-:   mORMot secure RESTful authentication
+:98   mORMot secure RESTful authentication
 The {\f1\fs20 TSQLRestServerAuthenticationDefault} class implements a proprietary but secure RESTful @18@.
 As stated in @74@, typical client-side authentication is performed using the following command:
 ! MyClient.SetUser('User','synopse'); // default user for Security tests
@@ -10373,7 +11788,7 @@ $ root/People/6?session_signature=0000004C000F6DD02E24541C
 For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA-256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA-256, to enhance security with no performance penalty.
 In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a {\i Delphi} Client or from a @*AJAX@ / {\i JavaScript} client.
 On practice, this scheme is secure and very fast, perfect for a {\i Delphi} client, or an AJAX application.
-:   Authentication using Windows credentials
+:121   Authentication using Windows credentials
 :    Windows Authentication
 By default, the {\i hash} of the user password is stored safely on the server side. This may be an issue for corporate applications, since a new user name / password pair is to be defined by each client, which may be annoying.
 Since revision 1.18 of the framework, {\i mORMot} is able to use {\i @*Windows Authentication@} to identify any user. That is, the user does not need to enter any name nor password, but her/his Windows credentials, as entered at Windows session startup, will be used.
@@ -10475,31 +11890,34 @@ This will allow checking of access right for all @*CRUD@ operations, according t
 !!        Call.OutStatus := HTML_FORBIDDEN else
 !      (...)
 Making access rights a parameter allows this method to be handled as pure stateless, @*thread-safe@ and @*session@-free, from the bottom-most level of the framework.
-On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to {\f1\fs20 true}.
+On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to all possible flags.
 The light session process, as implemented by @18@, is used to override the access rights with the one defined in the {\f1\fs20 TSQLAuthGroup.AccessRights} field.
 Be aware than this per-table access rights depend on the table order as defined in the associated {\f1\fs20 TSQLModel}. So if you add some tables to your database model, please take care to add the new tables {\i after} the existing. If you insert the new tables within current tables, you will need to update the access rights values.
 :19  Additional safety
-A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user.
-It adds some options to tune the security policy.
+A {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} field has been made available in the {\f1\fs20 TSQLAccessRights} record to tune remote execution, depending on the authenticated user, and the group he/she is part of.
+This field adds some flags to tune the security policy, for both @*SQL@ or @*SOA@ dimensions.
 :   SQL remote execution
-In our RESTful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly.
-This special command should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
-By default, for security reasons, this {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include {\f1\fs20 reSQL}. It means that no remote call will be allowed but for safe read-only SELECT statements.
-Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} option is used to enable or disable this feature.
+In our @*REST@ful implementation, the POST command with no table associated in the URI allows to execute any SQL statement directly. A GET command could also be used, either with the SQL statement transmitted as body (which is convenient, but not supported by all HTTP clients, since it is not standard), or inlined at URI level.
+These special commands should be carefully tested before execution, since SQL misuses could lead into major security issues. Such execution on any remote connection, if the SQL statement is not a SELECT, is unsafe. In fact, if it may affect the data content.
+By default, for security reasons, the {\f1\fs20 AllowRemoteExecute} field value in {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant does not include the {\f1\fs20 reSQL} flag. It means that no remote call will be allowed but for safe read-only SELECT statements.
+When SELECT statements are sent, the server will always check for the table name specified in their FROM clause. If there is a single table appearing, its security policy will be checked against the {\f1\fs20 GET[]} flags of the corresponding table. If the SELECT statement is more complex (e.g. is a JOINed statement), then the {\f1\fs20 reSQLSelectWithoutTable} will be checked to ensure that the user has the right to execute such statements.
+Another possibility of SQL remote execution is to add a {\f1\fs20 sql=....} inline parameter to a GET request (with optional paging). The {\f1\fs20 reUrlEncodedSQL} flag is used to enable or disable this feature.
 Last but not least, a {\f1\fs20 WhereClause=...} inline parameter can be added to a DELETE request. The {\f1\fs20 reUrlEncodedDelete} option is used to enable or disable this feature.
-You can change the default safe policy by including {\f1\fs20 reSQL}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} in the {\f1\fs20 TSQLAuthGroup.AccessRights} field if an authentication user session. But since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements.
+You can change the default safe policy by including or excluding {\f1\fs20 reSQL}, {\f1\fs20 reSQLSelectWithoutTable}, {\f1\fs20 reUrlEncodedSQL} or {\f1\fs20 reUrlEncodedDelete} flags in the {\f1\fs20 TSQLAuthGroup.} {\f1\fs20 AccessRights}. {\f1\fs20 AllowRemoteExecute} field of an authentication user session.
+If security is a real concern, you should enable @98@ and URI signature on your server, so that only trusted clients may access to the server. This is the main security rule of the framework - in practice, those {\i per table} access right or {\i SQL remote execution flags} are more a design rule than a strong security feature. Since remote execution of any SQL statements can be unsafe, we recommend to write a dedicated server-side service (method-based or interface-based) to execute such statements instead, and disallow remote SQL execution; then clients can safely use those dedicated safe services, and/or @*ORM@ @*CRUD@ operations for simple data requests. It would also help your project to be not tied to SQL, so that a switch to a {\i @*NoSQL@} persistence engine would still be possible, without changing the client code.
 :   Service execution
-The {\f1\fs20 reService} option can be used to enable or unable the @63@ feature of {\i mORMot}.
+The {\f1\fs20 reService} flag of {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} can be used to enable or unable the @63@ feature of {\i mORMot}.
 In addition to this global parameter, you can set per-service and per-method @77@.
-For @49@, if authentication is enabled, any method execution will be processed only for signed URI.
-You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
+For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
+For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
+Do not forget to remove authentication for the services for which you want to enable @97@. In fact, such world-wide @*CDN@ caching services expect the URI to be generic, and not tied to a particular client session.
 :79Scripting Engine
-%cartoon02.png
+%cartoon04.png
 : Scripting abilities
 As a {\i Delphi} framework, {\i mORMot} premium language support is for the {\i object pascal} language. But it could be convenient to have some part of your software not fixed within the executable. In fact, once the application is compiled, execution flow is written in stone: you can't change it, unless you modify the {\i Delphi} source and compile it again. Since {\i mORMot} is {\i Open Source}, you can ship the whole source code to your customers or services with no restriction, and diffuse your own code as pre-compiled {\f1\fs20 .dcu} files, but your end-user will need to have a {\i Delphi} IDE installed (and paid), and know the {\i Delphi} language.
 This is when @**script@ing does come on the scene.\line For instance, scripting may allow to customize an application behavior for an end-user (i.e. for reporting), or let a domain expert define evolving appropriate business rules - following @54@.
 If your business model is to publish a core domain expertise (e.g. accounting, peripheral driving, database model, domain objects, communication, AJAX clients...) among several clients, you will sooner or later need to adapt your application to one or several of your customers. There is no "one {\f1\fs20 exe} to rule them all". Maintaining several executables could become a "branch-hell". Scripting is welcome here: speed and memory critical functionality (in which {\i mORMot} excels) will be hard-coded within the main executable, then everything else could be defined in script.
-There are plenty of script languages available.\line We considered @http://code.google.com/p/dwscript which is well maintained and expressive (it is the code of our beloved {\i SmartMobileStudio}), but is not very commonly used. We still want to include it in the close future.\line Then @http://www.lua.org defines a light and versatile general-purpose language, dedicated to be embedded in any application. Sounds like a viable solution: if you can help with it, your contribution is welcome!\line We did also take into consideration @http://www.python.org and @http://www.ruby-lang.org but both are now far from light, and are not meant to be embedded, since they are general-purpose languages, with a huge set of full-featured packages.
+There are plenty of script languages available.\line We considered @http://code.google.com/p/dwscript which is well maintained and expressive (it is the code of our beloved {\i @*Smart Mobile Studio@}), but is not very commonly used. We still want to include it in the close future.\line Then @http://www.lua.org defines a light and versatile general-purpose language, dedicated to be embedded in any application. Sounds like a viable solution: if you can help with it, your contribution is welcome!\line We did also take into consideration @http://www.python.org and @http://www.ruby-lang.org but both are now far from light, and are not meant to be embedded, since they are general-purpose languages, with a huge set of full-featured packages.
 Then, there is {\i JavaScript}:
 - This is the {\i World Wide Web} assembler. Every programmer in one way or another knows {\i JavaScript};
 - {\i JavaScript} can be a very powerful language - see Crockford's book "{\i JavaScript - The Good Parts}";
@@ -10631,7 +12049,7 @@ Then each time you want to access the {\i JavaScript} engine, you will write for
 !   engine := fSMManager.ThreadSafeEngine;
 !...  // now you can use engine, e.g. engine.Global.someMethod()
 Each thread of the HTTP server thread-pool will be initialized on the fly if needed, or the previously initialized instance will be quickly returned otherwise.
-Once you have the {\f1\fs20 TSMEngine} instance corresponding to the current thread, you can launch actions on its global object, or tune its execution.\line For instance, it could be a good idea to check for the {\i JavaScript} VM's garbage collection:
+Once you have the {\f1\fs20 TSMEngine} instance corresponding to the current thread, you can launch actions on its global object, or tune its execution.\line For instance, it could be a good idea to check for the {\i JavaScript} VM's @*garbage collector@:
 !function TTestServer.Process(Ctxt: THttpServerRequest): cardinal;
 !...
 !   engine := fSMManager.ThreadSafeEngine;
@@ -10753,7 +12171,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 !  ...
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :68Domain-Driven-Design
-%cartoon03.png
+%cartoon05.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
 This is were @54@ - abbreviated DDD - patterns are worth looking at.
 : Domain
@@ -10761,7 +12179,7 @@ What do we call {\i @**Domain@} here?\line {\i The domain represents a sphere of
 As we already stated above, the domain has to be clearly identified, and your software is expected to solve a set of problems related to this domain.
 DDD is some special case of {\i Model-Driven Design}. Its purpose is to create a {\i model} of a given domain. The code itself will express the model: as a consequence, any code refactoring means changing the model, and vice-versa.
 \page
-: Modeling
+:91 Modeling
 Even the brightest programmer would never be able to convert a real-life domain into its software code. What we can do is to create an {\i abstraction} system that describes selected aspects of a domain.
 @**Model@ing is about {\i filtering} the reality, for a given use context: "All models are wrong, some are useful" {\i G. Box, statistician}.
 :  Several Models to rule them all
@@ -10808,14 +12226,14 @@ The main difference between {\i Value Objects} and {\i Entities} is that instanc
 {\i Value objects are immutable} by definition, so should be handled as read-only. In other words, they are incapable of change once they are created.\line Why is it important that they be immutable? With {\i Value objects}, you're seeking side-effect-free functions, yet another concept borrowed by DDD to functional languages (and not available in most @*OOP@ languages, until latest concurrent object definition like in {\i Rust} or {\i Immutable Collections} introduced in C#/.NET 4.5). When you add $10 to $20, are you changing $20? No, you are creating a new money descriptor of $30. A similar behavior should be visible at code level.
 {\i Entities} will very likely have an {\f1\fs20 ID} field, able to identify a given reality, and model the so-called {\i thread of continuity} of this identity. But this {\f1\fs20 ID} is an implementation detail, only used at {\i Persistence Layer} level: at the {\i Domain Layer} level, you should not access {\i Entities} individually, but via a special {\i Entity} bounded to a specific context, called {\i Aggregate Root} (see next paragraph).
 When we define some objects, we should focus on making the implicit become {\i explicit}. For instance, if we have to store a phone number, we won't use a plain {\f1\fs20 string} type for it, but we will create a dedicated {\i Value object} type, making explicit all the behavior of its associated reality. Then we will be free to combine all types into explicit grouped types, on need.
-:  Aggregates
+:124  Aggregates
 {\i @**Aggregates@} are a particular case of {\i Entities}, defined as collection of objects (nested {\i Values} and/or {\i Entities}) that are grouped together by a {\i root Entity}, otherwise known as an {\i @**Aggregate Root@}, which scope has been defined by a given execution context - see "{\i Composition}" above.
 Typically, {\i Aggregates} are persisted in a database, and guarantee the consistency of changes by isolating its members from external objects (i.e. you can link to an aggregate via its ID, but you can not directly access to its internal objects). See @29@ which sounds like @http://martinfowler.com/bliki/AggregateOrientedDatabase.html
 In practice, {\i Aggregates} may be the only kind of objects which will be persisted at the {\i Application layer}, before calling the domain methods: even if each nested {\i Entity} may have its own persistence method (e.g. one RDBMS table per Entity), {\i Aggregates} may be the unique access point to retrieve or update a given state. It will ensure so-called @*Persistence Ignorance@, meaning that domain should remain uncoupled to any low-level storage implementation detail.
 DDD services may just permit remote access to {\i Aggregates} methods, where the domain logic will be defined and isolated.
 :  Factory and Repository patterns
 DDD then favors some patterns to use those objects efficiently.
-The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).
+The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).\line In fact, Delphi is ahead of Java or C#, since it allows {\f1\fs20 virtual} constructors to be defined. Those {\f1\fs20 virtual} constructors are in fact a clean and efficient way of implementing a {\i Factory}, and also fulfil @*SOLID@ principles, especially the {\i @Liskov substitution principle@}: the parent class define an {\i abstract} constructor on which you rely, but the implementation will take place in the {\i overriden} constructor.
 The {\i Factory pattern} can also be used to create {\f1\fs20 interface} instances - see @46@. Main benefit is that alternative implementations may be easily interchanged. Such abstraction helps testing - see @62@ - but also introduces interface-based services - see @63@.
 {\i @**Repository@ pattern} is used to save and dispense each {\i Aggregate Root}.\line It matches the "@*Layer Supertype@" pattern (see above), e.g. via our {\i mORMot} {\f1\fs20 TSQLRecord} and {\f1\fs20 TSQLRest} classes and their Client-Server @*ORM@ features, or via dedicated repository classes - saving data is indeed a concern orthogonal to the model itself. DDD architects claim that persistence is infrastructure, not domain. You may benefit in defining your own repository interface, if the standard ORM / CRUD operations are not enough.
 :  DTO and Events
@@ -10823,7 +12241,7 @@ In addition to these domain-level objects, some cross-cutting types may appear, 
 - {\i Data Transfer Objects} (@**DTO@) are transmission objects, which purpose is to not send your domain across the wire (i.e. separate your layers, following the {\i Anti-Corruption Layer} pattern). It encourages you to create gatekeepers that work to prevent non-domain concepts from leaking into your model.
 - {\i Commands} and {\i Events} are some kind of DTO, since they communicate data about an event and they themselves encapsulate no behavior - in {\i mORMot}, we try to let the framework do all the plumbing, letting those types be implemented via interfaces, avoiding the need to define them by hand.
 Those kind of objects are needed to isolate the domain from the outer world. But if your domain is properly defined, most of your {\i Value Objects} may be used with no translation, so could be used as DTO classes. Even {\i Entities} may be transmitted directly, since their methods should not refer to nothing but their internal properties, so may be of some usefulness outside the domain itself.\line Only the {\i Aggregates} should better be isolated and stay at the {\i Application layer}, given access to its methods and nested objects via proper high-level remote Services.
-:  Services
+:102  Services
 {\i @*Aggregate root@s} (and sometimes {\i Entities}), with all their methods, often end up as {\i state machines}, and the behavior matches accordingly.\line In the domain, since {\i Aggregate roots} are the only kind of entities to which your software may hold a reference, they tend to be the main access point of any process. It could be handy to publish their methods as stateless @*Service@s, isolated at {\i Application layer} level.
 {\i Domain services pattern} is used to model primary operations.\line Domain Services give you a tool for modeling processes that do not have an identity or life-cycle in your domain, that is, that are not linked to one aggregate root, perhaps none, or several. In this terminology, services are not tied to a particular person, place, or thing in my application, but tend to embody processes. They tend to be named after verbs or business activities that domain experts introduce into the so-called {\i Ubiquitous Language}. If you follow the interface segregation principle - see @47@, your domain services should be exposed as dedicated client-oriented methods. Do not leak your domain! In DDD, you develop your {\i Application layer} services directly from the needs of your client applications, letting the {\i Domain layer} focus on the business logic.
 {\i @**Unit Of Work@} can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems.\line In short, it implements transactional process at Domain level, and may be implemented either at service or ORM level. It features so-called @**Persistence Ignorance@, meaning that your domain code may not be tied to a particular persistence implementation, but "hydrate" {\i Aggregate roots} class instances as abstractly as possible.
@@ -10916,9 +12334,9 @@ DDD's {\i @**Aggregates@} may either benefit of using {\i mORMot}'s {\i @3@}, or
 - Otherwise, you should define a dedicated persistence service, then use plain @*DTO@ - like {\i Delphi} {\f1\fs20 record} or our @80@ - or even publish the {\f1\fs20 TSQLRecord} types, and benefit of their automated JSON serialization.
 In all cases, when defining domain objects, we should always make the implicit {\i explicit}, i.e. defining one type (either {\f1\fs20 record/object} or {\f1\fs20 class}) per reality in the model. Thanks to {\i Delphi}'s strong typing, it will ensure that the Domain {\i Ubiquitous language} will appear in the code.
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
-DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a KISS implementation.
+DDD's {\i Events} should be defined also as {\f1\fs20 record}, just like regular DTOs. Note that in the close future, it is planned that {\i mORMot} will allow such events to be defined as {\f1\fs20 interface}, in a @*KISS@ implementation.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
-@28@ is a convenient implementation of the {\i @*Unit of Work@} pattern (i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods). Note that the current implementation of {\f1\fs20 Batch*} methods in {\i mORMot}, which focuses on Client side, should be enhanced to be more convenient and available on the server side, i.e. in the {\i Application Layer}.
+@28@ is a convenient implementation of the @100@ - i.e. regrouping all update / delete / insert operations in a single stream, with global {\f1\fs20 Commit} and {\f1\fs20 Rollback} methods. In fact, {\f1\fs20 Batch*} methods do work on Client side, you you can define one or several {\f1\fs20 @*TSQLRestBatch@} instance on the Server side. You may use those {\f1\fs20 TSQLRestBatch} instances to implement safe and fast {\i @*Unit of Work@} object modification tracking in the {\i Application Layer} services - see @100@.
 :  Defining services
 In practice, {\i mORMot}'s Client-Server architecture may be used as such:
 - {\i @*Service@s via methods} - see @49@ - can be used to publish methods corresponding to your aggregate roots defined as {\f1\fs20 TSQLRecord}.\line This will make it pretty @*REST@ful compatible.
@@ -11002,7 +12420,9 @@ label="Domain Model";
 In order to provide the better scaling of the server side, @*cache@ can be easily implemented at every level, and hosting can be tuned in order to provide the best response time possible: one central server, several dedicated servers for application, domain and persistence layers...
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
-%cartoon04.png
+%cartoon06.png
+Since we covered most architectural and technical aspects of the framework, it is time to put the last missing bricks to the building, meaning testing and logging.
+\page
 : Automated testing
 You know that @**test@ing is (almost) everything if you want to avoid regression problems in your application.
 How can you be confident that any change made to your software code won't create any error in other part of the software?
@@ -11015,9 +12435,9 @@ And even better, testing-driven coding can be encouraged:
 - Launch the test - it must pass;
 - Add some features, and repeat all previous tests every time you add a new feature.
 It could sounds like a waste of time, but such coding improve your code quality a lot, and, at least, it help you write and optimize every implementation feature.
-The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), it is very much integrated with other elements of the framework (like logging), and provide a complete {\i stubbing / mocking} mechanism to cover @62@.
+The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), the {\f1\fs20 SynTests.pas} unit is very much integrated with other elements of the framework (like logging), is cross-platform and cross-compiler, and provides a complete {\i stubbing / mocking} mechanism to cover @62@.
 :  Involved classes in Unitary testing
-The @!TSynTest,TSynTestCase,TSynTests!Lib\SynCommons.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE6, no external dependency).
+The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTests.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE7 and FPC, no external dependency).
 The following diagram defines this class hierarchy:
 \graph HierTSynTest TSynTest classes hierarchy
 \TSynTests\TSynTest
@@ -11123,20 +12543,321 @@ $! All tests passed successfully.
 You can see that all text on screen was created by "UnCamelCasing" the method names (thanks to our good old @*Camel@), and that the test suit just follows the order defined when registering the classes. Each method has its own timing, which is pretty convenient to track performance regressions.
 This test program has been uploaded in the {\f1\fs20 SQLite3\\Sample\\07 - SynTest} folder of the Source Code Repository.
 :  Implemented tests
-The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 35,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
+The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 175,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
 Before any release all unitary regression tests are performed with the following compilers:
-- {\i Delphi} 5 (for a limited scope, including {\i SynCommons}, {\i SynPdf} and {\i SynDB});
+- {\i Delphi} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynLog.pas}, {\f1\fs20 SynTests.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
 - {\i Delphi} 6;
 - {\i Delphi} 7, with and without our Enhanced Run Time Library;
 - {\i Delphi} 2007;
 - {\i Delphi} 2010 (we assume that if it works with {\i Delphi} 2010, it will work with {\i Delphi} 2009, with the exception of {\f1\fs20 generic} compilation);
 - {\i Delphi} XE4;
-- {\i Delphi} XE6.
+- {\i Delphi} XE6;
+- {\i Delphi} XE7;
+- {\i FPC} 2.7.1 / 3.1.1 (svn revision).
 Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBExplorer@} sophisticated tools) are compiled, and user-level testing is performed against those applications.
 You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
 \page
-:73 Logging
-The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynCommons} unit - see @16@.
+:16 Enhanced logging
+A @**log@ging mechanism is integrated with cross-cutting features of the framework. It includes stack trace exception and such, just like {\i MadExcept}, using {\f1\fs20 .map} file content to retrieve debugging information from the source code.
+Here are some of its features:
+- Logging with a {\i set} of levels, not only a level scale;
+- Fast, low execution overhead;
+- Can load {\f1\fs20 .map} file symbols to be displayed in logging (i.e. source code file name and line numbers are logged instead of a hexadecimal value);
+- Compression of {\f1\fs20 .map} into binary {\f1\fs20 .mab} (900 KB -> 70 KB);
+- Inclusion of the {\f1\fs20 .map/.mab} into the {\f1\fs20 .exe}, with very slow size increase;
+- Exception logging ({\i Delphi} or low-level exceptions) with unit names and line numbers;
+- Optional stack trace with units and line numbers;
+- Methods or procedure recursive tracing, with {\i Enter} and {\i auto-Leave} (using a fake {\f1\fs20 interface} instance);
+- High resolution time stamps, for customer-side profiling of the application execution;
+- Set / enumerates / {\f1\fs20 TList} / {\f1\fs20 TPersistent} / {\f1\fs20 TObjectList} / dynamic array JSON serialization;
+- Per-thread or global logging;
+- Optional multiple log files on the same process;
+- Optional rotation when main log reaches a specified size, with compression of the rotated logs;
+- Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
+- Optional colored echo to a console window, for interactive debugging;
+- Fast log viewer tool available, including thread filtering and customer-side execution profiling;
+- Optional remote logging via HTTP - the log viewer can be used as server.
+:  Setup logging
+Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
+For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
+In short, you can add logging to your program, just by using the {\f1\fs20 TSynLog} class, as such:
+!  TSynLog.Add.Log(sllInfo,Stats.DebugMessage);
+This line will log the {\f1\fs20 Stats.DebugMessage} text, with a {\f1\fs20 sllInfo} notification level. See the description of all {\f1\fs20 Log()} overloaded methods of the {\f1\fs20 ISynLog} interface, to find out how your project can easily log events.
+First of all, you need to define your logging setup via code:
+!  with TSynLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    //Level := [sllException,sllExceptionOS];
+!    //HighResolutionTimeStamp := true;
+!    //AutoFlushTimeOut := 5;
+!    OnArchive := EventArchiveSynLZ;
+!    //OnArchive := EventArchiveZip;
+!    ArchiveAfterDays := 1; // archive after one day
+!  end;
+The main setting here is {\f1\fs20 TSynLog.Family.Level := ...} which defines which levels are to be logged. That is, if {\f1\fs20 sllInfo} is part of {\f1\fs20 TSynLog.Family.Level}, any {\f1\fs20 TSynLog.Add.Log(sllInfo,...)} command will log the corresponding content - otherwise, it will be a no-operation. {\f1\fs20 LOG_VERBOSE} is a constant setting all levels at once.
+You have several debugging levels available, and even 4 custom types:
+!  TSynLogInfo = (
+!    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+!    sllEnter, sllLeave,
+!    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+!    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+!    sllServiceCall, sllServiceReturn, sllUserAuth,
+!    sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun);
+Here are the purpose of each logging level:
+- {\f1\fs20 sllInfo} will log general information events;
+- {\f1\fs20 sllDebug} will log detailed debugging information;
+- {\f1\fs20 sllTrace} will log low-level step by step debugging information;
+- {\f1\fs20 sllWarning} will log unexpected values (not an error);
+- {\f1\fs20 sllError} will log errors;
+- {\f1\fs20 sllEnter} will log every method start;
+- {\f1\fs20 sllLeave} will log every method quit;
+- {\f1\fs20 sllLastError} will log the {\f1\fs20 GetLastError} OS message;
+- {\f1\fs20 sllException} will log all exception raised - available since Windows XP;
+- {\f1\fs20 sllExceptionOS} will log all OS low-level exceptions ({\f1\fs20 EDivByZero, ERangeError, EAccessViolation}...);
+- {\f1\fs20 sllMemory} will log memory statistics;
+- {\f1\fs20 sllStackTrace} will log caller's stack trace (it is by default part of {\f1\fs20 TSynLogFamily. LevelStackTrace} like {\f1\fs20 sllError, sllException, sllExceptionOS, sllLastError} and {\f1\fs20 sllFail});
+- {\f1\fs20 sllFail} was defined for {\f1\fs20 TSynTestsLogged. Failed} method, and can be used to log some customer-side assertions (may be notifications, not errors);
+- {\f1\fs20 sllSQL} is dedicated to trace the SQL statements;
+- {\f1\fs20 sllCache} should be used to trace any internal caching mechanism (it is used for instance by our SQL statement caching);
+- {\f1\fs20 sllResult} could trace the SQL results, JSON encoded;
+- {\f1\fs20 sllDB} is dedicated to trace low-level database engine features;
+- {\f1\fs20 sllHTTP} could be used to trace HTTP process;
+- {\f1\fs20 sllClient/sllServer} could be used to trace some Client or Server process;
+- {\f1\fs20 sllServiceCall/sllServiceReturn} to trace some remote service or library;
+- {\f1\fs20 sllUserAuth} to trace user authentication (e.g. for individual requests);
+- {\f1\fs20 sllCustom1..sllCustom4} items can be used for any purpose by your programs;
+- {\f1\fs20 sllNewRun} will be written when a process re-opens a rotated log.
+Logging is not using directly a {\f1\fs20 TSynLogInfo} level, but the following {\f1\fs20 set}:
+!  /// used to define a logging level
+!  // - i.e. a combination of none or several logging event
+!  // - e.g. use LOG_VERBOSE constant to log all events
+!  TSynLogInfos = set of TSynLogInfo;
+Most logging tools in the wild use a level scale, i.e. with a hierarchy, excluding the lower levels when one is selected.
+Our logging classes use a {\i set}, and not directly a particular level, so you are able to select which exact events are worth recording. In practice, we found this pattern to make a lot of sense and to be much more efficient for support.
+:  Call trace
+The logging mechanism can be used to trace recursive calls. It can use an interface-based mechanism to log when you enter and leave any method:
+!procedure TMyDB.SQLExecute(const SQL: RawUTF8);
+!var ILog: ISynLog;
+!begin
+!  ILog := TSynLogDB.Enter(self,'SQLExecute');
+!  // do some stuff
+!  ILog.Log(sllInfo,'SQL=%',[SQL]);
+!end; // when you leave the method, it will write the corresponding event to the log
+It will be logged as such:
+$20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
+$20110325 19325801 info   SQL=SELECT * FROM Table;
+$20110325 19325801  -
+Note that by default you have human-readable {\i time and date} written to the log, but it is also possible to replace this timing with {\i high-resolution timestamps}. With this, you'll be able to profile your application with data coming from the customer side, on its real computer. Via the {\f1\fs20 Enter} method (and its {\i auto-Leave} feature), you have all information needed for this.
+:  Including symbol definitions
+In the above logging content, the method name is set in the code (as {\f1\fs20 'SQLExecute'}). But if the logger class is able to find a {\f1\fs20 .map} file associated to the {\f1\fs20 .exe}, the logging mechanism is able to read this symbol information, and write the exact line number of the event.
+By default, the {\f1\fs20 .map} file information is not generated by the compiler. To force its creation, you must ensure the {\f1\fs20 \{$D+\}} compiler directive is set in every unit (which is the case by default, unless you set {\f1\fs20 \{$D-\}} in the source), and the "{\i Detailed Map File}" option selected in the {\i Project > Options > Linker} page of the {\i Delphi} IDE.
+In the following log entries, you'll see both high-resolution time stamp, and the entering and leaving of a {\f1\fs20 TTestCompression.TestLog} method traced with no additional code (with accurate line numbers, extracted from the {\f1\fs20 .map} content):
+$0000000000000B56  +    TTestCompression(00AB3570).000E6C79 SynSelfTests.TTestCompression.TestLog (376)
+$0000000000001785  -
+There is already a dedicated {\f1\fs20 TSynLogFile} class able to read the {\f1\fs20 .log} file, and recognize its content.
+The first time the {\f1\fs20 .map} file is read, a {\f1\fs20 .mab} file is created, and will contain all symbol information needed. You can send the {\f1\fs20 .mab} file with the {\f1\fs20 .exe} to your client, or even embed its content to the {\f1\fs20 .exe} (see the {\f1\fs20 Map2Mab.dpr} sample file located in the {\f1\fs20 Samples\\11 - Exception logging\\} folder).
+This {\f1\fs20 .mab} file is very optimized: for instance, a {\f1\fs20 .map} of 927,984 bytes compresses into a 71,943 {\f1\fs20 .mab} file.
+:  Exception handling
+Of course, this @*log@ging mechanism is able to intercept the raise of exceptions, including the worse (e.g. {\f1\fs20 EAccessViolation}), to be logged automatically in the log file, as such:
+$000000000000090B EXCOS EAccessViolation (C0000005) at 000E9C7A SynSelfTests.Proc1 (785)  stack trace 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9D51 SynSelfTests.Proc2 (801) 000E9CC1 SynSelfTests.Proc1 (790) 000E9E2E SynSelfTests.TestsLog (818) 000EA0FB SynSelfTests (853) 00003BF4 System.InitUnits 00003C5B System.@StartExe 000064AB SysInit.@InitExe 000EA3EC TestSQL3 (153)
+The {\f1\fs20 TSynLogInfo} logging level makes a difference between high-level {\i Delphi} exceptions ({\f1\fs20 sllException}) and lowest-level OS exceptions ({\f1\fs20 sllExceptionOS}) like {\f1\fs20 EAccessViolation}.
+For instance, if you add to your program:
+!uses
+!  SynLog;
+!(...)
+!  TSynLog.Family.Level := [sllExceptionOS];
+all OS exceptions (excluding pure {\i Delphi} exception like {\f1\fs20 EConvertError} and such) will be logged to a separated log file.
+!TSynLog.Family.Level := [sllException,sllExceptionOS];
+will trace also {\i Delphi} exceptions, for instance.
+You can specify some {\f1\fs20 Exception} class to be ignored, by adding them to {\f1\fs20 Family.ExceptionIgnore} internal list. It could make sense to add this setting, if your code often triggers some non-breaking exceptions, e.g. with {\f1\fs20 StrToInt()}:
+!  TSynLog.Family.ExceptionIgnore.Add(EConvertError);
+If your {\i Delphi} code executes some {\i .Net} managed code (e.g. exposed via some COM wrapper components), the unit is able to recognize most un-handled {\i .Net} exceptions, and log them with their original {\f1\fs20 C#} class name (for instance, {\f1\fs20 EOleSysError 80004003} will be recorded as a much more user-friendly "{\f1\fs20 [.NET/CLR unhandled ArgumentNullException]}" message.
+You can set the following global variable to assign a customized callback, and be able to customize the logging content associated to any exception:
+!type
+!  /// global hook callback to customize exceptions logged by TSynLog
+!  // - should return FALSE if Context.EAddr and Stack trace is to be appended
+!  TSynLogExceptionToStr = function(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
+!
+!var
+!  /// allow to customize the Exception logging message
+!  TSynLogExceptionToStrCustom: TSynLogExceptionToStr = nil;
+The {\f1\fs20 Context: TSynLogExceptionContext} content is to be used to append some text to the specified {\f1\fs20 TTextWriter} instance.
+An easier possibility is to inherit your custom exception class from {\f1\fs20 ESynException}, and override its unique virtual method:
+!  /// generic parent class of all custom Exception types of this unit
+!  ESynException = class(Exception)
+!  public
+!    /// can be used to customize how the exception is logged
+!    // - this default implementation will call the DefaultSynLogExceptionToStr()
+!    // callback or TSynLogExceptionToStrCustom, if defined
+!    // - override this method to provide a custom logging content
+!    // - should return TRUE if Context.EAddr and Stack trace is not to be
+!    // written (i.e. as for any TSynLogExceptionToStr callback)
+!!    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
+!  end;
+See {\f1\fs20 TSynLogExceptionContext} to check the execution context, and the implementation of the {\f1\fs20 function DefaultSynLogExceptionToStr()} function.
+:  Serialization
+{\i @*dynamic array@s} can also be serialized as @*JSON@ in the log on request, via the default {\f1\fs20 TSynLog} class, as defined in {\f1\fs20 SynLog.pas} unit - see @48@.
+The {\f1\fs20 TSQLLog} class (using the enhanced @*RTTI@ methods defined in {\f1\fs20 mORMot.pas} unit) is even able to serialize {\f1\fs20 @*TSQLRecord@, @*TPersistent@, TList} and {\f1\fs20 @*TCollection@} instances as JSON, or any other class instance, after call to {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@}.
+For instance, the following code:
+!procedure TestPeopleProc;
+!var People: TSQLRecordPeople;
+!    Log: ISynLog;
+!begin
+!  Log := TSQLLog.Enter;
+!  People := TSQLRecordPeople.Create;
+!  try
+!    People.ID := 16;
+!    People.FirstName := 'Louis';
+!    People.LastName := 'Croiv嶵aton';
+!    People.YearOfBirth := 1754;
+!    People.YearOfDeath := 1793;
+!    Log.Log(sllInfo,People);
+!  finally
+!    People.Free;
+!  end;
+!end;
+will result in the following log content:
+$0000000000001172  +    000E9F67 SynSelfTests.TestPeopleProc (784)
+$000000000000171B info      {"TSQLRecordPeople(00AB92E0)":{"ID":16,"FirstName":"Louis","LastName":"Croiv嶵aton","Data":"","YearOfBirth":1754,"YearOfDeath":1793}}
+$0000000000001731  -
+:  Multi-threaded applications
+You can define several @*log@ files per process, and even a per-thread log file, if needed (it could be sometimes handy, for instance on a server running the same logic in parallel in several threads).
+The logging settings are made at the logging class level. Each logging class (inheriting from {\f1\fs20 TSynLog}) has its own {\f1\fs20 TSynLogFamily} instance, which is to be used to customize the logging class level. Then you can have several instances of the individual {\f1\fs20 TSynLog} classes, each class sharing the settings of the {\f1\fs20 TSynLogFamily}.
+You can therefore initialize the "family" settings before using logging, like in this code which will force to log all levels ({\f1\fs20 LOG_VERBOSE}), and create a per-thread log file, and write the {\f1\fs20 .log} content not in the {\f1\fs20 .exe} folder, but in a custom directory:
+! with TSynLogDB.Family do
+! begin
+!   Level := LOG_VERBOSE;
+!!   PerThreadLog := ptOneFilePerThread;
+!   DestinationPath := 'C:\Logs';
+! end;
+If you specifies {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} for the family, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} - the supplied {\f1\fs20 LogView} tool will handle it as expected. This can be very useful for a multi-threaded server process, e.g. as implement with {\i mORMot}'s Client-Server classes @35@.
+:  Log to the console
+For debugging purposes, it could be very handy to output the logging content to a console window. It enables interactive debugging of a Client-Server process, for instance: you can interact with the Client, then look in real time at the server console window, and inspect which requests are processed, without the need to open the log file.
+The {\f1\fs20 EchoToConsole} property enable you to select which events are to be echoed on the console (perhaps you expect only errors to appear, for instance).
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!!    EchoToConsole := LOG_VERBOSE; // log all events to the console
+!  end;
+Depending on the events, colors will be used to write the corresponding information. Errors will be displayed as light red, for instance.
+Note that this echoing process slow down the logging process a lot, since it is currently implemented in a blocking mode, and writing to the console under {\i Windows} is much slower than writing to a file. This feature is therefore disabled by default, and not to be enabled on a production server, but only to make interactive debugging easier.
+:104  Remote logging
+By default, {\f1\fs20 TSynLog} writes its activity to a local file, and/or to the console. The log file can be transmitted later on (once compressed) to support, for further review and debugging.\line But sometimes, it may be handy to see the logging in real-time, on a remote computer.
+You can enable such remote monitoring for a given {\f1\fs20 TSynLog} class, by adding the {\f1\fs20 mORMotHTTPClient.pas} unit in your use clause, then calling the following constructor:
+! TSQLHttpClient.CreateForRemoteLogging('192.168.1.15',SQLite3Log,'8091','LogService');
+This command will let any {\f1\fs20 SQLite3Log} event be sent to a remote server running at {\f1\fs20 http://192.168.1.15:8091/LogService/RemoteLog} - in fact this should be a {\i mORMot} server, but may be any REST server, able to answer to a {\f1\fs20 PUT} command sent to this URI.
+A {\f1\fs20 TSQLHttpClient} instance will be created, and will be managed by the {\f1\fs20 SQLite3Log} instance. It will be released when the application will be closed, or when the {\f1\fs20 SQLite3Log.Family.EchoRemoteStop} method will be called.
+In practice, our {\i Log View} tool - see @103@ - is able to run as a compatible remote server. Execute the tool, set the expected {\i Server Root} name ('{\f1\fs20 LogService}' by default), and the expected {\i Server Port} (8091 by default), then click on the "{\f1\fs20 Server Launch}" button.\line The {\i Log View} tool will now display in real time all incoming events, search into their content, and allow to save all received events into a regular {\f1\fs20 .log} or {\f1\fs20 .synlz} file, for further archiving and study.\line Note that since the {\i Log View} tool will run a {\f1\fs20 http.sys} based server - see @88@ - you may have to run once the tool with administrator rights, to register the {\i Server Root} / {\i Server Port} combination for binding.
+Implementation of this remote logging has been tuned on both client and server side.\line On client side, log events are gathered and sent in a dedicated background thread: if a lot of events are generated, they will be transferred in chunks of several rows, to minimize resource and bandwidth. On server side, incoming events are stored in memory, and indexed on the fly, with a periodic refresh rate of 500 ms: even a very active client logger would just let the {\i Log View} tool be responsive and efficient.\line Thanks to the nature of the {\f1\fs20 http.sys} based server, several {\i Server Root} URI can be accessed in parallel with several {\i Log View} tool instance, on the same HTTP port: it will ease the IT policy of your network, since a single forwarded port would be able to handle several incoming connections.
+See the "{\f1\fs20 RemoteLoggingTest.dpr}" sample from "{\f1\fs20 11 - Exception logging}", in conjunction with the {\f1\fs20 LogView.dpr} tool available in the same folder, for a running example of remote logging.
+Note that our cross-platform clients - see @86@ - are able to log to a remote server, with the same exact format as used by our {\f1\fs20 TSynLog} class.
+:  Log to third-party libraries
+Our {\f1\fs20 TSynLog} class was designed to write its information to a file, and optionally to the console or a remote log server (as we just saw). In fact, {\f1\fs20 TSynLog} is extensively used by the {\i mORMot} framework to provide various levels of details on what happens behind the scene: it is great for debugging purposes.
+It may be convenient to let {\f1\fs20 TSynLog} work with any third party logging applications such as {\i CodeSite} or {\i SmartInspect}, or any proprietary solution. As a result, {\i mORMot} logs can be mixed with existing application logs.
+You can define the {\f1\fs20 TSynLogFamily.EchoCustom} property to specify a simple event to be triggered for each log operation: the application can then decide to log to a third party logger application.
+Note that there is also the {\f1\fs20 TSynLogFamily.NoFile} property, which allows to disable completely the built-in file logging mechanism.
+For instance, you may write:
+!procedure TMyClass.Echo(Sender: TTextWriter; Level: TSynLogInfo; const Text: RawUTF8);
+!begin
+!  if Level in LOG_STACKTRACE then // filter only errors
+!    writeln(Text); // could be any third-party logger
+!end;
+!
+!...
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    // EchoToConsole := LOG_VERBOSE; // log all events to the console
+!!    EchoCustom := aMyClass.Echo; // register third-party logger
+!!    NoFile := true; // ensure TSynLog won't use the default log file
+!  end;
+A process similar to {\f1\fs20 TSynLogFile.ProcessOneLine()} could then parse the incoming {\f1\fs20 Text} value, if needed.
+:  Automated log archival
+Log archives can be created with the following settings:
+! with TSynLogDB.Family do
+! begin
+!  (...)
+!  OnArchive := EventArchiveZip;
+!  ArchivePath := '\\Remote\WKS2302\Archive\Logs'; // or any path
+! end;
+The {\f1\fs20 ArchivePath} property can be set to several functions, taking a timeout delay from the {\f1\fs20 ArchiveAfterDays} property value:
+- {\f1\fs20 nil} is the default value, and won't do anything: the {\f1\fs20 .log} will remain on disk until they will be deleted by hand;
+- {\f1\fs20 EventArchiveDelete} in order to delete deprecated {\f1\fs20 .log} files;
+- {\f1\fs20 EventArchiveSynLZ} to compress the {\f1\fs20 .log} file into a proprietary {\i @*SynLZ@} format: resulting file name will be located in {\f1\fs20 ArchivePath\\log\\YYYYMM\\*.log.synlz}, and the command-line {\f1\fs20 UnSynLz.exe} tool (calling {\f1\fs20 FileUnSynLZ} function of {\f1\fs20 SynCommons.pas} unit) can be used to uncompress it in to plain {\f1\fs20 .log} file;
+- {\f1\fs20 SynZip.EventArchiveZip} will archive the {\f1\fs20 .log} files in {\f1\fs20 ArchivePath\\log\\YYYYMM.zip} files, grouping every .
+{\i SynLZ} files are less compressed, but created much faster than {\f1\fs20 .zip} files. However, {\f1\fs20 .zip} files are more standard, and on a regular application, compression speed won't be an issue for the application.
+:  Log files rotation
+You can set {\f1\fs20 TSynLogFamily.RotateFileCount} and {\f1\fs20 RotateFileSizeKB} properties, to enable log file rotation:
+- If both values are > 0, the log file will have a fixed name, without any time-stamp within;
+- {\f1\fs20 RotateFileSizeKB} will define the maximum size of the main uncompressed log file
+- {\f1\fs20 RotateFileCount} will define how many files are kept on disk - note that rotated files are compressed using {\i SynLZ}, so compression will be very fast.
+Log file rotation is as easy as:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
+!    RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
+!  end;
+Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
+- {\f1\fs20 TestSQL3.log} which will be the latest (current) log file, uncompressed;
+- {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i Log Viewer} tool - see @103@ - is able to uncompress those {\f1\fs20 .synlz} files directly.
+Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
+As an alternative, or in addition to this {\i by-size} rotation pattern, you could specify a fixed time of the day to perform the rotation.\line For instance, the following will perform automatic rotation of the log files, whatever their size, at {\f1\fs20 23:00} each evening:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!    RotateFileCount := 5;        // will maintain a set of up to 5 files
+!    RotateFileDailyAtHour := 23; // rotate at 11:00 PM
+!  end;
+If the default behavior - which is to compress all rotated files into {\f1\fs20 .synlz} format, and delete the older files - does not fit your needs, you can set a custom event to the {\f1\fs20 TSynLogFamily.OnRotate} property, which would take care of the file rotation process.
+:  Integration within tests
+Logging is integrated within the unit @*test@ing classes, so that any failure will create an entry in the log with the source line, and stack trace:
+$C:\Dev\lib\SQLite3\exe\TestSQL3.exe 0.0.0.0 (2011-04-13)
+$Host=Laptop User=MyName CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
+$TSynLogTest 1.13 2011-04-13 05:40:25
+$
+$20110413 05402559 fail  TTestLowLevelCommon(00B31D70) Low level common: TDynArray "dynamic array failure" stack trace 0002FE0B SynCommons.TDynArray.Init (15148) 00036736 SynCommons.Test64K (18206) 0003682F SynCommons.TTestLowLevelCommon._TDynArray (18214) 000E9C94 TestSQL3 (163)
+The difference between a test suit without logging ({\f1\fs20 TSynTests}) and a test suit with logging ({\f1\fs20 TSynTestsLogged}) is only this overridden method:
+!procedure TSynTestsLogged.Failed(const msg: string; aTest: TSynTestCase);
+!begin
+!  inherited;
+!  with TestCase[fCurrentMethod] do
+!    fLogFile.Log(sllFail,'%: % "%"',
+!      [Ident,TestName[fCurrentMethodIndex],msg],aTest);
+!end;
+In order to enable tests logging, you have just to enable it, e.g. with:
+! TSynLogTestLog.Family.Level := LOG_VERBOSE;
+You can optionally redirect the following global variable at program initialization, to share testing events with the main {\i mORMot} logs:
+!  with TSQLLog.Family do begin
+!    Level := LOG_VERBOSE;
+!!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
+!  end;
+:103  Log Viewer
+Since the log files tend to be huge (for instance, if you set the logging for our unitary tests, the 17,000,000 test cases do create a huge log file of about 550 MB), a log viewer was definitively in need.
+The log-viewer application is available as source code in the "{\i Samples}" folder, in the "{\i 11 - Exception logging}" sub-folder.
+:   Open log files
+You can run it with a specified log file on the command line, or use the "{\i Browse}" button to browse for a file. That is, you can associate this tool with your {\f1\fs20 .log} files, for instance, and you'll open it just by double-clicking on such files.
+Note that if the file is not in our {\f1\fs20 TSynLog} format, it will still be opened as plain text. You'll be able to browse its content and search within, but all the nice features of our logging won't be available, of course.
+It is worth saying that the viewer was designed to be {\i fast}.\line In fact, it takes no time to open any log file. For instance, a 390 MB log file is opened in less than one second on my laptop. Under Windows Seven, it takes more time to display the "Open file" dialog window than reading and indexing the 390 MB content.\line It uses internally memory mapped files and optimized data structures to access to the data as fast as possible - see {\f1\fs20 TSynLogFile} class.
+:   Log browser
+The screen is divided into three main spaces:
+- On the left side, the panel of commands;
+- On the right side, the log events list;
+- On the middle, an optional list of method calls, and another list of threads (not shown by default).
+The command panel allows to {\i Browse} your disk for a {\f1\fs20 .log} file. This button is a toggle of an optional {\i Drive / Directory / File} panel on the leftmost side of the tool. When a {\f1\fs20 .log / .synlz / .txt} file is selected, its content is immediately displayed. You can specify a directory name as a parameter of the tool (e.g. in a {\f1\fs20 .lnk} desktop link), which will let the viewer be opened in "Browse" mode, starting with the specified folder.
+A button gives access to the global {\i Stats} about its content (customer-side hardware and software running configuration, general numbers about the log), and even ask for a source code line number and unit name from a hexadecimal address available in the log, by browsing for the corresponding {\f1\fs20 .map} file (could be handy if you did not deliver the {\f1\fs20 .map} content within your main executable - which you should have to, IMHO).
+Just below the "{\i Browse}" button, there is an edit field available, with a ? button. Enter any text within this edit field, and it will be searched within the log events list. Search is case-insensitive, and was designed to be fast. Clicking on the ? button (or pressing the {\f1\fs20 F3} key) allows to repeat the last search.
+In the very same left panel, you can see all existing events, with its own color and an associated check-box. Note that only events really encountered in the {\f1\fs20 .log} file appear in this list, so its content will change between log files. By selecting / un-selecting a check-box, the corresponding events will be instantaneously displayed / or not on the right side list of events. You can right click on the events check-box list to select a predefined set of events.
+The right colored event list follows the events appended to the log, by time order. When you click on an event, its full line content is displayed at the bottom on the screen, in a memo.
+Having all @*SQL@ / @*NoSQL@ and @*Client-Server@ events traced in the log is definitively a huge benefit for customer support and bug tracking.
+:   Customer-side profiler
+One distinctive feature of the {\f1\fs20 TSynLog} logging class is that it is able to map methods or functions entering/leaving (using the {\f1\fs20 Enter} method), and trace this into the logs. The corresponding timing is also written within the "{\i Leave}" event, and allows application profiling from the customer side. Most of the time, profiling an application is done during the testing, with a test environment and database. But this is not, and will never reproduce the exact nature of the customer use: for instance, hardware is not the same (network, memory, CPU), nor the software (Operating System version, [anti-]virus installed)... By enabling customer-side method profiling, the log will contain all relevant information. Those events are named "{\i Enter}" / "{\i Leave}" in the command panel check-box list, and written as + and - in the right-sided event list.
+The "{\i Methods profiler}" options allow to display the middle optional method calls list. Several sort order are available: by name (alphabetical sort), by occurrence (in running order, i.e. in the same order than in the event log), by time (the full time corresponding to this method, i.e. the time written within the "{\i Leave}" event), and by proper time (i.e. excluding all time spent in the nested methods).
+The "{\i Merge method calls}" check-box allows to regroup all identical method calls, according to their name. In fact, most methods are not called once, but multiple time. And this is the accumulated time spent in the method which is the main argument for code profiling.
+I'm quite sure that the first time you'll use this profiling feature on a huge existing application, you'll find out some bottlenecks you would have never thought about before.
+:   Per-thread inspection
+If the {\f1\fs20 TSynLog} family has specified {\f1\fs20 PerThreadLog := ptIdentifiedInOnFile} property, a new column will be added for each log row, with the corresponding {\f1\fs20 ThreadID} of the logged action.
+The log-viewer application will identify this column, and show a "{\i Thread}" group below the left-side commands. It will allow to go to the next thread, or toggle the optional {\i Thread view} list. By checking / un-checking any thread of this list, you are able to inspect the execution log for a given process, very easily. A right-click on this thread list will display a pop-up menu, allowing to select all threads or no thread in one command.
+:   Server for remote logging
+As was stated above, @104@ can use our {\i Log View} tool as server and real-time viewer for any remote client, either using {\f1\fs20 TSynLog}, or any cross-platform client - see @86@.
+Using a remote logging is specially useful from mobile applications (written with {\i Delphi} / @*FireMonkey@ or with @*Smart Mobile Studio@ / @*AJAX@). Our viewer tool allows efficient live debugging of such platforms.
+:73  Framework log integration
+The framework makes an extensive use of the logging features implemented in the {\f1\fs20 SynLog.pas} unit - see @16@.
 In its current implementation, the framework is able to log on request:
 - Any exceptions triggered during process, via {\f1\fs20 sllException} and {\f1\fs20 sllExceptionOS} levels;
 - Client and server @*REST@ful {\f1\fs20 URL} methods via {\f1\fs20 sllClient} and {\f1\fs20 sllServer} levels;
@@ -11175,7 +12896,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  (...)
 Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
-%cartoon05.png
+%cartoon07.png
 =[License]
 \page
 : Availability
@@ -11183,7 +12904,7 @@ As a true {\i Open Source} project, all source code of the framework is availabl
 As an alternative, you can monitor or fork our projects from our @*GitHub@ repository, at @http://github.com/synopse/mORMot
 The source has been commented following the scheme used by our {\i @*SynProject@} documentation tool. That is all interface definition of the units have special comments, which were extracted then incorporated into this @SAD@, in the following pages.
 :  Obtaining the Source Code
-Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official http://synopse.info web site, but you may want to use the latest version available.
+Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official @http://synopse.info web site, but you may want to use the latest version available.
 The easiest is to download a nightly-generated archive of the latest version of the trunk, from @http://synopse.info/files/mORMotNightlyBuild.zip
 As an alternative, you can manually obtain a {\f1\fs20 .zip} archive containing a snapshot of the latest version of the whole source code tree directly from this repository.
 Follow these steps:
@@ -11195,26 +12916,30 @@ Follow these steps:
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
-- {\i Delphi} 6 up to {\i Delphi} XE6 compiler and IDE (@**FPC@ support is not yet finished);
+- {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
 - Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
+- Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
 - @90@ startup with 2.1, for creating AJAX / HTML5 / Mobile clients.
-Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynPDF.pas} or the @27@ units) are also compatible with {\i Delphi} 5.
+Some part of the library (e.g. {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynTests.pas}, {\f1\fs20 SynLog.pas} {\f1\fs20 SynPDF.pas} or the @27@ units) are also compatible with {\i Delphi} 5.
 If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated {\i [DCC Error] @*E2201@ Need imported data reference ($G) to access 'VarCopyProc'} error at compilation, you should defined the {\f1\fs20 USEPACKAGES} conditional in your project's options. Open {\f1\fs20 SynCommons.inc} for a description of this conditional, and all over definitions global to all {\i mORMot} units - see @45@.
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
-The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s (yes, it is possible!). At least, it works, and works pretty well.\line As we just stated, we were able to make our cross-platform clients compatible with this developping environement, so every door is open! Stay tuned!
+The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and works pretty well. Official {\i @*Linux@} / {\i FPC} support is available for {\i mORMot} servers - thanks to Alfred! - but this platform is brand new to the framework, so less stable and not yet feature complete.
 :  32 bit sqlite3*.obj and 64 bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i Win64} library yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For native {\i Windows} @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For FPC, you can download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file.
+You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
 You can download the needed files from @http://synopse.info/files/synsm.7z
 Do not forget to copy both files in the executable folder. For instance, put both {\f1\fs20 mozjs.dll} and {\f1\fs20 nspr4.dll} files with your {\f1\fs20 JSHttpApiServer.exe}.
+By now, this library will work only under {\i Win32}, with {\i Delphi} as compiler - it has not yet been tested nor ported to FPC and other platforms.
 :  Folder layout
 As retrieved from our source code repository, you'll find the following folder layout:
 \graph mORMotSourceCodeFolders mORMot Source Code Folders
@@ -11251,6 +12976,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynCrypto.pas}|fast cryptographic routines (hashing and cypher)
 |{\f1\fs20 SynDprUses.inc}|generic header included in the beginning of the uses clause of a .dpr source code
 |{\f1\fs20 SynGdiPlus.pas}|GDI+ library API access with anti-aliasing drawing
+|{\f1\fs20 SynLog.pas}|logging functions used by most Synopse projects
 |{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
 |{\f1\fs20 SynLZO.pas}|LZO compression decompression unit
 |{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode {\i Delphi} only
@@ -11265,6 +12991,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine (for Win32)
 |{\f1\fs20 SynSSPIAuth.pas}|low level access to Windows Authentication
 |{\f1\fs20 SynTaskDialog.*}|implement TaskDialog window\line (native on Vista/Seven, emulated on XP)
+|{\f1\fs20 SynTests.pas}|cross-compiler unitary tests functions
 |{\f1\fs20 SynWinSock.pas}|low level access to network Sockets for the Windows platform
 |{\f1\fs20 SynZip.pas deflate.obj trees.obj}|low-level access to ZLib compression, 1.2.5
 |{\f1\fs20 SynZipFiles.pas}|high-level access to .zip archive file compression
@@ -11280,8 +13007,9 @@ In the same {\i Root folder}, the external database-agnostic units are located:
 |{\f1\fs20 SynDBODBC.pas}|fast @*ODBC@ direct access classes
 |{\f1\fs20 SynDBOracle.pas}|{\i @*Oracle@} DB direct access classes (via OCI)
 |{\f1\fs20 SynDBSQLite3.pas}|{\i @*SQLite3@} direct access classes
-|{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 TQuery}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
-|{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB} data access
+|{\f1\fs20 SynDBDataset.pas}|{\f1\fs20 @*TDataSet@} / {\f1\fs20 @*TQuery@}-like access classes\line (drivers included in {\f1\fs20 SynDBDataset} sub-folder)
+|{\f1\fs20 SynDBRemote.pas}|remote access over HTTP
+|{\f1\fs20 SynDBVCL.pas}|DB VCL read-only dataset using {\f1\fs20 SynDB.pas} data access
 |{\f1\fs20 SynDBZEOS.pas}|{\i @*Zeos@Lib} / ZDBC direct access classes
 |%
 :   SynDBDataset folder
@@ -11300,7 +13028,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 Documentation/}|Sub folder containing the source of the framework documentation
 |{\f1\fs20 Samples/}|Sub folders containing some sample code
 |{\f1\fs20 mORMot.pas}|Main @*ORM@ / @*SOA@ unit of the framework
-|{\f1\fs20 mORMotDB.pas}|Virtual Tables for ORM external {\f1\fs20 SynDB} access
+|{\f1\fs20 mORMotDB.pas}|Virtual Tables for ORM external {\f1\fs20 SynDB.pas} access
 |{\f1\fs20 mORMotFastCgiServer.pas}|FastCGI server - not fully tested
 |{\f1\fs20 mORMotHttpClient.pas}|HTTP/1.1 Client
 |{\f1\fs20 mORMotHttpServer.pas}|HTTP/1.1 Server
@@ -11309,6 +13037,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 mORMotSQLite3.pas}|{\i SQLite3} kernel bridge between {\f1\fs20 mORMot.pas} and {\f1\fs20 SynSQLite3.pas}
 |{\f1\fs20 mORMoti18n.pas}|internationalization (@*i18n@) routines and classes
 |{\f1\fs20 mORMotMongoDB.pas}|@*ODM@ integration of {\i @*MongoDB@} @*NoSQL@ database
+|{\f1\fs20 mORMotMVC.pas}|@*MVC@ classes to develop high performance @*Web Application@s
 |{\f1\fs20 mORMotToolBar.pas}|ORM ToolBar User Interface generation
 |{\f1\fs20 mORMotUI.*}|Grid to display Database content
 |{\f1\fs20 mORMotUIEdit.*}|Record edition dialog, used to edit record content on the screen
@@ -11322,7 +13051,7 @@ In the {\f1\fs20 SQlite3/} folder, the files implementing the {\i Synopse mORMot
 |{\f1\fs20 c.bat sqlite3.c}|Source code of the {\i SQLite3} embedded Database engine
 |%
 :   CrossPlatform folder
-In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} client for compilers or platforms not supported by the main branch:
+In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used when creating {\i mORMot} clients for compilers or platforms not supported by the main branch:
 |%40%60
 |\b File|Description\b0
 |{\f1\fs20 SynCrossPlatform.inc}|Includes cross-platform and cross-compiler conditionals
@@ -11331,14 +13060,16 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA-256 and crc32 algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
+See @86@ for more information.
 \page
-: Installation
+:113 Installation
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
 |{\b Static 32 bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
 |{\b 64 bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
 |{\b 32 bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
+|{\b for FPC only: static {\i SQLite3} .o files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
 In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} menu):
@@ -11350,6 +13081,169 @@ Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
 \page
+:125 FreePascal / Lazarus use
+You can use the {\i @**FreePascal@ Compiler} (@**FPC@) to compile the {\i mORMot} framework source code, targetting {\i Windows} and {\i Linux}.
+{\i Linux} is a premium target for cheap and efficient server @75@. Since {\i mORMot} has no dependency, installing a new {\i mORMot} server is as easy as copying its executable on a blank {\i Linux} host, then run it. No need to install any framework nor runtime. You could even use diverse operating systems (several {\i Linux} or {\i Windows Server} versions) in your {\i mORMot} servers farm, with minimal system requirements, and updates.
+:  Compiler expectations
+You should better use the latest SVN trunk version of the FPC 2.7.1 / 3.1.1 compiler, and the corresponding {\i Lazarus} IDE.
+If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug has not been fixed in 2.6.4 branch.
+We recommend using the @*fpcup@ tool, as published at @http://wiki.freepascal.org/fpcup \line To compile the latest svn version of the trunk, just write:
+$fpcup.exe --fpcURL="trunk" --lazURL="trunk"
+Then ensure you set the static {\i SQlite3} .o files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@.
+:  Creating the missing RTTI for interfaces
+Sadly, we have to face some unresolved FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774
+As a result, SOA, mock/stub and MVC features would not working directly.\line We propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
+The {\f1\fs20 mORMotWrappers.pas} unit proposes a {\f1\fs20 ComputeFPCInterfacesUnit()} function, which could be used on Delphi to generate the RTTI unit for FPC, as such:
+- Ensure that the application will use all its needed {\f1\fs20 interface}: for instance, run all your regression tests, and/or use all its SOA/MVC features if you are not confident about your test coverage;
+- Just before the application exists, add a call to {\f1\fs20 ComputeFPCInterfacesUnit()} with the proper folders, e.g. at the very end of your {\f1\fs20 .dpr} code.
+For instance, here is how {\f1\fs20 TestSQL3.dpr} has been modified:
+!program TestSQL3;
+! ...
+!uses
+!  ...
+!!  mORMotWrappers.pas,
+!  ...
+!begin
+!  SQLite3ConsoleTests;
+!  {$ifdef COMPUTEFPCINTERFACES}
+!  ChDir(ExtractFilePath(ParamStr(0)));
+!!  ComputeFPCInterfacesUnit(
+!!    ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
+!!     '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
+!  {$endif}
+!end.
+If you define the {\f1\fs20 COMPUTEFPCINTERFACES} conditional, the {\f1\fs20 TestSQL3FPCInterfaces.pas} unit will be generated.
+Of course, for your own application, you may use absolute path names: here we used relative naming, via {\f1\fs20 ..\\}, so that it would work on any development folder configuration.
+Then, add it to any of your uses clause, as such:
+!uses
+!  ...
+!!  TestSQL3FPCInterfaces, // will register RTTI for interfaces under FPC
+!  ...
+This unit will do nothing when compiled under {\i Delphi}: it will register the RTTI only when compiled with {\i FPC}.
+The rest of your code would be untouched, and could be shared between Delphi and FPC.
+If you do not modify the {\f1\fs20 interface} methods definition, this generation step could be safely bypassed.
+We hope that in a close future, the FPC team would fix the @http://bugs.freepascal.org/view.php?id=26774 issue, but the ticket seems pretty inactive since its creation.
+:143  Writing your project for FPC
+If you want your application to compile with FPC, some little patterns should be followed.
+In all your source code file, the easiest is to including the following {\f1\fs20 mORMot} file, which will define all compiler options and conditionals as expected:
+!{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+Then in your {\f1\fs20 .dpr} file, you should write:
+!uses
+!  {$ifdef FPC} // we may be on Kylix or upcoming Delphi for Linux
+!  {$ifdef Linux}
+!  // if you use threads
+!  cthreads,
+!  // widestring manager for Linux if needed !!
+!  // could also be put in another unit ... but doc states: as early as possible
+!  cwstring, // optional
+!  {$endif}
+!  {$endif}
+For instance a minimal FPC project to run the regression tests may be:
+!program LinuxSynTestFPCLinuxi386;
+!
+!{$I Synopse.inc}
+!{$APPTYPE CONSOLE}
+!
+!uses {$ifdef Linux} cthreads, cwstring, {$endif} mORMotSelfTests;
+!
+!begin
+!  SQLite3ConsoleTests;
+!end.
+In your user code, ensure you do not directly link to the {\f1\fs20 Windows} unit, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}. You could find in {\f1\fs20 SynFPCTypInfo.pas} and {\f1\fs20 SynFPCLinux.pas} some low-level functions dedicated to FPC and {\i Linux} compilation, to be used with legacy units - your new code should better rely on higher level functions and classes.
+If you rely on {\i mORMot} classes and types, e.g. use {\f1\fs20 RawUTF8} for all your {\f1\fs20 string} process in the business logic, and do not use Delphi-specific features (like generics, or new syntax sugar), it would be very easy to let your application compile with FPC.
+In practice, we use Delphi as our main IDE, then switch to Lazarus under a small integrated {\i Linux VirtualBox}, running a low resource {\i XFCE} desktop. We defined the {\i Windows} folder containing the source as a {\i VirtualBox} shared folder, so that we are able to compile, debug and test the {\i Linux} version of any executable in native {\i Linux}, on the same computer, from the very same sources. We found out that {\i Lazarus} debugging was pretty smooth on {\i Linux} - GDB is smoother on {\i Linux} than {\i Windows}, by the way. Then switching from {\i Delphi/Windows} to {\i Lazarus/Linux} is direct and natural, especially when the {\i VirtualBox} "Integrated Desktop" feature is enabled.
+:142  Linux installation tips
+Here are a few informal notes about getting running a FPC/Lazarus virtual machine running {\i XUbuntu}, on a {\i Windows} host. They are published as a general guideline, and we would not provide any reference procedure, nor support it.
+- Install the latest {\i VirtualBox} version from @http://www.virtualbox.org/ to Windows;
+- Download the latest {\f1\fs20 .iso} version published at @http://xubuntu.org/ or any other place - we use XFCE since it is a very lightweight desktop, perfect to run {\i Lazarus}, and we selected an Ubuntu LTS revision (14.04 at the time of this writing), which would be the same used on Internet servers;
+- Create a new virtual machine (VM) in {\i VirtualBox}, with 1 or 2 CPUs, more than 512 MB of RAM (we use 777 MB), and an automatic-growing disk storage, with a maximal size of 15 GB; ensure that the disk storage is marked as SSD if your real host storage is a SSD;
+- Let the CDROM storage point to the {\f1\fs20 .iso} you downloaded;
+- Start the VM and install {\i Linux} locally, as usual - you may select to download the updated packages during the installation, for safety;
+- When the system restarts, if it asks for software updates, accept and wait for the update installation to finish - it is a good idea to have the latest version of the kernel and libraries before installing the {\i VirtualBox} drivers;
+- Restart your VM when asked to;
+- Under a Ubuntu/Debian terminal, write the following commands:
+$ sudo apt-get update
+$ sudo apt-get upgrade
+$ sudo apt-get install dkms
+- Restart the VM, then select "Insert Guest Additions CD image" from the VM "Devices" menu: a virtual CD would be mounted on your system and appear on your desktop;
+- Run the following command, according to your current user name and {\i VirtualBox} version:
+$ sudo sh /media/...user.../VBOXADDITIONS_..../VBoxLinuxAdditions.run
+- Restart the VM, then add a permanent shared folder in the VM configuration, named {\f1\fs20 Lib}, and pointing to your local {\i mORMot} installation (e.g. {\f1\fs20 d:\\dev\\lib};
+- Create a void folder, e.g. in your home:
+$ mkdir lib
+- Create a launcher for the following command, to mount the shared folder as expected:
+$ sudo mount -t vboxsf lib /home/...user.../lib
+- Download the version of {\f1\fs20 fpcup} for your system, e.g. @https://bitbucket.org/reiniero/fpcup/downloads/fpcup_linux_x86
+- Execute the following commands:
+$ sudo apt-get install build-essential mingw32-binutils subversion libgtk2.0-dev
+$ sudo ln -s /usr/bin/i586-mingw32msvc-windres /usr/bin/windres
+$ ./fpcup_linux_x86 --fpcURL="trunk" --lazURL="trunk"
+- Now wait for all source to be retrieved by SVN, then the whole build to take places;
+- If you have issues during SVN retrieval, go the {\f1\fs20 development/fpc} folder, then run the following before trying again the {\f1\fs20 fpcup_linux_x86} command:
+$ svn cleanup
+$ svn update
+- On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
+If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
+For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on {\i Linux}, please execute:
+$ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
+If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64 bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32 bit, as such:
+$ sudo apt-get install libcurl3:i386
+If it may be for any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+$user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
+$   linux-gate.so.1 =>  (0xb774c000)
+$   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
+$   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
+$   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
+$   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
+$   /lib/ld-linux.so.2 (0xb774d000)
+There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a cloud-based solution, or a self-hosted office server, software requirements are pretty low.
+: CrossKylix support
+The framework source code can also be cross-compiled under Delphi into a {\i @*Linux@} executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for {\i Linux}) compiler into the Delphi Windows IDE.
+{\i CrossKylix} has indeed several known drawbacks:
+- It is a dead project, but an alive product. It still works!
+- You can not buy it any more. {\i Kylix} 3 was shipped with Delphi 7.
+- You need an actual {\i Kylix} CD (or an ISO image) to install it, since {\i CrossKylix} is just a wrapper around the official compiler, to let it run under Windows.
+- Visual applications (based on the CLX framework - the predecessor of FMX) may still compile, but should not be used. But for server applications, it is still a pretty viable solution.
+- The debugger and IDE is unusable. But thanks to our {\f1\fs20 SynLog.pas}, you can debug your applications, with a full stack trace in the log, in case of any exception.
+We added {\i CrossKylix} support for several reasons:
+- We use it since years, with great success, so we know it better than FPC.
+- It has still a better compiler than FPC, e.g. for the RTTI we need on interfaces, or even for executable size and memory use.
+- Its compilation is instant - whereas FPC is long to compile.
+- It supports {\f1\fs20 FastMM4}, which performs better than the FPC memory manager, from our tests.
+- Resulting executables, for {\i mORMot} purpose, are faster than FPC - timing based on the regression tests.
+- If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
+- There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code would be the same than Delphi and FPC.
+- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
+Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for {\i Linux}, directly from your {\i Delphi} IDE. Then you need an actual {\i Linux} system to test it - please check the @142@.
+A minimal console application which would compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
+!program Test;
+!
+!{$APPTYPE CONSOLE}
+!
+!uses
+!  FastMM4, // optional - only for CrossKylix or Delphi < 2006
+!  mORMotSelfTests;
+!
+!begin
+!  SQLite3ConsoleTests;
+!end.
+Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, you should never use the {\f1\fs20 Windows} unit in your server code, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}.
+We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your {\i Linux}.
+On a 32 bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
+$ sudo apt-get install sqlite3
+For a 64 bit system, you need to download and install manually packages for both modes:
+$ sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
+You could try to get the latest {\f1\fs20 .deb} from @https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0 \line If you want to dowwnload and install manually a {\f1\fs20 .deb} for {\f1\fs20 x86}, please install both {\i i386} and {\i amd64} revisions with the same exact version at once, otherwise {\f1\fs20 dpkg} would complain.
+If it may be of any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i CrossKylix} compiled executable:
+$ user@server:~$ ldd Test
+$       linux-gate.so.1 =>  (0xf77be000)
+$       libz.so.1 => /usr/lib32/libz.so.1 (0xf779b000)
+$       librt.so.1 => /lib/i386-linux-gnu/librt.so.1 (0xf7792000)
+$       libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xf7775000)
+$       libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xf7770000)
+$       libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xf75c1000)
+$       /lib/ld-linux.so.2 (0xf77bf000)
+As you can see, there is a very few dependencies - then same as FPC's executable in fact, with the addition of the external {\f1\fs20 libsqlite3.so.0}, which is statically linked to FPC's version.
 : Upgrading from a 1.17 revision
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
@@ -11357,16 +13251,20 @@ To properly upgrade to the latest revision:
 1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
 2. Download latest 1.18 revision files as stated just above.
 3. Change your references to {\i mORMot} units:
-- Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot};
-- Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3};
+- Add in your uses clause {\f1\fs20 SynTests.pas} if you use testing features;
+- Add in your uses clause {\f1\fs20 SynLog.pas} if you use logging features;
+- Rename in your uses clauses any {\f1\fs20 SQLite3Commons} reference into {\f1\fs20 mORMot.pas};
+- Rename in your uses clauses any {\f1\fs20 SQLite3} reference into {\f1\fs20 mORMotSQLite3.pas};
 - Rename in your uses clauses any other {\f1\fs20 SQlite3*} reference into {\f1\fs20 mORMot*};
-- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static} unit (for {\i Win32}).
+- Add in one of your uses clause a reference to the {\f1\fs20 SynSQLite3Static.pas} unit (for {\i Win32} or {\i Linux}).
 4. Consult the units' headers about 1.18 for breaking changes, mainly:
-- Renamed @*Iso8601@ low-level structure as {\f1\fs20 TTimeLogBits};
+- Introducing {\f1\fs20 @*TID@ = type Int64} as {\f1\fs20 TSQLRecord.ID} @*primary key@, {\f1\fs20 TIDDynArray} as an array, and {\f1\fs20 @*TRecordReference@} now declared as {\f1\fs20 Int64} instead of plain {\f1\fs20 PtrInt} / {\f1\fs20 integer};
+- Renamed {\f1\fs20 Iso8601} low-level structure as {\f1\fs20 @*TTimeLogBits@};
 - {\f1\fs20 TJSONSerializerCustomWriter} and {\f1\fs20 TJSONSerializerCustomReader} callbacks changed;
-- {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 TSQLRestServerURIContext} class;
+- {\f1\fs20 TSQLRestServerCallBackParams} which is replaced by the {\f1\fs20 @*TSQLRestServerURIContext@} class;
 - {\f1\fs20 rmJSON*} enumerates replaced by {\f1\fs20 TSQLRestRoutingREST} and {\f1\fs20 TSQLRestRoutingJSON_RPC} classes;
 - Changed '{\f1\fs20 弓' into '{\f1\fs20 ~}' character for {\f1\fs20 mORMoti18n.pas} (formerly {\f1\fs20 SQlite3i18n.pas}) language files.
+Most of those changes would be easily identified at compile time. But a quick code review, and proper regression tests at application level is worth considering.
 Feel free to get support from our forum, if needed.
 
 [SAD-SynFile]
@@ -11378,7 +13276,7 @@ TitleOffset=0
 DisplayName=Main SynFile Demo
 
 :50SynFile application
-%cartoon06.png
+%cartoon08.png
 This sample application is a simple database tool which stores text content and files into the database, in both clear and "safe" manner. Safe records are stored using {\i AES-256/SHA-256} encryption. There is an {\i Audit Trail} table for tracking the changes made to the database.
 This document will follow the application architecture and implementation, in order to introduce the reader to some main aspects of the Framework:
 - General architecture - see @7@;
@@ -11400,11 +13298,11 @@ Client-Server logic will be detailed in the next paragraph.
 The main form of the Client is void, if you open its {\f1\fs20 FileMain.dfm} file. All the User Interface is created by the framework, dynamically from the database model and some constant values and enumeration types (thanks to {\i Delphi} @*RTTI@) as defined in @!TFileRibbonTabParameters.Actions!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit (the first one, which defines also the classes/tables).
 It's main method is {\f1\fs20 TMainForm.ActionClick}, which will handle the actions, triggered when a button is pressed.
 The @**report@s use {\i GDI+} for anti-aliased drawing, can be zoomed and saved as @*pdf@ or text files.
-The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the form used for editing the data. It also performs the encryption of "safe memo" and "safe data" records, using our @!TAESFull.EncodeDecode!Lib\SynCrypto.pas@ unit.
+The last @!TEditForm!Lib\SQLite3\Samples\MainDemo\FileEdit.pas@ unit is just the form used for editing the data. It also performs the encryption of "safe memo" and "safe data" records, using our @!TAESFull.EncodeDecode!Lib\SynCrypto.pas@ unit. It will @*AES-NI@ hardware instructions, if available, so will be very fast, even for big content.
 You'll discover how the @*ORM@ plays its role here: you change the data, just like changing any class instance properties.
 It also uses our @!SaveAsRawByteString!Lib\SynGdiPlus.pas@ unit to create thumbnails of any picture ({\f1\fs20 emf+jpg+tif+gif+bmp}) of data inserted in the database, and add a @*BLOB@ data field containing these thumbnails.
 \page
-: Database design
+:128 Database design
 The @!TSQLFile,TSQLMemo,TSQLData,TSQLSafeMemo,TSQLSafeData,TSQLAuditTrail!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit is implementing all {\f1\fs20 @*TSQLRecord@} child classes, able to create the database tables, using the @*ORM@ aspect of the framework - see @13@. The following class hierarchy was designed:
 \graph HierSynFileRecord SynFile TSQLRecord classes hierarchy
 \TSQLAuditTrail\TSQLRecord
@@ -11443,7 +13341,7 @@ Here follows the {\i Delphi} code written, and each corresponding database field
 \graph DBMemo Memo Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Content : RawUTF8|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Content : RawUTF8|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLData = class(TSQLFile)
 !  public
@@ -11454,19 +13352,19 @@ struct1 [label="ID : integer|Content : RawUTF8|Created : TTimeLog|KeyWords : Raw
 \graph DBData Data Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLSafeMemo = class(TSQLData);
 \graph DBSafeMemo SafeMemo Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 !  TSQLSafeData = class(TSQLData);
 \graph DBSafeData SafeData Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
+struct1 [label="ID : TID|Data : TSQLRawBlob|Created : TTimeLog|KeyWords : RawUTF8|Modified : TTimeLog|Name : RawUTF8|Picture : TSQLRawBlob|Signature : RawUTF8|SignatureTime: TTimeLog"];
 \
 You can see that {\f1\fs20 TSQLSafeMemo} and {\f1\fs20 TSQLSafeData} are just a direct sub-class of {\f1\fs20 TSQLData} to create "{\i SafeMemo}" and "{\i SafeData}" tables with the exact same fields as the "{\i Data}" table. Since they were declared as {\f1\fs20 class(TSQLData)}, they are some new class type,
 Then the latest class is not inheriting from {\f1\fs20 TSQLFile}, because it does not contain any user data, and is used only as a log of all actions performed using {\i SynFile}:
@@ -11485,11 +13383,11 @@ Then the latest class is not inheriting from {\f1\fs20 TSQLFile}, because it doe
 \graph DBAuditTrail AuditTrail Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : integer|AssociatedRecord : TRecordReference|Status : TFileEvent|StatusMessage : RawUTF8|Time : TTimeLog"];
+struct1 [label="ID : TID|AssociatedRecord : TRecordReference|Status : TFileEvent|StatusMessage : RawUTF8|Time : TTimeLog"];
 \
-The {\f1\fs20 AssociatedRecord} property was defined as {\f1\fs20 TRecordReference}. This special type (mapped as an INTEGER field in the database) is able to define a "one to many" relationship with ANY other record of the database model.
+The {\f1\fs20 AssociatedRecord} property was defined as {\f1\fs20 @*TRecordReference@}. This special type (mapped as an INTEGER field in the database) is able to define a "one to many" relationship with ANY other record of the database model.
 - If you want to create a "one to many" relationship with a particular table, you should define a property with the corresponding {\f1\fs20 @*TSQLRecord@} sub-type (for instance, if you want to link to a particular {\i SafeData} row, define the property as {\f1\fs20 AssociatedData: TSQLSafeData;}) - in this case, this will create an INTEGER field in the database, holding the {\i RowID} value of the associated record (and this field content will be filled with {\f1\fs20 pointer(RowID)} and not with a real {\f1\fs20 TSQLSafeData} instance).
-- Using a {\f1\fs20 TRecordReference} type will not link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 RecordRef(AssociatedRecord)} to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
+- Using a {\f1\fs20 TRecordReference} type won't link to a particular table, but any table of the database model: it will store in its associated INTEGER database field not only the {\i RowID} of the record, but also the table index as registered at {\f1\fs20 @*TSQLModel@} creation. In order to access this {\f1\fs20 AssociatedRecord} property content, you could use either {\f1\fs20 @*TSQLRest@. Retrieve(AssociatedRecord)} to get the corresponding record instance, or typecast it to {\f1\fs20 @*RecordRef@} wrapper structure to easily retrieve or set the associated table and {\i RowID}. You could also use the {\f1\fs20 TSQLRecord. RecordReference(Model)} method in order to get the value corresponding to an existing {\f1\fs20 TSQLRecord} instance.
 According to the @*MVC@ model - see @10@ - the framework expect a common database model to be shared between client and server. A common function has been defined in the @!CreateFileModel!Lib\SQLite3\Samples\MainDemo\FileTables.pas@ unit, as such:
 !function CreateFileModel(Owner: TSQLRest): TSQLModel;
 We'll see later its implementation. Just note for the moment that it will register the {\f1\fs20 TSQLAuditTrail, TSQLMemo, TSQLData, TSQLSafeMemo}, and {\f1\fs20 TSQLSafeData} classes as part of the database model. The order of the registration of those classes will be used for the {\f1\fs20 AssociatedRecord: TRecordReference} field of {\f1\fs20 TSQLAuditTrail} - e.g. a {\f1\fs20 TSQLMemo} record will be identified with a table index of 1 in the {\f1\fs20 RecordReference} encoded value. So it's mandatory to NOT change this order in any future modification of the database schema, without providing any explicit database content conversion mechanism.
@@ -11503,7 +13401,7 @@ Note that all above graphs were created directly from our {\i @*SynProject@} too
 !    procedure AddAuditTrail(aEvent: TFileEvent; const aMessage: RawUTF8='';
 !      aAssociatedRecord: TRecordReference=0);
 !    function OnDatabaseUpdateEvent(Sender: TSQLRestServer;
-!      Event: TSQLEvent; aTable: TSQLRecordClass; aID: integer): boolean;
+!      Event: TSQLEvent; aTable: TSQLRecordClass; aID: TID): boolean;
 !  published
 !    procedure Event(Ctxt: TSQLRestServerURIContext);
 !  end;
@@ -11577,7 +13475,7 @@ The {\i Office UI licensing program} was designed by {\i Microsoft} for software
 If you want to design your user interface using a Office 2007/2010 ribbon look, please take a look at those official guidelines: @http://msdn.microsoft.com/en-us/library/cc872782.aspx
 Here is the screen content, using the TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE6:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE7:
 %synfilevcl.png
 We did not use yet the Ribbon component as was introduced in {\i Delphi} 2009. Its action-driven design won't make it easy to interface with the event-driven design of our User Interface handling, and we have to confess that this component has rather bad reputation (at least in the {\i Delphi} 2009 version). Feel free to adapt our Open Source code to use it - we'll be very pleased to release a new version supporting it, but we don't have time nor necessity to do it by ourself.
 :  Enumeration types
@@ -11675,16 +13573,18 @@ Even if a real application may be truly Client-Server, we define a stand-alone m
 All the ORM and actions defined in the {\f1\fs20 FileTables} unit are used to initialize the {\f1\fs20 TFileRibbon} content in the {\f1\fs20 Ribbon} field which will be the main entry point of all User Interface process.
 The {\f1\fs20 ActionClick()} method is the main entry point of the application, and is called when the User clicks on any ribbon button. It is just a {\f1\fs20 case Action of ...} switch instruction, handling each {\f1\fs20 TFileAction} event as expected.
 The {\f1\fs20 Edit()} method will allow edition of a given record fields, via the separated {\f1\fs20 TEditForm} window, as defined in {\f1\fs20 FileEdit} unit. We won't use the auto-generated window from RTTI in this case, since we expect a dedicated process to attach a picture to the corresponding {\f1\fs20 TSQLFile} item.
-The {\f1\fs20 ListDblClick()} method will process any double click on the list to edit the corresponding item ({\f1\fs20 faEdit} action), or go to the record an audit trail row refers to:
+The {\f1\fs20 ListDblClick()} method will process any double click on the list to edit the corresponding item ({\f1\fs20 faEdit} action), or go to the record an audit trail row refers to, using a convenient local {\f1\fs20 @*RecordRef@} wrapper variable:
 !procedure TMainForm.ListDblClick(Sender: TObject);
 !var P: TSQLRibbonTab;
+!    ref: RecordRef;
 !begin
 !  P := Ribbon.GetActivePage;
 !  if P<>nil then
 !    if P.Table=TSQLAuditTrail then begin
-!      if P.Retrieve(Client,P.List.Row) then
-!        with RecordRef(TSQLAuditTrail(P.CurrentRecord).AssociatedRecord) do
-!          Ribbon.GotoRecord(Table(Client.Model),ID);
+!      if P.Retrieve(Client,P.List.Row) then begin
+!        ref.Value := TSQLAuditTrail(P.CurrentRecord).AssociatedRecord;
+!        Ribbon.GotoRecord(ref.Table(Client.Model),ref.ID);
+!      end;
 !    end else
 !    ActionClick(Sender,P.Table,ord(faEdit));
 !end;
@@ -11701,7 +13601,7 @@ The following {\f1\fs20 CreateReport} method is overridden in @!TFileRibbon.Crea
 !  TFileRibbon = class(TSQLRibbon)
 !  public
 !    /// overridden method used customize the report content
-!    procedure CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+!    procedure CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
 !      AlreadyBegan: boolean=false); override;
 !  end;
 The reporting engine in the framework is implemented via the {\f1\fs20 TGDIPages} class, defined in the @!TGDIPages!Lib\SQLite3\mORMotReport.pas@:
@@ -11712,7 +13612,7 @@ The reporting engine in the framework is implemented via the {\f1\fs20 TGDIPages
 - Handle bookmark, outlines and links inside the document.
 By default, the {\f1\fs20 CreateReport} method of {\f1\fs20 TSQLRibbon} will write all editable fields value to the content.
 The method is overridden by the following code:
-!procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: integer; aReport: TGDIPages;
+!procedure TFileRibbon.CreateReport(aTable: TSQLRecordClass; aID: TID; aReport: TGDIPages;
 !  AlreadyBegan: boolean=false);
 !var Rec: TSQLFile;
 !    Pic: TBitmap;
@@ -11834,15 +13734,16 @@ You perhaps did notice that textual constant were defined as {\f1\fs20 @*resourc
 !  sPictureN = '%s Picture';
 The @!Lib\SQLite3\mORMoti18n.pas@ unit is able to parse all those {\f1\fs20 resourcestring} from a running executable, via its {\f1\fs20 ExtractAllResources} function, and create a reference text file to be translated into any handled language.
 Creating a report from code does make sense in an ORM. Since we have most useful data at hand as {\i Delphi} classes, code can be shared among all kind of reports, and a few lines of code is able to produce complex reports, with enhanced rendering, unified layout, direct internationalization and export capabilities.
+Note that the {\f1\fs20 mORMotReport.pas} unit uses UTF-16 encoded string, i.e. our {\f1\fs20 SynUnicode} type, which is either {\f1\fs20 UnicodeString} since Delphi 2009, or {\f1\fs20 WideString} for older versions. {\f1\fs20 WideString} is known to have performance issues, due to use of slow BSTR API calls - so if you want to create huge reports with pre-Unicode versions of Delphi and our report engine, consider adding a reference to our {\f1\fs20 @*SynFastWideString.pas@} unit at first place of your {\f1\fs20 .dpr} uses clause, for potential huge speed enhancement. See @32@ for more details, especially the restriction of use, since it would break any attempt to use BSTR parameters with any OLE/COM object.
 \page
-: Application i18n and L10n
+:115 Application i18n and L10n
 In computing, internationalization and localization (also spelled internationalisation and localisation) are means of adapting computer software to different languages, regional differences and technical requirements of a target market:
 - {\i Internationalization} (@**i18n@) is the process of designing a software application so that it can be adapted to various languages;
 - {\i Localization} (@**L10n@) is the process of adapting internationalized software for a specific region or language by adding locale-specific components and translating text, e.g. for dates display.
 Our framework handles both features, via the @!Lib\SQLite3\mORMoti18n.pas@ unit. We just saw above how {\f1\fs20 @*resourcestring@} defined in the source code are retrieved from the executable and can be translated on the fly. The unit extends this to visual forms, and even captions generated from @*RTTI@ - see @5@.
 The unit expects all textual content (both {\f1\fs20 resourcestring} and RTTI derived captions) to be correct English text. A list of all used textual elements will be retrieved then hashed into an unique numerical value. When a specific locale is set for the application, the unit will search for a {\f1\fs20 @*.msg@} text file in the executable folder matching the expected locale definition. For instance, it will search for {\f1\fs20 FR.msg} for translation into French.
 In order to translate all the user interface, a corresponding {\f1\fs20 .msg} file is to be supplied in the executable folder. Neither the source code, nor the executable is to be rebuild to add a new language. And since this file is indeed a plain textual file, even a non developer (e.g. an end-user) is able to add a new language, starting from another {\f1\fs20 .msg}.
-:   Creating the reference file
+:  Creating the reference file
 In order to begin a translation task, the {\f1\fs20 mORMoti18n.pas} unit is able to extract all textual resource from the executable, and create a reference text file, containing all English sentences and words to be translated, associated with their numerical hash value.
 It will in fact:
 - Extract all {\f1\fs20 resourcestring} text;
@@ -11902,7 +13803,7 @@ $388288630=Signed,By %s on %s
 $ (...)
 The main section of this text file is named {\f1\fs20 [Messages]}. In fact, it contains all English extracted texts, as {\f1\fs20 NumericalKey=EnglishText} pairs. Note this will reflect the exact content of {\f1\fs20 resourcestring} or RTTI captions, including formating characters (like {\f1\fs20 %d}), and replacing line feeds ({\f1\fs20 #13}) by the special {\f1\fs20 |} character (a line feed is not expected on a one-line-per-pair file layout). Some other text lines are separated by a comma. This is usual for instance for hint values, as expected by the code.
 As requested, each application form has its own section (e.g. {\f1\fs20 [TEditForm]}, {\f1\fs20 [TMainForm]}), proposing some default translation, specified by a numerical key (for instance {\f1\fs20 Label1.Caption} will use the text identified by 1741937413 in the {\f1\fs20 [Messages]} section). The underline character before the numerical key is used to refers to this value. Note that if no {\f1\fs20 _NumericalKey} is specified, a plain text can be specified, in order to reflect a specific use of the generic text on the screen.
-:   Adding a new language
+:  Adding a new language
 In order to translate the whole application into French, the following {\f1\fs20 FR.msg} file could be made available in the {\f1\fs20 SynFile.exe} folder:
 $[Messages]
 $2784453965=Texte
@@ -11924,7 +13825,7 @@ $388288630=Sign�,Par %s le %s
 $ (....)
 Since no form-level custom captions (e.g. {\f1\fs20 [TLoginForm]}) have been defined in this {\f1\fs20 FR.msg} file, the default numerical values will be used. In our case, {\f1\fs20 Name.EditLabel.Caption} will be displayed using the text specified by 2817614158, i.e. {\f1\fs20 'Nom'}. You can specify a custom translation for a given field on any form: sometimes, the text should be adapted with a given context.
 Note that the special characters {\f1\fs20 %s %d , |} markup was preserved: only the plain English text has been translated to the corresponding French.
-:   Language selection
+:  Language selection
 User Interface language can be specified at execution.
 There are two ways to change the application language:
 - Manual translation of every form;
@@ -11937,7 +13838,7 @@ In manual translation mode:
 - You do not need to modify your code, since it will be global to the application;
 - It will work also for any third-party dialog, even if you do not have the source of it;
 - But you can't change the language on the fly: you need to restart the application.
-:    Manual transaction
+:  Manual translation
 Once for the application, you should call {\f1\fs20 SetCurrentLanguage()} to set the global {\f1\fs20 Language} object and all related {\i Delphi} locale settings.
 The, in each {\f1\fs20 OnShow} event of any form, you should call {\f1\fs20 FormTranslateOne()} e.g.
 !procedure TMyForm.FormShow(Sender: TObject);
@@ -11949,14 +13850,14 @@ Another possibility may be to translate all already allocated forms at once, e.g
 Note that a list of already translated forms is maintained by the unit, when you call {\f1\fs20 FormTranslate()}.\line Therefore:
 - All specified forms will be translated again by any further {\f1\fs20 SetCurrentLanguage()} call;
 - But none of these forms must be freed after a {\f1\fs20 FormTranslate([])} call - use {\f1\fs20 FormTranslateOne()} instead to translate a given form once, e.g. for all temporary created forms.
-:   TForm / TFrame hook
+:  TForm / TFrame hook
 If the {\f1\fs20 USEFORMCREATEHOOK} conditional is defined, the {\f1\fs20 mORMoti18n.pas} unit will hook {\f1\fs20 TCustomForm.OnCreate} method to translate all its nested components. It will also intercept {\f1\fs20 TCustomFrame.Create()} to allow automatic translation of its content.
 Since the language must be known at program startup, before any {\f1\fs20 TForm} is actually created, the language will be set in the Operating System registry.\line The {\f1\fs20 HKEY_CURRENT_USER\\Software\\[CompanyName]i18n\\} key should contain one value per application (i.e. the lowercase .exe file name without its path), which will identify the abbreviation of the expected language. If there is no entry in this registration key for the given application, the current Windows local will be used.
 For instance, if you define {\f1\fs20 USEFORMCREATEHOOK} conditional for your project, and run at least e.g. once in @!TMainForm.FormShow!Lib\SQLite3\Samples\MainDemo\FileMain.pas@, for the framework main demo:
 !  i18nLanguageToRegistry(lngFrench);
 .. then it will set the main application language as French. At next startup, the unit will search for a {\f1\fs20 FR.msg} file, which will be used to translate all screen layout, including all RTTI-generated captions.
 Of course, for a final application, you'll need to change the language by a common setting. See {\f1\fs20 i18nAddLanguageItems, i18nAddLanguageMenu} and {\f1\fs20 i18nAddLanguageCombo} functions and procedures to create your own language selection dialog, using a menu or a combo box, for instance.
-:   Localization
+:  Localization
 Take a look at the {\f1\fs20 TLanguageFile} class. After the main language has been set, you can use the global {\f1\fs20 Language} instance in order to localize your application layout.
 The {\f1\fs20 mORMoti18n} unit will register itself to some methods of {\f1\fs20 mORMot.pas}, in order to translate the RTTI-level text into the current selected language. See for instance {\f1\fs20 i18nDateText}.
 
@@ -12032,7 +13933,7 @@ The {\f1\fs20 InitCrc32Tab} shall be called only once, at application startup. I
 :  SHA-256
 The well-known @*SHA-256@ algorithm is a proven way of creating an unique identifier from any data input. You can use it for instance to sign any content, or store efficiently a password. It is mathematically proven to be impossible to find out the input data from its hashed reduction (at least for the next decade of computer power). And it has a very low potential of "collision" (i.e. two diverse data having the same resulting hash). It is "Top Secret" enabled - U.S. National Institute of Standards and Technology says, "Federal agencies must use the SHA-2 family of hash functions for applications  that require collision resistance after 2010". This is the hashing pattern used within {\i mORMot}.
 But it is also more complex than the {\i crc32} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
-You have an optimized implementation in the {\f1\fs20 SynCrypto} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
+You have an optimized implementation in the {\f1\fs20 SynCrypto.pas} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
 First of all, we'll define a {\f1\fs20 record} type. We may have used a {\f1\fs20 class}, but since we have an extended {\f1\fs20 record} type at hand with {\i DWS} (including properties and methods), we will stay to it.
 !type
 !  TSHA256Buffer = array[0..63] of integer;
@@ -12343,7 +14244,7 @@ The JSON encoding and decoding is handled at diverse levels:
 The main class for producing JSON content is {\f1\fs20 TJSONWriter}. This class is a simple writer to a Stream, specialized for the JSON format. Since it makes
 use of an internal buffer, and avoid most temporary {\f1\fs20 string} allocation ({\i e.g.} using the stack instead of a temporary {\f1\fs20 string} via {\f1\fs20 IntToStr()} when converting a numerical value to text), it is much faster than a string append (standard {\i Delphi} {\f1\fs20 string := string+string} clauses) to produce its content. In particular, its {\f1\fs20 AddJSONEscape} method will handle JSON content escape, according to the official JSON RFC - see @http://www.ietf.org/rfc/rfc4627.txt paragraph 2.5, directly into the destination buffer. It was also designed to scales well on multi-core sytems.
 Some JSON-dedicated function are also available:
-- {\f1\fs20 GetJSONObjectAsSQL} decodes a JSON fields object into an UTF-8 encoded SQL-ready statement;
+- {\f1\fs20 GetJSONObjectAsSQL} decodes a JSON fields object into an @*UTF-8@ encoded SQL-ready statement;
 - {\f1\fs20 IsJSONString} returns TRUE if the supplied content must be encoded as a JSON string according to the JSON encoding schema, i.e. if it's some null/false/true content or any pure numerical data (integer or floating point);
 - {\f1\fs20 UnJSONFirstField} can be used to retrieve the FIRST field value of the FIRST row, from a JSON content: it may be useful to get an ID without converting the whole JSON content into a {\f1\fs20 TSQLTableJSON};
 - {\f1\fs20 JSONEncode} and {\f1\fs20 JSONDecode} functions are available to directly encode or decode some UTF-8 JSON content (used in the remote @*Service@ implementation, for instance).
@@ -12380,7 +14281,7 @@ Here is an extract of the main loop of this method:
 !  (...)
 : Database request table level
 Most high-level Client-sided list request methods returns a {\f1\fs20 TSQLTableJSON} instance as a result. This {\f1\fs20 TSQLTableJSON} class has been created from a pure JSON content, retrieved from the Server using on of the protocols defined in @SRS-DI-2.1.1.2@.
-Its {\f1\fs20 Create} constructor method call its internal {\f1\fs20 protected} method named {\f1\fs20 FillFrom()}, which make the JSON conversion into pure UTF-8 text fields, as expected by the {\f1\fs20 TSQLTable} class and its various {\f1\fs20 Get*()} methods. The {\f1\fs20 FillFrom()} method implements a very fast parsing of the supplied JSON content, then un-escape its content according to the JSON RFC quoted above.
+Its {\f1\fs20 Create} constructor method call its internal {\f1\fs20 protected} method named {\f1\fs20 FillFrom()}, which make the JSON conversion into pure @*UTF-8@ text fields, as expected by the {\f1\fs20 TSQLTable} class and its various {\f1\fs20 Get*()} methods. The {\f1\fs20 FillFrom()} method implements a very fast parsing of the supplied JSON content, then un-escape its content according to the JSON RFC quoted above.
 : Fast JSON parsing
 When it deals with parsing some (textual) content, two directions are usually envisaged. In the XML world, you have usually to make a choice between:
 - A DOM parser, which creates an in-memory tree structure of objects mapping the XML nodes;
@@ -12393,7 +14294,7 @@ In order to achieve best speed, we try to use a mixed approach:
 - The parser returns {\i pointers} to the converted elements (just like the {\i vtd-xml} library).
 In practice, here is how it is implemented:
 - A private copy of the source JSON data is made internally (so that the Client-Side method used to retrieve this data can safely free all allocated memory);
-- The source JSON data is parsed, and replaced by the UTF-8 text un-escaped content, in the same internal buffer (for example, strings are un-escaped and #0 are added at the end of any field value; and numerical values remains text-encoded in place, and will be extracted into {\f1\fs20 Int64} or {\f1\fs20 double} only if needed);
+- The source JSON data is parsed, and replaced by the UTF-8 text un-escaped content, in the same internal buffer (for example, strings are un-escaped and #0 are added at the end of any field value; and numerical values remains text-encoded in place, and will be extracted into {\f1\fs20 Int64} or {\f1\fs20 @*double@} only if needed);
 - Since data is replaced in-memory (JSON data is a bit more verbose than pure UTF-8 text so we have enough space), no memory allocation is performed during the parsing: the whole process is very fast, not noticeably slower than a SAX approach;
 - This very profiled code (using pointers and tuned code) results in a very fast parsing and conversion.
 This parsing "magic" is done in the {\f1\fs20 GetJSONField} function, as defined in the @!GetJSONField!Lib\SynCommons.pas@ unit:
@@ -12566,7 +14467,7 @@ The {\f1\fs20 TSQLRecordProperties} instance is therefore created within this fu
 !end;
 The {\f1\fs20 GarbageCollector} is a global {\f1\fs20 TObjectList}, which is used to store some global instances, living the whole process time, just like our {\f1\fs20 TSQLRecordProperties} values.
 A per-class {\f1\fs20 TSQLRecordProperties} was made therefore available for each kind of {\f1\fs20 TSQLRecord} class.
-Even most sophisticated methods of the @*ORM@ (like {\f1\fs20 TSQLRecord. GetJSONValues}) make use of these low-level {\f1\fs20 object} types. In most cases, the {\f1\fs20 GetValue} and {\f1\fs20 SetValue} methods of the {\f1\fs20 TPropInfo object} are used to convert any field value stored inside the current {\f1\fs20 TSQLRecord} instance in or from UTF-8 encoded text.
+Even most sophisticated methods of the @*ORM@ (like {\f1\fs20 TSQLRecord. GetJSONValues}) make use of these low-level {\f1\fs20 object} types. In most cases, the {\f1\fs20 GetValue} and {\f1\fs20 SetValue} methods of the {\f1\fs20 TPropInfo object} are used to convert any field value stored inside the current {\f1\fs20 TSQLRecord} instance in or from @*UTF-8@ encoded text.
 
 [SDD-DI-2.1.4]
 ; SRS-DI-2.1.4 - The framework shall provide some Cross-Cutting components
@@ -12716,7 +14617,7 @@ The {\i SQLite3} engine is accessed at two levels:
 - A low-level statically linked library @!TSQLite3LibraryStatic!Lib\SynSQLite3Static.pas@, embedding the engine within the project executable;
 - A possible use of external {\f1\fs20 sqlite3.dll} library, via the {\f1\fs20 TSQLite3LibraryDynamic} class;
 - A high-level access, implementing a Client-Side or Server-Side native {\f1\fs20 TSQLRest} descendant using the {\i SQLite3} library for ORM data persistence, in @!TSQLRestServerDB,TSQLRestClientDB!Lib\SQLite3\mORMotSQLite3.pas@.
-In addition to those two units, the @!TSQLDBSQLite3Connection,TSQLDBSQLite3Statement,TSQLDBSQLite3ConnectionProperties!Lib\SynDBSQLite3.pas@ unit publishes all features of the {\i SQlite3} database engine to its internal {\f1\fs20 SynDB} fast database access classes, which can be used uncoupled from the rest of the framework (i.e. without ORM).
+In addition to those two units, the @!TSQLDBSQLite3Connection,TSQLDBSQLite3Statement,TSQLDBSQLite3ConnectionProperties!Lib\SynDBSQLite3.pas@ unit publishes all features of the {\i SQlite3} database engine to its internal {\f1\fs20 SynDB.pas} fast database access classes, which can be used uncoupled from the rest of the framework (i.e. without ORM).
 : Low-Level access to the library
 :  Compilation of the SQLite3 engine
 First of all, the original source code of the library, which is retrieved from the official {\i SQLite3} web site in the form of the optimized Amalgamation file - see @http://www.sqlite.org/amalgamation.html - is compiled using the free Borland C++ command-line compiler.
@@ -12799,7 +14700,7 @@ The @!TSQLTableDB,TSQLRequest,TSQLDataBase,TSQLBlobStream,ESQLException!Lib\SynS
 Those database access types are then used by the following Client-Server @*REST@ful classes, to implement {\i SQLite3} storage for persistence of our @*ORM@ (the so called objects hibernation) in @!TSQLRestClientDB,TSQLRestServerDB!Lib\SQLite3\mORMotSQLite3.pas@:
 - {\f1\fs20 TSQLRestClientDB} implements a REST client with direct access to a {\i SQLite3} database, that is without the Client-Server aspect of the framework;
 - {\f1\fs20 TSQLRestServerDB} can be used to implement a REST server using {\i SQLite3} as its storage engine.
-In most projects, you should not have to use those {\f1\fs20 TSQLDatabase / TSQLRequest} objects, but rather rely either on ORM classes (from {\f1\fs20 mORMot.pas}) or the more generic {\f1\fs20 SynDB} classes (from {\f1\fs20 SynDBSQlite3.pas}).
+In most projects, you should not have to use those {\f1\fs20 TSQLDatabase / TSQLRequest} objects, but rather rely either on ORM classes (from {\f1\fs20 mORMot.pas}) or the more generic {\f1\fs20 SynDB.pas} classes (from {\f1\fs20 SynDBSQlite3.pas}).
 
 [SDD-DI-2.2.2]
 ; SRS-DI-2.2.2 - The framework libraries, including all its {\i SQLite3} related features, must be tested using Unitary testing
@@ -12850,7 +14751,7 @@ So, how does the variant type used by {\i Ole Automation} and our custom variant
 Behind the scene, the {\i Delphi} compiler calls the {\f1\fs20 DispInvoke} function, as defined in the {\i Variant.pas} unit.
 The default implementation of this {\f1\fs20 DispInvoke} is some kind of slow:
 - It uses a {\f1\fs20 TMultiReadExclusiveWriteSynchronizer} under {\i Delphi} 6, which is a bit over-sized for its purpose: since {\i Delphi} 7, it uses a lighter critical section;
-- It makes use of {\f1\fs20 WideString} for string handling (not at all the better for speed), and tends to define a lot of temporary string variables;
+- It makes use of {\f1\fs20 @*WideString@} for string handling (not at all the better for speed), and tends to define a lot of temporary string variables;
 - For the getter method, it always makes a temporary local copy during process, which is not useful for our classes.
 : Fast and furious
 So we rewrite the {\f1\fs20 DispInvoke} function with some enhancements in mind:
@@ -12948,7 +14849,7 @@ As you can see, the returned variant content is computed with the following meth
 !    end;
 !    end;
 !end;
-This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 WideString} variant for pre-Unicode version of {\i Delphi}, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since {\i Delphi} 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
+This above method will create the variant content without any temporary variant or string. It will return TEXT ({\f1\fs20 ftUTF8}) column as {\f1\fs20 @*SynUnicode@}, i.e. into a generic {\f1\fs20 @*WideString@} variant for pre-Unicode version of {\i Delphi}, and a generic {\f1\fs20 UnicodeString} (={\f1\fs20 string}) since {\i Delphi} 2009. By using the fastest available native Unicode {\f1\fs20 string} type, you will never loose any Unicode data during char-set conversion.
 : Hacking the VCL
 In order to enable this speed-up, we'll need to change each call to {\f1\fs20 DispInvoke} into a call to our custom {\f1\fs20 SynVarDispProc} function.
 With {\i Delphi} 6, we can do that by using {\f1\fs20 GetVariantManager   /SetVariantManager} functions, and the following code:
@@ -13252,7 +15153,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2014 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2015 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
 $    Will serve static content and DWS dynamic content via http.sys
@@ -13264,7 +15165,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1

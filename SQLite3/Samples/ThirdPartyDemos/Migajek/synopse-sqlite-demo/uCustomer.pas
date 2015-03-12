@@ -101,7 +101,7 @@ procedure InitClient();
 begin
   Model:= CreateSampleModel;
   globalClient:= TSQLRestClientDB.Create(Model, CreateSampleModel, ChangeFileExt(Application.ExeName,'.db3'), TSQLRestServerDB);
-  TSQLRestClientDB(globalClient).Server.CreateMissingTables(0);
+  TSQLRestClientDB(globalClient).Server.CreateMissingTables;
 end;
 
 function CreateSampleModel: TSQLModel;

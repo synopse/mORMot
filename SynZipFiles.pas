@@ -6,7 +6,7 @@ unit SynZipFiles;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynZipFiles;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -69,7 +69,12 @@ uses
   // USEPDF: under Windows: get ZLib 1.2.3 functions from libpdf.dll
   {$ifdef USEPDF}pdf,{$endif}
 {$else}
-  Libc, Types,
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  {$endif}
 {$endif}
   SynCommons,
   Classes, SysUtils, SynZip;
@@ -84,7 +89,7 @@ uses
   - TSynCompressionAlgo is called by 64KB chunks or once for whole data
   - inherit from TSynCompressionAlgoBuf to simply handle 64KB chunks
   - Synopse has registered several TSynCompressionAlgo IDs:
-     1=SynLz-chunked 2=SynLz-whole
+     1=SynLZ-chunked 2=SynLZ-whole
      3=LzoAsm-chunked 4=LzoAsm-whole
      5=Bz2-chunked 
      6=AES-chunked 7=AES+Zip-chunked 8=AES+SynLz-chunked
@@ -467,12 +472,16 @@ begin
       break; // not handled yet: use SynZip's TZipRead to access this archive
     end;
     with Entry[i] do begin
+      {$ifdef MSWINDOWS}
       if FileInfo.GetUTF8FileName then
         SetString(ZipName,PAnsiChar(H)+sizeof(H^),fileInfo.nameLen) else begin
         SetLength(tmp,fileInfo.nameLen); // convert from DOS/OEM into WinAnsi
         OemToCharBuffA(PAnsiChar(H)+sizeof(H^),pointer(tmp),fileInfo.nameLen);
         ZipName := WinAnsiToUtf8(tmp);
       end;
+      {$else}
+      SetString(ZipName,PAnsiChar(H)+sizeof(H^),fileInfo.nameLen);
+      {$endif}
       ZipName := StringReplaceChars(ZipName,'/','\');
       Header := H^;
     end; // next entry is after the ZipNname and some extra/comment
@@ -897,12 +906,10 @@ var Algo: TSynCompressionAlgoClass;
 begin
   fDestStream := outStream;
   fBlobDataHeaderPosition := -1; // not AsBlobData
-  with FStrm do begin
-    Init;
-    next_out := @FBufferOut;
-    avail_out := SizeOf(FBufferOut);
-    next_in := @FBufferIn;
-  end;
+  StreamInit(FStrm);
+  FStrm.next_out := @FBufferOut;
+  FStrm.avail_out := SizeOf(FBufferOut);
+  FStrm.next_in := @FBufferIn;
   if Algorithm<>0 then begin
     Algo := SynCompressionAlgos.Algo(Algorithm);
     if not Assigned(Algo) then // unknown algo -> error
@@ -1392,7 +1399,7 @@ begin
   // 5. if we worked on a .tmp file (recreated from a TZipReader) -> make it new
   if fDestFileName<>'' then begin
     if not DeleteFile(fDestFileName) then begin
-      Sleep(100);
+      SleepHiRes(100);
       if not DeleteFile(fDestFileName) then assert(false); end;
     RenameFile(fFileName,fDestFileName); // '.tmp' -> '.bjt' ou '.zip'
   end;
@@ -1411,7 +1418,7 @@ begin
   ZipCreate(aZipName,CompressionLevel,0,Algorithm); // initialize Zip object
   Entry[Count].Header.fileInfo.zlastMod :=
     {$ifdef MSWINDOWS}FileGetDate(Map._file){$else}
-    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map._file)){$endif};
+    DateTimeToFileDateWindows(FileDateToDateTime(FileGetDate(Map._file))){$endif};
   Zip.WriteOnce(Map.buf^,Map._size);
   Map.UnMap;
   ZipClose;
@@ -1775,13 +1782,13 @@ begin
 end;
 
 function TBlobData.Next: PAnsiChar;
-{$ifndef PUREPASCAL}
+{$ifdef PUREPASCAL}
 begin
   result := PAnsiChar(@databuf)+dataSize;
 end;
 {$else}
 asm
-  lea ecx,eax+TBlobData.databuf
+  lea ecx,[eax+TBlobData.databuf]
   mov eax,[eax].TBlobData.datasize
   add eax,ecx
 end;
@@ -1851,6 +1858,7 @@ var T: TTime_T;
     UT: TUnixTime;
 begin
   __time(@T);
+  localtime_r(
   localtime_r(@T, UT);
   Y := UT.tm_year + 1900;
   M := UT.tm_mon + 1;

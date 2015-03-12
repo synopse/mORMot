@@ -11,7 +11,8 @@ program Map2Mab;
 
 uses
   SysUtils,
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 procedure Process(const FileName: TFileName);
 var SR: TSearchRec;

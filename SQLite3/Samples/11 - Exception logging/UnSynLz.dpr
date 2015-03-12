@@ -13,7 +13,8 @@ program UnSynLz;
 
 uses
   SysUtils,
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 procedure Process(const FileName: TFileName);
 var SR: TSearchRec;

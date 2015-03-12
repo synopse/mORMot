@@ -9,6 +9,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotHttpServer,
   Project20Interface;

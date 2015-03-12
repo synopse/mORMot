@@ -6,7 +6,7 @@ unit SynOleDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOleDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -106,6 +106,8 @@ unit SynOleDB;
   - fixed issue in TOleDBConnectionProperties.ColumnTypeNativeToDB() about
     unrecognized column type when table schema is retrieved from SQL
   - fixed issue when running TOleDBStatement.Step(true)
+  - fixed issue [e8c211062e] when binding NULL values in multi INSERT statements
+  - fixed logging SQL content of external OleDB statements 
 
 }
 
@@ -124,6 +126,7 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynLog,
   SynDB;
 
 
@@ -573,11 +576,11 @@ type
     /// get all table names
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// convert a textual column data type, as retrieved e.g. from SQLGetField,
     // into our internal primitive types
     function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSQLDBFieldType; override;
@@ -623,7 +626,7 @@ type
   /// OleDB connection properties to Microsoft SQL Server 2008-2012, via
   // SQL Server Native Client 10.0 (SQL Server 2008)
   // - this will use the native OleDB provider supplied by Microsoft
-  // see http://msdn.microsoft.com/en-us/library/ms677227(v=VS.85).aspx
+  // see http://msdn.microsoft.com/en-us/library/ms677227
   // - is aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
   // - will use the SQLNCLI10 provider, which will work on Windows XP;
@@ -666,17 +669,21 @@ type
   // - just maps default TOleDBMSSQLConnectionProperties type
   TOleDBMSSQL2008ConnectionProperties = TOleDBMSSQLConnectionProperties;
 
-  /// OleDB connection properties to Microsoft SQL Server 2012, via
-  // SQL Server Native Client 11.0 (SQL Server 2012)
+  /// OleDB connection properties to Microsoft SQL Server 2008/2012, via
+  // SQL Server Native Client 11.0 (Microsoft SQL Server 2012 Native Client)
+  // - from http://www.microsoft.com/en-us/download/details.aspx?id=29065 get
+  // the sqlncli.msi package corresponding to your Operating System: note that
+  // the "X64 Package" will also install the 32-bit version of the client
   // - this overridden version will use newer SQLNCLI11 provider, but won't work
-  // under Windows XP - in this case, will fall back to SQLNCLI10 - see
-  // http://msdn.microsoft.com/en-us/library/ms131291.aspx
+  // under Windows XP - in this case, it will fall back to SQLNCLI10 - see
+  // http://msdn.microsoft.com/en-us/library/ms131291
   // - if aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
   // - for SQL Express LocalDB edition, just use aServerName='(localdb)\v11.0'
   TOleDBMSSQL2012ConnectionProperties = class(TOleDBMSSQLConnectionProperties)
   protected
     /// will set the appropriate provider name, i.e. 'SQLNCLI11'
+    // - will leave older 'SQLNCLI10' on Windows XP
     procedure SetInternalProperties; override;
   end;
 
@@ -713,6 +720,7 @@ type
   // - an ODBC Driver should be specified at creation
   // - you should better use direct connection classes, like
   // TOleDBMSSQLConnectionProperties or TOleDBOracleConnectionProperties
+  // as defined in SynDBODBC.pas
   TOleDBODBCSQLConnectionProperties = class(TOleDBConnectionProperties)
   protected
     fDriver: RawUTF8;
@@ -743,7 +751,8 @@ type
     fOleDBErrorMessage, fOleDBInfoMessage: string;
     /// Error handler for OleDB COM objects
     // - will update ErrorMessage and InfoMessage
-    procedure OleDBCheck(aResult: HRESULT; const aStatus: TCardinalDynArray=nil); virtual;
+    procedure OleDBCheck(aStmt: TSQLDBStatement; aResult: HRESULT;
+      const aStatus: TCardinalDynArray=nil); virtual;
     /// called just after fDBInitialize.Initialized: could add parameters
     procedure OnDBInitialized; virtual;
   public
@@ -804,6 +813,8 @@ type
     /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
     VInt64: Int64;
     /// storage used for the OleDB status field
+    // - if VStatus=ord(stIsNull), then it will bind a NULL with the type
+    // as set by VType (to avoid conversion error like in [e8c211062e])
     VStatus: integer;
     /// the column/parameter Value type
     VType: TSQLDBFieldType;
@@ -883,8 +894,11 @@ type
 
     {{ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1
+     - OleDB during MULTI INSERT statements expect BoundType to be set in
+       TOleDBStatementParam, and its VStatus set to ord(stIsNull)
      - raise an EOleDBException on any error }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); override;
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); override;
     {{ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1
      - raise an EOleDBException on any error }
@@ -1013,7 +1027,7 @@ type
      - fast overridden implementation with no temporary variable 
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     {{ return a Column as a variant
      - this implementation will retrieve the data with no temporary variable
        (since TQuery calls this method a lot, we tried to optimize it)
@@ -1141,28 +1155,30 @@ begin
 end;
 
 procedure TOleDBStatement.BindNull(Param: Integer;
-  IO: TSQLDBParamInOutType);
+  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
-  CheckParam(Param,ftNull,IO);
+  CheckParam(Param,BoundType,IO)^.VStatus := ord(stIsNull);
 end;
 
 function TOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldType;
   IO: TSQLDBParamInOutType): POleDBStatementParam;
 begin
   if Param<=0 then
-    raise EOleDBException.CreateFmt('%s.Bind*() called with Param=%d should be >= 1',
-      [fStatementClassName,Param]);
+    raise EOleDBException.CreateUTF8(
+      '%.Bind*() called with Param=% should be >= 1',[self,Param]);
   if Param>fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param-1];
   result^.VType := NewType;
   result^.VInOut := IO;
+  result^.VStatus := 0;
 end;
 
 constructor TOleDBStatement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TOleDBConnection) then
-    raise EOleDBException.CreateFmt('%s.Create expects a TOleDBConnection',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.Create(%) expects a TOleDBConnection',
+      [self,aConnection]);
   inherited Create(aConnection);
   fOleDBConnection := TOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TOleDBStatementParamDynArray),fParams,@fParamCount);
@@ -1192,24 +1208,19 @@ begin
   if cardinal(Status)<=cardinal(ord(high(TOleDBStatus))) then
     msg := UnCamelCase(TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TOleDBStatus),Status))) else
 {$else}
-    msg := Int32ToUtf8(Status);
+    Int32ToUtf8(Status,msg);
 {$endif}
-  SynDBLog.Add.Log(sllError,
-  {$ifdef DELPHI5OROLDER}
-    msg+' for column "'+Column^.ColumnName+'" at row '+Int32ToUTF8(fCurrentRow)+
-    ' for '+fSQL);
-  {$else}
-    'Invalid "%" status for column "%" at row % for %',[msg,Column^.ColumnName,fCurrentRow,fSQL],self);
-  {$endif}
+  SynDBLog.Add.Log(sllError,'Invalid "%" status for column "%" at row % for %',
+    [msg,Column^.ColumnName,fCurrentRow,fSQL],self);
 end;
 
 function TOleDBStatement.GetCol(Col: integer; out Column: PSQLDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value
   if not Assigned(fRowSet) or (fColumnCount=0) then
-    raise EOleDBException.CreateFmt('%s.Column*() with no prior Execute',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.Column*() with no prior Execute',[self]);
   if CurrentRow<=0 then
-    raise EOleDBException.CreateFmt('%s.Column*() with no prior Step',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.Column*() with no prior Step',[self]);
   Column := @fColumns[Col];
   result := @fRowSetData[Column^.ColumnAttr];
   case TOleDBStatus(PColumnValue(result)^.Status) of
@@ -1409,7 +1420,9 @@ begin // dedicated version to avoid as much memory allocation than possible
         {$endif}
           SetString(SynUnicode(VAny),PWideChar(P),V^.Length shr 1);
       end;
-      ftBlob: begin
+      ftBlob:
+      if fForceBlobAsNull then
+        VType := varNull else begin
         VAny := nil;
         if C^.ColumnValueInlined then
           P := @V^.VData else
@@ -1420,14 +1433,14 @@ begin // dedicated version to avoid as much memory allocation than possible
   end;
 end;
 
-procedure TOleDBStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TOleDBStatement.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     V: PColumnValue;
     P: Pointer;
 label Write;
 begin // dedicated version to avoid as much memory allocation than possible
   if CurrentRow<=0 then
-    raise EOleDBException.CreateFmt('%s.Column*() with no prior Step',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.ColumnsToJSON() with no prior Step',[self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do // fast direct conversion from OleDB buffer
@@ -1439,7 +1452,7 @@ begin // dedicated version to avoid as much memory allocation than possible
       stOK:
 Write:case ColumnType of
         ftInt64:    WR.Add(V^.Int64);
-        ftDouble:   WR.Add(V^.Double);
+        ftDouble:   WR.AddDouble(V^.Double);
         ftCurrency: WR.AddCurr64(V^.Int64);
         ftDate: begin
           WR.Add('"');
@@ -1455,7 +1468,7 @@ Write:case ColumnType of
           WR.Add('"');
         end;
         ftBlob:
-          if DoNotFletchBlobs then
+          if fForceBlobAsNull then
             WR.AddShort('null') else begin
             if ColumnValueInlined then
               P := @V^.VData else
@@ -1488,7 +1501,7 @@ begin
   inherited ParamToVariant(Param,Value); // raise exception if Param incorrect
   dec(Param); // start at #1
   if CheckIsOutParameter and (fParams[Param].VInOut=paramIn) then
-    raise EOleDBException.CreateFmt('%s.ParamToVariant expects an [In]Out parameter',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.ParamToVariant expects an [In]Out parameter',[self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
   // -> we have nothing to do but return the current value :)
@@ -1519,18 +1532,17 @@ procedure TOleDBStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
 var L: integer;
     SQLW: RawUnicode;
+    Timer: TPrecisionTimer;
 begin
+  Timer.Start;
   if Assigned(fCommand) or Assigned(fRowSet) or (fColumnCount>0) or
      (fColumnBindings<>nil) or (fParamBindings<>nil) then
-    raise EOleDBException.CreateFmt('%s.Prepare should be called once',[fStatementClassName]);
+    raise EOleDBException.CreateUTF8('%.Prepare should be called once',[self]);
   inherited;
-  with SynDBLog.Add do
-  if sllSQL in Family.Level then
-    LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
   with OleDBConnection do begin
     if not IsConnected then
       Connect;
-    OleDBCheck((fSession as IDBCreateCommand).
+    OleDBCheck(self,(fSession as IDBCreateCommand).
       CreateCommand(nil,IID_ICommandText,ICommand(fCommand)));
   end;
   L := Length(fSQL);
@@ -1539,6 +1551,9 @@ begin
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
+  with SynDBLog.Add do
+  if sllDB in Family.Level then
+    Log(sllDB,'Prepare % %',[Timer.Stop,SQL],self);
 end;
 
 procedure TOleDBStatement.ExecutePrepared;
@@ -1547,16 +1562,16 @@ var i: integer;
     B: PDBBinding;
     ParamsStatus: TCardinalDynArray;
     RowSet: IRowSet;
-    Log: ISynLog;
+    Timer: TPrecisionTimer;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Timer.Start;
   try
     // 1. check execution context
     if not Assigned(fCommand) then
-      raise EOleDBException.CreateFmt('%s.Prepare should have been called',[fStatementClassName]);
+      raise EOleDBException.CreateUTF8('%s.Prepare should have been called',[self]);
     if Assigned(fRowSet) or (fColumnCount>0) or
        (fColumnBindings<>nil) or (fParamBindings<>nil) then
-      raise EOleDBException.CreateFmt('Missing call to %s.Reset',[fStatementClassName]);
+      raise EOleDBException.CreateUTF8('Missing call to %.Reset',[self]);
     // 2. bind parameters
     if fParamCount=0 then
       // no parameter to bind
@@ -1564,9 +1579,8 @@ begin
       // bind supplied parameters, with direct mapping to fParams[]
       for i := 0 to fParamCount-1 do
         case fParams[i].VType of
-          ftUnknown: raise EOleDBException.CreateFmt(
-            '%s.Execute called with a missing #%d bound parameter for "%s"',
-            [fStatementClassName,i+1,fSQL]);
+          ftUnknown: raise EOleDBException.CreateUTF8(
+            '%.Execute: missing #% bound parameter for "%"',[self,i+1,fSQL]);
         end;
       P := pointer(fParams);
       SetLength(fParamBindings,fParamCount);
@@ -1609,7 +1623,7 @@ begin
         inc(B);
       end;
       SetLength(ParamsStatus,fParamCount);
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         (fCommand as IAccessor).CreateAccessor(
           DBACCESSOR_PARAMETERDATA,fParamCount,Pointer(fParamBindings),0,
           fDBParams.HACCESSOR,pointer(ParamsStatus)),ParamsStatus);
@@ -1620,7 +1634,7 @@ begin
     if fExpectResults then
     try
       // 3.1 SELECT will allow access to resulting rows data from fRowSet
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,IID_IRowset,fDBParams,nil,@RowSet),ParamsStatus);
       FromRowSet(RowSet);
     except
@@ -1630,11 +1644,14 @@ begin
       end;
     end else
       // 3.2 ExpectResults=false (e.g. SQL UPDATE) -> leave fRowSet=nil
-      OleDBConnection.OleDBCheck(
+      OleDBConnection.OleDBCheck(self,
         fCommand.Execute(nil,DB_NULLGUID,fDBParams,@fUpdateCount,nil));
+    with SynDBLog.Add do
+      if sllSQL in Family.Level then
+        Log(sllSQL,'% %',[Timer.Stop,SQLWithInlinedParams],self);
   except
     on E: Exception do begin
-      Log.Log(sllError,E);
+      SynDBLog.Add.Log(sllError,E);
       raise;
     end;
   end;
@@ -1672,7 +1689,7 @@ var Status: TCardinalDynArray;
     sav: integer;
 begin
 {  if not Assigned(fCommand) then
-    raise EOleDBException.CreateFmt('%s.Execute should be called before Step',[ClassName]); }
+    raise EOleDBException.CreateUTF8('%.Execute should be called before Step',[self]); }
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
@@ -1680,11 +1697,8 @@ begin
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if fRowSetAccessor=0 then begin
     // first time called -> need to init accessor from fColumnBindings[]
-    {$ifndef DELPHI5OROLDER}
-    SynDBLog.Enter(self,'CreateAccessor',true);
-    {$endif}
     SetLength(Status,fColumnCount);
-    OleDBConnection.OleDBCheck((fRowSet as IAccessor).CreateAccessor(
+    OleDBConnection.OleDBCheck(self,(fRowSet as IAccessor).CreateAccessor(
       DBACCESSOR_ROWDATA or DBACCESSOR_OPTIMIZED,fColumnCount,
       pointer(fColumnBindings),fRowSize,fRowSetAccessor,pointer(Status)),Status);
     fRowStepHandleRetrieved := 0;
@@ -1694,7 +1708,7 @@ begin
   if SeekFirst then begin
     // rewind to first row
     ReleaseRows;
-    OleDBConnection.OleDBCheck(fRowSet.RestartPosition(DB_NULL_HCHAPTER));
+    OleDBConnection.OleDBCheck(self,fRowSet.RestartPosition(DB_NULL_HCHAPTER));
     fRowStepResult := 0;
   end else
     FlushRowSetData;
@@ -1704,13 +1718,13 @@ begin
       exit; // no more row available -> return false
     fRowStepResult := fRowSet.GetNextRows(DB_NULL_HCHAPTER,0,length(fRowStepHandles),
       fRowStepHandleRetrieved,pointer(fRowStepHandles));
-    OleDBConnection.OleDBCheck(fRowStepResult);
+    OleDBConnection.OleDBCheck(self,fRowStepResult);
     fRowStepHandleCurrent := 0;
     if fRowStepHandleRetrieved=0 then
       exit; // no more row available
   end;
   // here we have always fRowStepHandleCurrent<fRowStepHandleRetrieved
-  OleDBConnection.OleDBCheck(fRowSet.GetData(fRowStepHandles[fRowStepHandleCurrent],
+  OleDBConnection.OleDBCheck(self,fRowSet.GetData(fRowStepHandles[fRowStepHandleCurrent],
     fRowSetAccessor,pointer(fRowSetData)));
   inc(fRowStepHandleCurrent);
   fCurrentRow := sav+1;
@@ -1719,13 +1733,9 @@ begin
 end;
 
 destructor TOleDBStatement.Destroy;
-var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
   try
-    {$ifndef DELPHI5OROLDER}
-    Log.Log(sllDB,'Total rows = %',[TotalRowsRetrieved],self);
-    {$endif}
+    SynDBLog.Add.Log(sllDB,'Rows = %',[self,TotalRowsRetrieved],self);
     CloseRowSet;
   finally
     fCommand := nil;
@@ -1764,6 +1774,7 @@ end;
 
 procedure TOleDBStatement.Reset;
 begin
+  inherited Reset;
   if fParamCount>0 then begin
     fParam.Clear;
     Finalize(fParamBindings);
@@ -1833,7 +1844,7 @@ begin
   nCols := 0;
   Cols := nil;
   ColsNames := nil;
-  OleDBConnection.OleDBCheck(ColumnInfo.GetColumnInfo(nCols,Cols,ColsNames));
+  OleDBConnection.OleDBCheck(self,ColumnInfo.GetColumnInfo(nCols,Cols,ColsNames));
   try
     nfo := Cols;
     SetLength(fColumnBindings,nCols);
@@ -1892,9 +1903,9 @@ begin
             inc(result,sizeof(Pointer));
         end;
       end;
-      else raise EOleDBException.CreateFmt(
-        '%s.Execute: wrong column "%s" (%s) for "%s"',[fStatementClassName,aName,
-        GetEnumName(TypeInfo(TSQLDBFieldType),ord(Col^.ColumnType))^,fSQL]);
+      else raise EOleDBException.CreateUTF8(
+        '%.Execute: wrong column "%" (%) for "%"',[self,aName,
+          GetEnumName(TypeInfo(TSQLDBFieldType),ord(Col^.ColumnType))^,fSQL]);
       end;
       inc(nfo);
       inc(B);
@@ -1937,12 +1948,12 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   // check context
   if Connected then
     Disconnect;
   if OleDBProperties.ConnectionString='' then
-    raise EOleDBException.CreateFmt('%s.Connect excepts a ConnectionString',[ClassName]);
+    raise EOleDBException.CreateUTF8('%.Connect excepts a ConnectionString',[self]);
   try
     // retrieve initialization parameters from connection string
     OleCheck(CoCreateInstance(CLSID_MSDAINITIALIZE, nil, CLSCTX_INPROC_SERVER,
@@ -1952,9 +1963,10 @@ begin
       IID_IDBInitialize,IUnknown(fDBInitialize)));
     DataInitialize := nil;
     // open the connection to the DB
-    OleDBCheck(fDBInitialize.Initialize);
+    OleDBCheck(nil,fDBInitialize.Initialize);
     OnDBInitialized; // optionaly set parameters
-    OleDBCheck((fDBInitialize as IDBCreateSession).CreateSession(nil,IID_IOpenRowset,fSession));
+    OleDBCheck(nil,
+      (fDBInitialize as IDBCreateSession).CreateSession(nil,IID_IOpenRowset,fSession));
     // check if DB handle transactions
     if fSession.QueryInterface(IID_ITransactionLocal,unknown)=S_OK then
       fTransaction := unknown as ITransactionLocal else
@@ -1974,9 +1986,9 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
-    raise EOleDBException.CreateFmt('Invalid %s.Create',[ClassName]);
+    raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
   inherited;
   CoInit;
@@ -1986,7 +1998,7 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self);
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
@@ -1999,14 +2011,14 @@ end;
 
 procedure TOleDBConnection.Disconnect;
 begin
-  SynDBLog.Enter(self,nil,true);
+  SynDBLog.Enter(self);
   try
     inherited Disconnect; // flush any cached statement
   finally
     if Connected then begin
       fTransaction := nil;
       fSession := nil;
-      OleDBCheck(fDBInitialize.Uninitialize);
+      OleDBCheck(nil,fDBInitialize.Uninitialize);
       fDBInitialize := nil;
     end;
   end;
@@ -2022,7 +2034,8 @@ begin
   result := TOleDBStatement.Create(self);
 end;
 
-procedure TOleDBConnection.OleDBCheck(aResult: HRESULT; const aStatus: TCardinalDynArray);
+procedure TOleDBConnection.OleDBCheck(aStmt: TSQLDBStatement; aResult: HRESULT;
+  const aStatus: TCardinalDynArray);
 procedure EnhancedTest;
 var ErrorInfo, ErrorInfoDetails: IErrorInfo;
     ErrorRecords: IErrorRecords;
@@ -2070,7 +2083,9 @@ begin // get OleDB specific error information
   if s<>'' then
     fOleDBErrorMessage :=  fOleDBErrorMessage+s;
   // raise exception
-  E := EOleDBException.Create(fOleDBErrorMessage);
+  if aStmt=nil then
+    E := EOleDBException.Create(fOleDBErrorMessage) else
+    E := EOleDBException.CreateUTF8('%: %',[self,fOleDBErrorMessage]);
   SynDBLog.Add.Log(sllError,E);
   raise E;
 end;
@@ -2090,7 +2105,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Commit;
-    OleDbCheck(fTransaction.Commit(False,XACTTC_SYNC,0));
+    OleDbCheck(nil,fTransaction.Commit(False,XACTTC_SYNC,0));
   end;
 end;
 
@@ -2099,7 +2114,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Rollback;
-    OleDbCheck(fTransaction.Abort(nil,False,False));
+    OleDbCheck(nil,fTransaction.Abort(nil,False,False));
   end;
 end;
 
@@ -2108,7 +2123,7 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited StartTransaction;   
-    OleDbCheck(fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
+    OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
   end;
 end;
 
@@ -2177,6 +2192,8 @@ type
     function Get_Groups: OleVariant; safecall;
     function Get_Users: OleVariant; safecall;
     function Create(const ConnectString: WideString): OleVariant; safecall;
+    // warning: the following method won't work if you use SynFastWideString.pas
+    // but we don't call it in this unit, you we can stay cool for now :)
     function GetObjectOwner(const ObjectName: WideString; ObjectType: OleVariant;
                             ObjectTypeId: OleVariant): WideString; safecall;
     procedure SetObjectOwner(const ObjectName: WideString; ObjectType: OleVariant;
@@ -2198,11 +2215,7 @@ begin
         result := true;
       except
       end;
-    {$ifdef DELPHI5OROLDER}
-    SynDBLog.Add.Log(sllDB,'CreateDatabase returned '+Int32ToUTF8(ord(result)));
-    {$else}
     SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
-    {$endif}
   finally
     DB := null;
     Catalog := nil;
@@ -2210,7 +2223,7 @@ begin
   end;
 end;
 
-procedure TOleDBConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TOleDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var Rows: IRowset;
     count, schemaCol, nameCol: integer;
     schema, tablename: RawUTF8;
@@ -2247,7 +2260,7 @@ begin
 end;
 
 procedure TOleDBConnectionProperties.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 var Owner, Table, Column: RawUTF8;
     Rows: IRowset;
     n, i: integer;
@@ -2384,7 +2397,7 @@ begin
       Args[i] := UTF8ToWideString(Fields[i]); // expect parameter as BSTR
   aResult := nil;
   try
-    C.OleDBCheck(SRS.GetRowset(nil,aUID,length(Args),Args,IID_IRowset,0,nil,aResult));
+    C.OleDBCheck(nil,SRS.GetRowset(nil,aUID,length(Args),Args,IID_IRowset,0,nil,aResult));
     result := aResult<>nil; // mark some rows retrieved
   except
     on E: Exception do
@@ -2595,11 +2608,22 @@ end;
 
 initialization
   assert(sizeof(TOleDBStatementParam) and (sizeof(Int64)-1)=0);
+  TOleDBConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBOracleConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSOracleConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQLConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2005ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2008ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMSSQL2012ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBMySQLConnectionProperties.RegisterClassNameForDefinition;
+  {$ifndef CPU64} // Jet is not available on Win64
+  TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
+  {$endif}
+  TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
 
 finalization
-  {$ifndef DELPHI5OROLDER}
   if OleDBCoinitialized<>0 then
     SynDBLog.Add.Log(sllError,'Missing TOleDBConnection.Destroy call = %',
       OleDBCoInitialized);
-  {$endif}
 end.

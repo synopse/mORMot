@@ -6,7 +6,7 @@ unit mORMotUI;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUI;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -263,7 +263,7 @@ type
     /// text of this column/field name has been truncated
     fFieldNameTruncated: Int64;
     /// used by OnTableUpdate() event
-    fOnTableUpdateID: TIntegerDynArray;
+    fOnTableUpdateID: TIDDynArray;
     /// return true if a GPF may occur
     function NotDefined: boolean;
   public
@@ -315,7 +315,7 @@ type
     procedure SortForce(ACol: integer; Ascending: boolean; ARow: integer=-1);
     /// get the ID of the first selected row, 0 on error (no ID field e.g.)
     // - useful even if ID column was hidden with IDColumnHide
-    function SelectedID: integer;
+    function SelectedID: TID;
     /// retrieve the record content of the first selected row, nil on error
     // - record type is retrieved via Table.QueryTables[0] (if defined)
     // - warning: it's up to the caller to Free the created instance after use
@@ -368,7 +368,7 @@ type
     /// call this procedure after a refresh of the data
     // - current Row will be set back to aID
     // - called internal by Refresh function above
-    procedure AfterRefresh(aID: integer; AutoResizeColumns: boolean);
+    procedure AfterRefresh(const aID: TID; AutoResizeColumns: boolean);
     /// you can call this method when the list is no more on the screen
     // - it will hide any pending popup Hint windows, for example
     procedure PageChanged;
@@ -1142,7 +1142,8 @@ begin
       sftEnumerate, sftTimeLog, sftRecord, sftDateTime:
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
           length(StringValue), nil); // translated text
-      //sftID: { TODO : display ID as TSQLRecord content? better calculate it in SELECT }
+      //sftID,sftTID:
+      // proposal: display ID as TSQLRecord content? better compute it in SELECT 
       else begin
         // normal field value: unicode text (even with Delphi 2-2007 VCL), left aligned
         L := Table.GetWP(ARow,ACol,tmp,high(tmp));
@@ -1170,7 +1171,7 @@ end;
 
 procedure TSQLTableToGrid.SortForce(ACol: integer; Ascending: boolean;
   ARow: integer=-1);
-var MIDs: TIntegerDynArray;
+var MIDs: TIDDynArray;
 begin
   if NotDefined or (ACol>=Table.FieldCount) then // we allow ACol<0 (see below)
     exit;
@@ -1432,7 +1433,7 @@ begin
   SortChange(0);
 end;
 
-function TSQLTableToGrid.SelectedID: integer;
+function TSQLTableToGrid.SelectedID: TID;
 begin
   if NotDefined then
     result := 0 else
@@ -1540,7 +1541,7 @@ begin
   end;
 end;
 
-procedure TSQLTableToGrid.AfterRefresh(aID: integer; AutoResizeColumns: boolean);
+procedure TSQLTableToGrid.AfterRefresh(const aID: TID; AutoResizeColumns: boolean);
 var CurrentRow: integer;
     Bulk: boolean;
 begin
@@ -1745,6 +1746,10 @@ end;
 function TSQLTableToGrid.GetFieldIndexTimeLogForMark: integer;
 var F: integer;
 begin
+  if Self=nil then begin
+    result := -1;
+    exit;
+  end;
   if fFieldIndexTimeLogForMark=-2 then begin
     fFieldIndexTimeLogForMark := -1;
     for F := 0 to Table.FieldCount-1 do

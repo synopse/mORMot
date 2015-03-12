@@ -6,7 +6,7 @@ unit SynDBNexusDB;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2015 Arnaud Bouchez
   Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBNexusDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -68,6 +68,7 @@ uses
   Classes, Contnrs,
   {$ifdef ISDELPHIXE2}Data.DB,{$else}DB,{$endif}
   SynCommons,
+  SynLog,
   SynDB,
   SynDBDataset,
   nxDB,
@@ -351,8 +352,9 @@ begin
   inherited Create(aProperties);
   lProp := aProperties as TSQLDBNexusDBConnectionProperties; // type check to make sure
   if lProp.Protocol=nxpUnknown then
-    raise ESQLDBNexusDB.CreateFmt('Unknown NexusDB protocol in Servername=[%s]',
-      [lProp.ServerName]);
+    raise ESQLDBNexusDB.CreateUTF8(
+      '%.Create: Unknown NexusDB protocol in Servername=[%]',
+      [self,lProp.ServerName]);
   fDatabase := TnxDatabase.Create(nil);
   fSession := TnxSession.Create(nil);
   fSession.UserName := UTF8ToString(lProp.UserID);
@@ -579,6 +581,7 @@ end;
 
 
 initialization
+  TSQLDBNexusDBConnectionProperties.RegisterClassNameForDefinition;
 
 finalization
   FinalizeNXEmbeddedEngine;

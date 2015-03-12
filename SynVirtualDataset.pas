@@ -6,7 +6,7 @@ unit SynVirtualDataSet;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,11 +25,14 @@ unit SynVirtualDataSet;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
+  - Esteban Martin (EMartin)
   - mingda
+  - Murat Ak
     
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -56,16 +59,14 @@ unit SynVirtualDataSet;
 interface
 
 uses
-  Windows,
-  {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
+  SysUtils,
   Classes,
   Contnrs,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   SynCommons,
-  DB,
-  Forms;
+  DB;
 
 
 type
@@ -160,6 +161,32 @@ type
     property OnPostError;
   end;
 
+  /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
+  // - could be used e.g. from the result of TMongoCollection.FindDocs() to
+  // avoid most temporary conversion into JSON or TClientDataSet buffers
+  TDocVariantArrayDataSet = class(TSynVirtualDataSet)
+  protected
+    fValues: TVariantDynArray;
+    fColumns: array of record
+      Name: RawUTF8;
+      FieldType: TSQLDBFieldType;
+    end;
+    fTemp64: Int64;
+    fTempUTF8: RawUTF8;
+    fTempBlob: RawByteString;
+    procedure InternalInitFieldDefs; override;
+    function GetRecordCount: Integer; override;
+    function GetRowFieldData(Field: TField; RowIndex: integer;
+      out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
+  public
+    /// initialize the virtual TDataSet from a dynamic array of TDocVariant
+    // - you can set the expected column names and types matching the results
+    // document layout - if no column information is specified, the first
+    // TDocVariant will be used as reference
+    constructor Create(Owner: TComponent; const Data: TVariantDynArray;
+      const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType); reintroduce;
+  end;
+
 const
   /// map the VCL string type, depending on the Delphi compiler version
   {$ifdef UNICODE}
@@ -168,10 +195,22 @@ const
   ftDefaultVCLString = ftString;
   {$endif}
 
+  /// map the best ft*Memo type available, depending on the Delphi compiler version
+  {$ifdef ISDELPHI2007ANDUP}
+  ftDefaultMemo = ftWideMemo;
+  {$else}
+  ftDefaultMemo = ftMemo;
+  {$endif}
 
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet
 function DataSetToJSON(Data: TDataSet): RawUTF8;
+
+/// convert a dynamic array of TDocVariant result into a VCL DataSet
+// - this function is just a wrapper around TDocVariantArrayDataSet.Create()
+// - the TDataSet will be opened once created
+function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
+  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
 
 
 implementation
@@ -285,17 +324,21 @@ begin
   ftDate,ftTime,ftDateTime:
     DateTimeToNative(Field.DataType,PDateTime(Data)^,Dest^);
   ftString: begin
-    CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
-    DataLen := length(Temp);
-    MaxLen := Field.DataSize-1; // without trailing #0
-    if DataLen>MaxLen then
-      DataLen := MaxLen;
-    move(pointer(Temp)^,Dest^,DataLen);
+    if DataLen<>0 then begin
+      CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
+      DataLen := length(Temp);
+      MaxLen := Field.DataSize-1; // without trailing #0
+      if DataLen>MaxLen then
+        DataLen := MaxLen;
+      move(pointer(Temp)^,Dest^,DataLen);
+    end;
     PAnsiChar(Dest)[DataLen] := #0;
   end;
   ftWideString: begin
     {$ifdef ISDELPHI2007ANDUP} // here Dest = PWideChar[] of DataSize bytes
-    UTF8ToWideChar(Dest,Data,(Field.DataSize-2)shr 1,DataLen);
+    if DataLen=0 then
+      PWideChar(Dest)^ := #0 else
+      UTF8ToWideChar(Dest,Data,(Field.DataSize-2)shr 1,DataLen);
     {$else}          // here Dest is PWideString
     UTF8ToWideString(Data,DataLen,WideString(Dest^));
     {$endif}
@@ -330,6 +373,8 @@ begin
   if Mode<>bmRead then
     raise EDatabaseError.CreateFmt('%s BLOB should be ReadOnly',[ClassName]);
   result := GetBlobStream(Field,PRecInfo(ActiveBuffer).RowIndentifier);
+  if result=nil then
+    result := TSynMemoryStream.Create; // null BLOB returns a void TStream
 end;
 
 function TSynVirtualDataSet.GetRecNo: Integer;
@@ -372,7 +417,11 @@ end;
 procedure TSynVirtualDataSet.InternalClose;
 begin
   BindFields(false);
+  {$ifdef ISDELPHIXE7}
+  if not(lcPersistent in Fields.LifeCycles) then
+  {$else}
   if DefaultFields then
+  {$endif}
     DestroyFields;
   fIsCursorOpen := False;
 end;
@@ -389,7 +438,9 @@ end;
 
 procedure TSynVirtualDataSet.InternalHandleException;
 begin
-  Application.HandleException(Self);
+  if Assigned(Classes.ApplicationHandleException) then
+    Classes.ApplicationHandleException(ExceptObject) else
+    SysUtils.ShowException(ExceptObject,ExceptAddr);
 end;
 
 procedure TSynVirtualDataSet.InternalInitRecord(Buffer: TRecordBuffer);
@@ -406,7 +457,11 @@ procedure TSynVirtualDataSet.InternalOpen;
 begin
   BookmarkSize := SizeOf(TRecInfo)-sizeof(TRecInfoIdentifier);
   InternalInitFieldDefs;
+  {$ifdef ISDELPHIXE7}
+  if not(lcPersistent in Fields.LifeCycles) then
+  {$else}
   if DefaultFields then
+  {$endif}
     CreateFields;
   BindFields(true);
   fCurrentRow := -1;
@@ -483,10 +538,16 @@ begin
         if IsNull then
           W.AddShort('null') else
         case DataType of
-        ftBoolean: W.AddString(JSON_BOOLEAN[AsBoolean]);
-        ftSmallint, ftInteger, ftWord, ftAutoInc: W.Add(AsInteger);
-        ftLargeint: W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
-        ftFloat, ftCurrency, ftBCD: W.Add(AsFloat);
+        ftBoolean:
+          W.AddString(JSON_BOOLEAN[AsBoolean]);
+        ftSmallint, ftInteger, ftWord, ftAutoInc:
+          W.Add(AsInteger);
+        ftLargeint:
+          W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
+        ftFloat, ftCurrency:
+          W.Add(AsFloat,TFloatField(Data.Fields[f]).Precision);
+        ftBCD:
+          W.AddCurr64(AsCurrency);
         ftTimeStamp, ftDate, ftTime, ftDateTime: begin
           W.Add('"');
           W.AddDateTime(AsDateTime);
@@ -503,7 +564,8 @@ begin
           W.AddJSONEscapeW(pointer(TWideStringField(Data.Fields[f]).Value));
           W.Add('"');
         end;
-        ftVariant: W.AddVariantJSON(AsVariant);
+        ftVariant:
+          W.AddVariantJSON(AsVariant);
         ftBytes, ftVarBytes, ftBlob, ftGraphic, ftOraBlob, ftOraClob: begin
           blob := TRawByteStringStream.Create;
           try
@@ -521,9 +583,14 @@ begin
         end;
         {$endif}
         {$ifdef UNICODE}
-        ftShortint, ftByte: W.Add(AsInteger);
-        ftLongWord: W.AddU(TLongWordField(Data.Fields[f]).Value);
-        ftExtended, ftSingle: W.Add(AsFloat);
+        ftShortint, ftByte:
+          W.Add(AsInteger);
+        ftLongWord:
+          W.AddU(TLongWordField(Data.Fields[f]).Value);
+        ftExtended:
+          W.Add(AsFloat,DOUBLE_PRECISION);
+        ftSingle:
+          W.Add(AsFloat,SINGLE_PRECISION);
         {$endif}
         else W.AddShort('null'); // unhandled field type
         end;
@@ -539,6 +606,123 @@ begin
   finally
     W.Free;
   end;
+end;
+
+{ TDocVariantArrayDataSet }
+
+constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
+  const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
+  const ColumnTypes: array of TSQLDBFieldType);
+var n,i,j: integer;
+    first: PDocVariantData;
+begin
+  fValues := Data;
+  n := Length(ColumnNames);
+  if n>0 then begin
+    if n<>length(ColumnTypes) then
+      raise ESynException.CreateUTF8('%.Create(ColumnNames<>ColumnTypes)',[self]);
+    SetLength(fColumns,n);
+    for i := 0 to n-1 do begin
+      fColumns[i].Name := ColumnNames[i];
+      fColumns[i].FieldType := ColumnTypes[i];
+    end;
+  end else
+  if fValues<>nil then begin
+    first := DocVariantDataSafe(fValues[0],dvObject);
+    SetLength(fColumns,first^.Count);
+    for i := 0 to first^.Count-1 do begin
+      fColumns[i].Name := first^.Names[i];
+      fColumns[i].FieldType := VariantTypeToSQLDBFieldType(first^.Values[i]);
+      case fColumns[i].FieldType of
+      SynCommons.ftNull:
+        fColumns[i].FieldType := SynCommons.ftBlob;
+      SynCommons.ftCurrency:
+        fColumns[i].FieldType := SynCommons.ftDouble;
+      SynCommons.ftInt64: // ensure type coherency of whole column
+        for j := 1 to first^.Count-1 do
+          if j>=Length(fValues) then // check objects are consistent
+            break else
+            with DocVariantDataSafe(fValues[j],dvObject)^ do
+            if (i<Length(Names)) and IdemPropNameU(Names[i],fColumns[i].Name) then
+            if VariantTypeToSQLDBFieldType(Values[i]) in
+                [SynCommons.ftNull,SynCommons.ftDouble,SynCommons.ftCurrency] then begin
+              fColumns[i].FieldType := SynCommons.ftDouble;
+              break;
+            end;
+      end;
+    end;
+  end;
+  inherited Create(Owner);
+end;
+
+function TDocVariantArrayDataSet.GetRecordCount: Integer;
+begin
+  result := length(fValues);
+end;
+
+function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
+  RowIndex: integer; out ResultLen: Integer;
+  OnlyCheckNull: boolean): Pointer;
+var F,ndx: integer;
+    wasString: Boolean;
+begin
+  result := nil;
+  F := Field.Index;
+  if (cardinal(RowIndex)<cardinal(length(fValues))) and
+     (cardinal(F)<cardinal(length(fColumns))) and
+     not (fColumns[F].FieldType in [ftNull,SynCommons.ftUnknown,SynCommons.ftCurrency]) then
+    with DocVariantDataSafe(fValues[RowIndex])^ do
+    if (Kind=dvObject) and (Count>0) then begin
+      if IdemPropNameU(fColumns[F].Name,Names[F]) then
+        ndx := F else // optimistic match
+        ndx := GetValueIndex(fColumns[F].Name);
+      if ndx>=0 then
+        if VarIsNull(Values[ndx]) then
+          exit else begin
+          result := @fTemp64;
+          if not OnlyCheckNull then
+          case fColumns[F].FieldType of
+          ftInt64:
+            VariantToInt64(Values[ndx],fTemp64);
+          ftDouble,SynCommons.ftDate:
+            VariantToDouble(Values[ndx],PDouble(@fTemp64)^);
+          ftUTF8: begin
+            VariantToUTF8(Values[ndx],fTempUTF8,wasString);
+            result := pointer(fTempUTF8);
+            ResultLen := length(fTempUTF8);
+          end;
+          SynCommons.ftBlob: begin
+            VariantToUTF8(Values[ndx],fTempUTF8,wasString);
+            if Base64MagicCheckAndDecode(pointer(fTempUTF8),length(fTempUTF8),fTempBlob) then begin
+              result := pointer(fTempBlob);
+              ResultLen := length(fTempBlob);
+            end;
+          end;
+          end;
+        end;
+    end;
+end;
+
+procedure TDocVariantArrayDataSet.InternalInitFieldDefs;
+const TYPES: array[TSQLDBFieldType] of TFieldType = (
+  // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+  ftWideString,ftWideString,ftLargeint,ftFloat,ftFloat,ftDate,ftWideString,ftBlob);
+var F,siz: integer;
+begin
+  FieldDefs.Clear;
+  for F := 0 to high(fColumns) do begin
+    if fColumns[F].FieldType=ftUTF8 then
+      siz := 16 else
+      siz := 0;
+    FieldDefs.Add(UTF8ToString(fColumns[F].Name),TYPES[fColumns[F].FieldType],siz);
+  end;
+end;
+
+function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
+  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
+begin
+  result := TDocVariantArrayDataSet.Create(aOwner,Data,ColumnNames,ColumnTypes);
+  result.Open;
 end;
 
 end.

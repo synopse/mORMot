@@ -6,7 +6,7 @@ unit SynDBBDE;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2015 Arnaud Bouchez
   Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBBDE;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -66,6 +66,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   DBTables,
   SynDBDataset;
@@ -220,8 +221,8 @@ procedure TSQLDBBDEConnection.Connect;
 var Log: ISynLog;
 begin
   if (fSession=nil) or (fDatabase=nil) then
-    raise ESQLDBBDE.CreateFmt('TSQLDBBDEConnection.Connect() on %s failed: Database=nil',
-      [fProperties.ServerName]);
+    raise ESQLDBBDE.CreateUTF8('%.Connect() on % failed: Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to Alias=%',[fDatabase.AliasName])),true);
   try
     fSession.Open;
@@ -306,4 +307,6 @@ begin
   (fQuery as DBTables.TQuery).ExecSQL;
 end;
 
+initialization
+  TSQLDBBDEConnectionProperties.RegisterClassNameForDefinition;
 end.

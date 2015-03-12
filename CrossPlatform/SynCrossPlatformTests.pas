@@ -6,7 +6,7 @@ unit SynCrossPlatformTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -317,18 +317,19 @@ end;
 
 procedure TSynCrossPlatformTests.JSON;
 var doc: variant;
-    json,json2,inlined: string;
+    js,json2,inlined: string;
     i: integer;
     obj1,obj2: TMain;
     item: TMainNested;
 begin
+  doc := JSONVariant('[{"ID:1,"Username":"xx","FirstName":"System","Active":-1}]');
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   check(doc.test=1234);
   check(doc.name='Joh"n'#13);
   check(doc.name2=null);
   check(doc.zero=0);
-  json := doc;
-  check(json='{"test":1234,"name":"Joh\"n\r","zero":0}');
+  js := doc;
+  check(js='{"test":1234,"name":"Joh\"n\r","zero":0}');
   {$ifdef FPC}
   TJSONVariantData(doc)['name2'] := 3.1415926;
   TJSONVariantData(doc)['name'] := 'John';
@@ -336,8 +337,8 @@ begin
   doc.name2 := 3.1415926;
   doc.name := 'John';
   {$endif}
-  json := doc;
-  check(json='{"test":1234,"name":"John","zero":0,"name2":3.1415926}');
+  js := doc;
+  check(js='{"test":1234,"name":"John","zero":0,"name2":3.1415926}');
   check(IsRowID('id'));
   check(IsRowID('iD'));
   check(IsRowID('rowid'));
@@ -348,10 +349,10 @@ begin
   check(not IsRowID(''));
   check(FormatBind('',[])='');
   for i := 1 to 1000 do begin
-    json := IntToStr(i);
-    inlined := ':('+json+'):';
-    check(FormatBind(json,[])=json);
-    check(FormatBind(json,[i])=json);
+    js := IntToStr(i);
+    inlined := ':('+js+'):';
+    check(FormatBind(js,[])=js);
+    check(FormatBind(js,[i])=js);
     check(FormatBind('?',[i])=inlined);
     check(FormatBind('a?a',[i])='a'+inlined+'a');
     check(FormatBind('a?',[i])='a'+inlined);
@@ -361,14 +362,14 @@ begin
     check(FormatBind('ab?ab',[i])='ab'+inlined+'ab');
     check(FormatBind('abc?abc',[i])='abc'+inlined+'abc');
     check(FormatBind('abc?abc',[i,1])='abc'+inlined+'abc');
-    check(FormatBind(json+'?',[i])=json+inlined);
-    check(FormatBind('?'+json,[i])=inlined+json);
-    check(FormatBind('ab?ab',[json])='ab:("'+json+'"):ab');
-    check(FormatBind('ab?ab',[variant(json)])='ab:("'+json+'"):ab');
+    check(FormatBind(js+'?',[i])=js+inlined);
+    check(FormatBind('?'+js,[i])=inlined+js);
+    check(FormatBind('ab?ab',[js])='ab:("'+js+'"):ab');
+    check(FormatBind('ab?ab',[variant(js)])='ab:("'+js+'"):ab');
     check(FormatBind('ab?ab',[variant(i)])='ab'+inlined+'ab');
     check(FormatBind('ab?ab?',[variant(i)])='ab'+inlined+'ab:(null):');
-    check(FormatBind('ab?ab??cd',[i,i,json])='ab'+inlined+'ab'+inlined+
-      ':("'+json+'"):cd');
+    check(FormatBind('ab?ab??cd',[i,i,js])='ab'+inlined+'ab'+inlined+
+      ':("'+js+'"):cd');
   end;
   RegisterClassForJSON([TMainNested]); // for JSONToNewObject()
   obj1 := TMain.Create;
@@ -381,58 +382,58 @@ begin
       item.Number := i/2;
       check(obj1.Nested.Count=i);
       obj1.list.Add(obj1.Name);
-      json := ObjectToJSON(obj1);
-      check(json<>'');
+      js := ObjectToJSON(obj1);
+      check(js<>'');
       if i=1 then
-        check(json='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}],"List":["1"]}');
-      JSONToObject(obj2,json);
+        check(js='{"Name":"1","Nested":[{"Ident":"1","Number":0.5}],"List":["1"]}');
+      JSONToObject(obj2,js);
       check(obj2.Nested.Count=i);
       json2 := ObjectToJSON(obj2);
-      check(json2=json);
-      json := ObjectToJSON(item,true);
-      item := JSONToNewObject(json);
+      check(json2=js);
+      js := ObjectToJSON(item,true);
+      item := TMainNested(JSONToNewObject(js));
       check(item<>nil);
       json2 := ObjectToJSON(item,true);
-      check(json2=json);
+      check(json2=js);
       item.Free;
     end;
   finally
     obj2.Free;
     obj1.Free;
   end;
-  json := 'one,two,3';
+  js := 'one,two,3';
   i := 1;
-  check(GetNextCSV(json,i,json2));
+  check(GetNextCSV(js,i,json2));
   check(json2='one');
-  check(GetNextCSV(json,i,json2));
+  check(GetNextCSV(js,i,json2));
   check(json2='two');
-  check(GetNextCSV(json,i,json2));
+  check(GetNextCSV(js,i,json2));
   check(json2='3');
-  check(not GetNextCSV(json,i,json2));
-  check(not GetNextCSV(json,i,json2));
-  json := 'one';
+  check(not GetNextCSV(js,i,json2));
+  check(not GetNextCSV(js,i,json2));
+  js := 'one';
   i := 1;
-  check(GetNextCSV(json,i,json2));
+  check(GetNextCSV(js,i,json2));
   check(json2='one');
-  check(not GetNextCSV(json,i,json2));
-  json := '';
+  check(not GetNextCSV(js,i,json2));
+  js := '';
   i := 1;
-  check(not GetNextCSV(json,i,json2));
+  check(not GetNextCSV(js,i,json2));
 end;
 
 procedure TSynCrossPlatformTests.Model;
-var Model: TSQLModel;
+var mdel: TSQLModel;
     people: TSQLRecordPeopleSimple;
     i: integer;
-    json: string;
+    js: string;
     fields: TSQLFieldBits;
 begin
-  Model := TSQLModel.Create([TSQLRecordPeopleSimple],'test/');
-  Check(Model.Root='test');
-  Check(length(Model.Info)=1);
-  Check(Model.Info[0].Table=TSQLRecordPeopleSimple);
-  Check(Model.Info[0].Name='PeopleSimple');
-  Check(length(Model.Info[0].Prop)=6);
+  mdel := TSQLModel.Create([TSQLRecordPeopleSimple],'test/');
+  Check(mdel.Root='test');
+  Check(length(mdel.Info)=1);
+  Check(mdel.Info[0].Table=TSQLRecordPeopleSimple);
+  Check(mdel.Info[0].Name='PeopleSimple');
+  Check(length(mdel.Info[0].Prop)=6);
   people := TSQLRecordPeopleSimple.Create;
   try
     for i := 1 to 1000 do begin
@@ -441,26 +442,28 @@ begin
       people.LastName := people.FirstName+people.FirstName;
       people.YearOfBirth := i+500;
       people.YearOfDeath := people.YearOfBirth+40;
-      json := ObjectToJSON(people);
-      check(json=Format('{"ID":%d,"FirstName":"%d","LastName":"%d%d",'+
+      js := ObjectToJSON(people);
+      check(js=Format('{"ID":%d,"FirstName":"%d","LastName":"%d%d",'+
         '"Data":"","YearOfBirth":%d,"YearOfDeath":%d}',[i,i,i,i,i+500,i+540]));
     end;
   finally
     people.Free;
   end;
-  Check(PInteger(@Model.Info[0].SimpleFields)^=$37);
-  Check(PInteger(@Model.Info[0].BlobFields)^=8);
-  fields := Model.Info[0].FieldNamesToFieldBits('',false);
+  Check(PInteger(@mdel.Info[0].SimpleFields)^=$37);
+  Check(PInteger(@mdel.Info[0].BlobFields)^=8);
+  fields := mdel.Info[0].FieldNamesToFieldBits('',false);
   Check(PInteger(@fields)^=$37);
-  fields := Model.Info[0].FieldNamesToFieldBits('*',false);
-  Check(PInteger(@fields)^=PInteger(@Model.Info[0].AllFields)^);
-  fields := Model.Info[0].FieldNamesToFieldBits('RowID,firstname',false);
+  fields := mdel.Info[0].FieldNamesToFieldBits('*',false);
+  Check(PInteger(@fields)^=PInteger(@mdel.Info[0].AllFields)^);
+  fields := mdel.Info[0].FieldNamesToFieldBits('id,firstname',false);
   Check(PInteger(@fields)^=3);
-  Check(Model.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
-  fields := Model.Info[0].FieldNamesToFieldBits('firstname,id,toto',false);
+  fields := mdel.Info[0].FieldNamesToFieldBits('RowID ,  firstname ',false);
   Check(PInteger(@fields)^=3);
-  Check(Model.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
-  Model.Free;
+  Check(mdel.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
+  fields := mdel.Info[0].FieldNamesToFieldBits('firstname,id,toto',false);
+  Check(PInteger(@fields)^=3);
+  Check(mdel.Info[0].FieldBitsToFieldNames(fields)='RowID,FirstName');
+  mdel.Free;
 end;
 
 
@@ -502,10 +505,23 @@ begin
 end;
 
 procedure TSynCrossPlatformClient.Connection;
+var doremotelog: boolean;
+    dofilelog: boolean;
 begin
-  if fAuthentication=TSQLRestServerAuthenticationDefault then
-    fClient := GetClient('localhost','User','synopse') else begin
+  doremotelog := false;
+  dofilelog := false;
+  if fAuthentication=TSQLRestServerAuthenticationDefault then begin
+    fClient := GetClient('localhost','User','synopse');
+    if dofilelog then
+      fClient.LogToFile(LOG_VERBOSE);
+    if doremotelog then
+      fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
+  end else begin
     fClient := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,GetModel,true);
+    if dofilelog then
+      fClient.LogToFile(LOG_VERBOSE);
+    if doremotelog then
+      fClient.LogToRemoteServer(LOG_VERBOSE,'localhost');
     check(fClient.Connect);
     check(fClient.ServerTimeStamp<>0);
     if fAuthentication<>nil then
@@ -635,7 +651,7 @@ end;
 procedure TSynCrossPlatformClient.ORMBatch;
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
-    res: TIntegerDynArray;
+    res: TIDDynArray;
     i,id: integer;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
@@ -658,7 +674,7 @@ begin
   end;
   Check(fClient.BatchSend(res)=HTML_SUCCESS);
   Check(length(res)=200);
-  for i := 1 to 200 do
+  for i := 1 to length(res) do
     Check(res[i-1]=i);
   people := TSQLRecordPeople.CreateAndFillPrepare(fClient,'','',[]);
   try
@@ -792,7 +808,7 @@ begin
     for j := 0 to high(Rec.G) do
       check(Rec.G[j]=IntToStr(j+1));
     check(Rec.H.H1=i);
-    check(length(Rec.J)=i);
+    check(length(Rec.J)=i-1);
     for j := 0 to high(Rec.J) do begin
       Check(Rec.J[j].J1=j);
       Check(Rec.J[j].J2.D2=j);

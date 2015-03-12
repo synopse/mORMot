@@ -273,13 +273,15 @@ end;
 
 procedure TMainForm.ListDblClick(Sender: TObject);
 var P: TSQLRibbonTab;
+    ref: RecordRef;
 begin
   P := Ribbon.GetActivePage;
   if P<>nil then
     if P.Table=TSQLAuditTrail then begin
-      if P.Retrieve(Client,P.List.Row) then
-        with RecordRef(TSQLAuditTrail(P.CurrentRecord).AssociatedRecord) do
-          Ribbon.GotoRecord(Table(Client.Model),ID);
+      if P.Retrieve(Client,P.List.Row) then begin
+        ref.Value := TSQLAuditTrail(P.CurrentRecord).AssociatedRecord;
+        Ribbon.GotoRecord(ref.Table(Client.Model),ref.ID);
+      end;
     end else
     ActionClick(Sender,P.Table,ord(faEdit));
 end;

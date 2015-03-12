@@ -6,7 +6,7 @@ unit mORMotMidasVCL;
 {
     This file is part of Synopse mORmot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit mORMotMidasVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - mingda
 
   Alternatively, the contents of this file may be used under the terms of
@@ -58,16 +59,29 @@ unit mORMotMidasVCL;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
-  Contnrs,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
+  {$ifndef FPC}
   MidasLib,
-{$endif}
+  {$endif}
+  {$endif}
   SynCommons, mORmot,
-  DB, DBClient;
+  DB
+  {$ifdef FPC}
+  ,BufDataset
+  {$else}
+  ,Contnrs
+  ,DBClient
+  {$endif}
+  ;
+
+{$ifdef FPC}
+type
+  /// FPC's pure pascal in-memory buffer is used instead of TClientDataSet
+  TClientDataSet = TBufDataset;
+{$endif}
 
 /// convert a TSQLTable result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from
@@ -76,8 +90,8 @@ uses
 // force the use of WideString fields instead of AnsiString, if needed
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function TSQLTableToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest=nil
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
+function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest=nil
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload; 
 
 /// convert a JSON result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from
@@ -93,7 +107,7 @@ function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8; aClient: 
 
 
 type
-  /// how TSQLTableToClientDataSet/JSONToClientDataSet functions will fill
+  /// how ToClientDataSet/JSONToClientDataSet functions will fill
   // the TClientDataSet instance
   TClientDataSetMode = (cdsNew, cdsAppend, cdsReplace);
 
@@ -104,7 +118,7 @@ type
 // force the use of WideString fields instead of AnsiString, if needed
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function TSQLTableToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
+function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
   aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 
@@ -130,8 +144,7 @@ var T: TSQLTableJSON;
 begin
   T := TSQLTableJSON.Create('',aJSON);
   try
-    result := TSQLTableToClientDataSet(aDataSet,T,aClient,aMode,aLogChange
-      {$ifndef UNICODE},aForceWideString{$endif});
+    result := ToClientDataSet(aDataSet,T,aClient,aMode,aLogChange{$ifndef UNICODE},aForceWideString{$endif});
   finally
     T.Free;
   end;
@@ -143,8 +156,7 @@ var T: TSQLTableJSON;
 begin
   T := TSQLTableJSON.Create('',aJSON);
   try
-    result := TSQLTableToClientDataSet(aOwner,T,aClient
-      {$ifndef UNICODE},aForceWideString{$endif});
+    result := ToClientDataSet(aOwner,T,aClient{$ifndef UNICODE},aForceWideString{$endif});
   finally
     T.Free;
   end;
@@ -153,7 +165,7 @@ end;
 var
   GlobalDataSetCount: integer;
 
-function TSQLTableToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest
+function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest
   {$ifndef UNICODE}; aForceWideString: boolean{$endif}): TClientDataSet;
 begin
   result := TClientDataSet.Create(aOwner);
@@ -162,7 +174,7 @@ begin
     inc(GlobalDataSetCount);
     if aTable=nil then
       exit;
-    if not TSQLTableToClientDataSet(result,aTable,aClient,cdsNew,false
+    if not ToClientDataSet(result,aTable,aClient,cdsNew,false
       {$ifndef UNICODE}, aForceWideString{$endif}) then
       FreeAndNil(result);
   except
@@ -171,7 +183,7 @@ begin
   end;
 end;
 
-function TSQLTableToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
+function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: TSQLRest=nil;
   aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 var F,i: integer;
@@ -201,7 +213,9 @@ begin
   fillchar(Previous,sizeof(Previous),0);
   if aDataSet.Active then begin
     Previous.Active := true;
+    {$ifndef FPC}
     Previous.LogChanges := aDataSet.LogChanges;
+    {$endif}
     Previous.ReadOnly := aDataSet.ReadOnly;
     Previous.AfterScroll := aDataSet.AfterScroll;
     aDataSet.AfterScroll := nil;
@@ -209,10 +223,18 @@ begin
     aDataSet.DisableControls;
   end;
   if aMode=cdsReplace then begin
+    {$ifndef FPC}
     if Previous.LogChanges then
       aDataSet.LogChanges := false;
     aDataSet.EmptyDataSet;
+    {$else}
+    aDataSet.MergeChangeLog;
+    aDataSet.Close;
+    aDataSet.Open;
+    {$endif}
   end;
+
+
   // handle columns
   {$ifndef UNICODE}
   if not aForceWideString then
@@ -227,12 +249,10 @@ begin
       case SQLType of
       sftBoolean:
         DBType := ftBoolean;
-      sftInteger:
+      sftInteger, sftID, sftTID:
         DBType := ftLargeint; // LargeInt=Int64
       sftFloat, sftCurrency:
         DBType := ftFloat;
-      sftID:
-        DBType := ftInteger;
       sftEnumerate, sftSet:
         if EnumType=nil then
           DBType := ftInteger else
@@ -275,7 +295,9 @@ begin
     end;
   // append data
   try
+    {$ifndef FPC}
     aDataSet.LogChanges := aLogChange;
+    {$endif}
     for i := 1 to aTable.RowCount do begin
       aDataSet.Append;
       for F := 0 to high(Columns) do
@@ -286,14 +308,12 @@ begin
       case Columns[F].SQLType of
       sftBoolean:
         Field.AsBoolean := aTable.GetAsInteger(i,F)<>0;
-      sftInteger:
+      sftInteger, sftID, sftTID:
         if Field.DataType=ftLargeInt then // handle Int64 values directly
           TLargeintField(Field).Value := aTable.GetAsInt64(i,F) else
           Field.AsInteger := aTable.GetAsInteger(i,F);
       sftFloat, sftCurrency:
         Field.AsFloat := GetExtended(aTable.Get(i,F));
-      sftID:
-        Field.AsInteger := aTable.GetAsInteger(i,F);
       sftEnumerate, sftSet:
         if EnumType=nil then
           Field.AsInteger := aTable.GetAsInteger(i,F) else
@@ -332,7 +352,9 @@ begin
     result := True;
   finally
     if Previous.Active then begin
+      {$ifndef FPC}
       aDataSet.LogChanges := Previous.LogChanges;
+      {$endif}
       aDataSet.ReadOnly := Previous.ReadOnly;
       aDataSet.AfterScroll := Previous.AfterScroll;
       if Assigned(Previous.AfterScroll) then

@@ -6,7 +6,7 @@ unit SynCrossPlatformCrypto;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformCrypto;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,7 +48,7 @@ unit SynCrossPlatformCrypto;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
 
 }
 
@@ -82,7 +82,7 @@ var
   /// table used by crc32() function
   // - table content is created from code in initialization section below
   {$ifdef ISDWS}
-  crc32tab: variant;
+  crc32tab: array of hash32;
   {$else}
   crc32tab: array[byte] of hash32;
   {$endif}
@@ -161,9 +161,6 @@ type // no-operation for unmanaged Delphi
 procedure InitCrc32Tab;
 var i,n,crc: hash32;
 begin
-  {$ifdef ISDWS}
-  asm @crc32tab=[]; end;
-  {$endif}
   for i := 0 to 255 do begin
     crc := i;
     for n := 1 to 8 do

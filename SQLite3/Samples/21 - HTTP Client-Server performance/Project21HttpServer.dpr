@@ -9,6 +9,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotSQlite3,
   SynSQLite3,
@@ -44,7 +45,7 @@ begin
   // create a Data Model
   aModel := TSQLModel.Create([TSQLRecordPeople]);
   try
-    aDatabaseFile := ChangeFileExt(paramstr(0),'.db3');
+    aDatabaseFile := ChangeFileExt(ExeVersion.ProgramFileName,'.db3');
     DeleteFile(aDatabaseFile);
     aServer := TSQLRestServerDB.Create(aModel,aDatabaseFile);
     try

@@ -19,7 +19,8 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit would work on Delphi 6 and later, under Win32 and Win64 platforms.
+  This unit would work on Delphi 6 and later, under Win32 and Win64 platforms,
+  and with FPC 2.7/trunk revision, under Win32 and Linux32.
 }
 
 interface
@@ -54,23 +55,19 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
-{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
-type
-  {{#soa.services}}
-  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
-  // - this service will run in sic{{instanceCreationName}} mode
-  I{{interfaceURI}} = interface(IInvokable)
-    ['{{GUID}}']
-{{#methods}}
-    {{>method}}
-{{/methods}}
-  end;
+{{#withArrays}}
+type // define some dynamic array types, used as properties below
+{{#arrays}}
+  {{name}} = array of {{typeSource}};
+{{/arrays}}
 
-  {{/soa.services}}
+{{/withArrays}}
+{{<method}}{{verb}} {{methodName}}({{#args}}{{^dirResult}}{{dirName}} {{argName}}: {{typeDelphi}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/method}}
+type
   {{#orm}}
   {{^isInMormotPas}}
   /// map "{{tableName}}" table
-  {{className}} = class(TSQLRecord)
+  {{className}} = class({{classParent}})
   protected
     {{#fields}}
     f{{name}}: {{typeDelphi}}; 
@@ -94,6 +91,17 @@ type
   
   {{/isInMormotPas}}
   {{/orm}}
+  {{#soa.services}}
+  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
+  // - this service will run in sic{{instanceCreationName}} mode
+  I{{interfaceURI}} = interface(IInvokable)
+    ['{{GUID}}']
+{{#methods}}
+    {{>method}}
+{{/methods}}
+  end;
+
+  {{/soa.services}}
   
 /// return the database Model corresponding to this server
 function GetModel: TSQLModel;
@@ -148,14 +156,15 @@ end;
 {{/soa.enabled}}
 
 {{#withRecords}}
-const
+const // text-based types definition for records and dynamic arrays
 {{#records}}
   __{{name}} = '{{>textrec}}';
 {{/records}}
 
 initialization
 {{#enumerates}}
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo({{name}}));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
+    TypeInfo({{name}}));
 {{/enumerates}}
 {{#records}}
   TTextWriter.RegisterCustomJSONSerializerFromText(

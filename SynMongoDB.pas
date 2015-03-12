@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,12 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - BBackSoon
+  - Sabbiolina
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -63,12 +65,22 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 SQLITE3_FASTCALL
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef KYLIX3}
+  SynKylix,
+  LibC,
+  {$else}
+  SynFPCLinux,
+  {$endif}
+  {$endif}
   Classes,
   Variants, // this unit expects Variants to be available for storage
   SysUtils,
   SynCrtSock,
-  SynCommons;
+  SynCommons,
+  SynLog;
 
 
   
@@ -156,8 +168,8 @@ type
   // - betBinary kind will store a BLOB content as RawByteString
   // - betDoc and betArray kind will store a BSON document, in its original
   // binary format as RawByteString (TBSONDocument)
-  // - betDeprecatedDbptr, betJSScope and betRegEx will store the raw original
-  // BSON content as RawByteString
+  // - betDeprecatedDbptr, betJSScope, betTimeStamp and betRegEx will store the
+  // raw original BSON content as RawByteString
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUTF8
   // - betDeprecatedUndefined or betMinKey/betMaxKey do not contain any data
@@ -174,7 +186,7 @@ type
       {$HINTS ON}
       VObjectID: TBSONObjectID
     );
-    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr,
+    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
     betJSScope: (
       /// store the raw binary content as a RawByteString (or TBSONDocument for
       // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
@@ -186,7 +198,7 @@ type
       /// store here a RawUTF8 with the associated text
       // - you have to use RawUF8(VText) when accessing this field
       VText: pointer;
-    )
+    );
   end;
   {$A+}
 
@@ -321,7 +333,7 @@ type
     // - not all Kind are handled here, only the complex data
     Data: record
     case TBSONElementType of
-    betFloat, betBoolean, betInt32, betDateTime, betTimeStamp, betInt64: (
+    betFloat, betBoolean, betInt32, betDateTime, betInt64: (
       /// this variable is not to be used directly, but for some internal
       // temporary storage, e.g. with FromVariant()
       // - use P*(Element)^ typecast instead
@@ -356,6 +368,11 @@ type
       JavaScriptLen: integer;
       ScopeDocument: PByte;
     );
+    betTimeStamp: (
+      { map InternalStorage: Int64 }
+      time_t: cardinal;
+      ordinal: cardinal;
+    )
     end;
     /// fill a BSON Element structure from a variant content and associated name
     // - perform the reverse conversion as made with ToVariant()
@@ -365,7 +382,16 @@ type
     // - aName here is just for conveniency, and could be left void
     // - supplied aTemp variable will be used for temporary storage, private to
     // this initialized TBSONElement
-    procedure FromVariant(const aName: RawUTF8; const aValue: Variant; var aTemp: RawByteString);
+    procedure FromVariant(const aName: RawUTF8; const aValue: Variant;
+      var aTemp: RawByteString);
+    /// fill a BSON Element structure from a BSON document
+    // - will check the document length then set Kind := betDoc and Data.DocList
+    // - will return TRUE if the supplied doc has a valid length, FALSE otherwise
+    // - you can later on use DocItemToVariant, DocItemToRawUTF8 or
+    // DocItemToInteger methods
+    // - the supplied "doc" variable should remain available until you are done
+    // with this TBSONElement wrapper
+    function FromDocument(const doc: TBSONDocument): boolean;
     /// fill a BSON Element structure from a BSON encoded binary buffer list
     // - parse the next BSON element: BSON parameter should point to the
     // "e_list" of the "int32 e_list #0" BSON document
@@ -381,13 +407,16 @@ type
     // ! while item.FromNext(bson) do
     // !   writeln(item.Name);
     // - will raise an EBSONException if BSON content is not correct
+    // - as an alternative, consider using TBSONIterator, which wrap both a
+    // PByte and a TBSONElement into one convenient item
     function FromNext(var BSON: PByte): boolean;
     /// search for a given name in a BSON encoded binary buffer list
     // - BSON parameter should point to the first "e_list" item of the
     // "int32 e_list #0" BSON document
-    // - returns nil if the item was not found (with case-insensitive search)
-    // - otherwise, has decoded the matching element structure otherwise
-    function FromSearch(BSON: PByte; const aName: RawUTF8): PByte;
+    // - returns false if the item was not found (with case-insensitive search)
+    // - otherwise returns TRUE and the matching element content has been
+    // decoded within this TBSONElement structure 
+    function FromSearch(BSON: PByte; const aName: RawUTF8): boolean;
     /// convert a BSON element, as retrieved by TBSONElement.FromNext(),
     // into a variant
     // - it will return either standard variant values, or TBSONVariant custom type
@@ -412,12 +441,55 @@ type
     // - will work only for betBoolean/betInt32/betInt64 types
     // - any other kind of values will return the supplied default value
     function ToInteger(const default: Int64=0): Int64;
+    /// search a variant property value within the BSON element as document
+    // - returns true if aName has been found as property in the BSON element,
+    // and fills aValue with the corresponding value
+    // - returns false if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToVariant(const aName: RawUTF8; var aValue: variant;
+      DocArrayConversion: TBSONDocArrayConversion=asBSONVariant): boolean;
+    /// search an UTF-8 property value within the BSON element as document
+    // - returns the value if aName has been found as property in the BSON element
+    // - returns '' if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToRawUTF8(const aName: RawUTF8): RawUTF8;
+    /// search an integer property value within the BSON element as document
+    // - returns the value if aName has been found as property in the BSON element
+    // - returns default if aName was not found, or if Kind is not betDoc or betArray
+    function DocItemToInteger(const aName: RawUTF8; const default: Int64=0): Int64;
     /// convert a BSON element, as retrieved by TBSONElement.FromNext(), into
     // its JSON representation
     // - this method will use by default the MongoDB Extended JSON syntax for
     // specific MongoDB objects but you may use modMongoShell if needed
     // - will raise an EBSONException if element is not correct
     procedure AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode=modMongoStrict); overload;
+  end;
+
+  /// data structure used for iterating over a BSON binary buffer
+  // - is just a wrapper around a PByte value, to be used with a TBSONDocument
+  {$ifndef UNICODE}
+  TBSONIterator = object
+  protected
+  {$else}
+  TBSONIterator = record
+  private
+  {$endif}
+    fBson: PByte;
+  public
+    /// map the current item, after the Next method did return TRUE
+    // - map the global document, after Init() but before the first Next call
+    Item: TBSONElement;
+    /// initialize the iteration on the supplied BSON document
+    // - will check the document length and returns TRUE if it is correct
+    // - only accepted kind are betDoc and betArray (but not used later)
+    // - you can then use the Next method to iterate over the Item elements
+    // - after this call, the Item property map to the global BSON document
+    // (note that after any call to the Next method, Item will map the current
+    // iterated value, and not the global BSON document any more)
+    function Init(const doc: TBSONDocument; kind: TBSONElementType=betArray): boolean;
+    /// will iterate on the BSON document
+    // - returns TRUE if the item has been retrieved into the Item property
+    // - returns FALSE if we reached the end of the supplied BSON buffer
+    function Next: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used to write the BSON context
@@ -429,6 +501,9 @@ type
       Offset: cardinal;
       Length: cardinal;
     end;
+    fDocumentStack: integer;
+    fDocumentStackOffset: TCardinalDynArray;
+    fDocumentArray: integer;
     procedure WriteCollectionName(Flags: integer; const CollectionName: RawUTF8);
   public
     /// rewind the Stream to the position when Create() was called
@@ -454,7 +529,7 @@ type
     /// write an ObjectID value
     procedure BSONWrite(const name: RawUTF8; const value: TBSONObjectID); overload;
     /// write a RegEx value
-    procedure BSONWriteRegEx(const name: RawUTF8; const RegEx: RawByteString);
+    procedure BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
     /// write a data/time value
     procedure BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
     /// write an element with no value
@@ -496,13 +571,25 @@ type
     procedure BSONWriteObject(const NameValuePairs: array of const);
     /// write a projection specified as fieldname:1 pairs as a BSON document
     procedure BSONWriteProjection(const FieldNamesCSV: RawUTF8);
+    /// write an object as query parameter
+    // - will handle all SQL operators, including IN (), IS NULL or LIKE 
+    // - see @http://docs.mongodb.org/manual/reference/operator/query
+    // - inverted should be TRUE e.g. for a NOT ... expression 
+    // - returns TRUE on success, FALSE if the operator is not implemented yet
+    function BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
+      operator: TSynTableStatementOperator; const Value: variant): boolean;
+    /// write one array item, i.e. the ASCII index name as text
+    // - only one level of array should be used per TBSONWriter class 
+    procedure BSONWriteArray(const kind: TBSONElementType); overload;
     /// write an array specified as a list of items as a BSON document
     // - data must be supplied as a list of values e.g.
     // ! aBSONWriter.BSONWriteArray(['John',1972]);
     // - this method wil be faster than using a BSONWriteDoc(_ArrFast(...))
-    procedure BSONWriteArray(const Items: array of const);
+    procedure BSONWriteArray(const Items: array of const); overload;
     /// write an array of integers as a BSON Document
     procedure BSONWriteArrayOfInteger(const Integers: array of integer);
+    /// write an array of integers as a BSON Document
+    procedure BSONWriteArrayOfInt64(const Integers: array of Int64);
     /// write some BSON document from a supplied (extended) JSON array or object
     // - warning: the incoming JSON buffer will be modified in-place: so you
     // should make a private copy before running this method
@@ -521,13 +608,22 @@ type
       out Kind: TBSONElementType; DoNotTryExtendedMongoSyntax: boolean=false): PUTF8Char;
 
     /// to be called before a BSON document will be written
-    // - returns the start offset of this document, which is to be specified
-    // to NotifyDocumentEnd() when all properties have been called
-    function BSONDocumentBegin: cardinal;
+    // - each BSONDocumentBegin should be followed by its nested BSONDocumentEnd
+    procedure BSONDocumentBegin; overload;
+    /// to be called before a BSON document will be written
+    // - each BSONDocumentBegin should be followed by its nested BSONDocumentEnd
+    // - you could create a new BSON object by specifying a name and its
+    // type, i.e. either betDoc or betArray
+    procedure BSONDocumentBegin(const name: RawUTF8; kind: TBSONElementType=betDoc); overload;
+    /// to be called before a BSON document will be written in an array
+    // - only one level of array should be used per TBSONWriter class 
+    procedure BSONDocumentBeginInArray(const name: RawUTF8; kind: TBSONElementType=betDoc);
     /// to be called when a BSON document has been written
     // - it will store the current stream position into an internal array,
     // which will be written when you call AdjustDocumentsSize()
-    procedure BSONDocumentEnd(Start: Cardinal; WriteEndingZero: boolean=true);
+    // - you can optional specify how many nested documents should be closed,
+    // and/or if it should not write an ending betEof item
+    procedure BSONDocumentEnd(CloseNumber: integer=1; WriteEndingZero: boolean=true);
     /// after all content has been written, call this method on the resulting
     // memory buffer to store all document size as expected by the standard
     procedure BSONAdjustDocumentsSize(BSON: PByteArray); virtual;
@@ -540,7 +636,7 @@ type
     // - call ToBSONDocument() to adjust all internal document sizes
     // - expect the TBSONWriter instance to have been created as such:
     // ! TBSONWriter.Create(TRawByteStringStream);
-    procedure ToBSONVariant(var result: variant);
+    procedure ToBSONVariant(var result: variant; Kind: TBSONElementType=betDoc);
   end;
 
 
@@ -556,7 +652,7 @@ const
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
   BSON_ELEMENTVARIANTMANAGED =
-   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr,
+   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
     betJSScope, betJS, betDeprecatedSymbol];
 
   /// by definition, maximum MongoDB document size is 16 MB
@@ -684,7 +780,7 @@ function BSON(const JSON: RawUTF8): TBSONDocument; overload;
 // explicitely via BSON-like extensions: any complex value (e.g. a TDateTime
 // or a BSONVariant binary) won't be handled as expected - use the overloaded
 // BSON() with explicit BSONVariant() name/value pairs instead
-function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocument; overload;
+function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument; overload;
 
 /// store some TDocVariant custom variant content into BSON encoded binary
 // - will write either a BSON object or array, depending of the internal
@@ -695,6 +791,10 @@ function BSON(const doc: TDocVariantData): TBSONDocument; overload;
 /// store an array of integer into BSON encoded binary
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
 function BSONFromIntegers(const Integers: array of integer): TBSONDocument;
+
+/// store an array of 64 bit integer into BSON encoded binary
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONFromInt64s(const Integers: array of Int64): TBSONDocument;
 
 /// store some object content, supplied as (extended) JSON into BSON binary
 // - warning: the supplied JSON buffer will be modified in-place, if necessary:
@@ -759,7 +859,7 @@ procedure BSONVariant(JSON: PUTF8Char; var result: variant); overload;
 // into a TBSONVariant betDoc type instance
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, as with the overloaded BSON() function
-function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): variant; overload;
+function BSONVariant(const Format: RawUTF8; const Args,Params: array of const): variant; overload;
 
 /// convert a TDocVariant variant into a TBSONVariant betDoc type instance
 function BSONVariant(doc: TDocVariantData): variant; overload;
@@ -769,11 +869,17 @@ function BSONVariant(doc: TDocVariantData): variant; overload;
 // - object will be initialized with data supplied e.g. as a TIntegerDynArray
 function BSONVariantFromIntegers(const Integers: array of integer): variant;
 
+/// store an array of 64 bit integer into a TBSONVariant betArray type instance
+// - object will be initialized with data supplied e.g. as a TIntegerDynArray
+function BSONVariantFromInt64s(const Integers: array of Int64): variant;
+
 /// parse the header of a BSON encoded binary buffer, and return its length
 // - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
 // - if ExpectedBSONLen is set, this function will check that the supplied
 // BSON content "int32" length matches the supplied value, and raise an
 // EBSONException if this comparison fails
+// - as an alternative, consider using TBSONIterator, which wrap both a PByte
+// and a TBSONElement into one convenient item
 function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 
 /// parse the next element in supplied BSON encoded binary buffer list
@@ -795,20 +901,16 @@ function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 // - if you want to parse a BSON list as fast as possible, you should better use
 // TBSONElement.FromNext() which avoid any memory allocation (the SAX way) - in
 // fact, this function is just a wrapper around TBSONElement.FromNext + ToVariant
+// - as an alternative, consider using TBSONIterator, which wrap both a PByte
+// and a TBSONElement into one convenient item
 function BSONParseNextElement(var BSON: PByte; var name: RawUTF8; var element: variant;
   DocArrayConversion: TBSONDocArrayConversion=asBSONVariant): boolean;
-
-/// search for a given property in a a supplied BSON encoded binary buffer
-// - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
-// - returns FALSE if not item in the list matches the expected name
-// - returns TRUE if the name is found in the list, then item points to the data
-function BSONSearchElement(BSON: PByte; const name: RawUTF8; var item: TBSONElement): PByte;
 
 /// search for a property by number in a a supplied BSON encoded binary buffer
 // - BSON should point to a "int32 e_list #0" BSON document (like TBSONDocument)
 // - returns FALSE if the list has too few elements (starting at index 0)
 // - otherwise, returns TRUE then let item point to the corresponding element
-function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): PByte;
+function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): boolean;
 
 /// convert a BSON document into a TDocVariant variant instance
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -816,15 +918,15 @@ function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement
 // BSON content "int32" length matches the supplied value
 // - by definition, asBSONVariant is not allowed as Option value
 procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: integer=0;
-  Option: TBSONDocArrayConversion=asDocVariantPerReference); overload;
+  Option: TBSONDocArrayConversion=asDocVariantPerReference);
 
-/// convert a BSON document into a TDocVariant variant instance
-// - BSON should point to a "int32 e_list #0" BSON document
-// - if ExpectedBSONLen is set, this function will check that the supplied
-// BSON content "int32" length matches the supplied value
+/// convert a TBSONDocument into a TDocVariant variant instance
+// - BSON should be valid BSON document (length will be checked against expected
+// "int32 e_list #0" binary layout)
 // - by definition, asBSONVariant is not allowed as Option value
-function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
-  Option: TBSONDocArrayConversion=asDocVariantPerReference): variant; overload;
+function BSONDocumentToDoc(const BSON: TBSONDocument;
+  Option: TBSONDocArrayConversion=asDocVariantPerReference): variant;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a BSON document into its JSON representation
 // - BSON should point to a "int32 e_list #0" BSON document
@@ -834,16 +936,15 @@ function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType;
-   ExpectedBSONLen: integer=0; Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+   ExpectedBSONLen: integer=0; Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 
-/// convert a BSON document into its JSON representation
-// - BSON should point to a "int32 e_list #0" BSON document
-// - if ExpectedBSONLen is set, this function will check that the supplied
-// BSON content "int32" length matches the supplied value
+/// convert a TBSONDocument into its JSON representation
+// - BSON should be valid BSON document (length will be checked against expected
+// "int32 e_list #0" binary layout)
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
-  Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+function BSONDocumentToJSON(const BSON: TBSONDocument;
+  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a BSON list of elements into its JSON representation
@@ -851,8 +952,8 @@ function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
 // i.e. the item data as expected by TBSONElement.FromNext()
 // - this function will use by default the MongoDB Extended JSON syntax for
 // specific MongoDB objects but you may use modMongoShell if needed
-procedure BSONToJSON(BSONList: PByte; Kind: TBSONElementType; W: TTextWriter;
-  Mode: TMongoJSONMode=modMongoStrict); overload;
+procedure BSONListToJSON(BSONList: PByte; Kind: TBSONElementType; W: TTextWriter;
+  Mode: TMongoJSONMode=modMongoStrict);
 
 /// convert any kind of BSON/JSON element, encoded as variant, into JSON
 // - this function will use by default the MongoDB Extended JSON syntax for
@@ -955,7 +1056,6 @@ type
   protected
     fRequestID: integer;
     fResponseTo: integer;
-    fRequestHeaderStart: cardinal;
     fRequestOpCode: TMongoOperation;
     fDatabaseName,
     fCollectionName,
@@ -972,8 +1072,8 @@ type
       opCode: TMongoOperation; requestID, responseTo: Integer); reintroduce;
     /// append a query parameter as a BSON document
     // - param can be a TDocVariant, e.g. created with:
-    // ! _JsonFast('{name:"John",age:{$gt,21}}');
-    // ! _JsonFastFmt('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! _JsonFast('{name:"John",age:{$gt:21}}');
+    // ! _JsonFastFmt('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! _JsonFastFmt('{name:?,field:/%/i}',['acme.*corp'],['John']);
     // - param can be a TBSONVariant containing a TBSONDocument raw binary block
     // created e.g. from:
@@ -1090,7 +1190,7 @@ type
   /// a MongoDB client message to query one or more documents in a collection
   TMongoRequestQuery = class(TMongoRequest)
   protected
-    fNumberToReturn: integer;
+    fNumberToReturn,fNumberToSkip: integer;
     fQuery, fReturnFieldsSelector: TVarData;
   public
     /// initialize a MongoDB client message to query one or more documents in
@@ -1099,8 +1199,8 @@ type
     // - Query is the BSON document query to select the document, supplied as
     // TDocVariant - i.e. created via _JsonFast() or _JsonFastFmt() - or null
     // if all documents are to be retrieved - for instance:
-    // ! _JsonFast('{name:"John",age:{$gt,21}}');
-    // ! _JsonFastFmt('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! _JsonFast('{name:"John",age:{$gt:21}}');
+    // ! _JsonFastFmt('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! _JsonFastFmt('{name:?,field:/%/i}',['acme.*corp'],['John']);
     // - if Query is a string, it will be converted as expected by most
     // database commands, e.g.
@@ -1108,7 +1208,7 @@ type
     // will query   { buildinfo: 1 }  to the  admin.$cmd  collection, i.e.
     // $ admin.$cmd.findOne( { buildinfo: 1 } )
     // - Query can also be a TBSONVariant, e.g. created with:
-    // ! BSONVariant('{name:?,age:{$gt,?}}',[],['John',21])
+    // ! BSONVariant('{name:?,age:{$gt:?}}',[],['John',21])
     // - ReturnFieldsSelector is an optional selector (set to null if not
     // applicable) as a BSON document that limits the fields in the returned
     // documents, supplied as TDocVariant or TBSONVariant - e.g. created via:
@@ -1125,6 +1225,8 @@ type
     procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
     /// retrieve the NumberToReturn parameter as set to the constructor
     property NumberToReturn: integer read fNumberToReturn;
+    /// retrieve the NumberToSkip parameter as set to the constructor
+    property NumberToSkip: integer read fNumberToSkip;
   end;
 
   /// a MongoDB client message to continue the query of one or more documents
@@ -1144,6 +1246,8 @@ type
 
   /// a MongoDB client message to close one or more active cursors
   TMongoRequestKillCursor = class(TMongoRequest)
+  protected
+    fCursors: TInt64DynArray;
   public
     /// initialize a MongoDB client message to close one or more active cursors
     // in the database
@@ -1152,7 +1256,10 @@ type
     // - if a cursor is read until exhausted (read until opQuery or opGetMore
     // returns zero for the CursorId), there is no need to kill the cursor
     // - there is no response to an opKillCursor message
-    constructor Create(const CursorIDs: array of Int64); reintroduce;
+    constructor Create(const FullCollectionName: RawUTF8;
+      const CursorIDs: array of Int64); reintroduce;
+    /// write the main parameters of the request as JSON
+    procedure ToJSON(W: TTextWriter; Mode: TMongoJSONMode); override;
   end;
 
 
@@ -1399,6 +1506,7 @@ type
     // will call TMongoReplyCursor.FetchAllToJSON(TTextWriter(Opaque))
     procedure ReplyJSONStrict(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     procedure ReplyJSONExtended(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
+    procedure ReplyJSONNoMongo(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     // will call TMongoReplyCursor.AppendAllToDocVariantDynArray(TVariantDynArray(Opaque))
     procedure ReplyDocVariant(Request: TMongoRequest; const Reply: TMongoReplyCursor; var Opaque);
     // will call TMongoReplyCursor.AppendAllToBSON(TBSONWrite(Opaque))
@@ -1789,8 +1897,8 @@ type
     fDatabase: TMongoDatabase;
     fName: RawUTF8;
     fFullCollectionName: RawUTF8;
-    function AggregateCall(Operators: PUTF8Char;
-      const Params: array of const; var reply,res: variant): boolean;
+    function AggregateCallFromJSON(const pipelineJSON: RawUTF8; var reply,res: variant): boolean; overload;
+    function AggregateCallFromVariant(const pipelineArray: variant; var reply,res: variant): boolean; overload;
   public
     /// initialize a reference to a given MongoDB Collection
     // - you should not use this constructor directly, but rather use
@@ -1801,8 +1909,8 @@ type
     // instance containing the selected documents
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindDoc(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindDoc(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindDoc(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindDoc(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
@@ -1821,8 +1929,8 @@ type
     // instance containing the selected documents
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindDoc('{name:"John",age:{$gt,21}}',[]);
-    // ! FindDoc('{name:?,age:{$gt,?}}',['John',21]);
+    // ! FindDoc('{name:"John",age:{$gt:21}}',[]);
+    // ! FindDoc('{name:?,age:{$gt:?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -1850,7 +1958,8 @@ type
       Flags: TMongoQueryFlags=[]); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
-    // ! FindDocs('{name:?,age:{$gt,?}}',['John',21],res);
+    // - you can e.g. fill a res: TVariantDynArray with the following query: 
+    // ! FindDocs('{name:?,age:{$gt:?}}',['John',21],res,null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
     // projection operators
@@ -1858,13 +1967,24 @@ type
       var result: TVariantDynArray; const Projection: variant;
       NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
       Flags: TMongoQueryFlags=[]); overload;
+    /// select documents in a collection and returns a dynamic array of
+    // TDocVariant instance containing the selected documents
+    // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
+    // as defined in SynVirtualDataSet.pas: 
+    // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
+    // field names to retrieve, or a TDocVariant or TBSONVariant with
+    // projection operators
+    function FindDocs(Criteria: PUTF8Char; const Params: array of const;
+      const Projection: variant; NumberToReturn: integer=maxInt; NumberToSkip: Integer=0;
+      Flags: TMongoQueryFlags=[]): TVariantDynArray; overload;
 
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindJSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindJSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindJSON(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindJSON(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
@@ -1885,8 +2005,8 @@ type
     // containing the selected documents
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindJSON('{name:"John",age:{$gt,21}}',[]);
-    // ! FindJSON('{name:?,age:{$gt,?}}',['John',21]);
+    // ! FindJSON('{name:"John",age:{$gt:21}}',[]);
+    // ! FindJSON('{name:?,age:{$gt:?}}',['John',21]);
     // see http://docs.mongodb.org/manual/reference/operator for reference
     // - this overloaded method will use a null Projection, i.e. will retrieve
     // all fields
@@ -1909,8 +2029,8 @@ type
     // containing the selected documents as a raw binary BSON array document
     // - Criteria can be null (to retrieve all documents) or a TDocVariant /
     // TBSONVariant query selector:
-    // ! FindBSON(BSONVariant('{name:"John",age:{$gt,21}}'),null);
-    // ! FindBSON(BSONVariant('{name:?,age:{$gt,?}}',[],['John',21]),null);
+    // ! FindBSON(BSONVariant('{name:"John",age:{$gt:21}}'),null);
+    // ! FindBSON(BSONVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBSONVariant - e.g.:
     // ! FindBSON(BSONVariant(['name','John']),null);
@@ -1934,7 +2054,7 @@ type
     // ! ...
     // !   products.insert('{ item: ?, qty: ? }',['card',15],@oid);
     // !   writeln(oid.ToText);
-    procedure Insert(Document: PUTF8Char; const Params: array of const;
+    procedure Insert(const Document: RawUTF8; const Params: array of const;
       CreatedObjectID: PBSONObjectID=nil); overload;
     /// insert one or more documents in the collection
     // - Documents is an array of TDocVariant (i.e. created via _JsonFast()
@@ -1983,7 +2103,7 @@ type
     // - supplied JSON could be either strict or in MongoDB Shell syntax:
     // - will perform either an insert or an update, depending of the
     // presence of the _id field, as overloaded Save(const Document: variant)
-    procedure Save(Document: PUTF8Char; const Params: array of const;
+    procedure Save(const Document: RawUTF8; const Params: array of const;
       CreatedObjectID: PBSONObjectID=nil); overload;
 
     /// modifies an existing document or several documents in a collection
@@ -2015,11 +2135,11 @@ type
     // - if Update contains update operators (like $set), it will update the
     // corresponding fields in the document:
     // ! book.insert('{_id:?,item:?,stock:?}',[11,'Divine Comedy',2]);
-    // ! book.update('{item:?},['Divine Comedy'],'{$set:{price:?},$inc:{$stock:?}},[18,5]);
+    // ! book.update('{item:?},['Divine Comedy'],'{$set:{price:?},$inc:{stock:?}},[18,5]);
     // ! // the updated document is now:
     // ! { "_id" : 11, "item" : "Divine Comedy", "price" : 18, "stock" : 7 }
     procedure Update(Query: PUTF8Char; const QueryParams: array of const;
-      Update: PUTF8Char; const UpdateParams: array of const;
+      const Update: RawUTF8; const UpdateParams: array of const;
       Flags: TMongoUpdateFlags=[]); overload;
     /// modifies some fields of an existing document in a collection
     // - by default, Update() or Save() will replace the whole document
@@ -2083,23 +2203,23 @@ type
     function Drop: RawUTF8;
 
     /// calculate the number of documents in the collection
-    function Count: integer;
+    function Count: Int64;
     /// calculate the number of documents in the collection that match
     // a specific query
     // - Criteria can specify the query selector as a BSONVariant/TDocVariant
-    function FindCount(const Query: variant): integer; overload;
+    function FindCount(const Query: variant): Int64; overload;
     /// calculate the number of documents in the collection that match
     // a specific query
     // - Criteria can specify the query selector as (extended) JSON and
     // parameters:
-    // ! FindCount('{name:?,age:{$gt,?}}',[],['John',21]);
+    // ! FindCount('{name:?,age:{$gt:?}}',[],['John',21]);
     // ! FindCount('{ ord_dt: { $gt: new Date(?) } }',[],[trunc(Now)-7]);
     // - optional MaxNumberToReturn can specify a limit for the search (e.g. if
     // you do not want an exact count, but only check for a specific limit)
     // - optional NumberToSkip can specify the number of matching documents
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
-      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer; overload;
+      MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
@@ -2113,10 +2233,7 @@ type
     // this single item as a TDocVariant
     // - if the server sent back several items as {result:[{..},{..}]}, will
     // return a dvArray kind of TDocVariant
-    // - for instance, the following will return the maximum _id value of
-    // the collection:
-    // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}',[]).max
-    function AggregateDoc(Operators: PUTF8Char; const Params: array of const): variant;
+    function AggregateDoc(Operators: PUTF8Char; const Params: array of const): variant; overload;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
     // alternative map-reduce pattern, and is available since MongoDB 2.2 -
@@ -2129,7 +2246,30 @@ type
     // according to the value in the posts field
     // ! AggregateJSON('{ $sort : { age : -1, posts: 1 } }',[])
     function AggregateJSON(Operators: PUTF8Char; const Params: array of const;
-      Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+      Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+    /// calculate aggregate values using the MongoDB aggregation framework
+    // and return the result as a TDocVariant instance
+    // - overloaded method to specify the pipeline as a BSON raw document
+    // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
+    function AggregateDocFromVariant(const pipelineArray: variant): variant;
+    /// calculate JSON aggregate values using the MongoDB aggregation framework
+    // - overloaded method to specify the pipeline as a BSON raw document
+    // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
+    function AggregateJSONFromVariant(const pipelineArray: variant;
+      Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
+    /// calculate aggregate values using the MongoDB aggregation framework
+    // and return the result as a TDocVariant instance
+    // - overloaded method to specify the pipeline as a JSON text object
+    // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
+    // - for instance, the following will return the maximum _id value of
+    // the collection:
+    // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}').max
+    function AggregateDocFromJson(const PipelineJSON: RawUTF8): variant;
+    /// calculate JSON aggregate values using the MongoDB aggregation framework
+    // - overloaded method to specify the pipeline as a JSON text object
+    // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
+    function AggregateJSONFromJson(const PipelineJSON: RawUTF8;
+      Mode: TMongoJSONMode=modMongoStrict): RawUTF8; overload;
   published
     /// the collection name
     property Name: RawUTF8 read fName;
@@ -2147,13 +2287,9 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aConnection: TMongoConnection); reintroduce;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    /// used to customize the exception log to contain information about the Query
-    // - it will log the connection parameters
-    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
-    {$endif}
+  published
     /// the associated connection
     property Connection: TMongoConnection read fConnection;
   end;
@@ -2165,13 +2301,14 @@ type
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aDatabase: TMongoDatabase); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aDatabase: TMongoDatabase); reintroduce;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// used to customize the exception log to contain information about the Query
     // - it will log the database parameters
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
     {$endif}
+  published
     /// the associated Database
     property Database: TMongoDatabase read fDatabase;
   end;
@@ -2188,7 +2325,7 @@ type
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
       aRequest: TMongoRequest=nil); reintroduce; overload;
     /// initialize the Exception for a given request
-    constructor CreateFmt(const aMsg: string; const Args: array of const;
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const;
       aConnection: TMongoConnection; aRequest: TMongoRequest); reintroduce;
     /// initialize the Exception for a given request
     constructor Create(const aMsg: string; aConnection: TMongoConnection;
@@ -2203,6 +2340,7 @@ type
     {$endif}
     /// the associated error reply document
     property ErrorReply: TMongoReplyCursor read fError;
+  published
     /// the associated error reply document, as a TDocVariant instance
     // - will return the first document available in ErrorReply, or the supplied
     // aErrorDoc: TDocVariantData instance
@@ -2238,20 +2376,40 @@ procedure BSONItemsToDocVariant(Kind: TBSONElementType; BSON: PByte;
 const OPTIONS: array[TBSONDocArrayConversion] of TDocVariantOptions =
     ([],[dvoReturnNullForUnknownProperty],
         [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]);
-var item: TBSONElement;
-    value: Variant;
-begin
+var k: TDocVariantKind;
+    i,n,cap: integer;
+    items: array[0..63] of TBSONElement;
+begin // very fast optimized code
   if not (Kind in [betDoc,betArray]) then
     VarCastError;
-  if (BSON=nil) or (TBSONElementType(BSON^)=betEof) then
+  if (BSON=nil) or (BSON^=byte(betEOF)) then
     TVarData(Doc).VType := varNull else begin
-    Doc.Init(OPTIONS[Option]);
-    while item.FromNext(BSON) do begin
-      item.ToVariant(value,Option);
-      if Kind=betDoc then
-        Doc.AddValue(item.Name,value) else
-        Doc.AddItem(value);
-    end;
+    if Kind=betDoc then
+      k := dvObject else
+      k := dvArray;
+    Doc.Init(OPTIONS[Option],k);
+    cap := 0;
+    repeat
+      n := 0;
+      while items[n].FromNext(BSON) do begin
+        inc(n);
+        if n=length(items) then
+          break;
+      end;
+      if n=0 then
+        break;
+      inc(cap,n);
+      if cap<512 then
+        Doc.Capacity := cap else
+        if Doc.Capacity<cap then
+          Doc.Capacity := cap+cap shr 3; // faster for huge arrays
+      for i := 0 to n-1 do begin
+        if Kind=betDoc then
+          SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
+        items[i].ToVariant(Doc.Values[i+Doc.Count],Option);
+      end;
+      Doc.SetCount(Doc.Count+n);
+    until (BSON=nil) or (BSON^=byte(betEOF));
   end;
 end;
 
@@ -2282,7 +2440,7 @@ var
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
     //betJSScope, betInt32, betTimeStamp, betInt64
-    varUnknown, varInteger, varWord64, varInt64);
+    varUnknown, varInteger, varUnknown, varInt64);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
 begin
@@ -2310,7 +2468,7 @@ begin
       BSONItemsToDocVariant(Kind,Data.DocList,TDocVariantData(result),DocArrayConversion);
       exit;
     end;
-  betBinary, betRegEx, betDeprecatedDbptr, betJSScope:
+  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimeStamp:
     SetString(RawByteString(resBSON.VBlob),PAnsiChar(Element),ElementBytes);
   betObjectID:
     resBSON.VObjectID := PBSONObjectID(Element)^;
@@ -2369,19 +2527,46 @@ begin
   end;
 end;
 
+function TBSONElement.DocItemToVariant(const aName: RawUTF8; var aValue: variant;
+  DocArrayConversion: TBSONDocArrayConversion): boolean;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then begin
+    item.ToVariant(aValue,DocArrayConversion);
+    result := true;
+  end else
+    result := false;
+end;
+
+function TBSONElement.DocItemToRawUTF8(const aName: RawUTF8): RawUTF8;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then 
+    result := item.ToRawUTF8 else
+    result := '';
+end;
+
+function TBSONElement.DocItemToInteger(const aName: RawUTF8; const default: Int64): Int64;
+var item: TBSONElement;
+begin
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then
+    result := item.ToInteger(default) else
+    result := default;
+end;
+
 procedure TBSONElement.AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode);
 label bin,regex;
 begin
   case Kind of
   betFloat:
-    W.Add(PDouble(Element)^);
+    W.AddDouble(PDouble(Element)^);
   betString, betJS, betDeprecatedSymbol: begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
     W.Add('"');
   end;
   betDoc, betArray:
-    BSONToJSON(Data.DocList,Kind,W,Mode);
+    BSONListToJSON(Data.DocList,Kind,W,Mode);
   betObjectID: begin
     W.AddShort(BSON_JSON_OBJECTID[false,Mode]);
     W.AddBinToHex(Element,SizeOf(TBSONObjectID));
@@ -2433,6 +2618,8 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     goto bin; // no specific JSON construct for this deprecated item
   betJSScope:
     goto bin; // no specific JSON construct for this item yet
+  betTimeStamp:
+    goto bin; // internal content will always be written as raw binary
   betBoolean:
     W.AddString(JSON_BOOLEAN[PBoolean(Element)^]);
   betDateTime: begin
@@ -2451,7 +2638,8 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
   if Kind=betMaxKey then
     W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
-    raise EBSONException.CreateFmt('Unexpected BSON element of type %d',[ord(Kind)]);
+    raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
+      [ord(Kind)]);
   end;
 end;
 
@@ -2493,18 +2681,27 @@ begin
     end;
     ElementBytes := BSON_ELEMENTSIZE[Kind];
   end;
-  varString: begin
-    Kind := betString;
-    Data.Text := aVarData.VAny;
-    Data.TextLen := Length(RawUTF8(aVarData.VAny));
-st2:ElementBytes := Data.TextLen+1;
-    if aVarData.VAny=nil then
-      Data.InternalStorage := 1 else
-      Element := nil; // special case handled by TBSONWriter.BSONWrite()
-  end;
-  {$ifdef UNICODE}
+  varString: 
+    if (aVarData.VAny<>nil) and
+       (PInteger(aVarData.VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+       Iso8601CheckAndDecode(PUTF8Char(aVarData.VAny)+3,Length(RawUTF8(aVarData.VAny))-3,
+         PDateTime(@Data.InternalStorage)^) then begin
+      // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+      Element := @Data.InternalStorage;
+      Kind := betDateTime;
+      ElementBytes := BSON_ELEMENTSIZE[betDateTime];
+    end else begin
+      Kind := betString;
+      Data.Text := aVarData.VAny;
+      Data.TextLen := Length(RawUTF8(aVarData.VAny));
+st2:  ElementBytes := Data.TextLen+1;
+      if aVarData.VAny=nil then
+        Data.InternalStorage := 1 else
+        Element := nil; // special case handled by TBSONWriter.BSONWrite()
+    end;
+  {$ifdef HASVARUSTRING}
   varUString: begin
-    aTemp := UnicodeStringToUtf8(UnicodeString(aVarData.VAny));
+    RawUnicodeToUtf8(aVarData.VAny,length(UnicodeString(aVarData.VAny)),RawUTF8(aTemp));
     goto str;
   end;
   {$endif}
@@ -2537,6 +2734,19 @@ str:Kind := betString;
       VarCastError;
   end else VarCastError;
   end;
+end;
+
+function TBSONElement.FromDocument(const doc: TBSONDocument): boolean;
+var n: Integer;
+begin
+  FillChar(self,sizeof(self),0);
+  n := length(doc);
+  if (n>=4) and (PInteger(doc)^=n) then begin
+    Kind := betDoc;
+    FromBSON(pointer(doc));
+    result := true;
+  end else
+    result := false;
 end;
 
 const
@@ -2589,7 +2799,7 @@ begin // see http://bsonspec.org/#/specification
   else
     if Kind>high(BSON_ELEMENTSIZE) then // e.g. betMinKey betMaxKey
       ElementBytes := 0 else
-      ElementBytes := BSON_ELEMENTSIZE[Kind];
+      ElementBytes := BSON_ELEMENTSIZE[Kind]; // fixed size storage
   end;
 end;
 
@@ -2598,35 +2808,60 @@ begin
   if BSON=nil then begin
     result := false;
     exit;
-  end;
+  end;                           
   Kind := TBSONElementType(BSON^);
-  inc(BSON);
   case ord(Kind) of
   ord(betEOF):
     result := false;
   ord(betFloat)..ord(betInt64),ord(betMinKey),ord(betMaxKey): begin
+    inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
     inc(BSON,NameLen+1);
     FromBSON(BSON);
     if ElementBytes<0 then
-      raise EBSONException.CreateFmt('Invalid %d element content',[ord(Kind)]);
+      raise EBSONException.CreateUTF8(
+        'TBSONElement.FromNext: unexpected size % for type %',[ElementBytes,ord(Kind)]);
     inc(BSON,ElementBytes);
     inc(Index);
     result := true;
   end;
-  else raise EBSONException.CreateFmt('Unexpected %d element type',[ord(Kind)]);
+  else raise EBSONException.CreateUTF8('TBSONElement.FromNext: unexpected type %',
+    [ord(Kind)]);
   end;
 end;
 
-function TBSONElement.FromSearch(BSON: PByte; const aName: RawUTF8): PByte;
+function TBSONElement.FromSearch(BSON: PByte; const aName: RawUTF8): boolean;
 begin
-  result := BSON;
-  while FromNext(result) do
+  result := true;
+  while FromNext(BSON) do
     if IdemPropNameU(aName,Name,NameLen) then
       exit;
-  result := nil;
+  result := false;
 end;
+
+
+{ TBSONIterator }
+
+function TBSONIterator.Init(const doc: TBSONDocument; kind: TBSONElementType): boolean;
+var n: integer;
+begin
+  FillChar(self,sizeof(self),0);
+  n := length(doc);
+  if (kind in [betDoc,betArray]) and (n>=4) and (PInteger(doc)^=n) then begin
+    Item.Kind := kind;
+    Item.FromBSON(pointer(doc));
+    fBson := Item.Data.DocList;
+    result := true;
+  end else
+    result := false;
+end;
+
+function TBSONIterator.Next: boolean;
+begin
+  result := Item.FromNext(fBson);
+end;
+
 
 function BSONParseLength(var BSON: PByte; ExpectedBSONLen: integer=0): integer;
 begin
@@ -2643,27 +2878,20 @@ var item: TBSONElement;
 begin
   result := item.FromNext(BSON);
   if result then begin
-    name := item.Name;
+    SetString(name,PAnsiChar(item.Name),item.NameLen);
     item.ToVariant(element,DocArrayConversion);
   end;
 end;
 
-function BSONSearchElement(BSON: PByte; const name: RawUTF8; var item: TBSONElement): PByte;
+function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): boolean;
 begin
-  if (BSON<>nil) and (BSONParseLength(BSON)<>0) then
-    result := item.FromSearch(item.Data.DocList,name) else
-    result := nil;
-end;
-
-function BSONPerIndexElement(BSON: PByte; index: integer; var item: TBSONElement): PByte;
-begin
-  result := BSON;
-  if (index>=0) and (result<>nil) and (BSONParseLength(result)<>0) then
-    while item.FromNext(result) do
+  result := true;
+  if (index>=0) and (BSON<>nil) and (BSONParseLength(BSON)<>0) then
+    while item.FromNext(BSON) do
       if index=0 then
         exit else
         dec(index);
-  result := nil;
+  result := false;
 end;
   
 procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
@@ -2677,20 +2905,19 @@ begin
   BSONItemsToDocVariant(betDoc,BSON,TDocVariantData(Result),Option);
 end;
 
-function BSONToDoc(const BSON: TBSONDocument; ExpectedBSONLen: integer;
-  Option: TBSONDocArrayConversion): variant;
+function BSONDocumentToDoc(const BSON: TBSONDocument; Option: TBSONDocArrayConversion): variant;
 begin
-  BSONToDoc(pointer(BSON),result,ExpectedBSONLen);
+  BSONToDoc(pointer(BSON),result,length(BSON));
 end;  
 
-procedure BSONToJSON(BSONList: PByte; Kind: TBSONElementType;
+procedure BSONListToJSON(BSONList: PByte; Kind: TBSONElementType;
   W: TTextWriter; Mode: TMongoJSONMode);
 var item: TBSONElement;
 begin
   case Kind of
   betDoc:
     if BSONList^=byte(betEOF) then
-      W.AddShort('null') else begin
+      W.Add('{','}') else begin
       W.Add('{');
       while item.FromNext(BSONList) do begin
         if Mode=modMongoShell then begin
@@ -2713,24 +2940,24 @@ begin
     W.CancelLastComma;
     W.Add(']');
   end;
-  else raise EBSONException.CreateFmt('BSONToJSON(Kind=%d)',[ord(Kind)]);
+  else raise EBSONException.CreateUTF8('BSONListToJSON(Kind=%)',[ord(Kind)]);
   end;
 end;
 
-function BSONToJSON(const BSON: TBSONDocument; ExpectedBSONLen: integer=0;
+function BSONDocumentToJSON(const BSON: TBSONDocument;
   Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 begin
-  result := BSONToJSON(pointer(BSON),betDoc,ExpectedBSONLen,Mode);
+  result := BSONToJSON(pointer(BSON),betDoc,length(BSON),Mode);
 end;  
 
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
-  Mode: TMongoJSONMode): RawUTF8; overload;
+  Mode: TMongoJSONMode): RawUTF8; 
 var W: TTextWriter;
 begin
   BSONParseLength(BSON,ExpectedBSONLen);
   W := TTextWriter.CreateOwnedStream;
   try
-    BSONToJSON(BSON,Kind,W,Mode);
+    BSONListToJSON(BSON,Kind,W,Mode);
     W.SetText(result);
   finally
     W.Free;
@@ -2823,10 +3050,13 @@ begin
   Write(@value,sizeof(value));
 end;
 
-procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx: RawByteString);
+procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
 begin
-  BSONWrite(name,betRegEx);
+  BSONWrite(name,betRegEx); // cstring cstring
   Write(pointer(RegEx),length(RegEx));
+  Write1(0);
+  Write(pointer(Options),length(Options));
+  Write1(0);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: RawUTF8;
@@ -2909,23 +3139,56 @@ begin
   BSONWriteDoc(doc);
 end;
 
-function TBSONWriter.BSONDocumentBegin: cardinal;
+procedure TBSONWriter.BSONWriteArray(const kind: TBSONElementType);
 begin
-  result := TotalWritten;
+  BSONWrite(UInt32ToUtf8(fDocumentArray),kind);
+  inc(fDocumentArray);
+  if kind in [betDoc,betArray] then
+    BSONDocumentBegin;
+end;
+
+procedure TBSONWriter.BSONDocumentBegin;
+begin
+  if fDocumentStack>=Length(fDocumentStackOffset) then
+    SetLength(fDocumentStackOffset,fDocumentStack+fDocumentStack shr 3+16);
+  fDocumentStackOffset[fDocumentStack] := TotalWritten;
+  inc(fDocumentStack);
   Write4(0);
 end;
 
-procedure TBSONWriter.BSONDocumentEnd(Start: Cardinal; WriteEndingZero: boolean);
+procedure TBSONWriter.BSONDocumentBegin(const name: RawUTF8; kind: TBSONElementType);
 begin
-  if WriteEndingZero then
-    Write1(0);
-  if fDocumentCount>=Length(fDocument) then
-    SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
-  with fDocument[fDocumentCount] do begin
-    Offset := Start;
-    Length := TotalWritten-Offset;
+  if not (kind in [betDoc,betArray]) then
+    raise EBSONException.Create('BSONDocumentBegin(?)');
+  BSONWrite(name,kind);
+  BSONDocumentBegin;
+end;
+
+procedure TBSONWriter.BSONDocumentBeginInArray(const name: RawUTF8; kind: TBSONElementType);
+begin
+  if fDocumentArray>0 then
+    BSONDocumentEnd;
+  BSONWriteArray(kind);
+  BSONDocumentBegin(name);
+end;
+
+procedure TBSONWriter.BSONDocumentEnd(CloseNumber: integer; WriteEndingZero: boolean);
+begin
+  while CloseNumber>0 do begin
+    if (CloseNumber>1) or WriteEndingZero then
+      Write1(0);
+    if fDocumentStack=0 then
+      raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
+    dec(fDocumentStack);
+    if fDocumentCount>=Length(fDocument) then
+      SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
+    with fDocument[fDocumentCount] do begin
+      Offset := fDocumentStackOffset[fDocumentStack];
+      Length := TotalWritten-Offset;
+    end;
+    inc(fDocumentCount);
+    dec(CloseNumber);
   end;
-  inc(fDocumentCount);
 end;
 
 procedure TBSONWriter.BSONAdjustDocumentsSize(BSON: PByteArray);
@@ -2943,11 +3206,11 @@ begin
   BSONAdjustDocumentsSize(pointer(result));
 end;
 
-procedure TBSONWriter.ToBSONVariant(var result: variant);
+procedure TBSONWriter.ToBSONVariant(var result: variant; Kind: TBSONElementType);
 var doc: TBSONDocument;
 begin
   ToBSONDocument(doc);
-  BSONVariantType.FromBSONDocument(doc,result);
+  BSONVariantType.FromBSONDocument(doc,result,Kind);
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: TVarRec);
@@ -2965,13 +3228,15 @@ begin
       VarRecToUTF8(value,tmp);
       BSONWrite(name,tmp);
     end;
-    else raise EBSONException.CreateFmt('Unhandled TVarRec.VType=%d',[value.VType]);
+    else raise EBSONException.CreateUtf8(
+      '%.BSONWrite(TVarRec.VType=%)',[self,value.VType]);
   end;
 end;
 
 procedure TBSONWriter.BSONWriteVariant(const name: RawUTF8; const value: variant);
 var temp: RawUTF8;
     JSON: PUTF8Char;
+    dt: TDateTime;
 begin
   with TVarData(value) do begin
     case VType of
@@ -2992,8 +3257,13 @@ begin
     varDouble:   BSONWrite(Name,VDouble);
     varDate:     BSONWriteDateTime(Name,VDate);
     varCurrency: BSONWrite(Name,VCurrency);
-    varString:   BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
-    {$ifdef UNICODE}
+    varString:
+      if (VAny<>nil) and (PInteger(VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+         Iso8601CheckAndDecode(PUTF8Char(VAny)+3,Length(RawUTF8(VAny))-3,dt) then 
+        // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
+        BSONWriteDateTime(Name,dt) else
+        BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
+    {$ifdef HASVARUSTRING}
     varUString: begin
       RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),temp);
       BSONWrite(Name,temp);
@@ -3009,12 +3279,12 @@ begin
     if VType=BSONVariantType.VarType then
       BSONWrite(name,TBSONVariantData(value)) else
     if VType=DocVariantType.VarType then
-      BSONWrite(name,TDocVariantData(Value)) else begin
+      BSONWrite(name,TDocVariantData(value)) else begin
       VariantSaveJSON(value,twJSONEscape,temp);
       JSON := pointer(temp);
       BSONWriteFromJSON(name,JSON,nil);
       if JSON=nil then
-        raise EBSONException.CreateFmt('Unhandled variant type %d',[VType]);
+        raise EBSONException.CreateUTF8('%.BSONWriteVariant(VType=%)',[self,VType]);
     end;
     end;
   end;
@@ -3023,67 +3293,143 @@ end;
 procedure TBSONWriter.BSONWriteDoc(const doc: TDocVariantData);
 var Name: RawUTF8;
     i: integer;
-    Start: Cardinal;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   if TVarData(doc).VType>varNull then // null,empty will write {}
     if TVarData(doc).VType<>DocVariantType.VarType then
-      raise EBSONException.CreateFmt('doc.VType=%d',[TVarData(doc).VType]) else
+      raise EBSONException.CreateUTF8('%.BSONWriteDoc(VType=%)',
+        [self,TVarData(doc).VType]) else
     for i := 0 to doc.Count-1 do begin
       if doc.Names<>nil then
         Name := doc.Names[i] else
         UInt32ToUtf8(i,Name);
       BSONWriteVariant(Name,doc.Values[i]);
       if TotalWritten>BSON_MAXDOCUMENTSIZE then
-        raise EBSONException.CreateFmt('BSON document size = %d > maximum %d',
-          [TotalWritten,BSON_MAXDOCUMENTSIZE]);
+        raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=%>max %)',
+          [self,TotalWritten,BSON_MAXDOCUMENTSIZE]);
     end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteProjection(const FieldNamesCSV: RawUTF8);
 var FieldNames: TRawUTF8DynArray;
     i: integer;
-    Start: cardinal;
 begin
   CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(FieldNames) do
     BSONWrite(FieldNames[i],1);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
+end;
+
+function TBSONWriter.BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
+  operator: TSynTableStatementOperator; const Value: variant): boolean;
+const
+  QUERY_OPS: array[opNotEqualTo..opIn] of RawUTF8 = (
+    '$ne','$lt','$lte','$gt','$gte','$in');
+  INVERT_OPS: array[opEqualTo..opGreaterThanOrEqualTo] of TSynTableStatementOperator = (
+    opNotEqualTo,opEqualTo, opGreaterThanOrEqualTo,opGreaterThan,
+    opLessThanOrEqualTo,opLessThan);
+var wasString: boolean;
+    like: RawUTF8;
+    len: integer;
+    doInvert: boolean;
+begin
+  result := false; // error on premature exit
+  case Operator of
+  // http://docs.mongodb.org/manual/faq/developers/#faq-developers-query-for-nulls
+  // {$type:10} would return only existing fields, but our ODM do not insert
+  // blobs by default -> do not use {$type:10} trick but plain {field:null}
+  opIsNull:
+    operator := opEqualTo;     // here Value=null
+  opIsNotNull:
+    operator := opNotEqualTo;  // here Value=null
+  end;
+  doInvert := false;
+  if inverted then
+    if operator<=high(INVERT_OPS) then
+      operator := INVERT_OPS[operator] else begin
+      doInvert := true;
+      BSONDocumentBegin(name);
+      name := '$not';
+    end;
+  case Operator of
+  opEqualTo:
+    BSONWriteVariant(name,Value);
+  opNotEqualTo..opIn: begin
+    BSONDocumentBegin(name);
+    BSONWriteVariant(QUERY_OPS[operator],Value);
+    BSONDocumentEnd;
+  end;
+  opLike: begin
+    VariantToUTF8(Value,like,wasString);
+    len := length(like);
+    if (len=0) or not wasString then
+      exit;
+    if like[1]='%' then
+      if len=1 then // LIKE '%' is invalid
+        exit else
+        if like[len]='%' then
+          if len=2 then
+            exit else // LIKE '%%' is invalid
+            like := copy(like,2,len-2) else    // LIKE '%a%' -> /a/
+          like := copy(like,2,len-1)+'$' else  // LIKE '%a'  -> /a$/
+      if like[len]='%' then
+        like := '^'+copy(like,1,len-1) else    // LIKE 'a%'  -> /^a/
+        like := '^'+like+'$';                  // LIKE 'a'   -> /^a$/
+    BSONWriteRegEx(name,like,'i'); // /like/i for case-insensitivity
+  end;
+  opContains: begin // http://docs.mongodb.org/manual/reference/operator/query/in
+    BSONDocumentBegin(name);
+    BSONWrite(QUERY_OPS[opIn],betArray);
+    BSONWriteArray([Value]);
+    BSONDocumentEnd;
+  end;
+  else
+    exit; // unhandled operator
+  end;
+  if doInvert then
+    BSONDocumentEnd;
+  result := true;
 end;
 
 procedure TBSONWriter.BSONWriteObject(const NameValuePairs: array of const);
-var Start: cardinal;
-    Name: RawUTF8;
+var Name: RawUTF8;
     i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to (length(NameValuePairs)shr 1)-1 do begin
     VarRecToUTF8(NameValuePairs[i*2],Name);
     BSONWrite(Name,NameValuePairs[i*2+1]);
   end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteArray(const Items: array of const);
-var Start: cardinal;
-    i: integer;
+var i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(Items) do
     BSONWrite(UInt32ToUtf8(i),Items[i]);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteArrayOfInteger(const Integers: array of integer);
-var Start: cardinal;
-    i: integer;
+var i: integer;
 begin
-  Start := BSONDocumentBegin;
+  BSONDocumentBegin;
   for i := 0 to high(Integers) do
     BSONWrite(UInt32ToUtf8(i),Integers[i]);
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
+end;
+
+procedure TBSONWriter.BSONWriteArrayOfInt64(const Integers: array of Int64);
+var i: integer;
+begin
+  BSONDocumentBegin;
+  for i := 0 to high(Integers) do
+    BSONWrite(UInt32ToUtf8(i),Integers[i]);
+  BSONDocumentEnd;
 end;
 
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
@@ -3105,6 +3451,10 @@ begin
     BSONWriteVariant(name,tmp) else
     // try from simple types
     case JSON^ of
+    #0: begin
+      JSON := nil;
+      exit;
+    end;
     '[': begin // nested array
       BSONWrite(name,betArray);
       JSON := BSONWriteDocFromJSON(JSON,EndOfObject,Kind,DoNotTryExtendedMongoSyntax);
@@ -3160,18 +3510,22 @@ begin
       if Iso8601CheckAndDecode(Value,ValueLen,ValueDateTime) then
         // recognized TTextWriter.AddDateTime() pattern
         BSONWriteDateTime(name,ValueDateTime) else
+      if (PInteger(Value)^ and $ffffff=JSON_SQLDATE_MAGIC) and
+         Iso8601CheckAndDecode(Value+3,ValueLen-3,ValueDateTime) then
+        // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) pattern
+        BSONWriteDateTime(name,ValueDateTime) else
         // will point to the in-place escaped JSON text
         BSONWriteString(name,Value,ValueLen);
     end;
   end;
   if TotalWritten>BSON_MAXDOCUMENTSIZE then
-    raise EBSONException.CreateFmt('BSON document size = %d > maximum %d',
-      [TotalWritten,BSON_MAXDOCUMENTSIZE]);
+    raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=%>max %)',
+      [self,TotalWritten,BSON_MAXDOCUMENTSIZE]);
 end;
 
 function TBSONWriter.BSONWriteDocFromJSON(JSON: PUTF8Char; aEndOfObject: PUTF8Char;
   out Kind: TBSONElementType; DoNotTryExtendedMongoSyntax: boolean): PUTF8Char;
-var Start, ndx: cardinal;
+var ndx: cardinal;
     EndOfObject: AnsiChar;
     Name: RawUTF8;
 begin
@@ -3182,39 +3536,43 @@ begin
   case JSON^ of
   '[': begin
     Kind := betArray;
-    Start := BSONDocumentBegin;
+    BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
     ndx := 0;
-    repeat
-      UInt32ToUtf8(ndx,Name);
-      BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
-      if JSON=nil then
-        exit; // invalid content
-      inc(ndx);
-    until EndOfObject=']';
+    if JSON^=']' then
+      inc(JSON) else
+      repeat
+        UInt32ToUtf8(ndx,Name);
+        BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
+        if JSON=nil then
+          exit; // invalid content
+        inc(ndx);
+      until EndOfObject=']';
   end;
   '{': begin
     Kind := betDoc;
-    Start := BSONDocumentBegin;
+    BSONDocumentBegin;
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    repeat
-      // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
-      Name := GetJSONPropName(JSON); // BSON/JSON accepts "" as key name
-      BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
-      if (JSON=nil) or (EndOfObject=#0) then
-        exit; // invalid content
-    until EndOfObject='}';
+    if JSON^='}' then
+      inc(JSON) else
+      repeat
+        // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
+        Name := GetJSONPropName(JSON); // BSON/JSON accepts "" as key name
+        BSONWriteFromJSON(Name,JSON,@EndOfObject,DoNotTryExtendedMongoSyntax);
+        if (JSON=nil) or (EndOfObject=#0) then
+          exit; // invalid content
+      until EndOfObject='}';
   end;
   'n','N': 
     if IdemPChar(JSON+1,'ULL') then begin
       Kind := betNull;
-      Start := BSONDocumentBegin;
+      BSONDocumentBegin;
       inc(JSON,4);
     end else
       exit;
   else exit;
   end;
-  BSONDocumentEnd(Start);
+  BSONDocumentEnd;
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if aEndOfObject<>nil then
     aEndOfObject^ := JSON^;
@@ -3235,7 +3593,7 @@ var
     MachineID: array[0..2] of byte;
     // we use the Thread ID, so that ComputeNew will be thread-safe
     ProcessID: word;
-    // bswap24-encoded
+    // bswap24-encoded (ending the ObjectID 12 bytes)
     Counter: integer;
     // naive but very efficient UnixCreateTime cache
     LastTick: cardinal;
@@ -3251,6 +3609,7 @@ begin
 end;
 
 procedure TBSONObjectID.ComputeNew;
+  {$ifdef MSWINDOWS}
   function ComputeMachineID: Cardinal;
   var tmp: array[byte] of AnsiChar;
   begin
@@ -3259,6 +3618,7 @@ procedure TBSONObjectID.ComputeNew;
       result := GetCurrentProcessId else
       result := kr32(0,@tmp,result);
   end;
+  {$endif}
 var Tick, CurrentTime: cardinal;
 begin // this is a bit complex, but we have to avoid any collision
   with GlobalBSONObjectID do begin
@@ -3276,7 +3636,11 @@ begin // this is a bit complex, but we have to avoid any collision
       end;
     end;
     if ProcessID=0 then begin
+      {$ifdef MSWINDOWS}
       PCardinal(@MachineID)^ := ComputeMachineID;
+      {$else}
+      PCardinal(@MachineID)^ := MainThreadID; // temporary workaround
+      {$endif}
       ProcessID := GetCurrentThreadId;
       FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
       Counter := FirstCounter;
@@ -3692,7 +4056,7 @@ var ID: TBSONObjectID;
 begin
   if ID.FromText(Hexa) then
     result := ID.ToVariant else
-    raise EBSONException.CreateFmt('Invalid ObjectID hexadecimal "%s"',[Hexa]);
+    raise EBSONException.CreateUTF8('Invalid ObjectID("%")',[Hexa]);
 end;
 
 function BSONObjectID(const aObjectID: variant): TBSONObjectID;
@@ -3760,18 +4124,27 @@ begin
   end;
 end;
 
+function BSONFromInt64s(const Integers: array of Int64): TBSONDocument;
+begin
+  with TBSONWriter.Create(TRawByteStringStream) do
+  try
+    BSONWriteArrayOfInt64(Integers);
+    ToBSONDocument(result);
+  finally
+    Free;
+  end;
+end;
+
 function BSON(const NameValuePairs: array of const): TBSONDocument;
 var W: TBSONWriter;
     name: RawUTF8;
     a: Integer;
-    Start: cardinal;
 procedure WriteValue;
-var StartNested, ndx: cardinal;
+var ndx: cardinal;
 begin
   case VarRecAsChar(NameValuePairs[a]) of
   ord('['): begin
-    W.BSONWrite(name,betArray);
-    StartNested := W.BSONDocumentBegin;
+    W.BSONDocumentBegin(name,betArray);
     ndx := 0;
     repeat
       inc(a);
@@ -3781,11 +4154,10 @@ begin
       WriteValue;
       inc(ndx);
     until a=high(NameValuePairs);
-    W.BSONDocumentEnd(StartNested);
+    W.BSONDocumentEnd;
   end;
   ord('{'): begin
-    W.BSONWrite(name,betDoc);
-    StartNested := W.BSONDocumentBegin;
+    W.BSONDocumentBegin(name,betDoc);
     repeat
       inc(a);
       VarRecToUTF8(NameValuePairs[a],name);
@@ -3794,7 +4166,7 @@ begin
       inc(a);
       WriteValue;
     until a=high(NameValuePairs);
-    W.BSONDocumentEnd(StartNested);
+    W.BSONDocumentEnd;
   end else
     W.BSONWrite(name,NameValuePairs[a]);
   end;
@@ -3802,7 +4174,7 @@ end;
 begin
   W := TBSONWriter.Create(TRawByteStringStream);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     a := 0;
     while a<high(NameValuePairs) do begin
       VarRecToUTF8(NameValuePairs[a],name);
@@ -3810,7 +4182,7 @@ begin
       WriteValue;
       inc(a);
     end;
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;
@@ -3819,15 +4191,14 @@ end;
 
 function BSONFieldSelector(const FieldNames: array of RawUTF8): TBSONDocument;
 var i: integer;
-    Start: cardinal;
     W: TBSONWriter;
 begin
   W := TBSONWriter.Create(TRawByteStringStream,512);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     for i := 0 to high(FieldNames) do
       W.BSONWrite(FieldNames[i],1);
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;
@@ -3890,11 +4261,11 @@ begin
   result := true;
 end;
 
-function BSON(Format: PUTF8Char; const Args,Params: array of const): TBSONDocument;
+function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument;
 var JSON: RawUTF8;
     v: variant;
 begin
-  if (Format<>nil) and (PWord(Format)^=ord('?')) and (high(Params)>=0) then begin
+  if (Format='?') and (high(Params)>=0) then begin
     VarRecToVariant(Params[0],v);
     if DocVariantType.IsOfType(v) then begin
       result := BSON(TDocVariantData(v));
@@ -3902,6 +4273,7 @@ begin
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
+  UniqueRawUTF8(JSON);
   JSONBufferToBSONDocument(pointer(JSON),result);
 end;
 
@@ -3929,7 +4301,7 @@ begin
   BSONVariantType.FromBSONDocument(tmp,result);
 end;
 
-function BSONVariant(Format: PUTF8Char; const Args,Params: array of const): variant; overload;
+function BSONVariant(const Format: RawUTF8; const Args,Params: array of const): variant; overload;
 begin
   BSONVariantType.FromBSONDocument(BSON(Format,Args,Params),result);
 end;
@@ -3954,6 +4326,11 @@ begin
   BSONVariantType.FromBSONDocument(BSONFromIntegers(Integers),result,betArray);
 end;
 
+function BSONVariantFromInt64s(const Integers: array of Int64): variant;
+begin
+  BSONVariantType.FromBSONDocument(BSONFromInt64s(Integers),result,betArray);
+end;
+
 
 { ************ MongoDB client }
 
@@ -3971,8 +4348,8 @@ constructor TMongoRequest.Create(const FullCollectionName: RawUTF8;
   opCode: TMongoOperation; requestID, responseTo: Integer);
 begin
   if not (opCode in CLIENT_OPCODES) then
-    raise EMongoException.CreateFmt('Unexpected %s.Create(opCode=%s)',
-      [ClassName,GetEnumName(TypeInfo(TMongoOperation),ord(opCode))^]);
+    raise EMongoException.CreateUTF8('Unexpected %.Create(opCode=%)',
+      [self,GetEnumName(TypeInfo(TMongoOperation),ord(opCode))^]);
   inherited Create(TRawByteStringStream);
   fFullCollectionName := FullCollectionName;
   Split(fFullCollectionName,'.',fDatabaseName,fCollectionName);
@@ -3980,7 +4357,7 @@ begin
     fRequestID := InterlockedIncrement(GlobalRequestID) else
     fRequestID := requestID;
   fResponseTo := responseTo;
-  fRequestHeaderStart := BSONDocumentBegin;
+  BSONDocumentBegin;
   fRequestOpCode := opCode;
   Write4(fRequestID);
   Write4(fResponseTo);
@@ -4003,9 +4380,9 @@ end;
 procedure TMongoRequest.ToBSONDocument(var result: TBSONDocument);
 begin
   if (fRequestID=0) or (fRequestOpCode=opReply) then
-    raise EMongoException.CreateFmt('No previous proper %s.Create() call',[ClassName]);
+    raise EMongoException.CreateUTF8('No previous proper %.Create() call',[self]);
   if fBSONDocument='' then begin
-    BSONDocumentEnd(fRequestHeaderStart,false);
+    BSONDocumentEnd(1,false);
     inherited ToBSONDocument(fBSONDocument);
   end;
   result := fBSONDocument;
@@ -4131,6 +4508,7 @@ constructor TMongoRequestQuery.Create(const FullCollectionName: RawUTF8;
 begin
   inherited Create(FullCollectionName,opQuery,0,0);
   fNumberToReturn := NumberToReturn;
+  fNumberToSkip := NumberToSkip;
   fQuery := TVarData(Query);
   fReturnFieldsSelector := TVarData(ReturnFieldsSelector);
   WriteCollectionName(byte(Flags),FullCollectionName);
@@ -4148,12 +4526,18 @@ begin
     W.CancelLastChar;
   W.AddShort(',query:');
   AddMongoJSON(variant(fQuery),W,modMongoShell);
-  W.AddShort(',projection:');
-  AddMongoJSON(variant(fReturnFieldsSelector),W,modMongoShell);
-  W.AddShort(',numberToReturn:');
-  if fNumberToReturn=maxInt then
-    W.Add('-','1') else
+  if fReturnFieldsSelector.VType<>varNull then begin
+    W.AddShort(',projection:');
+    AddMongoJSON(variant(fReturnFieldsSelector),W,modMongoShell);
+  end;
+  if fNumberToReturn<maxInt then begin
+    W.AddShort(',numberToReturn:');
     W.Add(fNumberToReturn);
+  end;
+  if fNumberToSkip>0 then begin
+    W.AddShort(',numberToSkip:');
+    W.AddU(fNumberToSkip);
+  end;
   W.Add('}');
 end;
 
@@ -4170,14 +4554,35 @@ end;
 
 { TMongoRequestKillCursor }
 
-constructor TMongoRequestKillCursor.Create(const CursorIDs: array of Int64);
+constructor TMongoRequestKillCursor.Create(const FullCollectionName: RawUTF8;
+  const CursorIDs: array of Int64);
+var n: integer;
 begin
   if high(CursorIDs)<0 then
-    raise EMongoException.CreateFmt('%s.Create([]) call',[ClassName]);
-  inherited Create(FullCollectionName,opGetMore,0,0); 
+    raise EMongoException.CreateUTF8('Invalid %.Create([]) call',[self]);
+  inherited Create(FullCollectionName,opKillCursors,0,0);
   Write4(0); // reserved for future use
-  Write4(length(CursorIDs));
-  Write(@CursorIDs[0],length(CursorIDs)*sizeof(Int64));
+  n := length(CursorIDs);
+  Write4(n);
+  SetLength(fCursors,n);
+  n := n*sizeof(Int64);
+  move(CursorIDs[0],fCursors[0],n);
+  Write(pointer(fCursors),n);
+end;
+
+procedure TMongoRequestKillCursor.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
+var i: integer;
+begin
+  inherited;
+  if W.LastChar='}' then
+    W.CancelLastChar;
+  W.AddShort(',cursorID:[');
+  for i := 0 to high(fCursors) do begin
+    W.Add(fCursors[i]);
+    W.Add(',');
+  end;
+  W.CancelLastComma;
+  W.Add(']','}');
 end;
 
 
@@ -4190,9 +4595,9 @@ begin
   with PMongoReplyHeader(ReplyMessage)^ do begin
     if (Len<sizeof(TMongoReplyHeader)) or (MessageLength<>Len) or
        (sizeof(TMongoReplyHeader)+NumberReturned*5>Len) then
-      raise EMongoException.CreateFmt('Invalid opReply length=%d',[len]);
+      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(len=%)',[len]);
     if OpCode<>WIRE_OPCODES[opReply] then
-      raise EMongoException.CreateFmt('Invalid opReply OpCode=%d',[OpCode]);
+      raise EMongoException.CreateUTF8('TMongoReplyCursor.Init(OpCode=%)',[OpCode]);
     fRequestID := RequestID;
     fResponseTo := ResponseTo;
     byte(fResponseFlags) := ResponseFlags;
@@ -4219,10 +4624,10 @@ begin
     fDocuments[i] := P;
     inc(P,PInteger(P)^); // fast "parsing" of all supplied documents
     if P-pointer(fReply)>Len then
-      raise EMongoException.CreateFmt('Invalid opReply Document[%d] content',[i]);
+      raise EMongoException.CreateUTF8('ComputeDocumentsList(Document[%])',[i]);
   end;
   if P-pointer(fReply)<>Len then
-    raise EMongoException.Create('Invalid opReply Documents');
+    raise EMongoException.Create('ComputeDocumentsList(Documents)');
 end;
 
 function TMongoReplyCursor.GetOneDocument(index: integer): variant;
@@ -4237,7 +4642,8 @@ end;
 procedure TMongoReplyCursor.GetDocument(index: integer; var result: variant);
 begin
   if cardinal(index)>=cardinal(length(fDocuments)) then
-    raise EMongoException.CreateFmt('Out of range index %d >= %d',[index,length(fDocuments)]);
+    raise EMongoException.CreateUTF8('TMongoReplyCursor.GetDocument(index %>=%)',
+      [index,length(fDocuments)]);
   if fDocuments=nil then
     ComputeDocumentsList;
   BSONToDoc(fDocuments[index],result,0,asDocVariantPerReference);
@@ -4356,7 +4762,7 @@ begin
   Rewind;
   while Next(b) do begin
     inc(b,sizeof(integer)); // points to the "e_list" of "int32 e_list #0"
-    BSONToJSON(b,betDoc,W,Mode);
+    BSONListToJSON(b,betDoc,W,Mode);
     W.Add(',');
     if (MaxSize>0) and (W.TextLength>MaxSize) then begin
       W.AddShort('...');
@@ -4395,7 +4801,7 @@ constructor TMongoConnection.Create(const aClient: TMongoClient;
   const aServerAddress: RawByteString; aServerPort: integer);
 begin
   if aClient=nil then
-    raise EMongoException.Create('TMongoConnection.Create(nil)');
+    raise EMongoException.CreateUTF8('%.Create(nil)',[self]);
   fClient := aClient;
   fServerAddress := trim(aServerAddress);
   if fServerAddress='' then
@@ -4429,8 +4835,8 @@ begin
       cslTCP,Client.ConnectionTimeOut);
   except
     on E: Exception do
-      raise EMongoException.CreateFmt(
-        'Unable to connect to MongoDB server: %s',[E.Message]);
+      raise EMongoException.CreateUTF8(
+        '%.Open unable to connect to MongoDB server: % "%"',[self,E,E.Message]);
   end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice
@@ -4474,13 +4880,12 @@ end;
 
 function TMongoConnection.GetBSONAndFree(Query: TMongoRequestQuery): TBSONDocument;
 var W: TBSONWriter;
-    Start: Cardinal;
 begin
   W := TBSONWriter.Create(TRawByteStringStream);
   try
-    Start := W.BSONDocumentBegin;
+    W.BSONDocumentBegin;
     GetRepliesAndFree(Query,ReplyBSON,W); // W.Tag = item number in array
-    W.BSONDocumentEnd(Start);
+    W.BSONDocumentEnd;
     W.ToBSONDocument(result);
   finally
     W.Free;
@@ -4496,9 +4901,11 @@ begin
   try
     if ReturnAsJSONArray then
       W.Add('[');
-    if Mode=modMongoShell then
-      GetRepliesAndFree(Query,ReplyJSONExtended,W) else
-      GetRepliesAndFree(Query,ReplyJSONStrict,W);
+    case Mode of
+      modNoMongo:     GetRepliesAndFree(Query,ReplyJSONNoMongo,W);
+      modMongoStrict: GetRepliesAndFree(Query,ReplyJSONStrict,W);
+      modMongoShell:  GetRepliesAndFree(Query,ReplyJSONExtended,W);
+    end;
     W.CancelLastComma;
     if ReturnAsJSONArray then
       W.Add(']');
@@ -4549,7 +4956,7 @@ begin
         end;
       until ((Query.NumberToReturn>0)and(count<=0)) or (cursorID=0);
     if cursorID<>0 then // if cursor not exhausted: need to kill it
-      SendAndFree(TMongoRequestKillCursor.Create([cursorID]));
+      SendAndFree(TMongoRequestKillCursor.Create(Query.FullCollectionName,[cursorID]),true);
   finally
     Query.Free;
   end;
@@ -4577,6 +4984,14 @@ begin
   W.Add(',');
 end;
 
+procedure TMongoConnection.ReplyJSONNoMongo(Request: TMongoRequest;
+  const Reply: TMongoReplyCursor; var Opaque);
+var W: TTextWriter absolute Opaque;
+begin
+  Reply.FetchAllToJSON(W,modNoMongo,false);
+  W.Add(',');
+end;
+
 procedure TMongoConnection.ReplyBSON(Request: TMongoRequest;
   const Reply: TMongoReplyCursor; var Opaque);
 begin
@@ -4591,7 +5006,8 @@ begin
   if Request=nil then
     raise EMongoRequestException.Create('LockAndSend(nil)',self);
   Request.ToBSONDocument(doc);
-  if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) then
+  if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) and
+     (Client.LogRequestEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.fLogRequestEvent,Request.ToJSON(modMongoShell));
   result := fSocket.TrySndLow(pointer(doc),length(doc));
 end;
@@ -4613,12 +5029,13 @@ begin
           wcAcknowledged:        cmd := 'getLastError';
           wcJournaled:           cmd := BSONVariant(['getLastError',1,'j',true]);
           wcReplicaAcknowledged: cmd := BSONVariant(['getLastError',1,'w',2]);
-          else raise EMongoRequestException.CreateFmt('SendAndFree WriteConcern=%d',
-            [ord(Client.WriteConcern)],self,Request);
+          else raise EMongoRequestException.CreateUTF8(
+            '%.SendAndFree WriteConcern=%',[self,ord(Client.WriteConcern)],self,Request);
         end;
         RunCommand(Request.DatabaseName,cmd,result);
         if not VarIsNull(result.err) then
-          raise EMongoRequestException.Create('SendAndFree',self,Request,TDocVariantData(result));
+          raise EMongoRequestException.Create(
+            'SendAndFree',self,Request,TDocVariantData(result));
       end else // socket error on sending
         if Client.WriteConcern=wcErrorsIgnored then
           exit else
@@ -4636,7 +5053,8 @@ var reply: TMongoReply;
 begin
   GetReply(Request,reply);
   Result.Init(reply);
-  if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) then
+  if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) and
+     (Client.LogReplyEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.LogReplyEvent,
       Result.ToJSON(modMongoShell,True,Client.LogReplyEventMaxSize));
   if mrfQueryFailure in Result.ResponseFlags then
@@ -4653,22 +5071,29 @@ begin
   try
     Lock;
     if Send(Request) then
+      while true do
       if fSocket.TrySockRecv(@Header,sizeof(Header)) then begin
         if (Header.MessageLength<SizeOf(Header)) or
            (Header.MessageLength>MONGODB_MAXMESSAGESIZE) then
-          raise EMongoRequestException.CreateFmt('Reply Length=%d',
-            [Header.MessageLength],self,Request);
+          raise EMongoRequestException.CreateUTF8('%.GetReply: MessageLength=%',
+            [self,Header.MessageLength],self,Request);
         SetLength(result,Header.MessageLength);
         PMongoReplyHeader(result)^ := Header;
         DataLen := Header.MessageLength-sizeof(Header);
         if fSocket.TrySockRecv(@PByteArray(result)[sizeof(Header)],DataLen) then
           if Header.ResponseTo=Request.MongoRequestID then // success
             exit else
-            raise EMongoRequestException.CreateFmt('Unexpected ResponseTo=%d',
-              [Header.ResponseTo],self,Request);
+          if Header.OpCode=ord(opMsg) then begin
+            if Client.Log<>nil then
+              Client.Log.Log(sllWarning,'Msg from MongoDB: %',
+                [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)]);
+          end else
+            raise EMongoRequestException.CreateUTF8(
+              '%.GetReply: ResponseTo=% Expected:% in current blocking mode',
+              [self,Header.ResponseTo,Request.MongoRequestID],self,Request);
       end else
         raise EMongoRequestException.Create('Server reset the connection: '+
-          'proabably due to a bad formatted BSON request',self,Request);
+          'probably due to a bad formatted BSON request',self,Request);
     // if we reached here, this is due to a socket error
     raise EMongoRequestOSException.Create('GetReply',self,Request);
   finally
@@ -4682,7 +5107,7 @@ begin
   GetDocumentsAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1),
     returnedValue);
-  with TDocVariantData(returnedValue) do
+  with DocVariantDataSafe(returnedValue)^ do
     if GetValueOrDefault('ok',1)<>0 then
       result := '' else
       result := VariantToUTF8(GetValueOrDefault('errmsg','unspecified error'));
@@ -4690,17 +5115,14 @@ end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
   const command: variant; var returnedValue: TBSONDocument): boolean;
-var res: PByte;
-    item: TBSONElement;
+var item: TBSONElement;
 begin
   returnedValue := GetBSONAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1));
   result := true;
-  res := pointer(returnedValue);
-  if BSONParseLength(res)>0 then
-    if item.FromSearch(res,'ok')<>nil then
-      if item.ToInteger(1)=0 then
-        result := false;
+  item.FromDocument(returnedValue);
+  if item.DocItemToInteger('ok',1)=0 then
+    result := false;
 end;
 
 procedure TMongoConnection.Lock;
@@ -4730,51 +5152,42 @@ begin
   fConnection := aConnection;
 end;
 
-constructor EMongoConnectionException.CreateFmt(const aMsg: string; const Args: array of const;
+constructor EMongoConnectionException.CreateUTF8(const Format: RawUTF8; const Args: array of const;
   aConnection: TMongoConnection);
 begin
-  inherited CreateFmt(aMsg,Args);
+  inherited CreateUTF8(Format,Args);
   fConnection := aConnection;
 end;
-
-{$ifndef NOEXCEPTIONINTERCEPT}
-function EMongoConnectionException.CustomLog(WR: TTextWriter;
-  const Context: TSynLogExceptionContext): boolean;
-begin
-  inherited CustomLog(WR,Context);
-  WR.AddShort('  ');
-  if fConnection<>nil then
-    WR.Add('using %:%  ',[fConnection.ServerAddress,fConnection.ServerPort]);
-  result := false; // log stack trace
-end;
-{$endif}
 
 
 { EMongoRequestException }
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   inherited Create(aMsg,aConnection);
   fRequest := aRequest;
 end;
 
-constructor EMongoRequestException.CreateFmt(const aMsg: string; const Args: array of const;
-  aConnection: TMongoConnection; aRequest: TMongoRequest);
+constructor EMongoRequestException.CreateUTF8(const Format: RawUTF8;
+  const Args: array of const; aConnection: TMongoConnection;
+  aRequest: TMongoRequest);
 begin
-  inherited CreateFmt(aMsg,Args,aConnection);
+  inherited CreateUTF8(Format,Args,aConnection);
   fRequest := aRequest;
-end;  
+end;
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest; const aError: TMongoReplyCursor);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest;
+  const aError: TMongoReplyCursor);
 begin
   Create(aMsg,aConnection,aRequest);
   fError := aError;
 end;
 
-constructor EMongoRequestException.Create(const aMsg: string; aConnection: TMongoConnection;
-  aRequest: TMongoRequest; const aErrorDoc: TDocVariantData);
+constructor EMongoRequestException.Create(const aMsg: string;
+  aConnection: TMongoConnection; aRequest: TMongoRequest;
+  const aErrorDoc: TDocVariantData);
 begin
   Create(aMsg,aConnection,aRequest);
   fErrorDoc := variant(aErrorDoc);
@@ -4790,11 +5203,7 @@ begin
     fRequest.ToJSON(WR,modMongoShell);
   end;
   if fError.Reply<>'' then
-    fError.FetchAllToJSON(WR,modMongoShell,True) else
-  if TVarData(fErrorDoc).VType<>varEmpty then begin
-    WR.AddShort(' ReplyDocument:');
-    AddMongoJSON(variant(fErrorDoc),WR,modMongoShell);
-  end;
+    fError.FetchAllToJSON(WR,modMongoShell,True);
   result := false; // log stack trace
 end;
 {$endif}
@@ -4814,8 +5223,8 @@ end;
 constructor EMongoRequestOSException.Create(const aMsg: string;
   aConnection: TMongoConnection; aRequest: TMongoRequest=nil);
 begin
-  fSystemLastError := Windows.GetLastError;
-  CreateFmt('%s: %s (%d)',[aMsg,SysErrorMessage(fSystemLastError),fSystemLastError],
+  fSystemLastError := GetLastError;
+  CreateUTF8('%: % (%)',[aMsg,SysErrorMessage(fSystemLastError),fSystemLastError],
     aConnection,aRequest);
 end;
 
@@ -4829,10 +5238,10 @@ begin
   fDatabase := aDatabase;
 end;
 
-constructor EMongoDatabaseException.CreateFmt(const aMsg: string; const Args: array of const;
-  aDatabase: TMongoDatabase);
+constructor EMongoDatabaseException.CreateUTF8(const Format: RawUTF8;
+  const Args: array of const; aDatabase: TMongoDatabase);
 begin
-  inherited CreateFmt(aMsg,Args,aDatabase.Client.Connections[0]);
+  inherited CreateUTF8(Format,Args,aDatabase.Client.Connections[0]);
   fDatabase := aDatabase;
 end;
 
@@ -4845,6 +5254,7 @@ begin
   result := false; // log stack trace
 end;
 {$endif}
+
 
 { TMongoClient }
 
@@ -4915,7 +5325,7 @@ begin
       if fConnections[result].Opened then
         if fConnections[result].Locked then
           if retry mod length(fConnections)=0 then
-            Sleep(2) else
+            SleepHiRes(2) else
             continue else
           break;
     end;
@@ -4950,13 +5360,13 @@ begin
     end;
   end;
   if result=nil then
-    raise EMongoException.CreateFmt('Unknown database "%s"',[DatabaseName]);
+    raise EMongoException.CreateUTF8('%.Open("%") unknown DB',[self,DatabaseName]);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName,
   PassWord: RawUTF8): TMongoDatabase;
 begin
-  raise EMongoException.CreateFmt('OpenAuth(%s) not yet implemented',[DatabaseName]);
+  raise EMongoException.CreateUTF8('%.OpenAuth(%) not implemented yet',[self,DatabaseName]);
 end;
 
 function TMongoClient.GetServerBuildInfo: variant;
@@ -4970,7 +5380,8 @@ function TMongoClient.GetServerBuildInfoNumber: cardinal;
   procedure ComputeIt;
   var vArr: variant;
   begin
-    vArr := ServerBuildInfo.versionArray;
+    GetServerBuildInfo; // circumvent a FPC compilation issue
+    vArr := fServerBuildInfo.versionArray;
     if vArr._Count=4 then
       fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
         vArr._(0)*1000000+vArr._(1)*10000+vArr._(2)*100+vArr._(3);
@@ -5006,32 +5417,29 @@ begin
 end;
 
 
-
-
 { TMongoDatabase }
 
 constructor TMongoDatabase.Create(aClient: TMongoClient;
   const aDatabaseName: RawUTF8);
-var colls: PByte;
-    item: TBSONElement;
+var colls: TBSONIterator;
     full,db,coll: RawUTF8;
 begin
   fClient := aClient;
   fName := aDatabaseName;
-  colls := pointer(Client.Connections[0].GetBSONAndFree(
-    TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt)));
-  // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
   fCollections := TRawUTF8ListHashed.Create(true);
-  if BSONParseLength(colls)>0 then
-    while item.FromNext(colls) do
-    if item.FromSearch(item.Data.DocList,'name')<>nil then begin
-      full := item.ToRawUTF8;
-      split(full,'.',db,coll);
-      if db<>aDatabaseName then
-        raise EMongoConnectionException.CreateFmt(
-          'Invalid "%s" collection name for DB "%s"',
-          [full,aDatabaseName],Client.Connections[0]);
-      fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+  if colls.Init(Client.Connections[0].GetBSONAndFree(
+     TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
+    // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
+    while colls.Next do begin
+      full := colls.item.DocItemToRawUTF8('name');
+      if full<>'' then begin
+        split(full,'.',db,coll);
+        if db<>aDatabaseName then
+          raise EMongoConnectionException.CreateUTF8(
+            '%.Create: invalid "%" collection name for DB "%"',
+            [self,full,aDatabaseName],Client.Connections[0]);
+        fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+      end;
     end;
 end;
 
@@ -5043,14 +5451,14 @@ end;
 
 procedure TMongoDatabase.AddUser(const User: variant);
 begin
-  raise EMongoException.CreateFmt('No %s.AddUser() yet',[ClassName]);
+  raise EMongoException.CreateUTF8('No %.AddUser() yet',[self]);
 end;
 
 function TMongoDatabase.GetCollection(const Name: RawUTF8): TMongoCollection;
 begin
   result := GetCollectionOrNil(Name);
   if result=nil then
-    raise EMongoDatabaseException.CreateFmt('Unknown collection "%s"',[Name],self);
+    raise EMongoDatabaseException.CreateUTF8('%.GetCollection("%")',[self,Name],self);
 end;
 
 function TMongoDatabase.GetCollectionOrCreate(const Name: RawUTF8): TMongoCollection;
@@ -5090,16 +5498,13 @@ begin
   fFullCollectionName := fDatabase.Name+'.'+fName;
 end;
 
-function TMongoCollection.AggregateCall(Operators: PUTF8Char;
-  const Params: array of const; var reply,res: variant): boolean;
-var pipeline: RawUTF8;
+function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUTF8;
+  var reply,res: variant): boolean;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  pipeline := FormatUTF8('{aggregate:"%",pipeline:[%]}',
-    [Name,FormatUTF8(Operators,[],Params,True)]);
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$int"}}}]})
-  Database.RunCommand(BSONVariant(pipeline),reply);
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+  Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
   // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
   res := reply.result;
   result := not VarIsNull(res);
@@ -5107,18 +5512,57 @@ end;
 
 function TMongoCollection.AggregateDoc(Operators: PUTF8Char;
   const Params: array of const): variant;
-var reply: variant;
 begin
-  if AggregateCall(Operators,Params,reply,result) then
-    TDocVariant.GetSingleOrDefault(result,result,result) else
-    SetVariantNull(result);
+  result := AggregateDocFromJson(FormatUTF8(Operators,Params));
 end;
 
 function TMongoCollection.AggregateJSON(Operators: PUTF8Char;
   const Params: array of const; Mode: TMongoJSONMode): RawUTF8;
+begin
+  result := AggregateJSONFromJson(FormatUTF8(Operators,Params),Mode);
+end;
+
+function TMongoCollection.AggregateCallFromVariant(const pipelineArray: variant; var reply,res: variant): boolean;
+begin // see http://docs.mongodb.org/manual/reference/command/aggregate
+  if fDatabase.Client.ServerBuildInfoNumber<2020000 then
+    raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+  Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
+  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+  res := reply.result;
+  result := not VarIsNull(res);
+end;
+
+function TMongoCollection.AggregateDocFromVariant(const pipelineArray: variant): variant;
+var reply: variant;
+begin
+  if AggregateCallFromVariant(pipelineArray,reply,result) then
+    TDocVariant.GetSingleOrDefault(result,result,result) else
+    SetVariantNull(result);
+end;
+
+function TMongoCollection.AggregateJSONFromVariant(const pipelineArray: variant;
+  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 var reply,res: variant;
 begin
-  if AggregateCall(Operators,Params,reply,res) then
+  if AggregateCallFromVariant(pipelineArray,reply,res) then
+    result := VariantSaveMongoJSON(res,Mode) else
+    result := '';
+end;
+
+function TMongoCollection.AggregateDocFromJson(const PipelineJSON: RawUTF8): variant;
+var reply: variant;
+begin
+  if AggregateCallFromJSON(PipelineJSON,reply,result) then
+    TDocVariant.GetSingleOrDefault(result,result,result) else
+    SetVariantNull(result);
+end;
+
+function TMongoCollection.AggregateJSONFromJson(const PipelineJSON: RawUTF8;
+  Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
+var reply,res: variant;
+begin
+  if AggregateCallFromJson(PipelineJSON,reply,res) then
     result := VariantSaveMongoJSON(res,Mode) else
     result := '';
 end;
@@ -5149,34 +5593,33 @@ begin
   if Database.Client.Log<>nil then
     Database.Client.Log.Enter(self);
   if DocVariantData(Keys)^.Kind<>dvObject then
-    raise EMongoException.CreateFmt('%s.EnsureIndex(Keys?)',[FullCollectionName]);
+    raise EMongoException.CreateUTF8('%[%].EnsureIndex(Keys?)',[self,FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber>=2060000;
   doc := _ObjFast(['key', Keys]);
   if not useCommand then
     doc.ns := FullCollectionName;
-  if DocVariantType.IsOfType(Options) then begin
-    with DocVariantData(Options)^ do
-      for i := 0 to Count-1 do
-        if Names[i]='name' then
-          indexName := VariantToUTF8(Values[i]) else
-          TDocVariantData(doc).AddValue(Names[i],Values[i]);
-  end;
+  if DocVariantType.IsOfType(Options) then
+    with DocVariantDataSafe(Options)^ do
+    for i := 0 to Count-1 do
+      if Names[i]='name' then
+        indexName := VariantToUTF8(Values[i]) else
+        TDocVariantData(doc).AddValue(Names[i],Values[i]);
   if indexName='' then begin
-    with DocVariantData(Keys)^ do
+    with DocVariantDataSafe(Keys)^ do
     for i := 0 to Count-1 do begin
       indexName := indexName+Names[i]+'_';
       order := VariantToIntegerDef(Values[i],10);
       if order=-1 then
         indexName := indexName+'_' else
       if order<>1 then
-        raise EMongoException.CreateFmt('%s.EnsureIndex({%s: %s!!})',
-          [FullCollectionName,Names[i],Values[i]]);
+        raise EMongoException.CreateUTF8('%[%].EnsureIndex() on order {%:%}',
+          [self,FullCollectionName,Names[i],Values[i]]);
     end;
   end;
   if length(FullCollectionName)+length(indexName)>120 then
-    raise EMongoException.CreateFmt(
-      '%s.EnsureIndex() computed name > 128 chars: set as option',
-      [FullCollectionName]);
+    raise EMongoException.CreateUTF8(
+      '%[%].EnsureIndex() computed name > 128 chars: please set as option',
+      [self,FullCollectionName]);
   doc.name := indexName;
   if useCommand then
     fDatabase.RunCommand(BSONVariant(
@@ -5199,23 +5642,23 @@ begin
   EnsureIndex(k,opt);
 end;
 
-function TMongoCollection.Count: integer;
+function TMongoCollection.Count: Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name]),res);
-  result := DocVariantData(res)^.GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
-function TMongoCollection.FindCount(const Query: variant): integer;
+function TMongoCollection.FindCount(const Query: variant): Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name,'query',Query]),res);
-  result := DocVariantData(res)^.GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
   const Args,Params: array of const;
-  MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): integer;
+  MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64;
 var cmd: RawUTF8;
     res: variant;
 begin
@@ -5225,7 +5668,7 @@ begin
   if NumberToSkip>0 then
     cmd := FormatUTF8('%,skip:%',[cmd,NumberToSkip]);
   fDatabase.RunCommand(BSONVariant(cmd+'}'),res);
-  result := TDocVariantData(res).GetValueOrDefault('n',0);
+  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;
@@ -5261,6 +5704,13 @@ begin
     TMongoRequestQuery.Create(fFullCollectionName,
       BSONVariant(Criteria,[],Params),Projection,
       NumberToReturn,NumberToSkip,Flags),result);
+end;
+
+function TMongoCollection.FindDocs(Criteria: PUTF8Char; const Params: array of const;
+  const Projection: variant; NumberToReturn,NumberToSkip: Integer;
+  Flags: TMongoQueryFlags): TVariantDynArray;
+begin
+  FindDocs(Criteria,Params,result,Projection,NumberToReturn,NumberToSkip,Flags);
 end;
 
 function TMongoCollection.FindOne(const _id: TBSONObjectID): variant;
@@ -5351,7 +5801,7 @@ begin // return TRUE if _id has been computed (i.e. save=insert)
     CreatedObjectID^.FromVariant(oid)
 end;
 
-procedure TMongoCollection.Insert(Document: PUTF8Char;
+procedure TMongoCollection.Insert(const Document: RawUTF8;
   const Params: array of const; CreatedObjectID: PBSONObjectID);
 var doc: variant;
     oid: variant;
@@ -5373,7 +5823,7 @@ begin
     Update(BSONVariant(['_id',oid]),Document,[mufUpsert])
 end;
 
-procedure TMongoCollection.Save(Document: PUTF8Char;
+procedure TMongoCollection.Save(const Document: RawUTF8;
   const Params: array of const; CreatedObjectID: PBSONObjectID);
 var doc: variant;
 begin
@@ -5382,7 +5832,7 @@ begin
 end;
 
 procedure TMongoCollection.Update(Query: PUTF8Char;
-  const QueryParams: array of const; Update: PUTF8Char;
+  const QueryParams: array of const; const Update: RawUTF8;
   const UpdateParams: array of const; Flags: TMongoUpdateFlags);
 var quer,upd: variant;
 begin
@@ -5441,5 +5891,6 @@ begin
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
 end.
+
 
 

@@ -1,9 +1,10 @@
 object MainForm: TMainForm
   Left = 265
   Top = 235
-  Width = 617
-  Height = 543
+  BorderStyle = bsDialog
   Caption = ' mORMot Source Code Repository Synch'
+  ClientHeight = 505
+  ClientWidth = 601
   Color = clBtnFace
   Constraints.MinHeight = 422
   Constraints.MinWidth = 617
@@ -94,7 +95,7 @@ object MainForm: TMainForm
   object btnGitSynch: TButton
     Left = 304
     Top = 425
-    Width = 113
+    Width = 81
     Height = 41
     Anchors = [akLeft, akBottom]
     Caption = 'Git Synch'
@@ -104,17 +105,17 @@ object MainForm: TMainForm
   object btnRefreshStatus: TButton
     Left = 520
     Top = 5
-    Width = 67
-    Height = 17
+    Width = 75
+    Height = 18
     Anchors = [akTop, akRight]
     Caption = 'Refresh'
     TabOrder = 5
     OnClick = btnRefreshStatusClick
   end
   object btnGitShell: TButton
-    Left = 336
+    Left = 232
     Top = 473
-    Width = 75
+    Width = 49
     Height = 25
     Anchors = [akLeft, akBottom]
     Caption = 'Git Shell'
@@ -122,9 +123,9 @@ object MainForm: TMainForm
     OnClick = btnGitShellClick
   end
   object btnFossilShell: TButton
-    Left = 208
+    Left = 168
     Top = 473
-    Width = 75
+    Width = 65
     Height = 25
     Anchors = [akLeft, akBottom]
     Caption = 'Fossil Shell'
@@ -141,5 +142,76 @@ object MainForm: TMainForm
     TabOrder = 8
     WordWrap = True
     OnClick = btnTestsClick
+  end
+  object btnCopyLink: TButton
+    Left = 512
+    Top = 222
+    Width = 75
+    Height = 18
+    Caption = 'Copy Link'
+    TabOrder = 9
+    OnClick = btnCopyLinkClick
+  end
+  object btnGitAll: TButton
+    Left = 304
+    Top = 472
+    Width = 41
+    Height = 25
+    Hint = 
+      'Git Commit mORMot + SynPDF + SynMustache + LVCL + SynProject rep' +
+      'ositories'
+    Caption = 'Git ALL'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 10
+    OnClick = btnGitSynchClick
+  end
+  object btnSynProject: TButton
+    Left = 392
+    Top = 424
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit SynProject Repository'
+    Caption = 'SynProject'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 11
+    OnClick = btnGitSynchClick
+  end
+  object btnSynPdf: TButton
+    Left = 392
+    Top = 448
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit SynPdf Repository'
+    Caption = 'SynPdf'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 12
+    OnClick = btnGitSynchClick
+  end
+  object btnDMustache: TButton
+    Left = 392
+    Top = 472
+    Width = 65
+    Height = 25
+    Hint = 'Git Commit dmustache Repository'
+    Caption = 'dmustache'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 13
+    OnClick = btnGitSynchClick
+  end
+  object btnLVCL: TButton
+    Left = 344
+    Top = 472
+    Width = 41
+    Height = 25
+    Hint = 'Git Commit LVCL Repository'
+    Caption = 'LVCL'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 14
+    OnClick = btnGitSynchClick
   end
 end

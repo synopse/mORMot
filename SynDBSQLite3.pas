@@ -6,7 +6,7 @@ unit SynDBSQLite3;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -70,7 +70,11 @@ unit SynDBSQLite3;
   Version 1.18
   - statement cache refactoring: cache logic is now at SynDB unit level
   - fixed ticket [4c68975022] about broken SQL statement when logging active
+  - fixed logging SQL content of external SQLite3 statements 
   - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
+  - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
+    constructor, to be used e.g. with a TSQLRestServerDB.DB existing database
+  - added TSQLDBSQLite3ConnectionProperties.MainDB property
   - overloaded function RowsToSQLite3() is now moved as generic
     TSQLDBConnection.NewTableFromRows() method
   - TSQLDBSQLite3Statement.BindTextP('') will bind '' text instead of null value
@@ -90,7 +94,19 @@ unit SynDBSQLite3;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$else}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  SynKylix,
+  {$endif}
+  {$endif}
+  {$endif}
   SysUtils,
   {$ifndef DELPHI5OROLDER}
   Variants,
@@ -100,23 +116,26 @@ uses
   Contnrs,
   {$endif}
   SynCommons,
+  SynLog,
   SynSQLite3,
   SynDB;
 
 { -------------- SQlite3 database engine native connection  }
 
 type
-  /// will implement properties shared by the static SQLite3 engine
+  /// will implement properties shared by the SQLite3 engine
   TSQLDBSQLite3ConnectionProperties = class(TSQLDBConnectionProperties)
   private
     fUseMormotCollations: boolean;
+    fExistingDB: TSQLDatabase;
     procedure SetUseMormotCollations(const Value: boolean);
+    function GetMainDB: TSQLDataBase;
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
   public
-    /// initialize the properties
+    /// initialize access to a SQLite3 engine with some properties 
     // - only used parameter is aServerName, which should point to the SQLite3
     // database file to be opened (one will be created if none exists)
     // - you can specify an optional password, which will be used to access
@@ -126,12 +145,20 @@ type
     // be used on production - in which the default encryption level is
     // very low)
     // - other parameters (DataBaseName, UserID) are ignored
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); overload; override;
+    /// initialize access to an existing SQLite3 engine
+    // - this overloaded constructor allows to access via SynDB methods to an
+    // existing SQLite3 database, e.g. TSQLRestServerDB.DB (from mORMotSQLite3.pas)
+    constructor Create(aDB: TSQLDatabase); reintroduce; overload; 
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
     function NewConnection: TSQLDBConnection; override;
+    /// direct access to the main SQlite3 DB instance
+    // - can be used to tune directly the database properties
+    property MainSQLite3DB: TSQLDataBase read GetMainDB;
+  published
     /// TRUE if you want the SQL creation fields to use mORMot collation
     // - default value is TRUE for use within the mORMot framework, to use
     // dedicated UTF-8 collation and full Unicode support, and Iso8601 handling
@@ -212,7 +239,8 @@ type
 
     {{ bind a NULL value to a parameter
      - the leftmost SQL parameter has an index of 1 }
-    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn); override;
+    procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
+      BoundType: TSQLDBFieldType=ftNull); override;
     {{ bind an integer value to a parameter
      - the leftmost SQL parameter has an index of 1 }
     procedure Bind(Param: Integer; Value: Int64;
@@ -314,7 +342,7 @@ type
      - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
 /// direct export of a DB statement rows into a SQLite3 database
@@ -327,7 +355,7 @@ implementation
 
 
 function RowsToSQLite3(const Dest: TFileName; const TableName: RawUTF8;
-  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer; overload;
+  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer;
 var DB: TSQLDBSQLite3ConnectionProperties;
     Conn: TSQLDBSQLite3Connection;
 begin
@@ -359,12 +387,36 @@ begin
   fSQLCreateField := SQLITE3_FIELDS[Value];
 end;
 
+function TSQLDBSQLite3ConnectionProperties.GetMainDB: TSQLDataBase;
+begin
+  if self=nil then
+    result := nil else
+    if fExistingDB<>nil then
+      result := fExistingDB else
+      with MainConnection as TSQLDBSQLite3Connection do begin
+        if not IsConnected then
+          Connect; // we expect the SQLite3 instance to be created if needed
+        result := DB;
+      end;
+end;
+
 constructor TSQLDBSQLite3ConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   fDBMS := dSQLite;
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
   UseMormotCollations := true;
+end;
+
+type
+  TSQLDatabaseHook = class(TSQLDatabase); // to access fPassword
+
+constructor TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase);
+begin
+  if aDB=nil then
+    raise ESQLDBException.CreateUTF8('%.Create(DB=nil)',[self]);
+  fExistingDB := aDB;
+  Create('',StringToUTF8(aDB.FileName),'',TSQLDatabaseHook(aDB).fPassword);
 end;
 
 procedure TSQLDBSQLite3ConnectionProperties.GetForeignKeys;
@@ -391,7 +443,9 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter;
   Disconnect; // force fTrans=fError=fServer=fContext=nil
-  fDB := TSQLDatabase.Create(UTF8ToString(Properties.ServerName),Properties.PassWord);
+  fDB := (Properties as TSQLDBSQLite3ConnectionProperties).fExistingDB;
+  if fDB=nil then
+    fDB := TSQLDatabase.Create(UTF8ToString(Properties.ServerName),Properties.PassWord);
   //fDB.SetWalMode(true); // slower INSERT in WAL mode for huge number of rows
   inherited Connect; // notify any re-connection
 end;
@@ -399,7 +453,9 @@ end;
 procedure TSQLDBSQLite3Connection.Disconnect;
 begin
   inherited Disconnect; // flush any cached statement
-  FreeAndNil(fDB);
+  if (Properties as TSQLDBSQLite3ConnectionProperties).fExistingDB=fDB then
+    fDB := nil else
+    FreeAndNil(fDB);
 end;
 
 function TSQLDBSQLite3Connection.GetLockingMode: TSQLLockingMode;
@@ -508,7 +564,7 @@ begin
 end;
 
 procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
-  IO: TSQLDBParamInOutType);
+  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
 begin
   if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then
     fBindValues[Param-1] := 'NULL';
@@ -604,9 +660,9 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSQLDBSQLite3Statement.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TSQLDBSQLite3Statement.ColumnsToJSON(WR: TJSONWriter);
 begin
-  fStatement.FieldsToJSON(WR,DoNotFletchBlobs);
+  fStatement.FieldsToJSON(WR,fForceBlobAsNull);
 end;
 
 function TSQLDBSQLite3Statement.ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
@@ -634,8 +690,7 @@ end;
 constructor TSQLDBSQLite3Statement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TSQLDBSQLite3Connection) then
-    raise ESQLDBException.CreateFmt('%s.Create expects a TSQLDBSQLite3Connection',
-      [fStatementClassName]);
+    raise ESQLDBException.CreateUTF8('%.Create(%)',[self,aConnection]);
   inherited Create(aConnection);
   if sllSQL in SynDBLog.Family.Level then
     fBindShouldStoreValue := true;
@@ -651,13 +706,37 @@ begin
 end;
 
 procedure TSQLDBSQLite3Statement.ExecutePrepared;
+var SQLToBeLogged: RawUTF8;
+    Timer: TPrecisionTimer;
 begin
-  if fBindShouldStoreValue then
-    SynDBLog.Add.Log(sllSQL,SQLWithInlinedParams,self,512);
-  if not fExpectResults then
-    // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
+  if fBindShouldStoreValue then begin
+    SQLToBeLogged := SQLWithInlinedParams;
+    if length(SQLToBeLogged)>512 then begin
+      SetLength(SQLToBeLogged,512);
+      SQLToBeLogged[511] := '.';
+      SQLToBeLogged[512] := '.';
+    end;
+  end;
+  if fExpectResults then
+    SynDBLog.Add.Log(sllSQL,'% %',[TSQLDBSQLite3Connection(Connection).DB.
+      FileNameWithoutPath,SQLToBeLogged],self) else
+  try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
+    if fBindShouldStoreValue then
+      Timer.Start;
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
+    if fBindShouldStoreValue then
+      SynDBLog.Add.Log(sllSQL,'% % %',[Timer.Stop,TSQLDBSQLite3Connection(Connection).
+        DB.FileNameWithoutPath,SQLToBeLogged],self);
+  except
+    on E: Exception do begin
+      if fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllSQL,'Error % on % for "%" as "%"',[E,
+          TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
+          SQLWithInlinedParams],self);
+      raise;
+    end;
+  end;
 end;
 
 function TSQLDBSQLite3Statement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
@@ -675,7 +754,10 @@ end;
 
 procedure TSQLDBSQLite3Statement.Prepare(const aSQL: RawUTF8;
   ExpectResults: Boolean);
+var Timer: TPrecisionTimer;
 begin
+  if fBindShouldStoreValue then
+    Timer.Start;
   inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
   fStatement.Prepare(TSQLDBSQLite3Connection(Connection).fDB.DB,aSQL);
   fColumnCount := fStatement.FieldCount;
@@ -684,10 +766,14 @@ begin
     SetLength(fBindValues,fParamCount);
     SetLength(fBindIsString,(fParamCount shr 3)+1);
   end;
+  if fBindShouldStoreValue and (PosEx('?',SQL)>0) then
+    SynDBLog.Add.Log(sllDB,'Prepare % % %',[Timer.Stop,
+      TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL],self);
 end;
 
 procedure TSQLDBSQLite3Statement.Reset;
 begin
+  inherited Reset;
   fStatement.Reset;
   // fStatement.BindReset; // slow down the process, and is not mandatory
 end;
@@ -696,11 +782,21 @@ function TSQLDBSQLite3Statement.Step(SeekFirst: boolean): boolean;
 begin
   if SeekFirst then begin
     if fCurrentRow>0 then
-      raise ESQLDBException.CreateFmt('%s.Step(SeekFirst=true) not implemented',[fStatementClassName]);
+      raise ESQLDBException.CreateUTF8('%.Step(SeekFirst=true) not implemented',[self]);
     fCurrentRow := 0;
     //fStatement.Reset;
   end;
-  result := fStatement.Step=SQLITE_ROW;
+  try
+    result := fStatement.Step=SQLITE_ROW;
+  except
+    on E: Exception do begin
+      if fBindShouldStoreValue then
+        SynDBLog.Add.Log(sllError,'Error % on % for "%" as "%"',
+          [E,TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
+          SQLWithInlinedParams],self);
+      raise;
+    end;
+  end;
   if result then begin
     inc(fTotalRowsRetrieved);
     inc(fCurrentRow);
@@ -708,4 +804,6 @@ begin
     fCurrentRow := 0;
 end;
 
+initialization
+  TSQLDBSQLite3ConnectionProperties.RegisterClassNameForDefinition;
 end.

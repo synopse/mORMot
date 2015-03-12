@@ -6,7 +6,7 @@ unit SynDBODBC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBODBC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -81,14 +81,17 @@ unit SynDBODBC;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$endif}
   SysUtils,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
-{$endif}
+  {$endif}
   Classes,
   Contnrs,
   SynCommons,
+  SynLog,
   SynDB;
 
 
@@ -143,12 +146,12 @@ type
     /// get all table names
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will also check if the columns are indexed
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined (e.g. for dDB2)
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
@@ -219,69 +222,70 @@ type
     procedure BindColumns;
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
+    function MoreResults: boolean;
   public
-    {{ create a ODBC statement instance, from an existing ODBC connection
-     - the Execute method can be called once per TODBCStatement instance,
-       but you can use the Prepare once followed by several ExecutePrepared methods
-     - if the supplied connection is not of TOleDBConnection type, will raise
-       an exception }
+    /// create a ODBC statement instance, from an existing ODBC connection
+    // - the Execute method can be called once per TODBCStatement instance,
+    //   but you can use the Prepare once followed by several ExecutePrepared methods
+    // - if the supplied connection is not of TOleDBConnection type, will raise
+    //   an exception 
     constructor Create(aConnection: TSQLDBConnection); override;
-    {{ release all associated memory and ODBC handles }
+    // release all associated memory and ODBC handles
     destructor Destroy; override;
 
-    {{ Prepare an UTF-8 encoded SQL statement
-     - parameters marked as ? will be bound later, before ExecutePrepared call
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - raise an EODBCException or ESQLDBException on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    //   to retrieve the data rows
+    // - raise an EODBCException or ESQLDBException on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
-    {{ Execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - this overridden method will log the SQL statement if sllSQL has been
-       enabled in SynDBLog.Family.Level
-     - raise an EODBCException or ESQLDBException on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - this overridden method will log the SQL statement if sllSQL has been
+    //   enabled in SynDBLog.Family.Level
+    // - raise an EODBCException or ESQLDBException on any error 
     procedure ExecutePrepared; override;
-    {/ Reset the previous prepared statement
-     - this overridden implementation will reset all bindings and the cursor state 
-     - raise an EODBCException on any error }
+    /// Reset the previous prepared statement
+    // - this overridden implementation will reset all bindings and the cursor state
+    // - raise an EODBCException on any error
     procedure Reset; override;
 
-    {/ After a statement has been prepared via Prepare() + ExecutePrepared() or
-       Execute(), this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - raise an EODBCException or ESQLDBException exception on any error }
+    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    //   Execute(), this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    //  is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    //   if SeekFirst is TRUE, will put the cursor on the first row of results,
+    //   otherwise, it will fetch one row of data, to be called within a loop
+    // - raise an EODBCException or ESQLDBException exception on any error 
     function Step(SeekFirst: boolean=false): boolean; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0
-     - should retrieve directly the 64 bit Currency content, to avoid
-     any rounding/conversion error from floating-point types }
+    /// return a Column currency value of the current Row, first Col is 0
+    // - should retrieve directly the 64 bit Currency content, to avoid
+    // any rounding/conversion error from floating-point types 
     function ColumnCurrency(Col: integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0 
     function ColumnUTF8(Col: integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0
-    - ColumnBlob() will return the binary content of the field is was not ftBlob,
-      e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
-      or a direct mapping of the RawUnicode  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - ColumnBlob() will return the binary content of the field is was not ftBlob,
+    //  e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
+    //  or a direct mapping of the RawUnicode  
     function ColumnBlob(Col: integer): RawByteString; override;
-    {{ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - fast overridden implementation with no temporary variable
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - fast overridden implementation with no temporary variable
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    //   format and contains true BLOB data 
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -865,6 +869,8 @@ type
       Sqlstate: PWideChar; var NativeError: SqlInteger;
       MessageText: PWideChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+    MoreResults: function(StatementHandle: SqlHStmt): SqlReturn;
+      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
     PrepareA: function(StatementHandle: SqlHStmt;
       StatementText: PAnsiChar; TextLength: SqlInteger): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -939,12 +945,14 @@ type
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
     constructor Create;
     /// raise an exception on error
-    procedure Check(Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
+    procedure Check(Stmt: TSQLDBStatement; Status: SqlReturn;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean=false;
+      LogLevelNoRaise: TSynLogInfo=sllNone);
       {$ifdef HASINLINE} inline; {$endif}
     /// generic process of error handle
-    procedure HandleError(Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+    procedure HandleError(Stmt: TSQLDBStatement; Status: SqlReturn;
+      HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: Boolean;
+      LogLevelNoRaise: TSynLogInfo);
     /// wrapper around SQLGetDiagField() API call
     function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
     /// wrapper around GetInfo() API call
@@ -953,7 +961,7 @@ type
   end;
 
 const
-  ODBC_ENTRIES: array[0..62] of PChar =
+  ODBC_ENTRIES: array[0..63] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
      'SQLColAttribute','SQLColAttributeW','SQLColumns','SQLColumnsW',
@@ -966,7 +974,7 @@ const
      'SQLGetCursorName','SQLGetCursorNameW','SQLGetData',
      'SQLGetDescField','SQLGetDescFieldW','SQLGetDescRec','SQLGetDescRecW',
      'SQLGetDiagField','SQLGetDiagFieldW','SQLGetDiagRec','SQLGetDiagRecW',
-     'SQLPrepare','SQLPrepareW','SQLRowCount','SQLNumResultCols',
+     'SQLMoreResults','SQLPrepare','SQLPrepareW','SQLRowCount','SQLNumResultCols',
      'SQLGetInfo','SQLGetInfoW','SQLSetStmtAttr','SQLSetStmtAttrW','SQLSetEnvAttr',
      'SQLSetConnectAttr','SQLSetConnectAttrW','SQLTables','SQLTablesW',
      'SQLForeignKeys','SQLForeignKeysW','SQLDriverConnect','SQLDriverConnectW');
@@ -1003,15 +1011,15 @@ begin
   Disconnect; // force fDbc=nil
   if fEnv=nil then
     if (ODBC=nil) or (ODBC.AllocHandle(SQL_HANDLE_ENV,SQL_NULL_HANDLE,fEnv)=SQL_ERROR) then
-      raise EODBCException.CreateFmt('%s: Unable to allocate an environment handle',[ClassName]);
+      raise EODBCException.CreateUTF8('%: Unable to allocate an environment handle',[self]);
   with ODBC do
   try
     // connect
-    Check(SetEnvAttr(fEnv,SQL_ATTR_ODBC_VERSION,SQL_OV_ODBC3,0),SQL_HANDLE_ENV,fEnv);
-    Check(AllocHandle(SQL_HANDLE_DBC,fEnv,fDbc),SQL_HANDLE_ENV,fEnv);
+    Check(nil,SetEnvAttr(fEnv,SQL_ATTR_ODBC_VERSION,SQL_OV_ODBC3,0),SQL_HANDLE_ENV,fEnv);
+    Check(nil,AllocHandle(SQL_HANDLE_DBC,fEnv,fDbc),SQL_HANDLE_ENV,fEnv);
     with fODBCProperties do
       if fServerName<>'' then
-        Check(ConnectA(fDbc,pointer(fServerName),length(fServerName),
+        Check(nil,ConnectA(fDbc,pointer(fServerName),length(fServerName),
           pointer(fUserID),length(fUserID),pointer(fPassWord),length(fPassWord)),
           SQL_HANDLE_DBC,fDbc) else
       if fDatabaseName='' then
@@ -1020,7 +1028,7 @@ begin
         SetString(fSQLDriverFullString,nil,1024);
         fSQLDriverFullString[1] := #0;
         Len := 0;
-        Check(SQLDriverConnectA(fDbc,
+        Check(nil,SQLDriverConnectA(fDbc,
           {$ifdef MSWINDOWS}GetDesktopWindow{$else}0{$endif},
           Pointer(fDatabaseName),length(fDatabaseName),pointer(fSQLDriverFullString),
           length(fSQLDriverFullString),Len,
@@ -1036,13 +1044,11 @@ begin
     if fDBMS=dDefault then
       fDBMS := DBMS_TYPES[IdemPCharArray(pointer(fDBMSName),DBMS_NAMES)];
     if fDBMS=dDefault then
-      raise EODBCException.CreateFmt('Unknown DBMSName=%s DriverName=%s DBMSVersion=%s',
-        [DBMSName,DriverName,DBMSVersion]);
-    {$ifndef DELPHI5OROLDER}
+      raise EODBCException.CreateUTF8(
+        '%.Connect: unrecognized provider DBMSName=% DriverName=% DBMSVersion=%',
+        [self,DBMSName,DriverName,DBMSVersion]);
     Log.Log(sllDebug,'Connected to % using % % recognized as %',
-      [DBMSName,DriverName,DBMSVersion,
-       GetEnumName(TypeInfo(TSQLDBDefinition),ord(fDBMS))^]);
-    {$endif}
+      [DBMSName,DriverName,DBMSVersion,fProperties.DBMSEngineName]);
     // notify any re-connection
     inherited Connect;
   except
@@ -1059,7 +1065,7 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self);
   if not aProperties.InheritsFrom(TODBCConnectionProperties) then
-    raise EODBCException.CreateFmt('Invalid %s.Create',[ClassName]);
+    raise EODBCException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fODBCProperties := TODBCConnectionProperties(aProperties);
   inherited Create(aProperties);
 end;
@@ -1100,8 +1106,8 @@ procedure TODBCConnection.Commit;
 begin
   inherited Commit;
   with ODBC do begin
-    Check(EndTran(SQL_HANDLE_DBC,fDBc,SQL_COMMIT),SQL_HANDLE_DBC,fDBc);
-    Check(SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
+    Check(nil,EndTran(SQL_HANDLE_DBC,fDBc,SQL_COMMIT),SQL_HANDLE_DBC,fDBc);
+    Check(nil,SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
       SQL_HANDLE_DBC,fDBc); // back to default AUTO COMMIT ON mode
   end;
 end;
@@ -1110,8 +1116,8 @@ procedure TODBCConnection.Rollback;
 begin
   inherited RollBack;
   with ODBC do begin
-    Check(EndTran(SQL_HANDLE_DBC,fDBc,SQL_ROLLBACK),SQL_HANDLE_DBC,fDBc);
-    Check(SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
+    Check(nil,EndTran(SQL_HANDLE_DBC,fDBc,SQL_ROLLBACK),SQL_HANDLE_DBC,fDBc);
+    Check(nil,SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
       SQL_HANDLE_DBC,fDBc); // back to default AUTO COMMIT ON mode
   end;
 end;
@@ -1119,9 +1125,9 @@ end;
 procedure TODBCConnection.StartTransaction;
 begin
   if TransactionCount>0 then
-    raise EODBCException.Create('TODBCConnection do not provide nested transactions');
+    raise EODBCException.CreateUTF8('% do not support nested transactions',[self]);
   inherited StartTransaction;
-  ODBC.Check(ODBC.SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_OFF,0),
+  ODBC.Check(nil,ODBC.SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_OFF,0),
     SQL_HANDLE_DBC,fDBc);
 end;
 
@@ -1132,13 +1138,13 @@ procedure TODBCStatement.AllocStatement;
 var hDbc: SqlHDbc;
 begin
   if fStatement<>nil then
-    raise EODBCException.Create('AllocStatement called twice');
+    raise EODBCException.CreateUTF8('%.AllocStatement called twice',[self]);
   fCurrentRow := 0;
   if not fConnection.Connected then
     fConnection.Connect;
   hDbc := (fConnection as TODBCConnection).fDbc;
   with ODBC do
-    Check(AllocHandle(SQL_HANDLE_STMT,hDBC,fStatement),SQL_HANDLE_DBC,hDBC);
+    Check(self,AllocHandle(SQL_HANDLE_STMT,hDBC,fStatement),SQL_HANDLE_DBC,hDBC);
 end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer): TSQLDBFieldType;
@@ -1183,13 +1189,16 @@ var nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
     c, siz: integer;
     Name: array[byte] of WideChar;
 begin
-  if (fColumnCount>0) or (fColData<>nil) then
-    raise EODBCException.Create('TODBCStatement.BindColumns twice');
+  if (fColumnCount>0) or (fColData<>nil) then begin
+    Finalize(fColData);
+    fColumn.Clear;
+    fColumn.ReHash;
+  end;
   with ODBC do begin
-    Check(NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
+    Check(self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
     for c := 1 to nCols do begin
-      Check(DescribeColW(fStatement,c,Name,256,NameLength,DataType,ColumnSize,
+      Check(self,DescribeColW(fStatement,c,Name,256,NameLength,DataType,ColumnSize,
         DecimalDigits,Nullable),SQL_HANDLE_STMT,fStatement);
       with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(
          RawUnicodeToUtf8(Name,NameLength)))^ do begin
@@ -1221,7 +1230,7 @@ var ExpectedDataType: ShortInt;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
   if not Assigned(fStatement) or (fColData=nil) then
-    raise EODBCException.Create('TODBCStatement.Column*() with no prior Execute');
+    raise EODBCException.CreateUTF8('%.Column*() with no prior Execute',[self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount-1 do
   with fColumns[c] do
@@ -1233,7 +1242,7 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
       if (Status=SQL_SUCCESS_WITH_INFO) and
          (ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE) then
         Status := SQL_SUCCESS else // allow rounding problem
-        ODBC.HandleError(Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+        ODBC.HandleError(self,Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
     ColumnDataSize := Indicator;
     if Indicator>=0 then
       if Status=SQL_SUCCESS then
@@ -1245,9 +1254,11 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
     SQL_NO_TOTAL:
       if ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
         ColumnDataState := colDataFilled else
-        raise EODBCException.CreateFmt('"%s" column: no size',[ColumnName]);
+        raise EODBCException.CreateUTF8('%.GetCol: "%" column has no size',
+          [self,ColumnName]);
     else
-      raise EODBCException.CreateFmt('"%s" column: invalid %d size',[ColumnName,Indicator]);
+      raise EODBCException.CreateUTF8('%.GetCol: "%" column had Indicator=%',
+        [self,ColumnName,Indicator]);
     end;
   end;
   // retrieve information for the specified column
@@ -1264,6 +1275,22 @@ begin
     SetString(fColData[Col],nil,MINIMUM_CHUNK_SIZE);
   fColumns[Col].ColumnDataState := colNone; // force ODBC.GetData() call
   result := GetCol(Col,ftNull); // ftNull to never return colWrongType here
+end;
+
+function TODBCStatement.MoreResults: Boolean;
+var R: SqlReturn;
+begin
+  R := ODBC.MoreResults(fStatement);
+  case R of
+    SQL_NO_DATA:
+      result := false; // no more results
+    SQL_SUCCESS, SQL_SUCCESS_WITH_INFO:
+      result := true; // got next
+    else begin
+      ODBC.Check(self, R, SQL_HANDLE_STMT, fStatement); // error
+      result := false; // makes compiler happy
+    end;
+  end;
 end;
 
 function TODBCStatement.ColumnBlob(Col: integer): RawByteString;
@@ -1352,14 +1379,14 @@ begin // will check for NULL but never returns colWrongType
   result := GetCol(Col,ftNull)=colNull;
 end;
 
-procedure TODBCStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TODBCStatement.ColumnsToJSON(WR: TJSONWriter);
 var res: TSQLDBStatementGetCol;
     col: integer;
     tmp: array[0..31] of AnsiChar;
     blob: RawByteString;
 begin
   if not Assigned(fStatement) or (CurrentRow<=0) then
-    raise EODBCException.Create('TODBCStatement.ColumnsToJSON() with no prior Step');
+    raise EODBCException.CreateUTF8('%.ColumnsToJSON() with no prior Step',[self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do // fast direct conversion from OleDB buffer
@@ -1391,7 +1418,7 @@ begin
         WR.Add('"');
       end;
       ftBlob:
-        if DoNotFletchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(Col);
           WR.WrBase64(pointer(blob),length(blob),true);
@@ -1408,7 +1435,7 @@ end;
 constructor TODBCStatement.Create(aConnection: TSQLDBConnection);
 begin
   if not aConnection.InheritsFrom(TODBCConnection) then
-    raise EODBCException.CreateFmt('%s.Create expects a TODBCConnection',[ClassName]);
+    raise EODBCException.CreateUTF8('%.Create(%)',[self,aConnection]);
   inherited Create(aConnection);
 end;
 
@@ -1416,7 +1443,7 @@ destructor TODBCStatement.Destroy;
 begin
   try
     if fStatement<>nil then
-      ODBC.Check(ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
+      ODBC.Check(self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
         (fConnection as TODBCConnection).fDbc);
   finally
     inherited Destroy;
@@ -1440,7 +1467,8 @@ begin
    SQL_C_BINARY:         result := SQL_VARBINARY;
    SQL_C_SBIGINT:        result := SQL_BIGINT;
    SQL_C_DOUBLE:         result := SQL_DOUBLE;
-   else raise EODBCException.CreateFmt('Unexpected ODBC C type %d',[CDataType]);
+   else raise EODBCException.CreateUTF8(
+     '%.ExecutePrepared: Unexpected ODBC C type %',[self,CDataType]);
   end;
 end;
 var p: integer;
@@ -1454,14 +1482,16 @@ var p: integer;
 label retry;
 begin
   if fStatement=nil then
-    raise EODBCException.Create('ExecutePrepared called without previous Prepare');
+    raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',[self]);
   DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   if fSQL<>'' then
     with SynDBLog.Enter(Self,nil,true).Instance do
       if sllSQL in Family.Level then
-        LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+        Log(sllSQL,SQLWithInlinedParams,self,2048);
   try
     // 1. bind parameters
+    if fParamsArrayCount>0 then
+      raise EODBCException.CreateUTF8('%.BindArray() not supported',[self]);
     if fParamCount>0 then begin
       SetLength(StrLen_or_Ind,fParamCount);
       for p := 0 to fParamCount-1 do
@@ -1503,7 +1533,8 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
         ftBlob:
           StrLen_or_Ind[p] := length(VData);
         else
-          raise EODBCException.CreateFmt('Invalid bound parameter #%d',[p+1]);
+          raise EODBCException.CreateUTF8(
+            '%.ExecutePrepared: invalid bound parameter #%',[self,p+1]);
         end;
         if ParameterValue=nil then begin
           if pointer(VData)=nil then
@@ -1525,13 +1556,15 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
           VData := RawUnicodeToUtf8(pointer(VData),StrLenW(pointer(VData)));
           goto retry; // circumvent restriction of non-Unicode ODBC drivers
         end;
-        ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+        ODBC.Check(self,status,SQL_HANDLE_STMT,fStatement);
       end;
     end;
     // 2. execute prepared statement
     status := ODBC.Execute(fStatement);
     if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
-      ODBC.HandleError(status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+      ODBC.HandleError(self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+    if fExpectResults then
+      BindColumns;
   finally
     // 3. release and/or retrieve OUT bound parameters
     for p := 0 to fParamCount-1 do
@@ -1556,9 +1589,9 @@ begin
   if fStatement<>nil then
   with ODBC do begin
     if fColumnCount>0 then
-      Check(CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
+      Check(self,CloseCursor(fStatement),SQL_HANDLE_STMT,fStatement);
     if fParamCount>0 then
-      Check(FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
+      Check(self,FreeStmt(fStatement,SQL_RESET_PARAMS),SQL_HANDLE_STMT,fStatement);
   end;
   inherited Reset;
 end;
@@ -1567,7 +1600,7 @@ function TODBCStatement.UpdateCount: integer;
 var RowCount: SqlLen;
 begin
   if (fStatement<>nil) and not fExpectResults then
-    ODBC.Check(ODBC.RowCount(fStatement,RowCount),SQL_HANDLE_STMT,fStatement) else
+    ODBC.Check(self,ODBC.RowCount(fStatement,RowCount),SQL_HANDLE_STMT,fStatement) else
     RowCount := 0;
   result := RowCount;
 end;
@@ -1577,17 +1610,15 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self,nil,true);
   if (fStatement<>nil) or (fColumnCount>0) then
-    raise EODBCException.CreateFmt('%s.Prepare should be called only once',[ClassName]);
+    raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL
   inherited Prepare(aSQL,ExpectResults); // set fSQL + Connect if necessary
   fSQLW := Utf8DecodeToRawUnicode(fSQL);
   // 2. prepare statement and bind result columns (if any)
   AllocStatement;
   try
-    ODBC.Check(ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
+    ODBC.Check(self,ODBC.PrepareW(fStatement,pointer(fSQLW),length(fSQLW) shr 1),
       SQL_HANDLE_STMT,fStatement);
-    if fExpectResults then
-      BindColumns;
   except
     on E: Exception do begin
       Log.Log(sllError,E);
@@ -1614,13 +1645,13 @@ begin
     status := FetchScroll(fStatement,CMD[SeekFirst],0);
     case status of
     SQL_NO_DATA:
-      exit; // no more data
+      exit;
     SQL_SUCCESS, SQL_SUCCESS_WITH_INFO: begin // ignore WITH_INFO messages
       fCurrentRow := sav+1;
       inc(fTotalRowsRetrieved);
       result := true; // mark data available for Column*() methods
     end;
-    else HandleError(status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+    else HandleError(self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
     end;
   end;
 end;
@@ -1628,11 +1659,11 @@ end;
 
 { TODBCLib }
 
-procedure TODBCLib.Check(Status: SqlReturn; HandleType: SqlSmallint;
+procedure TODBCLib.Check(Stmt: TSQLDBStatement; Status: SqlReturn; HandleType: SqlSmallint;
   Handle: SqlHandle; InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
 begin
   if Status<>SQL_SUCCESS then
-    HandleError(Status,HandleType,Handle,InfoRaiseException,LogLevelNoRaise);
+    HandleError(Stmt,Status,HandleType,Handle,InfoRaiseException,LogLevelNoRaise);
 end;
 
 constructor TODBCLib.Create;
@@ -1670,12 +1701,12 @@ var Len: SqlSmallint;
     Info: array[byte] of WideChar;
 begin
   Len := 0;
-  Check(GetInfoW(ConnectionHandle,InfoType,@Info,sizeof(Info)shr 1,@Len),
+  Check(nil,GetInfoW(ConnectionHandle,InfoType,@Info,sizeof(Info)shr 1,@Len),
     SQL_HANDLE_DBC,ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info,Len shr 1);
 end;
   
-procedure TODBCLib.HandleError(Status: SqlReturn; HandleType: SqlSmallint;
+procedure TODBCLib.HandleError(Stmt: TSQLDBStatement; Status: SqlReturn; HandleType: SqlSmallint;
   Handle: SqlHandle; InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
 const FMT: PUTF8Char = '%[%] % (%)'#13#10;
 var Sqlstate: array[0..6] of WideChar;
@@ -1703,7 +1734,9 @@ begin
   end;
   if LogLevelNoRaise<>sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise,msg) else
-    raise EODBCException.Create(UTF8ToString(msg));
+    if Stmt=nil then
+      raise EODBCException.CreateUTF8('% error: %',[self,msg]) else
+      raise EODBCException.CreateUTF8('% - % error: %',[Stmt,self,msg]);
 end;
 
 
@@ -1723,7 +1756,7 @@ begin
 end;
 
 procedure TODBCConnectionProperties.GetFields(const aTableName: RawUTF8;
-  var Fields: TSQLDBColumnDefineDynArray);
+  out Fields: TSQLDBColumnDefineDynArray);
 var Schema, Table: RawUTF8;
     F: TSQLDBColumnDefine;
     i,n,DataType: integer;
@@ -1749,7 +1782,7 @@ begin
         pointer(Table),SQL_NTS,nil,0);
       if status<>SQL_SUCCESS then // e.g. driver does not support schema
         status := ODBC.ColumnsA(fStatement,nil,0,nil,0,pointer(Table),SQL_NTS,nil,0);
-      ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+      ODBC.Check(nil,status,SQL_HANDLE_STMT,fStatement);
       BindColumns;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
@@ -1780,7 +1813,7 @@ begin
         if status<>SQL_SUCCESS then // e.g. driver does not support schema
           status := ODBC.StatisticsA(fStatement,nil,0,nil,0,pointer(Table),
             SQL_NTS,SQL_INDEX_ALL,SQL_QUICK);
-        ODBC.Check(status,SQL_HANDLE_STMT,fStatement);
+        ODBC.Check(nil,status,SQL_HANDLE_STMT,fStatement);
         BindColumns;
         while Step do begin
           F.ColumnName := Trim(ColumnUTF8(8));
@@ -1797,7 +1830,7 @@ begin
   end;
 end;
 
-procedure TODBCConnectionProperties.GetTableNames(var Tables: TRawUTF8DynArray);
+procedure TODBCConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var n: integer;
     schema, tablename: RawUTF8;
 begin
@@ -1808,7 +1841,7 @@ begin
     with TODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
-      ODBC.Check(ODBC.TablesA(fStatement,nil,0,nil,0,nil,0,'TABLE',SQL_NTS),SQL_HANDLE_STMT,fStatement);
+      ODBC.Check(nil,ODBC.TablesA(fStatement,nil,0,nil,0,nil,0,'TABLE',SQL_NTS),SQL_HANDLE_STMT,fStatement);
       BindColumns;
       n := 0;
       while Step do begin
@@ -1834,7 +1867,7 @@ begin
     with TODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
-      ODBC.Check(ODBC.ForeignKeysA(fStatement,nil,0,nil,0,nil,0,nil,0,nil,0,'%',SQL_NTS),
+      ODBC.Check(nil,ODBC.ForeignKeysA(fStatement,nil,0,nil,0,nil,0,nil,0,nil,0,'%',SQL_NTS),
         SQL_HANDLE_STMT,fStatement);
       BindColumns;
       while Step do 
@@ -1910,4 +1943,6 @@ begin
   Dest^ := '"';
 end;
 
+initialization
+  TODBCConnectionProperties.RegisterClassNameForDefinition;
 end.

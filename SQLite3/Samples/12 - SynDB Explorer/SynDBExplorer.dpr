@@ -49,12 +49,14 @@ uses
   SynDBExplorerClasses in 'SynDBExplorerClasses.pas',
   SynDBExplorerFrame in 'SynDBExplorerFrame.pas' {DBExplorerFrame: TFrame},
   SynDBExplorerQueryBuilder in 'SynDBExplorerQueryBuilder.pas' {DBQueryBuilderForm},
-  SynDBExplorerExportTables in 'SynDBExplorerExportTables.pas' {DBExportTablesForm};
+  SynDBExplorerExportTables in 'SynDBExplorerExportTables.pas' {DBExportTablesForm},
+  SynDBExplorerServer in 'SynDBExplorerServer.pas' {HTTPServerForm};
 
 {$R *.res}
 
 begin
   Application.Initialize;
   Application.CreateForm(TDbExplorerMain, DbExplorerMain);
+  Application.CreateForm(THTTPServerForm, HTTPServerForm);
   Application.Run;
 end.

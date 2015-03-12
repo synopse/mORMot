@@ -6,7 +6,7 @@ unit SynDBFireDAC;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2015 Arnaud Bouchez
   Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBFireDAC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -65,6 +65,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   SynDBDataset,
   {$ifdef ISDELPHIXE5}
@@ -126,13 +127,13 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use FireDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
 
     /// allow to set the options specific to a FireDAC driver
     // - by default, ServerName, DatabaseName, UserID and Password are set by
@@ -248,7 +249,8 @@ begin
      (fDBMS<>dNexusDB) then begin
     for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
       namevalue := ' '+namevalue+FIREDAC_PROVIDER[p];
-    raise ESQLDBFireDAC.CreateFmt('Unknown provider - available:%s',[namevalue]);
+    raise ESQLDBFireDAC.CreateUTF8('%.Create: unknown provider - available:%',
+      [self,namevalue]);
   end;
   fFireDACOptions.Text := UTF8ToString(FormatUTF8(
     'DriverID=%'#13#10'User_Name=%'#13#10'Password=%'#13#10'Database=%',
@@ -288,7 +290,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetTableNames(
-  var Tables: TRawUTF8DynArray);
+  out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -304,7 +306,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetFields(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 var meta: TADMetaInfoQuery;
     n: integer;
     F: TSQLDBColumnDefine;
@@ -338,7 +340,7 @@ begin
 end;
 
 procedure TSQLDBFireDACConnectionProperties.GetIndexes(
-  const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray);
+  const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
 var kind: boolean;
     meta, indexs: TADMetaInfoQuery;
     TableName: string;
@@ -351,7 +353,6 @@ const
   CHILD:  array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKeyFields,mkIndexFields);
 begin
   TableName := UTF8ToString(UpperCase(aTableName));
-  SetLength(Indexes,0);
   FA.Init(TypeInfo(TSQLDBIndexDefineDynArray),Indexes,@n);
   fillchar(F,sizeof(F),0);
   meta := TADMetaInfoQuery.Create(nil);
@@ -423,8 +424,8 @@ procedure TSQLDBFireDACConnection.Connect;
 var Log: ISynLog;
 begin
   if fDatabase=nil then
-    raise ESQLDBFireDAC.CreateFmt('TSQLDBFireDACConnection.Connect(%s): Database=nil',
-      [fProperties.ServerName]);
+    raise ESQLDBFireDAC.CreateUTF8('%.Connect(%): Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to DriverID=% Database=%',
     [FIREDAC_PROVIDER[fProperties.DBMS],fProperties.DatabaseName])),true);
   try
@@ -506,9 +507,9 @@ procedure TSQLDBFireDACStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBFireDAC.CreateFmt(
-      '%s.Prepare() expected %d parameters in request, found %d - [%s]',
-      [fStatementClassName,fPreparedParamsCount,fQueryParams.Count,aSQL]);
+    raise ESQLDBFireDAC.CreateUTF8(
+      '%.Prepare() expected % parameters in request, found % - [%]',
+      [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 
 procedure TSQLDBFireDACStatement.DatasetExecSQL;
@@ -600,9 +601,9 @@ begin
               {$ifdef UNICODE} // for FireDAC: TADWideString=UnicodeString
               P.AsWideStrings[i] := UTF8ToString(tmp);
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-                P.AsStrings[i] := UTF8ToString(tmp) else
-                P.AsWideStrings[i] := UTF8ToWideString(tmp);
+              if fForceUseWideString then
+                P.AsWideStrings[i] := UTF8ToWideString(tmp) else
+                P.AsStrings[i] := UTF8ToString(tmp);
               {$endif}
             end
           end else
@@ -615,17 +616,17 @@ begin
               {$ifdef UNICODE}
               P.AsWideString := UTF8ToString(tmp); // TADWideString=string
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-                P.AsString := UTF8ToString(tmp) else
-                P.AsWideString := UTF8ToWideString(tmp);
+              if fForceUseWideString then
+                P.AsWideString := UTF8ToWideString(tmp) else
+                P.AsString := UTF8ToString(tmp);
               {$endif}
           end else
-            if (VData=#39#39) and fConnection.Properties.StoreVoidStringAsNull then
+            if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else 
               {$ifdef UNICODE}
               P.AsWideString := UTF8ToString(VData); // TADWideString=string
               {$else}
-              if (not fForceUseWideString) or IsAnsiCompatible(VData) then
+              if (not fForceUseWideString) {or IsAnsiCompatible(VData)} then
                 P.AsString := UTF8ToString(VData) else
                 P.AsWideString := UTF8ToWideString(VData);
               {$endif}
@@ -641,8 +642,10 @@ begin
               P.AsBlob := VArray[aArrayIndex] else
             P.AsBlob := VData;
         else
-          raise ESQLDBFireDAC.CreateFmt('Invalid type on bound parameter #%d',[aParamIndex+1]);
-        end;
+          raise ESQLDBFireDAC.CreateUTF8(
+            '%.DataSetBindSQLParam: invalid type % on bound parameter #%',
+            [Self,ord(VType),aParamIndex+1]);
+        end;   
   end;
 end;
 
@@ -661,4 +664,6 @@ begin
   end;
 end;
 
+initialization
+  TSQLDBFireDACConnectionProperties.RegisterClassNameForDefinition;
 end.

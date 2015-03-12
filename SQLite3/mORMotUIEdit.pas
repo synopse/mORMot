@@ -6,7 +6,7 @@ unit mORMotUIEdit;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUIEdit;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -45,8 +45,8 @@ unit mORMotUIEdit;
 
 
   Version 1.9
-  - Initial Release, handling most common kind of SQL field (sftRecord,
-    sftTimeLog, sftCurrency, sftDateTime, sftFloat and sftBlob) are not handled
+  - Initial Release, handling most common kind of SQL field (but sftRecord,
+    sftTimeLog, sftCurrency, sftDateTime, sftFloat and sftBlob* ) are not handled
     yet, because is not needed; perhaps sftTimeLog, sftCurrency, sftDateTime and
     sftFloat should be handled in the future (using TDateTimePicker or a
     to be written TSynExtendedLabeledEdit components)
@@ -219,7 +219,8 @@ implementation
 procedure TRecordEditForm.SetRecord(aClient: TSQLRestClient;
   aRecord: TSQLRecord; CSVFieldNames: PUTF8Char=nil; Ribbon: TSQLRibbon=nil;
   FieldHints: string=''; FieldNamesWidth: integer=0; aCaption: string='');
-var i,j, aID, Y, aHeight, aWidth, CW: integer;
+var i,j, Y, aHeight, aWidth, CW: integer;
+    aID: TID;
     RibbonParams: PSQLRibbonTabParameters;
     ExpandFieldHints: boolean;
     E: PEnumType;
@@ -300,7 +301,8 @@ begin
       aHint := GetNextItemString(PHint,'|'); // ALL fields are listed: do it now
       P := Fields.List[i];
       if ((P.SQLFieldType in [ // must match "case SQLFieldType of" below
-          sftRecord, sftBlob, sftBlobDynArray, sftMany]) and
+          sftRecord, sftTID, sftBlob, sftBlobDynArray, sftBlobCustom, sftUTF8Custom,
+          sftModTime, sftCreateTime, sftMany]) and
            not Assigned(OnComponentCreate)) or
          ((FieldNameToHideCSV<>nil) and
           (FindCSVIndex(FieldNameToHideCSV,P.Name,',',false)>=0)) or
@@ -337,19 +339,19 @@ begin
             CD.Kind := dtkDate;
             CD.DateTime := Iso8601ToDateTime(aValue);
           end;
-          sftTimeLog, sftModTime: begin
+          sftTimeLog: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             TimeLog.Value := GetInt64(pointer(aValue));
             CD.DateTime := TimeLog.ToDateTime;
           end;
-          sftCreateTime:
-            ; // is low-level read/only field by design
-          sftBlob, sftMany:
+          sftModTime, sftCreateTime:
+            ; // is low-level read/only field by design, set by the ORM
+          sftBlob, sftMany, sftTID:
             ; // not implemented yet
           sftRecord:
             ; // should be handled as a TRecordReference to another record
-          sftBlobDynArray:
+          sftBlobDynArray, sftBlobCustom, sftUTF8Custom:
             ; // array of TSQLRecord should be handled as a list of IDs
               // array of RawUTF8/Integer/Int64 as a list of text or integers
               // array of RegisterCustomJSONSerializer as a list of JSON fields
@@ -394,7 +396,7 @@ begin
             CB := TComboBox.Create(Scroll);
             CB.Parent := Scroll; // need parent now for CB.Items access
             CB.Style := csDropDownList;
-            aID := GetInteger(pointer(aValue));
+            aID := GetInt64(pointer(aValue));
             with IDClass.RecordProps do
             if MainField[true]>=0 then begin
               aClient.OneFieldValues(IDClass,Fields.List[MainField[true]].Name,
@@ -403,8 +405,8 @@ begin
             end;
           end;
           sftSet: begin
-            // enumeration set is handled by a TGroupBox component contaning one
-            // TCheckBox for each enumeration value
+            // enumeration set is handled by a TGroupBox component contianing
+            // one TCheckBox for each enumeration value
             Group := TGroupBox.Create(Scroll); // add left-sided label
             Group.Parent := Scroll;
             Group.Font.Style := [fsBold];
@@ -550,7 +552,8 @@ begin
 end;
 
 procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
-var j, FieldIndex, SetIndex, aID: integer;
+var j, FieldIndex, SetIndex: integer;
+    aID: TID;
     SetValue: set of 0..31;
     U: RawUTF8;
     C: TWinControl;
@@ -631,7 +634,7 @@ begin
           if SetIndex<0 then
             aID := 0 else
             aID := PtrInt(CB.Items.Objects[SetIndex]);
-          P.SetValue(Rec,pointer(Int32ToUTF8(aID)),false);
+          P.SetValue(Rec,pointer(Int64ToUTF8(aID)),false);
           Include(ModifiedFields,FieldIndex);
         end;
       end;

@@ -85,4 +85,12 @@ object MainForm: TMainForm
     ScrollBars = ssVertical
     TabOrder = 5
   end
+  object chkSocketAPI: TCheckBox
+    Left = 24
+    Top = 269
+    Width = 129
+    Height = 17
+    Caption = 'Use Socket API'
+    TabOrder = 6
+  end
 end

@@ -8,15 +8,12 @@ uses
   SysUtils,
   WinSvc,
   SynCommons,
+  SynLog,
   mORMotService,
   mORMot,
   mORMotSQLite3, SynSQLite3Static,
   mORMotHTTPServer,
   SampleData in '..\01 - In Memory ORM\SampleData.pas';
-
-// define this conditional if you want the Windows Messages to be accessible
-// from the background service
-{.$define USEMESSAGES}
 
 
 /// if we will run the service with administrator rights
@@ -94,8 +91,8 @@ begin
   if Server<>nil then
     DoStop(nil); // should never happen
   Model := CreateSampleModel;
-  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'));
-  DB.CreateMissingTables(0);
+  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(ExeVersion.ProgramFileName,'.db3'));
+  DB.CreateMissingTables;
   Server := TSQLHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI);
   TSQLLog.Add.Log(sllInfo,'Server % started by %',[Server.HttpServer,Server]);
 end;
@@ -111,39 +108,20 @@ begin
   FreeAndNil(Model);
 end;
 
-procedure CheckParameters;
 begin
-  if SameText(ParamStr(1),'-c') or SameText(ParamStr(1),'/c') then
+  if (ParamCount<>0) and
+     (SameText(ParamStr(1),'-c') or SameText(ParamStr(1),'/c')) then
     with TSQLite3HttpService.CreateAsConsole do
     try
       DoStart(nil);
       TextColor(ccLightGray);
       writeln(#10'Background server is running.'#10);
       writeln('Press [Enter] to close the server.'#10);
-      ConsoleWaitForEnterKey;
+      ConsoleWaitForEnterKey; // ReadLn if you do not use main thread execution
       exit;
     finally
       Free;
-    end;
-  TSQLLog.Family.Level := LOG_VERBOSE;
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  try
-    CheckParameters(HTTPSERVICEDISPLAYNAME);
-  finally
-    Free;
-  end;
-  TSQLLog.Add.Log(sllTrace,'Quitting command line');
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  try
-    State; // just to log the service state after handling the /parameters
-  finally
-    Free;
-  end;
-end;
-
-begin
-  if ParamCount<>0 then
-    CheckParameters else
+    end else
     with TSQLite3HttpService.Create do
     try
       // launches the registered Services execution = do all the magic

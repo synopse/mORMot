@@ -8,6 +8,7 @@ uses
   {$I SynDprUses.inc}
   PeopleServer,
   SynCommons,
+  SynLog,
   mORMot,
   SysUtils;
 

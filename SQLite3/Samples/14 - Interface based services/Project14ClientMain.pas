@@ -75,7 +75,7 @@ begin
     2:   TSQLRestServerAuthenticationNone.ClientSetUser(Client,'User','');
     else Client.SetUser('User','synopse');
     end;
-    Client.ServiceRegister([TypeInfo(ICalculator)],sicShared);
+    Client.ServiceDefine([ICalculator],sicShared);
   end;
   if Client.Services['Calculator'].Get(I) then
     lblResult.Caption := IntToStr(I.Add(a,b));

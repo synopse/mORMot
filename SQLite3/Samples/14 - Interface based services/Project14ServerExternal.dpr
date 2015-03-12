@@ -11,7 +11,7 @@ uses
   SysUtils,
   mORMot,
   mORMotSQLite3,
-  SynCommons,
+  SynCommons, SynLog,
   SynDB,
   SynDBSQLite3, SynSQLite3, SynSQLite3Static,
   mORMotDB,
@@ -33,7 +33,7 @@ var
   aProps: TSQLDBSQLite3ConnectionProperties;
 begin
   aProps := TSQLDBSQLite3ConnectionProperties.Create(
-    StringToUtf8(ChangeFileExt(paramstr(0),'.db')),'','','');
+    StringToUtf8(ChangeFileExt(ExeVersion.ProgramFileName,'.db')),'','','');
   try
     aModel := TSQLModel.Create([TSQLAuthGroup,TSQLAuthUser],ROOT_NAME);
     VirtualTableExternalRegisterAll(aModel,aProps);
@@ -41,7 +41,7 @@ begin
       with TSQLRestServerDB.Create(aModel,SQLITE_MEMORY_DATABASE_NAME,true) do
       try
         CreateMissingTables; // we need AuthGroup and AuthUser tables
-        ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+        ServiceDefine(TServiceCalculator,[ICalculator],sicShared);
         if ExportServerNamedPipe(APPLICATION_NAME) then
           writeln('Background server is running.'#10) else
           writeln('Error launching the server'#10);

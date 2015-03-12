@@ -4,16 +4,22 @@ unit SynDBExplorerMain;
 
 interface
 
+{.$define USEZEOS}
+
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Grids, ExtCtrls, StdCtrls, Consts,
-  {$ifdef HASINLINE}XPMan,Contnrs,{$endif}
-{$ifdef ISDELPHIXE}
+  {$ifdef HASINLINE}XPMan, Contnrs,{$endif}
+  {$ifdef ISDELPHIXE}
   SynSQLite3RegEx, // use direct PCRE library as available since Delphi XE
-{$endif}
+  {$endif}
   SynCommons, SynZip, mORMot, SynSQLite3, SynSQLite3Static,
   mORMoti18n, mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
-  SynTaskDialog,  SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC,
+  SynTaskDialog,
+  SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC, SynDBRemote,
+  {$ifdef USEZEOS}
+  SynDBZeos,
+  {$endif}
   SynDBExplorerClasses, SynDBExplorerFrame, ComCtrls;
 
 type
@@ -25,6 +31,7 @@ type
       Shift: TShiftState);
   private
     MainCaption: string;
+    Connection: TExpConnectionType;
     Page: TSynPager;
     PageNew: TSynPage;
     procedure PageChange(Sender: TObject);
@@ -58,6 +65,8 @@ resourcestring
 
 implementation
 
+uses SynDBExplorerServer;
+
 {$ifndef HASINLINE}
   {$R Vista.res}
 {$endif}
@@ -83,27 +92,30 @@ var Conns: TSQLRestStorageInMemory;
 function TryConnect(C: TSQLConnection; LoadTableNames: boolean): boolean;
 const CONN_CLASSES: array[TExpConnectionType] of TSQLDBConnectionPropertiesClass =
   (TSQLDBOracleConnectionProperties,
-   {$ifdef WIN64}
-   nil,nil,nil,nil,
-   {$else}
    TOleDBOracleConnectionProperties,TOleDBMSOracleConnectionProperties,
    TOleDBMSSQLConnectionProperties,TOleDBConnectionProperties,
-   {$endif}
    TSQLDBSQLite3ConnectionProperties,
    {$ifdef WIN64}
-   nil,
+   nil, // no JET/MSAccess available under Win64
    {$else}
    TOleDBJetConnectionProperties,
    {$endif}
-   TODBCConnectionProperties);
+   TODBCConnectionProperties,
+   TSQLDBWinHTTPConnectionProperties,
+   {$ifdef USEZEOS}TSQLDBZeosConnectionProperties{$else}nil{$endif}
+  );
 var i: integer;
     Pass: RawUTF8;
 begin
   result := false;
-  {$ifdef WIN64}
-  if CONN_CLASSES[C.Connection]=nil then
+  if CONN_CLASSES[C.Connection]=nil then begin
+    {$ifndef USEZEOS}
+    if C.Connection=ctZEOS then
+      ShowMessage('USEZEOS conditional should be defined in SynDBExplorerMain.pas',
+        'Zeos/ZDBC not available',true);
+    {$endif} 
     exit;
-  {$endif}
+  end;
   try
     Pass := Crypt(C.Password);
     if Pass='?' then 
@@ -123,11 +135,13 @@ begin
     ConnectionName := U2S(C.Ident);
     with CreateTempForm(format(sPleaseWaitN,[ConnectionName]),nil,True) do
     try
+      Connection := C.Connection;
       MainCaption := format('%s %s (compiled with %s) - %s',
         [MainCaption,SYNOPSE_FRAMEWORK_VERSION,GetDelphiCompilerVersion,ConnectionName]);
-      if LoadTableNames then begin // retrieve all needed info from DB
-        Props.GetTableNames(C.fTableNames);     // retrieve and set table names        
-        C.ForeignKeys := CompressString(Props.ForeignKeysData); // set foreign keys
+      if LoadTableNames or                      // retrieve all needed info from DB
+         (C.Connection=ctRemoteHTTP) then begin
+        Props.GetTableNames(C.fTableNames);     // retrieve and set table names
+        C.ForeignKeys := CompressString(Props.ForeignKeysData); // foreign keys
         if Conns<>nil then
           Conns.Modified := true;
       end else begin
@@ -191,7 +205,7 @@ begin
     end;
   end else begin
     Conns := TSQLRestStorageInMemory.Create(
-      TSQLConnection,nil,ChangeFileExt(paramstr(0),'.config'),false);
+      TSQLConnection,nil,ChangeFileExt(ExeVersion.ProgramFileName,'.config'),false);
     try
       Conns.ExpandedJSON := true; // for better human reading and modification
       Task.Title := MainCaption;

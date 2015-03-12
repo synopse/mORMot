@@ -46,17 +46,13 @@ unit SynSMSelfTest;
 
   Version 0.1
   - initial release. Use SpiderMonkey 24
-  
+
 }
 
 interface
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
-uses
-  SysUtils,
-  Math,
-  SynCrtSock,
-  SynCommons;
+{$I SynSM.inc}   // define SM_DEBUG JS_THREADSAFE CONSIDER_TIME_IN_Z
 
 /// this is the main entry point of the tests
 // - this procedure will create a console, then run all available tests
@@ -68,8 +64,14 @@ implementation
 uses
   Windows,
   Classes,
+  SysUtils,
+  Math,
+  SynCommons,
+  SynLog,
+  SynTests,
   SynSMAPI,
   SynSM,
+  SynCrtSock,
   DateUtils;
 
 const
@@ -222,8 +224,13 @@ begin
 
 //  You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
 //  ION is disabled without this options
+  {$ifdef FIXBUGXE3}
+  cx.SetOptions([jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  Check(cx.GetOptions=[jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$else}
   cx.Options := [jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs];
   Check(cx.Options=[jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$endif}
   Check(JS_GetOptions(cx) =  JSOPTION_VAROBJFIX or JSOPTION_BASELINE or JSOPTION_TYPE_INFERENCE or JSOPTION_ION or JSOPTION_ASMJS);
 
   global := JS_NewGlobalObject(cx, @jsglobal_class, nil, @Opt);
@@ -249,7 +256,7 @@ var
 //  fn: AnsiString;
   uString: SynUnicode;
 begin
-  scriptDir := ExtractFilePath(ParamStr(0)) + 'js';
+  scriptDir := ExeVersion.ProgramFilePath + 'js';
   Check(DirectoryExists(scriptDir), scriptDir + ' dose not exist');
   if CheckFailed(IsAnsiCompatible(PChar(scriptDir)), ' Path to test directory must be Ansi Compatible') then Exit;
 
@@ -506,11 +513,17 @@ procedure TTestSynSMAPI.JslintSupport;
 var
   uString: SynUnicode;
   rVal: jsval;
+  jsLintFN: TFileName;
+  jsLint: RawByteString;
 begin
-  uString := AnyTextFileToSynUnicode(scriptDir + '\jslint.js');
+  jsLintFN := scriptDir + '\jslint.js';
+  uString := AnyTextFileToSynUnicode(jsLintFN);
+  if uString='' then begin
+    jsLint := TWinINet.Get('https://github.com/douglascrockford/JSLint/raw/master/jslint.js');
+    FileFromString(jsLint,jsLintFN);
+    uString := SynUnicode(jsLint);
+  end;
   Check(JS_EvaluateUCScript(cx, global, Pjschar(uString), length(uString), 'jslint', 1, rVal) = JS_TRUE, 'compile jslint');
-//  JS_GetProperty()
-//  JS_CallFunctionValue(cx, global, )
 end;
 
 type
@@ -1738,7 +1751,11 @@ begin
     Check (engine.LastErrorMsg = '[JSError 109] script (1): missing ; before statement');
 
     //check strict mode
-    engine.cx.Options := engine.cx.Options - [jsoExtraWarning ];
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions - [jsoExtraWarning]);
+    {$else}
+    engine.cx.Options := engine.cx.Options - [jsoExtraWarning];
+    {$endif}
     try
       engine.Evaluate('function sum(a, a, c){ return a + b + c; }');
     except
@@ -1753,14 +1770,22 @@ begin
     end;
     CheckNot( engine.ErrorExist );
 
-    engine.cx.Options := engine.cx.Options - [jsoExtraWarning ];
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions - [jsoExtraWarning]);
+    {$else}
+    engine.cx.Options := engine.cx.Options - [jsoExtraWarning];
+    {$endif}
     try
       engine.Evaluate(ScriptJSTYPE_NUMBER_WithNaN);
     except
     end;
     CheckNot( engine.ErrorExist );
 
+    {$ifdef FIXBUGXE3}
+    engine.cx.SetOptions(engine.cx.GetOptions + [jsoExtraWarning, jsoWError]);
+    {$else}
     engine.cx.Options := engine.cx.Options + [jsoExtraWarning, jsoWError];
+    {$endif}
     engine.NewObject(obj);
     try
       obj.Evaluate('mistypedVariable = 17;','',111,smv);
@@ -1771,13 +1796,21 @@ begin
   end;
 
   // check JSOPTION_VAROBJFIX
-  engine.cx.Options := engine.cx.Options - [ jsoVarObjFix ];
+  {$ifdef FIXBUGXE3}
+  engine.cx.SetOptions(engine.cx.GetOptions - [jsoVarObjFix]);
+  {$else}
+  engine.cx.Options := engine.cx.Options - [jsoVarObjFix];
+  {$endif}
   engine.NewObject(obj);
   obj.Evaluate('var objProp = 1;','',0,smv);
   CheckNot( engine.GlobalObject.HasOwnProperty('objProp'), 'global has OWN property globalProp');
   Check(    obj.HasOwnProperty('objProp'), 'obj has OWN property objProp');
 
-  engine.cx.Options := engine.cx.Options + [ jsoVarObjFix ];
+  {$ifdef FIXBUGXE3}
+  engine.cx.SetOptions(engine.cx.GetOptions + [jsoVarObjFix]);
+  {$else}
+  engine.cx.Options := engine.cx.Options + [jsoVarObjFix];
+  {$endif}
   obj.Evaluate('var objPropWFix = 2;','',0,smv);
   //TODO WHY it not work??????
   //Check( engine.globalObject.HasOwnProperty('PropWFix'), 'global has OWN property globalPropWFix');
@@ -1789,9 +1822,23 @@ procedure TTestSynSM.LoadMustacheTemplate;
 var
   engine: TSMEngine;
   mSource: SynUnicode;
+  mustacheFN: TFileName;
+  mustache: RawByteString;
+  i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
-  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\mustache.js');
+  mustacheFN := ExeVersion.ProgramFilePath + 'js\mustache.js';
+  mSource := AnyTextFileToSynUnicode(mustacheFN);
+  if mSource='' then begin
+    mustache := TWinINet.Get('https://github.com/janl/mustache.js/raw/master/mustache.js');
+    if PosEx('return send(result);',mustache)=0 then begin
+      i := PosEx('send(result);',mustache);
+      if i>0 then
+        insert('return ',mustache,i); // fix syntax error in official libary! :)
+    end;
+    FileFromString(mustache,mustacheFN);
+    mSource := SynUnicode(mustache);
+  end;
   Check(mSource <> '', 'exist js\mustache.js');
   engine.Evaluate(mSource, 'mustache.js');
 end;
@@ -1853,7 +1900,7 @@ var
   resultFromFortunes, rendered: RawUTF8; // n frtune test here must be resultFromFortunes of database query
 begin
   engine := FManager.ThreadSafeEngine;
-  mSource := AnyTextFileToSynUnicode(ExtractFilePath(ParamStr(0)) + 'js\precompiledMustache.js');
+  mSource := AnyTextFileToSynUnicode(ExeVersion.ProgramFilePath + 'js\precompiledMustache.js');
   if mSource='' then
     exit;
   CheckFailed(mSource <> '', 'exist js\precompiledMustache.js');

@@ -3,7 +3,8 @@ unit SynTestTest;
 interface
 
 uses
-  SynCommons;
+  SynCommons,
+  SynTests;
 
 function Adding(A,B: double): Double; overload;
 function Adding(A,B: integer): integer; overload;

@@ -9,7 +9,7 @@ interface
 
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -514,7 +514,7 @@ type
   /// store the UI elements and data, one per each Table
   TSQLRibbonTab = class
   private
-    function GetCurrentID: integer;
+    function GetCurrentID: TID;
   protected
     /// event called by ReportClick(), set by CustomReportPopupMenu()
     FReportPopupClick: TNotifyEvent;
@@ -600,7 +600,7 @@ type
     property ReportPopupParamsEnabled: pointer read FReportPopupParamsEnabled;
     /// retrieve the current selected ID of the grid
     // - returns 0 if no row is selected
-    property CurrentID: integer read GetCurrentID;
+    property CurrentID: TID read GetCurrentID;
   end;
 
   /// Event used to customize screen text of property names
@@ -685,7 +685,7 @@ type
     // - this default method create a report with the content of all fields,
     // except those listed in the corrresponding
     // TSQLRibbonTabParameters.EditFieldNameToHideCSV value
-    procedure CreateReport(aTable: TSQLRecordClass; aID: integer;
+    procedure CreateReport(aTable: TSQLRecordClass; aID: TID;
       aReport: TGDIPages; AlreadyBegan: boolean=false); overload; virtual;
     /// add the specified fields content to the report
     // - by default, all main fields are displayed, but caller can specify custom
@@ -706,7 +706,7 @@ type
     /// make a specified record available to the UI
     // - select tab and record index
     // - if ActionToPerform is set, the corresponding action is launched
-    procedure GotoRecord(aTable: TSQLRecordClass; aID: integer;
+    procedure GotoRecord(aTable: TSQLRecordClass; aID: TID;
       ActionToPerform: integer=0); overload;
     /// make a specified record available to the UI
     // - select tab and record index
@@ -725,7 +725,7 @@ type
     // - only two formats are available here: Acrobat (.pdf) and plain text (.txt)
     // - returns the exported file name if export was successful, or '' if any error occured
     // - by default, the report is created by using the CreateReport method
-    function ExportRecord(aTable: TSQLRecordClass; aID: integer;
+    function ExportRecord(aTable: TSQLRecordClass; aID: TID;
       const ActionHint: string; OpenAfterCreation: boolean=true): TFileName;
   protected { private properties set by Init method }
     fTabParameters: PSQLRibbonTabParameters;
@@ -1659,7 +1659,7 @@ begin
   end;
 end;
 
-function TSQLRibbonTab.GetCurrentID: integer;
+function TSQLRibbonTab.GetCurrentID: TID;
 begin
   if (self=nil) or (TableToGrid=nil) or (List=nil) then
     result := 0 else
@@ -2612,7 +2612,8 @@ begin
     result := Pointer(PtrInt(fTabParameters)+fTabParametersSize*aPageIndex);
 end;
 
-procedure TSQLRibbon.GotoRecord(aTable: TSQLRecordClass; aID, ActionToPerform: integer);
+procedure TSQLRibbon.GotoRecord(aTable: TSQLRecordClass; aID: TID;
+  ActionToPerform: integer);
 var P,R: integer;
 begin
   if (self=nil) or (aTable=nil) or (aID<=0) then
@@ -2843,7 +2844,7 @@ begin
   end;
 end;
 
-function TSQLRibbon.ExportRecord(aTable: TSQLRecordClass; aID: integer;
+function TSQLRibbon.ExportRecord(aTable: TSQLRecordClass; aID: TID;
   const ActionHint: string; OpenAfterCreation: boolean): TFileName;
 var i: integer;
     aName, ext: TFileName;
@@ -2930,7 +2931,7 @@ begin
   with Page[P].TableToGrid do begin
     if length(ColWidths)=Table.FieldCount then begin
       SetLength(ColWidth,Table.FieldCount);
-      move(ColWidths[0],ColWidth[0],Table.FieldCount*4);
+      move(ColWidths[0],ColWidth[0],Table.FieldCount*sizeof(integer));
     end else
       Table.CalculateFieldLengthMean(ColWidth,true); // FromDisplay=true
     result.AddColumns(ColWidth);
@@ -2957,7 +2958,7 @@ begin
     CreateReport(P.Table,P.CurrentRecord.ID,P.Report,false);
 end;
 
-procedure TSQLRibbon.CreateReport(aTable: TSQLRecordClass; aID: integer;
+procedure TSQLRibbon.CreateReport(aTable: TSQLRecordClass; aID: TID;
   aReport: TGDIPages; AlreadyBegan: boolean=false);
 var P: integer;
 begin
@@ -3029,7 +3030,7 @@ begin
     aClient := Client;
   if length(ColWidths)=Table.FieldCount then begin
     SetLength(ColWidth,Table.FieldCount);
-    move(ColWidths[0],ColWidth[0],Table.FieldCount*4);
+    move(ColWidths[0],ColWidth[0],Table.FieldCount*sizeof(integer));
   end else
     Table.CalculateFieldLengthMean(ColWidth,true); // FromDisplay=true
   aReport.AddColumns(ColWidth);

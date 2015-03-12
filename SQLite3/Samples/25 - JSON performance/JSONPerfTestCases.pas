@@ -5,33 +5,48 @@ interface
 
 {$I Synopse.inc}
 
+// standard slow-as-hell JSON library as part of the Delphi RTL
+{$define USEDBXJSON}
+
 // download from https://code.google.com/p/superobject
 {.$define USESUPEROBJECT}
 
-{$ifdef ISDELPHI2010}
-  // download from https://code.google.com/p/x-superobject
-  {.$define USEXSUPEROBJECT}
-{$endif}
+// download from https://code.google.com/p/x-superobject
+{.$define USEXSUPEROBJECT}
+
+// download from http://sourceforge.net/projects/qdac3
+{.$define USEQDAC}
+
+// download from https://code.google.com/p/dwscript
+{.$define USEDWSJSON}
+
+// download from https://github.com/ahausladen/JsonDataObjects
+{.$define USEJDO}
+
 
 {$ifdef USEXSUPEROBJECT}
   {$undef USESUPEROBJECT} // both libraries are exclusive! :(
 {$endif}
-
 {$ifdef CPU64}
   {$undef USESUPEROBJECT}   // SuperObject  just explodes under Win64 :(
   {$undef USEXSUPEROBJECT}  // XSuperObject just explodes under Win64 :(
 {$endif}
-
-{$ifdef ISDELPHI2010}
-  // download from https://code.google.com/p/dwscript
-  {.$define USEDWSJSON}
+{$ifndef ISDELPHI2010}      // libraries not available before Delphi 2010
+  {$undef USEXSUPEROBJECT}
+  {$undef USEQDAC}
+  {$undef USEDWSJSON}
+  {$undef USEJDO}
 {$endif}
-
-{$ifdef ISDELPHIXE} // Delphi 2010 DBXJSON is just buggy and not workable
-  {$define USEDBXJSON}
+{$ifndef ISDELPHIXE}
+  {$undef USEDBXJSON}  // Delphi 2010 DBXJSON is just buggy and not workable
 {$endif}
 
 {$define TESTBSON}
+
+{$ifdef ISDELPHI2010}
+  // undefine to test our text-based RTTI
+  {$define USEENHANCEDRTTIFORRECORDS}
+{$endif}
 
 uses
   {$I SynDprUses.inc} // link FastMM4 for older versions of Delphi
@@ -53,12 +68,18 @@ uses
   {$ifdef USEDWSJSON}
   dwsJSON,
   {$endif}
+  {$ifdef USEJDO}
+  JsonDataObjects,
+  {$endif}
   {$ifdef USEDBXJSON}
   {$ifdef ISDELPHIXE6}
   JSON,
   {$else}
   DBXJSON,
   {$endif}
+  {$endif}
+  {$ifdef USEQDAC}
+  qjson,
   {$endif}
   SynCrtSock,
   SynZip,
@@ -67,6 +88,7 @@ uses
   {$endif}
   mORMot,
   SynCommons,
+  SynTests,
   SynCrossPlatformJSON;
 
 
@@ -147,6 +169,24 @@ type
   end;
   {$endif}
 
+  {$ifdef USEJDO}
+  TTestJsonDataObjects = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+
+  {$ifdef USEQDAC}
+  TTestQDAC = class(TSynTestCase)
+  published
+    procedure Read;
+    procedure Access;
+    procedure Write;
+  end;
+  {$endif}
+
   {$ifdef USEDBXJSON}
   TTestDBXJSON = class(TSynTestCase)
   published
@@ -183,6 +223,12 @@ type
     {$ifdef USEDBXJSON}
     procedure DBXJSONRead;
     {$endif}
+    {$ifdef USEJDO}
+    procedure JsonDataObjectsRead;
+    {$endif}
+    {$ifdef USEQDAC}
+    procedure QDACRead;
+    {$endif}
   end;
 
   TTestTableContent = class(TTestBigContentRead)
@@ -190,10 +236,12 @@ type
   published
     procedure DownloadFilesIfNecessary; override;
     procedure SynopseParse;
+    procedure SynopseTableCached;
+    procedure SynopseTableIndex;
+    procedure SynopseTableLoop;
+    procedure SynopseTableVariant;
     procedure SynopseORMLoop;
     procedure SynopseORMList;
-    procedure SynopseTableDirect;
-    procedure SynopseTableVariant;
     procedure SynopseDocVariant;
     procedure SynopseLateBinding;
     procedure SynopseCrossORM;
@@ -203,7 +251,7 @@ type
     procedure SynopseToBSON;
     {$endif}
     {$ifdef USESUPEROBJECT}
-    procedure SuperObjectProperties;
+    procedure SuperObjectProps;
     procedure SuperObjectRecord;
     {$endif}
     {$ifdef USEDWSJSON}
@@ -211,6 +259,12 @@ type
     {$endif}
     {$ifdef USEDBXJSON}
     procedure DBXJSON;
+    {$endif}
+    {$ifdef USEJDO}
+    procedure _JsonDataObjects;
+    {$endif}
+    {$ifdef USEQDAC}
+    procedure QDAC;
     {$endif}
   end;
 
@@ -220,6 +274,7 @@ type
     function GeoJSONCoordReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   published
     procedure DownloadFilesIfNecessary; override;
+    procedure SynopseBeautifier;
     procedure SynopseReadRecord;
     procedure SynopseReadVariant;
     procedure SynopseCrossPlatform;
@@ -233,7 +288,14 @@ type
     procedure dwsJSONRead;
     {$endif}
     {$ifdef USEDBXJSON}
-    procedure DBXJSONRead; 
+    procedure DBXJSONRead;
+    {$endif}
+    {$ifdef USEJDO}
+    procedure JsonDataObjectsRead;
+    procedure JsonDataObjectsBeautifier;
+    {$endif}
+    {$ifdef USEQDAC}
+    procedure QDACRead;
     {$endif}
   end;
 
@@ -264,6 +326,12 @@ begin
   {$endif}
   {$ifdef USEDBXJSON},
     TTestDBXJSON
+  {$endif}
+  {$ifdef USEQDAC},
+    TTestQDAC
+  {$endif}
+  {$ifdef USEJDO},
+  TTestJsonDataObjects
   {$endif}
   ]);
 end;
@@ -315,7 +383,7 @@ const
     '}' + #13#10 +
     '}';
 
-{$ifdef ISDELPHI2010}
+{$ifdef USEENHANCEDRTTIFORRECORDS}
   {$RTTI EXPLICIT FIELDS([vcPublic])} // needed e.g. on Delphi XE4
 {$endif}
 
@@ -349,7 +417,7 @@ var gloss: TGlossary;
     i: integer;
     json: RawUTF8;
 begin
-  {$ifndef ISDELPHI2010}
+  {$ifndef USEENHANCEDRTTIFORRECORDS}
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TGlossary),__TGlossary);
   {$endif}
   for i := 1 to SAMPLE_JSON_1_COUNT do begin
@@ -727,6 +795,98 @@ end;
 
 {$endif USEDWSJSON}
 
+{$ifdef USEQDAC}
+
+{ TTestQDAC }
+
+procedure TTestQDAC.Read;
+var obj: TQJson;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := TQJson.Create;
+    obj.Parse(SAMPLE_JSON_1);
+    check(obj.ItemByPath('glossary.title').AsString='example glossary');
+    obj.Free;
+  end;
+end;
+
+procedure TTestQDAC.Access;
+var obj: TQJson;
+    i: integer;
+begin
+  obj := TQJson.Create;
+  obj.Parse(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    check(obj.ItemByPath('glossary.title').AsString='example glossary');
+    check(obj.ItemByPath('glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso')[0].AsString='GML');
+  end;
+  obj.Free;
+end;
+
+procedure TTestQDAC.Write;
+var obj: TQJson;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := TQJson.Create;
+  obj.Parse(SAMPLE_JSON_1);
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(obj.Encode(False),json); // (false)=no format
+    check(Hash32(json)=$293BAAA1);
+  end;
+  obj.Free;
+end;
+
+{$endif USEQDAC}
+
+{$ifdef USEJDO}
+procedure TTestJsonDataObjects.Read;
+var obj: JsonDataObjects.TJsonBaseObject;
+    i: integer;
+begin
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    obj := TJsonBaseObject.ParseUtf8(SAMPLE_JSON_1);
+    check((obj as JsonDataObjects.TJsonObject).O['glossary'].S['title']='example glossary');
+    obj.Free;
+  end;
+end;
+
+procedure TTestJsonDataObjects.Access;
+var obj: JsonDataObjects.TJsonBaseObject;
+    doc: JsonDataObjects.TJsonObject;
+    i: integer;
+begin
+  obj := TJsonBaseObject.ParseUtf8(SAMPLE_JSON_1);
+  doc := obj as JsonDataObjects.TJsonObject;
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    Check(doc.O['glossary'].S['title']='example glossary');
+    Check(doc.O['glossary'].O['GlossDiv'].O['GlossList'].
+      O['GlossEntry'].O['GlossDef'].A['GlossSeeAlso'].S[0]='GML');
+  end;
+  obj.Free;
+end;
+
+procedure TTestJsonDataObjects.Write;
+var obj: JsonDataObjects.TJsonBaseObject;
+    doc: JsonDataObjects.TJsonObject;
+    i: integer;
+    json: RawUTF8;
+begin
+  obj := TJsonBaseObject.ParseUtf8(SAMPLE_JSON_1);
+  doc := obj as JsonDataObjects.TJsonObject;
+  Owner.TestTimer.Start;
+  for i := 1 to SAMPLE_JSON_1_COUNT do begin
+    StringToUTF8(doc.ToJSON,json); // 91 ms
+    //json := doc.ToUtf8JSON; // 107 ms
+    check(Hash32(json)=$293BAAA1);
+  end;
+  obj.Free;
+end;
+{$endif}
 
 
 {$ifdef USEDBXJSON}
@@ -839,7 +999,7 @@ var download: RawByteString;
 begin // overriden method should have been set fFileName+fZipFileName+fDownloadURI
   fRunConsoleOccurenceNumber := 0;
   fMemoryAtStart := MemoryUsed;
-  fFileName := ExtractFilePath(ParamStr(0))+fFileName;
+  fFileName := ExeVersion.ProgramFilePath+fFileName;
   if not FileExists(fFileName) then begin
     download := TWinINet.Get(fDownloadURI);
     if not CheckFailed(download<>'') then begin
@@ -880,7 +1040,7 @@ type
     Point,MultiPoint,LineString,MultiLineString,
     Polygon,MultiPolygon,GeometryCollection,
     Feature,FeatureCollection);
-  {$ifdef ISDELPHI2010}
+  {$ifdef USEENHANCEDRTTIFORRECORDS}
   TCity = packed record
     &type: TGeoJSONObjectType;
     features: array of record
@@ -921,7 +1081,7 @@ const
 function TTestHugeContent.GeoJSONCoordReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 var V: TGeoJSONCoords absolute aValue;
-    i1,i2: integer;
+    i1,i2,n: integer;
 begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
   aValid := false;
   result := nil;
@@ -939,8 +1099,9 @@ begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
     V.multipolygon := false;
   end;
   for i1 := 0 to high(V.values) do begin
-    SetLength(V.values[i1],JSONArrayCount(P));
-    for i2 := 0 to high(V.values[i1]) do begin
+    n := JSONArrayCount(P);
+    SetLength(V.values[i1],n);
+    for i2 := 0 to n-1 do begin
       P := GotoNextNotSpace(P);
       if P^<>'[' then
         exit;
@@ -953,7 +1114,7 @@ begin // '[ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ]'
       if P^=',' then
         inc(P);
     end;
-    if V.multipolygon then begin 
+    if V.multipolygon then begin
       P := GotoNextNotSpace(P);
       if P^<>']' then
         exit;
@@ -997,12 +1158,22 @@ begin // '[ [ [ -122.420540559229593, 37.805963600244901, 0.0 ], ... ] ]'
   aWriter.Add(']',']');
 end;
 
+procedure TTestHugeContent.SynopseBeautifier;
+var json: RawUTF8;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  check(JSONBufferReformatToFile(pointer(json),'testsynopse.json',jsonHumanReadable));
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+end;
+
 procedure TTestHugeContent.SynopseReadRecord;
 var json: RawUTF8;
     data: TCity;
 begin
   TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TGeoJSONCoords),GeoJSONCoordReader,GeoJSONCoordWriter);
-  {$ifndef ISDELPHI2010}
+  {$ifndef USEENHANCEDRTTIFORRECORDS}
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TGeoJSONObjectType));
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TCity),__TCity);
   {$endif}
@@ -1010,7 +1181,7 @@ begin
   Owner.TestTimer.Start;
   RecordLoadJSON(data,pointer(JSON),TypeInfo(TCity));
   json := '';
-  {$ifdef ISDELPHI2010}
+  {$ifdef USEENHANCEDRTTIFORRECORDS}
   check(data.&type=FeatureCollection);
   {$else}
   check(data._type=FeatureCollection);
@@ -1101,6 +1272,20 @@ begin
 end;
 {$endif}
 
+{$ifdef USEQDAC}
+procedure TTestHugeContent.QDACRead;
+var obj: TQJson;
+begin
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  check(obj.ItemByName('type').AsString='FeatureCollection');
+  fRunConsoleOccurenceNumber := obj.ItemByName('features').Count;
+  check(fRunConsoleOccurenceNumber=206560);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
 {$ifdef USEDBXJSON}
 procedure TTestHugeContent.DBXJSONRead;
 var json: UTF8String;
@@ -1122,6 +1307,40 @@ begin
 end;
 {$endif}
 
+{$ifdef USEJDO}
+procedure TTestHugeContent.JsonDataObjectsRead;
+var json: UTF8String;
+    obj: JsonDataObjects.TJsonObject;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := JsonDataObjects.TJsonBaseObject.ParseUTF8(json) as JsonDataObjects.TJsonObject;
+  Check(obj.S['type']='FeatureCollection');
+  fRunConsoleOccurenceNumber := obj.A['features'].Count;
+  check(fRunConsoleOccurenceNumber=206560);
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+
+procedure TTestHugeContent.JsonDataObjectsBeautifier;
+var json: UTF8String;
+//    output: string; new: RawUTF8;
+    obj: JsonDataObjects.TJsonObject;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := JsonDataObjects.TJsonBaseObject.ParseUTF8(json) as JsonDataObjects.TJsonObject;
+{  output := obj.ToJSON(false); // is raising an OutOfMemory under Win32 -> file
+  StringToUTF8(output,new);
+  check(length(new)>length(json));
+  output := ''; }
+  obj.SaveToFile('testjdo.json',false);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+
+{$endif}
 
 { TTestDepthContent }
 
@@ -1201,6 +1420,18 @@ begin
 end;
 {$endif}
 
+{$ifdef USEQDAC}
+procedure TTestDepthContent.QDACRead;
+var obj: TQJson;
+begin
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  check(obj.ItemByPath('a.obj.key').AsString='wrong value');
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
 {$ifdef USEDBXJSON}
 procedure TTestDepthContent.DBXJSONRead;
 var json: UTF8String;
@@ -1218,6 +1449,20 @@ begin
 end;
 {$endif}
 
+{$ifdef USEJDO}
+procedure TTestDepthContent.JsonDataObjectsRead;
+var json: UTF8String;
+    obj: JsonDataObjects.TJsonObject;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  obj := JsonDataObjects.TJsonBaseObject.ParseUTF8(json) as JsonDataObjects.TJsonObject;
+  check(obj.O['a'].O['obj'].S['key']='wrong value');
+  json := '';
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
 
 { TTestTableContent }
 
@@ -1258,7 +1503,7 @@ procedure TTestTableContent.DownloadFilesIfNecessary;
 var i: integer;
 begin
   fMemoryAtStart := MemoryUsed;
-  fFileName := ExtractFilePath(paramstr(0));
+  fFileName := ExeVersion.ProgramFilePath;
   i := pos('\Samples\',fFileName);
   if i>0 then begin
     Setlength(fFileName,i);
@@ -1305,7 +1550,50 @@ begin
   list.Free;
 end;
 
-procedure TTestTableContent.SynopseTableDirect;
+procedure TTestTableContent.SynopseTableIndex;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+    i: Integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  for i := 1 to list.RowCount do begin
+    Check(list.Get(i,'FirstName')<>nil);
+    Check(list.Get(i,'LastName')<>nil);
+    Check(list.GetAsInteger(i,'YearOfBirth')<10000);
+    Check((list.GetAsInteger(i,'YearOfDeath')>1400)and(list.GetAsInteger(i,'YearOfDeath')<2000));
+    Check((list.GetAsInteger(i,'RowID')>11011) or (list.Get(i,'Data')<>nil));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableCached;
+var json: RawUTF8;
+    list: TSQLTableJSON;
+    i,FirstName,LastName,YearOfBirth,YearOfDeath,RowID,Data: Integer;
+begin
+  json := StringFromFile(fFileName);
+  Owner.TestTimer.Start;
+  list := TSQLTableJSON.Create('',pointer(json),length(json));
+  list.FieldIndexExisting(
+    ['FirstName','LastName','YearOfBirth','YearOfDeath','RowID','Data'],
+    [@FirstName,@LastName,@YearOfBirth,@YearOfDeath,@RowID,@Data]);
+  for i := 1 to list.RowCount do begin
+    Check(list.Get(i,FirstName)<>nil);
+    Check(list.Get(i,LastName)<>nil);
+    Check(list.GetAsInteger(i,YearOfBirth)<10000);
+    Check((list.GetAsInteger(i,YearOfDeath)>1400)and(list.GetAsInteger(i,YearOfDeath)<2000));
+    Check((list.GetAsInteger(i,RowID)>11011) or (list.Get(i,Data)<>nil));
+  end;
+  fRunConsoleOccurenceNumber := list.RowCount;
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  list.Free;
+end;
+
+procedure TTestTableContent.SynopseTableLoop;
 var json: RawUTF8;
     list: TSQLTableJSON;
 begin
@@ -1313,11 +1601,11 @@ begin
   Owner.TestTimer.Start;
   list := TSQLTableJSON.Create('',pointer(json),length(json));
   while list.Step do begin
-    Check(list.Field('FirstName')<>'');
-    Check(list.Field('LastName')<>'');
-    Check(list.Field('YearOfBirth')<10000);
-    Check((list.Field('YearOfDeath')>1400)and(list.Field('YearOfDeath')<2000));
-    Check((list.Field('RowID')>11011) or (list.Field('Data')<>null));
+    Check(list.FieldBuffer('FirstName')<>nil);
+    Check(list.FieldBuffer('LastName')<>nil);
+    Check(list.FieldAsInteger('YearOfBirth')<10000);
+    Check((list.FieldAsInteger('YearOfDeath')>1400)and(list.FieldAsInteger('YearOfDeath')<2000));
+    Check((list.FieldAsInteger('RowID')>11011) or (list.FieldBuffer('Data')<>nil));
   end;
   fRunConsoleOccurenceNumber := list.RowCount;
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
@@ -1518,7 +1806,7 @@ begin
 end;
 
 {$ifdef USESUPEROBJECT}
-procedure TTestTableContent.SuperObjectProperties;
+procedure TTestTableContent.SuperObjectProps;
 var f: TStream;
     obj: ISuperObject;
     ndx: integer;
@@ -1555,7 +1843,7 @@ procedure TTestTableContent.SuperObjectRecord;
 var f: TStream;
     obj: ISuperObject;
     ndx: integer;
-    ctx: superobject.TSuperRttiContext;
+    ctx: superobject.TSuperRttiContext ;
     people: TPeople;
 begin
   f := TFileStream.Create(fFileName,fmOpenRead);
@@ -1602,6 +1890,49 @@ begin
   check(fRunConsoleOccurenceNumber>8000);
   fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
   obj.Free;
+end;
+{$endif}
+
+{$ifdef USEQDAC}
+procedure TTestTableContent.QDAC;
+var obj: TQJson;
+    i: integer;
+begin
+  obj := TQJson.Create;
+  obj.LoadFromFile(fFileName);
+  fRunConsoleOccurenceNumber := obj.Count;
+  for i := 0 to fRunConsoleOccurenceNumber-1 do
+    with obj.Items[i] do begin
+      Check(ItemByName('FirstName').AsString<>'');
+      Check(ItemByName('LastName').AsString<>'');
+      Check(ItemByName('YearOfBirth').AsInteger<10000);
+      Check((ItemByName('YearOfDeath').AsInteger>1400)and(ItemByName('YearOfDeath').AsInteger<2000));
+      Check((ItemByName('RowID').AsInteger>11011) or (ItemByName('Data').AsString<>''));
+    end;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  obj.Free;
+end;
+{$endif}
+
+{$ifdef USEJDO}
+procedure TTestTableContent._JsonDataObjects;
+var arr: JsonDataObjects.TJsonArray;
+    i: integer;
+begin
+  arr := JsonDataObjects.TJsonBaseObject.ParseFromFile(fFileName) as JsonDataObjects.TJsonArray;
+  fRunConsoleOccurenceNumber := arr.Count;
+  for i := 0 to fRunConsoleOccurenceNumber-1 do
+    with arr.O[i] do begin
+      Check(S['FirstName']<>'');
+      Check(S['LastName']<>'');
+      Check(I['YearOfBirth']<10000);
+      Check((I['YearOfDeath']>1400)and(I['YearOfDeath']<2000));
+      Check((I['RowID']>11011) or (S['Data']<>''));
+    end;
+  check(fRunConsoleOccurenceNumber>8000);
+  fRunConsoleMemoryUsed := MemoryUsed-fMemoryAtStart;
+  arr.Free;
 end;
 {$endif}
 

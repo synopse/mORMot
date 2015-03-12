@@ -6,7 +6,7 @@ unit SynDBFirebird;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBFirebird;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -255,7 +255,7 @@ type
      - fast overridden implementation with no temporary variable
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
   end;
@@ -697,7 +697,7 @@ function TSQLDBFirebirdStatement.ColumnNull(Col: integer): boolean;
 begin
 end;
 
-procedure TSQLDBFirebirdStatement.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TSQLDBFirebirdStatement.ColumnsToJSON(WR: TJSONWriter);
 var col, METHODTOBEWRITTEN: integer;
 begin
   if (CurrentRow<=0) then
@@ -909,7 +909,7 @@ var P: PPointer;
 {$endif}
 begin
   if aEmbedded then begin
-    fLibName := ExtractFilePath(paramstr(0));
+    fLibName := ExeVersion.ProgramFilePath;
     if FileExists(LibName+FBLIBNAME[true]) then
       fLibName := LibName+FBLIBNAME[true] else
       fLibName := LibName+'Firebird\'+FBLIBNAME[true];
@@ -1058,10 +1058,10 @@ end;
 
 function XSQLVAR.ColumnName: RawUTF8;
 begin
-   SetString(result,sqlname,sqlname_length);
+  SetString(result,sqlname,sqlname_length);
 end;
 
 initialization
   assert(ord(dpb_gstat_attach)=67);
-
+  TSQLDBFirebirdConnectionProperties.RegisterClassNameForDefinition;
 end.

@@ -3,7 +3,7 @@
 unit SynBigTable;
 
 (*
-    Synopse Big Table. Copyright (C) 2014 Arnaud Bouchez
+    Synopse Big Table. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -22,10 +22,11 @@ unit SynBigTable;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -208,7 +209,10 @@ unit SynBigTable;
     - new sbtBeforeWrite step available (e.g. to safely update indexes)
 
   Version 1.18
-  - unit fixed and tested with Delphi XE2/XE3 64-bit compiler
+  - unit fixed and tested with Delphi XE2/XE7 64-bit compiler
+  - added TSynBigTable.FileSizeOnDisk property for [e4a1e76a32ab]
+  - fixed ticket [b9320499ae] about TBigTableRecord saving updated tables with
+    indexed fields
 
 *)
 
@@ -230,13 +234,20 @@ interface
 { Stack Checking must be sent to OFF in the code below }
 
 uses
+  {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
+  {$endif}
   Classes,
   SysUtils,
   {$ifdef FPC}
   Variants,
   {$endif}
-  SynCommons;
+  SynCommons,
+  SynTests;
 
 type
   TSynBigTable = class;
@@ -332,6 +343,7 @@ type
     fReadBuffer: TFileBufferReader;
     fOnAfterPack: TSynBigTableAfterPackEvent;
     function GetCount: integer; virtual;
+    function GetFileSizeOnDisk: Int64; virtual;
     /// this default implementation can be slow, because it must loop through all
     // items in case of deleted or updated items
     function GetID(Index: integer): integer; virtual;
@@ -501,11 +513,13 @@ type
     property Count: integer read GetCount;
     /// the associated filename storing the database
     property FileName: TFileName read fFileName;
-    /// contain the current in memory data size (in bytes)
+    /// returns the current in memory data size (in bytes)
     // - i.e. the data size not written yet to the disk
     // - can be used to flush regularely the data to disk by calling UpdateToFile
     // method when this value reach a certain limit
     property CurrentInMemoryDataSize: Int64 read fCurrentInMemoryDataSize;
+    /// returns the current data size stored on disk
+    property FileSizeOnDisk: Int64 read GetFileSizeOnDisk;
     /// retrieve an offset for a specified physical ID
     // - read from either fOffset32[] either fOffset64[]
     property Offset[Index: integer]: Int64 read GetOffset;
@@ -934,10 +948,11 @@ type
     procedure _TSynBigTableRecord;
   end;
 
-
+{$ifndef FPC}
 /// unitary test function of the TSynBigTable class
 // - return TRUE if test was OK, FALSE on any error
 function TestBigTable: boolean;
+{$endif}
 
 const
   /// will flush the in-memory data to disk when reached 256 MB of data in RAM
@@ -946,7 +961,7 @@ const
 
 implementation
 
-
+{$ifndef FPC}
 function TestBigTable: boolean;
 procedure SetS(var s: RawUTF8; i: cardinal);
 var p: array[0..3] of Word;
@@ -1134,9 +1149,7 @@ var s,s2: RawByteString;
     tot: integer;
     tmp: TIntegerDynArray;
     rec: TSynTableData;
-{$ifndef LVCL}
     p: pointer;
-{$endif}
 function stats(T: TSynBigTable): string;
 begin
   result := Format('Values: %s, file size: %s',
@@ -1175,6 +1188,7 @@ begin
        (integer(rec.GetFieldValue(fInt))<>i-1) then
       exit;
   end;
+  {$endif}
   Start('Read direct');
   for i := 1 to n do begin
     if DoRecord then
@@ -1184,8 +1198,7 @@ begin
        (fInt.GetInteger(p)<>i-1) or
        (fText.GetRawUTF8(p)<>By8[n-i]) then
       exit;
-  end;  
-  {$endif}
+  end;
   Start('Search 50 Text iterating');
   IDCount := 0; // not mandatory (if ID=nil, TR.Search will do it)
   for i := n-50 to n-1 do
@@ -1589,6 +1602,7 @@ begin
     TS.Free;
   end;
 end;
+{$endif FPC}
 
 
 { TSynBigTable }
@@ -2408,8 +2422,8 @@ var i, ndx, Di,Si,Ni,nCount,oneBuf,firstDel,nNewIndexs: integer;
     buf: RawByteString;
     index, NewIndexs: TIntegerDynArray;
 begin
-  if (self=nil) or ((fDeletedCount=0) and (fAliasCount=0)) or (fCount=0) or 
-     (fFile=0) then
+  if (self=nil) or ((fDeletedCount=0) and (fAliasCount=0) and (fInMemoryCount=0)) or
+     (fCount=0) or (fFile=0) then
     exit; // nothing to pack
 {$ifdef THREADSAFE}
   fLock.BeginWrite;
@@ -2708,6 +2722,23 @@ begin
       FlushFileBuffers(fFile);
     if not dontReopenReadBuffer then
       fReadBuffer.Open(fFile);
+{$ifdef THREADSAFE}
+  finally
+    fLock.EndWrite;
+  end;
+{$endif}
+end;
+
+function TSynBigTable.GetFileSizeOnDisk: Int64;
+begin
+  result := 0;
+  if fFile=0 then
+   exit;
+{$ifdef THREADSAFE}
+  fLock.BeginWrite;
+  try
+{$endif}
+    PInt64Rec(@result)^.Lo := GetFileSize(fFile,@PInt64Rec(@result)^.Hi);
 {$ifdef THREADSAFE}
   finally
     fLock.EndWrite;
@@ -3285,12 +3316,13 @@ begin
     fInt := T.Table['int'];
     rec.Init(T.Table);
     for i := 0 to n-1 do begin
-      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1])); 
+      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1]));
       rec.SetFieldSBFValue(fInt,fInt.SBF(i));
       if DoRecord then
-        Check(TRec.RecordAdd(rec)<>0) else
-        Check(TMeta.RecordAdd(CreateString(i+1),rec)<>0);
+        Check(TRec.RecordAdd(rec)=i+1) else
+        Check(TMeta.RecordAdd(CreateString(i+1),rec)=i+1);
     end;
+    if CheckFailed(TRTest) then exit;
     if tfoUnique in fInt.Options then
       for i := 0 to (n shr 3)-1 do begin
         rec.SetFieldSBFValue(fInt,fInt.SBF(i shl 3));
@@ -3304,7 +3336,17 @@ begin
     if DoRecord then
       T := TSynBigTableRecord.Create(FN,'test') else
       T := TSynBigTableMetaData.Create(FN,'test');
-    if CheckFailed(TRTest) then exit;
+    rec := T.RecordGet(1);
+    if checkFailed(rec.ID=1) then exit;
+    fInt := T.Table['int'];
+    rec.SetFieldSBFValue(fInt,fInt.SBF(0)); // fake update
+    if CheckFailed(T.RecordUpdate(rec)) then exit;
+    T.UpdateToFile;
+    T.Free;
+    if DoRecord then
+      T := TSynBigTableRecord.Create(FN,'test') else
+      T := TSynBigTableMetaData.Create(FN,'test');
+    if CheckFailed(TRTest,'after update+reload') then exit;
     Check(T.AddField('bool',tftBoolean));
     T.AddFieldUpdate;
     if CheckFailed(TRTest) then exit;
@@ -3445,7 +3487,7 @@ end;
 
 procedure TTestBigTable._TSynBigTableRecord;
 begin
-  Check(DoFieldTest(true,15000));
+  Check(DoFieldTest(true,10000));
 end;
 
 procedure TTestBigTable._TSynBigTableString;
@@ -3857,4 +3899,4 @@ end;
 {$endif}
 
 end.
-
+

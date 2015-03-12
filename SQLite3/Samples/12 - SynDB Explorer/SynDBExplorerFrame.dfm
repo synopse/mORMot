@@ -254,7 +254,7 @@ object DBExplorerFrame: TDBExplorerFrame
         Left = 2
         Top = 32
         Width = 167
-        Height = 417
+        Height = 401
         Anchors = [akLeft, akTop, akRight, akBottom]
         ItemHeight = 13
         MultiSelect = True
@@ -267,7 +267,7 @@ object DBExplorerFrame: TDBExplorerFrame
       end
       object BtnQueryBuilder: TButton
         Left = 2
-        Top = 453
+        Top = 434
         Width = 84
         Height = 20
         Hint = 'Create a query (and potential object) from the selected tables'
@@ -279,8 +279,8 @@ object DBExplorerFrame: TDBExplorerFrame
         OnClick = BtnQueryBuilderClick
       end
       object BtnTablesExport: TButton
-        Left = 86
-        Top = 453
+        Left = 1
+        Top = 454
         Width = 84
         Height = 20
         Hint = 'Export the selected tables into a SQLite3 DB file'
@@ -290,6 +290,19 @@ object DBExplorerFrame: TDBExplorerFrame
         ShowHint = True
         TabOrder = 3
         OnClick = BtnTablesExportClick
+      end
+      object btnRunServer: TButton
+        Left = 87
+        Top = 454
+        Width = 84
+        Height = 20
+        Hint = 'Export the selected tables into a SQLite3 DB file'
+        Anchors = [akLeft, akBottom]
+        Caption = 'HTTP Server'
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 4
+        OnClick = btnRunServerClick
       end
     end
     object TabObjects: TTabSheet

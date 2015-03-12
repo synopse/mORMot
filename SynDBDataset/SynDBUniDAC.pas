@@ -6,7 +6,7 @@ unit SynDBUniDAC;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2015 Arnaud Bouchez
   Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,14 +25,16 @@ unit SynDBUniDAC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - delphinium (louisyeow)
   - alexpirate
+  - delphinium (louisyeow)
+  - itSDS
+  - milesyou
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -50,9 +52,6 @@ unit SynDBUniDAC;
   Version 1.18
   - first public release, corresponding to mORMot framework 1.18
 
-
-  Todo:
-
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -66,12 +65,13 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   SynDBDataset,
   Uni,
   UniProvider,
   UniScript;
-  
+
 
 { -------------- UniDAC database access }
 
@@ -124,13 +124,13 @@ type
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetTableNames(var Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
 
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
@@ -237,7 +237,6 @@ begin
   dPostgreSQL: begin  // thanks delphinium for the trick!
     fSpecificOptions.Values['CharSet'] := 'UTF8';
     fSpecificOptions.Values['UseUnicode'] := 'true';
-    fSpecificOptions.Values['CharLength'] := '2';
   end;
   end;
 end;
@@ -249,7 +248,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetFields(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+  const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray);
 var meta: TDAMetaData;
     n: integer;
     F: TSQLDBColumnDefine;
@@ -298,7 +297,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetIndexes(
-  const aTableName: RawUTF8; var Indexes: TSQLDBIndexDefineDynArray);
+  const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray);
 var meta, indexs: TDAMetaData;
     F: TSQLDBIndexDefine;
     FA: TDynArray;
@@ -351,7 +350,7 @@ begin
 end;
 
 procedure TSQLDBUniDACConnectionProperties.GetTableNames(
-  var Tables: TRawUTF8DynArray);
+  out Tables: TRawUTF8DynArray);
 var List: TStringList;
 begin
   List := TStringList.Create;
@@ -408,34 +407,39 @@ end;
 
 constructor TSQLDBUniDACConnection.Create(aProperties: TSQLDBConnectionProperties);
 var options: TStrings;
-    PortNumber : Integer;
+    PortNumber, i: Integer;
 begin
   inherited Create(aProperties);
   fDatabase := TUniConnection.Create(nil);
   fDatabase.ProviderName := UTF8ToString(fProperties.ServerName);
   case aProperties.DBMS of
-  dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2:
+  dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
     fDatabase.Database := UTF8ToString(fProperties.DatabaseName);
   else
     fDatabase.Server := UTF8ToString(fProperties.DatabaseName);
   end;
+  fDatabase.Username := UTF8ToString(fProperties.UserID);
+  fDatabase.Password := UTF8ToString(fProperties.PassWord);
+  // handle the options set by TSQLDBUniDACConnectionProperties.URI() 
   options := (fProperties as TSQLDBUniDACConnectionProperties).fSpecificOptions;
-  if fDatabase.Server='' then // see TSQLDBUniDACConnectionProperties.URI()
+  if fDatabase.Server='' then 
     fDatabase.Server := options.Values['Server'];
   if fDatabase.Database='' then
     fDatabase.Database := options.Values['Database'];
-  if (fDatabase.Port=0) and TryStrToInt(options.Values['Port'], PortNumber) then
+  if (fDatabase.Port=0) and TryStrToInt(options.Values['Port'],PortNumber) then
     fDatabase.Port := PortNumber;
-  fDatabase.Username := UTF8ToString(fProperties.UserID);
-  fDatabase.Password := UTF8ToString(fProperties.PassWord);
-  fDatabase.SpecificOptions.AddStrings(options);
+  for i := 0 to options.Count-1 do
+    if FindRawUTF8(['Server','Database','Port'],
+        StringToUTF8(options.Names[i]),false)<0 then
+      fDatabase.SpecificOptions.Add(options[i]);
 end;
 
 procedure TSQLDBUniDACConnection.Connect;
 var Log: ISynLog;
 begin
   if fDatabase=nil then
-    raise ESQLDBUniDAC.CreateFmt('%s.Connect(%s): Database=nil',[ClassName,fProperties.ServerName]);
+    raise ESQLDBUniDAC.CreateUTF8('%.Connect(%): Database=nil',
+      [self,fProperties.ServerName]);
   Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName,fDatabase.Database,fDatabase.Server])),true);
   try
@@ -530,4 +534,6 @@ begin
 end;
 
 
+initialization
+  TSQLDBUniDACConnectionProperties.RegisterClassNameForDefinition;
 end.

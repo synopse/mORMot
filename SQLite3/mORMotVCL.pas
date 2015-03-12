@@ -1,12 +1,12 @@
 /// DB VCL dataset using TSQLTable/TSQLTableJSON data access
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit mORmotVCL;
+unit mORMotVCL;
 
 {
     This file is part of Synopse mORmot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit mORmotVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -61,7 +62,6 @@ unit mORmotVCL;
 interface
 
 uses
-  Windows,
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,
@@ -121,7 +121,6 @@ type
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
       const ColumnTypes: array of TSQLFieldType
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
-
     /// finalize the class instance
     destructor Destroy; override;
     
@@ -260,7 +259,7 @@ begin
     exit;
   SQLType := fTable.FieldType(F,@EnumType);
   case SQLType of
-  sftBoolean, sftInteger, sftID:
+  sftBoolean, sftInteger, sftID, sftTID:
     fTemp64 := GetInt64(P);
   sftFloat, sftCurrency:
     PDouble(@fTemp64)^ := GetExtended(P);
@@ -297,12 +296,10 @@ begin
     case SQLType of
     sftBoolean:
       DBType := ftBoolean;
-    sftInteger:
+    sftInteger, sftID, sftTID:
       DBType := ftLargeint; // LargeInt=Int64
     sftFloat, sftCurrency:
       DBType := ftFloat;
-    sftID:
-      DBType := ftInteger;
     sftEnumerate, sftSet:
       if EnumType=nil then
         DBType := ftInteger else begin

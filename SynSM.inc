@@ -67,4 +67,12 @@
 // let serve all date-time as in GMT0 (UTC) timezone
 
 {.$DEFINE WITHASSERT}
-// ensure *TO_JSVAL() macros will check explicitly for the target type  
+// ensure *TO_JSVAL() macros will check explicitly for the target type
+
+{$ifndef FPC}
+{$if CompilerVersion = 24.0}
+  // see http://synopse.info/forum/viewtopic.php?pid=12598#p12598
+  {$define FIXBUGXE3}
+{$ifend}
+{$endif}
+

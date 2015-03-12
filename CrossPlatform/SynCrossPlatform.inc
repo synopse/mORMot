@@ -2,7 +2,7 @@
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -21,7 +21,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,13 +48,24 @@
 
 {$ifdef FPC}
 
-  {$MODE DELPHI} // will do integer=longint, even on 64 bits CPU and include objpas
+  {.$MODE DELPHI} // we need e.g. auto-dereferenced pointers, as in Delphi
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKSET 1}
   {$PACKENUM 1}
 
   {$define HASINLINE}
+  {$define USEOBJECTINSTEADOFRECORD}
+  {$Q-} // disable overflow checking
+  {$R-} // disable range checking
+
+  {$ifdef VER2_7_1}
+    {$define ISFPC271}
+    // defined if the http://mantis.freepascal.org/view.php?id=26773 bug is fixed
+    // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
+    // => this will change the TInvokeableVariantType.SetProperty() signature
+    {$define FPC_VARIANTSETVAR}
+  {$endif}
 
 {$else}
 
@@ -67,9 +78,17 @@
     {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
     {$define ISDELPHI2010}
     {$define ISDELPHIXE}
+    {$define USETMONITOR}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-    {$ifdef VER140} 
+    {$ifdef UNICODE}
+      {$ifdef CPUX64}
+        {$define CPU64}
+      {$endif}
+    {$else}
+      {$define USEOBJECTINSTEADOFRECORD}
+    {$endif}
+    {$ifdef VER140}
       {$define ISDELPHI6}
     {$endif}
     {$if CompilerVersion >= 18}    // Delphi 2006 or newer
@@ -81,14 +100,24 @@
     {$if CompilerVersion >= 22.0}
       {$define ISDELPHIXE}
     {$ifend}
+    {$if CompilerVersion >= 23.0}
+      {$define ISDELPHIXE2} // e.g. for Vcl.Graphics
+      {$ifndef MSWINDOWS}
+      {$define USETMONITOR}
+      {$endif}
+    {$ifend}
     {$if CompilerVersion >= 25.0}
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
+      {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
     {$ifend}
   {$else}
     {$define ISDELPHI5OROLDER}
+    {$define USEOBJECTINSTEADOFRECORD}
   {$endif CONDITIONALEXPRESSIONS}
   {$endif NEXTGEN}
+  {$Q-} // disable overflow checking
+  {$R-} // disable range checking
 {$endif DELPHIWEBSCRIPT}
 
 {$endif FPC}

@@ -6,7 +6,7 @@ interface
 
 uses
   SynCommons,
-  mORMot, 
+  mORMot,
   mORMotHttpServer,
   mORMotWrappers,
   SynMustache,
@@ -38,15 +38,14 @@ type
 
   TPeopleSexe = (sFemale, sMale);
 
-  ICalculator = interface(IInvokable)
-    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-    function Add(n1,n2: integer): integer;
-    procedure ToText(Value: Currency; const Curr: RawUTF8;
-      var Sexe: TPeopleSexe; var Name: RawUTF8);
-    {$ifdef TESTRECORD}
-    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
-    {$endif}
+  TPeopleSexeDynArray = array of TPeopleSexe;
+
+  TSimpleRecord = packed record
+    A,B: integer;
+    C: RawUTF8;
   end;
+
+  TSimpleRecordDynArray = array of TSimpleRecord;
 
   TSQLRecordPeople = class(TSQLRecord)
   protected
@@ -72,6 +71,18 @@ type
   public
     property Simple: TTestCustomJSONArraySimpleArray read fSimple;
   {$endif}
+  end;
+
+  ICalculator = interface(IInvokable)
+    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
+    function Add(n1,n2: integer): integer;
+    procedure ToText(Value: Currency; const Curr: RawUTF8;
+      var Sexe: TPeopleSexe; var Name: RawUTF8);
+    {$ifdef TESTRECORD}
+    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
+    {$endif}
+    function GetPeople(id: TID; out People: TSQLRecordPeople;
+      out Sexes: TPeopleSexeDynArray; var arr: TSimpleRecordDynArray): boolean;
   end;
 
   TCustomServer = class(TSQLRestServerFullMemory)
@@ -100,6 +111,8 @@ type
     {$ifdef TESTRECORD}
     function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
     {$endif}
+    function GetPeople(id: TID; out People: TSQLRecordPeople;
+      out Sexes: TPeopleSexeDynArray; var arr: TSimpleRecordDynArray): boolean;
   end;
 
 function TServiceCalculator.Add(n1, n2: integer): integer;
@@ -115,6 +128,19 @@ begin
   Sexe := sFemale;
 end;
 
+function TServiceCalculator.GetPeople(id: TID;
+  out People: TSQLRecordPeople; out Sexes: TPeopleSexeDynArray;
+  var arr: TSimpleRecordDynArray): boolean;
+var n: integer;
+begin
+  result := ServiceContext.Request.Server.Retrieve(id,People);
+  n := length(arr);
+  SetLength(arr,n+1);
+  arr[n].A := id;
+  arr[n].C := People.FirstName;
+end;
+
+
 {$ifdef TESTRECORD}
 
 function TServiceCalculator.RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
@@ -126,6 +152,8 @@ begin
   SetLength(Rec.G,n+1);
   Rec.G[n] := UInt32ToUtf8(n+1);
   inc(Rec.H.H1);
+  if n=0 then
+    exit; // first return J[] with nothing
   n := length(Rec.J);
   SetLength(Rec.J,n+1);
   Rec.J[n].J1 := n;
@@ -166,11 +194,14 @@ begin
   end;
   if DB.TableRowCount(TSQLRecordPeople)=0 then
     // we expect at least one record
-    DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}]);
+    if DB.Add(TSQLRecordPeople,['First1','Last1',1801,1826{$ifdef TESTRECORD},0,''{$endif}])=0 then
+      writeln('StartServer DB.Add(TSQLRecordPeople) Error');
     // in all cases, client will call DropTable method-based service
   AddToServerWrapperMethod(DB,['..\..\..\CrossPlatform\templates',
                                 '..\..\..\..\CrossPlatform\templates']);
+  {$ifndef FPC}
   DB.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
+  {$endif}
 end;
 
 procedure StopServer;
@@ -189,6 +220,7 @@ const
   'F RawUTF8 G array of RawUTF8 '+
   'H {H1 integer H2 WideString H3{H3a boolean H3b RawByteString}} I TDateTime '+
   'J [J1 byte J2 TGUID J3 TRecordEnum]';
+  __TSimpleRecord = 'A,B:integer C: RawUTF8';
 
 class procedure TSQLRecordPeople.InternalRegisterCustomProperties(
   Props: TSQLRecordProperties);
@@ -201,6 +233,8 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TRecordEnum));
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArraySimpleArray),__TTestCustomJSONArraySimpleArray);
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSimpleRecord),__TSimpleRecord);
+
 
 {$endif TESTRECORD}
 

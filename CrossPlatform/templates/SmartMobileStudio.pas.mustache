@@ -1,6 +1,6 @@
 /// remote access to a mORMot server using SmartMobileStudio
 {{#uri}}
-// - retrieved from http://{{host}}/{{uri}}
+// - retrieved from {{protocol}}://{{host}}/{{uri}}
 // at {{time}} using "{{templateName}}" template
 {{/uri}}
 {{^uri}}
@@ -19,7 +19,7 @@ unit {{fileName}};
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.
 
-  This unit would work on Smart Mobile Studio 2.1 and later.
+  This unit would work on Smart Mobile Studio 2.1.1 and later.
 }
 
 interface
@@ -56,10 +56,39 @@ type // define some record types, used as properties below
 
 {{/records}}
 {{/withRecords}}
+{{#withArrays}}
+type // define some dynamic array types, used as properties below
+{{#arrays}}
+  {{name}} = array of {{typeSource}};
+{{/arrays}}
+
+{{/withArrays}}
 type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePascal}}; {{/dirInput}}{{/args}}
-      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typeDelphi}}{{commaIn}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typeDelphi}}{{/dirResult}}{{/args}};{{/methodSynch}}
+      onSuccess: procedure({{#args}}{{#dirOutput}}{{argName}}: {{typePascal}}{{commaOutResult}}{{/dirOutput}}{{/args}}); onError: TSQLRestEvent);{{/methodAsynch}}{{<methodSynch}}_{{methodName}}({{#args}}{{^dirResult}}{{dirNoOut}} {{argName}}: {{typePascal}}{{commaArg}}{{/dirResult}}{{/args}}){{#args}}{{#dirResult}}: {{typePascal}}{{/dirResult}}{{/args}};{{/methodSynch}}
+{{#orm}}
+{{^isInMormotPas}}
+  /// map "{{tableName}}" table
+  {{className}} = class(TSQLRecord)
+  protected
+    {{#fields}}
+    f{{name}}: {{typePascal}}; 
+    {{/fields}}
+    // those overridden methods will emulate the needed RTTI
+    class function ComputeRTTI: TRTTIPropInfos; override;
+    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
+    function GetProperty(FieldIndex: integer): variant; override;
+  public
+{{#fields}}
+{{#isSQLRecord}}    // defined as {{name}}: {{typeDelphi}} on the server
+{{/isSQLRecord}}
+    property {{name}}: {{typePascal}} read f{{name}} write f{{name}};
+{{/fields}}
+  end;
+  
+{{/isInMormotPas}}
+{{/orm}}
 {{#soa.services}}
-  /// service accessible {{#uri}}via http://{{host}}/{{root}}/{{uri}}{{/uri}}
+  /// service accessible {{#uri}}via {{protocol}}://{{host}}/{{root}}/{{uri}}{{/uri}}
   // - this service will run in sic{{instanceCreationName}} mode
   // - synchronous and asynchronous methods are available, depending on use case
   // - synchronous _*() methods will block the browser execution, so won't be
@@ -79,48 +108,49 @@ type{{<methodAsynch}}{{methodName}}({{#args}}{{#dirInput}}{{argName}}: {{typePas
   end;
 
 {{/soa.services}}
-{{#orm}}
-{{^isInMormotPas}}
-  /// map "{{tableName}}" table
-  {{className}} = class(TSQLRecord)
-  protected
-    {{#fields}}
-    f{{name}}: {{typePascal}}; 
-    {{/fields}}
-    // those overriden methods will emulate the needed RTTI
-    class function ComputeRTTI: TRTTIPropInfos; override;
-    procedure SetProperty(FieldIndex: integer; const Value: variant); override;
-    function GetProperty(FieldIndex: integer): variant; override;
-  public
-    {{#fields}}
-    property {{name}}: {{typePascal}} read f{{name}} write f{{name}};
-    {{/fields}}
-  end;
-  
-{{/isInMormotPas}}
-{{/orm}}
 
 const
-  /// the server port{{#uri}}, corresponding to http://{{host}}{{/uri}}
+  /// the server port{{#uri}}, corresponding to {{protocol}}://{{host}}{{/uri}}
   SERVER_PORT = {{port}};
+  /// the server model root name{{#uri}}, corresponding to {{protocol}}://{{host}}/{{root}}{{/uri}}
+  SERVER_ROOT = '{{root}}';
 
 
 /// return the database Model corresponding to this server
-function GetModel: TSQLModel;
+function GetModel(aRoot: string=SERVER_ROOT): TSQLModel;
 
 /// create a TSQLRestClientHTTP instance and connect to the server
-// - it will use by default port {{port}}
+// - it will use by default port {{port}} over root '{{root}}'{{#host}}, corresponding
+// to {{protocol}}://{{host}}/{{root}}{{/host}}
 {{#authClass}}
 // - secure connection will be established via {{.}}
 // with the supplied credentials
 {{/authClass}}
 // - request will be asynchronous, and trigger onSuccess or onError event
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer=SERVER_PORT);
+  onSuccess, onError: TSQLRestEvent;
+  aServerPort: integer=SERVER_PORT; aServerRoot: string=SERVER_ROOT;
+  aHttps: boolean={{#https}}true{{/https}}{{^https}}false{{/https}});
 
+{{#withHelpers}}
+// publish some low-level helpers for variant conversion
+// - used internally: you should not need those functions in your end-user code
+{{#enumerates}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+function {{name}}ToText(const value: {{name}}): string;
+{{/enumerates}}
+{{#records}}
+function Variant2{{name}}(const Value: variant): {{name}};
+function {{name}}2Variant(const Value: {{name}}): variant;
+{{/records}}
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+function {{name}}2Variant(const _array: {{name}}): variant;
+{{/arrays}}
+
+{{/withHelpers}}
 
 implementation
-{{#withRecords}}
 {{<setrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := Value.{{fullPropName}};
 {{/isSimple}}{{#nestedRecord}}{{>setrec}}{{/nestedRecord}}{{#fromVariant}}  result.{{fullPropName}} := {{fromVariant}}(Value.{{fullPropName}});
@@ -129,10 +159,10 @@ implementation
       result.{{fullPropName}}.Add({{typePascal}}(Value.{{fullPropName}}[i]));
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  if VariantType(Value.{{fullPropName}})=jvArray then begin
     var tmp: {{name}};
-    tmp.J.SetLength(1);
+    tmp.{{propName}}.SetLength(1);
     for var n := 0 to integer(Value.{{fullPropName}}.length)-1 do begin
       var source := Value.{{fullPropName}}[n];
-      var dest := tmp.J[0];
+      var dest := tmp.{{propName}}[0];
 {{#fields}}
       dest.{{propName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}source.{{propName}}{{#fromVariant}}){{/fromVariant}};
 {{/fields}}
@@ -142,12 +172,12 @@ implementation
 {{/nestedRecordArray}}{{/fields}}{{/setrec}}
 {{<getrec}}{{#fields}}
 {{#isSimple}}  result.{{fullPropName}} := Value.{{fullPropName}};
-{{/isSimple}}{{#nestedRecord}}  result.{{fullPropName}} := TVariant.CreateObject;
+{{/isSimple}}{{#nestedRecord}}  result.{{fullPropName}} := new JObject;
 {{>getrec}}{{/nestedRecord}}{{#toVariant}}  result.{{fullPropName}} := {{toVariant}}(Value.{{fullPropName}});
 {{/toVariant}}{{#nestedSimpleArray}}  result.{{fullPropName}} := variant(Value.{{fullPropName}});
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  result.{{fullPropName}} := TVariant.CreateArray;
   for var source in Value.{{fullPropName}} do begin
-    var dest := TVariant.CreateObject;
+    var dest: variant := new JObject;
 {{#fields}}
     dest.{{propName}} := {{#toVariant}}{{toVariant}}({{/toVariant}}source.{{propName}}{{#toVariant}}){{/toVariant}};
 {{/fields}}
@@ -168,10 +198,16 @@ begin
   asm return @VariantToEnum(@_variant,@{{name}}); end;
 end;
 
+function {{name}}ToText(const value: {{name}}): string;
+begin
+  asm return @{{name}}[@value]; end;
+end;
+
 {{/enumerates}}
 {$HINTS ON}
 
 {{/withEnumerates}}
+{{#withRecords}}
 { Some helpers for record types:
   due to potential obfuscation of generated JavaScript, we can't assume
   that the JSON used for transmission would match record fields naming }
@@ -184,13 +220,39 @@ end;
 
 function {{name}}2Variant(const Value: {{name}}): variant;
 begin
-  result := TVariant.CreateObject;
+  result := new JObject;
 {{>getrec}}
 end;
 {{/records}}
-{{/withRecords}}
 
+{{/withRecords}}
+{{#withArrays}}
+
+{ Some helpers for dynamic array types }
+
+{{#arrays}}
+function Variant2{{name}}(const _variant: variant): {{name}};
+var tmp: {{typeSource}};
+begin
+  if VariantType(_variant)=jvArray then
+    for var i := 0 to integer(_variant.Length)-1 do begin
+      tmp := {{#fromVariant}}{{fromVariant}}{{/fromVariant}}(_variant[i]);
+      result.Add(tmp);
+    end;
+end;
+
+function {{name}}2Variant(const _array: {{name}}): variant;
+var i: integer;
+begin
+  result := TVariant.CreateArray;
+  for i := 0 to high(_array) do
+    result.push({{#toVariant}}{{toVariant}}{{/toVariant}}(_array[i]));
+end;
+
+{{/arrays}}
+{{/withArrays}}
 {{#orm}}
+
 {{^isInMormotPas}}
 
 { {{className}} }
@@ -225,15 +287,17 @@ end;
 {{/isInMormotPas}}
 {{/orm}}
 
-function GetModel: TSQLModel;
+function GetModel(aRoot: string): TSQLModel;
 begin
-  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],'{{root}}');
+  result := TSQLModel.Create([{{#orm}}{{className}}{{comma}}{{/orm}}],aRoot);
 end;
 
 procedure GetClient(const aServerAddress{{#authClass}}, aUserName,aPassword{{/authClass}}: string;
-  onSuccess, onError: TSQLRestEvent; aServerPort: integer);
+  onSuccess, onError: TSQLRestEvent; aServerPort: integer; aServerRoot: string;
+  aHttps: boolean);
 begin
-  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,GetModel,true);
+  var client := TSQLRestClientHTTP.Create(aServerAddress,aServerPort,
+    GetModel(aServerRoot),true,aHttps); // aOwnModel=true
   client.Connect(
   lambda
     try
@@ -280,13 +344,13 @@ begin
     [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}],
     lambda (res: array of Variant)
       onSuccess({{#args}}{{#dirOutput}}{{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}}{{#commaOutResult}},{{/commaOutResult}}{{/dirOutput}}{{/args}});
-    end, onError); 
+    end, onError{{#resultIsServiceCustomAnswer}}, true{{/resultIsServiceCustomAnswer}}); 
 end;
 
 {{verb}} TService{{interfaceURI}}.{{>methodSynch}}
 begin
   var res := fClient.CallRemoteServiceSynch(self,'{{methodName}}',{{ArgsOutputCount}},
-    [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}]);
+    [{{#args}}{{#dirInput}}{{#toVariant}}{{toVariant}}({{argName}}){{/toVariant}}{{^toVariant}}{{argName}}{{/toVariant}}{{commaInSingle}}{{/dirInput}}{{/args}}]{{#resultIsServiceCustomAnswer}},true{{/resultIsServiceCustomAnswer}});
 {{#args}}{{#dirOutput}}  {{argName}} := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}res[{{indexOutResult}}{{#fromVariant}}){{/fromVariant}};
 {{/dirOutput}}{{/args}}end;
 

@@ -7,6 +7,7 @@ program RESTserver;
 
 uses
   SynCommons,          // framework core
+  SynLog,              // logging features
   mORMot,              // RESTful server & ORM
   mORMotSQLite3,       // SQLite3 engine as ORM core
   SynSQLite3Static,    // staticaly linked SQLite3 engine
@@ -22,10 +23,14 @@ var
   aRestServer: TSQLRestServerDB;
   aHttpServer: TSQLHttpServer;
 begin
+  // set logging abilities
+  SQLite3Log.Family.Level := LOG_VERBOSE;
+  //SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
+  SQLite3Log.Family.PerThreadLog := ptIdentifiedInOnFile;
   // ODBC driver e.g. from http://ftp.postgresql.org/pub/odbc/versions/msi
   aProps := TODBCConnectionProperties.Create('','Driver=PostgreSQL Unicode'+
       {$ifdef CPU64}'(x64)'+{$endif}';Database=postgres;'+
-      'Server=localhost;Port=5432;UID=postgres;Pwd=postgresPassword','','');
+      'Server=localhost;Port=5433;UID=postgres;Pwd=postgresPassword','','');
   try
     // get the shared data model
     aModel := DataModel;
@@ -35,7 +40,11 @@ begin
       // create the main mORMot server
       aRestServer := TSQLRestServerDB.Create(aModel,':memory:',false); // authentication=false
       try
-        aRestServer.CreateMissingTables; // create tables or fields if missing
+        // optionally execute all PostgreSQL requests in a single thread
+        aRestServer.AcquireExecutionMode[execORMGet] := amBackgroundORMSharedThread;
+        aRestServer.AcquireExecutionMode[execORMWrite] := amBackgroundORMSharedThread;
+        // create tables or fields if missing
+        aRestServer.CreateMissingTables;
         // serve aRestServer data over HTTP
         aHttpServer := TSQLHttpServer.Create(SERVER_PORT,[aRestServer],'+',useHttpApiRegisteringURI);
         try

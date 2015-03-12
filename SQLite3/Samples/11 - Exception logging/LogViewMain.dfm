@@ -1,6 +1,6 @@
 object MainLogView: TMainLogView
-  Left = 228
-  Top = 210
+  Left = 199
+  Top = 166
   Width = 860
   Height = 639
   Caption = ' Synopse LogView - '
@@ -145,6 +145,20 @@ object MainLogView: TMainLogView
       Transparent = True
       OnClick = ImageLogoClick
     end
+    object lblServerRoot: TLabel
+      Left = 16
+      Top = 48
+      Width = 62
+      Height = 13
+      Caption = 'Server Root:'
+    end
+    object lblServerPort: TLabel
+      Left = 16
+      Top = 90
+      Width = 59
+      Height = 13
+      Caption = 'Server Port:'
+    end
     object BtnBrowse: TButton
       Left = 16
       Top = 8
@@ -270,6 +284,55 @@ object MainLogView: TMainLogView
       ShowHint = True
       TabOrder = 9
       OnClick = BtnSearchPreviousClick
+    end
+    object btnServerLaunch: TButton
+      Left = 16
+      Top = 132
+      Width = 107
+      Height = 25
+      Hint = 'Lauch a HTTP server  for remote logging'
+      Anchors = [akTop, akRight]
+      Caption = 'Server Launch'
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 10
+      OnClick = btnServerLaunchClick
+    end
+    object edtServerRoot: TEdit
+      Left = 16
+      Top = 64
+      Width = 121
+      Height = 21
+      TabOrder = 11
+      Text = 'LogService'
+    end
+    object edtServerPort: TEdit
+      Left = 16
+      Top = 106
+      Width = 121
+      Height = 21
+      TabOrder = 12
+      Text = '8091'
+    end
+    object btnListClear: TButton
+      Left = 16
+      Top = 160
+      Width = 105
+      Height = 25
+      Caption = 'Clear List'
+      TabOrder = 13
+      Visible = False
+      OnClick = btnListClearClick
+    end
+    object btnListSave: TButton
+      Left = 16
+      Top = 192
+      Width = 105
+      Height = 25
+      Caption = 'Save List'
+      TabOrder = 14
+      Visible = False
+      OnClick = btnListSaveClick
     end
   end
   object MemoBottom: TMemo
@@ -405,5 +468,19 @@ object MainLogView: TMainLogView
       Caption = '&Copy'
       OnClick = ListMenuCopyClick
     end
+  end
+  object tmrRefresh: TTimer
+    Enabled = False
+    Interval = 200
+    OnTimer = tmrRefreshTimer
+    Left = 241
+    Top = 424
+  end
+  object dlgSaveList: TSaveDialog
+    DefaultExt = '.log'
+    Filter = 'log|*.log|txt|*.txt|synlz|*.synlz'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    Left = 345
+    Top = 200
   end
 end

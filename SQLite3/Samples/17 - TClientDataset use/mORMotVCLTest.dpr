@@ -1,6 +1,7 @@
 program mORMotVCLTest;
 
 uses
+  {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   Forms,
   mORMotVCLUnit in 'mORMotVCLUnit.pas' {Form1};
 

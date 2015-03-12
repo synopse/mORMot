@@ -5,10 +5,10 @@ unit SynSM;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    Scripting support for mORMot Copyright (C) 2014 Pavel Mashlyakovsky
+    Scripting support for mORMot Copyright (C) 2015 Pavel Mashlyakovsky
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -29,12 +29,13 @@ unit SynSM;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - Arnaud Bouchez
   - Vadim Orel
+  - win2014
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -80,6 +81,8 @@ uses
   {$endif}
   Variants,
   SynCommons,
+  SynLog,
+  SynTests,
   SynSMAPI;
 
 const
@@ -587,8 +590,8 @@ type
   // LastError property
   TSMEngine = class
   protected
-    frt: PJSRuntime;
-    fcx: PJSContext;
+    fRt: PJSRuntime;
+    fCx: PJSContext;
     fcomp: PJSCompartment;
     fNativeMethod: TSMEngineMethodEventDynArray;
     fNativeMethods: TDynArrayHashed;
@@ -598,7 +601,7 @@ type
     FGlobalObject: TSMObject;
     FEngineContentVersion: Cardinal;
     FStringFinalizer: JSStringFinalizer;
-    FThreadID: DWORD;
+    FThreadID: TThreadID;
     FLastErrorMsg: RawUTF8;
     FLastErrorFileName: RawUTF8;
     FLastErrorLine: integer;
@@ -808,7 +811,7 @@ type
     procedure SetMaxPerEngineMemory(AMaxMem: Cardinal);
     /// returns -1 if none was defined yet
     // - this method is not protected via the global FEngineCS mutex/lock
-    function ThreadEngineIndex(ThreadID: DWORD): Integer;
+    function ThreadEngineIndex(ThreadID: TThreadID): Integer;
     /// returns nil if none was defined yet
     function CurrentThreadEngine: TSMEngine;
     /// create a new SpiderMonkey Engine
@@ -1069,7 +1072,11 @@ begin
 
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
   // ION is disabled without these options
+  {$ifdef FIXBUGXE3}
+  fCx.SetOptions([jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs]);
+  {$else}
   fCx.Options := [jsoVarObjFix,jsoBaseLine,jsoTypeInference,jsoIon,jsoAsmJs];
+  {$endif}
 
   fStringFinalizer.finalize := ExternalStringFinalizer;
   JS_SetContextPrivate(cx, self);
@@ -1401,9 +1408,9 @@ begin
   FMaxPerEngineMemory := AMaxMem;
 end;
 
-function TSMEngineManager.ThreadEngineIndex(ThreadID: DWORD): Integer;
+function TSMEngineManager.ThreadEngineIndex(ThreadID: TThreadID): Integer;
 begin
-  if self <> nil then
+  if self<>nil then
     for result := 0 to FEnginePool.Count-1 do
       if TSMEngine(FEnginePool.List[result]).fThreadID=ThreadID then
         exit;
@@ -1425,7 +1432,7 @@ end;
 
 function TSMEngineManager.ThreadSafeEngine: TSMEngine;
 var i: integer;
-    ThreadID: DWORD;
+    ThreadID: TThreadID;
 begin
   EnterCriticalSection(fEngineCS);
   try
@@ -1441,13 +1448,13 @@ begin
         // content version changed -> force recreate thread Engine
         {$ifdef SM_DEBUG}
         SynSMLog.Add.Log(sllDebug,
-          'Drop SpiderMonkey Engine for thread % - modification found', ThreadID);
+          'Drop SpiderMonkey Engine for thread % - modification found',ThreadID);
         {$endif}
         FEnginePool.Delete(i); // as in ReleaseCurrentThreadEngine
       end;
     // here result=nil or to be ignored (just dropped)
     {$ifdef SM_DEBUG}
-    SynSMLog.Add.Log(sllDebug, 'Create new JavaScript Engine for thread %', ThreadID);
+    SynSMLog.Add.Log(sllDebug, 'Create new JavaScript Engine for thread %',ThreadID);
     {$endif}
     result := CreateNewEngine;
     result.fThreadID := ThreadID;
@@ -1649,8 +1656,8 @@ begin
     SetWideString(cx,WideString(VAny));
   varString:
     SetAnsiChar(cx,VAny,length(RawByteString(VAny)),
-  {$ifndef UNICODE}   CP_UTF8);
-  {$else}             StringCodePage(RawByteString(VAny)));
+  {$ifndef HASVARUSTRING} CP_UTF8);
+  {$else}                 StringCodePage(RawByteString(VAny)));
   varUString:
     SetSynUnicode(cx,UnicodeString(VAny));
   {$endif}
@@ -1659,7 +1666,7 @@ begin
     SetVariant(cx,PVariant(VPointer)^) else
   if VType=varByRef or varOleStr then
     SetWideString(cx,PWideString(VAny)^) else
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   if VType=varByRef or varUString then
     SetSynUnicode(cx,PUnicodeString(VAny)^) else
   {$endif}
@@ -1813,7 +1820,7 @@ end;
 procedure TSMValue.SetDateTime(cx: PJSContext; const Value: TDateTime);
 var dmsec: double;
     unixTime: Int64;
-{$ifdef CONSIDER_TIME_IN_Z} // as defined in SynSM.inc
+  {$ifdef CONSIDER_TIME_IN_Z} // as defined in SynSM.inc
     oDate: PJSObject;
 {$else}
     // this realisation is buggy - it ignores timezone rules change history
@@ -1908,7 +1915,7 @@ begin
     JSTYPE_NUMBER:
       if JSVAL_IS_INT(FValue) then
         W.Add(JSVAL_TO_INT(FValue)) else
-        W.Add(JSVAL_TO_DOUBLE(FValue));
+        W.AddDouble(JSVAL_TO_DOUBLE(FValue));
     JSTYPE_BOOLEAN:
       W.AddString(JSON_BOOLEAN[JSVAL_TO_BOOLEAN(FValue)=JS_TRUE]);
     JSTYPE_OBJECT,
@@ -1987,7 +1994,7 @@ end;
 procedure TSMObject.DefineProperty(const name: SynUnicode;
   const value: variant; attrs: TJSPropertyAttrs);
 begin
-  DefineProperty(name,VariantToJsVal(cx,value),attrs);
+  DefineProperty(name,TSMValue(VariantToJsVal(cx,value)),attrs);
 end;
 
 procedure TSMObject.DefineProperty(const name: SynUnicode;

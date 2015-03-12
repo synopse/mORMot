@@ -68,6 +68,7 @@ begin
   writeln('Connecting to the server at '+ServerAddress.Text+':888');
   GetClient(ServerAddress.Text,LogonName.Text,LogonPassword.Text,
   lambda(client)
+    client.LogToRemoteServer(LOG_VERBOSE,'localhost');
     writeln('Safely connected with SessionID='+IntToStr(client.Authentication.SessionID));
     people := TSQLRecordPeople.Create(client,1);
     assert(people.ID=1);

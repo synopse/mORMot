@@ -35,6 +35,7 @@ type
     BtnTablesExport: TButton;
     BtnExecLog: TButton;
     BtnExecToTab: TButton;
+    btnRunServer: TButton;
     procedure EditTableChange(Sender: TObject);
     procedure ListTableDblClick(Sender: TObject);
     procedure BtnExecClick(Sender: TObject);
@@ -51,6 +52,7 @@ type
       Shift: TShiftState);
     procedure ListTableKeyUp(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure btnRunServerClick(Sender: TObject);
   private
     fHint: THintWindowDelayed;
     fGrid: TSQLTableToGrid;
@@ -96,7 +98,7 @@ implementation
 uses
   SynDBOracle,
   SynDBExplorerMain, SynDBExplorerQueryBuilder, SynDBExplorerExportTables,
-  SynTaskDialog, SynBigTable, SynDBSQLite3;
+  SynTaskDialog, SynBigTable, SynDBSQLite3, SynDBExplorerServer;
 
 {$R *.dfm}
 
@@ -286,7 +288,7 @@ begin
       if SQL<>'' then
         if isSelect(Pointer(SQL)) then begin
           try
-            Rows := Props.Execute(SQL,[]);
+            Rows := Props.Execute(SQL,[],nil,(Sender<>BtnExecToFile));
           except
             on Exception do
             if Props.InheritsFrom(TSQLDBSQLite3ConnectionProperties) then
@@ -303,7 +305,7 @@ begin
               Frame.MemoSQL.Lines.Text := U2S(SQL);
             end;
             with Frame do begin
-              fJSONBuffer := Rows.FetchAllAsJSON(false,nil,true); // DoNotFletchBlobs=true
+              fJSONBuffer := Rows.FetchAllAsJSON(false); 
               Stop := Timer.Stop;
               Table := TSQLTableJSON.Create('',pointer(fJSONBuffer),length(fJSONBuffer));
               fGrid := TSQLTableToGrid.Create(DrawGrid,Table,nil);
@@ -435,7 +437,7 @@ constructor TDBExplorerFrame.Create(aOwner: TComponent);
 begin
   inherited Create(aOwner);
   fHint := THintWindowDelayed.Create(self);
-  fSQLLogFile := ChangeFileExt(paramstr(0),'.history');
+  fSQLLogFile := ChangeFileExt(ExeVersion.ProgramFileName,'.history');
   PagesLeft.ActivePageIndex := 0;
 end;
 
@@ -502,7 +504,6 @@ begin
           TSQLRibbon(nil).AddToReport(Rep,fGrid.Table,[]);
           Rep.EndDoc;
           Rep.Caption := GetFileNameWithoutExt(ExtractFileName(FileName));
-          ExeVersionRetrieve;
           Rep.ExportPDFAuthor := U2S(ExeVersion.User);
           Rep.ExportPDFApplication := Form.Caption;
           Rep.ExportPDFSubject := BtnResultToFile.Hint;
@@ -769,6 +770,13 @@ begin
   end;
   List.ItemIndex := 0;
   LogClick(List);
+end;
+
+procedure TDBExplorerFrame.btnRunServerClick(Sender: TObject);
+begin
+  if (HTTPServerForm.Props=nil) or (HTTPServerForm.Server=nil) then
+    HTTPServerForm.Props := Props;
+  HTTPServerForm.Show;
 end;
 
 end.

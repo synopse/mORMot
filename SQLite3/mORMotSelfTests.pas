@@ -6,7 +6,7 @@ unit mORMotSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -74,45 +74,17 @@ procedure SQLite3ConsoleTests;
 implementation
 
 uses
-  Windows,
-  Classes,
-  SynLZ,
-  SynLZO,
-  SynCrypto,
-  SynCrtSock,
-  SynCommons,
-{$ifndef DELPHI5OROLDER}
+  {$ifdef MSWINDOWS}
+  Windows, // for AllocConsole
+  {$ifndef DELPHI5OROLDER}
   SynBigTable,
-  SynSQLite3,
-  SynSQLite3Static,
-{$ifndef FPC}
-  mORMot,
-  mORMotSQLite3,
-  mORMotFastCgiServer,
-  mORMotHttpClient,
-  mORMotHttpServer,
-  mORMotService,
-  //mORMotBigTable,
-{$endif}
-{$endif}
-{$ifndef FPC}
-{$ifndef LVCL}
-  SynPdf,
-  Contnrs,
-  SynGdiPlus,
-  SynDB,
-  SynOleDB,
-  SynDBOracle,
-  SynDBODBC,
-  SynDBSQLite3,
-{$ifndef FPC}
-{$ifndef DELPHI5OROLDER}
-  mORMotDB,
-{$endif DELPHI5OROLDER}
-{$endif FPC}
-{$endif LVCL}
-{$endif FPC}
-  SynZip,
+  {$endif}
+  {$endif}
+  {$ifndef DELPHI5OROLDER}
+  mORMot, // for TSQLLog
+  {$endif}
+  SynLog,
+  SynTests,
   SynSelfTests;
 
 type
@@ -127,13 +99,11 @@ type
     // - low level functions and classes, cryptographic or compression routines,
     // PDF generation
     procedure SynopseLibraries;
-{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
     /// test the freeware Synopse mORMot framework
     // - access to SQLite3 or external engines, ORM features, Client/Server
     procedure _mORMot;
 {$endif DELPHI5OROLDER}
-{$endif FPC}
   end;
 
 
@@ -143,8 +113,9 @@ procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
   // exit;
   AddCase([TTestLowLevelCommon,
-{$ifndef FPC}
     TTestLowLevelTypes,
+{$ifdef MSWINDOWS}
+{$ifndef FPC}
 {$ifndef DELPHI5OROLDER}
     TTestBigTable,
 {$endif}
@@ -152,14 +123,11 @@ begin
     TTestSynopsePDF, // PDF uses SynGDIPlus or Jpeg.pas
 {$endif}
 {$endif}
+{$endif}
     TTestCryptographicRoutines, TTestCompression
    ]);
 end;
 
-{$ifdef FPC}
-type // mORMot.pas unit doesn't compile with FPC yet
-  TSQLLog = TSynLog;
-{$else}
 {$ifdef DELPHI5OROLDER}
 type // mORMot.pas unit doesn't compile with Delphi 5 yet
   TSQLLog = TSynLog;
@@ -173,21 +141,27 @@ begin
   // *)
   AddCase(TTestClientServerAccess); // (*
   AddCase(TTestServiceOrientedArchitecture);
+  AddCase(TTestBidirectionalRemoteConnection);
   AddCase(TTestExternalDatabase);
   AddCase(TTestMultiThreadProcess);
+  AddCase(TTestDDDSharedUnits);
   //exit; // *)
 end;
 {$endif DELPHI5OROLDER}
-{$endif FPC}
 
 procedure SQLite3ConsoleTests;
 begin
+  {$ifdef MSWINDOWS}
   AllocConsole;
+  {$endif}
+  {$ifndef DELPHI5OROLDER}
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
+  {$endif}
   TSQLLog.Family.Level := LOG_STACKTRACE; // log errors by default
-  if false then // "if not false then" will create around 500 MB of log file
+  if false then // "if not false then" will create around 550 MB of log file
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
+    //DestinationPath := ExeVersion.ProgramFilePath+'logs'; folder should exist
     PerThreadLog := ptIdentifiedInOnFile;
     //HighResolutionTimeStamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
@@ -207,8 +181,10 @@ begin
   finally
     Free;
   end;
+  {$ifndef LINUX}
   WriteLn(#13#10'Done - Press ENTER to Exit');
   ReadLn;
+  {$endif}
 end;
 
 end.

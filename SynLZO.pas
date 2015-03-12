@@ -5,7 +5,7 @@ unit SynLZO;
 {
     This file is part of Synopse LZO Compression.
 
-    Synopse LZO Compression. Copyright (C) 2014 Arnaud Bouchez
+    Synopse LZO Compression. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLZO;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -207,11 +207,13 @@ function lzopas_decompressfilecheck(const srcFile: AnsiString): boolean;
 
 implementation
 
+{$ifndef CPUARM}
 {$ifndef CPUX64}
 {$ifndef CPU64}
   {$define USEASM}
   // if defined, a hand-tuned asm compression code (derivating from one generated
   //   by Delphi 2009) will be used instead of the slower Delphi3-2007 code
+{$endif}
 {$endif}
 {$endif}
 
@@ -1831,7 +1833,7 @@ begin
     case L and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(P)^);
     2: inc(s1,PWord(P)^);
-    3: inc(s1,PWord(P)^ or (PByteArray(P)^[2] shl 16));
+    3: inc(s1,PWord(P)^ or (ord(PAnsiChar(P)[2]) shl 16));
     end;
     inc(s2,s1);
     result := s1 xor (s2 shl 16);

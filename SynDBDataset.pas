@@ -6,7 +6,7 @@ unit SynDBDataset;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2015 Arnaud Bouchez
   Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit SynDBDataset;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - itSDS
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -61,6 +62,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynLog,
   SynDB,
   {$ifdef ISDELPHIXE2}
   Data.DB, Data.FMTBcd;
@@ -71,9 +73,12 @@ uses
 { -------------- DB.pas TDataSet (TQuery like) abstract connection }
 
 type
+  {$ifndef ISDELPHIXE4}
+  TValueBuffer = Pointer;
+  {$endif}
 
   /// Exception type associated to generic TDataSet / DB.pas unit Dataset connection
-  ESQLDBDataset = class(Exception);
+  ESQLDBDataset = class(ESQLDBException);
 
   ///	implement properties shared by via the DB.pas TQuery-like connections
   TSQLDBDatasetConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
@@ -163,7 +168,8 @@ type
     {{ Execute a prepared SQL statement
       - parameters marked as ? should have been already bound with Bind*() functions
       - this implementation will also loop through all internal bound array
-      of values (if any), to implement BATCH mode
+      of values (if any), to implement BATCH mode even if the database library
+      does not support array binding (only SynDBFireDAC does support it yet)
       - this overridden method will log the SQL statement if sllSQL has been
         enabled in SynDBLog.Family.Level
       - raise an ESQLDBDataset on any error }
@@ -198,7 +204,7 @@ type
      - will use WR.Expand to guess the expected output format
      - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
        format and contains true BLOB data }
-    procedure ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean); override;
+    procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
   ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
@@ -348,7 +354,7 @@ begin
       end;
     end else begin
       SetLength(result,TField(ColumnAttr).DataSize);
-      TField(ColumnAttr).GetData(pointer(result));
+      TField(ColumnAttr).GetData(TValueBuffer(result));
     end;
 end;
 
@@ -442,12 +448,12 @@ var Log: ISynLog;
 begin
   Log := SynDBLog.Enter(Self);
   if fPrepared then
-    raise ESQLDBDataset.CreateFmt('%s.Prepare() shall be called once',[ClassName]);
+    raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL,oSQL);
   fPrepared := DatasetPrepare(UTF8ToString(oSQL));
   if not fPrepared then
-    raise ESQLDBDataset.CreateFmt('%s.DatasetPrepare set nil',[ClassName]);
+    raise ESQLDBDataset.CreateUTF8('%.DatasetPrepare not prepared',[self]);
 end;
 
 procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
@@ -459,14 +465,16 @@ begin
   Log := SynDBLog.Enter(Self);
   with Log.Instance do
     if sllSQL in Family.Level then
-      LogLines(sllSQL,pointer(SQLWithInlinedParams),self,'--');
+      Log(sllSQL,SQLWithInlinedParams,self,2048);
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount<>fParamCount then
-    raise ESQLDBDataset.CreateFmt('ExecutePrepared expected %d bound parameters, got %d',[fPreparedParamsCount,fParamCount]);
-  lArrayIndex := -1;
+    raise ESQLDBDataset.CreateUTF8(
+      '%.ExecutePrepared expected % bound parameters, got %',
+      [self,fPreparedParamsCount,fParamCount]);
+  lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support 
   repeat
     if (not fDatasetSupportBatchBinding) and (fParamsArrayCount>0) then
-      inc(lArrayIndex);
+      inc(lArrayIndex); // enable BindArray() emulation
     for p := 0 to fParamCount-1 do
       DatasetBindSQLParam(lArrayIndex,p,fParams[p]);
     // 2. Execute query (within a loop for BATCH mode)
@@ -570,7 +578,7 @@ begin
   result := fQuery.Fields[col];
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter; DoNotFletchBlobs: boolean);
+procedure TSQLDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter);
 var col: integer;
     blob: RawByteString;
 begin
@@ -596,7 +604,7 @@ begin
             WR.Add(TField(ColumnAttr).AsInteger);
           {$endif}
       SynCommons.ftDouble:
-        WR.Add(TField(ColumnAttr).AsFloat);
+        WR.AddDouble(TField(ColumnAttr).AsFloat);
       SynCommons.ftCurrency:
         if TField(ColumnAttr).DataType in [ftBCD,ftFMTBcd] then
           AddBcd(WR,TField(ColumnAttr).AsBCD) else
@@ -616,13 +624,13 @@ begin
         WR.Add('"');
       end;
       SynCommons.ftBlob:
-        if DoNotFletchBlobs then
+        if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
           WR.WrBase64(pointer(blob),length(blob),true); // withMagic=true
         end;
-      else raise ESQLDBException.CreateFmt(
-        'TSQLDBDatasetStatement: Invalid ColumnType()=%d',[ord(ColumnType)]);
+      else raise ESQLDBException.CreateUTF8('%: Invalid ColumnType()=%',
+            [self,ord(ColumnType)]);
     end;
     WR.Add(',');
   end;
@@ -688,27 +696,29 @@ begin
                fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else begin
             UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
-            if (not fForceUseWideString) or IsAnsiCompatible(tmp) then
-              P.AsString := UTF8ToString(tmp) else
-              P.Value := UTF8ToWideString(tmp);
+            if fForceUseWideString then
+              P.Value := UTF8ToWideString(tmp) else
+              P.AsString := UTF8ToString(tmp);
           end else
             if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
               P.Clear else    
-            if (not fForceUseWideString) or IsAnsiCompatible(VData) then
-              P.AsString := UTF8ToString(VData) else
-              P.Value := UTF8ToWideString(VData);
+            if fForceUseWideString then
+              P.Value := UTF8ToWideString(VData) else
+              P.AsString := UTF8ToString(VData);
         SynCommons.ftBlob:
           {$ifdef UNICODE}
           if aArrayIndex>=0 then
-            P.SetBlobData(pointer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
-            P.SetBlobData(pointer(VData),Length(VData));
+            P.SetBlobData(TValueBuffer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
+            P.SetBlobData(TValueBuffer(VData),Length(VData));
           {$else}
           if aArrayIndex>=0 then
             P.AsString := VArray[aArrayIndex] else
             P.AsString := VData;
           {$endif}
         else
-          raise ESQLDBDataset.CreateFmt('Invalid type on bound parameter #%d',[aParamIndex+1]);
+          raise ESQLDBDataset.CreateFmt(
+            '%.DataSetBindSQLParam: Invalid type % on bound parameter #%d',
+            [self,ord(VType),aParamIndex+1]);
         end;
   end;
 end;
@@ -748,8 +758,9 @@ procedure TSQLDBDatasetStatement.Prepare(const aSQL: RawUTF8;
 begin
   inherited;
   if fPreparedParamsCount<>fQueryParams.Count then
-    raise ESQLDBDataset.CreateFmt('Expect %d parameters in request, found %d - [%s]',
-      [fPreparedParamsCount,fQueryParams.Count,aSQL]);
+    raise ESQLDBDataset.CreateUTF8(
+      '%.Prepare expected % parameters in request, found % - [%]',
+      [self,fPreparedParamsCount,fQueryParams.Count,aSQL]);
 end;
 
 end.

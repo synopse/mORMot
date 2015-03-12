@@ -104,7 +104,7 @@ end;
 
 function TDBQueryTable.AsTSQLRecordType(Props: TSQLDBConnectionProperties): RawUTF8;
 var f, RowIDIndex: integer;
-    IdField: TSQLDBColumnProperty;
+    IdField: TSQLDBColumnCreate;
     def: RawUTF8;
 begin
   RowIDIndex := -1;
@@ -135,8 +135,9 @@ begin
       SYNOPSE_FRAMEWORK_VERSION+' at %'#13#10'  // from %'#13#10,
       [NameWithoutSchema,NowToString,NameWithSchema]);
   if RowIDIndex<0 then begin
-    IdField.ColumnName := 'ID';
-    IdField.ColumnType := ftUnknown;
+    IdField.Name := 'ID';
+    IdField.DBType := ftUnknown;
+    IdField.PrimaryKey := true;
     result := FormatUTF8('%  // - note that the ORM will add one missing ID field via:'#13#10+
       '  // $ %'#13#10,[result,Props.SQLAddColumn(NameWithSchema,IdField)]);
   end;

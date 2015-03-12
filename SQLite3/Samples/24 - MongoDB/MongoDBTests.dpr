@@ -8,6 +8,7 @@ program MongoDBTests;
 uses
   {$I SynDprUses.inc}
   SynCommons,
+  SynLog,
   mORMot,
   MongoDBTestCases;
 

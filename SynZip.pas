@@ -6,7 +6,7 @@ unit SynZip;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit SynZip;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+   - Alf
    - jpdk
    - Gigo
 
@@ -129,9 +130,12 @@ unit SynZip;
      log files as for EventArchiveZip)
 
    Version 1.18
+   - defined ZipString dedicated type, to store data in a Unicode-neutral manner 
+   - introducing new TZipWriteToStream class, able to create a zip without file
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
    - added DestDirIsFileName optional parameter to TZipRead.UnZip() methods
+   - added TZipRead.UnZipAll() method
    - fixed CompressDeflate() function, which was in fact creating zlib content
    - fixed TZipWrite.AddDeflated() to handle data > 200 MB - thanks jpdk!
    - fixed unexpected error when adding files e.g. via TZipWrite.CreateForm()
@@ -139,11 +143,14 @@ unit SynZip;
    - addded CompressZLib() function, as expected by web browsers
    - any zip-related error will now raise a ESynZipException
    - fixed ticket [2e22dd25aa] about TZipRead.UnMap
+   - fixed ticket [431b8b3dd9d] about gzread() overoptimistic assertion
    - fixed UnZip() when crc and sizes are stored not within the file header,
      but in a separate data descriptor block, after the compressed data (this
      may occur e.g. if the .zip is created with latest Java JRE) - also added
      corresponding TZipRead.RetrieveFileInfo() method and renamed TZipEntry
      info field into infoLocal, and introduced infoDirectory new field
+   - renamed ZipFormat parameter to ZlibFormat, and introduce it also for
+     uncompression, so that both deflate and zlib layout are handled
    - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
@@ -152,27 +159,43 @@ unit SynZip;
 
 {$ifdef FPC}
   {$define USEZLIB}
+  {$ifdef MSWINDOWS} // avoid link to zlib1.dll (will use zlib.so under Linux)
+    {$define USEPASZLIB}
+  {$endif}
 {$else}
   {$ifdef Win32}
     {$define USEINLINEASM}
     // if defined, we use a special inlined asm version for uncompress:
     // seems 50% faster than BC++ generated .obj, and is 3KB smaller in code size
   {$else}
-    {$define USEZLIB}
+    {$define USEZLIB} // e.g. for Kylix
   {$endif}
 {$endif}
 
 interface
 
 uses
-  SysUtils, Classes,
+  SysUtils,
+  Classes,
 {$ifdef USEZLIB}
+  {$ifdef USEPASZLIB}
+  zbase,
+  paszlib,
+  {$else}
   ZLib,
+  {$endif}
 {$endif}
 {$ifdef MSWINDOWS}
   Windows;
 {$else}
-  LibC;
+  {$ifdef KYLIX3}
+  LibC,
+  {$else}
+  {$ifndef ANDROID}
+  clocale,
+  {$endif}
+  {$endif}
+  Types;
 {$endif}
 
 type
@@ -184,49 +207,62 @@ type // Delphi 5 doesn't have those base types defined :(
   PInteger = ^Integer;            
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;
+const
+  soCurrent = soFromCurrent;
 {$endif}
 
-{/ in-memory ZLib DEFLATE compression }
+/// in-memory ZLib DEFLATE compression
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer=6; ZipFormat: Boolean=false) : integer;
+  CompressionLevel: integer=6; ZlibFormat: Boolean=false) : integer;
 
 /// in-memory ZLib INFLATE decompression
-function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer) : integer;
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
+function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer; ZlibFormat: Boolean=false) : integer;
 
 /// ZLib DEFLATE compression from memory into a stream
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel:integer=6; ZipFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel:integer=6; ZlibFormat: Boolean=false): cardinal;
 
 /// ZLib INFLATE decompression from memory into a stream
 // - return the number of bytes written into the stream
 // - if checkCRC if not nil, it will contain thecrc32  (if aStream is nil, it will
 // fast calculate the crc of the the uncompressed memory block)
-function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal): cardinal;
+// - by default, will use the deflate/.zip header-less format, but you may set
+// ZlibFormat=true to add an header, as expected by zlib (and pdf)
+function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
+  checkCRC: PCardinal; ZlibFormat: Boolean=false): cardinal;
 
 
-{$ifndef UNICODE}
 type
-  /// define RawByteString, as it does exist in Delphi 2009 and up
-  // - to be used for byte storage into an AnsiString
-  RawByteString = AnsiString;
+{$ifdef UNICODE}
+  /// define a raw storage string type, used for data buffer management
+  ZipString = type RawByteString;
+{$else}
+  /// define a raw storage string type, used for data buffer management
+  ZipString = type AnsiString;
   /// as available in newer Delphi versions
   NativeUInt = cardinal;
 {$endif}
 
 /// compress some data, with a proprietary format (including CRC)
-function CompressString(const data: RawByteString; failIfGrow: boolean = false;
-  CompressionLevel: integer=6) : RawByteString;
+function CompressString(const data: ZipString; failIfGrow: boolean = false;
+  CompressionLevel: integer=6) : ZipString;
 
 /// uncompress some data, with a proprietary format (including CRC)
 // - return '' in case of a decompression failure
-function UncompressString(const data: RawByteString) : RawByteString;
+function UncompressString(const data: ZipString) : ZipString;
 
 
 /// (un)compress a data content using the gzip algorithm
 // - as expected by THttpSocket.RegisterCompress
 // - will use internaly a level compression of 1, i.e. fastest available (content
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressGZip(var DataRawByteString; Compress: boolean): AnsiString;
 
 /// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
 // - as expected by THttpSocket.RegisterCompress
@@ -234,7 +270,7 @@ function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
 // - deflate content encoding is pretty inconsistent in practice, so slightly
 // slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressDeflate(var DataRawByteString; Compress: boolean): AnsiString;
 
 /// (un)compress a data content using the zlib algorithm
 // - as expected by THttpSocket.RegisterCompress
@@ -242,7 +278,7 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteStr
 // of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
 // - zlib content encoding is pretty inconsistent in practice, so slightly
 // slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091/458259
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressZLib(var DataRawByteString; Compress: boolean): AnsiString;
 
 
 
@@ -257,7 +293,7 @@ type
 
 /// just hash aString with CRC32 algorithm
 // - crc32 is better than adler32 for short strings
-function CRC32string(const aString: RawByteString): cardinal;
+function CRC32string(const aString: ZipString): cardinal;
 
 // don't know why using objects below produce an Internal Error DT5830
 // under Delphi 2009 Update 3 !!!!!
@@ -271,11 +307,17 @@ type
   ESynZipException = class(Exception);
 
   /// the internal memory structure as expected by the ZLib library
-  {$ifndef UNICODE}
-  TZStream = object
+  {$ifdef USEPASZLIB}
+  TZStream = z_stream;
+  {$else}
+  {$ifdef USEZLIB}
+  {$ifdef KYLIX3}
+  TZStream = TZStreamRec;
+  {$else}
+  TZStream = z_stream;
+  {$endif}
   {$else}
   TZStream =  record
-  {$endif}
     next_in : PAnsiChar;
     avail_in : cardinal;
     total_in : cardinal;
@@ -290,11 +332,17 @@ type
     data_type: integer;
     adler : cardinal;
     reserved : cardinal;
-    procedure Init;
-    function DeflateInit(CompressionLevel: integer; ZipFormat: Boolean): Boolean;
   end;
-  PZStream = ^TZStream;
+  {$endif}
+  {$endif}
 
+/// initialize the internal memory structure as expected by the ZLib library
+procedure StreamInit(var Stream: TZStream);
+
+/// prepare the internal memory structure as expected by the ZLib library for compression
+function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
+
+type
 {$A-} { force packed object (not allowed under Delphi 2009) }
   PFileInfo = ^TFileInfo;
   /// generic file information structure, as used in .zip file format
@@ -503,7 +551,7 @@ function get_crc_table: pointer;
 
 {/ uncompress a .gz file content
  - return '' if the .gz content is invalid (e.g. bad crc) }
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 
 type
   /// a simple TStream descendant for compressing data into a stream
@@ -535,12 +583,12 @@ type
     // - for real seek, this method will raise an error: it's a compression-only stream
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// the number of byte written, i.e. the current uncompressed size
-    property SizeIn: cardinal read FStrm.total_in;
-    /// write all pending compressed data into outStream 
-    procedure Flush;
+    function SizeIn: cardinal;
     /// the number of byte sent to the destination stream, i.e. the current
     // compressed size
-    property SizeOut: cardinal read FStrm.total_out;
+    function SizeOut: cardinal;
+    /// write all pending compressed data into outStream
+    procedure Flush;
     /// the current CRC of the written data, i.e. the uncompressed data CRC
     property CRC: cardinal read fCRC;
   end;
@@ -599,17 +647,21 @@ type
     /// get the index of a file inside the .zip archive
     function NameToIndex(const aName: TFileName): integer;
     /// uncompress a file stored inside the .zip archive into memory
-    function UnZip(aIndex: integer): RawByteString; overload;
+    function UnZip(aIndex: integer): ZipString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(aIndex: integer; const DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
     /// uncompress a file stored inside the .zip archive into memory
-    function UnZip(const aName: TFileName): RawByteString; overload;
+    function UnZip(const aName: TFileName): ZipString; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(const aName, DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
+    /// uncompress all fields stored inside the .zip archive into the supplied
+    // destination directory
+    // - returns -1 on success, or the index in Entry[] of the failing file
+    function UnZipAll(DestDir: TFileName): integer;
     /// retrieve information about a file
-    // - in some cases (e.g. for a .zip created by latest Java JRE), 
+    // - in some cases (e.g. for a .zip created by latest Java JRE),
     // infoLocal^.zzipSize/zfullSize/zcrc32 may equal 0: this method is able
     // to retrieve the information either from the ending "central directory",
     // or by searching the "data descriptor" block
@@ -619,29 +671,57 @@ type
   end;
 {$endif Linux}
 
-  /// write-only access for creating a .zip archive file
-  // - not to be used to update a .zip file, but to create a new one
-  // - update can be done manualy by using a TZipRead instance and the
-  // AddFromZip() method
-  TZipWrite = class
+  /// abstract write-only access for creating a .zip archive
+  TZipWriteAbstract = class
   protected
     fAppendOffset: cardinal;
-    fFileName: TFileName;
     fMagic: cardinal;
     function InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+    function InternalWritePosition: cardinal; virtual; abstract;
+    procedure InternalWrite(const buf; len: cardinal); virtual; abstract;
   public
-    /// the associated file handle
-    Handle: integer;
     /// the total number of entries
     Count: integer;
     /// the resulting file entries, ready to be written as a .zip catalog
     // - those will be appended after the data blocks at the end of the .zip file
     Entry: array of record
       /// the file name, as stored in the .zip internal directory
-      intName: RawByteString;
+      intName: ZipString;
       /// the corresponding file header
       fhr: TFileHeader;
     end;
+    /// initialize the .zip archive
+    // - a new .zip file content is prepared
+    constructor Create; 
+    /// compress (using the deflate method) a memory buffer, and add it to the zip file
+    // - by default, the 1st of January, 2010 is used if not date is supplied
+    procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
+      CompressLevel: integer=6; FileAge: integer=1+1 shl 5+30 shl 9); overload;
+    /// add a memory buffer to the zip file, without compression
+    // - content is stored, not deflated
+    // (in that case, no deflate code is added to the executable)
+    // - by default, the 1st of January, 2010 is used if not date is supplied
+    procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
+      FileAge: integer=1+1 shl 5+30 shl 9);
+    /// append a file content into the destination file
+    // - useful to add the initial Setup.exe file, e.g.
+    procedure Append(const Content: ZipString);
+    /// release associated memory, and close destination archive
+    destructor Destroy; override;
+  end;
+
+  /// write-only access for creating a .zip archive file
+  // - not to be used to update a .zip file, but to create a new one
+  // - update can be done manualy by using a TZipRead instance and the
+  // AddFromZip() method
+  TZipWrite = class(TZipWriteAbstract)
+  protected
+    fFileName: TFileName;
+    function InternalWritePosition: cardinal; override;
+    procedure InternalWrite(const buf; len: cardinal); override;
+  public
+    /// the associated file handle
+    Handle: integer;
     /// initialize the .zip file
     // - a new .zip file content is created
     constructor Create(const aFileName: TFileName); overload;
@@ -649,37 +729,50 @@ type
     // - warning: AddStored/AddDeflated() won't check for duplicate zip entries
     // - this method is very fast, and will increase the .zip file in-place
     // (the old content is not copied, new data is appended at the file end)
+    {$ifndef Linux}
     constructor CreateFrom(const aFileName: TFileName);
-    /// compress (using the deflate method) a memory buffer, and add it to the zip file
-    // - by default, the 1st of January, 2010 is used if not date is supplied
-    procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
-      CompressLevel: integer=6; FileAge: integer=1+1 shl 5+30 shl 9); overload;
+    {$endif}
     /// compress (using the deflate method) a file, and add it to the zip file
     procedure AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
       CompressLevel: integer=6); overload;
-    /// add a memory buffer to the zip file, without compression
-    // - content is stored, not deflated
-    // (in that case, no deflate code is added to the executable)
-    // - by default, the 1st of January, 2010 is used if not date is supplied
-    procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
-      FileAge: integer=1+1 shl 5+30 shl 9);
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipEntry);
-    /// append a file content into the destination file
-    // - useful to add the initial Setup.exe file, e.g.
-    procedure Append(const Content: RawByteString);
     /// release associated memory, and close destination file
     destructor Destroy; override;
+  end;
+
+  /// write-only access for creating a .zip archive into a stream
+  TZipWriteToStream = class(TZipWriteAbstract)
+  protected
+    fDest: TStream;
+    function InternalWritePosition: cardinal; override;
+    procedure InternalWrite(const buf; len: cardinal); override;
+  public
+    /// initialize the .zip archive
+    // - a new .zip file content is prepared
+    constructor Create(aDest: TStream); 
   end;
 
 /// a TSynLogArchiveEvent handler which will compress older .log files
 // into .zip archive files
 // - resulting file will be named YYYYMM.zip and will be located in the
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
+{$ifndef Linux}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+{$endif}
 
 
 implementation
+
+{$ifdef Linux}
+uses
+  {$ifdef FPC}
+  SynFPCLinux,
+  BaseUnix;
+  {$else}
+  SynKylix;
+  {$endif}
+{$endif Linux}
 
 const
   FIRSTHEADER_SIGNATURE = $04034b50;  // PK#3#4
@@ -691,6 +784,7 @@ const
 var
   EventArchiveZipWrite: TZipWrite = nil;
 
+{$ifndef Linux}
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var n: integer;
 begin
@@ -701,68 +795,14 @@ begin
       exit;
     if EventArchiveZipWrite=nil then
       EventArchiveZipWrite := TZipWrite.CreateFrom(
-        copy(aDestinationPath,1,length(aDestinationPath)-1)+'.zip');
+        system.copy(aDestinationPath,1,length(aDestinationPath)-1)+'.zip');
     n := EventArchiveZipWrite.Count;
     EventArchiveZipWrite.AddDeflated(aOldLogFileName,True);
-    if (EventArchiveZipWrite.Count=n+1) and DeleteFile(pointer(aOldLogFileName)) then
+    if (EventArchiveZipWrite.Count=n+1) and DeleteFile({$ifndef Linux}pointer{$endif}(aOldLogFileName)) then
       result := True;
   end;
 end;
-
-procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
-      CompressLevel: integer=6);
-var Time: TFileTime;
-    ZipName: TFileName;
-    FileTime: LongRec;
-    Size: Int64;
-    Size64: Int64Rec absolute Size;
-    OffsHead, OffsEnd: cardinal;
-    S: TFileStream;
-    D: THandleStream;
-    Z: TSynZipCompressor;
-begin
-  S := TFileStream.Create(aFileName,fmOpenRead or fmShareDenyNone);
-  try
-    if RemovePath then
-      ZipName := ExtractFileName(aFileName) else
-      ZipName := aFileName;
-    GetFileTime(S.Handle,nil,nil,@Time);
-    FileTimeToLocalFileTime(Time,Time);
-    FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
-    Size := S.Size;
-    if Size64.Hi<>0 then
-      raise ESynZipException.CreateFmt('%s file too big for .zip',[aFileName]);
-    if Count>=length(Entry) then
-      SetLength(Entry,length(Entry)+20);
-    OffsHead := InternalAdd(ZipName,nil,0);
-    D := THandleStream.Create(Handle);
-    Z := TSynZipCompressor.Create(D,CompressLevel);
-    try
-      Z.CopyFrom(S,Size64.Lo);
-      Z.Flush;
-      assert(Z.SizeIn=Size64.Lo);
-      with Entry[Count] do begin
-        with fhr.fileInfo do begin
-          zcrc32 := Z.CRC;
-          zfullSize := Z.SizeIn;
-          zzipSize := Z.SizeOut;
-          zzipMethod := Z_DEFLATED;
-          zlastMod := integer(FileTime);
-        end;
-        OffsEnd := D.Position;
-        D.Position := OffsHead+sizeof(fMagic);
-        D.Write(fhr.fileInfo,sizeof(fhr.fileInfo));
-        D.Position := OffsEnd;
-      end;
-      inc(Count);
-    finally
-      Z.Free;
-      D.Free;
-    end;
-  finally
-    S.Free;
-  end;
-end;
+{$endif}
 
 function Is7BitAnsi(P: PChar): boolean;
 begin
@@ -778,14 +818,23 @@ begin
   result := true;
 end;
 
-function TZipWrite.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+
+{ TZipWriteAbstract }
+
+constructor TZipWriteAbstract.Create;
+begin
+  fMagic := (FIRSTHEADER_SIGNATURE+1); // +1 to avoid finding it in the exe generated code
+  dec(fMagic);
+end;
+
+function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
 begin
   with Entry[Count] do begin
     fHr.signature := $02014b51;
     dec(fHr.signature); // +1 to avoid finding it in the exe
     fHr.madeBy := $14;
     fHr.fileInfo.neededVersion := $14;
-    result := SetFilePointer(Handle,0,nil,FILE_CURRENT);
+    result := InternalWritePosition;
     fHr.localHeadOff := result-fAppendOffset;
     {$ifndef DELPHI5OROLDER}
     // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
@@ -804,22 +853,22 @@ begin
     end;
     {$endif}
     fHr.fileInfo.nameLen := length(intName);
-    FileWrite(Handle,fMagic,sizeof(fMagic));
-    FileWrite(Handle,fhr.fileInfo,sizeof(fhr.fileInfo));
-    FileWrite(Handle,pointer(intName)^,fhr.fileInfo.nameLen);
+    InternalWrite(fMagic,sizeof(fMagic));
+    InternalWrite(fhr.fileInfo,sizeof(fhr.fileInfo));
+    InternalWrite(pointer(intName)^,fhr.fileInfo.nameLen);
   end;
   if Buf<>nil then begin
-    FileWrite(Handle,Buf^,Size); // write stored data
+    InternalWrite(Buf^,Size); // write stored data
     inc(Count);
   end;
 end;
 
-procedure TZipWrite.AddDeflated(const aZipName: TFileName; Buf: pointer;
+procedure TZipWriteAbstract.AddDeflated(const aZipName: TFileName; Buf: pointer;
   Size, CompressLevel, FileAge: integer);
 var tmp: pointer;
     tmpsize: integer;
 begin
-  if (self=nil) or (Handle<=0) then
+  if self=nil then
     exit;
   if Count>=length(Entry) then
     SetLength(Entry,length(Entry)+20);
@@ -838,22 +887,10 @@ begin
   end;
 end;
 
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
-begin
-  if (self=nil) or (Handle<=0) then
-    exit;
-  if Count>=length(Entry) then
-    SetLength(Entry,length(Entry)+20);
-  with Entry[Count] do begin
-    fhr.fileInfo := ZipEntry.infoLocal^;
-    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
-  end;
-end;
-
-procedure TZipWrite.AddStored(const aZipName: TFileName; Buf: pointer;
+procedure TZipWriteAbstract.AddStored(const aZipName: TFileName; Buf: pointer;
   Size, FileAge: integer);
 begin
-  if (self=nil) or (Handle<=0) then
+  if self=nil then
     exit;
   if Count>=length(Entry) then
     SetLength(Entry,length(Entry)+20);
@@ -866,23 +903,133 @@ begin
   end;
 end;
 
-procedure TZipWrite.Append(const Content: RawByteString);
+procedure TZipWriteAbstract.Append(const Content: ZipString);
 begin
-  if (self=nil) or (Handle<=0) or (fAppendOffset<>0) then
+  if (self=nil) or (fAppendOffset<>0) then
     exit;
   fAppendOffset := length(Content);
-  FileWrite(Handle,pointer(Content)^,fAppendOffset);
+  InternalWrite(pointer(Content)^,fAppendOffset);
+end;
+
+destructor TZipWriteAbstract.Destroy;
+var lhr: TLastHeader;
+    i: integer;
+begin
+  fillchar(lhr,sizeof(lhr),0);
+  lhr.signature := LASTHEADER_SIGNATURE+1;
+  dec(lhr.signature); // +1 to avoid finding it in the exe
+  lhr.thisFiles := Count;
+  lhr.totalFiles := Count;
+  lhr.headerOffset := InternalWritePosition-fAppendOffset;
+  for i := 0 to Count-1 do
+  with Entry[i] do begin
+    assert(fhr.fileInfo.nameLen=length(intName));
+    inc(lhr.headerSize,sizeof(TFileHeader)+fhr.fileInfo.nameLen);
+    InternalWrite(fhr,sizeof(fhr));
+    InternalWrite(pointer(IntName)^,fhr.fileInfo.nameLen);
+  end;
+  InternalWrite(lhr,sizeof(lhr));
+  inherited;
+end;
+
+
+
+{ TZipWrite }
+
+function TZipWrite.InternalWritePosition: cardinal;
+begin
+  result := SetFilePointer(Handle,0,nil,{$ifdef Linux}SEEK_CUR{$else}FILE_CURRENT{$endif});
+end;
+
+procedure TZipWrite.InternalWrite(const buf; len: cardinal);
+begin
+  FileWrite(Handle,buf,len);
+end;
+
+procedure TZipWrite.AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
+  CompressLevel: integer=6);
+var {$ifndef Linux}
+    Time: TFileTime;
+    FileTime: LongRec;
+    {$endif}
+    ZipName: TFileName;
+    Size: Int64;
+    Size64: Int64Rec absolute Size;
+    OffsHead, OffsEnd: cardinal;
+    S: TFileStream;
+    D: THandleStream;
+    Z: TSynZipCompressor;
+begin
+  S := TFileStream.Create(aFileName,fmOpenRead or fmShareDenyNone);
+  try
+    if RemovePath then
+      ZipName := ExtractFileName(aFileName) else
+      ZipName := aFileName;
+    {$ifndef Linux}
+    GetFileTime(S.Handle,nil,nil,@Time);
+    FileTimeToLocalFileTime(Time,Time);
+    FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
+    {$endif}
+    Size := S.Size;
+    if Size64.Hi<>0 then
+      raise ESynZipException.CreateFmt('%s file too big for .zip',[aFileName]);
+    if Count>=length(Entry) then
+      SetLength(Entry,length(Entry)+20);
+    OffsHead := InternalAdd(ZipName,nil,0);
+    D := THandleStream.Create(Handle);
+    Z := TSynZipCompressor.Create(D,CompressLevel);
+    try
+      Z.CopyFrom(S,Size64.Lo);
+      Z.Flush;
+      assert(Z.SizeIn=Size64.Lo);
+      with Entry[Count] do begin
+        with fhr.fileInfo do begin
+          zcrc32 := Z.CRC;
+          zfullSize := Z.SizeIn;
+          zzipSize := Z.SizeOut;
+          zzipMethod := Z_DEFLATED;
+          {$ifndef Linux}
+          zlastMod := integer(FileTime);
+          {$else}
+          zlastMod := FileAge(ZipName);
+          {$endif}
+        end;
+        OffsEnd := D.Position;
+        D.Position := OffsHead+sizeof(fMagic);
+        D.Write(fhr.fileInfo,sizeof(fhr.fileInfo));
+        D.Position := OffsEnd;
+      end;
+      inc(Count);
+    finally
+      Z.Free;
+      D.Free;
+    end;
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
+begin
+  if (self=nil) or (Handle<=0) then
+    exit;
+  if Count>=length(Entry) then
+    SetLength(Entry,length(Entry)+20);
+  with Entry[Count] do begin
+    fhr.fileInfo := ZipEntry.infoLocal^;
+    InternalAdd(ZipEntry.zipName,ZipEntry.data,fhr.fileInfo.zzipSize);
+  end;
 end;
 
 constructor TZipWrite.Create(const aFileName: TFileName);
 begin
+  Create;
   fFileName := aFileName;
-  fMagic := (FIRSTHEADER_SIGNATURE+1); // +1 to avoid finding it in the exe generated code
-  dec(fMagic);
   if Handle=0 then
     Handle := FileCreate(aFileName);
 end;
 
+{$ifndef Linux}
 constructor TZipWrite.CreateFrom(const aFileName: TFileName);
 var R: TZipRead;
     i: Integer;
@@ -910,29 +1057,37 @@ begin
     R.Free;
   end;
 end;
+{$endif}
 
 destructor TZipWrite.Destroy;
-var lhr: TLastHeader;
-    i: integer;
 begin
-  fillchar(lhr,sizeof(lhr),0);
-  lhr.signature := LASTHEADER_SIGNATURE+1;
-  dec(lhr.signature); // +1 to avoid finding it in the exe
-  lhr.thisFiles := Count;
-  lhr.totalFiles := Count;
-  lhr.headerOffset := SetFilePointer(Handle,0,nil,FILE_CURRENT)-fAppendOffset;
-  for i := 0 to Count-1 do
-  with Entry[i] do begin
-    assert(fhr.fileInfo.nameLen=length(intName));
-    inc(lhr.headerSize,sizeof(TFileHeader)+fhr.fileInfo.nameLen);
-    FileWrite(Handle,fhr,sizeof(fhr));
-    FileWrite(Handle,pointer(IntName)^,fhr.fileInfo.nameLen);
-  end;
-  FileWrite(Handle,lhr,sizeof(lhr));
+  inherited;
   SetEndOfFile(Handle);
   FileClose(Handle);
   inherited;
 end;
+
+
+{ TZipWriteToStream }
+
+constructor TZipWriteToStream.Create(aDest: TStream);
+begin
+  fDest := aDest;
+  inherited Create;
+end;
+
+function TZipWriteToStream.InternalWritePosition: cardinal;
+begin
+  result := fDest.Seek(0,soCurrent);
+end;
+
+procedure TZipWriteToStream.InternalWrite(const buf; len: cardinal); 
+begin
+  fDest.Write(buf,len);
+end;
+
+
+{ TZipRead }
 
 {$ifndef Linux}
 
@@ -965,7 +1120,7 @@ var lhr: PLastHeader;
     {$ifdef CONDITIONALEXPRESSIONS}
     tmp: UTF8String;
     {$else}
-    tmp: RawByteString;
+    tmp: ZipString;
     {$endif}
 begin
   for i := 0 to 127 do begin // resources size may be rounded up to alignment
@@ -996,8 +1151,6 @@ begin
         raise ESynZipException.Create('ZIP extended format');
       // UnZip() will call RetrieveFileInfo()
     end else
-      if (zzipSize=0) or (zfullSize=0) then
-        raise ESynZipException.Create('ZIP format size=0') else
       if (zzipSize=cardinal(-1)) or (zfullSize=cardinal(-1)) then
         raise ESynZipException.Create('ZIP64 format not supported');
     with Entry[Count] do begin
@@ -1021,9 +1174,15 @@ begin
         OemToChar(Pointer(tmp),Pointer(zipName)); // OemToCharW/OemToCharA
       end;
       inc(PByte(H),sizeof(H^)+infoLocal^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
-      if (infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) and
-        (zipName<>'') and (zipName[length(zipName)]<>'\') then // ignore folder
-        inc(Count); // known methods: stored + deflate
+      if not(infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) then
+        raise ESynZipException.CreateFmt(
+          'Unsupported compression method %d for %s',[infoLocal^.zZipMethod,zipName]);
+      if (zipName='') or (zipName[length(zipName)]='\') then
+        continue; // ignore folder
+      if infoLocal^.flags and (1 shl 3)=0 then
+        if (infoLocal^.zzipSize=0) or (infoLocal^.zfullSize=0) then
+          raise ESynZipException.CreateFmt('"%s" size=0 in ZIP',[zipName]);
+      inc(Count); // add file to Entry[]
     end;
   end;
 end;
@@ -1105,7 +1264,7 @@ type
     zipSize: dword;
     fullSize: dword;
   end;
-  
+
 function TZipRead.RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
 var P: ^TDataDescriptor;
     PDataStart: NativeUInt;
@@ -1114,12 +1273,13 @@ begin
     result := false;
     exit;
   end;
-  Info := Entry[Index].infoLocal^; // copy information from "local file header"
-  if Info.flags and (1 shl 3)=0 then begin  
-    result := true; // information is correct
+  // copy information from "local file header"
+  Info := Entry[Index].infoLocal^;
+  if Info.flags and (1 shl 3)=0 then begin
+    result := true; // local information is correct
     exit;
   end;
-  // try to get info from ending "central directory"
+  // get info from ending "central directory" (faster than "data descriptor")
   with Entry[Index].infoDirectory^.fileInfo do
     if (zzipSize<>0) and (zfullSize<>0) and
        (zzipSize<>dword(-1)) and (zfullSize<>dword(-1)) then begin
@@ -1159,7 +1319,7 @@ begin
   result := false; // data descriptor block not found
 end;
 
-function TZipRead.UnZip(aIndex: integer): RawByteString;
+function TZipRead.UnZip(aIndex: integer): ZipString;
 var len: cardinal;
     info: TFileInfo;
 begin
@@ -1202,7 +1362,7 @@ begin
     Path := Path+'\';
   if DirectoryExists(Path) then
     result := true else begin
-    Parent := ExtractFilePath(copy(Path,1,length(Path)-1));
+    Parent := ExtractFilePath(system.copy(Path,1,length(Path)-1));
     if (Parent<>'') and not DirectoryExists(Parent) then
       if not EnsurePath(Parent) then exit;
     if CreateDirectory(pointer(path),nil) then
@@ -1255,6 +1415,20 @@ begin
   end;
 end;
 
+function TZipRead.UnZipAll(DestDir: TFileName): integer;
+begin
+  if DestDir<>'' then
+    {$ifdef CONDITIONALEXPRESSIONS}
+    DestDir := IncludeTrailingPathDelimiter(DestDir);
+    {$else}
+    DestDir := IncludeTrailingBackslash(DestDir);
+    {$endif}
+  for result := 0 to Count-1 do
+    if not UnZip(result,DestDir) then
+      exit;
+  result := -1;
+end;
+
 function TZipRead.UnZip(const aName, DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var aIndex: integer;
@@ -1265,7 +1439,7 @@ begin
     result := UnZip(aIndex,DestDir,DestDirIsFileName);
 end;
 
-function TZipRead.UnZip(const aName: TFileName): RawByteString;
+function TZipRead.UnZip(const aName: TFileName): ZipString;
 var aIndex: integer;
 begin
   aIndex := NameToIndex(aName);
@@ -1276,14 +1450,13 @@ end;
 
 {$endif Linux}
 
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 var Len: integer;
 begin
   result := '';
   if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^<>$88B1F) then
     exit; // it MUST be a true .gz file
   Len := pInteger(@gz[gzLen-4])^;
-  assert(cardinal(Len)<cardinal(gzLen)*64); // basic content check
   if Len=0 then
     exit;
   SetLength(result,Len);
@@ -1346,11 +1519,11 @@ begin
   FreeMem(Block);
 end;
 
-procedure TZStream.Init;
+procedure StreamInit(var Stream: TZStream);
 begin
-  fillchar(Self,sizeof(Self),0);
-  zalloc := @zlibAllocMem; // even under Linux, use program heap
-  zfree := @zlibFreeMem;
+  fillchar(Stream,sizeof(Stream),0);
+  Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
+  Stream.zfree := @zlibFreeMem;
 end;
 
 {$else} // Windows:
@@ -4191,52 +4364,52 @@ function inflateEnd; external;
 
 function ZLIB_VERSION: PAnsiChar;
 begin
-  result := ZLib.ZLIB_VERSION;
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}ZLIB_VERSION;
 end;
 
 function adler32(adler: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := ZLib.adler32(adler,pointer(buf),len);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}adler32(adler,pointer(buf),len);
 end;
 
 function crc32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := ZLib.crc32(crc,pointer(buf),len);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}crc32(crc,pointer(buf),len);
 end;
 
 function deflateInit2_(var strm: TZStream; level: integer; method: integer; windowBits: integer; memLevel: integer;strategy: integer; version: PAnsiChar; stream_size: integer): integer;
 begin
-  result := ZLib.deflateInit2_(z_streamp(@strm)^,level,method,windowBits,memLevel,strategy,version,stream_size);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflateInit2_(strm,level,method,windowBits,memLevel,strategy,version,stream_size);
 end;
 
 function deflate(var strm: TZStream; flush: integer): integer;
 begin
-  result := ZLib.deflate(z_streamp(@strm)^,flush);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflate(strm,flush);
 end;
 
 function deflateEnd(var strm: TZStream): integer;
 begin
-  result := ZLib.deflateEnd(z_streamp(@strm)^);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}deflateEnd(strm);
 end;
 
 function inflateInit2_(var strm: TZStream; windowBits: integer; version: PAnsiChar; stream_size: integer): integer;
 begin
-  result := ZLib.inflateInit2_(z_streamp(@strm)^,windowBits,version,stream_size);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflateInit2_(strm,windowBits,version,stream_size);
 end;
 
 function inflate(var strm: TZStream; flush: integer): integer;
 begin
-  result := ZLib.inflate(z_streamp(@strm)^,flush);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflate(strm,flush);
 end;
 
 function inflateEnd(var strm: TZStream): integer;
 begin
-  result := ZLib.inflateEnd(z_streamp(@strm)^);
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}inflateEnd(strm);
 end;
 
 function get_crc_table: pointer;
 begin
-  result := ZLib.get_crc_table;
+  result := {$ifdef USEPASZLIB}paszlib.{$else}ZLib.{$endif}get_crc_table;
 end;
 
 {$else}
@@ -4497,16 +4670,16 @@ end;
 
 {$endif USEZLIB}
 
+procedure StreamInit(var Stream: TZStream);
+begin
+  fillchar(Stream,sizeof(Stream),0);
+end;
+
 {$endif LINUX}
  
 function compressBound(sourceLen: cardinal): cardinal;
 begin
   result := sourceLen + (sourceLen shr 12) + (sourceLen shr 14) + 11;
-end;
-
-procedure TZStream.Init;
-begin
-  fillchar(Self,sizeof(Self),0);
 end;
 
 function zcalloc(AppData: Pointer; Items, Size: cardinal): Pointer;
@@ -4529,14 +4702,14 @@ begin // will use fastcode if compiled within
   FillChar(dest^, count, val);
 end;
 
-function TZStream.DeflateInit(CompressionLevel: integer; ZipFormat: Boolean): Boolean;
+function DeflateInit(var Stream: TZStream; CompressionLevel: integer; ZlibFormat: Boolean): Boolean;
 var Bits: integer;
 begin
-  if ZipFormat then
+  if ZlibFormat then
     Bits := MAX_WBITS else
     Bits := -MAX_WBITS;
-  result := deflateInit2_(self, CompressionLevel, Z_DEFLATED, Bits, DEF_MEM_LEVEL,
-    Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(self))>=0
+  result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, Bits, DEF_MEM_LEVEL,
+    Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream))>=0
 end;
 
 function Check(const Code: Integer; const ValidCodes: array of Integer): integer;
@@ -4571,8 +4744,8 @@ begin
     result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf)); end;
 end;*)
 
-function CompressString(const data: RawByteString; failIfGrow: boolean = false;
-  CompressionLevel: integer=6) : RawByteString;
+function CompressString(const data: ZipString; failIfGrow: boolean = false;
+  CompressionLevel: integer=6) : ZipString;
 var i1 : integer;
 begin
   result := '';
@@ -4586,7 +4759,7 @@ begin
   else result := '';
 end;
 
-function UncompressString(const data: RawByteString) : RawByteString;
+function UncompressString(const data: ZipString) : ZipString;
 begin
   result := '';
   if Length(data) > 12 then begin
@@ -4600,15 +4773,15 @@ begin
 end;
 
 function CompressMem(src, dst: pointer; srcLen, dstLen: integer;
-  CompressionLevel: integer=6; ZipFormat: Boolean=false) : integer;
+  CompressionLevel: integer=6; ZlibFormat: Boolean=false) : integer;
 var strm: TZStream;
 begin
-  strm.Init;
+  StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
   strm.next_out := dst;
-  strm.avail_out := dstLen; // -MAX_WBITS -> no zLib header => .zip compatible !
-  if strm.DeflateInit(CompressionLevel,ZipFormat) then
+  strm.avail_out := dstLen;
+  if DeflateInit(strm,CompressionLevel,ZlibFormat) then
   try
     Check(deflate(strm,Z_FINISH),[Z_STREAM_END,Z_OK]);
   finally
@@ -4618,7 +4791,7 @@ begin
 end;
 
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel: integer=6; ZipFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false): cardinal;
 var strm: TZStream;
     code: integer;
     buf: array[word] of byte;
@@ -4632,13 +4805,13 @@ begin
   strm.avail_out := sizeof(buf);
 end;
 begin
-  strm.Init;
+  StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
   strm.next_out := @buf;
   strm.avail_out := sizeof(buf);
-  if strm.DeflateInit(CompressionLevel,ZipFormat) then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if DeflateInit(strm,CompressionLevel,ZlibFormat) then
+  try
     repeat
       code := Check(deflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR]);
       FlushBuf;
@@ -4650,17 +4823,21 @@ begin
   result := strm.total_out;
 end;
 
-function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer) : integer;
+function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer; ZlibFormat: Boolean) : integer;
 var strm: TZStream;
+    Bits: integer;
 //    Z: TMemoryStream; R: Int64Rec;
 begin
-  strm.Init;
+  StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
   strm.next_out := dst;
   strm.avail_out := dstLen;
-  if inflateInit2_(strm, -MAX_WBITS, ZLIB_VERSION, sizeof(strm))>=0 then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if ZlibFormat then
+    Bits := MAX_WBITS else
+    Bits := -MAX_WBITS; // -MAX_WBITS -> no zLib header => .zip compatible !
+  if inflateInit2_(strm, Bits, ZLIB_VERSION, sizeof(strm))>=0 then
+  try
     Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END]);
   finally
     inflateEnd(strm);
@@ -4672,10 +4849,12 @@ begin
 end;
 
 function UnCompressStream(
-  src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal): cardinal;
+  src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal;
+  ZlibFormat: Boolean): cardinal;
 // result:=dstLen  checkCRC(<>nil)^:=crc32  (if aStream=nil -> fast crc calc)
 var strm: TZStream;
     code: integer;
+    Bits: integer;
     buf: array[word] of byte;
 procedure FlushBuf;
 var Count: integer;
@@ -4690,15 +4869,18 @@ begin
   strm.avail_out := sizeof(buf);
 end;
 begin
-  strm.Init;
+  StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
   strm.next_out := @buf;
   strm.avail_out := sizeof(buf);
   if checkCRC<>nil then
     CheckCRC^ := 0;
-  if inflateInit2_(strm, -MAX_WBITS, ZLIB_VERSION, sizeof(strm))>=0 then
-  try                 // -MAX_WBITS -> no zLib header => .zip compatible !
+  if ZlibFormat then
+    Bits := MAX_WBITS else
+    Bits := -MAX_WBITS; // -MAX_WBITS -> no zLib header => .zip compatible !
+  if inflateInit2_(strm, Bits, ZLIB_VERSION, sizeof(strm))>=0 then
+  try
     repeat
       code := Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR]);
       FlushBuf;
@@ -4715,9 +4897,10 @@ const
 
   HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
 
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressGZip(var DataRawByteString; Compress: boolean): AnsiString;
 var L: integer;
     P: PAnsiChar;
+    Data: ZipString absolute DataRawByteString;
 begin
   L := length(Data);
   if Compress then begin
@@ -4736,12 +4919,12 @@ begin
   result := 'gzip';
 end;
 
-procedure CompressInternal(var Data: RawByteString; Compress: boolean; Bits: integer);
+procedure CompressInternal(var Data: ZipString; Compress: boolean; Bits: integer);
 var strm: TZStream;
     code, len: integer;
-    tmp: RawByteString;
+    tmp: ZipString;
 begin
-  strm.Init;
+  StreamInit(strm);
   strm.next_in := pointer(Data);
   strm.avail_in := length(Data);
   if Compress then begin
@@ -4769,7 +4952,7 @@ begin
         if strm.avail_out=0 then begin
           // need to increase buffer by chunk
           SetLength(tmp,length(tmp)+len);
-          strm.next_out := PAnsiChar(pointer(tmp))+length(tmp)-len;
+          strm.next_out := pointer(PAnsiChar(pointer(tmp))+length(tmp)-len);
           strm.avail_out := len;
         end;
       until code=Z_STREAM_END;
@@ -4780,13 +4963,15 @@ begin
   SetString(Data,PAnsiChar(pointer(tmp)),strm.total_out);
 end;
 
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressDeflate(var DataRawByteString; Compress: boolean): AnsiString;
+var Data: ZipString absolute DataRawByteString;
 begin
   CompressInternal(Data,Compress,-MAX_WBITS);
   result := 'deflate';
 end;
 
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawByteString;
+function CompressZLib(var DataRawByteString; Compress: boolean): AnsiString;
+var Data: ZipString absolute DataRawByteString;
 begin
   CompressInternal(Data,Compress,+MAX_WBITS);
   result := 'zlib';
@@ -4859,7 +5044,7 @@ begin
   flags := flags and not(1 shl 11);
 end;
 
-function CRC32string(const aString: RawByteString): cardinal;
+function CRC32string(const aString: ZipString): cardinal;
 // crc32 is better than adler32 for short strings, and fast enough in zlib 1.2.5
 begin
   result := length(aString);
@@ -4877,12 +5062,10 @@ begin
   fGZFormat := (Format=szcfGZ);
   if fGZFormat then
     fDestStream.Write(gzHeader,10);
-  with FStrm do begin
-    Init;
-    next_out := @FBufferOut;
-    avail_out := SizeOf(FBufferOut);
-    fInitialized := DeflateInit(CompressionLevel,Format=szcfZip);
-  end;
+  StreamInit(FStrm);
+  FStrm.next_out := @FBufferOut;
+  FStrm.avail_out := SizeOf(FBufferOut);
+  fInitialized := DeflateInit(FStrm,CompressionLevel,Format=szcfZip);
 end;
 
 procedure TSynZipCompressor.Flush;
@@ -4905,9 +5088,19 @@ begin
   end;
   if fGZFormat then begin
     fDestStream.Write(fCRC,4);
-    fDestStream.Write(SizeIn,4);
+    fDestStream.Write(FStrm.total_in,4);
   end;
   inherited;
+end;
+
+function TSynZipCompressor.SizeIn: cardinal;
+begin // FStrm.total_in may be integer, cardinal or ulong -> use function
+  result := FStrm.total_in;
+end;
+
+function TSynZipCompressor.SizeOut: cardinal;
+begin // FStrm.total_out may be integer, cardinal or ulong -> use function
+  result := FStrm.total_out;
 end;
 
 function TSynZipCompressor.FlushBufferOut: integer;
@@ -4931,11 +5124,11 @@ end;
 
 function TSynZipCompressor.Seek(Offset: Integer; Origin: Word): Longint;
 begin
-  if not FInitialized then 
+  if not FInitialized then
     result := 0 else
   if (Offset = 0) and (Origin = soFromCurrent) then // for TStream.Position
-      Result := FStrm.total_in else begin
-    Result := 0;
+      result := FStrm.total_in else begin
+    result := 0;
     assert((Offset = 0) and (Origin = soFromBeginning) and (FStrm.total_in = 0));
   end;
 end;
@@ -5016,6 +5209,3 @@ initialization
   InitCrc32Tab;
 {$endif}
 end.
-
-
-

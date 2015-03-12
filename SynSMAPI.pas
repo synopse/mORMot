@@ -5,10 +5,10 @@ unit SynSMAPI;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    Scripting support for mORMot Copyright (C) 2014 Pavel Mashlyakovsky
+    Scripting support for mORMot Copyright (C) 2015 Pavel Mashlyakovsky
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -29,7 +29,7 @@ unit SynSMAPI;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -92,7 +92,7 @@ const
   {$endif}
 {$endif}
 
-{$ifdef LINUX} // for Kylix
+{$ifdef LINUX} // for Kylix/FPC (not tested yet)
   SpiderMonkeyLib = 'mozjs.so';
 {$endif}
 
@@ -294,14 +294,16 @@ type
   // to access a PPJSContext value via JS_*Context*(..) API functions
   JSContext = object
   private
-    function GetOptions: TJSOptions;
-    procedure SetOptions(const Value: TJSOptions);
     function GetVersion: JSVersion;
 //  JS_SetVersion is not supported now Use CompartmentOptions in JS_NewGlobalObject
     function GetPrivate: Pointer;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetPrivate(const Value: Pointer);
-  protected
+  {$ifdef FIXBUGXE3}
+  public
+  {$endif}
+    function GetOptions: TJSOptions;
+    procedure SetOptions(const Value: TJSOptions);
   public
     /// wrapper to JS_DestroyContext(@self)
     procedure Destroy;
@@ -309,8 +311,12 @@ type
     function Runtime: PJSRuntime;
     /// wrapper to JS_InitStandardClasses(@self,global)
     function InitStandardClasses(global: PJSObject): boolean;
+    {$ifndef FIXBUGXE3}
     /// wrapper to JS_GetOptions()/JS_SetOptions()
+    // - due to a XE3 bug, you should use the GetOptions/SetOptions methods
+    // instead of this property, under this compiler revision
     property Options: TJSOptions read GetOptions write SetOptions;
+    {$endif}
     /// wrapper to JS_GetVersion()/JS_SetVersion()
     property Version: JSVersion read GetVersion;
     /// wrapper to JS_GetVersion() and string conversion
@@ -4689,7 +4695,7 @@ end;
 
 procedure JSContext.SetOptions(const Value: TJSOptions);
 begin
-  JS_SetOptions(@self,uint32(Value))
+  JS_SetOptions(@self,uint32(Value));
 end;
 
 procedure JSContext.SetPrivate(const Value: Pointer);
@@ -4724,6 +4730,7 @@ begin
   if buf<>@short then
     FreeMem(buf);
 end;
+
 
 { JSRuntime }
 
@@ -4849,6 +4856,7 @@ begin
     result := JSVAL_NULL else
     result := OBJECT_TO_JSVAL(@self);
 end;
+
 
 { JSCompartment }
 

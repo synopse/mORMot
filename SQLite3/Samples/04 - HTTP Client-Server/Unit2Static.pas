@@ -49,8 +49,8 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   Model := CreateSampleModel;
-  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(paramstr(0),'.db3'),true);
-  DB.CreateMissingTables(0);
+  DB := TSQLRestServerDB.Create(Model,ChangeFileExt(ExeVersion.ProgramFileName,'.db3'),true);
+  DB.CreateMissingTables;
   Server := TCustomHttpServer.Create('8080',[DB],'+',useHttpApiRegisteringURI,32,secNone,'static');
   Server.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
 end;
@@ -76,7 +76,7 @@ begin
   if (Ctxt.Method='GET') and IdemPChar(pointer(Ctxt.URL),'/STATIC/') and
      (PosEx('..',Ctxt.URL)=0) then begin
     // http.sys will send the specified file from kernel mode
-    FileName := ExtractFilePath(ParamStr(0))+'www\'+UTF8ToString(Copy(Ctxt.URL,8,maxInt));
+    FileName := ExeVersion.ProgramFilePath+'www\'+UTF8ToString(Copy(Ctxt.URL,8,maxInt));
     Ctxt.OutContent := StringToUTF8(FileName);
     Ctxt.OutContentType := HTTP_RESP_STATICFILE;
     result := 200; // THttpApiServer.Execute will return 404 if not found

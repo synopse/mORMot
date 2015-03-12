@@ -11,6 +11,7 @@ uses
   SysUtils,
   Variants,
   SynCommons,
+  SynTests,
   SynMongoDB,
   mORMot,
   SynSQLite3Static,
@@ -74,6 +75,7 @@ type
     procedure Retrieve;
     procedure RetrieveAll;
     procedure RetrieveOneWithWhereClause;
+    procedure RetrieveFromSQL;
     procedure Update;
     procedure Blobs;
     procedure Delete;
@@ -191,6 +193,7 @@ var Coll: TMongoCollection;
     i: integer;
     jsonArray: RawUTF8;
     bytes: Int64;
+    docs: TVariantDynArray;
 begin
   fDB.CollectionOrNil[COLL_NAME].Drop;
   Coll := fDB.CollectionOrCreate[COLL_NAME];
@@ -206,6 +209,10 @@ begin
   jsonArray := Coll.FindJSON(null,BSONVariant('{_id:0}'));
   Check(JSONArrayCount(@jsonArray[2])=COLL_COUNT);
   Check(Hash32(jsonArray)=HASH1,'projection over a collection');
+  Coll.FindDocs('{Number:{$gt:?}}',[COLL_COUNT shr 1],docs,null);
+  Check(length(docs)=COLL_COUNT-(COLL_COUNT shr 1)-1);
+  for i := 0 to high(docs) do
+    Check(docs[i].number>COLL_COUNT shr 1);
 end;
 
 procedure TTestDirect.DropCollection;
@@ -245,13 +252,11 @@ begin
   for i := 0 to COLL_COUNT-1 do begin
     jsonOne := VariantSaveMongoJSON(fValues[i],modMongoStrict);
     jsonArray := '['+jsonOne+']';
-    //if i mod 100=0 then begin // search by name is SLOW, even with the index!
-      Check(Coll.FindJSON('{Name:?}',[fValues[i].Name])=jsonArray);
-      Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null)=jsonarray);
-      Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null,1)=jsonone);
-      docs := Coll.FindDoc('{Name:?}',[fValues[i].Name]);
-      Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
-    //end;
+    Check(Coll.FindJSON('{Name:?}',[fValues[i].Name])=jsonArray);
+    Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null)=jsonarray);
+    Check(Coll.FindJSON(BSONVariant(['Name','Name '+IntToStr(i+1)]),null,1)=jsonone);
+    docs := Coll.FindDoc('{Name:?}',[fValues[i].Name]);
+    Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id]);
     Check(VariantSaveMongoJSON(docs,modMongoStrict)=jsonArray);
     docs := Coll.FindDoc('{_id:?}',[fValues[i]._id],1);
@@ -365,7 +370,7 @@ begin
   try
     for i := 1 to COLL_COUNT do begin
       R.Name := 'Name '+Int32ToUTF8(i);
-      R.Age := i;
+      R.Age := i and 63;
       R.Date := 1.0*(30000+i);
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
@@ -384,7 +389,7 @@ procedure TTestORM.InsertInBatchMode;
 var R: TSQLORM;
     i: integer;
     bytes: Int64;
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
 begin
   Check(fClient.TableRowCount(TSQLORM)=0);
   bytes := fMongoClient.BytesTransmitted;
@@ -393,7 +398,7 @@ begin
   try
     for i := 1 to COLL_COUNT do begin
       R.Name := 'Name '+Int32ToUTF8(i);
-      R.Age := i;
+      R.Age := i and 63;
       R.Date := 1.0*(30000+i);
       R.Value := _ObjFast(['num',i]);
       R.Ints := nil;
@@ -413,7 +418,7 @@ procedure TTestORM.TestOne(R: TSQLORM; aID: integer);
 begin
   Check(R.ID=aID);
   Check(R.Name='Name '+Int32ToUTF8(aID));
-  Check(R.Age=aID+fUpdateOffset);
+  Check(R.Age=aID and 63+fUpdateOffset);
   CheckSame(R.Date,1.0*(30000+aID),1E-5);
   Check(R.Value.num=aID+fUpdateOffset);
   Check(Length(R.Ints)=1);
@@ -480,6 +485,17 @@ begin
     end;
   end;
   NotifyTestSpeed('rows retrieved',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
+end;
+
+procedure TTestORM.RetrieveFromSQL;
+var R: TSQLORM;
+    n,tot,tot2,total: integer;
+    i64: Int64;
+    ages: TIntegerDynArray;
+    prev: RawUTF8;
+    doc: variant;
+    T: TSQLTable;
+begin
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name=?',['Name 43']);
   try
     n := 0;
@@ -496,11 +512,233 @@ begin
     n := 0;
     while R.FillOne do begin
       inc(n);
-      TestOne(R,n);
+      TestOne(R,R.ID);
+      Check(R.Age<51);
     end;
-    Check(n=50);
+    Check(n>50);
   finally
     R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not RowID=?',[50]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check(R.ID<>50);
+    end;
+    Check(n=COLL_COUNT-1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not Age<?',[52]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check(R.Age>51);
+    end;
+    Check(n>10);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n);
+    end;
+    Check(n=10);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10 offset 10',[51]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,n+10);
+    end;
+    Check(n=10);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'order by Name',[]);
+  try
+    n := 0;
+    total := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      inc(total,R.Age);
+      if prev<>'' then
+        Check(StrIComp(pointer(prev),pointer(R.Name))<0);
+      prev := R.Name;
+    end;
+    Check(n=COLL_COUNT,'client side sort of a text field');
+    Check(total>=2682);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check(R.Age in [1,10,20]);
+    end;
+    Check(n>=3);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and ID=?',[10]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,10);
+    end;
+    Check(n=1);
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=?',[30]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check((R.Age in [10,20]) or (R.ID=30));
+    end;
+    Check(n>=3,'{$or:[{Age:{$in:[10,20]}},{_id:30}]}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=? order by ID desc',[40]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,R.ID);
+      Check((R.Age in [10,20]) or (R.ID=40));
+    end;
+    Check(n>=3,'{$query:{$or:[{Age:{$in:[10,20]}},{_id:40}]},$orderby:{_id:-1}}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1%']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.ID);
+    end;
+    Check(n>10,'{Name:/^name 1/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.ID);
+    end;
+    Check(n=1,'{Name:/^name 1$/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['%ame 1%']);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.ID);
+    end;
+    Check(n>10,'{Name:/ame 1/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'not Name like ?',['%ame 1%']);
+  try
+    tot := 0;
+    while R.FillOne do begin
+      inc(n);
+      Check(not IdemPChar(pointer(R.Name),'NAME 1'));
+      TestOne(R,R.ID);
+    end;
+    Check(n+tot=COLL_COUNT,'{Name:/ame 1/i}');
+  finally
+    R.Free;
+  end;
+  R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and '+
+    'IntegerDynArrayContains(Ints,?)',[10]);
+  try
+    n := 0;
+    while R.FillOne do begin
+      inc(n);
+      TestOne(R,10);
+    end;
+    Check(n=1,'{Age:{$in:[1,10,20]},Ints:{$in:[10]}}');
+  finally
+    R.Free;
+  end;
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is null',[],[],i64));
+  check(i64=COLL_COUNT,'{Data:null}');
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
+  check(i64=0,'{Data:{$ne:null}}');
+  Check(fClient.RetrieveListJSON(TSQLORM,'',[],'min(RowID),max(RowID),Count(RowID)')=
+    FormatUTF8('[{"min(RowID)":1,"max(RowID)":%,"Count(RowID)":%}]',[COLL_COUNT,COLL_COUNT]));
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
+    'min(RowID) as a,max(RowID) as b,Count(RowID) as c');
+  check(doc.a=1);
+  check(doc.b=COLL_COUNT);
+  check(doc.c=COLL_COUNT);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'',[],
+    'min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c,sum(Age) as d');
+  check(doc.a=1);
+  check(doc.b=COLL_COUNT+1);
+  check(doc.c=COLL_COUNT);
+  check(doc.d=total);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'RowID=?',[50],'max(RowID) as a');
+  Check(doc.a=50);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'RowID<?',[50],'max(RowID) as a');
+  Check(doc.a=49);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'not RowID>=?',[50],'max(RowID) as a');
+  Check(doc.a=49);
+  doc := fClient.RetrieveDocVariant(TSQLORM,'not RowID=?',[50],'count(RowID) as a');
+  Check(doc.a=COLL_COUNT-1);
+  T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,'+
+    'count(Age) as count,sum(Age) as total','order by age group by age');
+  if not CheckFailed(T<>nil) then
+  try
+    n := 0;
+    tot := 0;
+    tot2 := 0;
+    Check(T.FieldIndex('Age')=0);
+    Check(T.FieldIndex('first')=1);
+    Check(T.FieldIndex('count')=2);
+    Check(T.FieldIndex('total')=3);
+    while T.Step(false,@doc) do begin
+      Check(AddInteger(ages,doc.Age,true));
+      if n>0 then
+        Check(ages[n]>ages[n-1]);
+      Check(integer(doc.first) and 63=doc.Age);
+      inc(n);
+      tot := tot+doc.Count;
+      tot2 := tot2+doc.total;
+    end;
+    Check(n=64);
+    Check(tot=COLL_COUNT);
+    Check(tot2=total);
+  finally
+    T.Free;
   end;
 end;
 
@@ -542,7 +780,7 @@ procedure TTestORM.Blobs;
 var R: TSQLORM;
     i, n: integer;
     blob,blobRead: TSQLRawBlob;
-    bytes: Int64;
+    bytes,i64: Int64;
 begin
   SetLength(blob,8);
   bytes := fMongoClient.BytesTransmitted;
@@ -604,6 +842,10 @@ begin
   finally
     R.Free;
   end;
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is null',[],[],i64));
+  check(i64=0,'{Data:null}');
+  check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
+  check(i64=COLL_COUNT,'{Data:{$ne:null}}');
 end;
 
 procedure TTestORM.Delete;
@@ -649,7 +891,7 @@ procedure TTestORM.DeleteInBatchMode;
 var i,n: integer;
     ExpectedCount: integer;
     bytes: Int64;
-    IDs: TIntegerDynArray;
+    IDs: TIDDynArray;
     R: TSQLORM;
 begin
   bytes := fMongoClient.BytesTransmitted;
