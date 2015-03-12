@@ -232,6 +232,7 @@ type
     // as big button in the middle of the dialog window; in this case, any
     // '\n' will be converted as note text (shown with smaller text under native
     // Vista/Seven TaskDialog, or as popup hint within Delphi emulation)
+    // - see the AddButton() wrapper method for an easy access
     Buttons: string;
     /// a #13#10 or #10 separated list of custom radio buttons
     // - they will be identified with an ID number starting at 200
@@ -308,6 +309,9 @@ type
     // the API does not give any runtime access to the checkbox caption
     // - other elements will work in both emulated and native modes
     procedure SetElementText(element: TTaskDialogElement; const Text: string);
+    /// wrapper method able to add a custom button to the Task Dialog
+    // - will add the expected content to the Buttons text field
+    procedure AddButton(const ACaption: string; const ACommandLinkHint: string = '');
   end;
 
   /// a wrapper around the TTaskDialog.Execute method
@@ -718,7 +722,8 @@ begin
   end;
   inc(Y,16);
 end;
-function AddButton(const s: string; ModalResult: integer): TSynTaskDialogButton;
+
+function AddBtn(const s: string; ModalResult: integer): TSynTaskDialogButton;
 var WB: integer;
 begin
   WB := Dialog.Form.Canvas.TextWidth(s)+52;
@@ -985,13 +990,13 @@ begin
         try
           Text := SysUtils.trim(Buttons);
           for i := Count-1 downto 0 do
-            AddButton(Strings[i],i+100);
+            AddBtn(Strings[i],i+100);
         finally
           Free;
         end;
       for B := high(B) downto low(B) do
         if B in aCommonButtons then
-          AddButton(LoadResString(TD_BTNS(B)), TD_BTNMOD[B]);
+          AddBtn(LoadResString(TD_BTNS(B)), TD_BTNMOD[B]);
       if Verify<>'' then begin
         Dialog.Form.Verif := TCheckBox.Create(Dialog.Form);
         with Dialog.Form.Verif do begin
@@ -1075,6 +1080,15 @@ begin
     if Dialog.Emulated then
       Dialog.Form.Verif.Caption := Text
   end;
+end;
+
+procedure TTaskDialog.AddButton(const ACaption: string; const ACommandLinkHint: string = '');
+begin
+  if Buttons <> '' then
+    Buttons := Buttons + sLineBreak;
+  Buttons := Buttons + ACaption;
+  if ACommandLinkHint <> '' then
+    Buttons := Buttons + '\n' + ACommandLinkHint;
 end;
 
 
