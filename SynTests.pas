@@ -782,6 +782,7 @@ begin
   fTestCase.Free; // TObjectList will free all TSynTestCase instance
   if TTextRec(fSaveToFile).Handle<>0 then
     Close(fSaveToFile);
+  inherited Destroy;
 end;
 
 procedure TSynTests.DuringRun(TestCaseIndex, TestMethodIndex: integer);

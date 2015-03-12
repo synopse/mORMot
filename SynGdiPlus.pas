@@ -1056,6 +1056,7 @@ begin
     fToken := 0;
   end;
   UnLoad;
+  inherited Destroy;
 end;
 
 const

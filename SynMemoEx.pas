@@ -5494,6 +5494,7 @@ destructor TKeyboard.Destroy;
 begin
   Clear;
   List.Free;
+  inherited Destroy;
 end;
 
 procedure TKeyboard.Add(const ACommand: TEditCommand; const AKey1: word;

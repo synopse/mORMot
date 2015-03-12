@@ -4237,6 +4237,7 @@ destructor TSQLDBProxyConnectionProtocol.Destroy;
 begin
   fAuthenticate.Free;
   DeleteCriticalSection(fLock);
+  inherited Destroy;
 end;
 
 function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString): RawByteString;
