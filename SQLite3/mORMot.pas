@@ -40842,13 +40842,12 @@ var SecCtx: TSecContext;
     Values: TPUtf8CharDynArray;
 begin
   result := '';
-  User.LogonName := '';
   InvalidateSecContext(SecCtx,'');
   try
     repeat
-      if User.LogonName <> '' then
-        ClientSSPIAuthWithPassword(SecCtx, InData, User.LogonName, User.PasswordHashHexa, OutData) else
-        ClientSSPIAuth(SecCtx, InData, User.PasswordHashHexa, OutData);
+      if User.LogonName<>'' then
+        ClientSSPIAuthWithPassword(SecCtx,InData,User.LogonName,User.PasswordHashHexa,OutData) else
+        ClientSSPIAuth(SecCtx,InData,User.PasswordHashHexa,OutData);
       if OutData='' then
         break;
       if result<>'' then
