@@ -12386,10 +12386,13 @@ type
   // - is able to authenticate the currently logged user on the client side,
   // using either NTLM or Kerberos - it would allow to safely authenticate
   // on a mORMot server without prompting the user to enter its password 
-  // - ClientSetUser() will ignore aUserName, and expect aPassword to be either
+  // - if ClientSetUser() receives aUserName as '', aPassword should be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
   // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
   // authentication
+  // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
+  // authentication will take place on the specified domain, with aPassword
+  // as plain password value
   TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationURI)
   protected
     /// Windows built-in authentication
@@ -12402,8 +12405,11 @@ type
     // - Windows SSPI authentication will be performed - in this case,
     // table TSQLAuthUser shall contain an entry for the logged Windows user,
     // with the LoginName in form 'DomainName\UserName'
-    // - here User.LogonName is ignored, and User.PasswordHashHexa is '' for
+    // - if User.LogonName is '', then User.PasswordHashHexa is '' for
     // NTLM authentication, or the SPN registration for Kerberos authentication
+    // - if User.LogonName is set as 'DomainName\UserName', then authentication
+    // would take place on the specified domain, with User.PasswordHashHexa as
+    // plain password
     class function ClientComputeSessionKey(Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8; override;
   public
     /// initialize the authentication method to a specified server
@@ -12415,33 +12421,6 @@ type
     // - the client-side logged user will be identified as valid, according
     // to a Windows SSPI API secure challenge
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
-  end;
-
-  /// authentication of a User and its Password using Active Directory
-  // - ClientSetUser() will use aUserName as 'Domain\Login', and will validate
-  // aPassword against the one registered for his/her account
-  TSQLRestServerAuthenticationActiveDirectory = class(TSQLRestServerAuthenticationURI)
-  protected
-    class function ClientComputeSessionKey(Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8; override;
-  public
-    /// will try to handle the Auth RESTful method with Windows SSPI API
-    // - to be called in a two pass "challenging" algorithm, as implemented by
-    // TSQLRestServerAuthenticationSignedURI.Auth method
-    // - the user name and password supplied from the client side will be
-    // checked against the domain supplied in the user name (e.g. 'Domain\Login')
-    function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
-    /// class method to be used on client side to create a remote session
-    // - call TSQLRestServerAuthenticationActiveDirectory.ClientSetUser() instead
-    // of TSQLRestClientURI.SetUser(), and never the method of this abstract class
-    // - expects aUserName to be in form of 'Domain\Login', so that 'Login'
-    // will be checked via Active Direction with the supplied password against
-    // the supplied 'Domain' - if 'Domain' is the computer name where the server
-    // is started (i.e. 'ComputeName\Login'), the user will be searched within
-    // the registered local accounts login 
-    // - needs the plain aPassword, so aPasswordKind should be passClear
-    // - returns true on success
-    class function ClientSetUser(Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
-      aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean; override;
   end;
 
   {$endif SSPIAUTH}
@@ -29397,7 +29376,7 @@ begin
   end;
 {$ifdef SSPIAUTH} // try Windows authentication with the current logged user
   result := true;
-  if (trim(aUserName)='') and
+  if ((trim(aUserName)='') or (PosEx('\', aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,'',aPassword,passKerberosSPN) then
       exit;
 {$endif}
@@ -40852,13 +40831,15 @@ var SecCtx: TSecContext;
     InData, OutData: RawByteString;
     Response: RawUTF8;
     Values: TPUtf8CharDynArray;
-begin // User.PasswordHashHexa = SPN registration for Kerberos
+begin
   result := '';
   User.LogonName := '';
   InvalidateSecContext(SecCtx,'');
   try
     repeat
-      ClientSSPIAuth(SecCtx, InData, User.PasswordHashHexa, OutData);
+      if User.LogonName <> '' then
+        ClientSSPIAuthWithPassword(SecCtx, InData, User.LogonName, User.PasswordHashHexa, OutData) else
+        ClientSSPIAuth(SecCtx, InData, User.PasswordHashHexa, OutData);
       if OutData='' then
         break;
       if result<>'' then
@@ -40894,84 +40875,6 @@ begin
   for i := 0 to High(fSSPIAuthContexts) do
     FreeSecContext(fSSPIAuthContexts[i]);
   inherited;
-end;
-
-
-{ TSQLRestServerAuthenticationActiveDirectory }
-
-const
-  AD_SALT = '5aLt';
-  AD_PATTERN = '5a77e35';
-
-function TSQLRestServerAuthenticationActiveDirectory.Auth(Ctxt: TSQLRestServerURIContext): boolean;
-function CheckPassword(const UserName,Password: RawUTF8): Boolean;
-var Domain,Login: RawUTF8;
-    hToken: THandle;
-begin
-  split(UserName,'\',Domain,Login);
-  result := LogonUser(pointer(UTF8ToString(Login)),pointer(UTF8ToString(Domain)),
-    pointer(UTF8ToString(Password)),9,LOGON32_PROVIDER_WINNT50,hToken);
-  if result then
-    CloseHandle(hToken);
-end;
-var aUserName, aHashedPassWord, aPassword, aPattern: RawUTF8;
-    User: TSQLAuthUser;
-begin
-  result := true;
-  if AuthSessionRelease(Ctxt) then
-    exit;
-  aUserName := Ctxt.InputUTF8OrVoid['UserName'];
-  aHashedPassWord := Base64ToBin(Ctxt.InputUTF8OrVoid['Password']);
-  if (aUserName<>'') and (aHashedPassWord<>'') then begin
-    User := GetUser(Ctxt,aUserName);
-    if User<>nil then
-    try
-      User.PasswordHashHexa := ''; // not needed, especially if from LogonName='*'
-      aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,AD_SALT+Nonce(false),false,true);
-      split(aPassword,#1,aPassword,aPattern);
-      if aPattern<>AD_PATTERN then begin // failed with current Nonce -> try previous
-        aPassword := TAESCFB.SimpleEncrypt(aHashedPassWord,AD_SALT+Nonce(true),false,true);
-        split(aPassword,#1,aPassword,aPattern);
-        if aPattern<>AD_PATTERN then
-          exit; // current and previous server nonce did not match -> fail
-      end;
-      if not CheckPassword(aUserName,aPassWord) then
-        exit; // Active Directory password incorrect
-      // now client is authenticated -> create a session
-      SessionCreate(Ctxt,User);
-    finally
-      User.Free;
-    end;
-  end else
-    if aUserName<>'' then
-      // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-      Ctxt.Results([Nonce(false)]) else
-      // parameters does not match any expected layout
-      result := false;
-end;
-
-class function TSQLRestServerAuthenticationActiveDirectory.ClientComputeSessionKey(Sender: TSQLRestClientURI;
-  User: TSQLAuthUser): RawUTF8;
-var aServerNonce: RawUTF8;
-begin
-  result := '';
-  if User.LogonName='' then
-    exit;
-  aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
-  if aServerNonce='' then
-    exit;
-  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,
-    'Password',BinToBase64(TAESCFB.SimpleEncrypt(
-    User.PasswordHashHexa+#1+AD_PATTERN,AD_SALT+aServerNonce,true,true))]);
-end;
-
-class function TSQLRestServerAuthenticationActiveDirectory.ClientSetUser(
-  Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
-  aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean;
-begin
-  if aPassworKind<>passClear then
-    raise ESecurityException.CreateUTF8('%.ClientSetUser() expects passClear',[self]);
-  result := inherited ClientSetUser(Sender,aUserName,aPassword,passHashed);
 end;
 
 

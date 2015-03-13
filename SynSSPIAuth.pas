@@ -64,7 +64,9 @@ unit SynSSPIAuth;
     see documentation for details
   - added SecPackageName() to see active Kerberos or NTLM authentication scheme
   - added SecEncrypt() and SecDecrypt() functions
-  
+  - added ClientSSPIAuthWithPassword for authentication procedure
+    with clear text password
+
 }
 
 interface
@@ -110,6 +112,21 @@ procedure InvalidateSecContext(var aSecContext: TSecContext; const aConnectionID
 function ClientSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8; 
     out aOutData: RawByteString): Boolean;
+
+/// Client-side authentication procedure with clear text password.
+//  This function must be used when application need to use different
+//  user credentials (not credentials of logged in user)
+// - aSecContext holds information between function calls
+// - aInData contains data received from server
+// - aUserName is the domain and user name, in form of
+// 'DomainName\UserName'
+// - aPassword is the user clear text password
+// - aOutData contains data that must be sent to server
+// - if function returns True, client must send aOutData to server
+// and call function again width data, returned from servsr
+function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
+    const aInData: RawByteString; const aUserName: RawUTF8;
+    const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -198,6 +215,17 @@ type
     cbSecurityTrailer: Cardinal;
   end;
 
+  TSecWinntAuthIdentityW = record
+    User: PWideChar;
+    UserLength: Cardinal;
+    Domain: PWideChar;
+    DomainLength: Cardinal;
+    Password: PWideChar;
+    PasswordLength: Cardinal;
+    Flags: Cardinal
+  end;
+  PSecWinntAuthIdentityW = ^TSecWinntAuthIdentityW;
+
 const
   SECBUFFER_VERSION = 0;
   SECBUFFER_DATA = 1;
@@ -216,6 +244,7 @@ const
   SEC_I_CONTINUE_NEEDED = $00090312;
   SEC_I_COMPLETE_NEEDED = $00090313;
   SEC_I_COMPLETE_AND_CONTINUE = $00090314;
+  SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
   secur32 = 'secur32.dll';
 
 function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
@@ -223,7 +252,7 @@ function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
   external secur32 name 'QuerySecurityPackageInfoW';
 
 function AcquireCredentialsHandleW(pszPrincipal, pszPackage: PWideChar;
-  fCredentialUse: Cardinal; pvLogonId, pAuthData: Pointer;
+  fCredentialUse: Cardinal; pvLogonId: Pointer; pAuthData: PSecWinntAuthIdentityW;
   pGetKeyFn: Pointer; pvGetKeyArgument: Pointer; phCredential: PSecHandle;
   var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
   external secur32 name 'AcquireCredentialsHandleW';
@@ -277,8 +306,9 @@ begin
   aSecContext.CreatedTick64 := 0;
 end;
 
-function ClientSSPIAuth(var aSecContext: TSecContext;
-    const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+function ClientSSPIAuthWorker(var aSecContext: TSecContext;
+    const aInData: RawByteString; pszTargetName: PWideChar;
+    pAuthData: PSecWinntAuthIdentityW;
     out aOutData: RawByteString): Boolean;
 var InBuf: TSecBuffer;
     InDesc: TSecBufferDesc;
@@ -301,7 +331,7 @@ begin
     if QuerySecurityPackageInfoW(SECPKGNAMEINTERNAL, SecPkgInfo) <> 0 then
       RaiseLastOSError;
     try
-      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
+      if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND, nil, pAuthData, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
         RaiseLastOSError;
     finally
       FreeContextBuffer(SecPkgInfo);
@@ -318,7 +348,7 @@ begin
   end;
 
   CtxReqAttr := ISC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY;
-  if aSecKerberosSPN <> '' then
+  if pszTargetName <> nil then
     CtxReqAttr := CtxReqAttr or ISC_REQ_MUTUAL_AUTH;
 
   OutBuf.BufferType := SECBUFFER_TOKEN;
@@ -329,7 +359,7 @@ begin
   OutDesc.pBuffers := @OutBuf;
 
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
-    pointer(UTF8ToSynUnicode(aSecKerberosSPN)), CtxReqAttr,
+    pszTargetName, CtxReqAttr,
     0, SECURITY_NATIVE_DREP, InDescPtr, 0, @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
 
   Result := (Status = SEC_I_CONTINUE_NEEDED) or (Status = SEC_I_COMPLETE_AND_CONTINUE);
@@ -341,6 +371,46 @@ begin
 
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
+end;
+
+function ClientSSPIAuth(var aSecContext: TSecContext;
+    const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+    out aOutData: RawByteString): Boolean;
+var TargetName: PWideChar;
+begin
+  if aSecKerberosSPN <> '' then
+      TargetName := PWideChar(UTF8ToSynUnicode(aSecKerberosSPN))
+  else
+      TargetName := nil;
+  Result := ClientSSPIAuthWorker(aSecContext, aInData, TargetName, nil, aOutData);
+end;
+
+function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
+    const aInData: RawByteString; const aUserName: RawUTF8;
+    const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
+var UserPos: Integer;
+    Domain, User, Password: SynUnicode;
+    AuthIdentity: TSecWinntAuthIdentityW;
+begin
+  UserPos := PosEx('\', aUserName);
+  if UserPos=0 then begin
+    Domain := '';
+    User := UTF8ToSynUnicode(aUserName);
+  end else begin
+    Domain := UTF8ToSynUnicode(Copy(aUserName, 1, UserPos-1));
+    User := UTF8ToSynUnicode(Copy(aUserName, UserPos+1, MaxInt));
+  end;
+  Password := UTF8ToSynUnicode(aPassword);
+
+  AuthIdentity.Domain := PWideChar(Domain);
+  AuthIdentity.DomainLength := Length(Domain);
+  AuthIdentity.User := PWideChar(User);
+  AuthIdentity.UserLength := Length(User);
+  AuthIdentity.Password := PWideChar(Password);
+  AuthIdentity.PasswordLength := Length(Password);
+  AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
+
+  Result := ClientSSPIAuthWorker(aSecContext, aInData, nil, @AuthIdentity, aOutData);
 end;
 
 function ServerSSPIAuth(var aSecContext: TSecContext;
@@ -410,23 +480,23 @@ var UserToken: THandle;
     NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
 begin
   aUserName := '';
-  if QuerySecurityContextToken(@aSecContext.CtxHandle,UserToken) <> 0 then
+  if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
     RaiseLastOSError;
   try
     Size := 0;
-    GetTokenInformation(UserToken,TokenUser,nil,0,Size);
+    GetTokenInformation(UserToken, TokenUser, nil, 0, Size);
     UserInfo := AllocMem(Size);
     try
-      if not GetTokenInformation(Cardinal(UserToken),Windows.TokenUser,UserInfo,Size,Size) then
+      if not GetTokenInformation(Cardinal(UserToken), Windows.TokenUser, UserInfo, Size, Size) then
         RaiseLastOSError;
-      FillChar(NameBuf[0],SizeOf(NameBuf),0);
+      FillChar(NameBuf[0], SizeOf(NameBuf), 0);
       NameLen := 256;
-      FillChar(DomainBuf[0],SizeOf(DomainBuf),0);
+      FillChar(DomainBuf[0], SizeOf(DomainBuf), 0);
       DomainLen := 256;
-      if not LookupAccountSid(nil,UserInfo^.Sid,NameBuf,NameLen,DomainBuf,DomainLen,NameType) then
+      if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
         RaiseLastOSError;
       if NameType = SidTypeUser then
-        aUserName := FormatUTF8('%\%',[DomainBuf,NameBuf]);
+        aUserName := FormatUTF8('%\%', [DomainBuf, NameBuf]);
     finally
       FreeMem(UserInfo);
     end;
