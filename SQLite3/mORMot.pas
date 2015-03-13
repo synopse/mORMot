@@ -10358,7 +10358,7 @@ type
     function AddImplementation(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of PTypeInfo;
       aInstanceCreation: TServiceInstanceImplementation;
-      aSharedImplementation: TInterfacedObject): TServiceFactoryServer;
+      aSharedImplementation: TInterfacedObject; const aContractExpected: RawUTF8): TServiceFactoryServer;
     /// defines if the "method":"_signature_" or /root/Interface._signature
     // pseudo method is available to retrieve the whole interface signature,
     // encoded as a JSON object
@@ -13199,7 +13199,8 @@ type
     // (just as Delphi allows to do natively)
     function ServiceRegister(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of PTypeInfo;
-      aInstanceCreation: TServiceInstanceImplementation=sicSingle): TServiceFactoryServer; overload; virtual;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle;
+      const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload; virtual;
     /// register a Service instance on the server side
     // - this methods expects a class instance to be supplied, and the exact list
     // of interfaces to be registered to the server (e.g. [TypeInfo(IMyInterface)])
@@ -13214,7 +13215,7 @@ type
     // - the same implementation class can be used to handle several interfaces
     // (just as Delphi allows to do natively)
     function ServiceRegister(aSharedImplementation: TInterfacedObject;
-      const aInterfaces: array of PTypeInfo): TServiceFactoryServer; overload; virtual;
+      const aInterfaces: array of PTypeInfo; const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload; virtual;
     /// register a remote Service via its interface
     // - this overloaded method will register a remote Service, accessed via the
     // supplied TSQLRest(ClientURI) instance: it can be available in the main
@@ -13237,18 +13238,19 @@ type
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of TGUID;
-      aInstanceCreation: TServiceInstanceImplementation=sicSingle): TServiceFactoryServer; overload;
+      aInstanceCreation: TServiceInstanceImplementation=sicSingle;
+      const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload;
     /// register a Service instance on the server side
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
-      const aInterfaces: array of TGUID): TServiceFactoryServer; overload;
+      const aInterfaces: array of TGUID; const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload;
     /// register a remote Service via its interface
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(aClient: TSQLRest; const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-      const aContractExpected: RawUTF8=''): boolean; overload; 
+      const aContractExpected: RawUTF8=''): boolean; overload;
 
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
@@ -32194,18 +32196,19 @@ end;
 
 function TSQLRestServer.ServiceRegister(
   aImplementationClass: TInterfacedClass; const aInterfaces: array of PTypeInfo;
-  aInstanceCreation: TServiceInstanceImplementation): TServiceFactoryServer;
+  aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
   if (aImplementationClass=nil) or (high(aInterfaces)<0) then
     result := nil else
     result := (fServices as TServiceContainerServer).
-      AddImplementation(aImplementationClass,aInterfaces,aInstanceCreation,nil);
+      AddImplementation(aImplementationClass,aInterfaces,aInstanceCreation,nil,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceRegister(aSharedImplementation: TInterfacedObject;
-  const aInterfaces: array of PTypeInfo): TServiceFactoryServer;
+  const aInterfaces: array of PTypeInfo; const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
@@ -32213,7 +32216,7 @@ begin
     result := nil else
     result := (fServices as TServiceContainerServer).
       AddImplementation(TInterfacedClass(aSharedImplementation.ClassType),
-        aInterfaces,sicShared,aSharedImplementation);
+        aInterfaces,sicShared,aSharedImplementation,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceRegister(aClient: TSQLRest;
@@ -32231,18 +32234,18 @@ begin
 end;
 
 function TSQLRestServer.ServiceDefine(aImplementationClass: TInterfacedClass;
-  const aInterfaces: array of TGUID;
-  aInstanceCreation: TServiceInstanceImplementation): TServiceFactoryServer;
+  const aInterfaces: array of TGUID; aInstanceCreation: TServiceInstanceImplementation;
+  const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
   result := ServiceRegister(aImplementationClass,
-    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aInstanceCreation);
+    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aInstanceCreation,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceDefine(aSharedImplementation: TInterfacedObject;
-  const aInterfaces: array of TGUID): TServiceFactoryServer;
+  const aInterfaces: array of TGUID; const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
   result := ServiceRegister(aSharedImplementation,
-    TInterfaceFactory.GUID2TypeInfo(aInterfaces));
+    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aContractExpected);
 end;
 
 function TSQLRestServer.ServiceDefine(aClient: TSQLRest;
@@ -43645,7 +43648,7 @@ end;
 function TServiceContainerServer.AddImplementation(
   aImplementationClass: TInterfacedClass; const aInterfaces: array of PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  aSharedImplementation: TInterfacedObject): TServiceFactoryServer;
+  aSharedImplementation: TInterfacedObject; const aContractExpected: RawUTF8): TServiceFactoryServer;
 var C: TClass;
     T: PInterfaceTable;
     i, j: integer;
@@ -43691,7 +43694,7 @@ begin
   // register this implementation class
   for j := 0 to high(aInterfaces) do begin
     F := TServiceFactoryServer.Create(Rest as TSQLRestServer,aInterfaces[j],
-      aInstanceCreation,aImplementationClass,'',1800,aSharedImplementation);
+      aInstanceCreation,aImplementationClass,aContractExpected,1800,aSharedImplementation);
     if result=nil then
       result := F; // returns the first registered interface
     AddServiceInternal(F);
