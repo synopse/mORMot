@@ -72,7 +72,7 @@ unit SynSSPIAuth;
 interface
 
 uses
-    SysUtils, SynCommons;
+  Windows, SysUtils, SynCommons;
 
 {$I Synopse.inc} // define HASINLINE
 
@@ -174,9 +174,6 @@ const
 
 
 implementation
-
-uses
-  Windows;
 
 type
   TSecBuffer = record
