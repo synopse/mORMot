@@ -281,6 +281,7 @@
     {$if CompilerVersion >= 18}
       {$define HASNEWFILEAGE} // Delphi 2006 or newer
       {$define HASINLINE}
+      {$define HASREGION}
     {$ifend}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
