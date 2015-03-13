@@ -17043,7 +17043,13 @@ begin
   if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
     CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous instance
-    SetInstance(Dest,TSQLPropInfoRTTIObject(DestInfo).PropInfo^.CopyToNewObject(S));
+    try
+      D := ClassInstanceCreate(S.ClassType); // create new child instance
+      CopyObject(S,D); // copy child content
+    except
+      FreeAndNil(D); // avoid memory leak if error during new instance copy
+    end;
+    SetInstance(Dest,D);
   end;
 end;
 
