@@ -25165,7 +25165,7 @@ end;
 procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
 var setVersion,i: integer;
 {$ifdef MSWINDOWS}
-    Tmp: array[byte] of AnsiChar;
+    Tmp: array[byte] of WideChar;
     TmpSize: cardinal;
 {$else}
 {$endif}
@@ -25206,11 +25206,11 @@ begin
       dec(i);
     {$ifdef MSWINDOWS}
     TmpSize := sizeof(Tmp);
-    GetComputerNameA(Tmp,TmpSize);
-    Host := Tmp;
+    GetComputerNameW(Tmp,TmpSize);
+    RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),Host);
     TmpSize := sizeof(Tmp);
-    GetUserNameA(Tmp,TmpSize);
-    User := Tmp;
+    GetUserNameW(Tmp,TmpSize);
+    RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),User);
     {$else}
     Host := GetHostName;
     {$ifdef KYLIX3}
