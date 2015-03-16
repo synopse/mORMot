@@ -584,6 +584,7 @@ unit SynCommons;
   - added GarbageCollectorFreeAndNil() procedure to handle global variables
     proper finalization to nil - avoid error [8e3073c8c7] and [8546b4af1d] e.g.
     when used as design package in Delphi IDE (for all globals and class VMTs)
+  - made GarbageCollectorFree public - may be usefull e.g. with packages
   - added GlobalLock/GlobalUnlock functions, used e.g. for ticket [ea4e8bd544] 
   - fixed rouding issue e.g. for ExtendedToString(double(22.99999999999997))
   - fixed potential GPF in TRawUTF8List.SetTextPtr() - ticket [d947b36cf9]
@@ -9170,6 +9171,12 @@ var
 // !  if SynAnsiConvertList=nil then
 // !    GarbageCollectorFreeAndNil(SynAnsiConvertList,TObjectList.Create);
 procedure GarbageCollectorFreeAndNil(var InstanceVariable; Instance: TObject);
+
+/// force the global "Garbage collector" list to be released immediately
+// - this function is called in the finalization section of this unit
+// - you should NEVER have to call this function, unless some specific cases
+// (e.g. when using Delphi packages, just before releasing the package)
+procedure GarbageCollectorFree;
 
 /// enter a giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -44305,6 +44312,8 @@ var
 procedure GarbageCollectorFree;
 var i: integer;
 begin
+  if GarbageCollectorFreeing then
+    exit; // when already called before finalization
   GarbageCollectorFreeing := true;
   for i := GarbageCollector.Count-1 downto 0 do // last in, first out
   try
