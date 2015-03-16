@@ -37397,7 +37397,7 @@ begin
             Item := ClassInstanceCreate(ItemClass);
           end else
             Item := ClassInstanceCreate(TObjectListItemClass);
-          From := JSONToObject(Item,From,NestedValid);
+          From := JSONToObject(Item,From,NestedValid,nil,Options);
           if not NestedValid then begin
             result := From;
             exit;
@@ -37430,7 +37430,7 @@ begin
           '{': begin
             result := From;
             CollItem := Coll.Add;
-            From := JSONToObject(CollItem,From,NestedValid);
+            From := JSONToObject(CollItem,From,NestedValid,nil,Options);
             if not NestedValid then begin
               result := From;
               exit;
@@ -37562,7 +37562,7 @@ begin
       continue;
     end;
     P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName);
-    if P=nil then // unknwown property
+    if P=nil then // unknown property
       if j2oIgnoreUnknownProperty in Options then begin
         From := GotoNextJSONItem(From,1,@EndOfObject);
         continue;
