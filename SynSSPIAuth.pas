@@ -324,7 +324,7 @@ begin
   InBuf.pvBuffer := PByte(aInData);
 
   if (aSecContext.CredHandle.dwLower = -1) and (aSecContext.CredHandle.dwUpper = -1) then begin
-    aSecContext.CreatedTick64 := GetTickCount64;
+    aSecContext.CreatedTick64 := GetTickCount64();
     if QuerySecurityPackageInfoW(SECPKGNAMEINTERNAL, SecPkgInfo) <> 0 then
       RaiseLastOSError;
     try
@@ -430,7 +430,7 @@ begin
   InDesc.pBuffers := @InBuf;
 
   if (aSecContext.CredHandle.dwLower = -1) and (aSecContext.CredHandle.dwUpper = -1) then begin
-    aSecContext.CreatedTick64 := GetTickCount64;
+    aSecContext.CreatedTick64 := GetTickCount64();
     if QuerySecurityPackageInfoW(SECPKGNAMEINTERNAL, SecPkgInfo) <> 0 then
       RaiseLastOSError;
     try
