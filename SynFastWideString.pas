@@ -1,4 +1,4 @@
-// this unit will patch the System.pas RTL to use a custom NON OLE COMPATIBLE
+/// this unit will patch the System.pas RTL to use a custom NON OLE COMPATIBLE
 // WideString type, NOT using the slow Windows API, but FastMM4 (without COW) 
 unit SynFastWideString;
 
@@ -99,7 +99,9 @@ interface
    code will stay self-contained, under Delphi 7 or Delphi 2007, and need use
    of WideString instead of string=AnsiString.
 
-   YOU HAVE BEEN WARNED - USE AT YOUR OWN RISK !   :)
+   -----------------------------------------------
+    YOU HAVE BEEN WARNED - USE AT YOUR OWN RISK !   :)
+   -----------------------------------------------
 
 }
 
