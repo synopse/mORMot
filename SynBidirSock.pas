@@ -599,10 +599,18 @@ begin
   P := GotoNextNotSpace(P);
   if P^<>'{' then
     exit;
-  inc(P);
-  if not IdemPropNameU(GetJSONPropName(P),Head) then
+  repeat
+    inc(P);
+    if P^=#0 then exit;
+  until P^='"';
+  txt := P+1;
+  P := GotoEndOfJSONString(P);
+  if (P^=#0) or not IdemPropNameU(Head,txt,P-txt) then
     exit;
-  P := GotoNextNotSpace(P);
+  P := GotoNextNotSpace(P+1);
+  if P^<>':' then
+    exit;
+  P := GotoNextNotSpace(P+1);
   if P^<>'[' then
     exit;
   inc(P);
@@ -616,7 +624,7 @@ begin
     content := GetJSONItemAsRawJSON(P) else begin
     txt := GetJSONField(P,P);
     if IdemPChar(pointer(contentType),'TEXT/') then
-      content := txt else
+      SetString(content,txt,StrLen(txt)) else
     if not Base64MagicCheckAndDecode(txt,content) then
       exit;
   end;

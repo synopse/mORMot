@@ -32291,7 +32291,7 @@ begin
           n := result-1;
       until L>n;
     end else
-      // array is not sorted -> use iterating search
+      // array is not sorted, or aIndex=nil -> use iterating search
       for result := 0 to n do
         if aCompare(P^,Elem)=0 then
           exit else
