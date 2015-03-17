@@ -1,6 +1,8 @@
 /// database Model for the MVCServer BLOG sample
 unit MVCModel;
 
+{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+
 interface
 
 uses
