@@ -316,10 +316,10 @@ type
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
-    /// encrypt an AES data block
-    procedure Encrypt(var B: TAESBlock); overload;
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
+    /// encrypt an AES data block
+    procedure Encrypt(var B: TAESBlock); overload;
 
     /// Initialize AES contexts for uncypher
     function DecryptInit(const Key; KeySize: cardinal): boolean;
@@ -4764,7 +4764,7 @@ end;
 var
   Xor32Byte: TByteArray absolute Td0;  // $2000=8192 bytes of XOR tables ;)
 
-{$ifndef PURE_PASCAL} // should be put outside XorOffset() for FPC :(
+{$ifndef PUREPASCAL} // should be put outside XorOffset() for FPC :(
 procedure Xor64(PI: PIntegerArray; P: pByte; Count: integer);
 asm // eax=PI edx=P ecx=Count64
   push ebx
@@ -5502,38 +5502,107 @@ procedure TAESCFB.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
     tmp: TAESBlock;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
   if not AES.Initialized then
     EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
-  for i := 1 to Count shr 4 do begin
-    tmp := fIn^;
-    AES.Encrypt(fCV,fCV);
-    if fIn=fOut then
-      XorBlock16(pointer(fIn),pointer(@fCV)) else
-      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    fCV := tmp;
-    inc(fIn);
-    inc(fOut);
+  {$ifndef PURE_PASCAL}
+  if (cfSSE2 in CpuFeatures) and (Count and (AESBlockSize-1)=0) then
+    asm
+      shr Count,4
+      jz @z
+      push ebx
+      push esi
+      push edi
+      mov eax,self
+      mov esi,BufIn
+      mov edi,BufOut
+      movdqu xmm0,dqword ptr [eax].TAESCFB.fIV
+      movdqu tmp,xmm0
+      lea ebx,[eax].TAESCFB.AES
+  @0: mov eax,ebx
+      lea edx,tmp
+      lea ecx,tmp
+      call TAES.Encrypt
+      movdqu xmm0,dqword ptr [esi]
+      movdqu xmm1,tmp
+      movdqu tmp,xmm0
+      pxor xmm0,xmm1
+      movdqu dqword ptr [edi],xmm0
+      dec Count
+      lea esi,[esi+16]
+      lea edi,[edi+16]
+      jnz @0
+      pop edi
+      pop esi
+      pop ebx
+@z: end else
+  {$endif} begin
+    inherited; // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      tmp := fIn^;
+      AES.Encrypt(fCV,fCV);
+      if fIn=fOut then
+        XorBlock16(pointer(fIn),pointer(@fCV)) else
+        XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      fCV := tmp;
+      inc(fIn);
+      inc(fOut);
+    end;
+    EncryptTrailer;
   end;
-  EncryptTrailer;
 end;
 
 procedure TAESCFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
+    {$ifndef PURE_PASCAL}
+    tmp: TAESBlock;
+    {$endif}
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
   if not AES.Initialized then
     EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
-  for i := 1 to Count shr 4 do begin
-    AES.Encrypt(fCV,fCV);
-    if fIn=fOut then
-      XorBlock16(pointer(fIn),pointer(@fCV)) else
-      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    fCV := fOut^;
-    inc(fIn);
-    inc(fOut);
+  {$ifndef PURE_PASCAL}
+  if (cfSSE2 in CpuFeatures) and (Count and (AESBlockSize-1)=0) then
+    asm
+      shr Count,4
+      jz @z
+      push ebx
+      push esi
+      push edi
+      mov eax,self
+      mov esi,BufIn
+      mov edi,BufOut
+      movdqu xmm0,dqword ptr [eax].TAESCFB.fIV
+      movdqu tmp,xmm0
+      lea ebx,[eax].TAESCFB.AES
+  @0: mov eax,ebx
+      lea edx,tmp
+      lea ecx,tmp
+      call TAES.Encrypt
+      movdqu xmm0,dqword ptr [esi]
+      movdqu xmm1,tmp
+      pxor xmm0,xmm1
+      movdqu dqword ptr [edi],xmm0
+      movdqu tmp,xmm0
+      dec Count
+      lea esi,[esi+16]
+      lea edi,[edi+16]
+      jnz @0
+      pop edi
+      pop esi
+      pop ebx
+@z: end else
+  {$endif} begin
+    inherited; // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      AES.Encrypt(fCV,fCV);
+      if fIn=fOut then
+        XorBlock16(pointer(fIn),pointer(@fCV)) else
+        XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      fCV := fOut^;
+      inc(fIn);
+      inc(fOut);
+    end;
+    EncryptTrailer;
   end;
-  EncryptTrailer;
 end;
 
 
@@ -5943,4 +6012,4 @@ finalization
     FreeLibrary(CryptoAPI.Handle);
   end;
 {$endif}
-end.
+end.
