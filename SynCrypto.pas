@@ -1440,6 +1440,108 @@ begin
   Encrypt(B,B);
 end;
 
+{$ifdef USEAESNI}
+procedure AesNiEncryptXmm7;
+asm // input: eax=TAESContext, xmm7=data; output: xmm7=data
+  mov dl,[eax].TAESContext.Rounds
+  movdqu xmm0,[eax+16*0]
+  movdqu xmm1,[eax+16*1]
+  movdqu xmm2,[eax+16*2]
+  movdqu xmm3,[eax+16*3]
+  movdqu xmm4,[eax+16*4]
+  movdqu xmm5,[eax+16*5]
+  movdqu xmm6,[eax+16*6]
+  pxor xmm7,xmm0
+  cmp dl,10
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  {$else}
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  {$endif}
+  movdqu xmm0,[eax+16*7]
+  movdqu xmm1,[eax+16*8]
+  movdqu xmm2,[eax+16*9]
+  movdqu xmm3,[eax+16*10]
+  je @128
+  cmp dl,12
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  {$endif}
+  movdqu xmm4,[eax+16*11]
+  movdqu xmm5,[eax+16*12]
+  je @192
+@256:
+  movdqu xmm6,[eax+16*13]
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  {$else}
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  {$endif}
+  movdqu xmm1,[eax+16*14]
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenclast xmm7,xmm1
+  {$else}
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  db $66,$0F,$38,$DD,$F9
+  {$endif}
+  ret
+@128:
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenclast xmm7,xmm3
+  {$else}
+  db $66,$0F,$38,$DC,$FD
+  db $66,$0F,$38,$DC,$FE
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DD,$FB
+  {$endif}
+  ret
+@192:
+  {$ifdef HASAESNI}
+  aesenc xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenclast xmm7,xmm5
+  {$else}
+  db $66,$0F,$38,$DC,$F8
+  db $66,$0F,$38,$DC,$F9
+  db $66,$0F,$38,$DC,$FA
+  db $66,$0F,$38,$DC,$FB
+  db $66,$0F,$38,$DC,$FC
+  db $66,$0F,$38,$DD,$FD
+  {$endif}
+end;
+{$endif}
+
 procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
 // encrypt one block: Context contains encryption key
 {$ifdef PURE_PASCAL}
@@ -1605,104 +1707,7 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   cmp byte ptr [eax].TAESContext.AesNi,0
   je @noAesNi
   movdqu xmm7,[edx]
-  mov dl,[eax].TAESContext.Rounds
-  movdqu xmm0,[eax+16*0]
-  movdqu xmm1,[eax+16*1]
-  movdqu xmm2,[eax+16*2]
-  movdqu xmm3,[eax+16*3]
-  movdqu xmm4,[eax+16*4]
-  movdqu xmm5,[eax+16*5]
-  movdqu xmm6,[eax+16*6]
-  pxor xmm7,xmm0
-  cmp dl,10
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm1
-  aesenc xmm7,xmm2
-  aesenc xmm7,xmm3
-  aesenc xmm7,xmm4
-  {$else}
-  db $66,$0F,$38,$DC,$F9
-  db $66,$0F,$38,$DC,$FA
-  db $66,$0F,$38,$DC,$FB
-  db $66,$0F,$38,$DC,$FC
-  {$endif}
-  movdqu xmm0,[eax+16*7]
-  movdqu xmm1,[eax+16*8]
-  movdqu xmm2,[eax+16*9]
-  movdqu xmm3,[eax+16*10]
-  je @128
-  cmp dl,12
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  {$else}
-  db $66,$0F,$38,$DC,$FD
-  db $66,$0F,$38,$DC,$FE
-  {$endif}
-  movdqu xmm4,[eax+16*11]
-  movdqu xmm5,[eax+16*12]
-  je @192
-@256:
-  movdqu xmm6,[eax+16*13]
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  {$else}
-  db $66,$0F,$38,$DC,$F8
-  db $66,$0F,$38,$DC,$F9
-  {$endif}
-  movdqu xmm1,[eax+16*14]
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm2
-  aesenc xmm7,xmm3
-  aesenc xmm7,xmm4
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  aesenclast xmm7,xmm1
-  {$else}
-  db $66,$0F,$38,$DC,$FA
-  db $66,$0F,$38,$DC,$FB
-  db $66,$0F,$38,$DC,$FC
-  db $66,$0F,$38,$DC,$FD
-  db $66,$0F,$38,$DC,$FE
-  db $66,$0F,$38,$DD,$F9
-  {$endif}
-  movdqu [ecx],xmm7
-  ret
-@128:
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  aesenc xmm7,xmm2
-  aesenclast xmm7,xmm3
-  {$else}
-  db $66,$0F,$38,$DC,$FD
-  db $66,$0F,$38,$DC,$FE
-  db $66,$0F,$38,$DC,$F8
-  db $66,$0F,$38,$DC,$F9
-  db $66,$0F,$38,$DC,$FA
-  db $66,$0F,$38,$DD,$FB
-  {$endif}
-  movdqu [ecx],xmm7
-  ret
-@192:
-  {$ifdef HASAESNI}
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  aesenc xmm7,xmm2
-  aesenc xmm7,xmm3
-  aesenc xmm7,xmm4
-  aesenclast xmm7,xmm5
-  {$else}
-  db $66,$0F,$38,$DC,$F8
-  db $66,$0F,$38,$DC,$F9
-  db $66,$0F,$38,$DC,$FA
-  db $66,$0F,$38,$DC,$FB
-  db $66,$0F,$38,$DC,$FC
-  db $66,$0F,$38,$DD,$FD
-  {$endif}
+  call AesNiEncryptXmm7
   movdqu [ecx],xmm7
   ret
 @noAesNi:
@@ -5498,51 +5503,63 @@ end;
 
 { TAESCFB }
 
+{$ifdef USEAESNI}
+procedure AesNiTrailer;
+asm
+    and    ecx,15
+    jz     @0
+    call   AesNiEncryptXmm7
+    lea    edx,[eax].TAESContext.buf
+    movdqu [edx],xmm7
+@s: lodsb
+    xor    al,[edx]
+    inc    edx
+    stosb
+    loop   @s
+@0:
+end;
+{$endif}
+
 procedure TAESCFB.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
     tmp: TAESBlock;
 begin
   if not AES.Initialized then
     EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
-  {$ifndef PURE_PASCAL}
-  if (cfSSE2 in CpuFeatures) and (Count and (AESBlockSize-1)=0) then
-    asm
-      shr Count,4
-      jz @z
-      push ebx
-      push esi
-      push edi
-      mov eax,self
-      mov esi,BufIn
-      mov edi,BufOut
-      movdqu xmm0,dqword ptr [eax].TAESCFB.fIV
-      movdqu tmp,xmm0
-      lea ebx,[eax].TAESCFB.AES
-  @0: mov eax,ebx
-      lea edx,tmp
-      lea ecx,tmp
-      call TAES.Encrypt
-      movdqu xmm0,dqword ptr [esi]
-      movdqu xmm1,tmp
-      movdqu tmp,xmm0
-      pxor xmm0,xmm1
-      movdqu dqword ptr [edi],xmm0
-      dec Count
-      lea esi,[esi+16]
-      lea edi,[edi+16]
-      jnz @0
-      pop edi
-      pop esi
-      pop ebx
-@z: end else
+  {$ifdef USEAESNI}
+  if TAESContext(AES.Context).AesNi then
+  asm
+    push   esi
+    push   edi
+    mov    eax,self
+    mov    ecx,Count
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV
+    lea    eax,[eax].TAESCFB.AES
+    push   ecx
+    shr    ecx,4
+    jz     @z
+@s: call   AesNiEncryptXmm7
+    movdqu xmm0,dqword ptr [esi]
+    pxor   xmm0,xmm7
+    movdqu xmm7,dqword ptr [esi]
+    movdqu dqword ptr [edi],xmm0
+    dec    ecx
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    jnz    @s
+@z: pop    ecx
+    call   AesNiTrailer
+    pop    edi
+    pop    esi
+  end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
       AES.Encrypt(fCV,fCV);
-      if fIn=fOut then
-        XorBlock16(pointer(fIn),pointer(@fCV)) else
-        XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := tmp;
       inc(fIn);
       inc(fOut);
@@ -5553,50 +5570,41 @@ end;
 
 procedure TAESCFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
-    {$ifndef PURE_PASCAL}
-    tmp: TAESBlock;
-    {$endif}
 begin
   if not AES.Initialized then
     EncryptInit; // CFB mode = only Encrypt -> allow prepare the key once
-  {$ifndef PURE_PASCAL}
-  if (cfSSE2 in CpuFeatures) and (Count and (AESBlockSize-1)=0) then
-    asm
-      shr Count,4
-      jz @z
-      push ebx
-      push esi
-      push edi
-      mov eax,self
-      mov esi,BufIn
-      mov edi,BufOut
-      movdqu xmm0,dqword ptr [eax].TAESCFB.fIV
-      movdqu tmp,xmm0
-      lea ebx,[eax].TAESCFB.AES
-  @0: mov eax,ebx
-      lea edx,tmp
-      lea ecx,tmp
-      call TAES.Encrypt
-      movdqu xmm0,dqword ptr [esi]
-      movdqu xmm1,tmp
-      pxor xmm0,xmm1
-      movdqu dqword ptr [edi],xmm0
-      movdqu tmp,xmm0
-      dec Count
-      lea esi,[esi+16]
-      lea edi,[edi+16]
-      jnz @0
-      pop edi
-      pop esi
-      pop ebx
-@z: end else
+  {$ifdef USEAESNI}
+  if TAESContext(AES.Context).AesNi then
+  asm
+    push   esi
+    push   edi
+    mov    eax,self
+    mov    ecx,Count
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV
+    lea    eax,[eax].TAESCFB.AES
+    push   ecx
+    shr    ecx,4
+    jz     @z
+@s: call   AesNiEncryptXmm7
+    movdqu xmm0,dqword ptr [esi]
+    pxor   xmm7,xmm0
+    movdqu dqword ptr [edi],xmm7
+    dec    ecx
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    jnz    @s
+@z: pop    ecx
+    call   AesNiTrailer
+    pop    edi
+    pop    esi
+  end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
       AES.Encrypt(fCV,fCV);
-      if fIn=fOut then
-        XorBlock16(pointer(fIn),pointer(@fCV)) else
-        XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := fOut^;
       inc(fIn);
       inc(fOut);
@@ -5616,16 +5624,45 @@ end;
 procedure TAESOFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
   if not AES.Initialized then
     EncryptInit; // OFB mode = only Encrypt -> allow prepare the key once
-  for i := 1 to Count shr 4 do begin
-    AES.Encrypt(fCV,fCV);
-    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    inc(fIn);
-    inc(fOut);
+  {$ifdef USEAESNI}
+  if TAESContext(AES.Context).AesNi then
+  asm
+    push   esi
+    push   edi
+    mov    eax,self
+    mov    ecx,Count
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV
+    lea    eax,[eax].TAESCFB.AES
+    push   ecx
+    shr    ecx,4
+    jz     @z
+@s: call   AesNiEncryptXmm7
+    movdqu xmm0,dqword ptr [esi]
+    pxor   xmm0,xmm7
+    movdqu dqword ptr [edi],xmm0
+    dec    ecx
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    jnz    @s
+@z: pop    ecx
+    call   AesNiTrailer
+    pop    edi
+    pop    esi
+  end else
+  {$endif} begin
+    inherited; // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      AES.Encrypt(fCV,fCV);
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      inc(fIn);
+      inc(fOut);
+    end;
+    EncryptTrailer;
   end;
-  EncryptTrailer;
 end;
 
 
@@ -5640,9 +5677,9 @@ procedure TAESCTR.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i,j: integer;
     tmp: TAESBlock;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
   if not AES.Initialized then
     EncryptInit; // CTR mode = only Encrypt -> allow prepare the key once
+  inherited; // CV := IV + set fIn,fOut,fCount
   for i := 1 to Count shr 4 do begin
     AES.Encrypt(fCV,tmp);
     inc(fCV[7]);
