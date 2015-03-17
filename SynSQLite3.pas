@@ -4672,7 +4672,7 @@ begin
     [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,sqlite3.libversion]);
   if aDB=0 then
     Message := Message+' with aDB=nil' else begin
-    Message := Format('%s - "%s"',[Message,sqlite3.errmsg(aDB)]);
+    Message := Format('%s - ''%s''',[Message,sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
       Message := Format('%s extended_errcode=%d',[Message,sqlite3.extended_errcode(aDB)]);
   end;
@@ -4745,8 +4745,8 @@ function TSQLBlobStream.Seek(Offset: Integer; Origin: word): Longint;
 begin
   case Origin of
     soFromBeginning: fPosition := Offset;
-    soFromCurrent: Inc(fPosition, Offset);
-    soFromEnd: fPosition := fSize + Offset;
+    soFromCurrent:   Inc(fPosition,Offset);
+    soFromEnd:       fPosition := fSize+Offset;
   end;
   if fPosition>fSize then
     fPosition := fSize;

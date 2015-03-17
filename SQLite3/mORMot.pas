@@ -8465,7 +8465,8 @@ type
     {$endif}
     smvObject,
     smvRawJSON,
-    smvDynArray);
+    smvDynArray,
+    smvInterface);
 
   /// handled kind of parameters internal variables for an interface-based method
   // - reference-counted variables will have their own storage
@@ -8473,7 +8474,7 @@ type
   // - smvVariant kind of parameter will be handled as a special smvvRecord
   TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvvRawUTF8, smvvString, smvvWideString,
-    smvvRecord, smvvObject, smvvDynArray);
+    smvvRecord, smvvObject, smvvDynArray, smvvInterface);
 
   /// set of parameters for an interface-based service provider method
   TServiceMethodValueTypes = set of TServiceMethodValueType;
@@ -8638,10 +8639,12 @@ type
     /// contains the count of variables for all used kind of arguments
     ArgsUsedCount: array[TServiceMethodValueVar] of integer;
     /// the index of the first argument expecting manual stack initialization
-    // - set if there is any smvObject,smvDynArray,smvRecord and smvVariant
+    // - set if there is any smvObject,smvDynArray,smvRecord,smvInterface or
+    // smvVariant
     ArgsManagedFirst: integer;
     /// the index of the last argument expecting manual stack initialization
-    // - set if there is any smvObject,smvDynArray,smvRecord and smvVariant
+    // - set if there is any smvObject,smvDynArray,smvRecord, smvInterface or
+    // smvVariant
     ArgsManagedLast: integer;
     /// method index in the original (non emulated) interface
     // - our custom methods start at index 3 (RESERVED_VTABLE_SLOTS), since
@@ -41179,7 +41182,8 @@ const
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
     smvvRawUTF8, smvvString, smvvWideString, smvvRecord,
-    {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8, smvvDynArray);
+    {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
+    smvvDynArray, smvvInterface);
 
   {$ifdef CPU64}
   CONST_STOREDINXMM: TServiceMethodValueTypes = [smvDouble, smvDateTime];
@@ -41190,8 +41194,8 @@ const
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
      8,       PTRSIZ,  PTRSIZ, PTRSIZ,     PTRSIZ, {$ifndef NOVARIANTS}PTRSIZ,{$endif}
  // Currency, RawUTF8, String, WideString, Record,  Variant,
-    PTRSIZ, PTRSIZ,  PTRSIZ);
- // Object, RawJSON, DynArray
+    PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
+ // Object, RawJSON, DynArray, Interface
    {$endif}
 
   CONST_ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
@@ -41406,11 +41410,18 @@ begin
           end;
           IgnoreComma(R);
         end;
-        smvRawJSON: begin
-          PRawUTF8(V)^ := GetJSONItemAsRawJSON(R);
+        smvInterface: begin
+          R := GotoNextJSONItem(R,1); // TODO: interface as callback
           if R=nil then
-            RaiseError('returned RawJSON',[]);
+            RaiseError('returned interface',[]);
         end;
+        smvRawJSON:
+          if (R<>nil) and (R^=']') then
+            PRawUTF8(V)^ := '' else begin
+            PRawUTF8(V)^ := GetJSONItemAsRawJSON(R);
+            if R=nil then
+              RaiseError('returned RawJSON',[]);
+          end;
         smvDynArray: begin
           if vIsObjArray in ValueKindAsm then
             ObjArrayClear(V^);
@@ -41603,6 +41614,8 @@ begin
   {$endif}
   tkDynArray: // TDynArray.LoadFromJSON / TTextWriter.AddDynArrayJSON type
     result := smvDynArray;
+  tkInterface:
+    result := smvInterface;
   tkUnknown: // assume var/out untyped arguments are in fact objects
     result := smvObject;
   end;
@@ -41794,6 +41807,11 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
           ErrorMsg := ' - class not allowed as function result: use a var/out parameter';
           goto error;
         end;
+      smvInterface:
+        if ValueDirection in [smdVar,smdResult] then begin
+          ErrorMsg := ' - interface not allowed as output: use a const parameter';
+          goto error;
+        end;
       end;
       if ValueDirection=smdResult then
         ArgsResultIndex := a else begin
@@ -41813,7 +41831,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         ArgsOutLast := a;
         inc(ArgsOutputValuesCount);
       end;
-      if ValueType in [smvObject,smvDynArray,smvRecord
+      if ValueType in [smvObject,smvDynArray,smvRecord,smvInterface
           {$ifndef NOVARIANTS},smvVariant{$endif}] then begin
         if ArgsManagedFirst<0 then
           ArgsManagedFirst := a;
@@ -42216,9 +42234,16 @@ begin
         P := AlignToPtr(P);
         ArgTypeInfo := PTypeInfo(ppointer(P)^);
         ArgTypeName := @ArgTypeInfo^.Name;
-        if TypeInfoToMethodValueType(ArgTypeInfo) in [smvRecord,smvDynArray] then begin
+        if a>0 then
+        case TypeInfoToMethodValueType(ArgTypeInfo) of
+        smvRecord,smvDynArray:
           if f*[pfConst,pfVar,pfOut{$IFDEF FPC_HAS_CONSTREF},pfConstRef{$endif}]=[] then
-             RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
+             RaiseError('%: % parameter should be declared as const, var or out',
+               [ParamName^,ArgTypeName^]);
+        smvInterface:
+           if not (pfConst in f) then 
+             RaiseError('%: % parameter should be declared as const',
+               [ParamName^,ArgTypeName^]);
         end;
         inc(PP);
         inc(PB);    // skip ParReg
@@ -42263,9 +42288,17 @@ begin
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
-        if TypeInfoToMethodValueType(ArgTypeInfo) in [smvRecord,smvDynArray] then
+        if a>0 then
+        case TypeInfoToMethodValueType(ArgTypeInfo) of
+        smvRecord,smvDynArray:
           if f*[pfConst,pfVar,pfOut]=[] then
-            RaiseError('"%" parameter should be declared as const, var or out',[ParamName^]);
+            RaiseError('%: % parameter should be declared as const, var or out',
+              [ParamName^,ArgTypeName^]);
+        smvInterface:
+          if not (pfConst in f) then
+            RaiseError('%: % parameter should be declared as const',
+              [ParamName^,ArgTypeName^]);
+        end;
       end;
       // add a pseudo argument after all arguments for functions
       if Kind=mkFunction then
@@ -43628,7 +43661,7 @@ begin
     if ArgsResultIndex>=0 then
     with Args[ArgsResultIndex] do
     case ValueType of
-    smvNone, smvObject:
+    smvNone, smvObject, smvInterface:
       raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
         [self,fInterface.fInterfaceTypeInfo^.Name,URI,ArgTypeName^]);
     smvRecord:
@@ -44421,7 +44454,7 @@ const
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
     'double','datetime','currency','utf8','utf8','utf8','',
-    {$ifndef NOVARIANTS}'variant',{$endif}'','json','');
+    {$ifndef NOVARIANTS}'variant',{$endif}'','json','','');
 begin
   WR.AddShort('{"argument":"');
   WR.AddShort(ParamName^);
@@ -44460,6 +44493,7 @@ begin
                  {$endif}
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[]);
+  smvInterface:  WR.AddShort('null'); // TODO: interface as callback
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
   smvVariant:    WR.AddVariantJSON(PVariant(V)^,twJSONEscape);
@@ -44486,9 +44520,10 @@ end;
 procedure TServiceMethodArgument.AddDefaultJSON(WR: TTextWriter);
 begin
   case ValueType of
-  smvBoolean:  WR.AddShort('false,');
-  smvObject:   WR.AddShort('null,'); // may raise an error on the client side
-  smvDynArray: WR.AddShort('[],');
+  smvBoolean:   WR.AddShort('false,');
+  smvObject:    WR.AddShort('null,'); // may raise an error on the client side
+  smvInterface: WR.AddShort('null,'); // TODO: interface as callback
+  smvDynArray:  WR.AddShort('[],');
   smvRecord:   begin
     WR.AddVoidRecordJSON(ArgTypeInfo);
     WR.Add(',');
@@ -44707,6 +44742,7 @@ var RawUTF8s: TRawUTF8DynArray;
     Stack: array[0..MAX_EXECSTACK-1] of byte;
     Int64s: array[0..MAX_METHOD_ARGS-1] of Int64;
     Objects: array[0..MAX_METHOD_ARGS-1] of TObject;
+    Interfaces: array[0..MAX_METHOD_ARGS-1] of pointer;
     DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArrayFake;
     Values: array[0..MAX_METHOD_ARGS-1] of PPointer;
 begin
@@ -44722,7 +44758,9 @@ begin
   if ArgsUsedCount[smvvRecord]>0 then
     SetLength(Records,ArgsUsedCount[smvvRecord]);
   if ArgsUsedCount[smvvObject]>0 then
-    fillchar(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0); // for finally
+    fillchar(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0); 
+  if ArgsUsedCount[smvvInterface]>0 then
+    fillchar(Interfaces,ArgsUsedCount[smvvInterface]*sizeof(pointer),0);
   if ArgsUsedCount[smvvDynArray]>0 then
     fillchar(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
   try
@@ -44765,6 +44803,8 @@ begin
       case ValueType of
       smvObject:
         Objects[IndexVar] := ArgTypeInfo^.ClassCreate;
+      smvInterface:
+        Interfaces[IndexVar] := nil; // TODO: interface as callback
       smvDynArray:
         with DynArrays[IndexVar] do begin
           Wrapper.Init(ArgTypeInfo,Value);
@@ -44793,6 +44833,9 @@ begin
           if not valid then
             exit;
           IgnoreComma(Par);
+        end;
+        smvInterface: begin
+          Par := GotoNextJSONItem(Par,1); // TODO: interface as callback
         end;
         smvRawJSON:
           RawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
@@ -44850,6 +44893,7 @@ begin
       smvvString:     Value := @Strings[IndexVar];
       smvvWideString: Value := @WideStrings[IndexVar];
       smvvObject:     Value := @Objects[IndexVar];
+      smvvInterface:  Value := @Interfaces[IndexVar];
       smvvRecord:     Value := pointer(Records[IndexVar]);
       smvvDynArray:   Value := @DynArrays[IndexVar].Value;
       else raise EInterfaceFactoryException.CreateUTF8(
@@ -44918,10 +44962,12 @@ begin
     end;
     Result := true;
   finally
-    // 7. release any Records[], Objects[] and DynArrays[] (emulated) instance
+    // 7. release any Records[], Objects[], Interfaces[] and DynArrays[]
     if ArgsManagedFirst>=0 then begin
       for i := 0 to ArgsUsedCount[smvvObject]-1 do
         Objects[i].Free;
+      for i := 0 to ArgsUsedCount[smvvInterface]-1 do
+        IUnknown(Interfaces[i]) := nil;
       for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
         with DynArrays[i] do
           if IsObjArray then

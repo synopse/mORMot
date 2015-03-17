@@ -245,7 +245,7 @@ const
   TYPES_SOA: array[TServiceMethodValueType] of TWrapperType = (
     wUnknown,wUnknown,wBoolean,wEnum,wSet,wUnknown,wUnknown,wUnknown,
     wDouble,wDateTime,wCurrency,wRawUTF8,wString,wRawUTF8,wRecord,wVariant,
-    wObject,wRawJSON,wArray); // integers are wUnknown to force best type
+    wObject,wRawJSON,wArray,wUnknown); // integers are wUnknown to force best type
 
 
 function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
