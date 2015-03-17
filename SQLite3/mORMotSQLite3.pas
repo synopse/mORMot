@@ -317,6 +317,7 @@ type
       const aSQL: RawUTF8; Expand: boolean); reintroduce;
   end;
 
+  /// class-reference type (metaclass) of a REST server using SQLite3 as main engine
   TSQLRestServerDBClass = class of TSQLRestServerDB;
 
   TSQLVirtualTableModuleServerDB = class;

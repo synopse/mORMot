@@ -250,6 +250,7 @@ type
       - these methods must be declared as procedure with no parameter }
   end;
 
+  /// class-reference type (metaclass) of a test case
   TSynTestCaseClass = class of TSynTestCase;
 
   /// a class used to run a suit of test cases

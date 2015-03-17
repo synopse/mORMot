@@ -1042,7 +1042,7 @@ begin
        (FileTimeStampCheckTick<GetTickCount64)) then begin
       age := FileAgeToDateTime(FileName);
       if (Mustache=nil) or (age<>FileTimeStamp) then begin
-        Mustache := nil;
+        Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
         FileTimeStamp := age;
         Template := AnyTextFileToRawUTF8(FileName,true);
         if Template<>'' then

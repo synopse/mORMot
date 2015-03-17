@@ -7654,6 +7654,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); virtual; abstract;
   end;
 
+  /// class-reference type (metaclass) of a record filter 
   TSynFilterClass = class of TSynFilter;
 
   /// a custom filter which will convert the value into Upper Case characters
@@ -10192,7 +10193,7 @@ type
       const Indirect: Boolean); override;
   end;
 
-  /// class of custom variant type definition
+  /// class-reference type (metaclass) of custom variant type definition
   // - used by SynRegisterCustomVariantType() function
   TSynInvokeableVariantTypeClass = class of TSynInvokeableVariantType;
 
@@ -11720,7 +11721,7 @@ type
 {$endif}
 {$endif}
 
-  /// used to refer to a simple authentication class
+  /// class-reference type (metaclass) of an authentication class
   TSynAuthenticationClass = class of TSynAuthenticationAbstract;
 
   /// abstract authentication class, implementing safe token/challenge security
@@ -32275,14 +32276,16 @@ begin
   if (@aCompare<>nil) and (n>0) then begin
     dec(n);
     P := fValue^;
-    if (n>10) and (length(aIndex)>n) then begin
-      // array should be sorted -> use fast binary search
+    if (n>10) and (length(aIndex)>=n) then begin
+      // array should be sorted via aIndex[] -> use fast binary search
       L := 0;
       repeat
         result := (L+n) shr 1;
         cmp := aCompare(P[cardinal(aIndex[result])*ElemSize],Elem);
-        if cmp=0 then
+        if cmp=0 then begin
+          result := aIndex[result]; // returns index in TDynArray
           exit;
+        end;
         if cmp<0 then
           L := result+1 else
           n := result-1;

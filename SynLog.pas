@@ -220,7 +220,14 @@ type
   {$M+} { we need the RTTI for the published methods of the logging classes }
 
   TSynLog = class;
+
+  /// class-reference type (metaclass) of a TSynLog family
+  // - since TSynLog classes store their information per type, you usually
+  // will store a reference to a logging family (i.e. logging settings) using
+  // a TSynLogClass variable, whereas TSynLog would point to the active logging
+  // instance
   TSynLogClass = class of TSynLog;
+
   TSynLogFamily = class;
   TSynLogFile = class;
   

@@ -2771,7 +2771,7 @@ type
     function SQLDBFieldTypeName: PShortString;
   end;
 
-  /// type of a TSQLPropInfo class
+  /// class-reference type (metaclass) of a TSQLPropInfo information 
   TSQLPropInfoClass = class of TSQLPropInfo;
 
   /// define how the published properties RTTI is to be interpreted
@@ -2822,7 +2822,7 @@ type
     property PropType: PTypeInfo read fPropType;
   end;
 
-  /// type of a TSQLPropInfoRTTI class
+  /// class-reference type (metaclass) of a TSQLPropInfoRTTI information
   TSQLPropInfoRTTIClass = class of TSQLPropInfoRTTI;
 
   TSQLPropInfoRTTIObjArray = array of TSQLPropInfoRTTI;
@@ -3683,7 +3683,7 @@ type
     constructor Create; reintroduce; virtual;
   end;
 
-  /// the class of TInterfacedCollection kind
+  /// class-reference type (metaclass) of a TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
 
   /// abstract TCollectionItem class, which will instantiate all its nested
@@ -3708,7 +3708,7 @@ type
 
   {$endif LVCL}
 
-  /// the class of TInterfacedObject kind
+  /// class-reference type (metaclass) of a TInterfacedObject kind
   TInterfacedObjectClass = class of TInterfacedObject;
 
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
@@ -3910,7 +3910,7 @@ type
   /// a list of incoming/outgoing data process statistics
   TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
 
-  /// used to store the class of process statistic instances
+  /// class-reference type (metaclass) of a process statistic information
   TSynMonitorClass = class of TSynMonitor;
 
 const
@@ -7354,6 +7354,8 @@ type
   TSQLRecordVirtual = class(TSQLRecord);
 
   TSQLVirtualTable = class;
+
+  /// class-reference type (metaclass) of a virtual table implementation
   TSQLVirtualTableClass = class of TSQLVirtualTable;
 
   /// pre-computed SQL statements for ORM operations for a given
@@ -8042,8 +8044,10 @@ type
   // - see http://sqlite.org/fts3.html#tokenizer
   TSQLRecordFTS3Porter = class(TSQLRecordFTS3);
 
+  /// class-reference type (metaclass) of a FTS3/FTS4 virtual table
   TSQLRecordFTS3Class = class of TSQLRecordFTS3;
 
+  /// class-reference type (metaclass) of a RTREE virtual table
   TSQLRecordRTreeClass = class of TSQLRecordRTree;
 
   {/ a base record, corresdonding to a FTS4 table, which is an enhancement to FTS3
@@ -8887,7 +8891,7 @@ type
     destructor Destroy; override;
   end;
 
-  /// defines the class of a TInjectableObject type
+  /// class-reference type (metaclass) of a TInjectableObject type
   TInjectableObjectClass = class of TInjectableObject;
 
   /// used to set the published properties of a TInjectableAutoCreateFields
@@ -10553,7 +10557,7 @@ type
     amUnlocked, amLocked, amBackgroundThread, amBackgroundORMSharedThread
     {$ifndef LVCL}, amMainThread{$endif});
 
-  /// the class of a TSQLRest
+  /// class-reference type (metaclass) of a TSQLRest kind
   TSQLRestClass = class of TSQLRest;
 
   /// a dynamic array of TSQLRest instances
@@ -11863,12 +11867,12 @@ type
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
 
-  /// class of our abstract table storage
+  /// class-reference type (metaclass) of our abstract table storage
   // - may be e.g. TSQLRestStorageInMemory, TSQLRestStorageInMemoryExternal,
   // TSQLRestStorageExternal or TSQLRestStorageMongoDB
   TSQLRestStorageClass = class of TSQLRestStorage;
 
-  /// class of our TObjectList memory-stored table storage
+  /// class-reference type (metaclass) of our TObjectList memory-stored table storage
   // - may be TSQLRestStorageInMemory or TSQLRestStorageInMemoryExternal
   TSQLRestStorageInMemoryClass = class of TSQLRestStorageInMemory;
 
@@ -11933,7 +11937,8 @@ type
     property AccessRights: RawUTF8 index 1600 read fAccessRights write fAccessRights;
   end;
 
-  /// class of the table containing the available user access rights for authentication
+  /// class-reference type (metaclass) of the table containing the available
+  // user access rights for authentication, defined as a group
   TSQLAuthGroupClass = class of TSQLAuthGroup;
 
   {/ table containing the Users registered for authentication
@@ -11986,7 +11991,8 @@ type
     property Data: TSQLRawBlob read fData write fData;
   end;
 
-  /// class of the table containing the Users registered for authentication
+  /// class-reference type (metaclass) of a table containing the Users
+  // registered for authentication
   TSQLAuthUserClass = class of TSQLAuthUser;
 
   /// class used to maintain in-memory sessions
@@ -12079,7 +12085,7 @@ type
     property ConnectionID: RawUTF8 read fConnectionID;
   end;
 
-  /// used to define overridden session instances
+  /// class-reference type (metaclass) used to define overridden session instances
   // - since all sessions data remain in memory, ensure they are not taking too
   // much resource (memory or process time)
   // - if you plan to use session persistence, ensure you override the
@@ -12088,7 +12094,7 @@ type
 
   TSQLRestServerAuthentication = class;
 
-  /// used to define an authentication scheme by its implementation class
+  /// class-reference type (metaclass) used to define an authentication scheme
   TSQLRestServerAuthenticationClass = class of TSQLRestServerAuthentication;
 
   /// maintain a list of TSQLRestServerAuthentication instances
@@ -12571,7 +12577,8 @@ type
     property History: TSQLRawBlob read fHistory write fHistory;
   end;
 
-  /// specifies the storage table to be used for tracking TSQLRecord changes
+  /// class-reference type (metaclass) to specify the storage table to be used
+  // for tracking TSQLRecord changes
   // - you can create your custom type from TSQLRecordHistory, even for a
   // particular table, to split the tracked changes storage in several tables:
   // ! type
@@ -12646,6 +12653,7 @@ type
     property Deleted: QWord read fDeleted;
   end;
 
+  /// class-reference type (metaclass) of a REST server
   TSQLRestServerClass = class of TSQLRestServer;
 
   /// a generic REpresentational State Transfer (REST) server
@@ -14865,6 +14873,8 @@ type
   PSQLVirtualTablePrepared = ^TSQLVirtualTablePrepared;
 
   TSQLVirtualTableCursor = class;
+
+  /// class-reference type (metaclass) of a cursor on an abstract Virtual Table
   TSQLVirtualTableCursorClass = class of TSQLVirtualTableCursor;
 
   /// the possible features of a Virtual Table
