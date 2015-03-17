@@ -279,8 +279,8 @@ type
     procedure Log(Level: TSynLogInfo=sllTrace); overload;
     /// call this method to add some multi-line information to the log at a
     // specified level
-    // - LinesToLog content will be added, one line per one line, delimited by
-    // #13#10 (CRLF)
+    // - LinesToLog content will be added, one line per one line, delimited
+    // by #13#10 (CRLF)
     // - if a line starts with IgnoreWhenStartWith (already uppercase), it won't
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char;

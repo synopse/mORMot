@@ -1260,7 +1260,7 @@ IncludePath=Lib;Lib\SQLite3;Lib\SynDBDataset;Lib\CrossPlatform;Lib\SQLite3\DDD\d
 ;Lib\SQLite3\Samples\MainDemo
 SourceFile=TestSQL3.dpr;SynLog.pas;SynTests.pas;mORMot.pas;mORMoti18n.pas;mORMotToolBar.pas;mORMotUI.pas;mORMotUIEdit.pas;mORMotMVC.pas;mORMotUILogin.pas;mORMotReport.pas;mORMotUIOptions.pas;mORMotUIQuery.pas;mORMotService.pas;mORMotSQLite3.pas;mORMotHttpClient.pas;mORMotHttpServer.pas;SynSQLite3.pas;SynSQLite3Static.pas;SynSQLite3RegEx.pas;SynDB.pas;SynOleDB.pas;SynDBOracle.pas;SynDBSQLite3.pas;SynDBODBC.pas;SynDBDataset.pas;SynDBZeos.pas;SynDBFireDAC.pas;SynDBUniDAC.pas;SynDBBDE.pas;SynDBNexusDB.pas;SynDBVCL.pas;mORMotReport.pas;mORMotVCL.pas;mORMotDB.pas;mORMotFastCGIServer.pas;SynSM.pas;SynDBMidasVCL.pas;mORMotMidasVCL.pas;SynMongoDB.pas;SynFastWideString.pas;SynCrossPlatformJSON.pas;SynCrossPlatformREST.pas;SynCrossPlatformSpecific.pas;SynCrossPlatformTests.pas
 ;Samples\MainDemo\SynFile.dpr
-SourceIgnoreSymbol=select,check,open,connect,sqlite3,mORMot,JavaScript,cypher
+SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 SourceIgnoreSymbolByUnit=SynCrossPlatformJSON,SynCrossPlatformREST,SynCrossPlatformSpecific,SynCrossPlatformTests
 Version=1.18
 TitleOffset=0
@@ -13273,7 +13273,7 @@ Feel free to get support from our forum, if needed.
 SourcePath=Lib\SQLite3\Samples\MainDemo
 IncludePath=Lib;Lib\SQLite3;Lib\SQLite3\Samples\MainDemo
 SourceFile=SynFile.dpr
-SourceIgnoreSymbol=select,check,open,connect,sqlite3,mORMot,JavaScript,cypher
+SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 ;SourceIgnoreSymbolByUnit=FileTables
 Version=1.18
 TitleOffset=0
