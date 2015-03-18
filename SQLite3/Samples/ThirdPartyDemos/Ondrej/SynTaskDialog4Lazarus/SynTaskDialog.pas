@@ -31,7 +31,8 @@ unit SynTaskDialog;
   Contributor(s):
   - Ulrich Gerhardt
   - Ondrej Pokorny (reddwarf)
-  
+  - Gergely Kovacs (bikechecker@gmail.com) - FireMonkey port (Delphi XE7)
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -97,13 +98,17 @@ interface
 
 {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
   {$ifndef VER140} // Delphi 6
+    {$IFNDEF FMX}
     {$define WITHUXTHEME} // Themes unit exists till Delphi 7
+    {$ENDIF}
   {$endif}
   {$IF (CompilerVersion >= 25.0)}// Delphi XE4 UP
     {$LEGACYIFEND ON}
   {$IFEND}
   {$IF CompilerVersion >= 20}// Delphi 2009 IP
+    {$IFNDEF FMX}
     {$define WITHPOPUPPARENT}
+    {$ENDIF}
     {$define WITHNATIVEINT}
   {$IFEND}
 {$ENDIF}
@@ -129,19 +134,35 @@ uses
   LResources,
   {$endif}
   Classes, SysUtils,
-  {$IFNDEF FPC}Consts,{$ENDIF}
-  Menus,
   {$ifdef USETMSPACK}
   AdvGlowButton, AdvMenus, TaskDialog, TaskDialogEx,
   {$endif}
-  Graphics, Forms, Controls, StdCtrls, ExtCtrls, Buttons;
+  {$IFDEF FMX}
+  System.UITypes, System.Types, System.UIConsts,
+  FMX.Menus, FMX.Types, FMX.Layouts, FMX.ComboEdit,
+  FMX.Graphics, FMX.Forms, FMX.Controls, FMX.StdCtrls, FMX.ExtCtrls,
+  FMX.ListBox, FMX.Edit, FMX.Objects, FMX.Platform,
+  {$IFDEF MSWINDOWS}
+  FMX.Platform.Win
+  {$ENDIF}
+  {$IFDEF MACOS}
+  FMX.Platform.Mac
+  {$ENDIF}
+  {$ELSE}
+  {$IFNDEF FPC}Consts,{$ENDIF}
+  Menus,
+  Graphics, Forms, Controls, StdCtrls, ExtCtrls, Buttons
+  {$ENDIF}
+  ;
 
 var
   /// will map a generic Arrow picture from SynTaskDialog.res
+  {$IFNDEF FMX}
   {$IFDEF WITHLAZARUSARROW}
   BitmapArrow: TPicture;
   {$ELSE}
   BitmapArrow: TBitmap;
+  {$ENDIF}
   {$ENDIF}
 
   /// will map a default font, according to the available
@@ -158,6 +179,15 @@ var
     ResRadio: PInteger; VerifyFlag: PBOOL): HRESULT; stdcall;
 {$ENDIF}
 type
+  {$IFDEF FMX} // width, height, screen position
+  TWH = Single;
+  {$IFDEF MACOS}
+  HWND = Cardinal;
+  {$ENDIF}
+  {$ELSE}
+  TWH = integer;
+  {$ENDIF}
+
   /// the standard kind of common buttons handled by the Task Dialog
   TCommonButton = (
     cbOK, cbYes, cbNo, cbCancel, cbRetry, cbClose);
@@ -187,7 +217,9 @@ type
     tdfExpandFooterArea, tdfExpandByDefault, tdfVerificationFlagChecked,
     tdfShowProgressBar, tdfShowMarqueeProgressBar, tdfCallbackTimer,
     tdfPositionRelativeToWindow, tdfRtlLayout, tdfNoDefaultRadioButton,
-    tdfCanBeMinimized, tdfQuery, tdfQueryMasked, tdfQueryFieldFocused);
+    tdfCanBeMinimized
+    , tdfQuery, tdfQueryMasked, tdfQueryFieldFocused
+    );
 
   /// set of available configuration flags for the Task Dialog
   TTaskDialogFlags = set of TTaskDialogFlag;
@@ -215,16 +247,27 @@ type
   protected
     procedure HandleEmulatedButtonClicked(Sender: TObject);
   public
+    {$IFDEF FMX}
+    FClientHeight : integer;
+    procedure KeyDown(var Key: Word; var KeyChar: System.WideChar; Shift: TShiftState); virtual;
+    constructor CreateNew(AOwner: TComponent; Dummy: NativeInt = 0); virtual;
+    procedure FormShow( Sender : TObject );
+    {$ELSE}
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    {$ENDIF}
+
   public
     /// the Task Dialog structure which created the form
     Owner: PTaskDialog;
     /// the labels corresponding to the Task Dialog main elements
     Element: array[tdeContent..tdeMainInstruction] of TLabel;
     /// the Task Dialog selection list
+    {$IFDEF FMX}
+    Combo: TControl;
+    {$ELSE}
     Combo: TComboBox;
+    {$ENDIF}
     /// the Task Dialog optional query editor
     Edit: TEdit;
     /// the Task Dialog optional checkbox
@@ -356,7 +399,7 @@ type
       aButtonDef: integer=0; aFlags: TTaskDialogFlags=[];
       aDialogIcon: TTaskDialogIcon=tiInformation;
       {%H-}aFooterIcon: TTaskDialogFooterIcon=tfiWarning;
-      aRadioDef: integer=0; aWidth: integer=0; aParent: HWND=0;
+      aRadioDef: integer=0; aWidth: TWH=0; aParent: HWND=0;
       {%H-}aNonNative: boolean=false; aEmulateClassicStyle: boolean = false;
       aOnButtonClicked: TTaskDialogButtonClickedEvent=nil): integer;
 
@@ -479,6 +522,9 @@ type
   TTaskDialogTranslate = function(const aString: string): string;
 var
   TaskDialog_Translate: TTaskDialogTranslate;
+  TaskDialog_ForceEmulation : boolean;
+
+procedure TDShowMessage( instr : string; msg:string=''; Title : string = 'Information' );
 
 implementation
 
@@ -486,10 +532,63 @@ implementation
 {$R SynTaskDialog.res}
 {$ENDIF}
 
+{$IFDEF FMX}
+  {$I info.png.pas}
+  {$I warning.png.pas}
+  {$I help.png.pas}
+  {$I error.png.pas}
+  {$I blank.png.pas}
+  {$I fmxutil.inc.pas}
+{$ENDIF}
+
 const
   TD_BTNMOD: array[TCommonButton] of Integer = (
     mrOk, mrYes, mrNo, mrCancel, mrRetry, mrAbort);
 
+{$IFDEF FMX}
+{vcl.consts}
+  SMsgDlgWarning = 'Warning';
+  SMsgDlgError = 'Error';
+  SMsgDlgInformation = 'Information';
+  SMsgDlgConfirm = 'Confirm';
+  SMsgDlgYes = '&Yes';
+  SMsgDlgNo = '&No';
+  SMsgDlgOK = 'OK';
+  SMsgDlgCancel = 'Cancel';
+  SMsgDlgHelp = '&Help';
+  SMsgDlgHelpNone = 'No help available';
+  SMsgDlgHelpHelp = 'Help';
+  SMsgDlgAbort = '&Abort';
+  SMsgDlgRetry = '&Retry';
+  SMsgDlgIgnore = '&Ignore';
+  SMsgDlgAll = '&All';
+  SMsgDlgNoToAll = 'N&o to All';
+  SMsgDlgYesToAll = 'Yes to &All';
+  SMsgDlgClose = '&Close';
+
+function TD_BTNS(button: TCommonButton): string;
+begin
+  case button of
+    cbOK:     result := SMsgDlgOK;
+    cbYes:    result := SMsgDlgYes;
+    cbNo:     result := SMsgDlgNo;
+    cbCancel: result := SMsgDlgCancel;
+    cbRetry:  result := SMsgDlgRetry;
+    cbClose:  result := SMsgDlgClose;
+        else  result := '?';
+  end;
+end;
+
+procedure SetFontSizeFMX( F:TForm );
+var
+  lbTmp : TLabel;
+begin
+  lbTmp := TLabel.Create( NIL );
+  DefaultFont.Size := ScalingByScreenDPI_N( F ) * lbtmp.Font.Size;
+  lbTmp.Free;
+end;
+
+{$ELSE}
 function TD_BTNS(button: TCommonButton): pointer;
 begin
   case button of
@@ -502,6 +601,7 @@ begin
         else  result := nil;
   end;
 end;
+{$ENDIF}
 
 function TD_Trans(const aString: string): string;
 begin
@@ -517,7 +617,12 @@ end;
 procedure TSynButton.DoDropDown;
 begin
   if DropDownMenu<>nil then
-    with ClientToScreen(BoundsRect.TopLeft) do
+    with
+      {$IFDEF FMX}
+      LocalToScreen(BoundsRect.TopLeft) do
+      {$ELSE}
+      ClientToScreen(BoundsRect.TopLeft) do
+      {$ENDIF}
       DropDownMenu.Popup(X,Y+Height);
 end;
 {$endif}
@@ -537,7 +642,10 @@ begin
 end;
 
 function UnAmp(const s: string): string;
-  {$IFDEF FPC}
+  {$IF DEFINED(FPC) or DEFINED(FMX)}
+  {$IFDEF FMX}
+  const cHotkeyPrefix = '&';
+  {$ENDIF}
   function StripHotkey(const Text: string): string;
   var
     I: Integer;
@@ -553,10 +661,10 @@ function UnAmp(const s: string): string;
           Delete(Result, I-1, 4)
         else
           Delete(Result, I, 1);
-      Inc(I);
+      System.Inc(I);
     end;
   end;
-  {$ENDIF}
+  {$IFEND}
 begin
   Result := StripHotkey(s);
 end;
@@ -571,6 +679,7 @@ const
   LAZ_FOOTERICONS: array[TTaskDialogFooterIcon] of string = (
     '', 'std_warning32', 'std_question32', 'std_error32', 'std_information32', 'std_shield32');
 {$ENDIF WITHLAZARUSICONS}
+
 {$IFDEF MSWINDOWS}
 const
   {$IFDEF FPC}
@@ -605,6 +714,11 @@ const
   WIN_FOOTERICONS: array[TTaskDialogFooterIcon] of PChar = (
     nil, IDI_WARNING, IDI_QUESTION, IDI_ERROR, IDI_INFORMATION, IDI_WINLOGO);
 {$ENDIF MSWINDOWS}
+
+{$IFDEF FMX}
+var
+  ICON_PNG : array[TTaskDialogIcon] of TBitmap;
+{$ENDIF}
 
 function IconMessage(Icon: TTaskDialogIcon): string;
 begin
@@ -712,11 +826,13 @@ begin
 end;
 {$ENDIF}
 
-function TTaskDialog.Execute(aCommonButtons: TCommonButtons;
-  aButtonDef: integer; aFlags: TTaskDialogFlags;
-  aDialogIcon: TTaskDialogIcon; aFooterIcon: TTaskDialogFooterIcon;
-  aRadioDef, aWidth: integer; aParent: HWND; aNonNative: boolean;
-  aEmulateClassicStyle: boolean; aOnButtonClicked: TTaskDialogButtonClickedEvent): integer;
+function TTaskDialog.Execute(aCommonButtons: TCommonButtons=[];
+      aButtonDef: integer=0; aFlags: TTaskDialogFlags=[];
+      aDialogIcon: TTaskDialogIcon=tiInformation;
+      {%H-}aFooterIcon: TTaskDialogFooterIcon=tfiWarning;
+      aRadioDef: integer=0; aWidth: TWH=0; aParent: HWND=0;
+      {%H-}aNonNative: boolean=false; aEmulateClassicStyle: boolean = false;
+      aOnButtonClicked: TTaskDialogButtonClickedEvent=nil): integer;
 function GetNextStringLineToWS(var P: PChar): WS;
 var S: PChar;
     {$ifndef UNICODE}tmp: string;{$endif}
@@ -725,7 +841,7 @@ begin
     result := '' else begin
     S := P;
     while S[0]>=' ' do
-      inc(S);
+      System.inc(S);
     {$ifdef UNICODE}
     SetString(result,P,S-P);
     result := CR(result);
@@ -733,7 +849,7 @@ begin
     SetString(tmp,P,S-P);
     result := _WS(CR(tmp));
     {$endif}
-    while (S^<>#0) and (S^<' ') do inc(S); // ignore e.g. #13 or #10
+    while (S^<>#0) and (S^<' ') do System.inc(S); // ignore e.g. #13 or #10
     if S^<>#0 then
       P := S else
       P := nil;
@@ -778,8 +894,8 @@ begin
       nButtonID := n+firstID;
       pszButtonText := pointer(RU[RUCount]);
     end;
-    inc(n);
-    inc(RUCount);
+    System.inc(n);
+    System.inc(RUCount);
   end;
 end;
 {$ENDIF}
@@ -787,51 +903,95 @@ var
     {$IFDEF MSWINDOWS}
     Config: TTASKDIALOGCONFIG;
     {$ENDIF}
+    {$IFDEF FMX}
+    Pic : TBitmap;
+    {$ELSE}
     {$IFDEF WITHLAZARUSICONS}
     Pic: TPicture;
     {$ELSE}
     Pic: TIcon;
     {$ENDIF}
+    {$ENDIF}
     Bmp: TBitmap;
-    i, X, Y, XB, IconBorder, FontHeight: integer;
-    Par: TWinControl;
-    Panel: TPanel;
+    X, Y, XB, IconBorder, FontHeight: TWH;
+    i : integer;
+    Par: {$IFDEF FMX} TFMXObject {$ELSE} TWinControl {$ENDIF};
+    Panel: {$IFDEF FMX} TRectangle {$ELSE} TPanel {$ENDIF};
     CurrTabOrder: TTabOrder;
     Image: TImage;
     List: TStrings;
     B: TCommonButton;
     CommandLink: TSynButton;
     Rad: array of TRadioButton;
+
 function AddLabel(Text: string; BigFont: boolean): TLabel;
-var R: TRect;
+var
+    {$IFDEF FMX}
+    R: TRectF;
+    W: Single;
+    {$ELSE}
+    R: TRect;
     W: integer;
+    {$ENDIF}
 begin
   result := TLabel.Create(Dialog.Form);
   result.Parent := Par;
   result.WordWrap := true;
   if BigFont then begin
     if aEmulateClassicStyle then begin
+      {$IFDEF FMX}
+      result.Font.Size:= FontHeight*1.3;
+      result.Font.Style := [TFontStyle.fsBold];
+      {$ELSE}
       result.Font.Height := FontHeight-2;
-      result.Font.Style := [fsBold]
+      result.Font.Style := [fsBold];
+      {$ENDIF}
     end else begin
+      {$IFDEF FMX}
+      result.Font.Size:= FontHeight*1.3;
+      {$IFDEF MSWINDOWS}
+      result.FontColor := $FF0000B0;
+      {$ENDIF}
+      {$ELSE}
       result.Font.Height := FontHeight-4;
       result.Font.Color := $B00000;
+      {$ENDIF}
     end;
   end else
+    {$IFDEF FMX}
+    result.Font.Size := FontHeight;
+    {$ELSE}
     result.Font.Height := FontHeight;
+    {$ENDIF}
   Text := CR(Text);
   result.AutoSize := false;
   R.Left := 0;
   R.Top := 0;
   W := aWidth-X-8;
   R.Right := W;
-  R.Bottom := result.Height;
-  DrawText(result.Canvas.Handle,PChar(Text),Length(Text),R,DT_CALCRECT or DT_WORDBREAK);//lazarus does not return box height on OSX (Lazarus bug), the height is stored in the rect in all cases, so we don't need to use the result
+  {$IFDEF FMX}
+  Result.StyledSettings := Result.StyledSettings - [ TStyledsetting.FontColor,
+                                                     TStyledSetting.Size ];
+  if Text = '' then
+    R.Height := 1
+  else begin
+    R.Height := FMXMeasureText( Text, Result, W, true ).Height;
+  end;
+  {$ELSE}
+  R.Bottom := Result.Height;
+  {$ENDIF}
 
-  result.SetBounds(X,Y,W,R.Bottom);
-  result.Caption := Text;
-  inc(Y,R.Bottom+16);
+  {$IFNDEF FMX}
+  DrawText(result.Canvas.Handle,PChar(Text),Length(Text),R,DT_CALCRECT or DT_WORDBREAK);//lazarus does not return box height on OSX (Lazarus bug), the height is stored in the rect in all cases, so we don't need to use the result
+  {$ENDIF}
+
+  Result.SetBounds(X,Y,W,R.Bottom);
+
+  Result.{$IFDEF FMX}Text{$ELSE}Caption{$ENDIF} := Text;
+  inc(Y,round(R.Bottom)+16);
 end;
+{$IFNDEF FMX}
+//! BEVEL IS NOT AVAILABLE IN FMX...
 procedure AddBevel;
 var BX: integer;
 begin
@@ -844,21 +1004,30 @@ begin
   end;
   inc(Y,16);
 end;
+{$ENDIF}
 function AddButton(const s: string; ModalResult: integer): TSynTaskDialogButton;
-var WB: integer;
+var WB: TWH;
 begin
+  result := TSynTaskDialogButton.Create(Dialog.Form);
+  result.Parent := Par;
+  {$IFDEF FMX}
+  Result.StyledSettings := Result.StyledSettings - [ TStyledSetting.Size ];
+  Result.Font.Size := FontHeight;
+  WB := FMXMeasureText( s, Result, 250, false ).Width + 52;
+  if WB < 80 then
+    WB := 80;
+  {$ELSE}
   WB := Dialog.Form.Canvas.TextWidth(s)+52;
+  {$ENDIF}
   dec(XB,WB);
-  if XB<X shr 1 then begin
+  if XB<trunc(X/2) then begin
     XB := aWidth-WB;
     inc(Y,32);
   end;
-  result := TSynTaskDialogButton.Create(Dialog.Form);
-  result.Parent := Par;
     if aEmulateClassicStyle then
       result.SetBounds(XB,Y,WB-10,22) else
       result.SetBounds(XB,Y,WB-12,28);
-  result.Caption := s;
+  result.{$IFDEF FMX}Text{$ELSE}Caption{$ENDIF} := s;
   result.ModalResult := ModalResult;
   result.TabOrder := CurrTabOrder;
   result.OnClick := Dialog.Form.HandleEmulatedButtonClicked;
@@ -874,8 +1043,13 @@ begin
     Dialog.Form.ActiveControl := result;
 end;
 
+{$IFDEF FMX}
+var
+  LI : TListBoxItem;
+{$ENDIF}
 begin
-  if (byte(aCommonButtons)=0) and (Buttons='') then begin
+  if (byte(aCommonButtons)=0) and (Buttons='') then
+  begin
     aCommonButtons := [cbOk];
     if aButtonDef=0 then
       aButtonDef := mrOk;
@@ -886,14 +1060,22 @@ begin
       Title := Application.MainForm.Caption;
   if Inst='' then
     Inst := IconMessage(aDialogIcon);
+  Dialog.OnButtonClicked := aOnButtonClicked;
+
+  {$ifdef MSWINDOWS} // WINDOWS API TASKDIALOG
   if aParent=0 then
+  {$IFDEF FMX}
+    if Screen.ActiveForm <> NIL then
+      aParent := WindowHandleToPlatform( Screen.ActiveForm.Handle ).Wnd;
+  {$ELSE}
     if Screen.ActiveCustomForm<>nil then
       aParent := Screen.ActiveCustomForm.Handle else
       aParent := {$ifndef fpc}Application.Handle{$else}0{$endif};
-  Dialog.OnButtonClicked := aOnButtonClicked;
-  {$ifdef MSWINDOWS}
-  if Assigned(TaskDialogIndirect) and not aNonNative and
-     not (tdfQuery in aFlags) and (Selection='') then begin
+  {$ENDIF}
+  if not TaskDialog_ForceEmulation and
+     Assigned(TaskDialogIndirect) and not aNonNative
+     and not (tdfQuery in aFlags) and (Selection='')
+  then begin
     Dialog.Emulated := False;
     // use Vista/Seven TaskDialog implementation (not tdfQuery nor Selection)
     FillChar(Config,sizeof(Config),0);
@@ -919,24 +1101,43 @@ begin
       include(aFlags,tdfVerificationFlagChecked);
     if (Config.cButtons=0) and (aCommonButtons=[cbOk]) then
       Include(aFlags,tdfAllowDialogCancellation); // just OK -> Esc/Alt+F4 close
-    Config.dwFlags := integer(aFlags);
+    Config.dwFlags := Cardinal(aFlags);
     Config.hMainIcon := TD_ICONS[aDialogIcon];
     Config.hFooterIcon := TD_FOOTERICONS[aFooterIcon];
     Config.nDefaultButton := aButtonDef;
     Config.nDefaultRadioButton := aRadioDef;
-    Config.cxWidth := aWidth;
+    Config.cxWidth := round(aWidth);
     Config.pfCallback := @TaskDialogCallbackProc;
     Config.lpCallbackData := @self;
     if TaskDialogIndirect(@Config,@result,@RadioRes,@VerifyChecked)=S_OK then
       exit; // error (mostly invalid argument) -> execute the VCL emulation
   end;
   {$endif MSWINDOWS}
+
   // use our native (naive?) Delphi implementation
   Dialog.Emulated := true;
   Dialog.Form := TEmulatedTaskDialog.CreateNew(Application);
   try
+    {$IFDEF FMX}
+    SetFontSizeFMX( Dialog.Form );
+
+    {$ENDIF}
     Dialog.Form.Owner := @Self;
     // initialize form properties
+    {$IFDEF FMX}
+    Dialog.Form.BorderStyle := TFmxFormBorderStyle.Single;
+    if tdfAllowDialogCancellation in aFlags then
+      Dialog.Form.BorderIcons := [TBorderIcon.biSystemMenu]
+    else
+      Dialog.Form.BorderIcons := [];
+    if tdfPositionRelativeToWindow in aFlags then
+      Dialog.Form.Position := TFormPosition.OwnerFormCenter
+    else
+      Dialog.Form.Position := TFormPosition.ScreenCenter;
+    //if not aEmulateClassicStyle then
+    //  Dialog.Form.Font := DefaultFont;
+    FontHeight := DefaultFont.Size;
+    {$ELSE}
     Dialog.Form.BorderStyle := bsDialog;
     if tdfAllowDialogCancellation in aFlags then
       Dialog.Form.BorderIcons := [biSystemMenu]
@@ -949,6 +1150,7 @@ begin
     if not aEmulateClassicStyle then
       Dialog.Form.Font := DefaultFont;
     FontHeight := Dialog.Form.Font.Height;
+    {$ENDIF}
     {$IFDEF FPC}
     if FontHeight = 0 then
       FontHeight := Screen.SystemFont.Height;
@@ -960,21 +1162,35 @@ begin
         aWidth := 480 else
         aWidth := 420;
     end;
-    Dialog.Form.ClientWidth := aWidth;
+    Dialog.Form.ClientWidth := round(aWidth);
     Dialog.Form.Height := 200;
     Dialog.Form.Caption := Title;
     // create a white panel for the main dialog part
+    {$IFDEF FMX}
+    Panel := TRectangle.Create(Dialog.Form);
+    {$IFDEF MSWINDOWS}
+    Panel.Fill.Color := claWhite;
+    {$ELSE}
+    Panel.Fill.Kind := TBrushKind.None;
+    {$ENDIF}
+    Panel.Stroke.Kind := TBrushKind.None;
+    Panel.Parent := Dialog.Form;
+    Panel.Align := TAlignLayout.Top;
+    {$ELSE}
     Panel := TPanel.Create(Dialog.Form);
     Panel.Parent := Dialog.Form;
     Panel.Align := alTop;
     Panel.BorderStyle := bsNone;
     Panel.BevelOuter := bvNone;
-    if not aEmulateClassicStyle then begin
+    if not aEmulateClassicStyle then
+      Panel.Color := clWhite;
+    {$ENDIF}
+    if not aEmulateClassicStyle then
+    begin
       {$ifdef HASINLINE}
       Panel.BevelEdges := [beBottom];
       Panel.BevelKind := bkFlat;
       {$endif}
-      Panel.Color := clWhite;
       {$ifdef WITHUXTHEME}{$ifndef FPC}
       Panel.ParentBackground := false; // clWhite not used otherwise
       {$endif}{$endif}
@@ -985,14 +1201,25 @@ begin
       IconBorder := 10 else
       IconBorder := 24;
 
+     {$IFDEF FMX}
+     if true then
+     {$ELSE}
      {$IFDEF WITHLAZARUSICONS}
      if LAZ_ICONS[aDialogIcon]<>'' then
      {$ELSE}
      if WIN_ICONS[aDialogIcon]<>nil then
      {$ENDIF}
+     {$ENDIF}
      begin
       Image := TImage.Create(Dialog.Form);
       Image.Parent := Par;
+
+      {$IFDEF FMX}
+      Image.Bitmap.Assign( ICON_PNG[ aDialogIcon ] );
+      Image.SetBounds(IconBorder,IconBorder,Image.Bitmap.Width,Image.Bitmap.Height);
+      X := Image.Width+IconBorder*2;
+      Y := Image.Position.Y;
+      {$ELSE}
       {$IFDEF WITHLAZARUSICONS}
       Image.Picture.LoadFromLazarusResource(LAZ_ICONS[aDialogIcon]);
       {$ELSE}
@@ -1001,6 +1228,7 @@ begin
       Image.SetBounds(IconBorder,IconBorder,Image.Picture.Icon.Width,Image.Picture.Icon.Height);
       X := Image.Width+IconBorder*2;
       Y := Image.Top;
+      {$ENDIF}
       if aEmulateClassicStyle then
         inc(Y, 8);
     end else
@@ -1027,11 +1255,17 @@ begin
           CommandLink := TSynButton.Create(Dialog.Form);
           with CommandLink do begin
             Parent := Par;
+            {$IFDEF FMX}
+            Font.Size := FontHeight;
+            StyledSettings := StyledSettings - [ TStyledSetting.Size ];
+            {$ELSE}
             Font.Height := FontHeight-3;
+            {$ENDIF}
             if aEmulateClassicStyle then
               SetBounds(X,Y,aWidth-10-X,40) else
               SetBounds(X,Y,aWidth-16-X,40);
-            Caption := NoCR(Strings[i]);
+            {$IFDEF FMX}Text{$ELSE}Caption{$ENDIF} := NoCR(Strings[i]);
+
             if aHint<>'' then begin
               ShowHint := true;
               Hint := aHint; // note shown as Hint
@@ -1042,8 +1276,13 @@ begin
             if ModalResult=aButtonDef then
               Dialog.Form.ActiveControl := CommandLink;
             if aEmulateClassicStyle then begin
+              {$IFDEF FMX}
+              Font.Size := FontHeight - 2;
+              Font.Style := [TFontStyle.fsBold]
+              {$ELSE}
               Font.Height := FontHeight - 2;
               Font.Style := [fsBold]
+              {$ENDIF}
             end;
             {$ifdef WITHUXTHEME}
             if aEmulateClassicStyle then begin
@@ -1072,15 +1311,25 @@ begin
           Rad[i] := TRadioButton.Create(Dialog.Form);
           with Rad[i] do begin
             Parent := Par;
-            SetBounds(X+16,Y,aWidth-32-X,6-FontHeight);
+            SetBounds(X+16,Y,aWidth-32-X,6 {$IFDEF FMX}+{$ELSE}-{$ENDIF}FontHeight);
+            {$IFDEF FMX}
+            Font.Size := FontHeight;
+            StyledSettings := StyledSettings - [ TStyledSetting.Size ];
+            Text := NoCR(Strings[i]);
+            {$ELSE}
             Caption := NoCR(Strings[i]);
             if aHint<>'' then begin
               ShowHint := true;
               Hint := aHint; // note shown as Hint
             end;
+            {$ENDIF}
             inc(Y,Height);
             if (i=0) or (i+200=aRadioDef) then
+              {$IFDEF FMX}
+              IsChecked := true;
+              {$ELSE}
               Checked := true;
+              {$ENDIF}
           end;
         end;
         inc(Y,24);
@@ -1091,16 +1340,65 @@ begin
     if Selection<>'' then begin
       List := TStringList.Create;
       try
+        {$IFDEF FMX}
+        if tdfQuery in aFlags then begin
+          Dialog.Form.Combo := TComboEdit.Create(Dialog.Form);
+          TComboEdit( Dialog.Form.Combo ).StyledSettings :=
+              TComboEdit( Dialog.Form.Combo ).StyledSettings - [ TStyledSetting.Size ];
+          TComboEdit( Dialog.Form.Combo ).Font.Size := FontHeight;
+        end else begin
+          Dialog.Form.Combo := TComboBox.Create(Dialog.Form);
+        end;
+        {$ELSE}
         Dialog.Form.Combo := TComboBox.Create(Dialog.Form);
-        with Dialog.Form.Combo do begin
+        {$ENDIF}
+        with Dialog.Form.Combo do
+        begin
           Parent := Par;
           SetBounds(X,Y,aWidth-32-X,22);
+          {$IFNDEF FMX}
           if tdfQuery in aFlags then
             Style := csDropDown else
             Style := csDropDownList;
+          {$ENDIF}
           List.Text := trim(Selection);
+          {$IFDEF FMX}
+          if Dialog.Form.Combo is TComboBox then
+          begin
+            TComboBox(Dialog.Form.Combo).Items.Assign(List);
+            if Query <> '' then
+              TComboBox(Dialog.Form.Combo).ItemIndex := List.IndexOf(Query)
+            else
+              TComboBox(Dialog.Form.Combo).ItemIndex := 0;
+            TComboBox( Dialog.Form.Combo ).ItemHeight := FontHeight + 8;
+            for i := 0 to TComboBox( Dialog.Form.Combo ).Count-1 do
+              with TComboBox( Dialog.Form.Combo ).ListBox.ItemByIndex(i) do
+              begin
+                StyledSettings := StyledSettings - [ TStyledSetting.Size ];
+                Font.Size := FontHeight;
+                //FindStyleResource('text')
+              end;
+          end else
+          if Dialog.Form.Combo is TComboEdit then
+          begin
+            TComboEdit(Dialog.Form.Combo).Items.Assign(List);
+            TComboEdit(Dialog.Form.Combo).Text := Query;
+{            for i := 0 to TComboEdit( Dialog.Form.Combo ).Count-1 do
+              TComboEdit( Dialog.Form.Combo ).
+              with TComboEdit( Dialog.Form.Combo )ListBox.ItemByIndex(i) do
+              begin
+                StyledSettings := StyledSettings - [ TStyledSetting.Size ];
+                Font.Size := FontHeight;
+              end;
+}
+          end;
+          {$ELSE}
           Items.Assign(List);
-          ItemIndex := List.IndexOf(Query);
+          if Query <> '' then
+            Text := Query
+          else
+            ItemIndex := 0;
+          {$ENDIF}
         end;
         inc(Y,42);
       finally
@@ -1114,7 +1412,11 @@ begin
           SetBounds(X,Y,aWidth-16-X,22);
           Text := Query;
           if tdfQueryMasked in aFlags then
+            {$IFDEF FMX}
+            Password := true;
+            {$ELSE}
             PasswordChar := '*';
+            {$ENDIF}
         end;
         if tdfQueryFieldFocused in aFlags then
           Dialog.Form.ActiveControl := Dialog.Form.Edit;
@@ -1140,43 +1442,72 @@ begin
         end;
       for B := high(B) downto low(B) do
         if B in aCommonButtons then
+          {$IFDEF FMX}
+          AddButton(TD_Trans(TD_BTNS(B)),TD_BTNMOD[B]);
+          {$ELSE}
           AddButton(TD_Trans(LoadResString(TD_BTNS(B))), TD_BTNMOD[B]);
+          {$ENDIF}
       if Verify<>'' then begin
         Dialog.Form.Verif := TCheckBox.Create(Dialog.Form);
         with Dialog.Form.Verif do begin
           Parent := Par;
-          if X+16+Dialog.Form.Canvas.TextWidth(Verify)>XB then begin
+          if X+16+Dialog.Form.Canvas.TextWidth(Verify)>XB then
+          begin
             inc(Y,32);
             XB := aWidth;
           end;
           SetBounds(X,Y,XB-X,24);
+          {$IFDEF FMX}
+          StyledSettings := StyledSettings - [ TStyledSetting.Size ];
+          Font.Size := FontHeight;
+          Text := Verify;
+          IsChecked := VerifyChecked;
+          {$ELSE}
           Caption := Verify;
           Checked := VerifyChecked;
+          {$ENDIF}
         end;
       end;
+      {$IFDEF FMX}
+      inc(Y,40);
+      {$ELSE}
       inc(Y,36);
+      {$ENDIF}
     end else
       XB := 0;
     // add footer text with optional icon
     if Footer<>'' then begin
+      {$IFNDEF FMX}
       if XB<>0 then
         AddBevel else
+      {$ENDIF}
         inc(Y,16);
+      {$IFDEF FMX}
+      if true then
+      {$ELSE}
       {$IFDEF WITHLAZARUSICONS}
       if LAZ_FOOTERICONS[aFooterIcon]<>'' then
       {$ELSE}
       if WIN_FOOTERICONS[aFooterIcon]<>nil then
       {$ENDIF}
+      {$ENDIF}
       begin
         Image := TImage.Create(Dialog.Form);
         Image.Parent := Par;
+        {$IFDEF FMX}
+        ;
+        {$ELSE}
         {$IFDEF WITHLAZARUSICONS}
         Pic := TPicture.Create;
         {$ELSE}
         Pic := TIcon.Create;
         {$ENDIF}
         Bmp := TBitmap.Create;
+        {$ENDIF}
         try
+          {$IFDEF FMX}
+          Image.Bitmap.Assign( ICON_PNG[ TTaskDialogIcon(aFooterIcon) ] );
+          {$ELSE}
           Bmp.Transparent := true;
           {$IFDEF WITHLAZARUSICONS}
           Pic.LoadFromLazarusResource(LAZ_FOOTERICONS[aFooterIcon]);
@@ -1198,8 +1529,10 @@ begin
             Bmp.Canvas.Brush.Handle,DI_NORMAL);
           {$ENDIF}
           Image.Picture.Bitmap := Bmp;
+          {$ENDIF}
+
           Image.SetBounds(24,Y,Bmp.Width,Bmp.Height);
-          X := 40+Bmp.Width;
+          X := 40+Image.Width;
         finally
           Bmp.Free;
           Pic.Free;
@@ -1211,7 +1544,11 @@ begin
       Dialog.Form.Element[tdeFooter] := AddLabel(Footer,false);
     end;
     // display the form
-    Dialog.Form.ClientHeight := Y;
+    Dialog.Form.ClientHeight := round(Y);
+    {$IFDEF FMX}
+    Dialog.Form.FClientHeight := round(Y);
+    Dialog.Form.OnShow := Dialog.Form.FormShow;
+    {$ENDIF}
 
     //set form parent
     {$IFDEF WITHPOPUPPARENT}
@@ -1233,16 +1570,30 @@ begin
     // retrieve the results
     result := Dialog.Form.ShowModal;
     if Dialog.Form.Combo<>nil then begin
+    {$IFDEF FMX}
+      if Dialog.Form.Combo is TComboBox then
+      begin
+        SelectionRes := TComboBox(Dialog.Form.Combo).ItemIndex;
+        if TComboBox(Dialog.Form.Combo).ItemIndex <> -1 then
+          Query := TComboBox(Dialog.Form.Combo).Items[ TComboBox(Dialog.Form.Combo).ItemIndex ];
+      end else
+      if Dialog.Form.Combo is TComboEdit then
+      begin
+        SelectionRes := TComboEdit( Dialog.Form.Combo ).Items.IndexOf( TComboEdit( Dialog.Form.Combo ).Text );
+        Query := TComboEdit( Dialog.Form.Combo ).Text;
+      end;
+    {$ELSE}
       SelectionRes := Dialog.Form.Combo.ItemIndex;
       Query := Dialog.Form.Combo.Text;
+    {$ENDIF}
     end else
     if Dialog.Form.Edit<>nil then
       Query := Dialog.Form.Edit.Text;
     if Dialog.Form.Verif<>nil then
-      VerifyChecked := Dialog.Form.Verif.Checked;
+      VerifyChecked := Dialog.Form.Verif.{$IFDEF FMX}IsChecked{$ELSE}Checked{$ENDIF};
     RadioRes := 0;
     for i := 0 to high(Rad) do
-      if Rad[i].Checked then
+      if Rad[i].{$IFDEF FMX}IsChecked{$ELSE}Checked{$ENDIF} then
         RadioRes := i+200;
   finally
     FreeAndNil(Dialog.Form);
@@ -1258,7 +1609,7 @@ begin
   case element of
   tdeContent..tdeMainInstruction:
     if Dialog.Emulated then
-      Dialog.Form.Element[element].Caption := CR(Text)
+      Dialog.Form.Element[element].{$IFDEF FMX}Text{$ELSE}Caption{$ENDIF} := CR(Text)
     {$IFDEF MSWINDOWS}
     else
       SendMessageW(Dialog.Wnd,TDM_UPDATE_ELEMENT_TEXT,ord(element),
@@ -1269,18 +1620,25 @@ begin
       Dialog.Form.Edit.Text := Text; // only in emulation
   tdeVerif:
     if Dialog.Emulated then
-      Dialog.Form.Verif.Caption := Text
+      Dialog.Form.Verif.{$IFDEF FMX}Text{$ELSE}Caption{$ENDIF} := Text
   end;
 end;
 
 
 { TEmulatedTaskDialog }
 
+{$IFDEF FMX}
+constructor TEmulatedTaskDialog.CreateNew(AOwner: TComponent; Dummy: NativeInt = 0);
+{$ELSE}
 constructor TEmulatedTaskDialog.CreateNew(AOwner: TComponent; Num: Integer);
+{$ENDIF}
 begin
+  {$IFDEF FMX}
+  inherited CreateNew(AOwner, Dummy);
+  {$ELSE}
   inherited CreateNew(AOwner, Num);
-
   KeyPreview := True;
+  {$ENDIF}
 end;
 
 procedure TEmulatedTaskDialog.HandleEmulatedButtonClicked(Sender: TObject);
@@ -1295,19 +1653,37 @@ begin
   end;
 end;
 
-procedure TEmulatedTaskDialog.KeyDown(var Key: Word; Shift: TShiftState);
+
+{$IFDEF FMX}
+procedure TEmulatedTaskDialog.FormShow( Sender : TObject );
 begin
-  if (biSystemMenu in BorderIcons) then//is Alt+F4/Esc cancellation allowed?
+  // resetting clientheight, did not work properly...
+  ClientHeight := FClientHeight;
+end;
+
+const
+  VK_F4 = vkF4;
+  VK_ESCAPE = vkEscape;
+
+procedure TEmulatedTaskDialog.KeyDown(var Key: Word; var KeyChar: System.WideChar; Shift: TShiftState);
+{$ELSE}
+procedure TEmulatedTaskDialog.KeyDown(var Key: Word; Shift: TShiftState);
+{$ENDIF}
+begin
+  if ({$IFDEF FMX}TBorderIcon.{$ENDIF}biSystemMenu in BorderIcons) then//is Alt+F4/Esc cancellation allowed?
   begin//yes -> cancel on ESC
     if Key = VK_ESCAPE then
       Close;
-  end else
+  end
+  {$IFDEF MSWINDOWS}
+  else
   begin//no -> block Alt+F4
     if (Key = VK_F4) and (ssAlt in Shift) then//IMPORTANT: native task dialog blocks Alt+F4 to close the dialog -> we have to block it as well
       Key := 0;
-  end;
-
-  inherited KeyDown(Key, Shift);
+  end
+  {$ENDIF}
+  ;
+  inherited;
 end;
 
 
@@ -1326,6 +1702,37 @@ end;
 
 {$endif USETMSPACK}
 
+{$IFDEF FMX}
+function StrToStream( const s : RawByteString ):TMemoryStream;
+begin
+  Result := TMemoryStream.Create;
+  Result.Write( s[1], length(s) );
+  Result.Seek( 0, soFromBeginning );
+end;
+
+function StrToBitmap( const s : RawByteString ):TBitmap;
+var
+  MS : TMemoryStream;
+begin
+  Result := NIL;
+  MS := StrToStream( s );
+  try
+    Result := TBitmap.CreateFromStream( MS );
+  finally
+    MS.Free;
+  end;
+end;
+{$ENDIF}
+
+procedure TDShowMessage( instr : string; msg:string=''; Title : string = 'Information' );
+var
+  TD : TTaskDialog;
+begin
+  TD.Title := TD_Trans( Title );
+  TD.Inst := instr;
+  TD.Content := msg;
+  TD.Execute( [ cbOk ] );
+end;
 
 initialization
   {$ifdef WITHLAZARUSICONS}
@@ -1337,6 +1744,8 @@ initialization
 
   DefaultFont := TFont.Create;
   DefaultFont.Style := [];
+
+  {$IFNDEF FMX}
   if Screen.Fonts.IndexOf('Calibri')>=0 then begin
     {$IFDEF FPC}
     DefaultFont.Size := 11;//Lazarus seems not to like the height property -> we must use Size
@@ -1360,6 +1769,8 @@ initialization
     DefaultFont.Height := -13;
     {$ENDIF}
   end;
+  {$ENDIF}
+
   {$ifndef USETMSPACK}
   {$IFDEF MSWINDOWS}
   InitComCtl6;
@@ -1367,6 +1778,7 @@ initialization
   assert(ord(tdfCanBeMinimized)=15);
   {$endif USETMSPACK}
 
+  {$IFNDEF FMX}
   {$IFDEF WITHLAZARUSARROW}
   BitmapArrow := TPicture.Create;
   BitmapArrow.LoadFromLazarusResource('std_arrow16');
@@ -1375,9 +1787,22 @@ initialization
   BitmapArrow.LoadFromResourceName(HInstance,'btnArrow');
   BitmapArrow.Transparent := true;
   {$ENDIF}
+  {$ENDIF}
+
+  {$IFDEF FMX}
+  ICON_PNG[tiBlank] := StrToBitmap( blank_png_str );
+  ICON_PNG[tiWarning] := StrToBitmap( warning_png_str );
+  ICON_PNG[tiQuestion] := StrToBitmap( help_png_str );
+  ICON_PNG[tiError] := StrToBitmap( error_png_str );
+  ICON_PNG[tiInformation] := StrToBitmap( info_png_str );
+  ICON_PNG[tiNotUsed] := StrToBitmap( blank_png_str );
+  ICON_PNG[tiShield] := StrToBitmap( error_png_str );
+  {$ENDIF}
 
 finalization
   DefaultFont.Free;
+  {$IFNDEF FMX}
   BitmapArrow.Free;
+  {$ENDIF}
 
 end.
