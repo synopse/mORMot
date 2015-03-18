@@ -1042,8 +1042,8 @@ type
     // - will raise an exception if http.sys is not available (e.g. before
     // Windows XP SP2) or if the request queue creation failed
     // - if you override this contructor, put the AddUrl() methods within,
-    // and you can set CreateSuspended to TRUE
-    // - if you will call AddUrl() methods later, set CreateSuspended to FALSE,
+    // and you can set CreateSuspended to FALSE
+    // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
     constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode='');
