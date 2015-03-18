@@ -88,8 +88,10 @@ uses
   {$ifndef DELPHI5OROLDER}
   Variants,
   {$endif}
+  {$ifdef FPC}
+  dynlibs,
+  {$endif}
   Classes,
-  Contnrs,
   SynCommons,
   SynLog,
   SynDB;
@@ -1945,4 +1947,4 @@ end;
 
 initialization
   TODBCConnectionProperties.RegisterClassNameForDefinition;
-end.
+end.

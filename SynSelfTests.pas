@@ -156,6 +156,7 @@ uses
   SynSQLite3Static,
   SynDBSQLite3,
   SynDBRemote,
+  SynDBODBC,
 {$ifndef DELPHI5OROLDER}
   mORMot,
   mORMotDB,
