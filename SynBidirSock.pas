@@ -149,7 +149,6 @@ type
     fURI: RawUTF8;
     function ProcessFrame(Context: TWebSocketServerResp;
       var request,answer: TWebSocketFrame): boolean; virtual; abstract;
-    function Clone: TWebSocketProtocol; virtual; abstract;
   public
     /// abstract constructor to initialize the protocol
     // - the protocol should be named, so that the client may be able to request
@@ -157,6 +156,8 @@ type
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName,aURI: RawUTF8); reintroduce;
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone: TWebSocketProtocol; virtual; abstract;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - is currently 'synopsejson' or 'synopsebinary'
@@ -183,8 +184,9 @@ type
     fOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame;
     function ProcessFrame(Context: TWebSocketServerResp;
       var request,answer: TWebSocketFrame): boolean; override;
-    function Clone: TWebSocketProtocol; override;
   public
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone: TWebSocketProtocol; override;
     /// allows to send a message over the wire to a specified connection
     function SendFrame(Sender: TWebSocketServerResp; const Frame: TWebSocketFrame): boolean;
     /// you can assign an event to this property to be notified of incoming messages
@@ -229,8 +231,9 @@ type
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
-    function Clone: TWebSocketProtocol; override;
   public
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone: TWebSocketProtocol; override;
     /// initialize the WebSockets JSON protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
@@ -249,8 +252,9 @@ type
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
-    function Clone: TWebSocketProtocol; override;
   public
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone: TWebSocketProtocol; override;
     /// finalize the encryption, if was used
     destructor Destroy; override;
     /// initialize the WebSockets binary protocol
@@ -565,7 +569,7 @@ begin
     WR.Add('[');
     for i := 1 to High(Values) do begin
       WR.Add('"');
-      WR.AddString(Values[i]);
+      WR.AddJSONEscape(pointer(Values[i]));
       WR.Add('"',',');
     end;
     WR.Add('"');

@@ -12718,7 +12718,7 @@ begin
   WebsocketsLowLevel(TWebSocketProtocolJSON.Create(''),focText);
 end;
 
-type
+type // to access protected low-level frame methods
   TWebSocketProtocolRestHook = class(TWebSocketProtocolRest);
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
@@ -12730,7 +12730,7 @@ var C1,C2: THttpServerRequest;
 begin
   C1 := THttpServerRequest.Create(nil,nil);
   C2 := THttpServerRequest.Create(nil,nil);
-  P2 := TWebSocketProtocolRestHook(protocol).Clone;
+  P2 := protocol.Clone;
   try
     C1.Prepare('url','POST','headers',content,contentType);
     TWebSocketProtocolRestHook(protocol).InputToFrame(C1,frame);
@@ -12795,4 +12795,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+
