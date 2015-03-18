@@ -1995,11 +1995,11 @@ You can optionally specify the associated table, using a custom {\f1\fs20 TID} t
 !
 !   TSQLOrder = class(TSQLRecord)
 !   ...
-!   published Client: TID
+!   property Client: TID
 !     read fClient write fClient;
-!   published OrderedBy: TSQLRecordClientID
+!   property OrderedBy: TSQLRecordClientID
 !     read fOrderedBy write fOrderedBy;
-!   published OrderedByCascade: TSQLRecordClientToBeDeletedID
+!   property OrderedByCascade: TSQLRecordClientToBeDeletedID
 !     read fOrderedByCascade write fOrderedByCascade;
 !   ...
 Those three published fields would be able to store a {\f1\fs20 Int64} foreign key, and will botall have one {\i index} created on the database.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or TSQLRecordClientToBeDeletedID - will define how the deletion process will be processed.
