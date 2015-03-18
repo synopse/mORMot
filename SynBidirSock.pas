@@ -53,7 +53,7 @@ unit SynBidirSock;
    - broadcast a message to several aCallingThread: THttpServerResp values
    - send asynchronously (e.g. for SOA methods sending events with no result)
 
-   TODO: enhance server process to use events, and not threads
+   TODO: enhance TWebSocketServer process to use events, and not threads
    - current implementation has its threads spending most time waiting in loops
    - eventually also at SynCrtSock's THttpServer class level also
 
@@ -260,11 +260,10 @@ type
     constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
       aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
-    // specify an URI to limit the protocol upgrade to a single resource
-    /// - AES-CFB 256 bit encryption will be enabled on this protocol if some
-    // strings are supplied
-    // - the supplied key and initialization vector will be hashed using SHA-256
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    /// - AES-CFB 256 bit encryption will be enabled on this protocol if the
+    // aKey parameter supplied, after been hashed using SHA-256 algorithm
     constructor Create(const aURI, aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
@@ -487,6 +486,8 @@ var Ctxt: THttpServerRequest;
     status: cardinal;
 begin
   result := true;
+  if not (request.opcode in [focText,focBinary]) then
+    exit; // ignore e.g. from TWebSocketServerResp.ProcessStart/ProcessStop
   Ctxt := THttpServerRequest.Create(Context.fServer,Context);
   try
     if not FrameToInput(request,Ctxt) then
@@ -658,7 +659,7 @@ end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI,'',fCompressed);
+  result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
   if fEncryption<>nil then
     TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
 end;
@@ -887,10 +888,11 @@ begin
     case Context.ProcessOne of
     wspNone: begin
       case GetTickCount64-last of
-      0..200:    delay := 1; // leave some time for Context.NotifyCallback()
-      201..500:  delay := 5;
-      501..2000: delay := 100;
-      else       delay := 500;
+      0..200:     delay := 1; // leave some time for Context.NotifyCallback()
+      201..500:   delay := 5;
+      501..2000:  delay := 50;
+      2001..5000: delay := 100;
+      else        delay := 500;
       end;
       SleepHiRes(delay);
     end;
