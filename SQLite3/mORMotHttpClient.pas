@@ -1,4 +1,4 @@
-/// HTTP/1.1 RESTFUL JSON Client classes for mORMot
+/// HTTP/1.1 RESTful JSON Client classes for mORMot
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMotHttpClient;
@@ -46,7 +46,7 @@ unit mORMotHttpClient;
 
 
 
-      HTTP/1.1 RESTFUL JSON Client for mORMot
+      HTTP/1.1 RESTful JSON Client for mORMot
     ******************************************
 
    - use internaly the JSON format for content communication
@@ -69,7 +69,7 @@ unit mORMotHttpClient;
     Version 1.4 - February 08, 2010
       - whole Synopse SQLite3 database framework released under the GNU Lesser
         General Public License version 3, instead of generic "Public Domain"
-      - HTTP/1.1 RESTFUL JSON Client and Server split into two units
+      - HTTP/1.1 RESTful JSON Client and Server split into two units
         (SQLite3HttpClient and SQLite3HttpServer)
 
     Version 1.5 - February 12, 2010
@@ -145,10 +145,11 @@ uses
 {$endif}
   SysUtils,
   Classes,
-  SynCrypto, // for hcSynShaAes
   SynZip,
   SynLZ,
   SynCrtSock,
+  SynBidirSock, // for WebSockets
+  SynCrypto,    // for hcSynShaAes
   SynCommons,
   SynLog,
   mORMot;
@@ -169,7 +170,7 @@ type
   /// set of available compressions schemes
   TSQLHttpCompressions = set of TSQLHttpCompression;
 
-  /// abstract HTTP/1.1 RESTFUL JSON mORMot Client class
+  /// abstract HTTP/1.1 RESTful JSON mORMot Client class
   // - this class, and other inherited classes defined in this unit, are 
   // thread-safe, since each of their URI() method is protected by a giant lock
   TSQLHttpClientGeneric = class(TSQLRestClientURI)
@@ -230,16 +231,17 @@ type
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
 
-  /// HTTP/1.1 RESTFUL JSON mORMot Client class using SynCrtSock / WinSock
+  /// HTTP/1.1 RESTful JSON mORMot Client class using SynCrtSock's Sockets 
   // - will give the best performance on a local computer, but has been found
   // out to be slower over a network
   // - is not able to use secure HTTPS protocol
   // - note that, in its current implementation, this class is not thread-safe:
   // you need either to lock its access via a critical section, or initialize
-  // one client instance per thread  
+  // one client instance per thread
   TSQLHttpClientWinSock = class(TSQLHttpClientGeneric)
   protected
     /// internal HTTP/1.1 compatible client
+    fSocketClass: THttpClientSocketClass;
     fSocket: THttpClientSocket;
     fSocketKeptAlive: cardinal;
     /// call fSocket.Request()
@@ -255,7 +257,22 @@ type
     property Socket: THttpClientSocket read fSocket;
   end;
 
-  /// HTTP/1.1 RESTFUL JSON mORMot Client abstract class using either WinINet,
+  /// HTTP/1.1 RESTful JSON mORMot Client able to upgrade to WebSockets
+  // - in addition to TSQLHttpClientWinSock, this client class is able
+  // to upgrade its HTTP connection to the WebSockets protocol, so that the
+  // server may be able to notify the client via a callback
+  // - the internal Socket class will be in fact a THttpClientWebSockets
+  // instance, as defined in the SynBidirSock unit
+  TSQLHttpClientWebsockets = class(TSQLHttpClientWinSock)
+  protected
+    function InternalCheckOpen: boolean; override;
+  public
+    /// internal HTTP/1.1 and WebSockets compatible client
+    // - you could use it when you want to upgrade the connection to WebSockets
+    function WebSockets: THttpClientWebSockets;
+  end;
+
+  /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
   // WinHTTP or libcurl API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
   // better) TSQLHttpClientWinHTTP overridden classes under Windows
@@ -312,7 +329,7 @@ type
   TSQLHttpClientRequestClass = class of TSQLHttpClientRequest;
 
   {$ifdef USEWININET}
-  /// HTTP/1.1 RESTFUL JSON mORMot Client class using WinINet API
+  /// HTTP/1.1 RESTful JSON mORMot Client class using WinINet API
   // - this class is 15/20 times slower than TSQLHttpClient using SynCrtSock
   // on a local machine, but was found to be faster throughout local networks
   // - this class is able to connect via the secure HTTPS protocol
@@ -326,7 +343,7 @@ type
     procedure InternalSetClass; override;
   end;
 
-  /// HTTP/1.1 RESTFUL JSON Client class using WinHTTP API
+  /// HTTP/1.1 RESTful JSON Client class using WinHTTP API
   // - has a common behavior as THttpClientSocket() but seems to be faster
   // over a network and is able to retrieve the current proxy settings
   // (if available) and handle secure HTTPS connection - so it seems to be used
@@ -349,7 +366,7 @@ type
   {$endif USEWININET}
 
   {$ifdef USELIBCURL}
-  /// HTTP/1.1 RESTFUL JSON Client class using libculr
+  /// HTTP/1.1 RESTful JSON Client class using libculr
   // - will handle HTTP and HTTPS, if OpenSSL or similar libray is available
   TSQLHttpClientCurl = class(TSQLHttpClientRequest)
   protected                               
@@ -358,11 +375,11 @@ type
   {$endif USELIBCURL}
 
   {$ifdef ONLYUSEHTTPSOCKET}
-  /// HTTP/1.1 RESTFUL JSON deault mORMot Client class
+  /// HTTP/1.1 RESTful JSON deault mORMot Client class
   // -  maps the raw socket implementation class
   TSQLHttpClient = TSQLHttpClientWinSock;
   {$else}
-  /// HTTP/1.1 RESTFUL JSON default mORMot Client class
+  /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
@@ -509,7 +526,9 @@ begin
   EnterCriticalSection(fMutex);
   try
     try
-      fSocket := THttpClientSocket.Open(fServer,fPort,cslTCP,60000); // 60 sec timeout
+      if fSocketClass=nil then
+        fSocketClass := THttpClientSocket;
+      fSocket := fSocketClass.Open(fServer,fPort,cslTCP,60000); // 60 sec timeout
       {$ifdef USETCPPREFIX}
       fSocket.TCPPrefix := 'magic';
       {$endif}
@@ -555,6 +574,26 @@ begin
   result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
   Header := fSocket.HeaderGetText;
   Data := fSocket.Content;
+end;
+
+
+{ TSQLHttpClientWebsockets }
+
+function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
+begin
+  if fSocketClass=nil then
+    fSocketClass := THttpClientWebSockets;
+  result := inherited InternalCheckOpen;
+end;
+
+function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
+begin
+  if fSocket=nil then
+    if not InternalCheckOpen then begin
+      result := nil;
+      exit;
+    end;
+  result := fSocket as THttpClientWebSockets;
 end;
 
 

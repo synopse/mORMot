@@ -807,12 +807,24 @@ type
   /// a test case for all bidirectional remote access, e.g. WebSockets
   TTestBidirectionalRemoteConnection = class(TSynTestCase)
   protected
+    fHttpServer: TSQLHttpServer;
+    fServer: TSQLRestServerFullMemory;
+    procedure CleanUp; override;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
+    procedure TestRest(Rest: TSQLRest);
+    procedure TestCallback(Rest: TSQLRest);
+    procedure SOACallbackViaWebsockets(Ajax: boolean);
   published
     /// low-level test of our 'synopsejson' WebSockets JSON protocol
     procedure WebsocketsJSONProtocol;
     /// low-level test of our 'synopsebinary' WebSockets binary protocol
     procedure WebsocketsBinaryProtocol;
+    /// test the callback mechanism via interface-based services on server side
+    procedure SOACallbackOnServerSide;
+    /// test callbacks via interface-based services over binary WebSockets
+    procedure SOACallbackViaBinaryWebsockets;
+    /// test callbacks via interface-based services over JSON WebSockets
+    procedure SOACallbackViaJSONWebsockets;
   end;
 
   /// a test case for all shared DDD types and services
@@ -12769,6 +12781,143 @@ begin
   end;
 end;
 
+type
+  IBidirCallback = interface(IInvokable)
+    ['{5C5818CC-FFBA-445C-82C1-39F45B84520C}']
+    procedure AsynchEvent(a: integer);
+    function Value: Integer;
+  end;
+  IBidirService = interface(IInvokable)
+    ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
+    function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+    procedure LaunchCallback(a: integer);
+  end;
+  TBidirServer = class(TInterfacedObject,IBidirService)
+  protected
+    fCallback: IBidirCallback;
+    function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+    procedure LaunchCallback(a: integer);
+  end;
+  TBidirCallback = class(TInterfacedObject,IBidirCallback)
+  protected
+    fValue: Integer;
+  public
+    function Value: Integer;
+    procedure AsynchEvent(a: integer);
+  end;
+
+function TBidirServer.TestRest(a,b: integer; out c: RawUTF8): variant;
+begin
+  c := Int32ToUtf8(a+b);
+  result := _ObjFast(['a',a,'b',b,'c',c]);
+end;
+
+function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+begin
+  fCallback := callback;
+  result := d<>0;
+end;
+
+procedure TBidirServer.LaunchCallback(a: integer);
+begin
+  if Assigned(fCallback) then
+    fCallback.AsynchEvent(a);
+end;
+
+procedure TBidirCallback.AsynchEvent(a: integer);
+begin
+  inc(fValue,a);
+end;
+
+function TBidirCallback.Value: integer;
+begin
+  result := fValue;
+end;
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
+begin
+  TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService),TypeInfo(IBidirCallback)]);
+  fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
+  // sicClientDriven services expect authentication for sessions
+  fHttpServer.WebSocketsEnable('','key',true);
+  fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
+  fServer.CreateMissingTables;
+  Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicClientDriven)<>nil);
+  TestRest(fServer);
+  TestCallback(fServer);
+  Check(fHttpServer.AddServer(fServer));
+end;
+
+procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TSQLRest);
+var I: IBidirService;
+    a,b: integer;
+    c: RawUTF8;
+    v: variant;
+begin
+  Rest.Services.Resolve(IBidirService,I);
+  if CheckFailed(Assigned(I)) then
+    exit;
+  for a := -10 to 10 do
+    for b := -10 to 10 do begin
+      v := I.TestRest(a,b,c);
+      check(GetInteger(pointer(c))=a+b);
+      if CheckFailed(DocVariantType.IsOfType(v)) then
+        continue;
+      check(v.a=a);
+      check(v.b=b);
+      check(v.c=c);
+    end;
+end;
+
+procedure TTestBidirectionalRemoteConnection.TestCallback(Rest: TSQLRest);
+var I: IBidirService;
+    d: integer;
+    subscribed: IBidirCallback;
+begin
+  Rest.Services.Resolve(IBidirService,I);
+  if CheckFailed(Assigned(I)) then
+    exit;
+  subscribed := TBidirCallback.Create;
+  for d := -5 to 6 do begin
+    check(I.TestCallback(d,subscribed)=(d<>0));
+    I.LaunchCallback(d);
+  end;
+  Check(subscribed.value=6);
+end;
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(Ajax: boolean);
+var Client: TSQLHttpClientWebsockets;
+begin
+  Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
+  try
+    Check(Client.ServerTimeStampSynchronize);
+    Check(Client.SetUser('User','synopse'));
+    Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
+    TestRest(Client);
+    Client.WebSockets.WebSocketsUpgrade('','key',Ajax,true);
+  finally
+    Client.Free;
+  end;
+end;
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaBinaryWebsockets;
+begin
+  SOACallbackViaWebsockets(false);
+end;
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaJSONWebsockets;
+begin
+  SOACallbackViaWebsockets(true);
+end;
+
+procedure TTestBidirectionalRemoteConnection.CleanUp;
+begin
+  FreeAndNil(fServer);
+  FreeAndNil(fHttpServer);
+end;
+
 
 { TTestDDDSharedUnits }
 
@@ -12795,4 +12944,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+

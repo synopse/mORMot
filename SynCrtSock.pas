@@ -643,17 +643,20 @@ type
   // - on any error (timeout, connection closed) will retry once to get the value
   // - don't forget to use Free procedure when you are finished
   THttpClientSocket = class(THttpSocket)
+  protected
+    fUserAgent: SockString;
   public
-    /// by default, the client is identified as IE 5.5, which is very
-    // friendly welcome by most servers :(
-    // - you can specify a custom value here
-    UserAgent: SockString;
-
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
     constructor Create(aTimeOut: cardinal=10000); override;
+    /// low-level HTTP/1.1 request
+    // - called by all Get/Head/Post/Put/Delete REST methods 
+    // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
+    // - retry is false by caller, and will be recursively called with true to retry once
+    function Request(const url, method: SockString; KeepAlive: cardinal;
+      const header, Data, DataType: SockString; retry: boolean): integer; virtual;
 
-    /// after an Open(server,port), return 200 if OK, http status error otherwise - get
+   /// after an Open(server,port), return 200 if OK, http status error otherwise - get
     // the page data in Content
     function Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
@@ -668,13 +671,16 @@ type
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
 
-    /// low-level HTTP/1.1 request
-    // - called by all REST methods above
-    // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
-    // - retry is false by caller, and will be recursively called with true to retry once
-    function Request(const url, method: SockString; KeepAlive: cardinal;
-      const header, Data, DataType: SockString; retry: boolean): integer;
+    /// by default, the client is identified as IE 5.5, which is very
+    // friendly welcome by most servers :(
+    // - you can specify a custom value here
+    property UserAgent: SockString read fUserAgent write fUserAgent;
   end;
+
+  /// class-reference type (metaclass) of a HTTP client socket access
+  // - may be either THttpClientSocket or THttpClientWebSockets (from
+  // SynBidirSock unit)
+  THttpClientSocketClass = class of THttpClientSocket;
 
   {$ifndef LVCL}
   /// event prototype used e.g. by THttpServerGeneric.OnHttpThreadStart
@@ -720,8 +726,10 @@ type
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
       {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
       overload; virtual;
-    /// the associated socket to communicate with the client  
+    /// the associated socket to communicate with the client
     property ServerSock: THttpServerSocket read fServerSock;
+    /// the associated main HTTP server instance
+    property Server: THttpServer read fServer;
   end;
 
   THttpServerRespClass = class of THttpServerResp;
@@ -843,8 +851,8 @@ type
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
     /// the thread instance which called this execution context
-    // - when assigned to a THttpServerGeneric.OnCallback event, this
-    // CallingThread should be set to the client connection to be notified
+    // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
+    // this property to specify the client connection to be notified
     property CallingThread: TNotifiedThread read fCallingThread;
     /// is TRUE if the caller is connected via HTTPS
     // - only set for THttpApiServer class yet

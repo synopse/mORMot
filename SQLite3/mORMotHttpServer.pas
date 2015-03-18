@@ -201,7 +201,8 @@ uses
   SynLZ,
 {$endif}
   SynCrtSock,
-  SynCrypto, // for CompressShaAes()
+  SynBidirSock, // for WebSockets
+  SynCrypto,    // for CompressShaAes()
   SynCommons,
   SynLog,
   mORMot;
@@ -223,6 +224,10 @@ type
   // - useHttpSocket will use the standard Sockets library (i.e. socket-based
   // THttpServer) - it will trigger the Windows firewall popup UAC window at
   // first execution
+  // - useBidirSocket will use the standard Sockets library but via the
+  // TWebSocketServerRest class, allowing HTTP connection upgrade to the
+  // WebSockets protocol, allowing immediate event callbacks in addition to the
+  // standard RESTful mode 
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TSQLHttpServerOptions =
     ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}
@@ -247,12 +252,16 @@ const
 type
   /// HTTP/1.1 RESTFUL JSON mORMot Server class
   // - this server is multi-threaded and not blocking
-  // - will first try to use fastest http.sys kernel-mode server (i.e. create a
-  // THttpApiServer instance); it should work OK under XP or WS 2K3 - but
-  // you need to have administrator rights under Vista or Seven: if http.sys
-  // fails to initialize, it will use a pure Delphi THttpServer instance; a
-  // solution is to call the THttpApiServer.AddUrlAuthorize class method during
+  // - under Windows, it will first try to use fastest http.sys kernel-mode
+  // server (i.e. create a THttpApiServer instance); it should work OK under XP
+  // or WS 2K3 - but you need to have administrator rights under Vista or Seven:
+  // if http.sys fails to initialize, it will use the socket-based THttpServer;
+  // a solution is to call the THttpApiServer.AddUrlAuthorize class method during
   // program setup for the desired port, in order to allow it for every user
+  // - under Linux, only THttpServer is available
+  // - you can specify useBidirSocket kind of server (i.e. TWebSocketServerRest)
+  // if you want the HTTP protocol connection to be upgraded to a WebSockets
+  // mode, to allow immediate callbacks from the server to the client 
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAJAXJSON := false;
@@ -298,9 +307,11 @@ type
     // when no other listening hostnames match the request for that port) - this
     // parameter is ignored by the TSQLHttpApiServer instance
     // - aHttpServerKind defines how the HTTP server itself will be implemented:
-    // it will use by default optimized useHttpApi kernel-based http.sys server,
+    // it will use by default optimized kernel-based http.sys server (useHttpApi),
     // optionally registering the URI (useHttpApiRegisteringURI) if needed,
-    // or using the standard Sockets library (useHttpSocket)
+    // or using the standard Sockets library (useHttpSocket), possibly in its
+    // WebSockets-friendly version (useBidirSocket - you shoud call the
+    // WebSocketsEnable method to initialize the available protocols)
     // - by default, the PSQLAccessRights will be set to nil
     // - the ServerThreadPoolCount parameter will set the number of threads
     // to be initialized to handle incoming connections (default is 32, which
@@ -386,8 +397,22 @@ type
     // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
     procedure RootRedirectToURI(const aRedirectedURI: RawUTF8;
       aRegisterURI: boolean=true; aHttps: boolean=false);
+    /// defines the WebSockets protocols to be used for useBidirSocket
+    // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
+    // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
+    // specify an URI to limit the protocol upgrade to a single REST server
+    // - TWebSocketProtocolBinary will always be registered by this method
+    // - if the encryption key text is not '', TWebSocketProtocolBinary will
+    // use AES-CFB 256 bits encryption
+    // - if aWebSocketsAJAX is TRUE, it will also register TWebSocketProtocolJSON
+    // so that AJAX applications would be able to connect to this server
+    // - this method does nothing if the associated HttpServer class is not a
+    // TWebSocketServerRest (i.e. this instance was not created as useBidirSocket)
+    procedure WebSocketsEnable(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
+      aWebSocketsAJAX: boolean=false);
     /// the associated running HTTP server instance
-    // - either THttpApiServer, either THttpServer
+    // - either THttpApiServer (under Windows), THttpServer or
+    // TWebSocketServerRest
     property HttpServer: THttpServerGeneric read fHttpServer;
     /// the TCP/IP port on which this server is listening to
     property Port: AnsiString read fPort;
@@ -585,8 +610,10 @@ begin
   {$endif}
   if fHttpServer=nil then begin
     // http.sys failed -> create one instance of our pure Delphi server
-    fHttpServer := THttpServer.Create(aPort
-      {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
+    if aHttpServerKind=useBidirSocket then
+      fHttpServer := TWebSocketServerRest.Create(aPort) else
+      fHttpServer := THttpServer.Create(aPort
+        {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
@@ -824,6 +851,14 @@ begin
       // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
       #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
+end;
+
+procedure TSQLHttpServer.WebSocketsEnable(const aWebSocketsURI,
+  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+begin
+  if fHttpServer.InheritsFrom(TWebSocketServerRest) then
+    TWebSocketServerRest(fHttpServer).WebSocketsEnable(
+      aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsAJAX);
 end;
 
 

@@ -42158,7 +42158,7 @@ var P: Pointer;
 procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 begin
   raise EInterfaceFactoryException.CreateUTF8(
-    '%.AddMethodsFromTypeInfo: %.% %',
+    '%.AddMethodsFromTypeInfo(%.%) failed - %',
     [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
 end;
 begin

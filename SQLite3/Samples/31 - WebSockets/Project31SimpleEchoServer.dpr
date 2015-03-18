@@ -12,10 +12,10 @@ uses
 type
   TWebSocketProtocolEcho = class(TWebSocketProtocolChat)
   protected
-    procedure EchoFrame(Sender: TWebSocketServerResp; const Frame: TWebSocketFrame);
+    procedure EchoFrame(Sender: THttpServerResp; const Frame: TWebSocketFrame);
   end;
 
-procedure TWebSocketProtocolEcho.EchoFrame(Sender: TWebSocketServerResp;
+procedure TWebSocketProtocolEcho.EchoFrame(Sender: THttpServerResp;
   const Frame: TWebSocketFrame);
 begin
   TextColor(ccLightMagenta);
