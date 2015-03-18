@@ -36271,7 +36271,7 @@ begin
     if Name=nil then
       exit;  // invalid JSON content
     Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
-    if (Value=nil) or not(EndOfObject in [',','}']) then
+    if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
       if StrIComp(Name,Names[i])=0 then begin
