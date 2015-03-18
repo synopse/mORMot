@@ -5511,6 +5511,7 @@ asm
     call   AesNiEncryptXmm7
     lea    edx,[eax].TAESContext.buf
     movdqu [edx],xmm7
+    cld
 @s: lodsb
     xor    al,[edx]
     inc    edx

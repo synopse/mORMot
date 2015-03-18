@@ -3278,7 +3278,7 @@ begin
   if fQuery=nil then
     exit; // Params already have updated value
   if fQuery.fRowIndex<=0 then // =-1 if empty, =0 if eof, >=1 if row data
-    fValue := Null else
+    SetVariantNull(fValue) else
   if fRowIndex<>fQuery.fRowIndex then begin // get column value once per row
     fRowIndex := fQuery.fRowIndex;
     fQuery.fPrepared.ColumnToVariant(fColumnIndex,fValue);
@@ -3291,7 +3291,7 @@ end;
 
 procedure TQueryValue.Clear;
 begin
-  fValue := Null;
+  SetVariantNull(fValue);
 end;
 
 function TQueryValue.GetAsBytes: TBytes;
@@ -3312,6 +3312,10 @@ begin
   case VType of
     varNull:     result := '';
     varInt64:    result := UTF8ToSynUnicode(Int64ToUtf8(VInt64));
+    varString:   result := UTF8ToSynUnicode(RawUTF8(VAny));
+    {$ifdef HASVARUSTRING}
+    varUString:  result := UnicodeString(VAny);
+    {$endif}
   else Result := SynUnicode(fValue);
   end;
 end;
@@ -3503,17 +3507,13 @@ begin
   {$ifdef UNICODE}
   fValue := aValue;
   {$else}
-  {$ifdef DELPHI5OROLDER}
   with TVarData(fValue) do begin
     if not(VType in VTYPE_STATIC) then
       VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    RawByteString(VAny) := StringToUTF8(aValue);
+    StringToUTF8(aValue,RawUTF8(VAny));
   end;
-  {$else}
-  RawUTF8ToVariant(StringToUTF8(aValue),fValue);
-  {$endif}
   {$endif}
 end;
 
@@ -7227,7 +7227,7 @@ begin
       ftDate:      Value := PDateTime(@VInt64)^;
       ftUTF8:      Value := RawUTF8(VData);
       ftBlob:      Value := VData;
-      else         Value := Null;
+      else         SetVariantNull(Value)
     end;
   end;
 end;

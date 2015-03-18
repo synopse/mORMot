@@ -1513,8 +1513,8 @@ begin
       ftCurrency:  Value := PCurrency(@VInt64)^;
       ftDate:      Value := PDateTime(@VInt64)^;
       ftUTF8:      Value := VText; // returned as WideString/OleStr variant
-      ftBlob:      Value := VBlob;
-      else         Value := Null;
+      ftBlob:      RawByteStringToVariant(VBlob,Value);
+      else         SetVariantNull(Value);
     end;
   end;
 end;
@@ -2217,7 +2217,7 @@ begin
       end;
     SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
   finally
-    DB := null;
+    VarClear(DB);
     Catalog := nil;
     CoUninit;
   end;

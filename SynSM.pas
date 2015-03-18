@@ -1101,7 +1101,7 @@ end;
 destructor TSMEngine.Destroy;
 begin
   inherited Destroy;
-  FGlobal := null;
+  VarClear(FGlobal);
   TSynFPUException.ForLibraryCode;
   //JS_RemoveExternalStringFinalizer(ExternalStringFinalizer);
 //  comp^.Destroy;

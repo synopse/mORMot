@@ -6018,7 +6018,7 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 - The default text encoding for both JSON and {\i @*SQLite3@} is UTF-8, which allows the full Unicode char-set to be stored and communicated;
 - It is the default data format used by ASP.NET AJAX services created in Windows Communication Foundation (WCF) since .NET framework 3.5; so it's Microsoft officially "ready";
 - For binary @*BLOB@ transmission, we simply encode the binary data as {\i @*Base64@}; please note that, by default, BLOB fields are not transmitted with other fields in JSON objects, see @1@ (only exception are {\i @*dynamic array@} fields, which are transmittest within the other fields).
-JSON @**serialization@  will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
+JSON @**serialization@ will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
 Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 @*double@} values are stored as their corresponding floating-point representation.

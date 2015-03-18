@@ -10087,6 +10087,10 @@ procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 // function call 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 
+/// same as Value := Null, but faster
+procedure SetVariantNull(var Value: variant);
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 {$ifndef NOVARIANTS}
 
@@ -10246,10 +10250,6 @@ type
   /// pointer to a set of options for a TDocVariant storage
   PDocVariantOptions = ^TDocVariantOptions;
 
-
-/// same as Value := Null, but faster
-procedure SetVariantNull(var Value: variant);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Dest := Source, but copying by reference
 // - i.e. VType is defined as varVariant or varByRef
@@ -29057,13 +29057,6 @@ begin
   end;
 end;
 
-{$ifndef NOVARIANTS}
-
-/// internal method used by VariantLoadJSON(), GetVariantFromJSON() and
-// TDocVariantData.InitJSONInPlace()
-procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; Options: PDocVariantOptions); forward;
-
 procedure SetVariantNull(var Value: variant);
 begin // slightly faster than Value := Null
   with TVarData(Value) do
@@ -29073,6 +29066,13 @@ begin // slightly faster than Value := Null
       PPtrUInt(@VType)^ := varNull;
     end;
 end;
+
+{$ifndef NOVARIANTS}
+
+/// internal method used by VariantLoadJSON(), GetVariantFromJSON() and
+// TDocVariantData.InitJSONInPlace()
+procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
+  EndOfObject: PUTF8Char; Options: PDocVariantOptions); forward;
 
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 begin
@@ -36304,7 +36304,7 @@ begin
       exit;  // invalid JSON content
     Value := GetJSONFieldOrObjectOrArray(
       P,wasString,@EndOfObject,HandleValuesAsObjectOrArray);
-    if (Value=nil) or not(EndOfObject in [',','}']) then
+    if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     if StrIComp(Name,pointer(aName))=0 then begin
       Result := RawUTF8(Value);
@@ -36332,7 +36332,7 @@ begin
       if Name=nil then
         exit;  // invalid JSON content
       Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
-      if (Value=nil) or not(EndOfObject in [',','}']) then
+      if not(EndOfObject in [',','}']) then
         exit; // invalid item separator
       if n=length(Values) then
         SetLength(Values,n+32);
@@ -36643,9 +36643,9 @@ begin
     result := GetJSONField(P,P,@wStr,EndOfObject);
     if (result<>nil) and (not wStr) and (result^>='f') then
       if PInteger(result)^=TRUE_LOW then
-        result := '1' else   // true -> 1
+        result := '1' else   // normalize true -> 1
       if PInteger(result)^=FALSE_LOW then
-        result := '0';       // false -> 0
+        result := '0';       // normalize false -> 0
     if wasString<>nil then
       wasString^ := wStr;
   end;
