@@ -223,8 +223,9 @@ unit SynCrypto;
      (CryptoAPI) via TAESECB_API, TAESCBC_API, TAESCFB_API and TAESOFB_API -
      our optimized asm version is faster, so is still our default/preferred
    - added optional IVAtBeginning parameter to EncryptPKCS7/DecryptPKC7 methods
-   - added CompressShaAes() and global CompressShaAesKey, CompressShaAesIV and
-     CompressShaAesClass variables to be used by THttpSocket.RegisterCompress
+   - get rid of the unsafe IV parameter for TAES* classes constructors
+   - added CompressShaAes() and global CompressShaAesKey and CompressShaAesClass
+     variables to be used by THttpSocket.RegisterCompress
    - introduce new TRC4 object for RC4 encryption algorithm
    - removed several compilation hints when assertions are set to off
 
@@ -367,8 +368,7 @@ type
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
-    // - IV is the Initialization Vector
-    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); virtual;
+    constructor Create(const aKey; aKeySize: cardinal); virtual;
     /// compute a class instance similar to this one
     function Clone: TAESAbstract; virtual;
 
@@ -399,6 +399,10 @@ type
 
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
+    /// associated Initialization Vector
+    // - you should better use PKCS7 encoding with IVAtBeginning option than
+    // a fixed Initialization Vector, especially in ECB mode
+    property IV: TAESBlock read fIV write fIV;
   end;
 
   /// handle AES cypher/uncypher with chaining
@@ -417,6 +421,7 @@ type
     procedure EncryptInit;
     procedure DecryptInit;
     procedure EncryptTrailer;
+    procedure DecryptTrailer;
   public
     /// perform the AES cypher in the corresponding mode
     // - this abstract method will set CV from AES.Context, and fIn/fOut
@@ -430,8 +435,8 @@ type
 
   /// handle AES cypher/uncypher without chaining (ECB)
   // - this mode is known to be less secure than the others
-  // - IV value set on constructor is used to code the trailing bytes
-  // of the buffer (by a simple XOR)
+  // - IV property should be set to a fixed value to encode the trailing bytes
+  // of the buffer by a simple XOR - but you should better use the PKC7 pattern
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! ECB128: 19.70ms in x86 optimized code, 6.97ms with AES-NI
   TAESECB = class(TAESAbstractSyn)
@@ -529,13 +534,18 @@ type
     /// Initialize AES context for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
-    // - IV is the Initialization Vector
-    constructor Create(const aKey; aKeySize: cardinal; const aIV: TAESBlock); override;
+    constructor Create(const aKey; aKeySize: cardinal); override;
     /// release the AES execution context
     destructor Destroy; override;
     /// perform the AES cypher in the ECB mode
+    // - if Count is not a multiple of a 16 bytes block, the IV will be used
+    // to XOR the trailing bytes - so it won't be compatible with our
+    // TAESAbstractSyn classes: you should better use PKC7 padding instead
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the ECB mode
+    // - if Count is not a multiple of a 16 bytes block, the IV will be used
+    // to XOR the trailing bytes - so it won't be compatible with our
+    // TAESAbstractSyn classes: you should better use PKC7 padding instead
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
@@ -906,32 +916,26 @@ procedure XorConst(p: PIntegerArray; Count: integer);
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
-  // - use CompressShaAesSetKey() procedure to set this Key and associated IV
+  // - use CompressShaAesSetKey() procedure to set this Key from text 
   CompressShaAesKey: TSHA256Digest;
-
-  /// the Initialization Vector used by CompressShaAes() global function
-  // - this vector is global to the whole process
-  // - use CompressShaAesSetKey() procedure to set this IV and associated Key
-  CompressShaAesIV: TAESBlock;
 
   /// the AES-256 encoding class used by CompressShaAes() global function
   // - use any of the implementation classes, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
-  // - set to the secure and efficient CTR mode by default
-  CompressShaAesClass: TAESAbstractClass = TAESCTR;
+  // - set to the secure and efficient CFB mode by default
+  CompressShaAesClass: TAESAbstractClass = TAESCFB;
 
-/// set an text-based encryption key/IV for CompressShaAes() global function
-// - will compute the key/IV via SHA256Weak() and set global CompressShaAesKey var
-// - the key and Initialization Vector are global to the whole process
-procedure CompressShaAesSetKey(const Key: RawByteString; const IV: RawByteString='');
+/// set an text-based encryption key for CompressShaAes() global function
+// - will compute the key via SHA256Weak() and set CompressShaAesKey
+// - the key is global to the whole process
+procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractClass=nil);
 
 /// encrypt data content using the AES-256/CTR algorithm, after SynLZ compression
 // - as expected by THttpSocket.RegisterCompress()
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
-// - will use global CompressShaAesKey and CompressShaAesIV variables to be set
-// according to the expected compression Key and Initialization Vector, e.g.
-// via a call to the CompressShaAesSetKey() global procedure
+// - will use global CompressShaAesKey / CompressShaAesClass variables to be set
+// according to the expected algorithm and Key e.g. via a call to CompressShaAesSetKey() 
 // - if you want to change the chaining mode, you can customize the global
 // CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
@@ -5305,8 +5309,16 @@ end;
 const
   sAESException = 'AES engine initialization failure';
 
-constructor TAESAbstract.Create(const aKey; aKeySize: cardinal;
-  const aIV: TAESBlock);
+procedure FillRandom(var IV: TAESBlock);
+var i,rnd: cardinal;
+begin
+  rnd := GetTickCount64*PtrUInt(@IV);
+  for i := 0 to 3 do
+    PCardinalArray(@IV)[i] := PCardinalArray(@IV)[i]
+      xor rnd xor TD0[(rnd shr i)and 255];
+end;
+
+constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
     raise ESynCrypto.CreateFmt(
@@ -5315,7 +5327,6 @@ begin
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
   move(aKey,fKey,fKeySizeBytes);
-  fIV := aIV;
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
@@ -5343,8 +5354,7 @@ end;
 
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
-var len, padding, iv, rnd: cardinal;
-    i: Integer;
+var len, padding, iv: cardinal;
     P: Pointer;
 begin
   // use PKCS7 padding, so expects AESBlockSize=16 bytes blocks
@@ -5355,9 +5365,7 @@ begin
     iv := 0;
   SetString(result,nil,iv+len+padding);
   if IVAtBeginning then begin
-    rnd := GetTickCount64*PtrInt(self)*len;
-    for i := 0 to 3 do
-      PCardinalArray(@fIV)[i] := PCardinalArray(@fIV)[i] xor rnd xor cardinal(Random(MaxInt));
+    FillRandom(fIV);
     PAESBlock(result)^ := fIV;
   end;
   move(Pointer(Input)^,PByteArray(result)^[iv],len);
@@ -5373,7 +5381,7 @@ var instance: TAESAbstract;
     digest: TSHA256Digest;
 begin
   SHA256Weak(Key,digest);
-  instance := Create(digest,256,PAESBlock(@digest)^);
+  instance := Create(digest,256);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input,IVAtBeginning) else
@@ -5385,7 +5393,7 @@ end;
 
 function TAESAbstract.Clone: TAESAbstract;
 begin
-  result := TAESAbstractClass(ClassType).Create(fKey,fKeySize,fIV);
+  result := TAESAbstractClass(ClassType).Create(fKey,fKeySize);
 end;
 
 
@@ -5429,6 +5437,17 @@ begin
   end;
 end;
 
+procedure TAESAbstractSyn.DecryptTrailer;
+var len: Cardinal;
+begin
+  len := fCount and (AESBlockSize-1);
+  if len<>0 then begin
+    EncryptInit; 
+    AES.Encrypt(fCV,fCV);
+    XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
+  end;
+end;
+
 
 { TAESECB }
 
@@ -5442,7 +5461,7 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  XorBlockN(pointer(fIn),pointer(fOut),@fCV,Count and (AESBlockSize-1));
+  DecryptTrailer;
 end;
 
 procedure TAESECB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -5455,7 +5474,7 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  XorBlockN(pointer(fIn),pointer(fOut),@fCV,Count and (AESBlockSize-1));
+  EncryptTrailer;
 end;
 
 
@@ -5477,12 +5496,7 @@ begin
       inc(fOut);
     end;
   end;
-  Count := Count and (AESBlockSize-1);
-  if Count<>0 then begin
-    EncryptInit; // not set in EncryptTrailer -> use custom code
-    AES.Encrypt(fCV,fCV);
-    XorBlockN(pointer(fIn),pointer(fOut),@fCV,Count);
-  end;
+  DecryptTrailer;
 end;
 
 procedure TAESCBC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -5800,11 +5814,10 @@ end;
 
 { TAESAbstract_API }
 
-constructor TAESAbstract_API.Create(const aKey; aKeySize: cardinal;
-  const aIV: TAESBlock);
+constructor TAESAbstract_API.Create(const aKey; aKeySize: cardinal);
 begin
   EnsureCryptoAPIAESProviderAvailable;
-  inherited Create(aKey,aKeySize,aIV); // check and set fKeySize[Bytes]
+  inherited Create(aKey,aKeySize); // check and set fKeySize[Bytes]
   InternalSetMode;
   fKeyHeader.bType := PLAINTEXTKEYBLOB;
   fKeyHeader.bVersion := CUR_BLOB_VERSION;
@@ -5824,7 +5837,8 @@ begin
   inherited;
 end;
 
-procedure TAESAbstract_API.EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal; DoEncrypt: boolean);
+procedure TAESAbstract_API.EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal;
+  DoEncrypt: boolean);
 var n: Cardinal;
 begin
   if Count=0 then
@@ -5985,17 +5999,11 @@ begin
 end;
 
 
-procedure CompressShaAesSetKey(const Key: RawByteString; const IV: RawByteString='');
-var IV256: TSHA256Digest;
+procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractClass);
 begin
   if Key='' then
     FillChar(CompressShaAesKey,sizeof(CompressShaAesKey),0) else
     SHA256Weak(Key,CompressShaAesKey);
-  if IV='' then
-    FillChar(CompressShaAesIV,sizeof(CompressShaAesIV),0) else begin
-    SHA256Weak(IV,IV256);
-    move(IV256,CompressShaAesIV,sizeof(CompressShaAesIV));
-  end;
 end;
 
 function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
@@ -6003,13 +6011,13 @@ var Data: RawByteString absolute DataRawByteString;
 begin
   if (Data<>'') and (CompressShaAesClass<>nil) then
   try
-    with CompressShaAesClass.Create(CompressShaAesKey,256,CompressShaAesIV) do
+    with CompressShaAesClass.Create(CompressShaAesKey,256) do
     try
       if Compress then begin
         CompressSynLZ(Data,true);
-        Data := EncryptPKCS7(Data);
+        Data := EncryptPKCS7(Data,true);
       end else begin
-        Data := DecryptPKCS7(Data);
+        Data := DecryptPKCS7(Data,true);
         if CompressSynLZ(Data,false)='' then begin
           result := '';
           exit; // invalid content

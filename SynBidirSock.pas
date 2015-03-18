@@ -644,7 +644,7 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
 begin
   inherited Create('synopsebinary',aURI);
   if aKeySize>=128 then
-    fEncryption := TAESCFB.Create(aKey,aKeySize,PAESBlock(@aKey)^);
+    fEncryption := TAESCFB.Create(aKey,aKeySize);
   fCompressed := aCompressed;
 end;
 

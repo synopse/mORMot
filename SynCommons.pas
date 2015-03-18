@@ -10449,6 +10449,7 @@ function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+
 var
   /// the internal custom variant type used to register TDocVariant
   DocVariantType: TSynInvokeableVariantType = nil;

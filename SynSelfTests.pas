@@ -7243,7 +7243,7 @@ procedure TTestCryptographicRoutines._AES256;
 var A: TAES;
     st, orig, crypted, s2: RawByteString;
     Key: TSHA256Digest;
-    s,b,p,iv: TAESBlock;
+    s,b,p: TAESBlock;
     i,k,ks,m, len: integer;
     AES: TAESFull;
     PC: PAnsiChar;
@@ -7299,10 +7299,10 @@ begin
         Check(len=MAX);
         Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),MAX));
         if not noaesni then begin
-          fillchar(iv,sizeof(iv),1);
           for m := low(MODES) to high(MODES) do
-          with MODES[m].Create(Key,ks,iv) do
+          with MODES[m].Create(Key,ks) do
           try
+            fillchar(pointer(@IV)^,sizeof(TAESBlock),1);
             //Timer.Start;
             for i := 0 to 256 do begin
               if i<64 then
@@ -7357,7 +7357,7 @@ var s1,s2: RawByteString;
     keysize,i: integer;
 begin
   for keysize := 0 to 10 do begin
-    CompressShaAesSetKey(RandomString(keysize),RandomString(keysize));
+    CompressShaAesSetKey(RandomString(keysize));
     for i := 0 to 50 do begin
       s1 := RandomString(i*3);
       s2 := s1;
