@@ -87,6 +87,8 @@ unit SynLog;
   - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
     now a per-thread context will be stored, e.g. for Enter/Leave tracking
   - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
+  - introduced clear distinction between absolute and relative memory address
+    values, and TSynMapFile.AbsoluteToOffset(), as reported by [0aeaa1353149]
 
 *)
 
@@ -165,7 +167,7 @@ type
     fSymbols: TDynArray;
     fUnits: TDynArrayHashed;
     fUnitSynLogIndex,fUnitSystemIndex: integer;
-    fCodeOffset: cardinal;
+    fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
   public
     /// get the available debugging information
@@ -191,20 +193,23 @@ type
     // write to the executable of a running process
     // - this method will work for .exe and for .dll (or .ocx)
     procedure SaveToExe(const aExeName: TFileName);
-    /// add some debugging information according to the specified memory address
+    /// add some debugging information about the supplied absolute memory address
     // - will create a global TSynMapFile instance for the current process, if
     // necessary
     // - if no debugging information is available (.map or .mab), will write
-    // the address as hexadecimal
-    class procedure Log(W: TTextWriter; Addr: PtrUInt; AllowNotCodeAddr: boolean);
-    /// retrieve a symbol according to an absolute code address
-    function FindSymbol(aAddr: integer): integer;
-    /// retrieve an unit and source line, according to an absolute code address
-    function FindUnit(aAddr: integer; out LineNumber: integer): integer;
+    // the raw address pointer as hexadecimal
+    class procedure Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
+      AllowNotCodeAddr: boolean);
+    /// compute the relative memory address from its absolute (pointer) value
+    function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
+    /// retrieve a symbol according to a relative code address
+    function FindSymbol(aAddressOffset: integer): integer;
+    /// retrieve an unit and source line, according to a relative code address
+    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
-    function FindLocation(aAddr: integer): RawUTF8;
+    function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -1528,38 +1533,41 @@ begin
   end;
 end;
 
-function TSynMapFile.FindSymbol(aAddr: integer): integer;
+function TSynMapFile.FindSymbol(aAddressOffset: integer): integer;
 var L,R: integer;
 begin
   R := high(fSymbol);
   L := 0;
-  if (R>=0) and (aAddr>=fSymbol[0].Start) and (aAddr<=fSymbol[R].Stop) then
+  if (R>=0) and
+     (aAddressOffset>=fSymbol[0].Start) and
+     (aAddressOffset<=fSymbol[R].Stop) then
   repeat
     result := (L+R)shr 1;
     with fSymbol[result] do
-      if aAddr<Start then
+      if aAddressOffset<Start then
         R := result-1 else
-      if aAddr>Stop then
+      if aAddressOffset>Stop then
         L := result+1 else
         exit;
   until L>R;
   result := -1;
 end;
 
-function TSynMapFile.FindUnit(aAddr: integer; out LineNumber: integer): integer;
+function TSynMapFile.FindUnit(aAddressOffset: integer; out LineNumber: integer): integer;
 var L,R,n,max: integer;
 begin
   LineNumber := 0;
   R := high(fUnit);
   L := 0;
   if (R>=0) and
-     (aAddr>=fUnit[0].Symbol.Start) and (aAddr<=fUnit[R].Symbol.Stop) then
+     (aAddressOffset>=fUnit[0].Symbol.Start) and
+     (aAddressOffset<=fUnit[R].Symbol.Stop) then
   repeat
     result := (L+R) shr 1;
     with fUnit[result] do
-      if aAddr<Symbol.Start then
+      if aAddressOffset<Symbol.Start then
         R := result-1 else
-      if aAddr>Symbol.Stop then
+      if aAddressOffset>Symbol.Stop then
         L := result+1 else begin
         // unit found -> search line number
         L := 0;
@@ -1568,9 +1576,9 @@ begin
         if R>=0 then
         repeat
           n := (L+R) shr 1;
-          if aAddr<Addr[n] then
+          if aAddressOffset<Addr[n] then
             R := n-1 else
-          if (n<max) and (aAddr>=Addr[n+1]) then
+          if (n<max) and (aAddressOffset>=Addr[n+1]) then
             L := n+1 else begin
             LineNumber := Line[n];
             exit;
@@ -1584,22 +1592,29 @@ end;
 
 var
   InstanceMapFile: TSynMapFile;
-  
-class procedure TSynMapFile.Log(W: TTextWriter; Addr: PtrUInt;
-  AllowNotCodeAddr: boolean);
-var u, s, Line: integer;
+
+function TSynMapFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
 begin
-  if (W=nil) or (Addr=0) or (InstanceMapFile=nil) then
+  if InstanceMapFile=nil then
+    result := 0 else
+    result := PtrInt(aAddressAbsolute)-PtrInt(InstanceMapFile.fCodeOffset);
+end;
+
+class procedure TSynMapFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
+  AllowNotCodeAddr: boolean);
+var u, s, Line, offset: integer;
+begin
+  if (W=nil) or (aAddressAbsolute=0) or (InstanceMapFile=nil) then
     exit;
   with InstanceMapFile do
   if HasDebugInfo then begin
-    dec(Addr,fCodeOffset);
-    s := FindSymbol(Addr);
-    u := FindUnit(Addr,Line);
+    offset := AbsoluteToOffset(aAddressAbsolute);
+    s := FindSymbol(offset);
+    u := FindUnit(offset,Line);
     if s<0 then begin
       if u<0 then begin
         if AllowNotCodeAddr then begin
-          W.AddPointer(Addr);
+          W.AddPointer(aAddressAbsolute);
           W.Add(' ');
         end;
         exit;
@@ -1610,7 +1625,7 @@ begin
           exit else // don't log stack trace internal to SynLog.pas :)
         if (u=fUnitSystemIndex) and (PosEx('Except',Symbols[s].Name)>0) then
           exit; // do not log stack trace of System.SysRaiseException
-    W.AddPointer(Addr); // only display addresses inside known Delphi code
+    W.AddPointer(aAddressAbsolute); // display addresses inside known Delphi code
     W.Add(' ');
     if u>=0 then begin
       W.AddString(Units[u].Symbol.Name);
@@ -1628,20 +1643,20 @@ begin
       W.Add(')',' ');
     end;
   end else begin
-    W.AddPointer(Addr); // no .map info available -> display all addresses
+    W.AddPointer(aAddressAbsolute); // no .map info available -> display address
     W.Add(' ');
   end;
 end;
 
-function TSynMapFile.FindLocation(aAddr: integer): RawUTF8;
-var u,s,Line: integer;
+function TSynMapFile.FindLocation(aAddressAbsolute: PtrUInt): RawUTF8;
+var u,s,Line,offset: integer;
 begin
   result := '';
-  if (aAddr=0) or not HasDebugInfo then
+  if (aAddressAbsolute=0) or not HasDebugInfo then
     exit;
-  dec(aAddr,fCodeOffset);
-  s := FindSymbol(aAddr);
-  u := FindUnit(aAddr,Line);
+  offset := AbsoluteToOffset(aAddressAbsolute);
+  s := FindSymbol(offset);
+  u := FindUnit(offset,Line);
   if (s<0) and (u<0) then
     exit;
   if u>=0 then begin
