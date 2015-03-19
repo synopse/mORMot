@@ -1218,7 +1218,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           Beg := pointer(P);
           {$ifdef HASINLINE}
           // trim left 'UnitName.' for each symbol (since Delphi 2005)
-          case PWord(P)^ of
+          case PWord(P)^ of // ignore RTL namespaces
           ord('S')+ord('y') shl 8:
              if IdemPChar(P+2,'STEM.') then
                if IdemPChar(P+7,'WIN.') then inc(P,9) else
@@ -1281,7 +1281,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
         while (P<PEnd) and (P^=' ') do inc(P);
         repeat
           if Count=n then begin
-            n := Count+256;
+            n := Count+Count shr 3+256;
             SetLength(U^.Line,n);
             SetLength(U^.Addr,n);
           end;
@@ -1312,7 +1312,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           ReadSymbols else
         if MatchPattern(P,PEnd,'LINE NUMBERS FOR',P) then
           ReadLines else
-         NextLine;
+          NextLine;
       // now we should have read all .map content
       s := fSymbols.Count-1;
       RehashNeeded := false;
@@ -3937,7 +3937,7 @@ begin
     if LineBeg[8]=' ' then // YYYYMMDD HHMMSS is one char bigger than TimeStamp
       fLineLevelOffset := 19 else
       fLineLevelOffset := 18;
-    if LineBeg[19]='!' then begin // thread number = 1 -> '  !'
+    if LineBeg[fLineLevelOffset]='!' then begin // thread number = 1 -> '  !'
       inc(fLineLevelOffset,3);
       fThreadsCount := fLinesMax;
       SetLength(fThreads,fLinesMax);
