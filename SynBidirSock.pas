@@ -317,6 +317,7 @@ type
     fAcquireConnectionLock: TRTLCriticalSection;
     fTryAcquireConnectionCount: Integer;
     fProtocol: TWebSocketProtocol;
+    fMaskSentFrames: byte;
     fLastPingTicks: Int64;
     fHeartbeatDelay: cardinal;
     fCallbackAcquireTimeOutMS: cardinal;
@@ -1466,24 +1467,31 @@ var hdr: TFrameHeader;
 begin
   try
     result := true;
-    hdr.first := byte(Frame.opcode) or FRAME_FIN;
     len := Length(Frame.payload);
+    hdr.first := byte(Frame.opcode) or FRAME_FIN;
+    if fMaskSentFrames<>0 then begin
+      hdr.mask := (GetTickCount64 xor PtrInt(self))*Random(MaxInt);
+      ProcessMask(pointer(Frame.payload),hdr.mask,len);
+    end;
     if len<FRAME_LEN2BYTES then begin
-      hdr.len8 := len;
+      hdr.len8 := len or fMaskSentFrames;
       fSocket.Snd(@hdr,2);
     end else
     if len<65536 then begin
-      hdr.len8 := FRAME_LEN2BYTES;
+      hdr.len8 := FRAME_LEN2BYTES or fMaskSentFrames;
       hdr.len32 := swap(len);
       fSocket.Snd(@hdr,4);
     end else begin
-      hdr.len8 := FRAME_LEN8BYTES;
+      hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
       hdr.len64 := bswap32(len);
       hdr.len32 := 0;
-      fSocket.SndLow(@hdr,10); // huge payload sent outside TCrtSock buffers
+      fSocket.SndLow(@hdr,10+fMaskSentFrames shr 5);
+      // huge payload sent outside TCrtSock buffers
       fSocket.SndLow(pointer(Frame.payload),len);
       exit;
     end;
+    if fMaskSentFrames<>0 then
+      fSocket.Snd(@hdr.mask,4);
     fSocket.Snd(pointer(Frame.payload),len);
     fSocket.SockSendFlush; // send at once up to 64 KB
   except
@@ -1624,6 +1632,7 @@ constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aProtocol: TWebSocketProtocol);
 begin
   fClientThread := TWebSocketProcessClientThread.Create(self);
+  fMaskSentFrames := 128;
   inherited Create(aSender,aProtocol,fClientThread,aSender.HeartbeatDelay,
     aSender.CallbackAcquireTimeOutMS,aSender.CallbackAnswerTimeOutMS);
 end;

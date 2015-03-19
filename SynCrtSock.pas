@@ -2728,7 +2728,7 @@ procedure TCrtSocket.SockSendFlush;
 begin
   if SndBufLen=0 then
     exit;
-  SndLow(pointer(SndBuf), SndBufLen);
+  SndLow(pointer(SndBuf),SndBufLen);
   SndBufLen := 0;
 end;
 
