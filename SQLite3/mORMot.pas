@@ -41306,7 +41306,7 @@ end;
 var method: ^TServiceMethod;
 procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 begin
-  raise EInterfaceFactoryException.CreateUTF8('Invalid %.FakeCall() for %.%: %',
+  raise EInterfaceFactoryException.CreateUTF8('Invalid %.FakeCall(%.%)%',
     [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,FormatUTF8(Format,Args)]);
 end;
 var resultType: TServiceMethodValueType; // type of value stored into result

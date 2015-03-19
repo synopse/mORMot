@@ -645,6 +645,7 @@ type
   THttpClientSocket = class(THttpSocket)
   protected
     fUserAgent: SockString;
+    procedure RequestSendHeader(const url, method: SockString); virtual;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -2602,7 +2603,8 @@ end;
 
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 begin
-  Create(5000); // default bind timeout is 5 seconds
+  // on Linux, Accept() blocks even after Shutdown() -> use 1 second timeout
+  Create({$ifdef LINUX}1000{$else}5000{$endif});
   OpenBind('0.0.0.0',aPort,true,-1,aLayer); // raise an ECrtSocket exception on error
 end;
 
@@ -2659,8 +2661,10 @@ begin
     {$endif}
       exit;
   end else
-  if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
+  if OptName=TCP_NODELAY then begin
+    if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
     exit;
+  end;
   raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
     [WSAGetLastError,OptName,OptVal]);
 end;
@@ -2765,6 +2769,8 @@ var len: integer;
 begin
   // get data from SockIn buffer, if any (faster than ReadChar)
   result := 0;
+  if Length=0 then
+    exit;
   if SockIn<>nil then
     with PTextRec(SockIn)^ do
     repeat
@@ -3074,11 +3080,30 @@ begin
   result := Request(url,'PUT',KeepAlive,header,Data,DataType,false);
 end;
 
+procedure THttpClientSocket.RequestSendHeader(const url, method: SockString);
+var aURL: SockString;
+begin
+  if Sock<0 then
+    exit;
+  if SockIn=nil then // done once
+    CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  if TCPPrefix<>'' then
+    SockSend(TCPPrefix);
+  if (url='') or (url[1]<>'/') then
+    aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
+    aURL := url;
+  SockSend([method,' ',aURL,' HTTP/1.1']);
+  if Port='80' then
+    SockSend(['Host: ',Server]) else
+    SockSend(['Host: ',Server,':',Port]);
+  SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
+end;
+
 function THttpClientSocket.Request(const url, method: SockString;
   KeepAlive: cardinal; const Header, Data, DataType: SockString; retry: boolean): integer;
 procedure DoRetry(Error: integer);
 begin
-  if retry then // retry once -> return error only if failed after retrial 
+  if retry then // retry once -> return error only if failed after retrial
     result := Error else begin
     Close; // close this connection
     try
@@ -3091,47 +3116,31 @@ begin
   end;
 end;
 var P: PAnsiChar;
-    aURL, aData: SockString;
+    aData: SockString;
 begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  {$ifdef DEBUG2}system.write(#13#10,method,' ',url);
-  if Retry then system.Write(' RETRY');{$endif}
   if Sock<0 then
     DoRetry(STATUS_NOTFOUND) else // socket closed (e.g. KeepAlive=0) -> reconnect
   try
   try
-{$ifdef DEBUG23}system.write(' Send');{$endif}
     // send request - we use SockSend because writeln() is calling flush()
     // -> all header will be sent at once
-    if TCPPrefix<>'' then
-      SockSend(TCPPrefix);
-    if (url='') or (url[1]<>'/') then
-      aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
-      aURL := url;            
-{$ifdef DEBUGAPI}  writeln('? ',method,' ',aurl); {$endif}
-    SockSend([method,' ',aURL,' HTTP/1.1']);
-    if Port='80' then
-      SockSend(['Host: ',Server]) else
-      SockSend(['Host: ',Server,':',Port]);
-    SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
-    aData := Data; // need var for Data to be eventually compressed
-    CompressDataAndWriteHeaders(DataType,aData);
+    RequestSendHeader(url,method);
     if KeepAlive>0 then
       SockSend(['Keep-Alive: ',KeepAlive,#13#10'Connection: Keep-Alive']) else
       SockSend('Connection: Close');
+    aData := Data; // need var for Data to be eventually compressed
+    CompressDataAndWriteHeaders(DataType,aData);
     if header<>'' then
       SockSend(header);
     if fCompressAcceptEncoding<>'' then
       SockSend(fCompressAcceptEncoding);
     SockSend; // send CRLF
-    {$ifdef DEBUG23} SndBuf[SndBufLen+1] := #0;
-      system.Writeln(#13#10'HeaderOut ',PAnsiChar(SndBuf));{$endif}
     SockSendFlush; // flush all pending data (i.e. headers) to network
     if aData<>'' then // for POST and PUT methods: content to be sent
       SndLow(pointer(aData),length(aData)); // no CRLF at the end of data
-{$ifdef DEBUG23}system.write('OK ');{$endif}
     // get headers
     SockRecvLn(Command); // will raise ECrtSocket on any error
     if TCPPrefix<>'' then
@@ -3140,7 +3149,6 @@ begin
         exit;
       end else
       SockRecvLn(Command);
-{$ifdef DEBUG23}system.write(Command);{$endif}
     P := pointer(Command);
     if IdemPChar(P,'HTTP/1.') then begin
       result := GetCardinal(P+9); // get http numeric status code
@@ -3162,7 +3170,6 @@ begin
       exit;
     end;
     GetHeader; // read all other headers
-{$ifdef DEBUG23}system.write('OK Body');{$endif}
     if not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
 {$ifdef DEBUGAPI}writeln('? ',Command,' ContentLength=',length(Content));
@@ -3409,12 +3416,15 @@ end;
 
 destructor THttpServer.Destroy;
 var StartTick, StopTick: Cardinal;
+    i: integer;
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   StartTick := GetTickCount;
   StopTick := StartTick+20000;
   EnterCriticalSection(fProcessCS);
   if fInternalHttpServerRespList<>nil then begin
+    for i := 0 to fInternalHttpServerRespList.Count-1 do
+      THttpServerResp(fInternalHttpServerRespList.List[i]).Terminate;
     repeat // wait for all THttpServerResp.Execute to be finished
       if fInternalHttpServerRespList.Count=0 then
         break;
@@ -3428,13 +3438,13 @@ begin
 {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
 {$endif}
-{$ifdef FPC}
 {$ifdef LINUX}
+{$ifdef FPC}
   KillThread(ThreadID);  // manualy do it here
 {$endif}
 {$endif}
   FreeAndNil(fSock);
-  inherited Destroy;         // direct Thread abort, no wait till ended
+  inherited Destroy;     // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
 end;
 
@@ -3459,7 +3469,9 @@ begin
   try
     while not Terminated do begin
       ClientSock := Accept(Sock.Sock,Sin);
-      if ClientSock<0 then begin
+      if ClientSock<0 then
+        if Terminated then
+          break else begin
         SleepHiRes(0);
         continue;
       end;
@@ -3673,6 +3685,7 @@ begin
     InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
   {$endif}
   try
+  try
     repeat
       StartTick := GetTickCount;
       StopTick := StartTick+fServer.ServerKeepAliveTimeOut;
@@ -3705,10 +3718,12 @@ begin
        until false;
        //write('!');
     until false;
+  finally
     {$ifdef USETHREADPOOL}
     if fThreadPool<>nil then
       InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
     {$endif}
+  end;
   except
     on E: Exception do
       ; // any exception will silently disconnect the client
@@ -4069,7 +4084,7 @@ begin
     if (ContentLength<0) and KeepAliveClient then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     EndTix := GetTickCount;
-    result := EndTix<StartTix+5000; // 5 sec for header -> DOS / TCP SYN Flood
+    result := EndTix<StartTix+10000; // 10 sec for header -> DOS / TCP SYN Flood
     // if time wrap after 49.7 days -> EndTix<StartTix -> always accepted
     if result and withBody and not ConnectionUpgrade then 
       GetBody;

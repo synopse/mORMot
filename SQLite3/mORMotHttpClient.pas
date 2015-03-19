@@ -267,8 +267,20 @@ type
   protected
     function InternalCheckOpen: boolean; override;
   public
+    /// upgrade the HTTP client connection to a specified WebSockets protocol
+    // - the Model.Root URI will be used for upgrade
+    // - if aWebSocketsAJAX equals default FALSE, it will use 'synopsebinary'
+    // i.e. TWebSocketProtocolBinaryprotocol, with AES-CFB 256 bits encryption
+    // if the encryption key text is not '' and optional SynLZ compression
+    // - if aWebSocketsAJAX is TRUE, it will register the slower and less secure
+    // 'synopsejson' mode, i.e. TWebSocketProtocolJSON (to be used for AJAX
+    // debugging/test purposes only)
+    // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
+    // - will return '' on success, or an error message on failure
+    function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUTF8;
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
     /// internal HTTP/1.1 and WebSockets compatible client
-    // - you could use it when you want to upgrade the connection to WebSockets
+    // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
   end;
 
@@ -596,6 +608,26 @@ begin
   result := fSocket as THttpClientWebSockets;
 end;
 
+function TSQLHttpClientWebsockets.WebSocketsUpgrade(
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  aWebSocketsCompression: boolean): RawUTF8;
+var sockets: THttpClientWebSockets;
+begin
+{$ifdef WITHLOG}
+  fLogFamily.SynLog.Enter(self);
+{$endif}
+  sockets := WebSockets;
+  if sockets=nil then
+    result := 'Impossible to connect to the Server' else
+    result := sockets.WebSocketsUpgrade(Model.Root,
+      aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
+{$ifdef WITHLOG}
+  with fLogFamily.SynLog do
+    if result<>'' then
+      Log(sllWarning,'"%" against %',[result,sockets],self) else
+      Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
+{$endif}
+end;
 
 { TSQLHttpClientRequest }
 

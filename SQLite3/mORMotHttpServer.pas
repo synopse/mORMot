@@ -409,7 +409,14 @@ type
     // - this method does nothing if the associated HttpServer class is not a
     // TWebSocketServerRest (i.e. this instance was not created as useBidirSocket)
     procedure WebSocketsEnable(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean=false);
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompressed: boolean=true); overload;
+    /// defines the useBidirSocket WebSockets protocol to be used for a REST server
+    // - same as the overloaded WebSocketsEnable() method, but the URI will be
+    // forced to match the aServer.Model.Root value, as expected on the client
+    // side by TSQLHttpClientWebsockets.WebSocketsUpgrade()
+    procedure WebSocketsEnable(aServer: TSQLRestServer;
+      const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean=false;
+      aWebSocketsCompressed: boolean=true); overload;
     /// the associated running HTTP server instance
     // - either THttpApiServer (under Windows), THttpServer or
     // TWebSocketServerRest
@@ -854,11 +861,19 @@ begin
 end;
 
 procedure TSQLHttpServer.WebSocketsEnable(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompressed: boolean);
 begin
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
     TWebSocketServerRest(fHttpServer).WebSocketsEnable(
-      aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsAJAX);
+      aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
+end;
+
+procedure TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompressed: boolean);
+begin
+  if aServer<>nil then
+    WebSocketsEnable(aServer.Model.Root,
+      aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
 end;
 
 

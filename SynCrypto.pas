@@ -856,6 +856,10 @@ function MD5DigestsEqual(const A, B: TMD5Digest): Boolean;
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 
+/// fill a block of 16 bytes with some random values
+// - is used internally by this unit to compute an AES Initialization Vector
+procedure FillRandom(var IV: TAESBlock);
+
 /// compute the HTDigest for a user and a realm, according to a supplied password
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;

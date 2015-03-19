@@ -821,6 +821,8 @@ type
     procedure WebsocketsBinaryProtocol;
     /// test the callback mechanism via interface-based services on server side
     procedure SOACallbackOnServerSide;
+    /// launch the WebSockets-ready HTTP server
+    procedure RunHttpServer;
     /// test callbacks via interface-based services over binary WebSockets
     procedure SOACallbackViaBinaryWebsockets;
     /// test callbacks via interface-based services over JSON WebSockets
@@ -12839,15 +12841,19 @@ end;
 procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
 begin
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService),TypeInfo(IBidirCallback)]);
-  fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   // sicClientDriven services expect authentication for sessions
-  fHttpServer.WebSocketsEnable('','key',true);
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
   Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicClientDriven)<>nil);
   TestRest(fServer);
   TestCallback(fServer);
+end;
+
+procedure TTestBidirectionalRemoteConnection.RunHttpServer;
+begin
+  fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
+  fHttpServer.WebSocketsEnable(fServer,'key',true);
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TSQLRest);
@@ -12892,11 +12898,12 @@ var Client: TSQLHttpClientWebsockets;
 begin
   Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
   try
+    Client.WebSocketsUpgrade('key',Ajax,true);
     Check(Client.ServerTimeStampSynchronize);
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
+    Check(Client.ServerTimeStampSynchronize);
     TestRest(Client);
-    Client.WebSockets.WebSocketsUpgrade('','key',Ajax,true);
   finally
     Client.Free;
   end;
