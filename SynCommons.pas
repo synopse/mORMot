@@ -681,6 +681,7 @@ unit SynCommons;
     exception mapping: to be used e.g. when mixing code between external
     libraries and Delphi code
   - added new TSynValidateNonVoidText and TSynFilterTruncate classes
+  - added new TSynCriticalSection class, avoiding CPU cache performance issue
   - added Utf8TruncateToUnicodeLength() and Utf8TruncateToLength() functions
   - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
     MaxUpperCount properties to TSynValidateText class
@@ -716,7 +717,7 @@ uses
 {$endif}
   Classes,
 {$ifndef LVCL}
-  SyncObjs, // for TEvent
+  SyncObjs, // for TEvent and TCriticalSection
   Contnrs,  // for TObjectList
 {$ifdef HASINLINE}
   Types,
@@ -6253,6 +6254,20 @@ function ObjectToJSON(Value: TObject;
 
 
 type
+  /// implements a cross-platform enhanced mutex
+  // - includes a TryEnter method for older versions of Delphi (e.g. Delphi 6-7)
+  // - fix potential CPU cache conflict, as reported by 
+  // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
+  TSynCriticalSection = class(TCriticalSection)
+  protected
+    PaddingForLock: array[0..95] of byte;
+  public
+    {$ifndef HASINLINE}
+    /// will try to acquire the mutex
+    function TryEnter: boolean; 
+    {$endif}
+  end;
+
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
   // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
   // internal JSON format (which is faster than a query to the SQLite3 engine)
@@ -38417,6 +38432,17 @@ begin
   +' 64 bit'
 {$endif}
 end;
+
+
+{ TSynCriticalSection }
+
+{$ifndef HASINLINE}
+function TSynCriticalSection.TryEnter: boolean;
+begin
+  result := TryEnterCriticalSection(FSection);
+end;
+{$endif}
+
 
 { TSynCache }
 
