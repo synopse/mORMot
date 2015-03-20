@@ -580,7 +580,7 @@ function TSQLHttpClientWinSock.InternalRequest(const url, method: RawUTF8;
 begin
   if KeepAliveMS<>fSocketKeptAlive then begin
     fSocketKeptAlive := KeepAliveMS;
-    fSocket.KeepAlive := KeepAliveMS;
+    fSocket.KeepAlive := KeepAliveMS+1000;
   end;
   result.Lo := fSocket.Request(url,method,KeepAliveMS,Header,Data,DataType,false);
   result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));

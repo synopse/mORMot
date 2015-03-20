@@ -12741,15 +12741,19 @@ procedure TestOne(const content,contentType: RawByteString);
 var C1,C2: THttpServerRequest;
     P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
+    noAnswer1,noAnswer2: boolean;
 begin
   C1 := THttpServerRequest.Create(nil,nil);
   C2 := THttpServerRequest.Create(nil,nil);
   P2 := protocol.Clone;
   try
     C1.Prepare('url','POST','headers',content,contentType);
-    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,frame);
+    noAnswer1 := opcode=focBinary;
+    noAnswer2 := not noAnswer1;
+    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame);
     Check(frame.opcode=opcode);
-    TWebSocketProtocolRestHook(P2).FrameToInput(frame,C2);
+    TWebSocketProtocolRestHook(P2).FrameToInput(frame,noAnswer2,C2);
+    Check(noAnswer1=noAnswer2);
     Check(C2.URL='url');
     Check(C2.Method='POST');
     Check(C2.InHeaders='headers');
@@ -12849,11 +12853,14 @@ begin
   TestCallback(fServer);
 end;
 
+const
+  WEBSOCKETS_KEY = 'key';
+  
 procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 begin
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
-  fHttpServer.WebSocketsEnable(fServer,'key',true);
+  fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true);
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TSQLRest);
@@ -12898,11 +12905,10 @@ var Client: TSQLHttpClientWebsockets;
 begin
   Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
   try
-    Client.WebSocketsUpgrade('key',Ajax,true);
+    Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
     Check(Client.ServerTimeStampSynchronize);
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
-    Check(Client.ServerTimeStampSynchronize);
     TestRest(Client);
   finally
     Client.Free;

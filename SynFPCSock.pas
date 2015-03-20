@@ -639,6 +639,8 @@ begin
     {$endif}
     if result>=0 then
       exit; // success
+    if timeout<=0 then
+      break;
     if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
       break;
     sleep(1);
@@ -659,6 +661,8 @@ begin
     {$endif}
     if result>=0 then
       exit; // success
+    if timeout<=0 then
+      break;
     if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
       break;
     sleep(1);

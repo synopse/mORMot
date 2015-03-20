@@ -2603,8 +2603,8 @@ end;
 
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 begin
-  // on Linux, Accept() blocks even after Shutdown() -> use 1 second timeout
-  Create({$ifdef LINUX}1000{$else}5000{$endif});
+  // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
+  Create({$ifdef LINUX}500{$else}5000{$endif});
   OpenBind('0.0.0.0',aPort,true,-1,aLayer); // raise an ECrtSocket exception on error
 end;
 
@@ -2915,8 +2915,13 @@ function TCrtSocket.SockReceivePending(TimeOut: cardinal): integer;
 var tv: TTimeVal;
     fdset: TFDSet;
 begin
-  FillChar(fdset,sizeof(fdset),0);
-  FD_SET(Sock,fdset);
+  {$ifdef MSWINDOWS}
+  fdset.fd_array[0] := Sock;
+  fdset.fd_count := 1;
+  {$else}
+  FD_ZERO(fdset);
+  FD_SET(sock,fdset);
+  {$endif}
   tv.tv_usec := TimeOut*1000;
   tv.tv_sec := 0; 
   result := Select(Sock+1,@fdset,nil,nil,@tv);

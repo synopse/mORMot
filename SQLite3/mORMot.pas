@@ -41708,8 +41708,8 @@ begin
   fact := Get(aGUID);
   if fact=nil then
     raise EServiceException.CreateUTF8(
-    '%.GUID2TypeInfo(%): Interface not registered - you could use '+
-    '%.RegisterInterfaces()',[self,GUIDToShort(aGUID),self]);
+      '%.GUID2TypeInfo(%): Interface not registered - use %.RegisterInterfaces()',
+      [self,GUIDToShort(aGUID),self]);
   result := fact.fInterfaceTypeInfo;
 end;
 
