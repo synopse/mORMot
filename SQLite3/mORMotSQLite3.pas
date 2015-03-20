@@ -270,6 +270,7 @@ uses
   SysUtils,
   Classes,
   {$ifndef LVCL}
+  SyncObjs, // for TCriticalSection inlining
   Contnrs,
   {$endif}
   SynZip,
@@ -1687,7 +1688,7 @@ function TSQLRestServerDB.InternalBatchStart(
 begin
   result := false; // means BATCH mode not supported
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
-    EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Enter;
     try
       if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) then
         raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
@@ -1698,7 +1699,7 @@ begin
       result := true; // means BATCH mode is supported
     finally
       if not result then
-        LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+        fAcquireExecution[execORMWrite].Leave;
     end;
   end;
 end;
@@ -1829,7 +1830,7 @@ begin
     fBatchMethod := mNone;
     fBatchValuesCount := 0;
     fBatchValues := nil;
-    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 

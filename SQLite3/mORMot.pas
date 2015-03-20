@@ -1224,7 +1224,7 @@ uses
   {$endif}
 {$endif}
 {$ifndef LVCL}
-  SyncObjs,
+  SyncObjs, // for TEvent and TCriticalSection
   Contnrs,  // for TObjectList
   {$ifndef NOVARIANTS}
     Variants,
@@ -10566,6 +10566,16 @@ type
   /// a dynamic array of TSQLRest instances
   TSQLRestDynArray = array of TSQLRest;
 
+  /// used to store the execution parameters for a TSQLRest instance
+  TSQLRestAcquireExecution = class(TSynCriticalSection)
+  public
+    Mode: TSQLRestServerAcquireMode;
+    LockedTimeOut: cardinal;
+    Thread: TSynBackgroundThreadMethod;
+    /// finalize the memory structure, and the associated background thread
+    destructor Destroy; override;
+  end;
+
   /// a generic REpresentational State Transfer (REST) client/server class
   TSQLRest = class
   protected
@@ -10580,14 +10590,7 @@ type
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
     fFrequencyTimeStamp: Int64;
-    fAcquireExecution: array[TSQLRestServerURIContextCommand] of record
-      Mode: TSQLRestServerAcquireMode;
-      LockedTimeOut: cardinal;
-      Thread: TSynBackgroundThreadMethod;
-      Lock: TRTLCriticalSection;
-      // see http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
-      PaddingForLock: array[0..95-sizeof(cardinal)*2-sizeof(pointer)-sizeof(TRTLCriticalSection)] of byte;
-    end;
+    fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
     fLogFamily: TSynLogFamily; // =SQLite3Log.Family by default
@@ -14191,7 +14194,7 @@ type
     fRemoteLogOwnedByFamily: boolean;
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
-    fOnIdle: TOnIdleSynBackgroundThread;                 
+    fOnIdle: TOnIdleSynBackgroundThread;
     fRemoteLogThread: TObject; // private TRemoteLogThread
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
@@ -27130,12 +27133,12 @@ var cmd: TSQLRestServerURIContextCommand;
 begin
   fPrivateGarbageCollector := TObjectList.Create;
   fModel := aModel;
+  for cmd := Low(cmd) to high(cmd) do
+    fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 2000; // default 2 seconds
   fRoutingClass := TSQLRestRoutingREST;
   QueryPerformanceFrequency(fFrequencyTimeStamp);
-  for cmd := Low(cmd) to high(cmd) do
-    InitializeCriticalSection(fAcquireExecution[cmd].Lock);
   {$ifdef WITHLOG}
   SetLogClass(SQLite3Log); // by default
   {$endif}
@@ -27150,10 +27153,6 @@ begin
     FreeAndNil(fModel);
   fServices.Free;
   fCache.Free;
-  for cmd := Low(cmd) to high(cmd) do begin
-    DeleteCriticalSection(fAcquireExecution[cmd].Lock);
-    fAcquireExecution[cmd].Thread.Free;
-  end;
   {$ifdef WITHLOG}
   fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
@@ -27167,6 +27166,8 @@ begin
     end;
     fPrivateGarbageCollector.Free;
   end;
+  for cmd := Low(cmd) to high(cmd) do
+    fAcquireExecution[cmd].Free;
   inherited Destroy;
 end;
 
@@ -27801,14 +27802,14 @@ end;
 procedure TSQLRest.Commit(SessionID: cardinal);
 begin
   if self<>nil then begin
-    EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Enter;
     try
       if (fTransactionActiveSession<>0) and (fTransactionActiveSession=SessionID) then begin
         fTransactionActiveSession := 0; // by default, just release flag
         fTransactionTable := nil;
       end;
     finally
-      LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+      fAcquireExecution[execORMWrite].Leave;
     end;
   end;
 end;
@@ -27816,14 +27817,14 @@ end;
 procedure TSQLRest.RollBack(SessionID: cardinal);
 begin
   if self<>nil then begin
-    EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Enter;
     try
       if (fTransactionActiveSession<>0) and (fTransactionActiveSession=SessionID) then begin
         fTransactionActiveSession := 0; // by default, just release flag
         fTransactionTable := nil;
       end;
     finally
-      LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+      fAcquireExecution[execORMWrite].Leave;
     end;
   end;
 end;
@@ -27831,7 +27832,7 @@ end;
 function TSQLRest.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
 begin
   result := false;
-  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+  fAcquireExecution[execORMWrite].Enter;
   try
     if fTransactionActiveSession=0 then begin // nested transactions are not allowed
       fTransactionActiveSession := SessionID;
@@ -27839,7 +27840,7 @@ begin
       result := true;
     end;
   finally
-    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 
@@ -27847,11 +27848,11 @@ function TSQLRest.TransactionActiveSession: cardinal;
 begin
   if self=nil then
     result := 0 else begin
-    EnterCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Enter;
     try
       result := fTransactionActiveSession;
     finally
-      LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+      fAcquireExecution[execORMWrite].Leave;
     end;
   end;
 end;
@@ -31044,6 +31045,12 @@ begin
   Call.OutStatus := HTML_FORBIDDEN;
 end;
 
+destructor TSQLRestAcquireExecution.Destroy;
+begin
+  inherited Destroy;
+  Thread.Free;
+end;
+
 procedure TSQLRestServerURIContext.ExecuteCommand;
 procedure TimeOut;
 begin
@@ -31070,8 +31077,7 @@ begin
         Method := ExecuteORMWrite;
         Start64 := GetTickCount64;
         repeat
-          if TryEnterCriticalSection(Lock)
-            {$ifdef FPC}{$ifndef MSWINDOWS}<>0{$endif}{$endif} then
+          if TryEnter then
           try
             if (Server.fTransactionActiveSession=0) or // avoid transaction mixups
                (Server.fTransactionActiveSession=Session) then begin
@@ -31082,7 +31088,7 @@ begin
               break;   // will handle Mode<>amLocked below
             end;
           finally
-            LeaveCriticalSection(Lock);
+            Leave;
           end;
           if (LockedTimeOut<>0) and (GetTickCount64>Start64+LockedTimeOut) then begin
             TimeOut; // wait up to 2 second by default
@@ -31105,21 +31111,20 @@ begin
       Method;
     amLocked:
       if LockedTimeOut=0 then begin
-        EnterCriticalSection(Lock);
+        Enter;
         try
           Method;
         finally
-          LeaveCriticalSection(Lock);
+          Leave;
         end;
       end else begin
       Start64 := GetTickCount64;
       repeat
-        if TryEnterCriticalSection(Lock)
-           {$ifdef FPC}{$ifndef MSWINDOWS}<>0{$endif}{$endif} then
+        if TryEnter then
         try
           Method;
         finally
-          LeaveCriticalSection(Lock);
+          Leave;
         end;
         if GetTickCount64>Start64+LockedTimeOut then
           break; // wait up to 2 second by default
@@ -33105,7 +33110,7 @@ begin
   {$ifdef WITHLOG}
   fLogClass.Enter;
   {$endif}
-  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock); // avoid race condition
+  fAcquireExecution[execORMWrite].Enter; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
     MaxRevisionJSON := fTrackChangesHistory[TableHistoryIndex].MaxRevisionJSON;
@@ -33212,7 +33217,7 @@ begin
       Rec.Free;
     end;
   finally
-    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock); 
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 
@@ -33230,7 +33235,7 @@ begin
   else exit;
   end;
   TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-  EnterCriticalSection(fAcquireExecution[execORMWrite].Lock); // avoid race condition
+  fAcquireExecution[execORMWrite].Enter; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
                         'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
@@ -33244,7 +33249,7 @@ begin
       // fast append as JSON until reached MaxSentDataJsonRow
       inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
   finally
-    LeaveCriticalSection(fAcquireExecution[execORMWrite].Lock);
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 begin
@@ -41360,7 +41365,7 @@ begin
         DynArrays[IndexVar].Init(ArgTypeInfo,V^);
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
-        AddJSON(Params,V); 
+        AddJSON(Params,V);
     end;
     Params.CancelLastComma;
     // call remote server or stub implementation
