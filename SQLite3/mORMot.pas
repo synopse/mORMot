@@ -36793,7 +36793,7 @@ begin
   if Value=nil then
     result := 'null' else
   if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
-    result := FormatUTF8('{"%":?)',[Value],[Exception(Value).Message],True) else
+    result := FormatUTF8('{"%":?}',[Value],[Exception(Value).Message],True) else
     result := ObjectToJSON(Value,
       [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]);
 end;
