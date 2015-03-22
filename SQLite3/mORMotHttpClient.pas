@@ -266,6 +266,10 @@ type
   TSQLHttpClientWebsockets = class(TSQLHttpClientWinSock)
   protected
     function InternalCheckOpen: boolean; override;
+    function FakeCallbackRegister(Sender: TServiceFactoryClient;
+      const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
+      ParamValue: Pointer): integer; override;
+    function CallbackRequest(Ctxt: THttpServerRequest): cardinal; virtual;
   public
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - the Model.Root URI will be used for upgrade
@@ -598,13 +602,27 @@ begin
   result := inherited InternalCheckOpen;
 end;
 
+function TSQLHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactoryClient;
+  const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
+  ParamValue: Pointer): integer;
+begin
+  if WebSockets=nil then
+    raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call '+
+      'to enable interface parameter callbacks for %.%(%: %)',
+      [self,Sender.InterfaceTypeInfo^.Name,Method.URI,
+       ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
+  result := fFakeCallbacks.DoRegister(
+    ParamValue,TInterfaceFactory.Get(ParamInfo.ArgTypeInfo));
+end;
+
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket=nil then
     if not InternalCheckOpen then begin
       result := nil;
       exit;
-    end;
+    end else
+    (fSocket as THttpClientWebSockets).CallbackRequestProcess := CallbackRequest;
   result := fSocket as THttpClientWebSockets;
 end;
 
@@ -628,6 +646,72 @@ begin
       Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;
+
+function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
+var methodIndex,fakeCallID: integer;
+    url,root,interfmethod,interf,id,method,head: RawUTF8;
+    instance: pointer;
+    factory: TInterfaceFactory;
+    WR: TTextWriter;
+begin
+  result := HTML_BADREQUEST;
+  if (Ctxt=nil) or
+     ((Ctxt.InContentType<>'') and
+      not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE)) then
+    exit;
+  url := Ctxt.URL;
+  if url='' then
+    exit;
+  if url[1]='/' then
+    system.delete(url,1,1);
+  Split(Split(url,'/',root),'/',interfmethod,id); // 'root/BidirCallback.AsynchEvent/1'
+  if not IdemPropNameU(root,Model.Root) then
+    exit;
+  fakeCallID := GetInteger(pointer(id));
+  if fakeCallID<=0 then
+    exit;
+  instance := fFakeCallbacks.FindInstance(fakeCallID,factory);
+  if instance=nil then
+    exit;
+  split(interfmethod,'.',interf,method);
+  if method='!release' then begin
+    fFakeCallbacks.UnRegister(fakeCallID);
+    result := HTML_SUCCESS;
+    exit;
+  end;
+  methodIndex := factory.FindMethodIndex(method);
+  if methodIndex>=0 then
+    if IdemPropNameU(interfmethod,factory.Methods[methodIndex].InterfaceDotMethodName) then
+    try
+      WR := TJSONSerializer.CreateOwnedStream;
+      try
+        WR.AddShort('{"result":[');
+        if not factory.Methods[methodIndex].InternalExecute([instance],
+           pointer(Ctxt.InContent),WR,head,result,[],False,nil,nil) then
+          result := HTML_SERVERERROR else begin
+          if head='' then begin
+            WR.Add(']','}');
+            result := HTML_SUCCESS;
+          end else begin
+            Ctxt.OutCustomHeaders := head;
+            Ctxt.OutContentType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
+          end;
+          if Ctxt.OutContentType='' then
+            Ctxt.OutContentType := JSON_CONTENT_TYPE;
+          Ctxt.OutContent := WR.Text;
+        end;
+      finally
+        WR.Free;
+      end;
+    except
+      on E: Exception do begin
+        Ctxt.OutContent := ObjectToJSONDebug(E);
+        Ctxt.OutContentType := JSON_CONTENT_TYPE;
+        result := HTML_SERVERERROR;
+      end;
+    end;
+end;
+
 
 { TSQLHttpClientRequest }
 

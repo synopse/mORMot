@@ -117,13 +117,7 @@ uses
   SynMongoDB in '..\SynMongoDB.pas',
   {$ifndef NOVARIANTS}
   SynMustache in '..\SynMustache.pas',
-  {$ifndef FPC}
-  {$ifndef CPU64}
-  SynSMAPI in '..\SynSMAPI.pas',
-  SynSM in '..\SynSM.pas',
-  {$endif CPU64}
   mORMotWrappers in 'mORMotWrappers.pas',
-  {$endif FPC}
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
@@ -131,6 +125,10 @@ uses
   {$endif NOVARIANTS}
   {$endif LVCL}
   {$ifdef MSWINDOWS}
+  {$ifndef CPU64}
+  SynSMAPI in '..\SynSMAPI.pas',
+  SynSM in '..\SynSM.pas',
+  {$endif CPU64}
   SynBigTable in '..\SynBigTable.pas',
   {$ifndef LVCL}
   SynZipFiles in '..\SynZipFiles.pas',

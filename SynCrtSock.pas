@@ -822,7 +822,7 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders, aInContent, aInContentType: SockString);
+    procedure Prepare(const aURL,aMethod,aInHeaders,aInContent,aInContentType: SockString);
     /// input parameter containing the caller URI
     property URL: SockString read fURL;
     /// input parameter containing the caller method (GET/POST...)

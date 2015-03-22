@@ -940,8 +940,6 @@ unit mORMot;
       service instance execution and release to be locked for the whole interface
     - added TServiceFactoryServer.ByPassAuthentication property to release
       authentication for a given interface-based service
-    - new TInterfaceFactory.CreateFakeInstance() method for easy mocking of
-      any interface, via some event callbacks
     - stub creation speed-up by using a shared PAGE_EXECUTE_READWRITE buffer
     - added TServiceMethod.DefaultResult property, to be used for stubs/mocks
     - TServiceFactory.Create() and its children will now always have an optional
@@ -2187,8 +2185,7 @@ type
     /// the declared name of the type ('String','Word','RawUnicode'...)
     Name: ShortString;
     /// get the class type information
-    function ClassType: PClassType;
-      {$ifdef HASINLINE}inline;{$endif}
+    function ClassType: PClassType; {$ifdef HASINLINE}inline;{$endif}
     /// create an instance of the corresponding class
     // - will call TObject.Create, or TSQLRecord.Create virtual constructor
     // - will raise EParsingException if class cannot be constructed on the fly,
@@ -2196,45 +2193,38 @@ type
     function ClassCreate: TObject;
     /// get the SQL type of this Delphi class type
     // - returns either sftObject, sftID, sftMany or sftUnknown
-    function ClassSQLFieldType: TSQLFieldType;
-       {$ifdef HASINLINE}inline;{$endif}
+    function ClassSQLFieldType: TSQLFieldType; {$ifdef HASINLINE}inline;{$endif}
     /// get the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
-    // actually stored, and ignore e.g. any textual conversion 
+    // actually stored, and ignore e.g. any textual conversion
     function ClassFieldCount(onlyWithoutGetter: boolean): integer;
     /// for ordinal types, get the storage size and sign
-    function OrdType: TOrdType;
-      {$ifdef HASINLINE}inline;{$endif}
+    function OrdType: TOrdType; {$ifdef HASINLINE}inline;{$endif}
     /// for set types, get the type information of the corresponding enumeration
     function SetEnumType: PEnumType;
     /// for gloating point types, get the storage size and procision
-    function FloatType: TFloatType;
-      {$ifdef HASINLINE}inline;{$endif}
+    function FloatType: TFloatType; {$ifdef HASINLINE}inline;{$endif}
     /// get the SQL type of this Delphi type, as managed with the database driver
     function GetSQLFieldType: TSQLFieldType;
     /// fast and easy find if a class type inherits from a specific class type
     function InheritsFrom(AClass: TClass): boolean;
     /// get the enumeration type information
-    function EnumBaseType: PEnumType;
-      {$ifdef HASINLINE}inline;{$endif}
+    function EnumBaseType: PEnumType; {$ifdef HASINLINE}inline;{$endif}
     /// get the record type information
-    function RecordType: PRecordType;
-      {$ifdef HASINLINE}inline;{$endif}
+    function RecordType: PRecordType; {$ifdef HASINLINE}inline;{$endif}
     /// get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the dynamic array size (in bytes) of the stored item
-    function DynArrayItemSize: integer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function DynArrayItemSize: integer; {$ifdef HASINLINE}inline;{$endif}
     /// recognize most used string types, returning their code page
     // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
     // - will return the exact code page since Delphi 2009, from RTTI
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    function AnsiStringCodePage: integer;
-      {$ifdef UNICODE}inline;{$endif}
+    function AnsiStringCodePage: integer; {$ifdef UNICODE}inline;{$endif}
     /// get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
@@ -4796,6 +4786,9 @@ type
     procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
     procedure InternalSetTableFromTableName(const TableName: RawUTF8); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
+    /// event raised by ExecuteMethod() for interface parameters
+    // - match TServiceMethodInternalExecuteCallback signature
+    procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj);
     /// initialize the execution context
     // - this method has been declared as protected, since it shuold never be
     // called outside the TSQLRestServer.URI() method workflow
@@ -8584,6 +8577,13 @@ type
   // creation of a per-interface dedicated thread
   TServiceMethodOptions = set of TServiceMethodOption;
 
+  /// callback called by TServiceMethod.InternalExecute to process an
+  // interface callback parameter
+  // - implementation should set the Obj local variable to an instance of
+  // a fake class implementing the aParamInfo interface
+  TServiceMethodInternalExecuteCallback =
+    procedure(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj) of object;
+
   /// describe an interface-based service provider method
   TServiceMethod = {$ifndef UNICODE}object{$else}record{$endif}
   public
@@ -8658,7 +8658,8 @@ type
     function InternalExecute(Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
       Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-      BackgroundExecutionThread: TSynBackgroundThreadMethod): boolean;
+      BackgroundExecutionThread: TSynBackgroundThreadMethod;
+      OnCallback: TServiceMethodInternalExecuteCallback): boolean;
     /// retrieve a var / out / result argument index in Args[] from its name
     // - search is case insensitive
     // - returns -1 if not found
@@ -8934,7 +8935,7 @@ type
     destructor Destroy; override;
   end;
 
-  /// event used by TInterfaceFactory.CreateFakeInstance() to run a method
+  /// event used by TInterfaceFactory to run a method from a fake instance
   // - aMethod will specify which method is to be executed
   // - aParams will contain the input parameters, encoded as a JSON array
   // - shall return TRUE on success, or FALSE in case of failure, with
@@ -8947,7 +8948,7 @@ type
     const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
     aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
 
-  /// event called when destroying a TInterfaceFactory.CreateFakeInstance()
+  /// event called when destroying a TInterfaceFactory's fake instance
   /// - this method will be run when the fake class instance is destroyed
   // (e.g. if aInstanceCreation is sicClientDriven, to notify the server
   // than the client life time just finished)
@@ -9005,13 +9006,6 @@ type
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
     class function GetUsedInterfaces: TObjectList;
-
-    /// create a fake class instance implementing the corresponding interface
-    // - aInvoke event will be called at method execution
-    // - optional aNotifyDestroy event will be called when the fake
-    // implementation instance will be released (e.g. for server notification)
-    function CreateFakeInstance(aInvoke: TOnFakeInstanceInvoke;
-      aNotifyDestroy: TOnFakeInstanceDestroy=nil): TInterfacedObject; virtual;
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -10327,6 +10321,9 @@ type
     // - is defined as virtual so that e.g. TServiceContainerClient would
     // automatically register the interface, if it was not already done
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
+    /// notify the other side that the given Callback event interface is released
+    // - this default implementation will do nothing
+    function CallBackUnRegister(const Callback: IInvokable): boolean; virtual;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -10348,8 +10345,11 @@ type
   TServiceContainerServer = class(TServiceContainer)
   protected
     fPublishSignature: boolean;
+    fFakeCallbacks: TObjectListLocked; // TInterfacedObjectFakeServer instances
     /// make some garbage collection when session is finished
     procedure OnCloseSession(aSessionID: cardinal); virtual;
+    procedure FakeCallbackAdd(aFakeInstance: TObject);
+    procedure FakeCallbackRemove(aFakeInstance: TObject);
   public
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
@@ -10366,6 +10366,8 @@ type
       const aInterfaces: array of PTypeInfo;
       aInstanceCreation: TServiceInstanceImplementation;
       aSharedImplementation: TInterfacedObject; const aContractExpected: RawUTF8): TServiceFactoryServer;
+    /// finalize the service container
+    destructor Destroy; override; 
     /// defines if the "method":"_signature_" or /root/Interface._signature
     // pseudo method is available to retrieve the whole interface signature,
     // encoded as a JSON object
@@ -10385,8 +10387,26 @@ type
     // - in this case, the interface will be registered with sicClientDriven
     // implementation method
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; override;
+    /// notify the other side that the given Callback event interface is released
+    // - this overriden implementation will check the private fFakeCallbacks list
+    function CallBackUnRegister(const Callback: IInvokable): boolean; override;
   end;
 
+  /// TInterfacedObject class which would notify a REST server when it is released
+  // - could be used when implementing event callbacks as interfaces, so that
+  // the other side instance would
+  TInterfacedCallback = class(TInterfacedObject)
+  protected
+    fRest: TSQLRest;
+    fInterface: TGUID;
+  public
+    /// initialize the instance for a given REST and callback interface
+    constructor Create(aRest: TSQLRest; const aGUID: TGUID);
+    /// finalize the instance, and notify the TSQLRestServer that the callback
+    // is now unreachable
+    destructor Destroy; override;
+  end;
+  
   /// for TSQLRestCache, stores a table values
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
@@ -10569,8 +10589,11 @@ type
   /// used to store the execution parameters for a TSQLRest instance
   TSQLRestAcquireExecution = class(TSynCriticalSection)
   public
+    /// how read or write operations will be executed
     Mode: TSQLRestServerAcquireMode;
+    /// delay before failing to acquire the lock
     LockedTimeOut: cardinal;
+    /// background thread instance (if any)
     Thread: TSynBackgroundThreadMethod;
     /// finalize the memory structure, and the associated background thread
     destructor Destroy; override;
@@ -10604,7 +10627,7 @@ type
       Level: TSynLogInfo); overload;
     /// internal method used by Delete(Table,SQLWhere) method
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-      var IDs: TIDDynArray): boolean; 
+      var IDs: TIDDynArray): boolean;
     /// retrieve the server time stamp
     // - default implementation will use fServerTimeStampOffset to compute
     // the value from PC time (i.e. NowUTC+fServerTimeStampOffset as TTimeLog)
@@ -10652,7 +10675,7 @@ type
     // - this default implementation will trigger an EORMException
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
-    /// any overriden TSQLRest class should call it in the initialization section 
+    /// any overriden TSQLRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
     // inherited classes should unserialize the other aDefinition properties by
     // overriding this method, in a reverse logic to overriden DefinitionTo()
@@ -11668,6 +11691,12 @@ type
     procedure QueryAddCustom(aTypeInfo: pointer; aEvent: TSQLQueryEvent;
       const aOperators: TSQLQueryOperators);
   end;
+
+  /// event signature used to notify a client callback
+  // - implemented e.g. by TSQLHttpServer.NotifyCallback
+  TSQLRestServerNotifyCallback = function(aSender: TSQLRestServer;
+    aRequest: TObject; const aInterfaceDotMethodName,aParams: RawUTF8;
+    aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean of object;
 
 {$ifdef MSWINDOWS}
   /// Server thread accepting connections from named pipes
@@ -12791,7 +12820,6 @@ type
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
-
     /// virtual methods which will perform CRUD operations on the main DB
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; virtual; abstract;
     function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; virtual; abstract;
@@ -12839,6 +12867,10 @@ type
     // - Ctxt is nil if the session is closed due to a timeout
     // - Ctxt is not nil if the session is closed explicitly by the client 
     OnSessionClosed: TNotifySQLSession;
+    /// this event will be executed to push notifications from the server to
+    // a remote client, using a (fake) interface parameter
+    // - is nil by default, but may point e.g. to TSQLHttpServer.NotifyCallback
+    OnNotifyCallback: TSQLRestServerNotifyCallback;
     /// this property can be used to specify the URI parmeters to be used
     // for query paging
     // - is set by default to PAGINGPARAMETERS_YAHOO constant by
@@ -14167,6 +14199,46 @@ type
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string): boolean of object;
 
+  /// store the references to active interface callbacks on a REST instance
+  TSQLRestCallbacks = class
+  protected
+    fCurrentID: integer;
+    function UnRegisterByIndex(index: integer): boolean; 
+    function Find(aID: integer): integer; 
+  public
+    /// the associated REST instance
+    Owner: TSQLRest;
+    /// how many callbacks are registered
+    Count: integer;
+    /// list of registered interface callbacks
+    List: array of record
+      /// the identifier of the callback, as sent to the server side
+      // - computed from TSQLRestClientURICallbacks.fCurrentID counter
+      ID: integer;
+      /// pointer typecast to the associated IInvokable variable
+      Instance: pointer;
+      //// information about the associated IInvokable
+      Factory: TInterfaceFactory;
+    end;
+    constructor Create(aOwner: TSQLRest);
+    /// to be called before multi-thread access to the List[] low-level content
+    procedure Enter; {$ifdef HASINLINE}inline;{$endif}
+    /// to be called after multi-thread access to the List[] low-level content
+    procedure Leave; {$ifdef HASINLINE}inline;{$endif}
+    /// register a callback event interface instance from a new computed ID
+    function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
+    /// register a callback event interface instance from its supplied ID
+    procedure DoRegister(aID: Integer; aInstance: pointer; aFactory: TInterfaceFactory); overload;
+    /// delete a callback event from the internal list, as specified by its ID
+    function UnRegister(aID: integer): boolean; overload;
+    /// delete all callback events from the internal list, as specified by its instance
+    // - note that the same IInvokable instance may be registered for several IDs
+    function UnRegister(aInstance: pointer): boolean; overload;
+    /// find a callback event from the internal list, as specified by its ID
+    function FindInstance(aID: Integer; out aFactory: TInterfaceFactory): pointer;
+  end;
+
+    
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
@@ -14196,6 +14268,10 @@ type
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
     fRemoteLogThread: TObject; // private TRemoteLogThread
+    fFakeCallbacks: TSQLRestCallbacks;
+    function FakeCallbackRegister(Sender: TServiceFactoryClient;
+      const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
+      ParamValue: Pointer): integer; virtual;
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -27804,7 +27880,8 @@ begin
   if self<>nil then begin
     fAcquireExecution[execORMWrite].Enter;
     try
-      if (fTransactionActiveSession<>0) and (fTransactionActiveSession=SessionID) then begin
+      if (fTransactionActiveSession<>0) and
+         (fTransactionActiveSession=SessionID) then begin
         fTransactionActiveSession := 0; // by default, just release flag
         fTransactionTable := nil;
       end;
@@ -27819,7 +27896,8 @@ begin
   if self<>nil then begin
     fAcquireExecution[execORMWrite].Enter;
     try
-      if (fTransactionActiveSession<>0) and (fTransactionActiveSession=SessionID) then begin
+      if (fTransactionActiveSession<>0) and
+         (fTransactionActiveSession=SessionID) then begin
         fTransactionActiveSession := 0; // by default, just release flag
         fTransactionTable := nil;
       end;
@@ -28905,6 +28983,126 @@ begin
 end;
 
 
+{ TSQLRestCallbacks }
+
+constructor TSQLRestCallbacks.Create(aOwner: TSQLRest);
+begin
+  Owner := aOwner;
+end;
+
+procedure TSQLRestCallbacks.Enter;
+begin
+  Owner.fAcquireExecution[execSOAByInterface].Acquire;
+end;
+
+procedure TSQLRestCallbacks.Leave;
+begin
+  Owner.fAcquireExecution[execSOAByInterface].Release;
+end;
+
+function TSQLRestCallbacks.Find(aID: integer): integer;
+begin
+  if self<>nil then
+    for result := 0 to Count-1 do
+      if List[result].ID=aID then
+        exit;
+  result := -1;
+end;
+
+function TSQLRestCallbacks.UnRegisterByIndex(index: integer): boolean;
+begin
+  if cardinal(index)>=cardinal(Count) then begin
+    result := false;
+    exit;
+  end;
+  dec(Count);
+  if index<Count then
+    Move(List[index+1],List[index],(Count-index)*sizeof(List[index]));
+  result := true;
+end;
+
+function TSQLRestCallbacks.UnRegister(aInstance: pointer): boolean;
+var i: integer;
+begin
+  result := false;
+  if (self=nil) or (Count=0) then
+    exit;
+  Enter;
+  try
+    for i := Count-1 downto 0 do
+      if List[i].Instance=aInstance then begin
+        UnRegisterByIndex(i);
+        result := true;
+      end;
+  finally
+    Leave;
+  end;
+end;
+
+function TSQLRestCallbacks.UnRegister(aID: integer): boolean;
+begin
+  if (self=nil) or (Count=0) or (aID<=0) then begin
+    result := false;
+    exit;
+  end;
+  Enter;
+  try
+    result := UnRegisterByIndex(Find(aID));
+  finally
+    Leave;
+  end;
+end;
+
+function TSQLRestCallbacks.FindInstance(aID: Integer;
+  out aFactory: TInterfaceFactory): pointer;
+var index: Integer;
+begin
+  if (self=nil) or (Count=0) or (aID<=0) then begin
+    result := nil;
+    exit;
+  end;
+  Enter;
+  try
+    index := Find(aID);
+    if index<0 then
+      result := nil else begin
+      result := List[index].Instance;
+      aFactory := List[index].Factory;
+    end;
+  finally
+    Leave;
+  end;
+end;
+
+procedure TSQLRestCallbacks.DoRegister(aID: integer;
+  aInstance: pointer; aFactory: TInterfaceFactory);
+begin
+  if aID<=0 then
+    exit;
+  Enter;
+  try
+    if length(List)>=Count then
+      SetLength(List,Count+32);
+    with List[Count] do begin
+      ID := aID;
+      Instance := aInstance;
+      Factory := aFactory;
+    end;
+    inc(Count);
+  finally
+    Leave;
+  end;
+end;
+
+function TSQLRestCallbacks.DoRegister(aInstance: pointer;
+  aFactory: TInterfaceFactory): integer;
+begin
+  result := InterlockedIncrement(fCurrentID);
+  DoRegister(result,aInstance,aFactory);
+end;
+
+
+
 { TSQLRestClientURI }
 
 function TSQLRestClientURI.EngineExecute(const SQL: RawUTF8): boolean;
@@ -29242,6 +29440,8 @@ constructor TSQLRestClientURI.Create(aModel: TSQLModel);
 begin
   inherited Create(aModel);
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
+  fFakeCallbacks := TSQLRestCallbacks.Create(self);
+  fPrivateGarbageCollector.Add(fFakeCallbacks);
   InitializeCriticalSection(fMutex);
 end;
 
@@ -29445,6 +29645,16 @@ begin
 end;
 
 {$endif LVCL}
+
+function TSQLRestClientURI.FakeCallbackRegister(Sender: TServiceFactoryClient;
+  const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
+  ParamValue: Pointer): integer;
+begin
+  raise EServiceException.CreateUTF8('% does not support interface parameters '+
+    'for %.%(%: %): consider using another kind of client',
+    [self,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,
+     ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
+end;
 
 function TSQLRestClientURI.URI(const url, method: RawUTF8;
   Resp, Head, SendData: PRawUTF8): Int64Rec;
@@ -30299,6 +30509,7 @@ begin
   fLogClass.Enter(self,'Shutdown').
     Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
   {$endif}
+  OnNotifyCallback := nil; 
   fSessions.Lock;
   try
     if fShutdownRequested then
@@ -41134,15 +41345,20 @@ begin
     result := TServiceFactory(fList.Objects[aIndex]);
 end;
 
+function TServiceContainer.CallBackUnRegister(const Callback: IInvokable): boolean;
+begin
+  result := false; // nothing to be done here
+end;
+
+
+{ TInterfacedObjectFake }
+
 const
   // this is used to avoid creating dynamic arrays if not needed
   MAX_METHOD_ARGS = 32;
 
   // QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
-
-
-{ TInterfacedObjectFake (private class for TInterfaceFactory.CreateFakeInstance) }
 
 // see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 
@@ -41226,6 +41442,7 @@ type
   end;
 
   /// instances of this class will emulate a given interface
+  // - as used by TInterfaceFactory.CreateFakeInstance
   TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
   protected
     fVTable: PPointerArray;
@@ -41235,10 +41452,38 @@ type
     function Fake_Release: Integer; stdcall;
     function SelfFromInterface: TInterfacedObjectFake;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+    procedure InterfaceWrite(W: TJSONSerializer; const aMethod: TServiceMethod;
+      const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+    /// retrieve one local instance of this interface
+    procedure Get(out Obj);
+  end;
+
+  TInterfacedObjectFakeClient = class(TInterfacedObjectFake)
+  protected
+    fClient: TServiceFactoryClient;
+    procedure InterfaceWrite(W: TJSONSerializer; const aMethod: TServiceMethod;
+      const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); override;
+  public
+    constructor Create(aClient: TServiceFactoryClient;
+      aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+  end;
+
+  TInterfacedObjectFakeServer = class(TInterfacedObjectFake)
+  protected
+    fServer: TSQLRestServer;
+    fLowLevelRequest: TObject;
+    fInterface: TInterfaceFactory;
+    function CallbackInvoke(const aMethod: TServiceMethod;
+      const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+      aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
+  public
+    constructor Create(aRequest: TSQLRestServerURIContext;
+      aInterface: TInterfaceFactory; aID: Integer);
+    destructor Destroy; override;
   end;
 
   EInterfaceStub = class(EInterfaceFactoryException)
@@ -41294,6 +41539,12 @@ begin
     result := E_NOINTERFACE;
 end;
 
+procedure TInterfacedObjectFake.Get(out Obj);
+begin
+  pointer(Obj) := @fVTable;
+  _AddRef;
+end;
+
 procedure IgnoreComma(var P: PUTF8Char);
 begin
   if P<>nil then begin
@@ -41311,7 +41562,7 @@ end;
 var method: ^TServiceMethod;
 procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 begin
-  raise EInterfaceFactoryException.CreateUTF8('Invalid %.FakeCall(%.%)%',
+  raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
     [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,FormatUTF8(Format,Args)]);
 end;
 var resultType: TServiceMethodValueType; // type of value stored into result
@@ -41327,12 +41578,11 @@ var Params: TJSONSerializer;
     Value: array[0..MAX_METHOD_ARGS-1] of pointer;
     I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
 begin
-  method := @fFactory.fMethods[aCall.MethodIndex];
   Params := TJSONSerializer.CreateOwnedStream;
   try
     // create the parameters
     FillChar(I64s,method^.ArgsUsedCount[smvv64]*sizeof(Int64),0);
-    for arg := 0 to high(method^.Args) do
+    for arg := 1 to high(method^.Args) do
     with method^.Args[arg] do
     if ValueType>smvSelf then begin
       case RegisterIdent of
@@ -41361,8 +41611,12 @@ begin
       end;
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
-      if ValueType=smvDynArray then
+      case ValueType of
+      smvDynArray:
         DynArrays[IndexVar].Init(ArgTypeInfo,V^);
+      smvInterface:
+        InterfaceWrite(Params,method^,method^.Args[arg],V^);
+      end;
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
         AddJSON(Params,V);
@@ -41374,12 +41628,13 @@ begin
       ServiceCustomAnswerPoint := nil;
     if not fInvoke(method^,Params.Text,@ResArray,@Error,@fClientDrivenID,
        ServiceCustomAnswerPoint) then
-      RaiseError('%',[Error]);
+      RaiseError('''%''',[Error]);
   finally
     Params.Free;
   end;
   // retrieve method result and var/out parameters content
-  if ServiceCustomAnswerPoint=nil then begin
+  if ServiceCustomAnswerPoint=nil then
+  if ResArray<>'' then begin
     R := pointer(ResArray);
     if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
     resultAsJSONObject := false; // [value,...] JSON array format
@@ -41415,11 +41670,8 @@ begin
           end;
           IgnoreComma(R);
         end;
-        smvInterface: begin
-          R := GotoNextJSONItem(R,1); // TODO: interface as callback
-          if R=nil then
-            RaiseError('returned interface',[]);
-        end;
+        smvInterface:
+          RaiseError('unexpected var/out interface',[]);
         smvRawJSON:
           if (R<>nil) and (R^=']') then
             PRawUTF8(V)^ := '' else begin
@@ -41493,7 +41745,9 @@ begin
       if not method^.ArgResultNext(arg) then
         break; // end of JSON array
     until false;
-  end;
+  end else
+    if method^.ArgsOutputValuesCount>0 then
+      RaiseError('method returned value, but ResArray=''''',[]);
 end;
 begin
   // WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
@@ -41501,7 +41755,10 @@ begin
   // forged to call a remote SOA server or mock/stub an interface
   self := SelfFromInterface;
   if aCall.MethodIndex>=fFactory.fMethodsCount then
-    RaiseError('out of range method: %>=%',[aCall.MethodIndex,fFactory.fMethodsCount]);
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.FakeCall(%.%) failed: out of range method %>=%',
+      [self,fFactory.fInterfaceTypeInfo^.Name,aCall.MethodIndex,fFactory.fMethodsCount]);
+  method := @fFactory.fMethods[aCall.MethodIndex];
   if not Assigned(fInvoke)then
     RaiseError('fInvoke=nil',[]);
   result := 0;
@@ -41518,6 +41775,81 @@ begin
   {$endif}
 end;
 {$endif CPUARM}
+
+procedure TInterfacedObjectFake.InterfaceWrite(W: TJSONSerializer;
+  const aMethod: TServiceMethod; const aParamInfo: TServiceMethodArgument;
+  aParamValue: Pointer);
+begin
+  raise EInterfaceFactoryException.CreateUTF8('%: unhandled %.%(%: %) argument',
+    [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.URI,
+     aParamInfo.ParamName^,aParamInfo.ArgTypeName^]);
+end;
+
+constructor TInterfacedObjectFakeClient.Create(aClient: TServiceFactoryClient;
+  aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+begin
+  fClient := aClient;
+  inherited Create(aClient.fInterface,aInvoke,aNotifyDestroy);
+end;
+
+procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
+  const aMethod: TServiceMethod; const aParamInfo: TServiceMethodArgument;
+  aParamValue: Pointer);
+begin
+  W.Add(fClient.fClient.FakeCallbackRegister(
+    fClient,aMethod,aParamInfo,aParamValue));
+end;
+
+constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContext;
+  aInterface: TInterfaceFactory; aID: Integer);
+begin
+  fServer := aRequest.Server;
+  fLowLevelRequest := aRequest.Call^.LowLevelRequest;
+  fInterface := aInterface;
+  fClientDrivenID := aID;
+  inherited Create(fInterface,CallbackInvoke,nil);
+end;
+
+destructor TInterfacedObjectFakeServer.Destroy;
+begin
+  with (fServer.Services as TServiceContainerServer) do
+    if fFakeCallbacks<>nil then
+      FakeCallbackRemove(self);
+  inherited Destroy;
+end;
+
+function TInterfacedObjectFakeServer.CallbackInvoke(const aMethod: TServiceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+begin // here aClientDrivenID^ = FakeCall ID
+  if not Assigned(fServer.OnNotifyCallback) then
+    raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
+      [fServer,aMethod.InterfaceDotMethodName]);
+  if aMethod.ArgsOutputValuesCount=0 then
+    aResult := nil; // no result -> asynchronous non blocking callback
+  result := fServer.OnNotifyCallback(fServer,
+    fLowLevelRequest,aMethod.InterfaceDotMethodName,
+    aParams,aClientDrivenID^,aResult,aErrorMsg);
+end;
+
+procedure TSQLRestServerURIContext.ExecuteCallback(var Par: PUTF8Char;
+  ParamInterfaceInfo: PTypeInfo; out Obj);
+var ID: integer;
+    factory: TInterfaceFactory;
+    instance: TInterfacedObjectFakeServer;
+begin
+  ID := GetInteger(GetJSONField(Par,Par));
+  if ID<=0 then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.ExecuteCallback ID=% for % parameter at %',
+      [self,ID,ParamInterfaceInfo^.Name,URIWithoutSignature]);
+  if Par=nil then
+    Par := @NULL_SHORTSTRING; // as expected by TServiceMethod.InternalExecute
+  factory := TInterfaceFactory.Get(ParamInterfaceInfo);
+  instance := TInterfacedObjectFakeServer.Create(Self,factory,ID);
+  instance.Get(Obj);
+  //(Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
+end;
 
 
 { TInterfacedObjectFromFactory }
@@ -41639,7 +41971,7 @@ end;
 class function TInterfaceFactory.Get(aInterface: PTypeInfo): TInterfaceFactory;
 var i: integer;
 begin
-  if aInterface=nil then
+  if (aInterface=nil) or (aInterface^.Kind<>tkInterface) then
     raise EInterfaceFactoryException.CreateUTF8('%.Get(nil)',[self]);
   EnterInterfaceFactoryCache;
   try
@@ -42124,12 +42456,6 @@ begin
     end;
   end;
   result := pointer(fFakeVTable);
-end;
-
-function TInterfaceFactory.CreateFakeInstance(aInvoke: TOnFakeInstanceInvoke;
-  aNotifyDestroy: TOnFakeInstanceDestroy): TInterfacedObject;
-begin
-  result := TInterfacedObjectFake.Create(self,aInvoke,aNotifyDestroy);
 end;
 
 
@@ -43730,7 +44056,7 @@ begin
         with T^.Entries[i] do
         for j := 0 to high(aInterfaces) do
           if (UID[j]<>nil) and IsEqualGUID(UID[j]^,IID{$ifdef FPC}^{$endif}) then begin
-            UID[j] := nil;
+            UID[j] := nil; // mark TGUID found
             break;
           end;
     C := C.ClassParent;
@@ -43763,6 +44089,35 @@ begin
     with TServiceFactoryServer(Index(i)) do
     if InstanceCreation=sicPerSession then
       InternalInstanceRetrieve(Inst,INTERNALINSTANCERETRIEVE_FREEINSTANCE);
+end;
+
+destructor TServiceContainerServer.Destroy;
+begin
+  FreeAndNil(fFakeCallbacks);
+  inherited Destroy;
+end;
+
+procedure TServiceContainerServer.FakeCallbackAdd(aFakeInstance: TObject);
+begin
+  if self=nil then
+    exit;
+  if fFakeCallbacks=nil then
+    fFakeCallbacks := TObjectListLocked.Create;
+  fFakeCallbacks.Lock;
+  fFakeCallbacks.Add(aFakeInstance);
+  fFakeCallbacks.UnLock;
+end;
+
+procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
+var i: integer;
+begin
+  if (self=nil) or (fFakeCallbacks=nil) then
+    exit;
+  fFakeCallbacks.Lock;
+  i := fFakeCallbacks.IndexOf(aFakeInstance);
+  if i>=0 then
+    fFakeCallbacks.Delete(i);
+  fFakeCallbacks.UnLock;
 end;
 
 
@@ -43891,6 +44246,7 @@ constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer; aInterface
   aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUTF8;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
+var m,a: integer;
 begin
   // extract RTTI from the interface
   if aInstanceCreation<>sicPerThread then
@@ -43934,6 +44290,13 @@ begin
     end;
   end;
   SetLength(fStats,fInterface.MethodsCount);
+  for m := 0 to fInterface.MethodsCount-1 do
+    with fInterface.Methods[m] do
+    if ArgsUsedCount[smvvInterface]<>0 then
+      for a := 1 to length(Args)-1 do
+        if Args[a].ValueType=smvInterface then begin // prepare callback event
+
+        end;
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -44232,7 +44595,7 @@ begin
              WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
              fExecution[Ctxt.ServiceMethodIndex].Options,
              Ctxt.ForceServiceResultAsJSONObject,
-             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif}) then begin
+             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif},Ctxt.ExecuteCallback) then begin
           Error('execution failed (probably due to bad input parameters)');
           exit; // wrong request
         end;
@@ -44498,7 +44861,7 @@ begin
                  {$endif}
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[]);
-  smvInterface:  WR.AddShort('null'); // TODO: interface as callback
+  smvInterface:  ; // already written by TInterfacedObjectFake.InterfaceWrite
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
   smvVariant:    WR.AddVariantJSON(PVariant(V)^,twJSONEscape);
@@ -44527,7 +44890,7 @@ begin
   case ValueType of
   smvBoolean:   WR.AddShort('false,');
   smvObject:    WR.AddShort('null,'); // may raise an error on the client side
-  smvInterface: WR.AddShort('null,'); // TODO: interface as callback
+  smvInterface: WR.AddShort('0,'); 
   smvDynArray:  WR.AddShort('[],');
   smvRecord:   begin
     WR.AddVoidRecordJSON(ArgTypeInfo);
@@ -44730,7 +45093,8 @@ end;
 function TServiceMethod.InternalExecute(Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
   Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-  BackgroundExecutionThread: TSynBackgroundThreadMethod): boolean;
+  BackgroundExecutionThread: TSynBackgroundThreadMethod;
+  OnCallback: TServiceMethodInternalExecuteCallback): boolean;
 var RawUTF8s: TRawUTF8DynArray;
     Strings: TStringDynArray;
     WideStrings: TWideStringDynArray;
@@ -44808,8 +45172,6 @@ begin
       case ValueType of
       smvObject:
         Objects[IndexVar] := ArgTypeInfo^.ClassCreate;
-      smvInterface:
-        Interfaces[IndexVar] := nil; // TODO: interface as callback
       smvDynArray:
         with DynArrays[IndexVar] do begin
           Wrapper.Init(ArgTypeInfo,Value);
@@ -44839,9 +45201,11 @@ begin
             exit;
           IgnoreComma(Par);
         end;
-        smvInterface: begin
-          Par := GotoNextJSONItem(Par,1); // TODO: interface as callback
-        end;
+        smvInterface:
+          if Assigned(OnCallback) then
+            OnCallback(Par,ArgTypeInfo,Interfaces[IndexVar]) else
+            raise EInterfaceFactoryException.CreateUTF8(
+              'Unhandled %(%: %) parameter',[URI,ParamName^,ArgTypeName^]);
         smvRawJSON:
           RawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
         smvDynArray: begin
@@ -44858,7 +45222,7 @@ begin
         smvBoolean..smvWideString: begin
           Val := GetJSONField(Par,Par,@wasString,@EndOfObject);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
-            exit;  // 'null' will set Val=nil and Par<>nil 
+            exit;  // 'null' will set Val=nil and Par<>nil
           if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
             exit;
           case ValueType of
@@ -44972,7 +45336,7 @@ begin
       for i := 0 to ArgsUsedCount[smvvObject]-1 do
         Objects[i].Free;
       for i := 0 to ArgsUsedCount[smvvInterface]-1 do
-        IUnknown(Interfaces[i]) := nil;
+        IUnknown(Interfaces[i]) := nil; 
       for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
         with DynArrays[i] do
           if IsObjArray then
@@ -45011,21 +45375,48 @@ begin
     result := AddInterface(aTypeInfo,sicClientDriven);
 end;
 
+function TServiceContainerClient.CallBackUnRegister(const Callback: IInvokable): boolean;
+begin
+  result := (fRest as TSQLRestClientURI).fFakeCallbacks.UnRegister(pointer(Callback));
+end;
+
+
+{ TInterfacedCallback }
+
+constructor TInterfacedCallback.Create(aRest: TSQLRest; const aGUID: TGUID);
+begin
+  inherited Create;
+  fRest := aRest;
+  fInterface := aGUID;
+end;
+
+destructor TInterfacedCallback.Destroy;
+var Obj: pointer; // Obj: IInvokable here raises a EStackOverflow
+begin
+  if (fRest<>nil) and (fRest.Services<>nil) then
+    if GetInterface(fInterface,Obj) then
+      fRest.Services.CallBackUnRegister(IInvokable(Obj));
+  inherited Destroy;
+end;
+
 
 { TServiceFactoryClient }
 
 function TServiceFactoryClient.CreateFakeInstance: TInterfacedObject;
+var notify: TOnFakeInstanceDestroy;
 begin
   if fInstanceCreation=sicClientDriven then
-    result := fInterface.CreateFakeInstance(Invoke,NotifyInstanceDestroyed) else
-    result := fInterface.CreateFakeInstance(Invoke);
+    notify := NotifyInstanceDestroyed else
+    notify := nil;
+  result := TInterfacedObjectFakeClient.Create(self,Invoke,notify);
 end;
 
 function TServiceFactoryClient.Invoke(const aMethod: TServiceMethod;
   const aParams: RawUTF8; aResult: PRawUTF8; aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
-  result := InternalInvoke(aMethod.URI,aParams,aResult,aErrorMsg,aClientDrivenID,aServiceCustomAnswer);
+  result := InternalInvoke(
+    aMethod.URI,aParams,aResult,aErrorMsg,aClientDrivenID,aServiceCustomAnswer);
 end;
 
 function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
@@ -45033,6 +45424,7 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   aClientDrivenID: PCardinal=nil; aServiceCustomAnswer: PServiceCustomAnswer=nil): boolean;
 var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
+    status: integer;
 begin
   result := false;
   if Self=nil then
@@ -45051,9 +45443,13 @@ begin
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
   // call remote server
-  if fClient.URI(uri,'POST',@resp,@head,@sent).Lo<>HTML_SUCCESS then begin
-    if aErrorMsg<>nil then
-      aErrorMsg^ := ': '+resp;
+  status := fClient.URI(uri,'POST',@resp,@head,@sent).Lo;
+  if status<>HTML_SUCCESS then begin
+    if aErrorMsg<>nil then begin
+      if resp='' then
+        aErrorMsg^ := FormatUTF8('URI % % returned status %',[uri,sent,status]) else
+        aErrorMsg^ := resp;
+    end;
     exit;
   end;
   // decode result

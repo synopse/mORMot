@@ -823,10 +823,10 @@ type
     procedure SOACallbackOnServerSide;
     /// launch the WebSockets-ready HTTP server
     procedure RunHttpServer;
-    /// test callbacks via interface-based services over binary WebSockets
-    procedure SOACallbackViaBinaryWebsockets;
     /// test callbacks via interface-based services over JSON WebSockets
     procedure SOACallbackViaJSONWebsockets;
+    /// test callbacks via interface-based services over binary WebSockets
+    procedure SOACallbackViaBinaryWebsockets;
   end;
 
   /// a test case for all shared DDD types and services
@@ -12806,7 +12806,14 @@ type
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchCallback(a: integer);
   end;
-  TBidirCallback = class(TInterfacedObject,IBidirCallback)
+  TBidirCallbackAsObject = class(TInterfacedObject,IBidirCallback)
+  protected
+    fValue: Integer;
+  public
+    function Value: Integer;
+    procedure AsynchEvent(a: integer);
+  end;
+  TBidirCallback = class(TInterfacedCallback,IBidirCallback)
   protected
     fValue: Integer;
   public
@@ -12823,6 +12830,7 @@ end;
 function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
 begin
   fCallback := callback;
+//  fCallback.AsynchEvent(d);
   result := d<>0;
 end;
 
@@ -12830,6 +12838,16 @@ procedure TBidirServer.LaunchCallback(a: integer);
 begin
   if Assigned(fCallback) then
     fCallback.AsynchEvent(a);
+end;
+
+procedure TBidirCallbackAsObject.AsynchEvent(a: integer);
+begin
+  inc(fValue,a);
+end;
+
+function TBidirCallbackAsObject.Value: integer;
+begin
+  result := fValue;
 end;
 
 procedure TBidirCallback.AsynchEvent(a: integer);
@@ -12888,17 +12906,31 @@ procedure TTestBidirectionalRemoteConnection.TestCallback(Rest: TSQLRest);
 var I: IBidirService;
     d: integer;
     subscribed: IBidirCallback;
+procedure WaitUntilNotified;
+var timeout: Int64;
+begin
+  timeout := GetTickCount64+1000;
+  repeat sleep(1) until (subscribed.value=6) or (GetTickCount64>timeout);
+  Check(subscribed.value=6);
+end;
 begin
   Rest.Services.Resolve(IBidirService,I);
   if CheckFailed(Assigned(I)) then
     exit;
-  subscribed := TBidirCallback.Create;
+  subscribed := TBidirCallbackAsObject.Create; // raw TInterfacedObject
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
     I.LaunchCallback(d);
   end;
-  Check(subscribed.value=6);
-end;
+  WaitUntilNotified;
+  Rest.Services.CallBackUnRegister(subscribed); // manual callback release notify
+  subscribed := TBidirCallback.Create(Rest,IBidirCallback); // auto notification
+  for d := -5 to 6 do begin
+    check(I.TestCallback(d,subscribed)=(d<>0));
+    I.LaunchCallback(d);
+  end;
+  WaitUntilNotified;
+end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(Ajax: boolean);
 var Client: TSQLHttpClientWebsockets;
@@ -12910,6 +12942,7 @@ begin
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
     TestRest(Client);
+    TestCallback(Client);
   finally
     Client.Free;
   end;

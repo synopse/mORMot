@@ -293,6 +293,9 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
+    function NotifyCallback(aSender: TSQLRestServer; aRequest: TObject;
+      const aInterfaceDotMethodName,aParams: RawUTF8; aFakeCallID: integer;
+      aResult, aErrorMsg: PRawUTF8): boolean;
   public
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
     // - raise a EHttpServer exception if binding failed
@@ -509,6 +512,7 @@ begin
         RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS else
         RestAccessRights := aRestAccessRights;
     end;
+    aServer.OnNotifyCallback := NotifyCallback;
     result := true;
   finally
     fLog.Add.Log(sllDebug,'%.AddServer(%,Root=%,Port=%)=%',
@@ -536,6 +540,7 @@ begin
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
       SetLength(fDBServers,n);
+      aServer.OnNotifyCallback := nil;
       result := true; // don't break here: may appear with another Security  
     end;
   finally
@@ -590,6 +595,7 @@ begin
     for i := 0 to high(aServers) do
     with fDBServers[i] do begin
       Server := aServers[i];
+      Server.OnNotifyCallback := NotifyCallback; 
       RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
       Security := aHttpServerSecurity;
     end;
@@ -874,6 +880,46 @@ begin
   if aServer<>nil then
     WebSocketsEnable(aServer.Model.Root,
       aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
+end;
+
+function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
+  aRequest: TObject; const aInterfaceDotMethodName, aParams: RawUTF8;
+  aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
+var ctxt: THttpServerRequest;
+    mode: TWebSocketProcessNotifyCallback;
+    status: cardinal;
+begin
+  result := false;
+  if fHttpServer.InheritsFrom(TWebSocketServerRest) and
+     aRequest.InheritsFrom(THttpServerRequest) then
+  try
+    ctxt := THttpServerRequest.Create(nil,THttpServerRequest(aRequest).CallingThread);
+    try
+      ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
+        aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
+      if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
+        mode := wscNonBlockWithoutAnswer else
+        mode := wscBlockWithAnswer;
+      status := TWebSocketServerRest(fHttpServer).WebSocketsCallback(ctxt,mode);
+      if status=HTML_SUCCESS then begin
+        if aResult<>nil then
+          aResult^ := Ctxt.OutContent;
+        result := true;
+      end else
+        if aErrorMsg<>nil then
+          if status=STATUS_WEBSOCKETBLOCKING then
+            aErrorMsg^ := FormatUTF8('%(%) already processing (nested '+
+              'blocking requests with WebSockets): use callbacks methods '+
+              'with no returned value',[aRequest,aFakeCallID]) else
+            aErrorMsg^ := FormatUTF8('% returned status=%',[aRequest,status]);
+    finally
+      ctxt.Free;
+    end;
+  except
+    on E: Exception do 
+      if aErrorMsg<>nil then
+        aErrorMsg^ := ObjectToJSONDebug(E);
+  end;
 end;
 
 

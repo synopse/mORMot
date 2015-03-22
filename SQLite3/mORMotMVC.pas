@@ -1366,7 +1366,7 @@ begin
             with fApplication.fFactory do
             if not Methods[fMethodIndex].InternalExecute([fApplication.fFactoryEntry],
                pointer(fInput),WR,action.RedirectToMethodName,action.ReturnedStatus,
-               [optVariantCopiedByReference],true,nil) then
+               [optVariantCopiedByReference],true,nil,nil) then
               raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
                 [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
             if not isAction then

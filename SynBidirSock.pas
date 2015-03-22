@@ -325,6 +325,7 @@ type
     fOwnerThread: TNotifiedThread;
     fAcquireConnectionLock: TRTLCriticalSection;
     fTryAcquireConnectionCount: Integer;
+    fAcquiredConnectionProcessingCount: integer;
     fProtocol: TWebSocketProtocol;
     fMaskSentFrames: byte;
     fLastPingTicks: Int64;
@@ -345,6 +346,7 @@ type
     procedure ProcessStop; virtual;
     function ProcessLoop: boolean; virtual;
     function ProcessOne: TWebSocketProcessOne; virtual;
+    function ProcessPendingCallbacks: boolean; virtual;
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; virtual; abstract;
     function NotifyCallback(aRequest: THttpServerRequest;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
@@ -409,11 +411,12 @@ type
     fProcess: TWebSocketProcessServer;
     fCallbackAcquireTimeOutMS: cardinal;
     fCallbackAnswerTimeOutMS: cardinal;
-    function NotifyCallback(Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
   public
     /// initialize the context, associated to a HTTP/WebSockets server instance
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
        {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif}); override;
+    /// push a notification to the client
+    function NotifyCallback(Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
     /// how many milliseconds the callback notification should wait acquiring
     // the connection before failing
     // - defaut is 5000, i.e. 5 seconds
@@ -621,6 +624,12 @@ type
     property CallbackAnswerTimeOutMS: cardinal
       read fCallbackAnswerTimeOutMS write fCallbackAnswerTimeOutMS;
   end;
+
+
+const
+  /// fake status returned by TWebSocketProcess.NotifyCallback when nested
+  // requests are detected
+  STATUS_WEBSOCKETBLOCKING = 1;
 
 
 implementation
@@ -1034,7 +1043,7 @@ end;
 
 destructor TWebSocketProcess.Destroy;
 begin
-  while fTryAcquireConnectionCount>0 do
+  while (fAcquiredConnectionProcessingCount>0) or (fTryAcquireConnectionCount>0) do
     SleepHiRes(2);
   DeleteCriticalSection(fAcquireConnectionLock);
   fProtocol.Free;
@@ -1137,27 +1146,43 @@ procedure TWebSocketProcess.ProcessStop;
 begin // nothing to do at this level
 end;
 
+function TWebSocketProcess.ProcessPendingCallbacks: boolean;
+var i,n: integer;
+begin
+  result := false;
+  if TryAcquireConnection(5) then
+  try
+    try
+      // send any pending callback notifications (oldest first)
+      if fAcquiredConnectionProcessingCount=1 then begin
+        n := fPendingNotifyCallbacksCount;
+        if n>0 then begin
+          fPendingNotifyCallbacksCount := 0;
+          for i := 0 to n-1 do
+            if SendFrame(fPendingNotifyCallbacks[i]) then
+              fPendingNotifyCallbacks[i].payload := '' else
+              exit;
+          fLastPingTicks := GetTickCount64;
+          result := true;
+        end;
+      end;
+    finally
+      dec(fAcquiredConnectionProcessingCount);
+      LeaveCriticalSection(fAcquireConnectionLock);
+    end;
+  except
+    result := false;
+  end;
+end;
+
 function TWebSocketProcess.ProcessOne: TWebSocketProcessOne;
 var request,answer: TWebSocketFrame;
     sendAnswer: boolean;
-    i,n: integer;
 begin // current implementation is blocking vs NotifyCallback
   result := wspNone;
   if TryAcquireConnection(5) then
   try
     try
-      // send any pending callback notifications (oldest first)
-      n := fPendingNotifyCallbacksCount;
-      if n>0 then begin
-        fPendingNotifyCallbacksCount := 0;
-        for i := 0 to n-1 do
-          if SendFrame(fPendingNotifyCallbacks[i]) then
-            fPendingNotifyCallbacks[i].payload := '' else begin
-            result := wspError;
-            exit;
-          end;
-        fLastPingTicks := GetTickCount64;
-      end;
       // retrieve any incoming request
       if not GetFrame(request,0) then begin
         if (not TThreadHook(fOwnerThread).Terminated) and
@@ -1199,6 +1224,7 @@ begin // current implementation is blocking vs NotifyCallback
         fLastPingTicks := GetTickCount64;
       end;
     finally
+      dec(fAcquiredConnectionProcessingCount);
       LeaveCriticalSection(fAcquireConnectionLock);
     end;
   except
@@ -1257,8 +1283,14 @@ begin
   try
     repeat
       result := boolean(TryEnterCriticalSection(fAcquireConnectionLock));
-      if result or TThreadHook(fOwnerThread).Terminated then
+      if TThreadHook(fOwnerThread).Terminated then begin
+        result := false;
         exit;
+      end;
+      if result then begin
+        inc(fAcquiredConnectionProcessingCount);
+        exit;
+      end;
       SleepHiRes(delay);
       inc(loopcount);
       if loopcount>5 then
@@ -1278,6 +1310,11 @@ begin
   if (fProtocol=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
+  if (aMode<>wscNonBlockWithoutAnswer) and
+     (fAcquiredConnectionProcessingCount>0) then begin
+    result := STATUS_WEBSOCKETBLOCKING;
+    exit;
+  end;
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request);
   if TryAcquireConnection(fCallbackAcquireTimeOutMS) then
@@ -1314,6 +1351,7 @@ begin
       exit;
     fLastPingTicks := GetTickCount64;
   finally
+    dec(fAcquiredConnectionProcessingCount);
     LeaveCriticalSection(fAcquireConnectionLock);
   end else
     exit;
@@ -1344,6 +1382,9 @@ begin
       if (LoopDelay>0) and (LoopDelay<delay) then
         delay := LoopDelay;
       SleepHiRes(delay);
+      if (fPendingNotifyCallbacksCount>0) and
+         ProcessPendingCallbacks then
+        last := GetTickCount64; 
     end;
     wspPing:
       SleepHiRes(1);
@@ -1672,9 +1713,9 @@ begin
       if not CompareMem(@digest1,@digest2,SizeOf(digest1)) then
         exit;
       // if we reached here, connection is successfully upgraded to WebSockets
+      result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self,protocol);
       protocol := nil; // protocol will be owned by fProcess now
-      result := ''; // no error message = success
     finally
       protocol.Free;
     end;
@@ -1711,6 +1752,7 @@ begin
     SendFrame(frame);     // notify clean closure
     GetFrame(frame,1000); // expects an answer from the server
   finally
+    dec(fAcquiredConnectionProcessingCount);
     LeaveCriticalSection(fAcquireConnectionLock);
   end;
   fClientThread.Free;
