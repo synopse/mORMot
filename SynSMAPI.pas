@@ -80,6 +80,7 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   {$endif}
+  Variants,
   SynCommons;
 
 const
@@ -3962,7 +3963,7 @@ type
   end;
   TJSPropertyDescVector = array[0..(MaxInt div sizeof(JSPropertyDesc))-1] of JSPropertyDesc;
   PJSPropertyDescVector = ^TJSPropertyDescVector;
-
+
   /// stores JavaScript object properties description
   JSPropertyDescArray = record
    len: uint32;
@@ -4719,14 +4720,14 @@ begin
 end;
 
 function JSContext.NewJSString(TextAnsi: PAnsiChar; TextLen, CodePage: integer): PJSString;
-var short: array[byte] of jschar; // to avoid temp allocation on heap
-    buf: pjschar;
+var short: array[byte] of WideChar; // to avoid temp allocation on heap
+    buf: PWideChar;
 begin
   if TextLen<(sizeof(short) div 3) then
     buf := @short else
     GetMem(buf,TextLen*3+2);
-  result := JS_NewUCStringCopyN(@Self, buf,
-    TSynAnsiConvert.Engine(CodePage).AnsiBufferToUnicode(PWideChar(buf),TextAnsi,TextLen)-buf);
+  result := JS_NewUCStringCopyN(@Self, PJschar(buf),
+    TSynAnsiConvert.Engine(CodePage).AnsiBufferToUnicode(buf,TextAnsi,TextLen)-buf);
   if buf<>@short then
     FreeMem(buf);
 end;
