@@ -6262,9 +6262,11 @@ type
   protected
     PaddingForLock: array[0..95] of byte;
   public
+    {$ifndef DELPHI5OROLDER}
     {$ifndef HASINLINE}
     /// will try to acquire the mutex
     function TryEnter: boolean; 
+    {$endif}
     {$endif}
   end;
 
@@ -38436,11 +38438,13 @@ end;
 
 { TSynCriticalSection }
 
+{$ifndef DELPHI5OROLDER}
 {$ifndef HASINLINE}
 function TSynCriticalSection.TryEnter: boolean;
 begin
   result := TryEnterCriticalSection(FSection);
 end;
+{$endif}
 {$endif}
 
 
@@ -43411,7 +43415,7 @@ end;
 
 constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
 begin
-  Create(UTF8ToString(FormatUTF8(Format,Args)));
+  inherited Create(UTF8ToString(FormatUTF8(Format,Args)));
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
