@@ -431,7 +431,7 @@ begin
       end;
     end;
     if ContentType='' then
-      ContentType := JSON_CONTENT_TYPE;
+      ContentType := JSON_CONTENT_TYPE_VAR;
     EnterCriticalSection(fMutex);
     try
         PInt64(@Call.OutStatus)^ := Int64(
@@ -697,7 +697,7 @@ begin
             Ctxt.OutContentType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
           end;
           if Ctxt.OutContentType='' then
-            Ctxt.OutContentType := JSON_CONTENT_TYPE;
+            Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
           Ctxt.OutContent := WR.Text;
         end;
       finally
@@ -706,7 +706,7 @@ begin
     except
       on E: Exception do begin
         Ctxt.OutContent := ObjectToJSONDebug(E);
-        Ctxt.OutContentType := JSON_CONTENT_TYPE;
+        Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
         result := HTML_SERVERERROR;
       end;
     end;

@@ -812,7 +812,7 @@ begin
           call.OutHead := P;
         end else
           // default content type is JSON
-          Ctxt.OutContentType := JSON_CONTENT_TYPE;
+          Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
         // handle HTTP redirection over virtual hosts
         if (host<>'') and
            ((result=HTML_MOVEDPERMANENTLY) or (result=HTML_TEMPORARYREDIRECT)) then begin

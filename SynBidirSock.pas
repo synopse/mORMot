@@ -152,6 +152,8 @@ type
     fURI: RawUTF8;
     function ProcessFrame(Sender: TWebSocketProcess;
       var request,answer: TWebSocketFrame): boolean; virtual; abstract;
+    function SendFrames(Owner: TWebSocketProcess;
+      var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
   public
     /// abstract constructor to initialize the protocol
     // - the protocol should be named, so that the client may be able to request
@@ -260,6 +262,10 @@ type
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
+    function SendFrames(Owner: TWebSocketProcess;
+      var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
+    function ProcessFrame(Sender: TWebSocketProcess;
+      var request,answer: TWebSocketFrame): boolean; override;
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
@@ -657,6 +663,22 @@ begin
   fURI := aURI;
 end;
 
+function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
+  var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
+var i,n: integer;
+begin // this default implementation will send all frames one by one
+  result := false;
+  n := FramesCount;
+  if (n>0) and (Owner<>nil) then begin
+    FramesCount := 0;
+    for i := 0 to n-1 do
+      if Owner.SendFrame(Frames[i]) then
+        Frames[i].payload := '' else
+        exit;
+    result := true;
+  end;
+end;
+
 
 { TWebSocketProtocolChat }
 
@@ -905,18 +927,30 @@ begin
   frame.payload := Values[0]+#1+value;
 end;
 
+function BinaryFrameIs(const frame: TWebSocketFrame; const Head: RawUTF8;
+  var Body: RawByteString): boolean;
+var headLen: integer;
+begin
+  headLen := length(Head);
+  if (frame.opcode<>focBinary) or // check frame header with no memory alloc
+     (length(frame.payload)<headLen+6) or
+     (frame.payload[headLen+1]<>#1) or
+     not IdemPropNameU(Head,pointer(frame.payload),headLen) then
+    result := false else begin
+    Body := copy(frame.payload,headLen+2,maxInt);
+    result := true;
+  end;
+end;
+
 function TWebSocketProtocolBinary.FrameDecompress(
   const frame: TWebSocketFrame; const Head: RawUTF8;
   const values: array of PRawByteString; var contentType,content: RawByteString): Boolean;
-var tmp,hd,value: RawByteString;
+var tmp,value: RawByteString;
     i: integer;
     P: PUTF8Char;
 begin
   result := false;
-  split(frame.payload,#1,RawUTF8(hd),RawUTF8(tmp));
-  if (frame.opcode<>focBinary) or
-     (length(tmp)<5) or
-     not IdemPropNameU(hd,Head) then
+  if not BinaryFrameIs(frame,Head,tmp) then
     exit;
   if fEncryption<>nil then
     tmp := fEncryption.DecryptPKCS7(tmp,true);
@@ -932,6 +966,48 @@ begin
   if P<>nil then
     SetString(content,P,length(value)-(P-pointer(value)));
   result := true;
+end;
+
+function TWebSocketProtocolBinary.SendFrames(Owner: TWebSocketProcess;
+  var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
+var jumboFrame: TWebSocketFrame;
+    fr: TDynArray;
+begin
+  if (FramesCount=0) or (Owner=nil) then begin
+    result := false;
+    exit;
+  end;
+  if FramesCount=1 then begin
+    FramesCount := 0;
+    result := Owner.SendFrame(Frames[0]);
+    exit;
+  end;
+  fr.Init(TypeInfo(TWebSocketFrameDynArray),Frames);
+  fr.UseExternalCount(FramesCount);
+  jumboFrame.opcode := focBinary;
+  jumboFrame.payload := 'frames'#1+fr.SaveTo; // each frame is already encrypted
+  FramesCount := 0;
+  Frames := nil;
+  result := Owner.SendFrame(jumboFrame); // send all frames at once
+end;
+
+function TWebSocketProtocolBinary.ProcessFrame(Sender: TWebSocketProcess;
+  var request, answer: TWebSocketFrame): boolean;
+var jumbo: RawByteString;
+    i: integer;
+    frames: TWebSocketFrameDynArray;
+begin
+  if BinaryFrameIs(request,'frames',jumbo) then begin
+    if DynArrayLoad(frames,pointer(jumbo),TypeInfo(TWebSocketFrameDynArray))=nil then
+      raise ESynBidirSocket.CreateUTF8(
+        'Invalid content for %.ProcessFrame(''frames'')',[self]);
+    for i := 0 to high(frames) do
+      if inherited ProcessFrame(Sender,frames[i],answer) then
+        raise ESynBidirSocket.CreateUTF8(
+          'NoAnswer=false in %.ProcessFrame(''frames'')[%]',[self,i]);
+    result := false; // no answer to be sent for callback jumbo frame
+  end else
+    result := inherited ProcessFrame(Sender,request,answer);
 end;
 
 
@@ -1147,25 +1223,19 @@ begin // nothing to do at this level
 end;
 
 function TWebSocketProcess.ProcessPendingCallbacks: boolean;
-var i,n: integer;
 begin
   result := false;
-  if TryAcquireConnection(5) then
+  if (fPendingNotifyCallbacksCount>0) and
+     TryAcquireConnection(5) then
   try
     try
       // send any pending callback notifications (oldest first)
-      if fAcquiredConnectionProcessingCount=1 then begin
-        n := fPendingNotifyCallbacksCount;
-        if n>0 then begin
-          fPendingNotifyCallbacksCount := 0;
-          for i := 0 to n-1 do
-            if SendFrame(fPendingNotifyCallbacks[i]) then
-              fPendingNotifyCallbacks[i].payload := '' else
-              exit;
+      if fAcquiredConnectionProcessingCount=1 then
+        if fProtocol.SendFrames(self,
+            fPendingNotifyCallbacks,fPendingNotifyCallbacksCount) then begin
           fLastPingTicks := GetTickCount64;
           result := true;
         end;
-      end;
     finally
       dec(fAcquiredConnectionProcessingCount);
       LeaveCriticalSection(fAcquireConnectionLock);

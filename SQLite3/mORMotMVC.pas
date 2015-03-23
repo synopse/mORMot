@@ -1455,7 +1455,7 @@ procedure TMVCRendererJson.Renders(outContext: variant;
   status: cardinal; forcesError: boolean);
 begin
   fOutput.Content := JSONReformat(VariantToUTF8(outContext));
-  fOutput.Header := JSON_CONTENT_TYPE_HEADER;
+  fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;
 

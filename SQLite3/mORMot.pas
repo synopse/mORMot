@@ -31411,9 +31411,6 @@ const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_','_contract_','_signature_');
 
-var
-  JSON_CONTENT_TYPE_HEADER_VAR: RawUTF8 = JSON_CONTENT_TYPE_HEADER;
-
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
     ('{"result":[','{"result":{');

@@ -1346,7 +1346,18 @@ const
   /// HTTP header for MIME content type used for raw binary data
   BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+BINARY_CONTENT_TYPE;
 
+var
+  /// MIME content type used for JSON communication
+  // - this global will be initialized with JSON_CONTENT_TYPE constant, to
+  // avoid a memory allocation each time it is assigned to a variable
+  JSON_CONTENT_TYPE_VAR: RawUTF8;
 
+  /// HTTP header for MIME content type used for plain JSON
+  // - this global will be initialized with JSON_CONTENT_TYPE_HEADER constant,
+  // to avoid a memory allocation each time it is assigned to a variable
+  JSON_CONTENT_TYPE_HEADER_VAR: RawUTF8;
+
+  
 /// faster equivalence to SetString() function for a RawUTF8
 // - will reallocate the content in-place if the string refcount is 1
 // - to be used instead of SetString() for "var" RawUTF8 parameters
@@ -3740,6 +3751,12 @@ type
     // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
+    /// define the reference to an external count integer variable 
+    // - Init and InitSpecific methods will reset the aCountPointer to 0: you
+    // can use this method to set the external count variable without overriding
+    // the current value
+    procedure UseExternalCount(var aCountPointer: Integer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize the wrapper to point to no dynamic array
     procedure Void;
     /// check if the wrapper points to a dynamic array
@@ -4990,6 +5007,8 @@ const
   JSON_BASE64_MAGIC_QUOTE = ord('"')+cardinal(JSON_BASE64_MAGIC) shl 8;
 
   /// '"' + UTF-8 encoded \uFFF0 special code to mark Base64 binary in JSON
+  // - defined as a cardinal variable to be used as:
+  // ! AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR,4);
   JSON_BASE64_MAGIC_QUOTE_VAR: cardinal = JSON_BASE64_MAGIC_QUOTE;
 
   /// UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
@@ -5003,6 +5022,8 @@ const
   JSON_SQLDATE_MAGIC_QUOTE = ord('"')+cardinal(JSON_SQLDATE_MAGIC) shl 8;
 
   ///'"' +  UTF-8 encoded \uFFF1 special code to mark ISO-8601 SQLDATE in JSON
+  // - defined as a cardinal variable to be used as:
+  // ! AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4);
   JSON_SQLDATE_MAGIC_QUOTE_VAR: cardinal = JSON_SQLDATE_MAGIC_QUOTE;
 
 
@@ -24705,7 +24726,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       63,68,72,96: Result := XML_CONTENT_TYPE;
       76: Result := 'image/webp';
       81,86: Result := 'text/cache-manifest';
-      100: Result := JSON_CONTENT_TYPE;
+      100: Result := JSON_CONTENT_TYPE_VAR;
       else
         if Result<>'' then
           Result := 'application/'+copy(result,2,10);
@@ -32733,6 +32754,11 @@ begin
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];
+end;
+
+procedure TDynArray.UseExternalCount(var aCountPointer: Integer);
+begin
+  fCountP := @aCountPointer;
 end;
 
 procedure TDynArray.Void;
@@ -44410,6 +44436,8 @@ const n2u: array[138..255] of byte =
    79,79,79,79,247,79,85,85,85,85,89,222,89);
 {$endif OWNNORMTOUPPER}
 begin
+  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   {$ifdef FPC}
   {$ifdef ISFPC27}
   DefaultSystemCodepage := CODEPAGE_US;

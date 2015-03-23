@@ -12798,15 +12798,19 @@ type
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchCallback(a: integer);
+    procedure RemoveCallback;
   end;
+
   TBidirServer = class(TInterfacedObject,IBidirService)
   protected
     fCallback: IBidirCallback;
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchCallback(a: integer);
+    procedure RemoveCallback;
   end;
-  TBidirCallbackAsObject = class(TInterfacedObject,IBidirCallback)
+
+  TBidirCallbackInterfacedObject = class(TInterfacedObject,IBidirCallback)
   protected
     fValue: Integer;
   public
@@ -12830,7 +12834,6 @@ end;
 function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
 begin
   fCallback := callback;
-//  fCallback.AsynchEvent(d);
   result := d<>0;
 end;
 
@@ -12840,12 +12843,17 @@ begin
     fCallback.AsynchEvent(a);
 end;
 
-procedure TBidirCallbackAsObject.AsynchEvent(a: integer);
+procedure TBidirServer.RemoveCallback;
+begin
+  fCallback := nil;
+end;
+
+procedure TBidirCallbackInterfacedObject.AsynchEvent(a: integer);
 begin
   inc(fValue,a);
 end;
 
-function TBidirCallbackAsObject.Value: integer;
+function TBidirCallbackInterfacedObject.Value: integer;
 begin
   result := fValue;
 end;
@@ -12909,7 +12917,7 @@ var I: IBidirService;
 procedure WaitUntilNotified;
 var timeout: Int64;
 begin
-  timeout := GetTickCount64+1000;
+  timeout := GetTickCount64+5000;
   repeat sleep(1) until (subscribed.value=6) or (GetTickCount64>timeout);
   Check(subscribed.value=6);
 end;
@@ -12917,7 +12925,7 @@ begin
   Rest.Services.Resolve(IBidirService,I);
   if CheckFailed(Assigned(I)) then
     exit;
-  subscribed := TBidirCallbackAsObject.Create; // raw TInterfacedObject
+  subscribed := TBidirCallbackInterfacedObject.Create; 
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
     I.LaunchCallback(d);
@@ -12928,6 +12936,13 @@ begin
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
     I.LaunchCallback(d);
+  end;
+  WaitUntilNotified;
+  subscribed := TBidirCallback.Create(Rest,IBidirCallback); 
+  for d := -5 to 6 do begin
+    check(I.TestCallback(d,subscribed)=(d<>0));
+    I.LaunchCallback(d);
+    I.RemoveCallback;
   end;
   WaitUntilNotified;
 end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
