@@ -86,12 +86,12 @@ uses
   SynSMAPI;
 
 const
-  /// default stack growning size 
-  STACK_CHUNK_SIZE: Cardinal = 8192;
+  /// default stack growing size, in bytes
+  STACK_CHUNK_SIZE: cardinal = 8192;
 
 type
   /// generic parent class of all SpiderMonkey-related Exception types
-  ESMException = class(Exception);
+  ESMException = class(ESynException);
 
   {$M+}
   TSMEngineManager = class;
@@ -1049,7 +1049,7 @@ const
   gMaxStackSize = 128 * sizeof(size_t) * 1024;
 begin
   if aManager = nil then
-    raise ESMException.Create('No manager provided');
+    raise ESMException.CreateUTF8('%.Create(nil): No manager provided',[self]);
   FDefaultPropertyAttrs := [jspEnumerate];
   fNativeMethods.Init(TypeInfo(TSMEngineMethodEventDynArray),
     fNativeMethod,HashPointer,SortDynArrayPointer,nil,@fNativeMethodCount);
@@ -1059,7 +1059,7 @@ begin
   FEngineContentVersion := FManager.ContentVersion;
   frt := JS_NewRuntime(FManager.MaxPerEngineMemory, JS_USE_HELPER_THREADS);
   if frt = nil then
-    raise ESMException.Create('Create runtime: out of memory');
+    raise ESMException.CreateUTF8('%.Create runtime: out of memory',[self]);
   JS_SetNativeStackQuota(rt, gMaxStackSize);
 
   JS_SetGCParameter(frt, JSGC_MAX_BYTES, FManager.MaxPerEngineMemory);
@@ -1068,7 +1068,7 @@ begin
 
   fCx := JS_NewContext(rt, STACK_CHUNK_SIZE);
   if fCx = nil then
-    raise ESMException.Create('JSContext create');
+    raise ESMException.CreateUTF8('%.Create: JS_NewContext failure',[self]);
 
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
   // ION is disabled without these options
@@ -1085,16 +1085,16 @@ begin
   FGlobalObject.fCx := cx;
   FGlobalObject.fObj := JS_NewGlobalObject(cx, @jsglobal_class, nil, @Opt);
   if GlobalObj = nil then
-    raise ESMException.Create('Create global object');
+    raise ESMException.CreateUTF8('%.Create: JS_NewGlobalObject failure',[self]);
   fcomp := fcomp.EnterCompartment(cx,GlobalObj);
   if JS_InitStandardClasses(cx, GlobalObj)<>JS_TRUE then
-    raise ESMException.Create('InitStandardClasses failure');
+    raise ESMException.CreateUTF8('%.Create: JS_InitStandardClasses failure',[self]);
   FGlobalObject.DefineProperty('global', GlobalObject.AsSMValue,
      [jspEnumerate,jspPermanent,jspReadOnly]);
   TSMVariantData(FGlobal).Init(FGlobalObject);
   fTimeoutInterval := -1;
   if not InitWatchdog then
-    raise ESMException.Create('InitWatchDog failure');
+    raise ESMException.CreateUTF8('%.Create: InitWatchDog failure',[self]);
   JS_SetOperationCallback(cx, OperationCallback);
 end;
 
@@ -1159,15 +1159,15 @@ end;
 procedure TSMEngine.CheckJSError(res: JSBool);
 begin
   if FTimeOutAborted then 
-    raise ESMException.Create('Script runs for too long, terminating');
+    raise ESMException.CreateUTF8('%: script runs for too long, abort',[self]);
   if FErrorExist then begin
     SynSMLog.Add.Log(sllError, FLastErrorMsg);
-    raise ESMException.Create(UTF8ToString(FLastErrorMsg));
+    raise ESMException.CreateUTF8('% error: %',[self,FLastErrorMsg]);
   end;
   if res=JS_FALSE then begin
     SynSMLog.Add.Log(sllError, 'Error compiling script %', FLastErrorFileName);
-    raise ESMException.CreateFmt('Error compiling script "%s". Line %d',
-      [UTF8ToString(FLastErrorFileName), FLastErrorLine]);
+    raise ESMException.CreateUTF8('%: Error compiling script "%". Line %',
+      [self,FLastErrorFileName,FLastErrorLine]);
   end;
 end;
 
@@ -1194,7 +1194,7 @@ begin
   newobj.fObj := JS_NewObject(cx, nil{class}, nil{proto}, globalObj{parent});
   newobj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   if newobj.fObj=nil then
-    raise ESMException.Create('NewObject');
+    raise ESMException.CreateUTF8('%.NewObject',[self]);
 end;
 
 procedure TSMEngine.NewObject(const prototype: TSMObject; out newobj: TSMObject);
@@ -1203,7 +1203,7 @@ begin
   newobj.fObj := JS_NewObject(cx, nil{class}, prototype.obj, nil{parent});
   newobj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   if newobj.fObj=nil then
-    raise ESMException.Create('NewObject(prototype)');
+    raise ESMException.CreateUTF8('%.NewObject(prototype)',[self]);
 end;
 
 procedure TSMEngine.NewObjectWithClass(clasp: PJSClass; var newobj: TSMObject);
@@ -1212,7 +1212,7 @@ begin
   newobj.fObj := JS_NewObject(cx, clasp, nil, nil);
   newobj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   if newobj.fObj=nil then
-    raise ESMException.Create('NewObject');
+    raise ESMException.CreateUTF8('%.NewObjectWithClass',[self]);
 end;
 
 procedure TSMEngine.NewObjectWithClass(clasp: PJSClass; const prototype: TSMObject;
@@ -1222,7 +1222,7 @@ begin
   newobj.fObj := JS_NewObject(cx, clasp, prototype.obj, parent.obj);
   newobj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   if newobj.fObj=nil then
-    raise ESMException.Create('NewObject');
+    raise ESMException.CreateUTF8('%.NewObjectWithClass(parent)',[self]);
 end;
 
 procedure TSMEngine.InitClass(clasp: PJSClass; ps: PJSPropertySpec; var newobj: TSMObject);
@@ -1232,7 +1232,7 @@ begin
     JS_InitClass(cx, GlobalObj, nil, clasp, nil, 0, ps , nil, nil, nil);
   newobj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   if newobj.obj=nil then
-    raise ESMException.Create('NewObject');
+    raise ESMException.CreateUTF8('%.InitClass',[self]);
 end;
 
 procedure TSMEngine.MakeObject(const value: TSMValue; out obj: TSMObject);
@@ -1247,7 +1247,7 @@ begin
     obj.fObj := JSVAL_TO_OBJECT(value);
     obj.FDefaultPropertyAttrs := self.FDefaultPropertyAttrs;
   end else
-    raise ESMException.Create('MakeObject(value: not an object)');
+    raise ESMException.CreateUTF8('%.MakeObject(value: not an object)',[self]);
 end;
 
 procedure TSMEngine.MakeObject(jsobj: PJSObject; out obj: TSMObject);
@@ -1324,14 +1324,15 @@ begin
       method := -1 else
       method := engine.fNativeMethods.FindHashed(f);
     if method<0 then
-      raise ESMException.Create('No callback defined');
+      raise ESMException.Create('nsm_methodDelphi: No callback defined');
     argv := pointer(JS_ARGV(cx,vp));
     instance.Init(cx,JS_THIS_OBJECT(cx,vp));
     with engine.fNativeMethod[method] do
       case EventKind of
       meVariant: RunAsVariant(CallbackVariant);
       meJSON:    RunAsJson(CallbackJSON);
-      else raise ESMException.CreateFmt('Unknown EventKind=%d',[ord(EventKind)]);
+      else raise ESMException.CreateUTF8('nsm_methodDelphi: Unknown EventKind=%',
+        [ord(EventKind)]);
       end;
     JS_SET_RVAL(cx,vp,res.FValue);
     result := JS_TRUE;
@@ -1353,7 +1354,8 @@ begin
   result := JS_DefineUCFunction(cx, obj, pointer(MethodName), Length(MethodName),
     nsm_methodDelphi, ArgumentsCount, JSPROP_ENUMERATE);
   if result=nil then
-    raise ESMException.CreateFmt('Defining native function %s()',[MethodName]);
+    raise ESMException.CreateUTF8(
+      '%.InternalRegisterMethod(%): Defining native function',[self,MethodName]);
   i := fNativeMethods.FindHashedForAdding(result,added);
   if added then
   with fNativeMethod[i] do begin
@@ -1361,7 +1363,8 @@ begin
     EventKind := Kind;
     TMethod(CallbackVariant) := Event;
   end else
-    raise ESMException.CreateFmt('Duplicated native function %s()',[MethodName]);
+    raise ESMException.CreateUTF8(
+      '%.InternalRegisterMethod(%): Duplicated name',[self,MethodName]);
 end;
 
 function TSMEngine.RegisterMethod(obj: PJSObject; const MethodName: SynUnicode;
@@ -1384,7 +1387,8 @@ var i: integer;
 begin
   i := fNativeMethods.FindHashed(JSFunction);
   if i<0 then
-    raise ESMException.Create('Method not previously registered');
+    raise ESMException.CreateUTF8(
+      '%.UnRegisterMethod(%): Method not previously registered',[self,JSFunction]);
   fNativeMethods.Delete(i);
 end;
 
@@ -1402,9 +1406,9 @@ end;
 procedure TSMEngineManager.SetMaxPerEngineMemory(AMaxMem: Cardinal);
 begin
   if aMaxMem<STACK_CHUNK_SIZE*MaxRecursionDepth then
-    raise ESMException.CreateFmt(
-      'Per engine memory must be >= STACK_CHUNK_SIZE*%d, i.e. %d',
-      [MaxRecursionDepth,STACK_CHUNK_SIZE*MaxRecursionDepth]);
+    raise ESMException.CreateUTF8(
+      '%.MaxPerEngineMemory := %, but must be >= STACK_CHUNK_SIZE*%, i.e. %',
+      [self,aMaxMem,MaxRecursionDepth,STACK_CHUNK_SIZE*MaxRecursionDepth]);
   FMaxPerEngineMemory := AMaxMem;
 end;
 
@@ -1608,7 +1612,7 @@ begin
     JSTYPE_FUNCTION:
       result := TransformToSynUnicode(cx);
     else
-      raise ESMException.CreateFmt('Unhandled ToVariant(%d)',[ord(ValType(cx))]);
+      raise ESMException.CreateUTF8('Unhandled ToVariant(%)',[ord(ValType(cx))]);
   end;
 end;
 
@@ -1675,7 +1679,7 @@ begin
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
        SetJSON(cx,VariantSaveJSON(Value)) else
-    raise ESMException.CreateFmt('Unhandled variant type %d',[VType]);
+    raise ESMException.CreateUTF8('Unhandled variant type %',[VType]);
   end;
 end;
 
@@ -1715,7 +1719,7 @@ begin
       SetAnsiChar(cx,@V.VChar,1,0);
     vtWideChar:
       FValue := STRING_TO_JSVAL(cx^.NewJSString(PWideChar(@V.VWideChar),1));
-    else raise ESMException.CreateFmt('Unhandled TVarRec.VType=%d',[V.VType]);
+    else raise ESMException.CreateUTF8('Unhandled TVarRec.VType=%',[V.VType]);
   end;
 end;
 
@@ -1795,13 +1799,13 @@ var oDate: PJSObject;
 begin
   oDate := JSVAL_TO_OBJECT(FValue);
   if JS_ObjectIsDate(cx, oDate) = JS_FALSE then
-    raise ESMException.create('not a DateTime object');
+    raise ESMException.Create('TSMValue.ToDateTime: not a DateTime object');
 {$ifdef CONSIDER_TIME_IN_Z}
   ms := 0;         
   if JS_CallFunctionName(cx, oDate, PCChar('getTime'), 0, nil, fval) = JS_TRUE then
     ms := JSVAL_TO_DOUBLE(fval);
   if ms = 0 then
-    raise ESMException.Create('JSDateToDateTime: no getTime() in Date object');
+    raise ESMException.Create('TSMValue.ToDateTime: no getTime() in Date object');
   ms64 := Trunc(ms);
   // W/O millisec: Result := IncMilliSecond(UnixDateDelta, ms64);
   Result := UnixMSTimeToDateTime(ms64);
@@ -1836,7 +1840,7 @@ begin
   dmsec := unixTime-(unixTime mod 1000);
   oDate := JS_NewDateObjectMsec(cx, dmsec);
   if JS_ObjectIsDate(cx, oDate)<>JS_TRUE then
-    raise ESMException.CreateFmt('SetDateTime(%g): not a valid date',[Value]);
+    raise ESMException.CreateUTF8('TSMValue.SetDateTime(%): not a valid date',[Value]);
   FValue := oDate.ToJSValue;
 {$else}
   DateTimeToSystemTime(Value, STLocal);
@@ -1925,8 +1929,8 @@ begin
         TSMEngine(cx.PrivateData).ClearLastError;
       end
     end
-    else
-      raise ESMException.CreateFmt('Unhandled AddJSON(%d)',[ord(ValType(cx))]);
+    else raise ESMException.CreateUTF8(
+      'Unhandled TSMValue.AddJSON(%)',[ord(ValType(cx))]);
   end;
 end;
 
@@ -1988,7 +1992,7 @@ begin
   if (@self=nil) or (cx=nil) or (obj=nil) or
      (JS_DefineUCProperty(cx, Obj, pointer(name), length(name),
       value.AsJSVal, nil, nil, word(attrs))<>JS_TRUE) then
-    raise ESMException.CreateFmt('define property (%s)', [name]);
+    raise ESMException.CreateUTF8('TSMObject.DefineProperty(%)', [name]);
 end;
 
 procedure TSMObject.DefineProperty(const name: SynUnicode;
@@ -2027,7 +2031,7 @@ function TSMObject.GetPropValue(const propName: SynUnicode): TSMValue;
 begin
   if JS_GetUCProperty(cx, obj,
       pointer(propName), length(propName), Result.FValue)=JS_FALSE then
-    raise ESMException.CreateFmt('get property (%s)', [propName]);
+    raise ESMException.CreateUTF8('TSMObject.GetPropValue(%)',[propName]);
 end;
 
 function TSMObject.GetPropVariant(const propName: SynUnicode): variant;
@@ -2108,7 +2112,7 @@ begin
   Result := JS_DefineUCFunction(cx, obj,
       Pjschar(methodName), Length(methodName), func, nargs, word(attrs));
   if Result=nil then
-    raise ESMException.CreateFmt('Impossible to define native method "%s"',[methodName]);
+    raise ESMException.CreateUTF8('TSMObject.DefineNativeMethod(%)',[methodName]);
 end;
 
 procedure TSMObject.Clear;
@@ -2117,13 +2121,13 @@ begin
   fObj := nil;
 end;
 
-function  TSMObject.DefineNativeMethod(const methodName: AnsiString; func: JSNative; nargs: uintN; 
+function TSMObject.DefineNativeMethod(const methodName: AnsiString; func: JSNative; nargs: uintN; 
   attrs: TJSPropertyAttrs): PJSFunction;
 begin
   Result := JS_DefineFunction(cx, obj,
       PCChar(methodName), func, nargs, word(attrs));
   if Result=nil then
-    raise ESMException.CreateFmt('Impossible to define native method "%s"',[methodName]);
+    raise ESMException.CreateUTF8('TSMObject.DefineNativeMethod(%)',[methodName]);
 end;
 
 function TSMObject.DefineNativeMethod(const methodName: AnsiString;
@@ -2369,7 +2373,7 @@ function TSMObject.GetItem(aIndex: integer): variant;
 var res: TSMValue;
 begin
   if JS_GetElement(cx,obj,aIndex,res.FValue)=JS_FALSE then
-    raise ESMException.CreateFmt('get TSMObject.Items[%d]',[aIndex]) else
+    raise ESMException.CreateUTF8('get TSMObject.Items[%]',[aIndex]) else
     res.ToVariant(cx,result);
 end;
 
@@ -2383,13 +2387,13 @@ var val: TSMValue;
 begin
   val.SetVariant(cx,Value);
   if JS_SetElement(cx,obj,aIndex,val.FValue)=JS_FALSE then
-    raise ESMException.CreateFmt('set TSMObject.Items[%d]',[aIndex]);
+    raise ESMException.CreateUTF8('set TSMObject.Items[%]',[aIndex]);
 end;
 
 procedure TSMObject.DeleteItem(aIndex: integer);
 begin
   if JS_DeleteElement(cx,obj,aIndex)=JS_FALSE then
-    raise ESMException.CreateFmt('delete TSMObject.Items[%d]',[aIndex]);
+    raise ESMException.CreateUTF8('TSMObject.DeleteItem(%)',[aIndex]);
 end;
 
 
@@ -2402,7 +2406,7 @@ begin
   //Assert(V.VType=SMVariantType.VarType);
   with TSMVariantData(V) do
     if JS_GetProperty(cx,obj,Name,res.FValue)=JS_FALSE then
-      raise ESMException.CreateFmt('Unexpected TSMVariant.%s',[Name]) else
+      raise ESMException.CreateUTF8('Unexpected %.%',[self,Name]) else
       res.ToVariant(cx,variant(Dest));
 end;
 
@@ -2449,7 +2453,7 @@ begin
   with TSMVariantData(V) do begin
     smValue.SetVariant(cx,Variant(Value));
     if JS_SetProperty(cx,obj,Name,smValue.FValue)=JS_FALSE then
-      raise ESMException.CreateFmt('Error setting TSMVariant.%s',[Name]);
+      raise ESMException.CreateUTF8('Error setting %.%',[self,Name]);
   end;
 end;
 
@@ -2464,8 +2468,8 @@ begin
       TSMEngine(cx.PrivateData).CheckJSError(JS_FALSE);
       TSMEngine(cx.PrivateData).ClearLastError;
     end;
-  end else
-    raise ESMException.CreateFmt('Unexpected variant type %d',[VType]);
+  end else raise ESMException.CreateUTF8(
+    '%.ToJSON: Unexpected variant type %',[self,VType]);
 end;
 
 class procedure TSMVariant.New(const aObject: TSMObject;
