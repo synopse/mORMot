@@ -11443,7 +11443,7 @@ begin
      CheckFailed(fClient.Services.Info(TypeInfo(ITestPerThread)).Get(Inst.CT)) then
     exit;
   O := ObjectFromInterface(Inst.I);
-  Check((O<>nil) and (O.ClassName='TInterfacedObjectFake'),'ObjectFromInterface('+O.ClassName);
+  Check((O<>nil) and (copy(O.ClassName,1,21)='TInterfacedObjectFake'));
   Inst.ExpectedSessionID := fClient.SessionID;
   fClient.Retrieve('LogonName=?',[],[fClient.SessionUser.LogonName],fClient.SessionUser);
   Inst.ExpectedUserID := fClient.SessionUser.ID;
