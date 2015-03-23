@@ -4674,9 +4674,10 @@ type
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: PSQLAccessRights;
     /// opaque reference to the protocol context which made this request
-    // - may contain e.g. nil, a THttpServerRequest, a TSQLRestClientURI,
-    // a TFastCGIServer or a TSQLRestServerNamedPipeResponse 
-    LowLevelRequest: TObject;
+    // - may contain e.g. nil, a THttpServerResp, a TWebSocketServerResp,
+    // a THttpApiServer, a TSQLRestClientURI, a TFastCGIServer or a
+    // TSQLRestServerNamedPipeResponse
+    LowLevelConnection: TObject;
     /// low-level properties of the current protocol context
     LowLevelFlags: TSQLRestURIParamsLowLevelFlags;
   end;
@@ -11695,7 +11696,7 @@ type
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
   TSQLRestServerNotifyCallback = function(aSender: TSQLRestServer;
-    aRequest: TObject; const aInterfaceDotMethodName,aParams: RawUTF8;
+    aConnection: TObject; const aInterfaceDotMethodName,aParams: RawUTF8;
     aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean of object;
 
 {$ifdef MSWINDOWS}
@@ -29679,7 +29680,7 @@ begin
       exit; // if /TimeStamp is not available, server is down!
     end;
   fillchar(Call,sizeof(Call),0);
-  Call.LowLevelRequest := self;
+  Call.LowLevelConnection := self;
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -34181,7 +34182,7 @@ begin
   Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe);
   fServer.BeginCurrentThread(self);
   fillchar(call,sizeof(call),0);
-  call.LowLevelRequest := self;
+  call.LowLevelConnection := self;
   Ticks64 := 0;
   Sleeper64 := 0;
   ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min of inactivity
@@ -41472,7 +41473,7 @@ type
   TInterfacedObjectFakeServer = class(TInterfacedObjectFake)
   protected
     fServer: TSQLRestServer;
-    fLowLevelRequest: TObject;
+    fLowLevelConnection: TObject;
     fInterface: TInterfaceFactory;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
@@ -41558,9 +41559,11 @@ end;
 {$else}
 var method: ^TServiceMethod;
 procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+var msg: RawUTF8;
 begin
+  msg := FormatUTF8(Format,Args);
   raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
-    [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,FormatUTF8(Format,Args)]);
+    [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,msg]);
 end;
 var resultType: TServiceMethodValueType; // type of value stored into result
 procedure InternalProcess;
@@ -41801,7 +41804,7 @@ constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContex
   aInterface: TInterfaceFactory; aID: Integer);
 begin
   fServer := aRequest.Server;
-  fLowLevelRequest := aRequest.Call^.LowLevelRequest;
+  fLowLevelConnection := aRequest.Call^.LowLevelConnection;
   fInterface := aInterface;
   fClientDrivenID := aID;
   inherited Create(fInterface,CallbackInvoke,nil);
@@ -41825,7 +41828,7 @@ begin // here aClientDrivenID^ = FakeCall ID
   if aMethod.ArgsOutputValuesCount=0 then
     aResult := nil; // no result -> asynchronous non blocking callback
   result := fServer.OnNotifyCallback(fServer,
-    fLowLevelRequest,aMethod.InterfaceDotMethodName,
+    fLowLevelConnection,aMethod.InterfaceDotMethodName,
     aParams,aClientDrivenID^,aResult,aErrorMsg);
 end;
 
@@ -41835,6 +41838,9 @@ var ID: integer;
     factory: TInterfaceFactory;
     instance: TInterfacedObjectFakeServer;
 begin
+  if not Assigned(Server.OnNotifyCallback) then
+    raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
+      [Server,ParamInterfaceInfo^.Name]);
   ID := GetInteger(GetJSONField(Par,Par));
   if ID<=0 then
     raise EInterfaceFactoryException.CreateUTF8(

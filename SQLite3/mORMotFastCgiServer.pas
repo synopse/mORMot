@@ -635,7 +635,7 @@ begin
   end;
   fillchar(call,sizeof(call),0);
   with call do begin
-    LowLevelRequest := self;
+    LowLevelConnection := self;
     Url := fRequestURL;
     Method := fRequestMethod;
     InHead := 'ConnectionID: '+CardinalToHex(fRequestID);

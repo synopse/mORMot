@@ -293,7 +293,7 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
-    function NotifyCallback(aSender: TSQLRestServer; aRequest: TObject;
+    function NotifyCallback(aSender: TSQLRestServer; aConnection: TObject;
       const aInterfaceDotMethodName,aParams: RawUTF8; aFakeCallID: integer;
       aResult, aErrorMsg: PRawUTF8): boolean;
   public
@@ -771,7 +771,7 @@ begin
   end else begin
     // compute URI, handling any virtual host domain
     fillchar(call,sizeof(call),0);
-    call.LowLevelRequest := Ctxt;
+    call.LowLevelConnection := Ctxt.CallingThread;
     if Ctxt.UseSSL then
       include(call.LowLevelFlags,llfSSL);
     if fHosts.Count>0 then begin
@@ -883,7 +883,7 @@ begin
 end;
 
 function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
-  aRequest: TObject; const aInterfaceDotMethodName, aParams: RawUTF8;
+  aConnection: TObject; const aInterfaceDotMethodName, aParams: RawUTF8;
   aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
 var ctxt: THttpServerRequest;
     mode: TWebSocketProcessNotifyCallback;
@@ -891,9 +891,9 @@ var ctxt: THttpServerRequest;
 begin
   result := false;
   if fHttpServer.InheritsFrom(TWebSocketServerRest) and
-     aRequest.InheritsFrom(THttpServerRequest) then
+     aConnection.InheritsFrom(TNotifiedThread) then
   try
-    ctxt := THttpServerRequest.Create(nil,THttpServerRequest(aRequest).CallingThread);
+    ctxt := THttpServerRequest.Create(nil,TNotifiedThread(aConnection));
     try
       ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
         aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
@@ -907,11 +907,7 @@ begin
         result := true;
       end else
         if aErrorMsg<>nil then
-          if status=STATUS_WEBSOCKETBLOCKING then
-            aErrorMsg^ := FormatUTF8('%(%) already processing (nested '+
-              'blocking requests with WebSockets): use callbacks methods '+
-              'with no returned value',[aRequest,aFakeCallID]) else
-            aErrorMsg^ := FormatUTF8('% returned status=%',[aRequest,status]);
+          aErrorMsg^ := FormatUTF8('% returned status=%',[aConnection,status]);
     finally
       ctxt.Free;
     end;

@@ -44052,7 +44052,8 @@ begin
     result := wrError;
   end;
 end;
-{$define USESEMTRYWAIT} // sem_timedwait() is slower than our manual wait
+{.$define USESEMTRYWAIT}
+// sem_timedwait() is slower than sem_trywait(), but consuming much less CPU
 {$ifdef USESEMTRYWAIT}
 var time: timespec;
 {$else}

@@ -12887,6 +12887,8 @@ begin
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true);
+  WebSocketLog := TSQLLog;
+  //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TSQLRest);
@@ -13005,4 +13007,4 @@ initialization
   _uEA := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[4],1);
   _uF4 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[5],1);
 end.
-
+
