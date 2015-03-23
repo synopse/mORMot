@@ -30,6 +30,7 @@ unit SynSQLite3;
 
   Contributor(s):
   - Eric Grange
+  - Vaclav
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -3141,28 +3142,36 @@ end;
 function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
     s2Len: integer; S2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if s1Len=0 then // see WladiD note above
-    s1 := nil;
-  if s2Len=0 then
-    s2 := nil;
+  if s1Len<=0 then begin // see WladiD note above
+    S1 := nil;
+    s1Len := 0;
+  end;
+  if s2Len<=0 then begin
+    S2 := nil;
+    s2Len := 0;
+  end;
   {$ifdef MSWINDOWS}
-  result := CompareStringW(GetThreadLocale, 0, S1, S1len, S2, S2Len) - 2;
-  {$else}
-  result := WideCompareStr(Pwidechar(S1),Pwidechar(S2))-2;
+  result := CompareStringW(GetThreadLocale,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
+  {$else} // cross-platform but slower version using two temporary WideString
+  result := WideCompareStr(PWideChar(S1),PWideChar(S2));
   {$endif}
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if s1Len=0 then // see WladiD note above
-    s1 := nil;
-  if s2Len=0 then
-    s2 := nil;
+  if s1Len<=0 then begin // see WladiD note above
+    S1 := nil;
+    s1Len := 0;
+  end;
+  if s2Len<=0 then begin
+    S2 := nil;
+    s2Len := 0;
+  end;
   {$ifdef MSWINDOWS}
-  result := CompareStringW(GetThreadLocale, NORM_IGNORECASE, S1, S1len, S2, S2Len) - 2;
-  {$else}
-  result := WideCompareText(Pwidechar(S1),Pwidechar(S2))-2;
+  result := CompareStringW(GetThreadLocale,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
+  {$else} // cross-platform but slower version using two temporary WideString
+  result := WideCompareText(PWideChar(S1),PWideChar(S2)); 
   {$endif}
 end;
 
