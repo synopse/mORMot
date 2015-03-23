@@ -5319,7 +5319,7 @@ begin
   rnd := (GetTickCount64 xor PtrUInt(@IV))*Random(MaxInt);
   for i := 0 to 3 do
     PCardinalArray(@IV)[i] := PCardinalArray(@IV)[i]
-      xor rnd xor TD0[(rnd shr i)and 8091];
+      xor rnd xor TD0[(rnd shr i)and 2047];
 end;
 
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
