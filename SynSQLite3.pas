@@ -3141,6 +3141,9 @@ end;
 
 function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
     s2Len: integer; S2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$ifndef MSWINDOWS}
+var W1,W2: WideString;
+{$endif}
 begin
   if s1Len<=0 then begin // see WladiD note above
     S1 := nil;
@@ -3153,12 +3156,17 @@ begin
   {$ifdef MSWINDOWS}
   result := CompareStringW(GetThreadLocale,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
   {$else} // cross-platform but slower version using two temporary WideString
-  result := WideCompareStr(PWideChar(S1),PWideChar(S2));
+  SetString(W1,PWideChar(S1),s1len shr 1);
+  SetString(W2,PWideChar(S2),s2len shr 1);
+  result := WideCompareStr(W1,W2); // use OS string comparison API
   {$endif}
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$ifndef MSWINDOWS}
+var W1,W2: WideString;
+{$endif}
 begin
   if s1Len<=0 then begin // see WladiD note above
     S1 := nil;
@@ -3171,7 +3179,9 @@ begin
   {$ifdef MSWINDOWS}
   result := CompareStringW(GetThreadLocale,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
   {$else} // cross-platform but slower version using two temporary WideString
-  result := WideCompareText(PWideChar(S1),PWideChar(S2)); 
+  SetString(W1,PWideChar(S1),s1len shr 1);
+  SetString(W2,PWideChar(S2),s2len shr 1);
+  result := WideCompareText(W1,W2); // use OS string comparison API
   {$endif}
 end;
 
