@@ -646,6 +646,7 @@ unit SynCommons;
   - added TTimeLogBits.FromUnixTime/FromUnixMSTime/ToUnixTime/ToUnixMSTime
   - added TTimeLogBits.Year/Month/Day/Hour/Minute/Second functions
   - added GetTickCount64() function, native since Vista, emulated e.g. for XP
+  - introducing InterlockedIncrement/IntelrlockedDecrement compatibility functions
   - fixed TTextWriter.RegisterCustomJSONSerializer() method when unregistering
   - fixed TTextWriter.AddFloatStr() method when processing '-.5' input
   - fixed potential random GPF in TTextWriter after Flush - see [577ad95cfd0]
@@ -6433,7 +6434,7 @@ type
   public
     /// initialize the list instance
     // - the stored TObject instances will be owned by this TObjectListLocked 
-    constructor Create;
+    constructor Create(AOwnsObjects: Boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
     /// lock the list for exclusive access
@@ -9089,10 +9090,24 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas 
+// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas
 function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
+
+{$ifndef FPC} { FPC defines those functions as built-in }
+
+/// compatibility function, to be implemented according to the running CPU
+// - expect the same result as the homonymous Win32 API function
+function InterlockedIncrement(var I: Integer): Integer;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// compatibility function, to be implemented according to the running CPU
+// - expect the same result as the homonymous Win32 API function
+function InterlockedDecrement(var I: Integer): Integer;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+{$endif FPC}
 
 var
   /// global information about the current executable and computer
@@ -17096,6 +17111,40 @@ end;
 
 {$endif MSWINDOWS}
 
+
+{$ifndef FPC}
+{$ifdef PUREPASCAL}
+
+function InterlockedIncrement(var I: Integer): Integer;
+begin
+  result := AtomicIncrement(I);
+end;
+
+function InterlockedDecrement(var I: Integer): Integer;
+begin
+  result := AtomicDecrement(I);
+end;
+
+{$else}
+
+function InterlockedIncrement(var I: Integer): Integer;
+asm
+     mov  edx,1
+     xchg eax,edx
+lock xadd [edx],eax
+     inc  eax
+end;
+
+function InterlockedDecrement(var I: Integer): Integer;
+asm
+     mov  edx,-1
+     xchg eax,edx
+lock xadd [edx],eax
+     dec  eax
+end;
+
+{$endif}
+{$endif}
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
 var n,v,old: cardinal;
@@ -37852,9 +37901,7 @@ begin
   TextColor(ccWhite);
   write(E.ClassName);
   TextColor(ccLightRed);
-  Writeln(' raised with message:');
-  TextColor(ccLightBlue);
-  writeln(E.Message);
+  Writeln(' raised with message:'#13#10' ',E.Message);
   TextColor(ccLightGray);
   writeln(#13#10'Program will now abort');
   {$ifndef LINUX}
@@ -37876,10 +37923,9 @@ begin
       result := ' GB';
     end else
       result := ' MB';
-    result :=
-      UInt32ToUtf8(bytes shr 20)+'.'+
-      UInt32ToUtf8((PtrUInt(bytes) and pred(1 shl 20))div (102*1024))+
-      result;
+    result := UInt32ToUtf8(bytes shr 20)+'.'+
+              UInt32ToUtf8((PtrUInt(bytes) and pred(1 shl 20))div (102*1024))+
+              result;
   end else
   if bytes>1023*9 then
     result := UInt32ToUtf8(PtrUInt(bytes) shr 10)+' KB' else
@@ -39179,9 +39225,9 @@ end;
 
 { TObjectListLocked }
 
-constructor TObjectListLocked.Create;
+constructor TObjectListLocked.Create(AOwnsObjects: Boolean=true);
 begin
-  inherited Create;
+  inherited Create(AOwnsObjects);
   InitializeCriticalSection(fLock);
 end;
 
@@ -44542,4 +44588,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

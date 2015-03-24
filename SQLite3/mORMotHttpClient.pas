@@ -265,10 +265,18 @@ type
   // instance, as defined in the SynBidirSock unit
   TSQLHttpClientWebsockets = class(TSQLHttpClientWinSock)
   protected
+    fWebSocketParams: record
+      AutoUpgrade: boolean;
+      Key: RawUTF8;
+      Compression: boolean;
+      Ajax: boolean;
+    end;
     function InternalCheckOpen: boolean; override;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
       ParamValue: Pointer): integer; override;
+    function FakeCallbackUnregister(Factory: TInterfaceFactory;
+      FakeCallbackID: integer; Instance: pointer): boolean; override;
     function CallbackRequest(Ctxt: THttpServerRequest): cardinal; virtual;
   public
     /// upgrade the HTTP client connection to a specified WebSockets protocol
@@ -409,6 +417,7 @@ implementation
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P: PUTF8Char;
+    res: Int64Rec;
 begin
 {$ifdef WITHLOG}
   fLogClass.Enter(self,nil,true);
@@ -434,10 +443,11 @@ begin
       ContentType := JSON_CONTENT_TYPE_VAR;
     EnterCriticalSection(fMutex);
     try
-        PInt64(@Call.OutStatus)^ := Int64(
-          InternalRequest(Call.Url,Call.Method,Head,Content,ContentType));
-        Call.OutHead := Head;
-        Call.OutBody := Content;
+      res := InternalRequest(Call.Url,Call.Method,Head,Content,ContentType);
+      Call.OutStatus := res.Lo;
+      Call.OutInternalState := res.Hi;
+      Call.OutHead := Head;
+      Call.OutBody := Content;
     finally
       LeaveCriticalSection(fMutex);
     end;
@@ -597,9 +607,17 @@ end;
 
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
+  if fSocket<>nil then begin
+    result := true;
+    exit;
+  end;
   if fSocketClass=nil then
     fSocketClass := THttpClientWebSockets;
   result := inherited InternalCheckOpen;
+  if result then
+    with fWebSocketParams do
+    if AutoUpgrade then
+      result := WebSocketsUpgrade(Key,Ajax,Compression)=''; 
 end;
 
 function TSQLHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -613,6 +631,19 @@ begin
        ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
   result := fFakeCallbacks.DoRegister(
     ParamValue,TInterfaceFactory.Get(ParamInfo.ArgTypeInfo));
+end;
+
+function TSQLHttpClientWebsockets.FakeCallbackUnregister(
+  Factory: TInterfaceFactory; FakeCallbackID: integer;
+  Instance: pointer): boolean;
+var ws: THttpClientWebSockets;
+    body,resp: RawUTF8;
+begin
+  ws := WebSockets;
+  if ws=nil then
+    raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
+  Int32ToUtf8(FakeCallbackID,body);
+  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp)=HTML_SUCCESS;
 end;
 
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
@@ -637,9 +668,17 @@ begin
 {$endif}
   sockets := WebSockets;
   if sockets=nil then
-    result := 'Impossible to connect to the Server' else
+    result := 'Impossible to connect to the Server' else begin
     result := sockets.WebSocketsUpgrade(Model.Root,
       aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
+    if result='' then
+      with fWebSocketParams do begin // store parameters for auto-reconnection
+        AutoUpgrade := true; 
+        Key := aWebSocketsEncryptionKey;
+        Compression := aWebSocketsCompression;
+        Ajax := aWebSocketsAJAX;
+      end;
+  end;
 {$ifdef WITHLOG}
   with fLogFamily.SynLog do
     if result<>'' then
@@ -675,7 +714,7 @@ begin
   if instance=nil then
     exit;
   split(interfmethod,'.',interf,method);
-  if method='!release' then begin
+  if method='_free_' then begin
     fFakeCallbacks.UnRegister(fakeCallID);
     result := HTML_SUCCESS;
     exit;

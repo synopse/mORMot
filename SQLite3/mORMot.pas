@@ -4665,7 +4665,6 @@ type
     // can try another TSQLRestServer)
     OutStatus: cardinal;
     /// output parameter to be set to the database internal state
-    // - should be the first unpacked 32 bit parameter after OutStatus
     OutInternalState: cardinal;
     /// associated RESTful access rights
     // - AccessRights must be handled by the TSQLRestServer child, according
@@ -10351,6 +10350,7 @@ type
     procedure OnCloseSession(aSessionID: cardinal); virtual;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
+    procedure FakeCallbackRelease(aFakeID: cardinal); 
   public
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
@@ -14200,15 +14200,15 @@ type
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string): boolean of object;
 
-  /// store the references to active interface callbacks on a REST instance
-  TSQLRestCallbacks = class
+  /// store the references to active interface callbacks on a REST Client
+  TSQLRestClientCallbacks = class
   protected
     fCurrentID: integer;
-    function UnRegisterByIndex(index: integer): boolean; 
-    function Find(aID: integer): integer; 
+    function UnRegisterByIndex(index: integer): boolean;
+    function Find(aID: integer): integer;
   public
     /// the associated REST instance
-    Owner: TSQLRest;
+    Owner: TSQLRestClientURI;
     /// how many callbacks are registered
     Count: integer;
     /// list of registered interface callbacks
@@ -14221,7 +14221,7 @@ type
       //// information about the associated IInvokable
       Factory: TInterfaceFactory;
     end;
-    constructor Create(aOwner: TSQLRest);
+    constructor Create(aOwner: TSQLRestClientURI);
     /// to be called before multi-thread access to the List[] low-level content
     procedure Enter; {$ifdef HASINLINE}inline;{$endif}
     /// to be called after multi-thread access to the List[] low-level content
@@ -14269,10 +14269,12 @@ type
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
     fRemoteLogThread: TObject; // private TRemoteLogThread
-    fFakeCallbacks: TSQLRestCallbacks;
+    fFakeCallbacks: TSQLRestClientCallbacks;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
       ParamValue: Pointer): integer; virtual;
+    function FakeCallbackUnregister(Factory: TInterfaceFactory;
+      FakeCallbackID: integer; Instance: pointer): boolean; virtual;
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -28984,24 +28986,24 @@ begin
 end;
 
 
-{ TSQLRestCallbacks }
+{ TSQLRestClientCallbacks }
 
-constructor TSQLRestCallbacks.Create(aOwner: TSQLRest);
+constructor TSQLRestClientCallbacks.Create(aOwner: TSQLRestClientURI);
 begin
   Owner := aOwner;
 end;
 
-procedure TSQLRestCallbacks.Enter;
+procedure TSQLRestClientCallbacks.Enter;
 begin
   Owner.fAcquireExecution[execSOAByInterface].Acquire;
 end;
 
-procedure TSQLRestCallbacks.Leave;
+procedure TSQLRestClientCallbacks.Leave;
 begin
   Owner.fAcquireExecution[execSOAByInterface].Release;
 end;
 
-function TSQLRestCallbacks.Find(aID: integer): integer;
+function TSQLRestClientCallbacks.Find(aID: integer): integer;
 begin
   if self<>nil then
     for result := 0 to Count-1 do
@@ -29010,19 +29012,21 @@ begin
   result := -1;
 end;
 
-function TSQLRestCallbacks.UnRegisterByIndex(index: integer): boolean;
+function TSQLRestClientCallbacks.UnRegisterByIndex(index: integer): boolean;
 begin
   if cardinal(index)>=cardinal(Count) then begin
     result := false;
     exit;
   end;
+  with List[index] do
+    Owner.FakeCallbackUnregister(Factory,ID,Instance);
   dec(Count);
   if index<Count then
     Move(List[index+1],List[index],(Count-index)*sizeof(List[index]));
   result := true;
 end;
 
-function TSQLRestCallbacks.UnRegister(aInstance: pointer): boolean;
+function TSQLRestClientCallbacks.UnRegister(aInstance: pointer): boolean;
 var i: integer;
 begin
   result := false;
@@ -29040,7 +29044,7 @@ begin
   end;
 end;
 
-function TSQLRestCallbacks.UnRegister(aID: integer): boolean;
+function TSQLRestClientCallbacks.UnRegister(aID: integer): boolean;
 begin
   if (self=nil) or (Count=0) or (aID<=0) then begin
     result := false;
@@ -29054,7 +29058,7 @@ begin
   end;
 end;
 
-function TSQLRestCallbacks.FindInstance(aID: Integer;
+function TSQLRestClientCallbacks.FindInstance(aID: Integer;
   out aFactory: TInterfaceFactory): pointer;
 var index: Integer;
 begin
@@ -29075,7 +29079,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCallbacks.DoRegister(aID: integer;
+procedure TSQLRestClientCallbacks.DoRegister(aID: integer;
   aInstance: pointer; aFactory: TInterfaceFactory);
 begin
   if aID<=0 then
@@ -29095,7 +29099,7 @@ begin
   end;
 end;
 
-function TSQLRestCallbacks.DoRegister(aInstance: pointer;
+function TSQLRestClientCallbacks.DoRegister(aInstance: pointer;
   aFactory: TInterfaceFactory): integer;
 begin
   result := InterlockedIncrement(fCurrentID);
@@ -29441,7 +29445,7 @@ constructor TSQLRestClientURI.Create(aModel: TSQLModel);
 begin
   inherited Create(aModel);
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
-  fFakeCallbacks := TSQLRestCallbacks.Create(self);
+  fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
   fPrivateGarbageCollector.Add(fFakeCallbacks);
   InitializeCriticalSection(fMutex);
 end;
@@ -29655,6 +29659,14 @@ begin
     'for %.%(%: %): consider using another kind of client',
     [self,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,
      ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
+end;
+
+function TSQLRestClientURI.FakeCallbackUnregister(Factory: TInterfaceFactory;
+  FakeCallbackID: integer; Instance: pointer): boolean;
+begin
+  raise EServiceException.CreateUTF8(
+    '% does not support % callbacks: consider using another kind of client',
+    [self,Factory.fInterfaceTypeInfo^.Name]);
 end;
 
 function TSQLRestClientURI.URI(const url, method: RawUTF8;
@@ -32707,12 +32719,21 @@ begin
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
+var callbackID: integer;
 begin
-  if Ctxt.Table=nil then
-    Cache.Flush else
-    if Ctxt.TableID=0 then
-      Cache.Flush(Ctxt.Table) else
-      Cache.SetCache(Ctxt.Table,Ctxt.TableID);
+  case Ctxt.Method of
+  mGET:
+    if Ctxt.Table=nil then
+      Cache.Flush else
+      if Ctxt.TableID=0 then
+        Cache.Flush(Ctxt.Table) else
+        Cache.SetCache(Ctxt.Table,Ctxt.TableID);
+  mPOST:
+    if Ctxt.URIBlobFieldName='_callback_' then begin
+      callbackID := GetInteger(pointer(Ctxt.Call^.InBody));
+      (Services as TServiceContainerServer).FakeCallbackRelease(callbackID);
+    end;
+  end;
   Ctxt.Success;
 end;
 
@@ -34206,7 +34227,8 @@ begin
           call.OutBody := '';
           // it's up to URI overridden method to implement access rights
           fServer.URI(call);
-          FileWrite(fPipe,call.OutStatus,sizeof(cardinal)*2);
+          FileWrite(fPipe,call.OutStatus,sizeof(cardinal));
+          FileWrite(fPipe,call.OutInternalState,sizeof(cardinal));
           WriteString(fPipe,call.OutHead);
           WriteString(fPipe,call.OutBody);
           FlushFileBuffers(fPipe); // Flush the pipe to allow the client to read
@@ -34402,7 +34424,8 @@ begin
       for i := 0 to 25 do // wait up to 325 ms
         if PeekNamedPipe(fServerPipe,nil,0,nil,@Card,nil) and
            (Card>=sizeof(Int64)) then begin
-          FileRead(fServerPipe,Call.OutStatus,sizeof(Int64));
+          FileRead(fServerPipe,Call.OutStatus,sizeof(cardinal));
+          FileRead(fServerPipe,Call.OutInternalState,sizeof(cardinal));
           Call.OutHead := ReadString(fServerPipe);
           Call.OutBody := ReadString(fServerPipe);
           exit;
@@ -34410,8 +34433,9 @@ begin
         SleepHiRes(i);
       Call.OutStatus := HTML_TIMEOUT; // 408 Request Timeout Error
 {$else}
-      if FileRead(fServerPipe,Call.OutStatus,sizeof(Int64))=sizeof(Int64) then begin
-        // FileRead() waits till response arrived
+      if FileRead(fServerPipe,Call.OutStatus,sizeof(cardinal))=sizeof(cardinal) then begin
+        // FileRead() waits till response arrived (or pipe is broken)
+        FileRead(fServerPipe,Call.OutInternalState,sizeof(cardinal));
         Call.OutHead := ReadString(fServerPipe);
         Call.OutBody := ReadString(fServerPipe);
       end else
@@ -38225,11 +38249,13 @@ begin
       Call.OutStatus := HTML_NOTIMPLEMENTED else begin
       P := pointer(fCurrentResponse);
       if PCardinal(P)^<>MAGIC_SYN then // broadcasted WM_COPYDATA message? :(
-        Call.OutStatus := 0 else
-        PInt64(@Call.OutStatus)^ := PInt64(P+4)^;
+        Call.OutStatus := 0 else begin
+        Call.OutStatus := PIntegerArray(P)[1];
+        Call.OutInternalState := PIntegerArray(P)[2];
+        inc(P,sizeof(integer)*3);
+      end;
       if Call.OutStatus=0 then
         Call.OutStatus := HTML_NOTFOUND else begin
-        inc(P,4+sizeof(Int64));
         Call.OutHead := GetNextItem(P,#1);
         if P<>nil then
           SetString(Call.OutBody,P,length(fCurrentResponse)-(P-pointer(fCurrentResponse)));
@@ -41475,6 +41501,7 @@ type
     fServer: TSQLRestServer;
     fLowLevelConnection: TObject;
     fInterface: TInterfaceFactory;
+    fReleasedOnClientSide: boolean;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
@@ -41825,11 +41852,19 @@ begin // here aClientDrivenID^ = FakeCall ID
   if not Assigned(fServer.OnNotifyCallback) then
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [fServer,aMethod.InterfaceDotMethodName]);
-  if aMethod.ArgsOutputValuesCount=0 then
-    aResult := nil; // no result -> asynchronous non blocking callback
-  result := fServer.OnNotifyCallback(fServer,
-    fLowLevelConnection,aMethod.InterfaceDotMethodName,
-    aParams,aClientDrivenID^,aResult,aErrorMsg);
+  if fReleasedOnClientSide then begin
+    fServer.InternalLog('%.CallbackInvoke: I% instance has been released on '+
+      'the client side, so callback notification was NOT sent',
+      [self,aMethod.InterfaceDotMethodName],sllWarning);
+    result := true; // do not raise an exception here: just log warning
+    // TODO: option to raise an exception (i.e. result := false) on request
+  end else begin
+    if aMethod.ArgsOutputValuesCount=0 then
+      aResult := nil; // no result -> asynchronous non blocking callback
+    result := fServer.OnNotifyCallback(fServer,
+      fLowLevelConnection,aMethod.InterfaceDotMethodName,
+      aParams,aClientDrivenID^,aResult,aErrorMsg);
+  end;
 end;
 
 procedure TSQLRestServerURIContext.ExecuteCallback(var Par: PUTF8Char;
@@ -41851,7 +41886,7 @@ begin
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
   instance := TInterfacedObjectFakeServer.Create(Self,factory,ID);
   instance.Get(Obj);
-  //(Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
+  (Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
 end;
 
 
@@ -44105,7 +44140,7 @@ begin
   if self=nil then
     exit;
   if fFakeCallbacks=nil then
-    fFakeCallbacks := TObjectListLocked.Create;
+    fFakeCallbacks := TObjectListLocked.Create(false);
   fFakeCallbacks.Lock;
   fFakeCallbacks.Add(aFakeInstance);
   fFakeCallbacks.UnLock;
@@ -44117,10 +44152,31 @@ begin
   if (self=nil) or (fFakeCallbacks=nil) then
     exit;
   fFakeCallbacks.Lock;
-  i := fFakeCallbacks.IndexOf(aFakeInstance);
-  if i>=0 then
-    fFakeCallbacks.Delete(i);
-  fFakeCallbacks.UnLock;
+  try
+    i := fFakeCallbacks.IndexOf(aFakeInstance);
+    if i>=0 then
+      fFakeCallbacks.Delete(i);
+  finally
+    fFakeCallbacks.UnLock;
+  end;
+end;
+
+procedure TServiceContainerServer.FakeCallbackRelease(aFakeID: cardinal);
+var i: integer;
+begin
+  if (self=nil) or (fFakeCallbacks=nil) then
+    exit;
+  fFakeCallbacks.Lock;
+  try
+    with fFakeCallbacks do
+    for i := 0 to Count-1 do
+      if TInterfacedObjectFakeServer(List[i]).ClientDrivenID=aFakeID then begin
+        TInterfacedObjectFakeServer(List[i]).fReleasedOnClientSide := true;
+        break;
+      end;
+  finally
+    fFakeCallbacks.UnLock;
+  end;
 end;
 
 

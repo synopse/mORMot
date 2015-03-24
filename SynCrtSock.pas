@@ -1683,6 +1683,8 @@ const
   STATUS_NOTFOUND = 404;
   /// HTML Status Code for "Internal Server Error"
   STATUS_SERVERERROR = 500;
+  /// HTML Status Code for "Not Implemented"
+  STATUS_NOTIMPLEMENTED = 501;
 
   {$ifdef MSWINDOWS}
   /// can be used with THttpApiServer.AuthenticationSchemes to enable all schemes
