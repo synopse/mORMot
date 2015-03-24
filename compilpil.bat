@@ -260,6 +260,8 @@ rem %DCC% MVCServerMongoDB.dpr %Switches%
 cd "\dev\lib\sqlite3\Samples\31 - WebSockets"
 echo - Sample 31
 %DCC% Project31SimpleEchoServer.dpr %Switches%
+%DCC% Project31LongWorkClient.dpr %Switches%
+%DCC% Project31LongWorkServer.dpr %Switches%
 @if errorlevel 1 pause
 
 
