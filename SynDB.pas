@@ -158,6 +158,7 @@ unit SynDB;
     DefinitionToFile methods and CreateFrom*() class methods to persist the
     database connection properties, and the associated class, as JSON 
   - new TSQLDBConnectionProperties/TSQLDBConnection.OnProcess event handlers
+  - new TSQLDBConnectionProperties.OnStatementInfo event handler
   - added TSQLDBConnectionProperties.StoreVoidStringAsNull, which will be
     set e.g. for MS SQL and Jet databases which do not allow by default to
     store '' values, but expect NULL instead
@@ -997,6 +998,14 @@ type
   // TSQLDBConnection.OnProperties properties
   TOnSQLDBProcess = procedure(Sender: TSQLDBConnection; Event: TOnSQLDBProcessEvent) of object;
 
+  /// event handler called when the low-level driver send some warning information
+  // - errors will trigger Exceptions, but sometimes the database driver returns
+  // some non critical information, which is logged and may be intercepted using
+  // the TSQLDBConnectionProperties.OnStatementInfo property
+  // - may be used e.g. to track ORA-28001 or ORA-28002 about account expire
+  // - is currently implemented by SynDBOracle, SynDBODBC and SynOleDB units
+  TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
+
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
   TSQLDBSharedTransactionAction = (transBegin, transCommit, transRollback);
 
@@ -1061,6 +1070,7 @@ type
     fEngineName: RawUTF8;
     fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
+    fOnStatementInfo: TOnSQLDBInfo;
     fConnectionTimeOutTicks: Int64;
     fSharedTransactions: array of record
       SessionID: cardinal;
@@ -1449,9 +1459,13 @@ type
     property ForeignKeysData: RawByteString
       read GetForeignKeysData write SetForeignKeysData;
     /// this event handler will be called during all process
-    // - can be used e.g. to change the desktop cursor
+    // - can be used e.g. to change the desktop cursor, or be notified
+    // on connection/disconnection/reconnection
     // - you can override this property directly in the TSQLDBConnection
     property OnProcess: TOnSQLDBProcess read fOnProcess write fOnProcess;
+    /// this event handler will be called when statements trigger some low-level
+    // information
+    property OnStatementInfo: TOnSQLDBInfo read fOnStatementInfo write fOnStatementInfo;
     /// you can define a callback method able to handle multiple INSERT
     // - may execute e.g. INSERT with multiple VALUES (like MySQL, MSSQL, NexusDB,
     // PostgreSQL or SQlite3), as defined by MultipleValuesInsert() callback
