@@ -942,7 +942,7 @@ type
   // ! Process(cExecuteToJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
   // ! Process(cExecuteToExpandedJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
   // - cExceptionRaised is a pseudo-command, used only for sending an exception
-  // to the client in case of remote connection 
+  // to the client in case of execution problem on the server side 
   TSQLDBProxyConnectionCommand = (
     cGetToken,cGetDBMS,
     cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
@@ -972,16 +972,25 @@ type
   /// possible events notified to TOnSQLDBProcess callback method
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
   // TSQLDBConnection.OnProcess properties
+  // - speConnected / speDisconnected will notify TSQLDBConnection.Connect
+  // and TSQLDBConnection.Disconnect calls
   // - speNonActive / speActive will be used to notify external DB blocking
   // access, so can be used e.g. to change the mouse cursor shape (this trigger
   // is re-entrant, i.e. it will be executed only once in case of nested calls)
   // - speReconnected will be called if TSQLDBConnection did successfully
-  // recover its database connection (on error, TQuery will call speConnectionLost)
+  // recover its database connection (on error, TQuery will call
+  // speConnectionLost): this event will be called by TSQLDBConnection.Connect
+  // after a regular speConnected notification
   // - speConnectionLost will be called by TQuery in case of broken connection,
   // and if Disconnect/Reconnect did not restore it as expected (i.e. speReconnected)
+  // - speStartTransaction / speCommit / speRollback will notify the
+  // corresponding TSQLDBConnection.StartTransaction, TSQLDBConnection.Commit
+  // and TSQLDBConnection.Rollback methods
   TOnSQLDBProcessEvent = (
+    speConnected, speDisconnected,
     speNonActive, speActive,
-    speConnectionLost, speReconnected);
+    speConnectionLost, speReconnected,
+    speStartTransaction, speCommit, speRollback);
 
   /// event handler called during all external DB process
   // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
@@ -1596,7 +1605,7 @@ type
     function GetServerTimeStamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
     function GetLastErrorWasAboutConnection: boolean; 
-    /// raise an exception
+    /// raise an exception if IsConnected returns false
     procedure CheckConnection;
     /// call OnProcess() call back event, if needed
     procedure InternalProcess(Event: TOnSQLDBProcessEvent);
@@ -3864,17 +3873,13 @@ procedure TSQLDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
 begin
   if (self=nil) or not Assigned(OnProcess) then
     exit;
-  case Event of
-  speActive: begin
-    if fInternalProcessActive=0 then
+  case Event of // thread-safe handle of speActive/peNonActive nested calls
+  speActive:
+    if InterlockedIncrement(fInternalProcessActive)=1 then
       OnProcess(self,Event);
-    inc(fInternalProcessActive);
-  end;
-  speNonActive: begin
-    dec(fInternalProcessActive);
-    if fInternalProcessActive=0 then
+  speNonActive: 
+    if InterlockedDecrement(fInternalProcessActive)=0 then
       OnProcess(self,Event);
-  end;
   else
     OnProcess(self,Event);
   end;
@@ -3886,6 +3891,7 @@ begin
   if TransactionCount<=0 then
     raise ESQLDBException.CreateUTF8('Invalid %.Commit call',[self]);
   dec(fTransactionCount);
+  InternalProcess(speCommit);
 end;
 
 constructor TSQLDBConnection.Create(aProperties: TSQLDBConnectionProperties);
@@ -3900,6 +3906,7 @@ end;
 procedure TSQLDBConnection.Connect;
 begin
   inc(fTotalConnectionCount);
+  InternalProcess(speConnected);
   if fTotalConnectionCount>1 then
     InternalProcess(speReconnected);
   if fServerTimeStampAtConnection=0 then
@@ -3914,6 +3921,7 @@ procedure TSQLDBConnection.Disconnect;
 var i: integer;
     Obj: PPointerArray;
 begin
+  InternalProcess(speDisconnected);
   if fCache<>nil then begin
     InternalProcess(speActive);
     try
@@ -4074,12 +4082,14 @@ begin
   if TransactionCount<=0 then
     raise ESQLDBException.CreateUTF8('Invalid %.Rollback call',[self]);
   dec(fTransactionCount);
+  InternalProcess(speRollback);
 end;
 
 procedure TSQLDBConnection.StartTransaction;
 begin
   CheckConnection;
   inc(fTransactionCount);
+  InternalProcess(speStartTransaction);
 end;
 
 function TSQLDBConnection.NewTableFromRows(const TableName: RawUTF8;
@@ -4244,14 +4254,14 @@ end;
 function TSQLDBRemoteConnectionProtocol.HandleInput(const input: RawByteString): RawByteString;
 begin
   result := Input;
-  SymmetricEncrypt(length(result),result);
+  SymmetricEncrypt(REMOTE_MAGIC,result);
   result := SynLZDecompress(result);
 end;
 
 function TSQLDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString): RawByteString;
 begin
   result := SynLZCompress(output);
-  SymmetricEncrypt(length(result),result);
+  SymmetricEncrypt(REMOTE_MAGIC,result);
 end;
 
 procedure TSQLDBConnection.RemoteProcessMessage(const Input: RawByteString;
@@ -4269,11 +4279,11 @@ var Stmt: ISQLDBStatement;
     OutputSQLDBIndexDefineDynArray: TSQLDBIndexDefineDynArray;
     OutputRawUTF8DynArray: TRawUTF8DynArray;
 procedure AppendOutput(value: Int64);
-var temp: RawUTF8;
+var len: integer;
 begin
-  SetLength(temp,sizeof(Int64));
-  PInt64(temp)^ := value;
-  msgOutput := msgOutput+temp;
+  len := Length(msgOutput);
+  SetLength(msgOutput,len+sizeof(Int64));
+  PInt64(@PByteArray(msgOutput)[len])^ := value;
 end;
 begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
   if Protocol=nil then
@@ -6615,7 +6625,7 @@ begin
   for F := 0 to length(ColTypes)-1 do
     if not (F in Null) then begin
       colType := ColTypes[F];
-      if colType<ftInt64 then begin
+      if colType<ftInt64 then begin // ftUnknown,ftNull
         colType := ColumnType(F); // per-row column type (SQLite3 only)
         W.Write1(ord(colType));
       end;
@@ -7634,7 +7644,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
     SetString(OutputRawUTF8,O,length(msgOutput)-sizeof(header));
   cExceptionRaised: // msgOutput is ExceptionClassName+#0+ExceptionMessage
-    raise ESQLDBRemote.CreateUTF8('%.Process(%): server raised % with "%"',
+    raise ESQLDBRemote.CreateUTF8('%.Process(%): server raised % with ''%''',
       [self,GetEnumName(TypeInfo(TSQLDBProxyConnectionCommand),Ord(Command))^,
        O,O+StrLen(O)+1]);
   else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() output command %',
