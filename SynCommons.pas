@@ -6281,7 +6281,7 @@ type
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   TSynCriticalSection = class(TCriticalSection)
   protected
-    PaddingForLock: array[0..95] of byte;
+    PaddingForLock: array[0..11] of Int64;
   public
     {$ifndef DELPHI5OROLDER}
     {$ifndef HASINLINE}

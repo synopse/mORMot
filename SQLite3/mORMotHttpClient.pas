@@ -621,9 +621,10 @@ begin
     if not InternalCheckOpen then begin
       result := nil;
       exit;
-    end else
-    (fSocket as THttpClientWebSockets).CallbackRequestProcess := CallbackRequest;
+    end;
   result := fSocket as THttpClientWebSockets;
+  if not Assigned(result.CallbackRequestProcess) then
+    result.CallbackRequestProcess := CallbackRequest;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(

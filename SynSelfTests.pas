@@ -12920,7 +12920,7 @@ procedure WaitUntilNotified;
 var timeout: Int64;
 begin
   timeout := GetTickCount64+5000;
-  repeat sleep(1) until (subscribed.value=6) or (GetTickCount64>timeout);
+  while (subscribed.value<>6) and (GetTickCount64<timeout) do sleep(1);
   Check(subscribed.value=6);
 end;
 begin
@@ -12954,10 +12954,11 @@ var Client: TSQLHttpClientWebsockets;
 begin
   Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
   try
-    Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
     Check(Client.ServerTimeStampSynchronize);
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
+    TestRest(Client);
+    Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
     TestRest(Client);
     TestCallback(Client);
   finally
