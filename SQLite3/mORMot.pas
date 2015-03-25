@@ -10350,7 +10350,7 @@ type
     procedure OnCloseSession(aSessionID: cardinal); virtual;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
-    procedure FakeCallbackRelease(aFakeID: cardinal); 
+    function FakeCallbackRelease(aConnection: TObject; aFakeID: cardinal): boolean;
   public
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
@@ -32722,19 +32722,23 @@ procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
 var callbackID: integer;
 begin
   case Ctxt.Method of
-  mGET:
+  mGET: begin
     if Ctxt.Table=nil then
       Cache.Flush else
       if Ctxt.TableID=0 then
         Cache.Flush(Ctxt.Table) else
         Cache.SetCache(Ctxt.Table,Ctxt.TableID);
+    Ctxt.Success;
+  end;
   mPOST:
     if Ctxt.URIBlobFieldName='_callback_' then begin
       callbackID := GetInteger(pointer(Ctxt.Call^.InBody));
-      (Services as TServiceContainerServer).FakeCallbackRelease(callbackID);
+      if (callbackID>0) and
+         (Services as TServiceContainerServer).FakeCallbackRelease(
+          Ctxt.Call^.LowLevelConnection,callbackID) then
+        Ctxt.Success;
     end;
   end;
-  Ctxt.Success;
 end;
 
 procedure TSQLRestServer.Batch(Ctxt: TSQLRestServerURIContext);
@@ -44161,18 +44165,22 @@ begin
   end;
 end;
 
-procedure TServiceContainerServer.FakeCallbackRelease(aFakeID: cardinal);
+function TServiceContainerServer.FakeCallbackRelease(
+  aConnection: TObject; aFakeID: cardinal): boolean;
 var i: integer;
 begin
+  result := false;
   if (self=nil) or (fFakeCallbacks=nil) then
     exit;
-  fFakeCallbacks.Lock;
   try
-    with fFakeCallbacks do
-    for i := 0 to Count-1 do
-      if TInterfacedObjectFakeServer(List[i]).ClientDrivenID=aFakeID then begin
-        TInterfacedObjectFakeServer(List[i]).fReleasedOnClientSide := true;
-        break;
+    fFakeCallbacks.Lock;
+    for i := 0 to fFakeCallbacks.Count-1 do
+      with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do
+      if (fLowLevelConnection=aConnection) and
+         (ClientDrivenID=aFakeID) then begin
+        fReleasedOnClientSide := true;
+        result := true;
+        exit;
       end;
   finally
     fFakeCallbacks.UnLock;
