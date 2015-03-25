@@ -819,10 +819,10 @@ type
     procedure WebsocketsJSONProtocol;
     /// low-level test of our 'synopsebinary' WebSockets binary protocol
     procedure WebsocketsBinaryProtocol;
-    /// test the callback mechanism via interface-based services on server side
-    procedure SOACallbackOnServerSide;
     /// launch the WebSockets-ready HTTP server
     procedure RunHttpServer;
+    /// test the callback mechanism via interface-based services on server side
+    procedure SOACallbackOnServerSide;
     /// test callbacks via interface-based services over JSON WebSockets
     procedure SOACallbackViaJSONWebsockets;
     /// test callbacks via interface-based services over binary WebSockets
@@ -12743,8 +12743,8 @@ var C1,C2: THttpServerRequest;
     frame: TWebSocketFrame;
     noAnswer1,noAnswer2: boolean;
 begin
-  C1 := THttpServerRequest.Create(nil,nil);
-  C2 := THttpServerRequest.Create(nil,nil);
+  C1 := THttpServerRequest.Create(nil,0,nil);
+  C2 := THttpServerRequest.Create(nil,0,nil);
   P2 := protocol.Clone;
   try
     C1.Prepare('url','POST','headers',content,contentType);
@@ -12868,22 +12868,16 @@ begin
   result := fValue;
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
+const
+  WEBSOCKETS_KEY = 'key';
+
+procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 begin
   TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService),TypeInfo(IBidirCallback)]);
   // sicClientDriven services expect authentication for sessions
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
   Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicClientDriven)<>nil);
-  TestRest(fServer);
-  TestCallback(fServer);
-end;
-
-const
-  WEBSOCKETS_KEY = 'key';
-  
-procedure TTestBidirectionalRemoteConnection.RunHttpServer;
-begin
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).
@@ -12949,6 +12943,13 @@ begin
   end;
   WaitUntilNotified;
 end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
+
+procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
+begin
+  TestRest(fServer);
+  TestRest(fServer);
+  TestCallback(fServer);
+end;
 
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(Ajax: boolean);
 var Client: TSQLHttpClientWebsockets;

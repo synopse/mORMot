@@ -293,8 +293,9 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
-    function NotifyCallback(aSender: TSQLRestServer; aConnection: TObject;
-      const aInterfaceDotMethodName,aParams: RawUTF8; aFakeCallID: integer;
+    function NotifyCallback(aSender: TSQLRestServer;
+      const aInterfaceDotMethodName,aParams: RawUTF8;
+      aConnectionID: Int64; aFakeCallID: integer;
       aResult, aErrorMsg: PRawUTF8): boolean;
   public
     /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
@@ -784,7 +785,7 @@ begin
   end else begin
     // compute URI, handling any virtual host domain
     fillchar(call,sizeof(call),0);
-    call.LowLevelConnection := Ctxt.CallingThread;
+    call.LowLevelConnectionID := Ctxt.ConnectionID;
     if Ctxt.UseSSL then
       include(call.LowLevelFlags,llfSSL);
     if fHosts.Count>0 then begin
@@ -904,17 +905,17 @@ begin
 end;
 
 function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
-  aConnection: TObject; const aInterfaceDotMethodName, aParams: RawUTF8;
+  const aInterfaceDotMethodName, aParams: RawUTF8; aConnectionID: Int64;
   aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
 var ctxt: THttpServerRequest;
     mode: TWebSocketProcessNotifyCallback;
     status: cardinal;
-begin
+begin    
   result := false;
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   try // aConnection.InheritsFrom(TNotifiedThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-    ctxt := THttpServerRequest.Create(nil,TNotifiedThread(aConnection));
+    ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
     try                                    
       ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
         aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
@@ -928,7 +929,7 @@ begin
         result := true;
       end else
         if aErrorMsg<>nil then
-          aErrorMsg^ := FormatUTF8('% returned status=%',[aConnection,status]);
+          aErrorMsg^ := FormatUTF8('% returned status=%',[aConnectionID,status]);
     finally
       ctxt.Free;
     end;

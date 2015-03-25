@@ -4632,7 +4632,7 @@ type
 
   /// some flags set by the caller to notify low-level context
   TSQLRestURIParamsLowLevelFlags = set of TSQLRestURIParamsLowLevelFlag;
-
+                        
   /// store all parameters for a TSQLRestServer.URI() method call
   // - see TSQLRestClient to check how data is expected in our RESTful format
   TSQLRestURIParams = packed record
@@ -4673,10 +4673,12 @@ type
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: PSQLAccessRights;
     /// opaque reference to the protocol context which made this request
-    // - may contain e.g. nil, a THttpServerResp, a TWebSocketServerResp,
+    // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
     // a THttpApiServer, a TSQLRestClientURI, a TFastCGIServer or a
-    // TSQLRestServerNamedPipeResponse
-    LowLevelConnection: TObject;
+    // TSQLRestServerNamedPipeResponse instance
+    // - is a Int64 as expected by http.sys, but is an incremental sequence
+    // of integer for THttpServer/TWebSocketServer, or a PtrInt(self) 
+    LowLevelConnectionID: Int64;
     /// low-level properties of the current protocol context
     LowLevelFlags: TSQLRestURIParamsLowLevelFlags;
   end;
@@ -10348,12 +10350,13 @@ type
   TServiceContainerServer = class(TServiceContainer)
   protected
     fPublishSignature: boolean;
+    fConnectionID: Int64;
     fFakeCallbacks: TObjectListLocked; // TInterfacedObjectFakeServer instances
     /// make some garbage collection when session is finished
     procedure OnCloseSession(aSessionID: cardinal); virtual;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
-    function FakeCallbackRelease(aConnection: TObject; aFakeID: cardinal): boolean;
+    function FakeCallbackRelease(aConnectionID: Int64; aFakeID: integer): boolean;
   public
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
@@ -11699,8 +11702,9 @@ type
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
   TSQLRestServerNotifyCallback = function(aSender: TSQLRestServer;
-    aConnection: TObject; const aInterfaceDotMethodName,aParams: RawUTF8;
-    aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean of object;
+    const aInterfaceDotMethodName,aParams: RawUTF8;
+    aConnectionID: Int64; aFakeCallID: integer;
+    aResult, aErrorMsg: PRawUTF8): boolean of object;
 
 {$ifdef MSWINDOWS}
   /// Server thread accepting connections from named pipes
@@ -29652,7 +29656,7 @@ begin
       exit; // if /TimeStamp is not available, server is down!
     end;
   fillchar(Call,sizeof(Call),0);
-  Call.LowLevelConnection := self;
+  Call.LowLevelConnectionID := PtrInt(self);
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -32696,7 +32700,7 @@ begin
       InternalLog('FakeCallbackRelease(%)',[callbackID],sllDebug);
       if (callbackID>0) and
          (Services as TServiceContainerServer).FakeCallbackRelease(
-          Ctxt.Call^.LowLevelConnection,callbackID) then
+          Ctxt.Call^.LowLevelConnectionID,callbackID) then
         Ctxt.Success;
     end;
   end;
@@ -34168,7 +34172,7 @@ begin
   Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe);
   fServer.BeginCurrentThread(self);
   fillchar(call,sizeof(call),0);
-  call.LowLevelConnection := self;
+  call.LowLevelConnectionID := PtrInt(self);
   Ticks64 := 0;
   Sleeper64 := 0;
   ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min of inactivity
@@ -41464,7 +41468,7 @@ type
   TInterfacedObjectFakeServer = class(TInterfacedObjectFake)
   protected
     fServer: TSQLRestServer;
-    fLowLevelConnection: TObject;
+    fLowLevelConnectionID: Int64;
     fReleasedOnClientSide: boolean;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
@@ -41795,7 +41799,7 @@ constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContex
   aFactory: TInterfaceFactory; aID: Integer);
 begin
   fServer := aRequest.Server;
-  fLowLevelConnection := aRequest.Call^.LowLevelConnection;
+  fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aID;
   inherited Create(aFactory,CallbackInvoke,nil);
 end;
@@ -41824,9 +41828,8 @@ begin // here aClientDrivenID^ = FakeCall ID
   end else begin
     if aMethod.ArgsOutputValuesCount=0 then
       aResult := nil; // no result -> asynchronous non blocking callback
-    result := fServer.OnNotifyCallback(fServer,
-      fLowLevelConnection,aMethod.InterfaceDotMethodName,
-      aParams,aClientDrivenID^,aResult,aErrorMsg);
+    result := fServer.OnNotifyCallback(fServer,aMethod.InterfaceDotMethodName,
+      aParams,fLowLevelConnectionID,aClientDrivenID^,aResult,aErrorMsg);
   end;
 end;
 
@@ -44111,45 +44114,47 @@ end;
 
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
 var i,callbackID: integer;
-    connection: TObject;
+    connectionID: Int64;
     server: TSQLRestServer;
 begin
   if (self=nil) or (fFakeCallbacks=nil) then
     exit;
-  connection := nil;
+  connectionID := 0;
   callbackID := 0;
   fFakeCallbacks.Lock;
   try
     i := fFakeCallbacks.IndexOf(aFakeInstance);
-    if i>=0 then
-    with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do begin
-      connection := fLowLevelConnection;
-      callbackID := ClientDrivenID;
+    if i>=0 then begin
+      with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do
+        if not fReleasedOnClientSide then begin
+          connectionID := fLowLevelConnectionID;
+          callbackID := ClientDrivenID;
+        end;
       fFakeCallbacks.Delete(i);
     end;
   finally
     fFakeCallbacks.UnLock;
   end;
-  if connection<>nil then begin
+  if connectionID<>0 then begin
     server := fRest as TSQLRestServer;
     if Assigned(server.OnNotifyCallback) then
-      server.OnNotifyCallback(server,connection,'_free_','',callbackID,nil,nil);
+      server.OnNotifyCallback(server,'_free_','',connectionID,callbackID,nil,nil);
   end;
 end;
 
 function TServiceContainerServer.FakeCallbackRelease(
-  aConnection: TObject; aFakeID: cardinal): boolean;
+  aConnectionID: Int64; aFakeID: integer): boolean;
 var i: integer;
 begin
   result := false;
   if (self=nil) or (fFakeCallbacks=nil) then
     exit;
-  try
+  try                                              
     fFakeCallbacks.Lock;
     for i := 0 to fFakeCallbacks.Count-1 do
       with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do
-      if (fLowLevelConnection=aConnection) and
-         (ClientDrivenID=aFakeID) then begin
+      if (fLowLevelConnectionID=aConnectionID) and
+         (ClientDrivenID=cardinal(aFakeID)) then begin
         fReleasedOnClientSide := true;
         result := true;
         exit;

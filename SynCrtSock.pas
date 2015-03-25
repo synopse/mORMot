@@ -716,6 +716,7 @@ type
     fThreadPool: TSynThreadPoolTHttpServer;
     {$endif}
     fClientSock: TSocket;
+    fConnectionID: integer;
     /// main thread loop: read request from socket, send back answer
     procedure Execute; override;
   public
@@ -731,6 +732,8 @@ type
     property ServerSock: THttpServerSocket read fServerSock;
     /// the associated main HTTP server instance
     property Server: THttpServer read fServer;
+    /// the unique identifier of this connection
+    property ConnectionID: integer read fConnectionID;
   end;
 
   THttpServerRespClass = class of THttpServerResp;
@@ -811,14 +814,15 @@ type
     fURL, fMethod, fInHeaders, fInContent, fInContentType: SockString;
     fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
-    fCallingThread: TNotifiedThread;
+    fConnectionID: Int64;
+    fConnectionThread: TNotifiedThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fAuthenticatedUser: SockString;
   public
     /// initialize the context, associated to a HTTP server instance
-    constructor Create(aServer: THttpServerGeneric;
-      aCallingThread: TNotifiedThread); virtual;
+    constructor Create(aServer: THttpServerGeneric; aConnectionID: Int64;
+      aConnectionThread: TNotifiedThread); virtual;
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
@@ -851,10 +855,15 @@ type
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric read fServer;
-    /// the thread instance which called this execution context
+    /// the ID of the connection which called this execution context
     // - e.g. SynCrtSock's TWebSocketProcess.NotifyCallback method would use
     // this property to specify the client connection to be notified
-    property CallingThread: TNotifiedThread read fCallingThread;
+    // - is set as an Int64 to match http.sys ID type, but will be an 
+    // increasing integer sequence for (web)socket-based servers
+    property ConnectionID: Int64 read fConnectionID;
+    /// the thread which owns the connection of this execution context
+    // - depending on the HTTP server used, may not follow ConnectionID
+    property ConnectionThread: TNotifiedThread read fConnectionThread;
     /// is TRUE if the caller is connected via HTTPS
     // - only set for THttpApiServer class yet
     property UseSSL: boolean read fUseSSL;
@@ -894,10 +903,12 @@ type
     fCompressAcceptEncoding: SockString;
     fOnHttpThreadStart: TNotifyThreadEvent;
     fServerName: SockString;
+    fCurrentConnectionID: integer;
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
     procedure NotifyThreadStart(Sender: TNotifiedThread);
     procedure SetServerName(const aName: SockString); virtual;
+    function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: Boolean); reintroduce; 
@@ -1261,7 +1272,8 @@ type
     procedure OnDisconnect; virtual;
     /// override this function in order to low-level process the request;
     // default process is to get headers, and call public function Request
-    procedure Process(ClientSock: THttpServerSocket; aCallingThread: TNotifiedThread); virtual;
+    procedure Process(ClientSock: THttpServerSocket;
+      ConnectionID: integer; ConnectionThread: TNotifiedThread); virtual;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -1270,7 +1282,7 @@ type
     // cases, maximum is 64) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString
-      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
+      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif}); virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -3331,11 +3343,12 @@ end;
 { THttpServerRequest }
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
-  aCallingThread: TNotifiedThread);
+  aConnectionID: Int64; aConnectionThread: TNotifiedThread);
 begin
   inherited Create;
   fServer := aServer;
-  fCallingThread := aCallingThread;
+  fConnectionID := aConnectionID;
+  fConnectionThread := aConnectionThread;
 end;
 
 procedure THttpServerRequest.Prepare(
@@ -3370,7 +3383,7 @@ end;
 
 function THttpServerGeneric.Request(Ctxt: THttpServerRequest): cardinal;
 begin
-  NotifyThreadStart(Ctxt.CallingThread);
+  NotifyThreadStart(Ctxt.ConnectionThread);
   if Assigned(OnRequest) then
     result := OnRequest(Ctxt) else
     result := STATUS_NOTFOUND;
@@ -3394,6 +3407,11 @@ end;
 procedure THttpServerGeneric.SetServerName(const aName: SockString);
 begin
   fServerName := aName;
+end;
+
+function THttpServerGeneric.NextConnectionID: integer;
+begin
+  result := InterlockedIncrement(fCurrentConnectionID);
 end;
 
 
@@ -3535,7 +3553,7 @@ begin
 end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
-  aCallingThread: TNotifiedThread);
+  ConnectionID: integer; ConnectionThread: TNotifiedThread);
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
@@ -3548,7 +3566,7 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
-  Context := THttpServerRequest.Create(self,aCallingThread);
+  Context := THttpServerRequest.Create(self,ConnectionID,ConnectionThread);
   try                          
     // calc answer
     with ClientSock do
@@ -3666,8 +3684,6 @@ end;
 constructor THttpServerResp.Create(aServerSock: THttpServerSocket;
   aServer: THttpServer{$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
 begin
-  inherited Create(false);
-  FreeOnTerminate := true;
   fServer := aServer;
   fServerSock := aServerSock;
   {$ifdef USETHREADPOOL}
@@ -3680,6 +3696,9 @@ begin
   finally
     LeaveCriticalSection(fServer.fProcessCS);
   end;
+  fConnectionID := fServer.NextConnectionID;
+  inherited Create(false);
+  FreeOnTerminate := true;
 end;
 
 procedure THttpServerResp.Execute;
@@ -3715,7 +3734,7 @@ begin
             // fServerSock connection was down or headers are not correct
             exit;
           // calc answer and send response
-          fServer.Process(fServerSock,self);
+          fServer.Process(fServerSock,ConnectionID,self);
           // keep connection only if necessary
           if fServerSock.KeepAliveClient then
             break else
@@ -3753,7 +3772,7 @@ begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not fServerSock.fBodyRetrieved then
           fServerSock.GetBody;
-        fServer.Process(fServerSock,self);
+        fServer.Process(fServerSock,ConnectionID,self);
         if (fServer<>nil) and fServerSock.KeepAliveClient then
           HandleRequestsProcess; // process further kept alive requests
       end;
@@ -4222,7 +4241,8 @@ begin
   result := PostQueuedCompletionStatus(FRequestQueue,PtrUInt(aClientSock),0,nil);
 end;
 
-procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThreadPoolSubThread; aContext: Pointer);
+procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThreadPoolSubThread;
+  aContext: Pointer);
 var ServerSock: THttpServerSocket;
 begin
   ServerSock := THttpServerSocket.Create(fServer);
@@ -4241,7 +4261,7 @@ begin
       end else begin
         // no Keep Alive = multi-connection -> process in the Thread Pool
         ServerSock.GetBody; // we need to get it now
-        fServer.Process(ServerSock,aCaller);
+        fServer.Process(ServerSock,0,aCaller); // multi-connection -> ID=0
         fServer.OnDisconnect;
         // no Shutdown here: will be done client-side
       end;
@@ -5667,7 +5687,7 @@ begin
   Req := pointer(ReqBuf);
   CurrentLog := pointer(fLogDataStorage);
   Verbs := VERB_TEXT;
-  Context := THttpServerRequest.Create(self,self);
+  Context := THttpServerRequest.Create(self,0,self);
   try
     // main loop
     ReqID := 0;
@@ -5682,6 +5702,7 @@ begin
       NO_ERROR:
       try
         // parse method and headers
+        Context.fConnectionID := Req^.RequestId;
         Context.fURL := Req^.pRawUrl;
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else

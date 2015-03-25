@@ -61,6 +61,7 @@ unit SynCrypto;
     - MD5 - standard fast 128 bits Hash
     - SHA1 - 160 bits Secure Hash
     - SHA256 - 256 bits Secure Hash with optimized asm version
+    - hardware AES-NI and SHA-SSE4 support for latest CPU
     - VIA PADLOCK optional support - native .o code on linux or .dll (Win32)
      (tested on a Dedibox C7 (rev1) linux server - need validation for Win32)
     - Microsoft AES Cryptographic Provider optional support via CryptoAPI
