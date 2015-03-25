@@ -804,6 +804,22 @@ type
     {$endif}
   end;
 
+  /// SOA callback definition as expected by TTestBidirectionalRemoteConnection
+  IBidirCallback = interface(IInvokable)
+    ['{5C5818CC-FFBA-445C-82C1-39F45B84520C}']
+    procedure AsynchEvent(a: integer);
+    function Value: Integer;
+  end;
+  
+  /// SOA service definition as expected by TTestBidirectionalRemoteConnection
+  IBidirService = interface(IInvokable)
+    ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
+    function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+    procedure LaunchCallback(a: integer);
+    procedure RemoveCallback;
+  end;
+
   /// a test case for all bidirectional remote access, e.g. WebSockets
   TTestBidirectionalRemoteConnection = class(TSynTestCase)
   protected
@@ -12788,19 +12804,6 @@ begin
 end;
 
 type
-  IBidirCallback = interface(IInvokable)
-    ['{5C5818CC-FFBA-445C-82C1-39F45B84520C}']
-    procedure AsynchEvent(a: integer);
-    function Value: Integer;
-  end;
-  IBidirService = interface(IInvokable)
-    ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
-    function TestRest(a,b: integer; out c: RawUTF8): variant;
-    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchCallback(a: integer);
-    procedure RemoveCallback;
-  end;
-
   TBidirServer = class(TInterfacedObject,IBidirService)
   protected
     fCallback: IBidirCallback;

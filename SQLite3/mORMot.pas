@@ -2228,6 +2228,9 @@ type
     /// get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
+    /// get the unit name of a given interface type information
+    // - returns '' if this type is not an interface
+    function InterfaceUnitName: PShortString;
   end;
 
 {$ifdef FPC}
@@ -23893,6 +23896,13 @@ begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
     result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfGuid;
+end;
+
+function TTypeInfo.InterfaceUnitName: PShortString;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := @NULL_SHORTSTRING else
+    result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfUnit;
 end;
 
 

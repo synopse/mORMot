@@ -163,7 +163,7 @@ type
     wCurrency, wSingle, wDouble, wDateTime,
     wRawUTF8, wString, wRawJSON, wBlob,
     wGUID, wCustomAnswer, wRecord, wArray, wVariant,
-    wObject, wSQLRecord);
+    wObject, wSQLRecord, wInterface);
   /// supported languages typesets
   TWrapperLanguage = (
     lngDelphi, lngPascal, lngCS, lngJava);
@@ -190,22 +190,22 @@ const
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'RawUTF8','String', 'RawJSON',
-    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', ''),
+    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', '', ''),
    // lngPascal
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
-    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID'),
+    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID', ''),
    // lngCS
    ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
     'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'decimal', 'single', 'double', 'double', 'string', 'string', 'dynamic',
-    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID'),
+    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID', ''),
    // lngJava
    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
-    'String', 'byte[]', '', '', 'Object', '', 'TID'));
+    'String', 'byte[]', '', '', 'Object', '', 'TID', ''));
                        
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,   // sftUnknown
@@ -454,10 +454,14 @@ end;
 
 function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
 var m: integer;
+    unitName: RawUTF8;
 begin
   TDocVariant.NewFast(result);
   for m := 0 to int.MethodsCount-1 do
     TDocVariantData(result).AddItem(ContextFromMethod(int.Methods[m]));
+  unitName := ShortStringToAnsi7String(int.InterfaceTypeInfo^.InterfaceUnitName^);
+  if (unitName<>'') and (fUnits.SearchItemByValue(unitName)<0) then
+    fUnits.AddItem(unitName);
 end;
 
 function TWrapperContext.ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
@@ -562,8 +566,10 @@ begin
       case typInfo^.Kind of
       tkRecord{$ifdef FPC},tkObject{$endif}:
         typ := wRecord;
+      tkInterface:
+        typ := wInterface;
       else
-        raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typName]);
+        raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typInfo^.Name]);
       end;
     end;
   end;
@@ -583,13 +589,16 @@ begin
     'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
   if self=nil then
     exit; // no need to have full info if called e.g. from MVC
-  if (typInfo<>nil) and (typInfo^.Kind=tkClass) then begin
+  if typInfo<>nil then
+  case typInfo^.Kind of
+  tkClass: begin
     unitName := ShortStringToAnsi7String(typInfo^.ClassType^.UnitName);
     if not IdemPropNameU(unitName,'mORMot') then begin
       _ObjAddProps(['unitName',unitName],result);
       if fUnits.SearchItemByValue(unitName)<0 then
         fUnits.AddItem(unitName);
     end;
+  end;
   end;
   case typ of
   wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
@@ -650,6 +659,8 @@ begin
   wBlob:
     _ObjAddProps(['isBlob',true,
       'toVariant','BlobToVariant','fromVariant','VariantToBlob'],result);
+  wInterface:
+    _ObjAddProps(['isInterface',true],result);
   else raise EWrapperContext.CreateUTF8('Unexpected type % (%) for "%"',
     [typeWrapper^,ord(typ),typName]);
   end;

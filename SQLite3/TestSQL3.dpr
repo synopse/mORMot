@@ -112,7 +112,6 @@ uses
   SynCommons in '..\SynCommons.pas',
   SynLog in '..\SynLog.pas',
   SynTests in '..\SynTests.pas',
-  mORMotSelfTests in 'mORMotSelfTests.pas',
 {$ifndef DELPHI5OROLDER}
   {$ifndef LVCL}
   SynMongoDB in '..\SynMongoDB.pas',
@@ -162,14 +161,15 @@ uses
   SynDBZeos in '..\SynDBZeos.pas',
   {$endif}
   {$endif}
-{$ifndef DELPHI5OROLDER}      
+{$ifndef DELPHI5OROLDER}
   SynDBRemote in '..\SynDBRemote.pas',
   mORMotDB in 'mORMotDB.pas',
   mORMotMongoDB in 'mORMotMongoDB.pas',
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   SynZip in '..\SynZip.pas',
-  SynSelfTests in '..\SynSelfTests.pas';
+  SynSelfTests in '..\SynSelfTests.pas',
+  mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}
 
 begin
