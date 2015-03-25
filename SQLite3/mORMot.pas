@@ -9062,6 +9062,7 @@ type
 
   {$endif HASINTERFACERTTI}
 
+  {$M+}
   /// abstract class handling a generic interface implementation class
   TInterfacedObjectFromFactory = class(TInterfacedObject)
   protected
@@ -9075,11 +9076,13 @@ type
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
     /// release the remote server instance (in sicClientDriven mode);
     destructor Destroy; override;
+  published
     /// the associated interface factory class
     property Factory: TInterfaceFactory read fFactory;
     /// the ID used in sicClientDriven mode
     property ClientDrivenID: Cardinal read fClientDrivenID;
   end;
+  {$M-}
 
   /// class handling interface implementation generated from source
   // - this class targets FPC, which does not generate the expected RTTI - see
@@ -32733,6 +32736,7 @@ begin
   mPOST:
     if Ctxt.URIBlobFieldName='_callback_' then begin
       callbackID := GetInteger(pointer(Ctxt.Call^.InBody));
+      InternalLog('FakeCallbackRelease(%)',[callbackID],sllDebug);
       if (callbackID>0) and
          (Services as TServiceContainerServer).FakeCallbackRelease(
           Ctxt.Call^.LowLevelConnection,callbackID) then
@@ -41504,14 +41508,13 @@ type
   protected
     fServer: TSQLRestServer;
     fLowLevelConnection: TObject;
-    fInterface: TInterfaceFactory;
     fReleasedOnClientSide: boolean;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   public
     constructor Create(aRequest: TSQLRestServerURIContext;
-      aInterface: TInterfaceFactory; aID: Integer);
+      aFactory: TInterfaceFactory; aID: Integer);
     destructor Destroy; override;
   end;
 
@@ -41832,13 +41835,12 @@ begin
 end;
 
 constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContext;
-  aInterface: TInterfaceFactory; aID: Integer);
+  aFactory: TInterfaceFactory; aID: Integer);
 begin
   fServer := aRequest.Server;
   fLowLevelConnection := aRequest.Call^.LowLevelConnection;
-  fInterface := aInterface;
   fClientDrivenID := aID;
-  inherited Create(fInterface,CallbackInvoke,nil);
+  inherited Create(aFactory,CallbackInvoke,nil);
 end;
 
 destructor TInterfacedObjectFakeServer.Destroy;
@@ -41857,9 +41859,9 @@ begin // here aClientDrivenID^ = FakeCall ID
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [fServer,aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then begin
-    fServer.InternalLog('%.CallbackInvoke: I% instance has been released on '+
-      'the client side, so callback notification was NOT sent',
-      [self,aMethod.InterfaceDotMethodName],sllWarning);
+    fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+
+      'the client side, so I% callback notification was NOT sent',
+      [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.InterfaceDotMethodName],sllWarning);
     result := true; // do not raise an exception here: just log warning
     // TODO: option to raise an exception (i.e. result := false) on request
   end else begin

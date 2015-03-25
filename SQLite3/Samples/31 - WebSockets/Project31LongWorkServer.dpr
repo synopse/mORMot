@@ -75,7 +75,8 @@ begin
       ByPassAuthentication := true;
     HttpServer := TSQLHttpServer.Create('8888',[Server],'+',useBidirSocket);
     try
-      HttpServer.WebSocketsEnable(Server,PROJECT31_TRANSMISSION_KEY);
+      HttpServer.WebSocketsEnable(Server,PROJECT31_TRANSMISSION_KEY).
+        Settings.HeartbeatLog := true; // full verbose logs for this demo
       TextColor(ccLightGreen);
       writeln('WebSockets Long Work Server running on localhost:8888'#13#10);
       TextColor(ccWhite);

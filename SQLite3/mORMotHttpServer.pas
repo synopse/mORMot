@@ -288,8 +288,8 @@ type
     procedure HttpThreadTerminate(Sender: TThread); virtual;
     /// implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
-    function GetDBServerCount: integer;
-    function GetDBServer(Index: Integer): TSQLRestServer;
+    function GetDBServerCount: integer; {$ifdef HASINLINE}inline;{$endif}
+    function GetDBServer(Index: Integer): TSQLRestServer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
@@ -411,15 +411,15 @@ type
     // so that AJAX applications would be able to connect to this server
     // - this method does nothing if the associated HttpServer class is not a
     // TWebSocketServerRest (i.e. this instance was not created as useBidirSocket)
-    procedure WebSocketsEnable(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean=false; aWebSocketsCompressed: boolean=true); overload;
+    function WebSocketsEnable(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompressed: boolean=true): TWebSocketServerRest; overload;
     /// defines the useBidirSocket WebSockets protocol to be used for a REST server
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TSQLHttpClientWebsockets.WebSocketsUpgrade()
-    procedure WebSocketsEnable(aServer: TSQLRestServer;
+    function WebSocketsEnable(aServer: TSQLRestServer;
       const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean=false;
-      aWebSocketsCompressed: boolean=true); overload;
+      aWebSocketsCompressed: boolean=true): TWebSocketServerRest; overload;
     /// the associated running HTTP server instance
     // - either THttpApiServer (under Windows), THttpServer or
     // TWebSocketServerRest
@@ -435,6 +435,10 @@ type
     /// write-only access to all internal servers access right
     // - can be used to override the default HTTP_DEFAULT_ACCESS_RIGHTS setting
     property DBServerAccessRight[Index: integer]: PSQLAccessRights write SetDBServerAccessRight;
+    /// find the first instance of a registered REST server
+    // - note that the same REST server may appear several times in this HTTP
+    // server instance, e.g. with diverse security options 
+    function DBServerFind(aServer: TSQLRestServer): integer;
     /// set this property to TRUE if the server must only respond to
     // request of MIME type APPLICATION/JSON
     // - the default is false, in order to allow direct view of JSON from
@@ -520,6 +524,14 @@ begin
   end;
 end;
 
+function TSQLHttpServer.DBServerFind(aServer: TSQLRestServer): integer;
+begin
+  for result := 0 to Length(fDBServers)-1 do
+    if fDBServers[result].Server=aServer then
+      exit;
+  result := -1;
+end;
+
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
 var i,j,n: integer;
 begin
@@ -528,9 +540,9 @@ begin
     exit;
   fLog.Enter(self);
   try
-  n := high(fDBServers);
-  for i := 0 to n do
-    if fDBServers[i].Server=aServer then begin
+    n := high(fDBServers);
+    for i := n downto 0 do  
+    if fDBServers[i].Server=aServer then begin // FindServer() would find the 1st
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPort,
@@ -540,6 +552,7 @@ begin
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
       SetLength(fDBServers,n);
+      dec(n);
       aServer.OnNotifyCallback := nil;
       result := true; // don't break here: may appear with another Security  
     end;
@@ -866,20 +879,28 @@ begin
       #13#10'Access-Control-Allow-Origin: '+Value;
 end;
 
-procedure TSQLHttpServer.WebSocketsEnable(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompressed: boolean);
+function TSQLHttpServer.WebSocketsEnable(
+  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
+  aWebSocketsAJAX,aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
-  if fHttpServer.InheritsFrom(TWebSocketServerRest) then
-    TWebSocketServerRest(fHttpServer).WebSocketsEnable(
-      aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
+  if fHttpServer.InheritsFrom(TWebSocketServerRest) then begin
+    result := TWebSocketServerRest(fHttpServer);
+    result.WebSocketsEnable(aWebSocketsURI,aWebSocketsEncryptionKey,
+      aWebSocketsAJAX,aWebSocketsCompressed);
+  end else
+    raise ESynBidirSocket.CreateUTF8(
+      '%.WebSocketEnable(%): expected useBidirSocket',
+      [self,GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(fHttpServerKind))^]);
 end;
 
-procedure TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompressed: boolean);
+function TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
+  const aWebSocketsEncryptionKey: RawUTF8;
+  aWebSocketsAJAX,aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
-  if aServer<>nil then
-    WebSocketsEnable(aServer.Model.Root,
-      aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
+  if (aServer=nil) or (DBServerFind(aServer)<0) then
+    raise ESynBidirSocket.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
+  result := WebSocketsEnable(aServer.Model.Root,
+    aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
 end;
 
 function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
