@@ -688,7 +688,7 @@ begin
 end;
 
 function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
-var methodIndex,fakeCallID: integer;
+var i,methodIndex,fakeCallID: integer;
     url,root,interfmethod,interf,id,method,head: RawUTF8;
     instance: pointer;
     factory: TInterfaceFactory;
@@ -710,46 +710,54 @@ begin
   fakeCallID := GetInteger(pointer(id));
   if fakeCallID<=0 then
     exit;
-  instance := fFakeCallbacks.FindInstance(fakeCallID,factory);
-  if instance=nil then
-    exit;
-  split(interfmethod,'.',interf,method);
-  if method='_free_' then begin
-    fFakeCallbacks.UnRegister(fakeCallID);
-    result := HTML_SUCCESS;
-    exit;
-  end;
-  methodIndex := factory.FindMethodIndex(method);
-  if methodIndex>=0 then
-    if IdemPropNameU(interfmethod,factory.Methods[methodIndex].InterfaceDotMethodName) then
-    try
-      WR := TJSONSerializer.CreateOwnedStream;
-      try
-        WR.AddShort('{"result":[');
-        if not factory.Methods[methodIndex].InternalExecute([instance],
-           pointer(Ctxt.InContent),WR,head,result,[],False,nil,nil) then
-          result := HTML_SERVERERROR else begin
-          if head='' then begin
-            WR.Add(']','}');
-            result := HTML_SUCCESS;
-          end else begin
-            Ctxt.OutCustomHeaders := head;
-            Ctxt.OutContentType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
-          end;
-          if Ctxt.OutContentType='' then
-            Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-          Ctxt.OutContent := WR.Text;
-        end;
-      finally
-        WR.Free;
-      end;
-    except
-      on E: Exception do begin
-        Ctxt.OutContent := ObjectToJSONDebug(E);
-        Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-        result := HTML_SERVERERROR;
-      end;
+  fFakeCallbacks.Acquire;
+  try
+    i := fFakeCallbacks.FindIndex(fakeCallID);
+    if i<0 then
+      exit;
+    if interfmethod='_free_' then begin
+      fFakeCallbacks.List[i].ReleasedFromServer := true; 
+      result := HTML_SUCCESS;
+      exit;
     end;
+    instance := fFakeCallbacks.List[i].Instance;
+    factory := fFakeCallbacks.List[i].Factory;
+  finally
+    fFakeCallbacks.Release;
+  end;
+  split(interfmethod,'.',interf,method);
+  methodIndex := factory.FindMethodIndex(method);
+  if methodIndex<0 then
+    exit;
+  if IdemPropNameU(interfmethod,factory.Methods[methodIndex].InterfaceDotMethodName) then
+  try
+    WR := TJSONSerializer.CreateOwnedStream;
+    try
+      WR.AddShort('{"result":[');
+      if not factory.Methods[methodIndex].InternalExecute([instance],
+         pointer(Ctxt.InContent),WR,head,result,[],False,nil,nil) then
+        result := HTML_SERVERERROR else begin
+        if head='' then begin
+          WR.Add(']','}');
+          result := HTML_SUCCESS;
+        end else begin
+          Ctxt.OutCustomHeaders := head;
+          Ctxt.OutContentType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
+        end;
+        if Ctxt.OutContentType='' then
+          Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
+        Ctxt.OutContent := WR.Text;
+      end;
+    finally
+      WR.Free;
+    end;
+  except
+    on E: Exception do begin
+      Ctxt.OutContent := ObjectToJSONDebug(E);
+      Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
+      result := HTML_SERVERERROR;
+    end;
+  end;
 end;
 
 

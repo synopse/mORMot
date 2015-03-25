@@ -6431,6 +6431,7 @@ type
   TObjectListLocked = class(TObjectList)
   protected
     fLock: TRTLCriticalSection;
+    PaddingForLock: array[0..9] of Int64; // just like TSynCriticalSection
   public
     /// initialize the list instance
     // - the stored TObject instances will be owned by this TObjectListLocked 
@@ -6603,6 +6604,7 @@ type
   TRawUTF8ListHashedLocked = class(TRawUTF8ListHashed)
   protected
     fLock: TRTLCriticalSection;
+    PaddingForLock: array[0..4] of Int64; // just like TSynCriticalSection
   public
     /// initialize the class instance
     constructor Create(aOwnObjects: boolean=false);

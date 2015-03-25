@@ -14204,11 +14204,10 @@ type
     var aUserName, aPassword: string): boolean of object;
 
   /// store the references to active interface callbacks on a REST Client
-  TSQLRestClientCallbacks = class
+  TSQLRestClientCallbacks = class(TSynCriticalSection)
   protected
     fCurrentID: integer;
     function UnRegisterByIndex(index: integer): boolean;
-    function Find(aID: integer): integer;
   public
     /// the associated REST instance
     Owner: TSQLRestClientURI;
@@ -14223,23 +14222,20 @@ type
       Instance: pointer;
       //// information about the associated IInvokable
       Factory: TInterfaceFactory;
+      /// set to TRUE if the instance was released from the server
+      ReleasedFromServer: boolean;
     end;
-    constructor Create(aOwner: TSQLRestClientURI);
-    /// to be called before multi-thread access to the List[] low-level content
-    procedure Enter; {$ifdef HASINLINE}inline;{$endif}
-    /// to be called after multi-thread access to the List[] low-level content
-    procedure Leave; {$ifdef HASINLINE}inline;{$endif}
+    constructor Create(aOwner: TSQLRestClientURI); reintroduce;
     /// register a callback event interface instance from a new computed ID
     function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
     /// register a callback event interface instance from its supplied ID
     procedure DoRegister(aID: Integer; aInstance: pointer; aFactory: TInterfaceFactory); overload;
-    /// delete a callback event from the internal list, as specified by its ID
-    function UnRegister(aID: integer): boolean; overload;
     /// delete all callback events from the internal list, as specified by its instance
     // - note that the same IInvokable instance may be registered for several IDs
     function UnRegister(aInstance: pointer): boolean; overload;
-    /// find a callback event from the internal list, as specified by its ID
-    function FindInstance(aID: Integer; out aFactory: TInterfaceFactory): pointer;
+    /// find the index of the ID in the internal list
+    // - warning: this method should be called within an Enter...Leave lock
+    function FindIndex(aID: integer): integer;
   end;
 
     
@@ -28993,20 +28989,11 @@ end;
 
 constructor TSQLRestClientCallbacks.Create(aOwner: TSQLRestClientURI);
 begin
+  inherited Create;
   Owner := aOwner;
 end;
 
-procedure TSQLRestClientCallbacks.Enter;
-begin
-  Owner.fAcquireExecution[execSOAByInterface].Acquire;
-end;
-
-procedure TSQLRestClientCallbacks.Leave;
-begin
-  Owner.fAcquireExecution[execSOAByInterface].Release;
-end;
-
-function TSQLRestClientCallbacks.Find(aID: integer): integer;
+function TSQLRestClientCallbacks.FindIndex(aID: integer): integer;
 begin
   if self<>nil then
     for result := 0 to Count-1 do
@@ -29022,7 +29009,12 @@ begin
     exit;
   end;
   with List[index] do
-    Owner.FakeCallbackUnregister(Factory,ID,Instance);
+    if not ReleasedFromServer then
+    try
+      Owner.FakeCallbackUnregister(Factory,ID,Instance);
+    except
+      // ignore errors at this point, and continue
+    end;
   dec(Count);
   if index<Count then
     Move(List[index+1],List[index],(Count-index)*sizeof(List[index]));
@@ -29035,7 +29027,7 @@ begin
   result := false;
   if (self=nil) or (Count=0) then
     exit;
-  Enter;
+  Acquire;
   try
     for i := Count-1 downto 0 do
       if List[i].Instance=aInstance then begin
@@ -29043,42 +29035,7 @@ begin
         result := true;
       end;
   finally
-    Leave;
-  end;
-end;
-
-function TSQLRestClientCallbacks.UnRegister(aID: integer): boolean;
-begin
-  if (self=nil) or (Count=0) or (aID<=0) then begin
-    result := false;
-    exit;
-  end;
-  Enter;
-  try
-    result := UnRegisterByIndex(Find(aID));
-  finally
-    Leave;
-  end;
-end;
-
-function TSQLRestClientCallbacks.FindInstance(aID: Integer;
-  out aFactory: TInterfaceFactory): pointer;
-var index: Integer;
-begin
-  if (self=nil) or (Count=0) or (aID<=0) then begin
-    result := nil;
-    exit;
-  end;
-  Enter;
-  try
-    index := Find(aID);
-    if index<0 then
-      result := nil else begin
-      result := List[index].Instance;
-      aFactory := List[index].Factory;
-    end;
-  finally
-    Leave;
+    Release;
   end;
 end;
 
@@ -29087,7 +29044,7 @@ procedure TSQLRestClientCallbacks.DoRegister(aID: integer;
 begin
   if aID<=0 then
     exit;
-  Enter;
+  Acquire;
   try
     if length(List)>=Count then
       SetLength(List,Count+32);
@@ -29098,7 +29055,7 @@ begin
     end;
     inc(Count);
   finally
-    Leave;
+    Release;
   end;
 end;
 
@@ -44153,17 +44110,30 @@ begin
 end;
 
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
-var i: integer;
+var i,callbackID: integer;
+    connection: TObject;
+    server: TSQLRestServer;
 begin
   if (self=nil) or (fFakeCallbacks=nil) then
     exit;
+  connection := nil;
+  callbackID := 0;
   fFakeCallbacks.Lock;
   try
     i := fFakeCallbacks.IndexOf(aFakeInstance);
     if i>=0 then
+    with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do begin
+      connection := fLowLevelConnection;
+      callbackID := ClientDrivenID;
       fFakeCallbacks.Delete(i);
+    end;
   finally
     fFakeCallbacks.UnLock;
+  end;
+  if connection<>nil then begin
+    server := fRest as TSQLRestServer;
+    if Assigned(server.OnNotifyCallback) then
+      server.OnNotifyCallback(server,connection,'_free_','',callbackID,nil,nil);
   end;
 end;
 

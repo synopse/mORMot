@@ -12886,7 +12886,8 @@ procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 begin
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
-  fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true);
+  fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).
+    Settings.SetFullLog;
   WebSocketLog := TSQLLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
 end;
@@ -12958,6 +12959,7 @@ begin
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
     TestRest(Client);
+    Client.WebSockets.Settings.SetFullLog;
     Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
     TestRest(Client);
     TestCallback(Client);

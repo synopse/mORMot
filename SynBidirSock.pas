@@ -377,12 +377,15 @@ type
     // client to return its answer
     // - defaut is 30000, i.e. 30 seconds
     CallbackAnswerTimeOutMS: cardinal;
-    /// by default, contains FALSE to minimize the logged information
-    // - set this property to TRUE if you want the ping/pong frames to be logged
-    // - only if WebSocketLog global variable is set
-    HeartbeatLog: boolean;
+    /// by default, contains [] to minimize the logged information
+    // - set logHeartbeat if you want the ping/pong frames to be logged
+    // - set logTextFrameContent if you want the text frame content to be logged
+    // - used only if WebSocketLog global variable is set
+    LogDetails: set of (logHeartbeat,logTextFrameContent);
     /// will set the default values
     procedure SetDefaults;
+    /// will set LogDetails to its highest level
+    procedure SetFullLog;
   end;
   /// points to parameters to be used for WebSockets process
   PWebSocketProcessSettings = ^TWebSocketProcessSettings;
@@ -407,9 +410,9 @@ type
     /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
     procedure ProcessStart; virtual;
     procedure ProcessStop; virtual;
-    function ProcessLoop: boolean; virtual;
+    procedure ProcessLoop; virtual;
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; virtual; abstract;
-    function HiResDelay(timeout: cardinal): boolean;
+    procedure HiResDelay(const start: Int64);
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
       aEvent: TSynLogInfo=sllTrace); virtual;
     function LastPingDelay: Int64;
@@ -671,7 +674,12 @@ begin
   DisconnectAfterInvalidHeartbeatCount := 5;
   CallbackAcquireTimeOutMS := 5000;
   CallbackAnswerTimeOutMS := 5000;
-  HeartbeatLog := False;
+  LogDetails := [];
+end;
+
+procedure TWebSocketProcessSettings.SetFullLog;
+begin
+  LogDetails := [logHeartbeat,logTextFrameContent];
 end;
 
 
@@ -1397,27 +1405,20 @@ begin
   end;
 end;
 
-function TWebSocketProcess.HiResDelay(timeout: cardinal): boolean;
-var elapsed,delay: cardinal;
+procedure TWebSocketProcess.HiResDelay(const start: Int64);
+var delay: cardinal;
 begin
-  elapsed := LastPingDelay;
-  if (timeout<>0) and (elapsed>timeout) then
-    result := true else begin
-    case elapsed of
-    0..50:      delay := 0;
-    51..200:    delay := 1;
-    201..500:   delay := 5;
-    501..2000:  delay := 50;
-    2001..5000: delay := 100;
-    else        delay := 500;
-    end;
-    if (fSettings.LoopDelay<>0) and (delay>fSettings.LoopDelay) then
-      delay := fSettings.LoopDelay;
-    if (timeout<>0) and (elapsed+delay>timeout) then
-      delay := timeout-elapsed;
-    SleepHiRes(delay);
-    result := (timeout<>0) and (LastPingDelay>=timeout);
+  case GetTickCount64-start of
+  0..50:      delay := 0;
+  51..200:    delay := 1;
+  201..500:   delay := 5;
+  501..2000:  delay := 50;
+  2001..5000: delay := 100;
+  else        delay := 500;
   end;
+  if (fSettings.LoopDelay<>0) and (delay>fSettings.LoopDelay) then
+    delay := fSettings.LoopDelay;
+  SleepHiRes(delay);
 end;
 
 function TWebSocketProcess.Settings: PWebSocketProcessSettings;
@@ -1428,6 +1429,7 @@ end;
 function TWebSocketProcess.NotifyCallback(
   aRequest: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal;
 var request,answer: TWebSocketFrame;
+    start,max: Int64;
 begin
   WebSocketLog.Add.Log(sllDebug,'%.NotifyCallback(%,%)',[ClassType,aRequest.URL,
      GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^]); 
@@ -1453,15 +1455,20 @@ begin
       result := STATUS_SUCCESS;
       exit;
     end;
+    start := GetTickCount64;
+    if fSettings.CallbackAnswerTimeOutMS=0 then
+      max := start+60000 else // never wait for ever
+      max := start+fSettings.CallbackAnswerTimeOutMS;
     while not fIncoming.Pop(fProtocol,'answer',answer) do
       if fState in [wpsDestroy,wpsClose] then begin
         result := STATUS_WEBSOCKETCLOSED;
         exit;
       end else
-      if HiResDelay(fSettings.CallbackAnswerTimeOutMS) then begin
+      if GetTickCount64>max then begin
         Log(request,'NotifyCallback TIMEOUT',sllWarning);
         exit;
-      end;
+      end else
+        HiResDelay(start);
   finally
     InterlockedDecrement(fProcessCount);
   end;
@@ -1470,6 +1477,7 @@ end;
 
 procedure TWebSocketProcess.SendPendingOutgoingFrames;
 begin
+  WebSocketLog.Enter(self);
   fOutgoing.Acquire;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
@@ -1479,11 +1487,10 @@ begin
   end;
 end;
 
-function TWebSocketProcess.ProcessLoop: boolean;
+procedure TWebSocketProcess.ProcessLoop;
 var request: TWebSocketFrame;
     elapsed: cardinal;
 begin
-  result := false;
   if fProtocol=nil then
     exit;
   ProcessStart;
@@ -1506,9 +1513,8 @@ begin
           focConnectionClose: begin
             SendFrame(request);
             fState := wpsClose;
-            result := true; // indicates gracefully closed by server
-            break; // will close the connection 
-          end;
+            break; // will close the connection
+          end;                                             
           end;
         end else
         if TThreadHook(fOwnerThread).Terminated then
@@ -1521,25 +1527,23 @@ begin
             request.opcode := focPing;
             if SendFrame(request) then
               fInvalidPingSendCount := 0 else
-              if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
-                 (fInvalidPingSendCount>
-                  fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
-                fState := wpsCLose;
-                result := true;
-                break; // will close the connection
-              end else begin
-                inc(fInvalidPingSendCount);
-                SetLastPingTicks; // avoid endless retry in case of broken socket
-              end;
+            if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
+               (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+              fState := wpsClose;
+              break; // will close the connection
+            end else begin
+              inc(fInvalidPingSendCount);
+              SetLastPingTicks; // avoid endless retry in case of broken socket
+            end;
           end;
         end;
       finally
         request.payload := '';
         InterlockedDecrement(fProcessCount);
       end;
-      HiResDelay(0);
+      HiResDelay(fLastSocketTicks);
     except
-      HiResDelay(50);
+      SleepHiRes(50); // be optimistic: wait a little and retry
     end;
   ProcessStop;
 end;
@@ -1577,7 +1581,12 @@ begin
   if WebSocketLog<>nil then
   with WebSocketLog.Family do
   if aEvent in Level then
-  if fSettings.HeartbeatLog or not (frame.opcode in [focPing,focPong]) then
+  if (logHeartbeat in fSettings.LogDetails) or
+     not (frame.opcode in [focPing,focPong]) then
+    if (frame.opcode=focText) and
+       (logTextFrameContent in fSettings.LogDetails) then
+    SynLog.Log(aEvent,'%.%(%) focText %',[Self.ClassType,aMethodName,
+      Protocol.FrameType(frame),frame.PayLoad]) else
     SynLog.Log(aEvent,'%.%(%) % len=%',[Self.ClassType,aMethodName,
       Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad)]);
 end;
@@ -1637,11 +1646,12 @@ begin
     'Sec-WebSocket-Protocol: ',prot.Name,#13#10+
     'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest)),#13#10]);
   ClientSock.SockSendFlush;
+  result := true; // connection upgraded: never back to HTTP/1.1
   fWebSocketConnections.Lock;
   fWebSocketConnections.Add(Context);
   fWebSocketConnections.UnLock;
   try
-    result := Context.fProcess.ProcessLoop;
+    Context.fProcess.ProcessLoop;
     ClientSock.KeepAliveClient := false; // always close connection
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
@@ -1718,7 +1728,7 @@ function TWebSocketServerRest.WebSocketsCallback(
 var connection: TWebSocketServerResp;
 begin
   WebSocketLog.Add.Log(sllTrace,'%.WebSocketsCallback(%) on %',
-    [ClassType,Ctxt.URL,Ctxt.CallingThread]);
+    [ClassType,Ctxt.URL,pointer(Ctxt.CallingThread)]);
   if Ctxt=nil then
     connection := nil else
     connection := IsActiveWebSocket(Ctxt.CallingThread);
@@ -1818,6 +1828,7 @@ begin
     if fProcess.fClientThread.fThreadState>sRun then
       // WebSockets closed by server side
       result := STATUS_NOTIMPLEMENTED else begin
+      // send the REST request over WebSockets
       Ctxt := THttpServerRequest.Create(nil,fProcess.fOwnerThread);
       try
         Ctxt.Prepare(url,method,header,data,dataType);
@@ -1913,9 +1924,8 @@ end;
 
 destructor TWebSocketProcessClient.Destroy;
 begin
-  while fClientThread.fThreadState=sCreate do
-    SleepHiRes(1);
-  if fClientThread.fThreadState<>sClosed then
+  fClientThread.Terminate;
+  if fState<>wpsClose then
   try
     InterlockedIncrement(fProcessCount);
     if fOutgoing.Count>0 then
@@ -1948,7 +1958,9 @@ end;
 procedure TWebSocketProcessClientThread.Execute;
 begin
   fThreadState := sRun;
-  if fProcess.ProcessLoop then
+  if not Terminated then
+    fProcess.ProcessLoop;
+  if fProcess.fState=wpsClose then
     fThreadState := sClosed else
     fThreadState := sFinished;
 end;

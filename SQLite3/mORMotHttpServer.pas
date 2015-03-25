@@ -519,7 +519,7 @@ begin
     aServer.OnNotifyCallback := NotifyCallback;
     result := true;
   finally
-    fLog.Add.Log(sllDebug,'%.AddServer(%,Root=%,Port=%)=%',
+    fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%)=%',
       [self,aServer,aServer.Model.Root,fPort,JSON_BOOLEAN[Result]],self);
   end;
 end;
@@ -557,7 +557,7 @@ begin
       result := true; // don't break here: may appear with another Security  
     end;
   finally
-    fLog.Add.Log(sllDebug,'%.RemoveServer(Root=%)=%',
+    fLog.Add.Log(sllHttp,'%.RemoveServer(Root=%)=%',
       [self,aServer.Model.Root,JSON_BOOLEAN[Result]],self);
   end;
 end;
@@ -661,7 +661,7 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$endif}
-  fLog.Add.Log(sllInfo,'% initialized for%',[fHttpServer,ServersRoot],self);
+  fLog.Add.Log(sllHttp,'% initialized for%',[fHttpServer,ServersRoot],self);
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
@@ -678,7 +678,7 @@ end;
 
 destructor TSQLHttpServer.Destroy;
 begin
-  fLog.Enter(self).Log(sllInfo,'% finalized for % server(s)',
+  fLog.Enter(self).Log(sllHttp,'% finalized for % server(s)',
     [fHttpServer,length(fDBServers)],self);
   FreeAndNil(fHttpServer);
   inherited Destroy;
@@ -722,7 +722,7 @@ procedure TSQLHttpServer.RootRedirectToURI(const aRedirectedURI: RawUTF8;
 begin
   if fRootRedirectToURI[aHttps]=aRedirectedURI then
     exit;
-  fLog.Add.Log(sllDebug,'Redirect http%://localhost:% to http%://localhost:%/%',
+  fLog.Add.Log(sllHttp,'Redirect http%://localhost:% to http%://localhost:%/%',
     [HTTPS_TEXT[aHttps],Port,HTTPS_TEXT[aHttps],Port,aRedirectedURI],self);
   fRootRedirectToURI[aHttps] := aRedirectedURI;
   if aRedirectedURI<>'' then
@@ -741,7 +741,7 @@ begin
   if not fHttpServer.InheritsFrom(THttpApiServer) then
     exit;
   https := aSecurity=secSSL;
-  fLog.Add.Log(sllInfo,'http.sys registration of http%://%:%/%',
+  fLog.Add.Log(sllHttp,'http.sys registration of http%://%:%/%',
     [HTTPS_TEXT[https],aDomainName,fPort,aRoot],self);
   // try to register the URL to http.sys
   err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPort,https,aDomainName,aRegisterURI);
@@ -911,11 +911,11 @@ var ctxt: THttpServerRequest;
     status: cardinal;
 begin
   result := false;
-  if fHttpServer.InheritsFrom(TWebSocketServerRest) and
-     aConnection.InheritsFrom(TNotifiedThread) then
-  try
+  if fHttpServer.InheritsFrom(TWebSocketServerRest) then
+  try // aConnection.InheritsFrom(TNotifiedThread) may raise an exception
+      // -> checked in WebSocketsCallback/IsActiveWebSocket
     ctxt := THttpServerRequest.Create(nil,TNotifiedThread(aConnection));
-    try
+    try                                    
       ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
         aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
       if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
