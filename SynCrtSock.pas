@@ -176,7 +176,7 @@ unit SynCrtSock;
   - added THttpRequest.Get/Post/Put/Delete() class functions for easy remote
     resource retrieval using either WinHTTP or WinINet APIs
   - added TURI structure, ready to parse a supplied HTTP URI
-  - added 'ConnectionID: 1234578' to the HTTP headers - request [0636eeec54]
+  - added ConnectionID the HTTP server context - see request [0636eeec54]
   - added THttpRequest.IgnoreSSLCertificateErrors property (proposal by EMartin)
   - added THttpRequest AuthScheme and AuthUserName/AuthPassword properties, for
     authentication - only implemented at TWinHttp level (thanks Eric Grange)
@@ -4076,10 +4076,8 @@ begin
 end;
 
 function THttpServerSocket.HeaderGetText: SockString;
-var ConnectionID: shortstring;
 begin
-  BinToHexDisplay(@Sock,4,ConnectionID);
-  result := inherited HeaderGetText+'ConnectionID: '+ConnectionID+#13#10;
+  result := inherited HeaderGetText;
   if RemoteIP<>'' then
     result := result+'RemoteIP: '+RemoteIP+#13#10;
 end;
@@ -5047,24 +5045,19 @@ const
     'Proxy-Authorization','Referer','Range','TE','Translate','User-Agent');
   REMOTEIP_HEADERLEN = 10;
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
-  CONNECTIONID_HEADERLEN = 14;
-  CONNECTIONID_HEADER: string[CONNECTIONID_HEADERLEN] = 'ConnectionID: ';
 var i, L: integer;
     H: THttpHeader;
     P: PHTTP_UNKNOWN_HEADER;
     D: PAnsiChar;
-    ConnectionID: ShortString;
 begin
   assert(low(KNOWNHEADERS)=low(Request.Headers.KnownHeaders));
   assert(high(KNOWNHEADERS)=high(Request.Headers.KnownHeaders));
   if Request.Address.pRemoteAddress<>nil then
     GetSinIPFromCache(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP);
-  BinToHexDisplay(@Request.ConnectionId,8,ConnectionID);
   // compute headers length
   if RemoteIP<>'' then
     L := (REMOTEIP_HEADERLEN+2)+length(RemoteIP) else
     L := 0;
-  inc(L,(CONNECTIONID_HEADERLEN+2)+ord(ConnectionID[0]));
   for H := low(KNOWNHEADERS) to high(KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[h].RawValueLength<>0 then
       inc(L,Request.Headers.KnownHeaders[h].RawValueLength+ord(KNOWNHEADERS[h][0])+4);
@@ -5108,14 +5101,8 @@ begin
     move(pointer(RemoteIP)^,D^,length(RemoteIP));
     inc(D,length(RemoteIP));
     PWord(D)^ := 13+10 shl 8;
-    inc(D,2);
   end;
-  move(CONNECTIONID_HEADER[1],D^,CONNECTIONID_HEADERLEN);
-  inc(D,CONNECTIONID_HEADERLEN);
-  move(ConnectionID[1],D^,ord(ConnectionID[0]));
-  inc(D,ord(ConnectionID[0]));
-  PWord(D)^ := 13+10 shl 8;
-  {$ifopt C+}         
+  {$ifopt C+}
   inc(D,2);
   assert(D-pointer(result)=L);
   {$endif}

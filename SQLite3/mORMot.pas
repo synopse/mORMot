@@ -4941,9 +4941,6 @@ type
     /// the remote IP, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionRemoteIP: RawUTF8;
-    /// a remote connection identifier, if any
-    // - is undefined if Session is 0 or 1 (no authentication running)
-    SessionConnectionID: RawUTF8;
     /// the static instance corresponding to the associated Table (if any)
     {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
     /// the kind of static instance corresponding to the associated Table (if any)
@@ -12059,7 +12056,6 @@ type
     fPrivateSalt: RawUTF8;
     fSentHeaders: RawUTF8;
     fRemoteIP: RawUTF8;
-    fConnectionID: RawUTF8;
     fPrivateSaltHash: Cardinal;
     fLastTimeStamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
@@ -12126,9 +12122,6 @@ type
     /// the remote IP, if any
     // - is extracted from SentHeaders properties
     property RemoteIP: RawUTF8 read fRemoteIP;
-    /// a remote connection identifier, if any
-    // - is extracted from SentHeaders properties
-    property ConnectionID: RawUTF8 read fConnectionID;
   end;
 
   /// class-reference type (metaclass) used to define overridden session instances
@@ -29666,7 +29659,6 @@ begin
       exit; // if /TimeStamp is not available, server is down!
     end;
   fillchar(Call,sizeof(Call),0);
-  Call.LowLevelConnectionID := PtrInt(self);
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -30101,7 +30093,8 @@ begin
   fillchar(call,SizeOf(call),0);
   call.Url := url;
   call.Method := method;
-  call.InHead := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: 0001';
+  call.LowLevelConnectionID := PtrInt(GlobalURIRequestServer);
+  call.InHead := 'RemoteIP: 127.0.0.1';
   if (Head<>nil) and (Head^<>nil) then
     call.InHead := RawUTF8(Head^)+#13#10+call.InHead;
   call.InBody := SendData;
@@ -30214,7 +30207,8 @@ begin
   call.Url := GetNextItem(P,#1);
   call.Method := GetNextItem(P,#1);
   call.InHead := GetNextItem(P,#1);
-  Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(Msg.From);
+  call.LowLevelConnectionID := Msg.From;
+  Header := 'RemoteIP: 127.0.0.1';
   if call.InHead='' then
     call.InHead := Header else
     call.InHead := call.InHead+#13#10+Header;
@@ -32763,8 +32757,8 @@ begin
         {$ifdef WITHLOG}
         with TAuthSession(fSessions.List[i]) do
           Ctxt.Log.Log(sllUserAuth,'User.LogonName=% already connected from "%/%"',
-            [User.LogonName,RemoteIP,ConnectionID],self);
-        {$endif}
+            [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
+        {$endif}                                                    
         Ctxt.Call^.OutStatus := HTML_NOTALLOWED;
         exit; // user already connected -> error 404
       end;
@@ -32774,7 +32768,7 @@ begin
       {$ifdef WITHLOG}
       Ctxt.Log.Log(sllUserAuth,'Session aborted by OnSessionCreate() callback '+
          'for User.LogonName=% (connected from "%/%") - clients=%, sessions=%',
-        [User.LogonName,Session.RemoteIP,Session.ConnectionID,
+        [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
          fStats.ClientsCurrent,fSessions.Count],self);
       {$endif}
       User := nil;
@@ -32810,7 +32804,7 @@ begin
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     {$ifdef WITHLOG}
     fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
-      [User.LogonName,IDCardinal,RemoteIP,ConnectionID],self);
+      [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
     {$endif}
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self,fSessions.List[aSessionIndex],Ctxt);
@@ -32840,7 +32834,6 @@ begin // caller shall be locked via fSessions.Lock
         Ctxt.SessionGroup := result.User.GroupRights.fID;
         Ctxt.SessionUserName := result.User.LogonName;
         Ctxt.SessionRemoteIP := result.RemoteIP;
-        Ctxt.SessionConnectionID := result.ConnectionID;
         exit;
       end;
     end;
@@ -34179,10 +34172,10 @@ begin
   if (fPipe=0) or (fPipe=INVALID_HANDLE_VALUE) or (fServer=nil) then
     exit;
   SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
-  Header := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+CardinalToHex(fPipe);
+  Header := 'RemoteIP: 127.0.0.1';
   fServer.BeginCurrentThread(self);
   fillchar(call,sizeof(call),0);
-  call.LowLevelConnectionID := PtrInt(self);
+  call.LowLevelConnectionID := fPipe;
   Ticks64 := 0;
   Sleeper64 := 0;
   ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min of inactivity
@@ -40230,7 +40223,6 @@ begin // here User.GroupRights and fPrivateKey should have been set
     crc32(crc32(0,pointer(fPrivateSalt),length(fPrivateSalt)),
       pointer(User.PasswordHashHexa),length(User.PasswordHashHexa));
   fRemoteIP := FindIniNameValue(pointer(fSentHeaders),'REMOTEIP: ');
-  fConnectionID := FindIniNameValue(pointer(fSentHeaders),'CONNECTIONID: ');
 end;
 
 constructor TAuthSession.Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
@@ -40260,7 +40252,8 @@ begin
       {$ifdef WITHLOG}
       aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
-        [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,fConnectionID,
+        [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,
+         aCtxt.Call^.LowLevelConnectionID,
          FindIniNameValue(pointer(fSentHeaders),'USER-AGENT: ')],self);
       {$endif}
       exit; // create successfull
@@ -40316,7 +40309,7 @@ begin
   fUser.GroupRights.GetBinaryValues(W);
   W.Write(fPrivateKey);
   W.Write(fSentHeaders);
-end; // TODO: persist fMethods[] fInterfaces[] stats? or integrate them before? 
+end; // TODO: persist ORM/SOA stats? -> rather integrate them before saving 
 
 constructor TAuthSession.CreateFrom(var P: PAnsiChar; Server: TSQLRestServer);
 var PB: PByte absolute P;
@@ -40964,13 +40957,14 @@ end;
 
 const
   /// maximum number of Windows Authentication context to be handled at once
-  // - 32 should be big enough
-  MAXSSPIAUTHCONTEXTS = 32;
+  // - 64 should be big enough
+  MAXSSPIAUTHCONTEXTS = 64;
 
 function TSQLRestServerAuthenticationSSPI.Auth(
   Ctxt: TSQLRestServerURIContext): boolean;
 var i: integer;
-    ConnectionID, UserName, InDataEnc: RawUTF8;
+    UserName, InDataEnc: RawUTF8;
+    ticks,ConnectionID: Int64;
     BrowserAuth: Boolean;
     CtxArr: TDynArray;
     SecCtxIdx: Integer;
@@ -40982,7 +40976,7 @@ begin
   if result or (not Ctxt.InputExists['UserName']) or (not Ctxt.InputExists['Data']) then
     exit;
   // use ConnectionID to find authentication session
-  ConnectionID := Ctxt.InHeader['ConnectionID'];
+  ConnectionID := Ctxt.Call^.LowLevelConnectionID;
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
   InDataEnc := Ctxt.InputUTF8['Data'];
   if InDataEnc='' then begin
@@ -40998,10 +40992,11 @@ begin
     BrowserAuth := True;
   end else
     BrowserAuth := False;
-  CtxArr.InitSpecific(TypeInfo(TSecContextDynArray),fSSPIAuthContexts,djRawUTF8);
+  CtxArr.InitSpecific(TypeInfo(TSecContextDynArray),fSSPIAuthContexts,djInt64);
   // check for outdated auth context
+  ticks := GetTickCount64-30000;
   for i := High(fSSPIAuthContexts) downto 0 do
-    if GetTickCount64>fSSPIAuthContexts[i].CreatedTick64+30000  then begin
+    if ticks>fSSPIAuthContexts[i].CreatedTick64 then begin
       FreeSecContext(fSSPIAuthContexts[i]);
       CtxArr.Delete(i);
     end;
@@ -41027,8 +41022,7 @@ begin
       Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData);
       Ctxt.Call.OutStatus := HTML_UNAUTHORIZED;
       StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
-    end
-    else
+    end else
       Ctxt.Returns(['result','','data',BinToBase64(OutData)]);
     exit; // 1st call: send back OutData to the client
   end;
@@ -41074,7 +41068,7 @@ var SecCtx: TSecContext;
     Values: TPUtf8CharDynArray;
 begin
   result := '';
-  InvalidateSecContext(SecCtx,'');
+  InvalidateSecContext(SecCtx,0);
   try
     repeat
       if User.LogonName<>'' then

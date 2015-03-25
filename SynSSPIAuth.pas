@@ -69,12 +69,12 @@ unit SynSSPIAuth;
 
 }
 
+{$I Synopse.inc} // define HASINLINE and other compatibility switches
+
 interface
 
 uses
   Windows, SysUtils, SynCommons;
-
-{$I Synopse.inc} // define HASINLINE
 
 type
   /// Windows Authentication context handle
@@ -86,7 +86,7 @@ type
 
   /// Windows Authentication context
   TSecContext = record
-    ID: RawUTF8;
+    ID: Int64;
     CredHandle: TSecHandle;
     CtxHandle: TSecHandle;
     CreatedTick64: Int64;
@@ -99,7 +99,7 @@ type
 
   
 /// Sets aSecHandle fields to empty state for a given connection ID
-procedure InvalidateSecContext(var aSecContext: TSecContext; const aConnectionID: RawUTF8);
+procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 
 /// Client-side authentication procedure
 // - aSecContext holds information between function calls
@@ -242,6 +242,7 @@ const
   SEC_I_COMPLETE_NEEDED = $00090313;
   SEC_I_COMPLETE_AND_CONTINUE = $00090314;
   SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
+
   secur32 = 'secur32.dll';
 
 function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
@@ -293,7 +294,8 @@ function DeleteSecurityContext(phContext: PSecHandle): Integer; stdcall;
 function FreeCredentialsHandle(phCredential: PSecHandle): Integer; stdcall;
   external secur32 name 'FreeCredentialsHandle';
 
-procedure InvalidateSecContext(var aSecContext: TSecContext; const aConnectionID: RawUTF8);
+  
+procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 begin
   aSecContext.ID := aConnectionID;
   aSecContext.CredHandle.dwLower := -1;
@@ -376,9 +378,8 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 var TargetName: PWideChar;
 begin
   if aSecKerberosSPN <> '' then
-      TargetName := PWideChar(UTF8ToSynUnicode(aSecKerberosSPN))
-  else
-      TargetName := nil;
+    TargetName := PWideChar(UTF8ToSynUnicode(aSecKerberosSPN)) else
+    TargetName := nil;
   Result := ClientSSPIAuthWorker(aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
@@ -440,8 +441,7 @@ begin
       FreeContextBuffer(SecPkgInfo);
     end;
     LInCtxPtr := nil;
-  end
-  else
+  end else
     LInCtxPtr := @aSecContext.CtxHandle;
 
   OutBuf.BufferType := SECBUFFER_TOKEN;
