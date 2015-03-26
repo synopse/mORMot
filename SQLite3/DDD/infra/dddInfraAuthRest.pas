@@ -195,25 +195,25 @@ function TDDDAuthenticationAbstract.ChallengeSelectFinal(
   const aChallengedPassword: TAuthQueryNonce): TCQRSResult;
 begin
   if (fChallengeLogonName='') or (fChallengeNonce='') then
-    result := ORMError(cqrsBadRequest) else
+    result := CqrsSetResultError(cqrsBadRequest) else
     result := SelectByName(fChallengeLogonName);
   if result<>cqrsSuccess then
     exit;
   if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
-     (ORM as TSQLRecordUserAuth).HashedPassword)=aChallengedPassword then begin
+     (fCurrentORMInstance as TSQLRecordUserAuth).HashedPassword)=aChallengedPassword then begin
     fLogged := true;
-    ORMResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess);
   end else
-    ORMResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
+    CqrsSetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
   fChallengeNonce := '';
   fChallengeLogonName := '';
 end;
 
 function TDDDAuthenticationAbstract.LogonName: RawUTF8;
 begin
-  if (ORM=nil) or not Logged then
+  if (fCurrentORMInstance=nil) or not Logged then
     result := '' else
-    result := TSQLRecordUserAuth(ORM).Logon;
+    result := TSQLRecordUserAuth(fCurrentORMInstance).Logon;
 end;
 
 function TDDDAuthenticationAbstract.Logged: boolean;
@@ -249,9 +249,9 @@ end;
 function TDDDAuthenticationAbstract.Add(const aLogonName: RawUTF8;
   aHashedPassword: TAuthQueryNonce): TCQRSResult;
 begin
-  if not ORMBegin(qaCommandDirect,result) then
+  if not CqrsBeginMethod(qaCommandDirect,result) then
     exit;
-  with ORM as TSQLRecordUserAuth do begin
+  with fCurrentORMInstance as TSQLRecordUserAuth do begin
     Logon := aLogonName;
     HashedPassword := aHashedPassword;
   end;
@@ -261,9 +261,9 @@ end;
 function TDDDAuthenticationAbstract.UpdatePassword(
   const aHashedPassword: TAuthQueryNonce): TCQRSResult;
 begin
-  if not ORMBegin(qaCommandOnSelect,result) then
+  if not CqrsBeginMethod(qaCommandOnSelect,result) then
     exit;
-  (ORM as TSQLRecordUserAuth).HashedPassword := aHashedPassword;
+  (fCurrentORMInstance as TSQLRecordUserAuth).HashedPassword := aHashedPassword;
   ORMPrepareForCommit(soUpdate,nil);
 end;
 

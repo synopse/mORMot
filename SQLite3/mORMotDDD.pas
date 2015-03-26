@@ -118,6 +118,9 @@ type
 type
   /// result enumerate for I*Query/I*Command CQRS repository service methods
   // - cqrsSuccess will map the default TInterfaceStub returned value
+  // - cqrsSuccessWithMoreData would be used e.g. for versioned publish/
+  // subscribe to notify the caller that there are still data available, and
+  // the call should be reiterated until cqrsSuccess is returned
   // - cqrsBadRequest would indicate that the method was not called in the
   // expected workflow sequence
   // - cqrsNotFound appear after a I*Query SelectBy*() method with no match
@@ -132,12 +135,17 @@ type
   // call to SelectBy*()
   // - cqrsNoPriorCommand for a I*Command.Commit with no prior Add/Update/Delete
   // - cqrsUnspecifiedError will be used for any other kind of error
+  // - cqrsVPSTooManyEvents is returned by a VPS subscribe method when the
+  // subscribal is not possible unless information is first to be retrieved with
+  // regular REST requests
   TCQRSResult =
-    (cqrsSuccess, cqrsUnspecifiedError, cqrsBadRequest,
+    (cqrsSuccess, cqrsSuccessWithMoreData,
+     cqrsUnspecifiedError, cqrsBadRequest,
      cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
-     cqrsNoPriorQuery, cqrsNoPriorCommand);
+     cqrsNoPriorQuery, cqrsNoPriorCommand,
+     cqrsVPSTooManyEvents);
 
   /// generic interface, to be used for CQRS I*Query types definition
   // - TCQRSQueryObject class will allow to easily implement LastError* members
@@ -180,14 +188,14 @@ type
 { ----- Persistence / Repository CQRS Implementation }
 
 type
-  /// which kind of process is about to take place after an ORMBegin()
+  /// which kind of process is about to take place after an CqrsBeginMethod()
   TCQRSQueryAction = (
     qaNone,
     qaSelect, qaGet,
     qaCommandDirect, qaCommandOnSelect,
     qaCommit);
 
-  /// define one or several process to take place after an ORMBegin()
+  /// define one or several process to take place after an CqrsBeginMethod()
   TCQRSQueryActions = set of TCQRSQueryAction;
 
   /// the current step of a TCQRSQuery state machine
@@ -202,16 +210,17 @@ type
 
   /// to be inherited to implement CQRS I*Query services extended error process
   // - you should never assign directly a cqrs* value to a method result, but
-  // rather use the ORMBegin/ORMResult/ORMResultMsg methods provided by this class:
+  // rather use the CqrsBeginMethod/CqrsSetResult/CqrsSetResultMsg methods provided by this class:
   // ! function TMyService.MyMethod: TCQRSResult;
   // ! begin
-  // !   ORMBegin(qsNone,result); // reset the error information to cqrsUnspecifiedError
+  // !   CqrsBeginMethod(qsNone,result); // reset the error information to cqrsUnspecifiedError
   // !   ... // do some work
   // !   if error then
-  // !     ORMResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
-  // !     ORMResult(cqrsSuccess); // instead of result := cqrsSuccess
+  // !     CqrsSetResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
+  // !     CqrsSetResult(cqrsSuccess); // instead of result := cqrsSuccess
   // !   end;
-  // - the methods are implemented as a simple state machine
+  // - the methods are implemented as a simple state machine, following
+  // the TCQRSQueryAction and TCQRSQueryState definitions
   TCQRSQueryObject = class(TInjectableObject, ICQRSQuery)
   protected
     fLastErrorAddress: ^TCQRSResult;
@@ -221,25 +230,25 @@ type
     fState: TCQRSQueryState;
     fLock: IAutoLocker;
     // method to be called at first for LastError process
-    function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
+    function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
-    function ORMError(aError: TCQRSResult): TCQRSResult; virtual;
+    function CqrsSetResultError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
-    procedure ORMResult(Error: TCQRSResult); overload;
-    procedure ORMResult(E: Exception); overload;
-    procedure ORMSuccessIf(SuccessCondition: boolean;
+    procedure CqrsSetResult(Error: TCQRSResult); overload;
+    procedure CqrsSetResult(E: Exception); overload;
+    procedure CqrsSetResultSuccessIf(SuccessCondition: boolean;
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
-    procedure ORMResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
-    procedure ORMResultMsg(Error: TCQRSResult;
+    procedure CqrsSetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
+    procedure CqrsSetResultMsg(Error: TCQRSResult;
       ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
-    procedure ORMResultString(Error: TCQRSResult; const ErrorMessage: string);
-    procedure ORMResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
-    procedure ORMResultJSON(Error: TCQRSResult;
+    procedure CqrsSetResultString(Error: TCQRSResult; const ErrorMessage: string);
+    procedure CqrsSetResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
+    procedure CqrsSetResultJSON(Error: TCQRSResult;
       JSONFmt: PUTF8Char; const Args,Params: array of const);
     function GetLastError: TCQRSResult;
     function GetLastErrorInfo: variant; virtual;
-    procedure InternalORMResult(Error: TCQRSResult); virtual;
-    procedure AfterInternalORMResult; virtual;
+    procedure InternalCqrsSetResult(Error: TCQRSResult); virtual;
+    procedure AfterInternalCqrsSetResult; virtual;
   public
     /// initialize the class instance
     constructor Create; override;
@@ -260,6 +269,9 @@ type
 type
   TDDDRepositoryRestFactory = class;
   TDDDRepositoryRestQuery = class;
+
+  /// class-reference type (metaclass) to implement I*Query interface
+  // using our RESTful ORM
   TDDDRepositoryRestClass = class of TDDDRepositoryRestQuery;
 
   /// abstract ancestor for all persistence/repository related Exceptions
@@ -275,8 +287,8 @@ type
 
   /// home repository of several DDD Entity factories using REST storage
   // - this shared class will be can to manage a service-wide repositories,
-  // i.e. will handle all actual I*Query/I*Command implementation classes
-  // accross a set of TSQLRest instances
+  // e.g. manage actual I*Query/I*Command implementation classes accross a
+  // set of TSQLRest instances
   // - is designed to optimize BATCH or transactional process
   TDDDRepositoryRestManager = class
   protected
@@ -451,11 +463,13 @@ type
   end;
 
   /// abstract repository class to implement I*Query interface using RESTful ORM
+  // - actual repository implementation will just call the ORM*() protected
+  // method from the published Aggregate-oriented CQRS service interface 
   TDDDRepositoryRestQuery = class(TCQRSQueryObject)
   protected
     fFactory: TDDDRepositoryRestFactory;
-    fORM: TSQLRecord;
-    function ORMBegin(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
+    fCurrentORMInstance: TSQLRecord;
+    function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; override;
     // one-by-one retrieval in local ORM: TSQLRecord
     function ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
@@ -469,7 +483,7 @@ type
     function ORMSelectCount(ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
       out aResultCount: integer; ForcedBadRequest: boolean=false): TCQRSResult;
     // will log any error on the owner Rest server
-    procedure AfterInternalORMResult; override;
+    procedure AfterInternalCqrsSetResult; override;
   public
     /// you should not have to use this constructor, since the instances would
     // be injected by TDDDRepositoryRestFactory.TryResolve()
@@ -488,11 +502,14 @@ type
     /// access to the current state of the underlying mapped TSQLRecord
     // - is nil if no query was run yet
     // - contains the queried object after a successful Select*() method
-    property ORM: TSQLRecord read fORM;
+    // - is either a single object, or a list of objects, via its internal
+    // CurrentORMInstance.FillTable cursor
+    property CurrentORMInstance: TSQLRecord read fCurrentORMInstance;
   end;
 
   /// abstract class to implement I*Command interface using ORM's TSQLRecord
-  // - it will use an internal TSQLRestBatch for commit
+  // - it will use an internal TSQLRestBatch for dual-phase commit, therefore
+  // implementing a generic Unit Of Work / Transaction pattern 
   TDDDRepositoryRestCommand = class(TDDDRepositoryRestQuery)
   protected
     fBatch: TSQLRestBatch;
@@ -529,14 +546,19 @@ type
     function DeleteAll: TCQRSResult; virtual;
     /// write all pending changes prepared by Add/UpdatePassword/Delete methods
     // - this is the only mandatory method, to be declared in your I*Command
-    // - will process the current fORM using the fCommand
+    // - in practice, will send the current internal BATCH to the REST instance 
     function Commit: TCQRSResult; virtual;
     /// flush any pending changes prepared by Add/UpdatePassword/Delete methods
-    // - if you do not need this method, just do not declare it in I*Command
+    // - if you do not need this method, just do not publish it in I*Command
     // - the easiest to perform a roll-back would be to release the I*Command
     // instance - but you may explictly reset the pending changes by calling
     // this method
+    // - in practice, will release the internal BATCH instance
     function Rollback: TCQRSResult; virtual;
+    /// access to the low-level BATCH instance, used for dual-phase commit
+    // - you should not need to access it directly, but rely on Commit and
+    // Rollback methods to
+    property Batch: TSQLRestBatch read fBatch;
   end;
 
   /// abstract CQRS class tied to a TSQLRest instance for low-level persistence
@@ -547,13 +569,19 @@ type
   protected
     fRest: TSQLRest;
   public
-    constructor Create(aRest: TSQLRest); reintroduce; virtual; 
+    /// reintroduced constructor, allowing to specify the associated REST instance
+    constructor Create(aRest: TSQLRest); reintroduce; virtual;
+    /// reintroduced constructor, associating a REST instance with the supplied
+    // IoC resolvers  
+    constructor CreateWithResolver(aRest: TSQLRest; aResolver: TInterfaceResolver;
+      aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
+    /// reintroduced constructor, associating a REST instance with the supplied
+    // IoC resolvers (may be stubs/mocks, resolver classes or single instances)
     constructor CreateInjected(aRest: TSQLRest;
       const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject); reintroduce;
-    constructor CreateWithResolver(aRest: TSQLRest; aResolver: TInterfaceResolver;
-      aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
+    /// access to the associated REST instance
     property Rest: TSQLRest read FRest;
   end;
 
@@ -618,7 +646,7 @@ type
   /// abstract process thread class with monitoring abilities, using the ORM
   // for pending tasks persistence
   // - a protected TSQLRecord instance will be maintained to store the
-  // processing task and its current state 
+  // processing task and its current state
   TDDDMonitoredDaemonProcessRest = class(TDDDMonitoredDaemonProcess)
   protected
     /// the internal ORM instance used to maintain the current task
@@ -626,16 +654,17 @@ type
     // (e.g. at least "processing", "processed" and "failed"), and optionally
     // the resulting content (if any)
     // - overriden ExecuteRetrievePendingAndSetProcessing method should create
-    // fPending then save fPending.State to "processing"
+    // fPendingTask then save fPendingTask.State to "processing"
     // - overriden ExecuteProcessAndSetResult method should perform the task,
-    // then save fPending.State to "processed" or "failed"
-    fPending: TSQLRecord;
-    /// finalize the pending task: will free fPending and set it to nil
+    // then save fPendingTask.State to "processed" or "failed"
+    fPendingTask: TSQLRecord;
+    /// finalize the pending task: will free fPendingTask and set it to nil
     procedure ExecuteProcessFinalize; override;
   end;
 
 
-  /// used to determine which actual thread class will implement the process
+  /// class-reference type (metaclass) to determine which actual thread class
+  // will implement the monitored process
   TDDDMonitoredDaemonProcessClass = class of TDDDMonitoredDaemonProcess;
 
   /// abstract class using several process threads and with monitoring abilities
@@ -725,19 +754,19 @@ const
     // qsNone = no state change after this action
     qsNone, qsQuery, qsNone, qsCommand, qsCommand, qsNone);
 
-function TCQRSQueryObject.ORMBegin(aAction: TCQRSQueryAction;
+function TCQRSQueryObject.CqrsBeginMethod(aAction: TCQRSQueryAction;
   var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
   fLastErrorAddress := @aResult;
   fLastErrorAddress^ := aError;
   VarClear(fLastErrorContext);
   if (aAction in NEEDS_QUERY) and (fState<qsQuery) then begin
-    ORMResult(cqrsNoPriorQuery);
+    CqrsSetResult(cqrsNoPriorQuery);
     result := false;
     exit;
   end;
   if (aAction in NEEDS_COMMAND) and (fState<qsCommand) then begin
-    ORMResult(cqrsNoPriorCommand);
+    CqrsSetResult(cqrsNoPriorCommand);
     result := false;
     exit;
   end;
@@ -745,29 +774,29 @@ begin
   result := true;
 end;
 
-function TCQRSQueryObject.ORMError(aError: TCQRSResult): TCQRSResult;
+function TCQRSQueryObject.CqrsSetResultError(aError: TCQRSResult): TCQRSResult;
 begin
-  ORMBegin(qaNone,result);
-  ORMResult(aError);
+  CqrsBeginMethod(qaNone,result);
+  CqrsSetResult(aError);
 end;
 
-procedure TCQRSQueryObject.ORMResult(Error: TCQRSResult);
+procedure TCQRSQueryObject.CqrsSetResult(Error: TCQRSResult);
 begin
-  InternalORMResult(Error);
-  AfterInternalORMResult;
+  InternalCqrsSetResult(Error);
+  AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.ORMResult(E: Exception);
+procedure TCQRSQueryObject.CqrsSetResult(E: Exception);
 begin
-  InternalORMResult(cqrsInternalError);
+  InternalCqrsSetResult(cqrsInternalError);
   _ObjAddProps(['Exception',ObjectToVariantDebug(E)],fLastErrorContext);
-  AfterInternalORMResult;
+  AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.InternalORMResult(Error: TCQRSResult);
+procedure TCQRSQueryObject.InternalCqrsSetResult(Error: TCQRSResult);
 begin
   if fLastErrorAddress=nil then
-    raise ECQRSException.CreateUTF8('%.ORMResult(%) with no prior ORMBegin',
+    raise ECQRSException.CreateUTF8('%.CqrsSetResult(%) with no prior CqrsBeginMethod',
       [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
   fLastErrorAddress^ := Error;
   fLastError := Error;
@@ -778,52 +807,52 @@ begin
   fAction := qaNone;
 end;
 
-procedure TCQRSQueryObject.AfterInternalORMResult;
+procedure TCQRSQueryObject.AfterInternalCqrsSetResult;
 begin
 end;
 
-procedure TCQRSQueryObject.ORMSuccessIf(SuccessCondition: boolean;
+procedure TCQRSQueryObject.CqrsSetResultSuccessIf(SuccessCondition: boolean;
   ErrorIfFalse: TCQRSResult);
 begin
   if SuccessCondition then
-    ORMResult(cqrsSuccess) else
-    ORMResult(ErrorIfFalse);
+    CqrsSetResult(cqrsSuccess) else
+    CqrsSetResult(ErrorIfFalse);
 end;
 
-procedure TCQRSQueryObject.ORMResultDoc(Error: TCQRSResult;
+procedure TCQRSQueryObject.CqrsSetResultDoc(Error: TCQRSResult;
   const ErrorInfo: variant);
 begin
-  InternalORMResult(Error);
+  InternalCqrsSetResult(Error);
   _ObjAddProps(['ErrorInfo',ErrorInfo],fLastErrorContext);
-  AfterInternalORMResult;
+  AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.ORMResultJSON(Error: TCQRSResult;
+procedure TCQRSQueryObject.CqrsSetResultJSON(Error: TCQRSResult;
   JSONFmt: PUTF8Char; const Args,Params: array of const);
 begin
-  ORMResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
+  CqrsSetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
 end;
 
-procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
+procedure TCQRSQueryObject.CqrsSetResultMsg(Error: TCQRSResult;
   const ErrorMessage: RawUTF8);
 begin
-  InternalORMResult(Error);
+  InternalCqrsSetResult(Error);
   _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
-  AfterInternalORMResult;
+  AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.ORMResultString(Error: TCQRSResult;
+procedure TCQRSQueryObject.CqrsSetResultString(Error: TCQRSResult;
   const ErrorMessage: string);
 begin
-  InternalORMResult(Error);
+  InternalCqrsSetResult(Error);
   _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
-  AfterInternalORMResult;
+  AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.ORMResultMsg(Error: TCQRSResult;
+procedure TCQRSQueryObject.CqrsSetResultMsg(Error: TCQRSResult;
   ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
 begin
-  ORMResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
+  CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
 end;
 
 
@@ -1271,48 +1300,50 @@ constructor TDDDRepositoryRestQuery.Create(
   aFactory: TDDDRepositoryRestFactory);
 begin
   fFactory := aFactory;
-  fORM := fFactory.Table.Create;
+  fCurrentORMInstance := fFactory.Table.Create;
 end;
 
 destructor TDDDRepositoryRestQuery.Destroy;
 begin
-  fORM.Free;
+  fCurrentORMInstance.Free;
   inherited;
 end;
 
-procedure TDDDRepositoryRestQuery.AfterInternalORMResult;
+procedure TDDDRepositoryRestQuery.AfterInternalCqrsSetResult;
 begin
-  inherited AfterInternalORMResult;
+  inherited AfterInternalCqrsSetResult;
   if (fLastError<>cqrsSuccess) and
      (sllDDDError in Factory.Rest.LogFamily.Level) then
     Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext],self);
 end;
 
-function TDDDRepositoryRestQuery.ORMBegin(aAction: TCQRSQueryAction;
+function TDDDRepositoryRestQuery.CqrsBeginMethod(aAction: TCQRSQueryAction;
   var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
-  result := inherited ORMBegin(aAction,aResult,aError);
+  result := inherited CqrsBeginMethod(aAction,aResult,aError);
   if aAction=qaSelect then
-    ORM.ClearProperties;
+    fCurrentORMInstance.ClearProperties; // reset internal instance
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
    const Bounds: array of const; ForcedBadRequest: boolean): TCQRSResult;
 begin
-  ORMBegin(qaSelect,result);
+  CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest then
-    ORMResult(cqrsBadRequest) else
-    ORMSuccessIf(Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,ORM),cqrsNotFound);
+    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,
+      fCurrentORMInstance),cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectAll(
   ORMWhereClauseFmt: PUTF8Char; const Bounds: array of const;
   ForcedBadRequest: boolean): TCQRSResult;
 begin
-  ORMBegin(qaSelect,result);
+  CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest then
-    ORMResult(cqrsBadRequest) else
-    ORMSuccessIf(ORM.FillPrepare(Factory.Rest,ORMWhereClauseFmt,[],Bounds),cqrsNotFound);
+    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResultSuccessIf(fCurrentORMInstance.FillPrepare(
+      Factory.Rest,ORMWhereClauseFmt,[],Bounds),cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectCount(
@@ -1320,25 +1351,25 @@ function TDDDRepositoryRestQuery.ORMSelectCount(
   out aResultCount: integer; ForcedBadRequest: boolean): TCQRSResult;
 var tmp: Int64;
 begin
-  ORMBegin(qaNone,result); // qaNone and not qaSelect which would fill ORM
+  CqrsBeginMethod(qaNone,result); // qaNone and not qaSelect which would fill ORM
   if ForcedBadRequest then
-    ORMResult(cqrsBadRequest) else
+    CqrsSetResult(cqrsBadRequest) else
     if Factory.Rest.OneFieldValue(
         Factory.Table,'count(*)',ORMWhereClauseFmt,Args,Bounds,tmp) then begin
        aResultCount := tmp;
-       ORMResult(cqrsSuccess)
+       CqrsSetResult(cqrsSuccess)
     end else
-      ORMResult(cqrsNotFound);
+      CqrsSetResult(cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.GetCount: integer;
 var dummy: TCQRSResult;
 begin
-  if not ORMBegin(qaGet,dummy) then
+  if not CqrsBeginMethod(qaGet,dummy) then
     result := 0 else
-    if ORM.FillTable<>nil then
-      result := ORM.FillTable.RowCount else
-      if ORM.ID=0 then
+    if fCurrentORMInstance.FillTable<>nil then
+      result := fCurrentORMInstance.FillTable.RowCount else
+      if fCurrentORMInstance.ID=0 then
         result := 0 else
         result := 1;
 end;
@@ -1346,22 +1377,22 @@ end;
 function TDDDRepositoryRestQuery.ORMGetAggregate(
   aAggregate: TObject): TCQRSResult;
 begin
-  if ORMBegin(qaGet,result) then begin
-    Factory.AggregateFromTable(ORM,aAggregate);
-    ORMResult(cqrsSuccess);
+  if CqrsBeginMethod(qaGet,result) then begin
+    Factory.AggregateFromTable(fCurrentORMInstance,aAggregate);
+    CqrsSetResult(cqrsSuccess);
   end;
 end;
 
 function TDDDRepositoryRestQuery.ORMGetNextAggregate(
   aAggregate: TObject; aRewind: boolean): TCQRSResult;
 begin
-  if ORMBegin(qaGet,result) then
-    if (aRewind and ORM.FillRewind) or
-       ((not aRewind) and ORM.FillOne) then begin
-      Factory.AggregateFromTable(ORM,aAggregate);
-      ORMResult(cqrsSuccess);
+  if CqrsBeginMethod(qaGet,result) then
+    if (aRewind and fCurrentORMInstance.FillRewind) or
+       ((not aRewind) and fCurrentORMInstance.FillOne) then begin
+      Factory.AggregateFromTable(fCurrentORMInstance,aAggregate);
+      CqrsSetResult(cqrsSuccess);
     end else
-      ORMResult(cqrsNoMoreData);
+      CqrsSetResult(cqrsNoMoreData);
 end;
 
 function TDDDRepositoryRestQuery.ORMGetAllAggregates(
@@ -1369,21 +1400,22 @@ function TDDDRepositoryRestQuery.ORMGetAllAggregates(
 var res: TObjectDynArray absolute aAggregateObjArray;
     i: integer;
 begin
-  if ORMBegin(qaGet,result) then
-  if (ORM.FillTable=nil) or (ORM.FillTable.RowCount=0) then
-    ORMResult(cqrsSuccess) else begin
-    SetLength(res,ORM.FillTable.RowCount);
+  if CqrsBeginMethod(qaGet,result) then
+  if (fCurrentORMInstance.FillTable=nil) or
+     (fCurrentORMInstance.FillTable.RowCount=0) then
+    CqrsSetResult(cqrsSuccess) else begin
+    SetLength(res,fCurrentORMInstance.FillTable.RowCount);
     i := 0;
-    if ORM.FillRewind then
-    while ORM.FillOne do begin
+    if fCurrentORMInstance.FillRewind then
+    while fCurrentORMInstance.FillOne do begin
       res[i] := Factory.AggregateCreate;
-      Factory.AggregateFromTable(ORM,res[i]);
+      Factory.AggregateFromTable(fCurrentORMInstance,res[i]);
       inc(i);
     end;
     if i=length(res) then
-      ORMResult(cqrsSuccess) else begin
+      CqrsSetResult(cqrsSuccess) else begin
       ObjArrayClear(res);
-      ORMResult(cqrsNoMoreData);
+      CqrsSetResult(cqrsNoMoreData);
     end;
   end;
 end;
@@ -1406,40 +1438,40 @@ end;
 
 function TDDDRepositoryRestCommand.Delete: TCQRSResult;
 begin
-  if ORMBegin(qaCommandOnSelect,result) then
+  if CqrsBeginMethod(qaCommandOnSelect,result) then
     ORMPrepareForCommit(soDelete,nil);
 end;
 
 function TDDDRepositoryRestCommand.DeleteAll: TCQRSResult;
 var i: integer;
 begin
-  if ORMBegin(qaCommandOnSelect,result) then
-    if ORM.FillTable=nil then
+  if CqrsBeginMethod(qaCommandOnSelect,result) then
+    if fCurrentORMInstance.FillTable=nil then
       ORMPrepareForCommit(soDelete,nil) else
       if fState<qsQuery then
-        ORMResult(cqrsNoPriorQuery) else begin
+        CqrsSetResult(cqrsNoPriorQuery) else begin
         ORMEnsureBatchExists;
-        for i := 1 to ORM.FillTable.RowCount do
-          if fBatch.Delete(ORM.FillTable.IDColumnHiddenValue(i))<0 then begin
-            ORMResult(cqrsDataLayerError);
+        for i := 1 to fCurrentORMInstance.FillTable.RowCount do
+          if fBatch.Delete(fCurrentORMInstance.FillTable.IDColumnHiddenValue(i))<0 then begin
+            CqrsSetResult(cqrsDataLayerError);
             exit;
           end;
-        ORMResult(cqrsSuccess);
+        CqrsSetResult(cqrsSuccess);
       end;
 end;
 
 function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
 begin
-  if ORMBegin(qaCommandDirect,result) then begin
-    Factory.AggregateToTable(aAggregate,0,ORM);
+  if CqrsBeginMethod(qaCommandDirect,result) then begin
+    Factory.AggregateToTable(aAggregate,0,fCurrentORMInstance);
     ORMPrepareForCommit(soInsert,aAggregate);
   end;
 end;
 
 function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
 begin
-  if ORMBegin(qaCommandOnSelect,result) then begin
-    Factory.AggregateToTable(aAggregate,ORM.ID,ORM);
+  if CqrsBeginMethod(qaCommandOnSelect,result) then begin
+    Factory.AggregateToTable(aAggregate,fCurrentORMInstance.ID,fCurrentORMInstance);
     ORMPrepareForCommit(soUpdate,aAggregate);
   end;
 end;
@@ -1460,18 +1492,18 @@ procedure SetValidationError(default: TCQRSResult);
 begin
   if (validator<>nil) and
      (validator.ClassType=TSynValidateUniqueField) then
-    ORMResultMsg(cqrsAlreadyExists,msg) else
-    ORMResultMsg(default,msg);
+    CqrsSetResultMsg(cqrsAlreadyExists,msg) else
+    CqrsSetResultMsg(default,msg);
 end;
 begin
   case aCommand of
   soSelect: begin
-    ORMResult(cqrsBadRequest);
+    CqrsSetResult(cqrsBadRequest);
     exit;
   end;
   soUpdate,soDelete:
-    if (fState<qsQuery) or (ORM.ID=0) then begin
-      ORMResult(cqrsNoPriorQuery);
+    if (fState<qsQuery) or (fCurrentORMInstance.ID=0) then begin
+      CqrsSetResult(cqrsNoPriorQuery);
       exit;
     end;
   end;
@@ -1483,7 +1515,8 @@ begin
         exit;
       end;
     end;
-    msg := ORM.FilterAndValidate(Factory.Rest,[0..MAX_SQLFIELDS-1],@validator);
+    msg := fCurrentORMInstance.FilterAndValidate(
+      Factory.Rest,[0..MAX_SQLFIELDS-1],@validator);
     if msg<>'' then begin
       SetValidationError(cqrsDataLayerError);
       exit;
@@ -1492,18 +1525,18 @@ begin
   ORMEnsureBatchExists;
   ndx := -1;
   case aCommand of
-  soInsert: ndx := fBatch.Add(ORM,true);
-  soUpdate: ndx := fBatch.Update(ORM);
-  soDelete: ndx := fBatch.Delete(ORM.ID);
+  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true);
+  soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
+  soDelete: ndx := fBatch.Delete(fCurrentORMInstance.ID);
   end;
-  ORMSuccessIf(ndx>=0);
+  CqrsSetResultSuccessIf(ndx>=0);
 end;
 
 procedure TDDDRepositoryRestCommand.InternalCommit;
 begin
   if fBatch.Count=0 then
-    ORMResult(cqrsBadRequest) else begin
-    ORMSuccessIf(Factory.Rest.BatchSend(fBatch,fBatchResults)=HTML_SUCCESS);
+    CqrsSetResult(cqrsBadRequest) else begin
+    CqrsSetResultSuccessIf(Factory.Rest.BatchSend(fBatch,fBatchResults)=HTML_SUCCESS);
     FreeAndNil(fBatch);
   end;
 end;
@@ -1516,15 +1549,15 @@ end;
 
 function TDDDRepositoryRestCommand.Commit: TCQRSResult;
 begin
-  if ORMBegin(qaCommit,result) then
+  if CqrsBeginMethod(qaCommit,result) then
     InternalCommit;
 end;
 
 function TDDDRepositoryRestCommand.Rollback: TCQRSResult;
 begin
-  ORMBegin(qaNone,result,cqrsSuccess);
+  CqrsBeginMethod(qaNone,result,cqrsSuccess);
   if fBatch.Count=0 then
-    ORMResult(cqrsNoPriorCommand) else
+    CqrsSetResult(cqrsNoPriorCommand) else
     InternalRollback;
 end;
 
@@ -1559,6 +1592,7 @@ begin
   fRest := aRest;
   inherited CreateWithResolver(aResolver,aRaiseEServiceExceptionIfNotFound);
 end;
+
 
 { TDDDMonitoredDaemonProcess }
 
@@ -1641,7 +1675,7 @@ end;
 
 procedure TDDDMonitoredDaemonProcessRest.ExecuteProcessFinalize;
 begin
-  FreeAndNil(fPending);
+  FreeAndNil(fPendingTask);
 end;
 
 
@@ -1704,7 +1738,7 @@ end;
 function TDDDMonitoredDaemon.RetrieveState(
   out Status: variant): TCQRSResult;
 begin
-  ORMBegin(qaNone,result,cqrsSuccess);
+  CqrsBeginMethod(qaNone,result,cqrsSuccess);
   Status := GetStatus;
 end;
 
@@ -1719,7 +1753,7 @@ begin
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
   Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount],self);
-  ORMBegin(qaNone,result,cqrsSuccess);
+  CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
     fProcess[i] := fProcessClass.Create(self,i);
@@ -1732,7 +1766,7 @@ var i: integer;
     Log: ISynLog;
 begin
   fProcessTimer.Pause;
-  ORMBegin(qaNone,result);
+  CqrsBeginMethod(qaNone,result);
   try
     if fProcess<>nil then begin
       Log := Rest.LogClass.Enter(self);
@@ -1751,10 +1785,10 @@ begin
       Log.Log(sllTrace,'Stopped %',[Information],self);
       ObjArrayClear(fProcess);
     end;
-    ORMResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess);
   except
     on E: Exception do
-      ORMResult(E);
+      CqrsSetResult(E);
   end;
 end;
 
