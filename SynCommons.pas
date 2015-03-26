@@ -43231,14 +43231,11 @@ end;
 const
   /// 128 MB default buffer
   FILESYNLZ_BLOCKSIZE = 128*1024*1024;
-  /// 64 KB overhead seems OK for in-memory compression/decompression
-  FILESYNLZ_HEADER = 65536;
 
 function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
-var tmp: RawByteString;
+var src,dst: RawByteString;
     S,D: TFileStream;
     Head: TSynLZHead;
-    P: PAnsiChar;
     Count: Int64;
 begin
   result := false;
@@ -43255,15 +43252,17 @@ begin
           if Count>FILESYNLZ_BLOCKSIZE then
             Head.UnCompressedSize := FILESYNLZ_BLOCKSIZE else
             Head.UnCompressedSize := Count;
-          if tmp='' then
-            SetLength(tmp,Head.UnCompressedSize+FILESYNLZ_HEADER);
-          P := pointer(tmp);
-          S.Read(P[FILESYNLZ_HEADER],Head.UnCompressedSize);
-          Head.HashUncompressed := Hash32(P+FILESYNLZ_HEADER,Head.UnCompressedSize);
-          Head.CompressedSize := SynLZcompress1(P+FILESYNLZ_HEADER,Head.UnCompressedSize,P);
-          Head.HashCompressed := Hash32(P,Head.CompressedSize);
+          if src='' then
+            SetString(src,nil,Head.UnCompressedSize);
+          if dst='' then
+            SetString(dst,nil,SynLZcompressdestlen(Head.UnCompressedSize));
+          S.Read(pointer(src)^,Head.UnCompressedSize);
+          Head.HashUncompressed := Hash32(pointer(src),Head.UnCompressedSize);
+          Head.CompressedSize :=
+            SynLZcompress1(pointer(src),Head.UnCompressedSize,pointer(dst));
+          Head.HashCompressed := Hash32(pointer(dst),Head.CompressedSize);
           if (D.Write(Head,sizeof(Head))<>sizeof(Head)) or
-             (D.Write(P^,Head.CompressedSize)<>Head.CompressedSize) then
+             (D.Write(pointer(dst)^,Head.CompressedSize)<>Head.CompressedSize) then
             exit;
           dec(Count,Head.UnCompressedSize);
         end;
@@ -43281,11 +43280,10 @@ begin
 end;
 
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
-var tmp: RawByteString;
+var src,dst: RawByteString;
     S,D: TFileStream;
     Count: Int64;
     Head: TSynLZHead;
-    PS,PD: PAnsiChar;
 begin
   result := false;
   if FileExists(Source) then
@@ -43301,23 +43299,23 @@ begin
             exit;
           dec(Count,sizeof(Head));
           if (Head.Magic<>Magic) or
-             (cardinal(Head.UnCompressedSize)>FILESYNLZ_BLOCKSIZE) or
              (Head.CompressedSize>Count) then
             exit;
-          if Head.UnCompressedSize+FILESYNLZ_HEADER>length(tmp) then
-            SetLength(tmp,Head.UnCompressedSize+FILESYNLZ_HEADER);
-          PD := Pointer(tmp);
-          PS := PD+length(tmp)-Head.CompressedSize;
-          if S.Read(PS^,Head.CompressedSize)<>Head.CompressedSize then
+          if Head.CompressedSize>Length(src) then
+            SetString(src,nil,Head.CompressedSize);
+          if dst='' then
+            SetString(dst,nil,Head.UnCompressedSize);
+          if S.Read(pointer(src)^,Head.CompressedSize)<>Head.CompressedSize then
             exit;
           dec(Count,Head.CompressedSize);
-          if (Hash32(PS,Head.CompressedSize)<>Head.HashCompressed) or
-             (SynLZdecompressdestlen(PS)<>Head.UnCompressedSize) then
+          if (Hash32(pointer(src),Head.CompressedSize)<>Head.HashCompressed) or
+             (SynLZdecompressdestlen(pointer(src))<>Head.UnCompressedSize) then
             exit;
-          if (SynLZdecompress1(PS,Head.CompressedSize,PD)<>Head.UnCompressedSize) or
-             (Hash32(PD,Head.UnCompressedSize)<>Head.HashUncompressed) then
+          if (SynLZdecompress1(pointer(src),Head.CompressedSize,pointer(dst))
+               <>Head.UnCompressedSize) or
+             (Hash32(pointer(dst),Head.UnCompressedSize)<>Head.HashUncompressed) then
             exit;
-          if D.Write(PD^,Head.UncompressedSize)<>Head.UncompressedSize then
+          if D.Write(pointer(dst)^,Head.UncompressedSize)<>Head.UncompressedSize then
             exit;
         end;
       finally
@@ -43350,8 +43348,9 @@ begin
 end;
 
 function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream;
-var P: pointer;
-    start, size: Int64;
+var S,D: pointer;
+    sourcePosition,resultSize: PtrInt;
+    sourceSize: Int64;
     Head: TSynLZHead;
     Trailer: TSynLZTrailer;
     buf: RawByteString;
@@ -43359,46 +43358,70 @@ begin
   result := nil;
   if Source=nil then
     exit;
-  size := Source.Size;
-  start := Source.Position;
-  if size-start<sizeof(head) then
+  sourceSize := Source.Size;
+  {$ifndef CPU64}
+  if sourceSize>maxInt then
+    exit; // result TMemoryStream should stay in memory!
+  {$endif}
+  sourcePosition := Source.Position;
+  if sourceSize-sourcePosition<sizeof(head) then
     exit;
-  Source.Read(Head,sizeof(Head));
-  if Head.Magic<>Magic then begin
-    // Source not positioned as expected -> try from the end
-    Source.Position := size-sizeof(Trailer);
-    Source.Read(Trailer,sizeof(Trailer));
-    if Trailer.Magic<>Magic then
-      exit;
-    start := size-Trailer.HeaderRelativeOffset;
-    Source.Position := start;
+  resultSize := 0;
+  repeat
     Source.Read(Head,sizeof(Head));
-    if Head.Magic<>Magic then
+    if Head.Magic<>Magic then begin
+      // Source not positioned as expected -> try from the end
+      Source.Position := sourceSize-sizeof(Trailer);
+      Source.Read(Trailer,sizeof(Trailer));
+      if Trailer.Magic<>Magic then
+        exit;
+      sourcePosition := sourceSize-Trailer.HeaderRelativeOffset;
+      Source.Position := sourcePosition;
+      Source.Read(Head,sizeof(Head));
+      inc(sourcePosition,sizeof(Head));
+      if Head.Magic<>Magic then
+        exit;
+    end;
+    inc(sourcePosition,sizeof(Head));
+    if sourcePosition+Head.CompressedSize>sourceSize then
       exit;
-  end;
-  inc(start,sizeof(Head));
-  if start+Head.CompressedSize>size then
-    exit;
-  if Source.InheritsFrom(TCustomMemoryStream) then begin
-    P := PAnsiChar(TCustomMemoryStream(Source).Memory)+PtrUInt(start);
-    Source.Seek(Head.CompressedSize,soFromCurrent);
-  end else begin
-    SetLength(Buf,Head.CompressedSize);
-    P := pointer(Buf);
-    Source.Read(P^,Head.CompressedSize);
-  end;
-  if (Source.Read(Trailer,sizeof(Trailer))=sizeof(Trailer)) and
-     (Trailer.Magic<>Magic) then
-    exit; // trailer may not be available in old .synlz layout -> ignore
-  // Source will now point after all data
-  if (SynLZdecompressdestlen(P)<>Head.UnCompressedSize) or
-     (Hash32(P,Head.CompressedSize)<>Head.HashCompressed) then
-    exit;
-  result := THeapMemoryStream.Create;
-  result.Size := Head.UnCompressedSize;
-  if (SynLZdecompress1(P,Head.CompressedSize,result.Memory)<>Head.UnCompressedSize) or
-     (Hash32(result.Memory,Head.UnCompressedSize)<>Head.HashUncompressed) then
-    FreeAndNil(result);
+    if Source.InheritsFrom(TCustomMemoryStream) then begin
+      S := PAnsiChar(TCustomMemoryStream(Source).Memory)+PtrUInt(sourcePosition);
+      Source.Seek(Head.CompressedSize,soFromCurrent);
+    end else begin
+      if Head.CompressedSize>length(Buf) then
+        SetString(Buf,nil,Head.CompressedSize);
+      S := pointer(Buf);
+      Source.Read(S^,Head.CompressedSize);
+    end;
+    inc(sourcePosition,Head.CompressedSize);
+    if (Source.Read(Trailer,sizeof(Trailer))<>sizeof(Trailer)) or
+       (Trailer.Magic<>Magic) then
+      // trailer not available in old .synlz layout, or in FileSynLZ multiblocks
+      Source.Position := sourcePosition else
+      sourceSize := 0; // should be monoblock
+    // Source will now point after all data
+    if (SynLZdecompressdestlen(S)<>Head.UnCompressedSize) or
+       (Hash32(S,Head.CompressedSize)<>Head.HashCompressed) then
+      exit;
+    if result=nil then
+      result := THeapMemoryStream.Create else begin
+      {$ifndef CPU64}
+      if Int64(resultSize)+Head.UnCompressedSize>maxInt then begin
+        FreeAndNil(result); // result TMemoryStream should stay in memory!
+        break;
+      end;
+      {$endif}
+    end;
+    result.Size := resultSize+Head.UnCompressedSize;
+    D := PAnsiChar(result.Memory)+resultSize;
+    inc(resultSize,Head.UnCompressedSize);
+    if (SynLZdecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize) or
+       (Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed) then begin
+      FreeAndNil(result);
+      break;
+    end;
+  until sourcePosition>=sourceSize;
 end;
 
 const
