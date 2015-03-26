@@ -413,7 +413,7 @@ unit SynCommons;
     content from a given set of values identified by ? - used e.g. by _JsonFmt()
   - added ESynException.CreateUTF8() constructor, more powerful than the
     default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
-  - added QuotedStrJSON() function
+  - added QuotedStrJSON() and NextNotSpaceCharIs() functions
   - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
   - added MultiPartFormDataDecode() to decode multipart/form-data POST requests 
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
@@ -2695,6 +2695,13 @@ function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
 
 /// get the next character not in [#1..' ']
 function GotoNextNotSpace(P: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check if the next character not in [#1..' '] matchs a given value
+// - first ignore any non space character
+// - then returns TRUE if P^=ch, setting P to the character after ch
+// - or returns FALSE if P^<>ch, leaving P at the level of the unexpected char
+function NextNotSpaceCharIs(var P: PUTF8Char; ch: AnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// go to the beginning of the SQL statement, ignoring all blanks and comments
@@ -16048,6 +16055,19 @@ begin
   result := P;
 end;
 
+function NextNotSpaceCharIs(var P: PUTF8Char; ch: AnsiChar): boolean;
+begin
+  if P^ in [#1..' '] then
+    repeat
+      inc(P)
+    until not(P^ in [#1..' ']);
+  if P^=ch then begin
+    inc(P);
+    result := true;
+  end else
+    result := false;
+end;
+
 function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 var quote: AnsiChar;
     PBeg, PS: PUTF8Char;
@@ -28515,10 +28535,8 @@ var EndOfObject: AnsiChar;
       Prop.AllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
       // read array content
       if ArrayLen=0 then begin
-        P := GotoNextNotSpace(P);
-        if P^<>']' then
+        if not NextNotSpaceCharIs(P,']') then
           exit;
-        inc(P);
       end else begin
         n := 0;
         DynArray := PPointer(Data)^;
@@ -32086,19 +32104,15 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
   result := nil;
   if (P=nil) or (fValue=nil) then
     exit;
-  P := GotoNextNotSpace(P);
-  if P^<>'[' then
+  if not NextNotSpaceCharIs(P,'[') then
     exit;
-  repeat inc(P) until P^<>' ';
   n := JSONArrayCount(P);
   if n<0 then
     exit; // invalid array content
   if n=0 then begin
-    P := GotoNextNotSpace(P);
-    if P^<>']' then
-      result := nil else begin
+    if NextNotSpaceCharIs(P,']') then begin
       Clear;
-      result := P+1;
+      result := P;
     end;
     exit; // handle '[]' array
   end;
