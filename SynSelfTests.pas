@@ -7859,12 +7859,23 @@ var
   Names: TRawUTF8DynArray;
   i1,i2: integer;
   Res: Int64;
+  id: TID;
   password, s: RawUTF8;
   R: TSQLRequest;
 begin
   if Pos('TSQLite3Library',Owner.CustomVersions)=0 then
     Owner.CustomVersions := Owner.CustomVersions+#13#10+
       string(sqlite3.ClassName)+' '+string(sqlite3.Version);
+  Check(JSONGetID('{"id":123}',id) and (id=123));
+  Check(JSONGetID('{"rowid":1234}',id) and (id=1234));
+  Check(JSONGetID(' { "id": 123}',id) and (id=123));
+  Check(JSONGetID(' { "rowid": 1234}',id) and (id=1234));
+  Check(not JSONGetID('{"ide":123}',id));
+  Check(not JSONGetID('{"rowide":1234}',id));
+  Check(not JSONGetID('{"as":123}',id));
+  Check(not JSONGetID('{"s":1234}',id));
+  Check(not JSONGetID('"ide":123}',id));
+  Check(not JSONGetID('{ rowide":1234}',id));
   if ClassType=TTestMemoryBased then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';

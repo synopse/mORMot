@@ -360,7 +360,9 @@ type
     fBatchMethod: TSQLURIMethod;
     fBatchOptions: TSQLRestBatchOptions;
     fBatchTableIndex: integer;
-    fBatchFirstID: TID;
+    fBatchID: TIDDynArray;
+    fBatchIDCount: integer;
+    fBatchIDMax: TID;
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
@@ -772,7 +774,6 @@ end;
 function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var SQL: RawUTF8;
-    LastID: Int64;
 begin
   result := 0;
   if TableModelIndex<0 then
@@ -786,31 +787,36 @@ begin
         'DEFAULT VALUES not implemented',[SQL],self);
       {$endif}
     end else
-    if (fBatchMethod=mPOST) and (fBatchFirstID>=0) and
+    if (fBatchMethod=mPOST) and (fBatchIDMax>=0) and
        ((fBatchTableIndex<0) or (fBatchTableIndex=TableModelIndex)) then begin
       fBatchTableIndex := TableModelIndex;
-      if fBatchFirstID=0 then begin
-        SQL := 'select max(rowid) from '+SQL;
-        if InternalExecute(SQL,true,@LastID) then
-          fBatchFirstID := LastID+1 else begin
-          fBatchFirstID := -1; // will force error for whole BATCH block
-          exit;
+      if JSONGetID(pointer(SentData),result) then begin
+        if result>fBatchIDMax then
+          fBatchIDMax := result;
+      end else begin
+        if fBatchIDMax=0 then begin
+          SQL := 'select max(rowid) from '+SQL;
+          if not InternalExecute(SQL,true,PInt64(@fBatchIDMax)) then begin
+            fBatchIDMax := -1; // will force error for whole BATCH block
+            exit;
+          end;
         end;
+        inc(fBatchIDMax); 
+        result := fBatchIDMax;
       end;
-      result := fBatchFirstID+fBatchValuesCount;
+      AddInt64(TInt64DynArray(fBatchID),fBatchIDCount,result);
       AddRawUTF8(fBatchValues,fBatchValuesCount,SentData);
     end;
     exit;
   end;
   SQL := 'INSERT INTO '+SQL;
   if trim(SentData)='' then
-    SQL := SQL+' DEFAULT VALUES;' else
-    SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,
-      JSONRetrieveIDField(pointer(SentData)))+';';
-  if InternalExecute(SQL,true,nil,nil,nil,@LastID) then begin
-    result := LastID;
-    InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
+    SQL := SQL+' DEFAULT VALUES;' else begin
+    JSONGetID(pointer(SentData),result);
+    SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,result)+';';
   end;
+  if InternalExecute(SQL,true,nil,nil,nil,PInt64(@result)) then
+    InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
 end;
 
 procedure InternalRTreeIn(Context: TSQLite3FunctionContext;
@@ -1690,12 +1696,12 @@ begin
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
     fAcquireExecution[execORMWrite].Enter;
     try
-      if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) then
+      if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) or (fBatchIDCount<>0) then
         raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
       fBatchMethod := method;
       fBatchOptions := BatchOptions;
       fBatchTableIndex := -1;
-      fBatchFirstID := 0; // MainEngineAdd() will search for max(id)
+      fBatchIDMax := 0; // MainEngineAdd() will search for max(id)
       result := true; // means BATCH mode is supported
     finally
       if not result then
@@ -1721,13 +1727,15 @@ begin
       [self,ord(fBatchMethod)]);
   try
     if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
-      exit; // not hing to add
+      exit; // nothing to add
+    if fBatchValuesCount<>fBatchIDCount then
+      raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
-      Decode.Decode(fBatchValues[0],nil,pInlined,fBatchFirstID);
+      Decode.Decode(fBatchValues[0],nil,pInlined,fBatchID[0]);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
       if InternalExecute(SQL,true) then
-        InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID,fBatchValues[0],nil);
+        InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[0],fBatchValues[0],nil);
       exit;
     end;
     DecodeSaved := true;
@@ -1748,7 +1756,7 @@ begin
             raise EORMException.CreateUTF8('%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
           P := UniqueRawUTF8(privateCopy);
           while P^ in [#1..' ','{','['] do inc(P);
-          Decode.Decode(P,nil,pNonQuoted,fBatchFirstID+ndx);
+          Decode.Decode(P,nil,pNonQuoted,fBatchID[ndx]);
           inc(ndx);
           DecodeSaved := false;
         end;
@@ -1808,7 +1816,7 @@ begin
           end;
           repeat until fStatement^.Step<>SQLITE_ROW;
           for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
-            InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchFirstID+r,fBatchValues[r],nil);
+            InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[r],fBatchValues[r],nil);
           inc(valuesFirstRow,rowCount);
           GetAndPrepareStatementRelease;
         except
@@ -1825,11 +1833,14 @@ begin
       rowCount := 0;
       Fields := nil; // force new SQL statement and Values[]
     until DecodeSaved and (ndx=fBatchValuesCount);
-    assert(valuesFirstRow=fBatchValuesCount);
+    if valuesFirstRow<>fBatchValuesCount then
+      raise EORMException.CreateUTF8('%.InternalBatchStop(valuesFirstRow)',[self]);
   finally
     fBatchMethod := mNone;
     fBatchValuesCount := 0;
     fBatchValues := nil;
+    fBatchIDCount := 0;
+    fBatchID := nil;
     fAcquireExecution[execORMWrite].Leave;
   end;
 end;

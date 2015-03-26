@@ -174,7 +174,7 @@ type
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
     fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
     fEngineUseSelectMaxID: Boolean;
-    fEngineLockedLastID: TID;
+    fEngineLockedMaxID: TID;
     /// external column layout as retrieved by fProperties
     // - used internaly to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
@@ -190,7 +190,6 @@ type
     // multi-thread BATCH process is secured via Lock/UnLock critical section
     fBatchMethod: TSQLURIMethod;
     fBatchCapacity, fBatchCount: integer;
-    fBatchFirstAddedID: TID;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchValues: TRawUTF8DynArray;
     fBatchIDs: TIDDynArray;
@@ -243,7 +242,7 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    function InternalBatchAdd(const aValue: RawUTF8; aID: TID): TID;
+    procedure InternalBatchAdd(const aValue: RawUTF8; const aID: TID);
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -325,7 +324,10 @@ type
     procedure EndCurrentThread(Sender: TThread); override;
     /// reset the internal cache of external table maximum ID
     // - next EngineAdd/BatchAdd will execute SELECT max(ID) FROM externaltable
-    procedure ResetMaxIDCache;
+    // - is a lighter alternative to EngineAddUseSelectMaxID=TRUE, since this
+    // method may be used only when some records have been inserted into the
+    // external database outside this class scope (e.g. by legacy code)
+    procedure EngineAddForceSelectMaxID;
 
     /// retrieve the REST server instance corresponding to an external TSQLRecord
     // - just map aServer.StaticVirtualTable[] and will return nil if not
@@ -344,7 +346,8 @@ type
     // - it is very fast and reliable, unless external IDs can be created
     // outside this engine
     // - you can set EngineAddUseSelectMaxID=true to execute a slower
-    // 'select max(ID) from TableName' SQL statement
+    // 'select max(ID) from TableName' SQL statement before each EngineAdd()
+    // - a lighter alternative may be to call EngineAddForceSelectMaxID only when required
     property EngineAddUseSelectMaxID: Boolean read fEngineUseSelectMaxID
       write fEngineUseSelectMaxID;
   end;
@@ -953,20 +956,22 @@ begin
 end;
 
 function TSQLRestStorageExternal.EngineLockedNextID: TID;
+procedure RetrieveFromDB;
 // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
 // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
 var Rows: ISQLDBRows;
 begin
-  if (fEngineLockedLastID=0) or EngineAddUseSelectMaxID then begin
-    // first method call -> retrieve value from DB
-    Rows := ExecuteDirect('select max(%) from %',
-      [StoredClassProps.ExternalDB.RowIDFieldName,fTableName],[],true);
-    if (Rows<>nil) and Rows.Step then
-      fEngineLockedLastID := Rows.ColumnInt(0) else
-      fEngineLockedLastID := 0;
-  end;
-  inc(fEngineLockedLastID);
-  result := fEngineLockedLastID;
+  Rows := ExecuteDirect('select max(%) from %',
+    [StoredClassProps.ExternalDB.RowIDFieldName,fTableName],[],true);
+  if (Rows<>nil) and Rows.Step then
+    fEngineLockedMaxID := Rows.ColumnInt(0) else
+    fEngineLockedMaxID := 0;
+end;
+begin
+  if (fEngineLockedMaxID=0) or EngineAddUseSelectMaxID then
+    RetrieveFromDB;
+  inc(fEngineLockedMaxID);
+  result := fEngineLockedMaxID;
 end;
 
 function TSQLRestStorageExternal.InternalBatchStart(
@@ -982,9 +987,6 @@ begin
       if fBatchMethod<>mNone then
         raise EORMException.CreateUTF8('Missing previous %.InternalBatchStop(%)',
           [self,StoredClass]);
-      if Method=mPOST then
-        fBatchFirstAddedID := EngineLockedNextID else
-        fBatchFirstAddedID := 0;
       fBatchMethod := Method;
       fBatchCount := 0;
       result := true; // means BATCH mode is supported
@@ -1122,9 +1124,6 @@ begin
       Owner.FlushInternalDBCache;
     end;
   finally
-    if (fBatchMethod=mPost) and (fBatchCount>1) then
-      // -1 since fBatchFirstAddedID := EngineLockedNextID did already a +1
-      inc(fEngineLockedLastID,fBatchCount-1);
     fBatchValues := nil;
     fBatchIDs := nil;
     fBatchCount := 0;
@@ -1134,10 +1133,9 @@ begin
   end;
 end;
 
-function TSQLRestStorageExternal.InternalBatchAdd(
-  const aValue: RawUTF8; aID: TID): TID;
+procedure TSQLRestStorageExternal.InternalBatchAdd(
+  const aValue: RawUTF8; const aID: TID);
 begin
-  result := fBatchFirstAddedID+fBatchCount;
   if fBatchCount>=fBatchCapacity then begin
     fBatchCapacity := fBatchCapacity+64+fBatchCount shr 3;
     SetLength(fBatchIDs,fBatchCapacity);
@@ -1146,8 +1144,6 @@ begin
   end;
   if aValue<>'' then
     fBatchValues[fBatchCount] := aValue;
-  if aID=0 then
-    aID := result;
   fBatchIDs[fBatchCount] := aID;
   inc(fBatchCount);
 end;
@@ -1159,8 +1155,14 @@ begin
     result := 0 else // avoid GPF
   if fBatchMethod<>mNone then
     if fBatchMethod<>mPOST then
-      result := 0 else
-      result := InternalBatchAdd(SentData,0) else begin
+      result := 0 else begin
+      JSONGetID(pointer(SentData),result);
+      if result=0 then
+        result := EngineLockedNextID else
+        if result>fEngineLockedMaxID then
+          fEngineLockedMaxID := result;
+      InternalBatchAdd(SentData,result);
+    end else begin
     result := ExecuteFromJSON(SentData,soInsert,0);
     // UpdatedID=0 -> insert with EngineLockedNextID
     if (result>0) and (Owner<>nil) then begin
@@ -1177,8 +1179,10 @@ begin
     result := false else
     if fBatchMethod<>mNone then
       if fBatchMethod<>mPUT then
-        result := false else
-        result := InternalBatchAdd(SentData,ID)>=0 else begin
+        result := false else begin
+        InternalBatchAdd(SentData,ID);
+        result := true;
+      end else begin
       result := ExecuteFromJSON(SentData,soUpdate,ID)=ID;
       if result and (Owner<>nil) then begin
         Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
@@ -1193,8 +1197,10 @@ begin
     result := false else
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDELETE then
-        result := false else
-        result := InternalBatchAdd('',ID)>=0 else begin
+        result := false else begin
+        InternalBatchAdd('',ID);
+        result := true;
+      end else begin
       if Owner<>nil then // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
       result := ExecuteDirect('delete from % where %=?',
@@ -1706,11 +1712,11 @@ begin
   try
     case Occasion of
     soInsert: begin
-      InsertedID := JSONRetrieveIDField(pointer(SentData));
+      JSONGetID(pointer(SentData),InsertedID);
       if InsertedID=0 then // no specified "ID":... field value -> compute next
         InsertedID := EngineLockedNextID else
-        if result>fEngineLockedLastID then
-          fEngineLockedLastID := result;
+        if InsertedID>fEngineLockedMaxID then
+          fEngineLockedMaxID := InsertedID;
     end;
     soUpdate:
       if UpdatedID<>0 then
@@ -1791,10 +1797,10 @@ begin
   end;
 end;
 
-procedure TSQLRestStorageExternal.ResetMaxIDCache;
+procedure TSQLRestStorageExternal.EngineAddForceSelectMaxID;
 begin
   StorageLock(true);
-  fEngineLockedLastID := 0;
+  fEngineLockedMaxID := 0;
   StorageUnLock;
 end;
 

@@ -7205,12 +7205,6 @@ function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
 function JSONDecode(var JSON: RawUTF8; const aName: RawUTF8='result';
   wasString: PBoolean=nil; HandleValuesAsObjectOrArray: Boolean=false): RawUTF8; overload;
 
-/// retrieve a "ID":... or "RowID":... field value from a JSON object buffer
-// - returns 0 if no such field exist, or returns the numerical field value
-// - this function won't touch the JSON buffer, so you can call it before
-// using in-place escape process via JSONDecode() or GetJSONField()
-function JSONRetrieveIDField(P: PUTF8Char): Int64;
-
 /// retrieve a pointer to JSON string field content
 // - returns either ':' for name field, either '}',',' for value field
 // - returns nil on JSON content error
@@ -36482,32 +36476,6 @@ begin
   result := P; // return either ':' for name field, either '}',',' for value
 end;
 
-function JSONRetrieveIDField(P: PUTF8Char): Int64;
-var FieldName: PUTF8Char;
-    FieldNameLen: Integer;
-    EndOfObject: AnsiChar;
-begin
-  result := 0;
-  if P=nil then
-    exit;
-  while P^<>'{' do
-    if P^=#0 then
-      exit else
-      inc(P);
-  inc(P); // jump {
-  repeat
-    P := JSONRetrieveStringField(P,FieldName,FieldNameLen,true);
-    repeat inc(P) until not(P^ in [#1..' ']);
-    if IsRowID(FieldName,FieldNameLen) then begin
-      SetInt64(P,result);
-      exit;
-    end;
-    P := GotoNextJSONItem(P,1,@EndOfObject);
-    if not(EndOfObject in [',','}']) then
-      exit; // invalid item separator
-  until (P=nil) or (EndOfObject='}');
-end;
-
 /// decode a JSON field into an UTF-8 encoded buffer, stored inplace of JSON data
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil): PUTF8Char;
@@ -42603,10 +42571,11 @@ function IsRowID(FieldName: PUTF8Char): boolean;
 begin
   if FieldName=nil then
     result := false else
-    result := (pInteger(FieldName)^ and $ffdfdf=ord('I')+ord('D')shl 8) or
+    result :=
+      (pInteger(FieldName)^ and $ffdfdf=ord('I')+ord('D')shl 8) or
       (PInteger(FieldName)^ and $dfdfdfdf=
-      ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
-      (PIntegerArray(FieldName)^[1] and $ffdf=ord('D'));
+        ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+        (PIntegerArray(FieldName)^[1] and $ffdf=ord('D'));
 end;
 
 function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;

@@ -471,11 +471,11 @@ begin
   MissingID := true;
   for i := doc.Count-1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(doc.Names[i])) then begin
-      MissingID := false;
       doc.Names[i] := fStoredClassProps.ExternalDB.RowIDFieldName;
       VariantToInt64(doc.Values[i],Int64(result));
-      if Occasion=soUpdate then
-        doc.Delete(i); // update does not expect any $set:{_id:..}
+      if (Occasion=soUpdate) or (result=0) then
+        doc.Delete(i) else  // update does not expect any $set:{_id:..}
+        MissingID := false; // leave true if value is not an integer (=0) 
     end else begin
       ndx := fStoredClassProps.Props.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
@@ -514,10 +514,16 @@ begin
         // sftObject,sftVariant,sftUTF8Custom were already converted to object from JSON
       end;
     end;
-  if (Occasion=soInsert) and MissingID then begin
-    result := EngineNextID;
-    doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
-  end;
+  if Occasion=soInsert then  
+    if MissingID then begin
+      result := EngineNextID;
+      doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
+    end else begin
+      EnterCriticalSection(fStorageCriticalSection);
+      if result>fEngineLastID then
+        fEngineLastID := result;
+      LeaveCriticalSection(fStorageCriticalSection);
+    end;
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;
