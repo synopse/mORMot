@@ -217,7 +217,7 @@ type
   protected
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame); override;
-    procedure FrameCompress(const Values: array of RawByteString;
+    procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); virtual; abstract;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; virtual; abstract;
@@ -243,7 +243,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsejson
   TWebSocketProtocolJSON = class(TWebSocketProtocolRest)
   protected
-    procedure FrameCompress(const Values: array of RawByteString;
+    procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
@@ -266,7 +266,7 @@ type
   protected
     fEncryption: TAESAbstract;
     fCompressed: boolean;
-    procedure FrameCompress(const Values: array of RawByteString;
+    procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
@@ -826,14 +826,19 @@ begin
     Sender.fIncoming.Push(request); 
 end;
 
-const
-  BOOL: array[boolean] of RawByteString = ('0','1');
-  
+// by convention, defaults are POST and JSON, to reduce frame size for SOA calls
+
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequest;
   aNoAnswer: boolean; out request: TWebSocketFrame);
+var Method,InContentType: RawByteString;
 begin
-  FrameCompress(['request',Ctxt.Method,Ctxt.URL,Ctxt.InHeaders,BOOL[aNoAnswer]],
-    Ctxt.InContent,Ctxt.InContentType,request);
+  if not IdemPropNameU(Ctxt.Method,'POST') then
+    Method := Ctxt.Method;
+  if (Ctxt.InContent<>'') and
+     not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE) then
+    InContentType := Ctxt.InContentType;
+  FrameCompress('request',[Method,Ctxt.URL,Ctxt.InHeaders,ord(aNoAnswer)],
+    Ctxt.InContent,InContentType,request);
 end;
 
 function TWebSocketProtocolRest.FrameToInput(var request: TWebSocketFrame;
@@ -843,16 +848,24 @@ begin
   result := FrameDecompress(request,'request',
     [@Method,@URL,@InHeaders,@NoAnswer],InContentType,InContent);
   if result then begin
+    if (InContentType='') and (InContent<>'') then
+      InContentType := JSON_CONTENT_TYPE_VAR;
+    if Method='' then
+      Method := 'POST';
     Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType);
-    aNoAnswer := NoAnswer=BOOL[true];
+    aNoAnswer := NoAnswer='1';
   end;
 end;
 
 procedure TWebSocketProtocolRest.OutputToFrame(Ctxt: THttpServerRequest;
   Status: Cardinal; out answer: TWebSocketFrame);
+var OutContentType: RawByteString;
 begin
-  FrameCompress(['answer',UInt32ToUTF8(Status),Ctxt.OutCustomHeaders],
-    Ctxt.OutContent,Ctxt.OutContentType,answer);
+  if (Ctxt.OutContent<>'') and
+     not IdemPropNameU(Ctxt.OutContentType,JSON_CONTENT_TYPE) then
+    OutContentType := Ctxt.OutContentType;
+  FrameCompress('answer',[Status,Ctxt.OutCustomHeaders],
+    Ctxt.OutContent,OutContentType,answer);
 end;
 
 function TWebSocketProtocolRest.FrameToOutput(
@@ -865,7 +878,9 @@ begin
     exit;
   result := GetInteger(pointer(status));
   Ctxt.OutCustomHeaders := outHeaders;
-  Ctxt.OutContentType := outContentType;
+  if (outContentType='') and (outContent<>'') then
+    Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR else
+    Ctxt.OutContentType := outContentType;
   Ctxt.OutContent := outContent;
 end;
 
@@ -882,8 +897,9 @@ begin
   result := TWebSocketProtocolJSON.Create(fURI);
 end;
 
-procedure TWebSocketProtocolJSON.FrameCompress(const Values: array of RawByteString;
-  const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
+procedure TWebSocketProtocolJSON.FrameCompress(const Head: RawUTF8;
+  const Values: array of const; const Content, ContentType: RawByteString;
+  var frame: TWebSocketFrame);
 var WR: TTextWriter;
     i: integer;
 begin
@@ -891,12 +907,11 @@ begin
   WR := TTextWriter.CreateOwnedStream;
   try
     WR.Add('{');
-    WR.AddFieldName(Values[0]);
+    WR.AddFieldName(Head);
     WR.Add('[');
-    for i := 1 to High(Values) do begin
-      WR.Add('"');
-      WR.AddJSONEscape(pointer(Values[i]));
-      WR.Add('"',',');
+    for i := 0 to High(Values) do begin
+      WR.AddJSONEscape(Values[i]);
+      WR.Add(',');
     end;
     WR.Add('"');
     WR.AddString(ContentType);
@@ -923,19 +938,18 @@ begin
   if (length(frame.payload)<10) or (frame.opcode<>focText) then
     exit;
   P := pointer(frame.payload);
-  P := GotoNextNotSpace(P);
-  if P^<>'{' then
+  if not NextNotSpaceCharIs(P,'{') then
     exit;
-  repeat
+  while P^<>'"' do begin
     inc(P);
     if P^=#0 then exit;
-  until P^='"';
+  end;
   txt := P+1;
-  P := GotoEndOfJSONString(P);
+  P := GotoEndOfJSONString(P); // here P^ should be '"'
   if (P^<>#0) and IdemPropNameU(Head,txt,P-txt) then
-    result := P;
+    result := P+1;
 end;
- 
+
 function TWebSocketProtocolJSON.FrameIs(const frame: TWebSocketFrame;
   const Head: RawUTF8): boolean;
 begin
@@ -953,13 +967,9 @@ begin
   P := JsonFrameIs(frame,Head);
   if P=nil then
     exit;
-  P := GotoNextNotSpace(P+1);
-  if P^<>':' then
+  if not NextNotSpaceCharIs(P,':') or
+     not NextNotSpaceCharIs(P,'[') then
     exit;
-  P := GotoNextNotSpace(P+1);
-  if P^<>'[' then
-    exit;
-  inc(P);
   for i := 0 to high(values) do
     values[i]^ := GetJSONField(P,P);
   contentType := GetJSONField(P,P);
@@ -985,9 +995,9 @@ begin
   if (length(frame.payload)<10) or (frame.opcode<>focText) then
     exit;
   P := pointer(frame.payload);
-  if not IdemPChar(P,'{"') then
+  if not NextNotSpaceCharIs(P,'{') or
+     not NextNotSpaceCharIs(P,'"') then
     exit;
-  inc(P,2);
   txt := P;
   P := GotoEndOfJSONString(P);
   SetString(result,txt,P-Txt);
@@ -1031,21 +1041,25 @@ begin
   inherited;
 end;
 
-procedure TWebSocketProtocolBinary.FrameCompress(const Values: array of RawByteString;
-  const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
+procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
+  const Values: array of const; const Content, ContentType: RawByteString;
+  var frame: TWebSocketFrame);
 var tmp,value: RawByteString;
+    item: RawUTF8;
     i: integer;
 begin
   frame.opcode := focBinary;
-  for i := 1 to high(Values) do
-    tmp := tmp+Values[i]+#1;
+  for i := 0 to high(Values) do begin
+    VarRecToUTF8(Values[i],item);
+    tmp := tmp+item+#1;
+  end;
   tmp := tmp+ContentType+#1+Content;
   if fCompressed then
     SynLZCompress(pointer(tmp),length(tmp),value,512) else
     value := tmp;
   if fEncryption<>nil then
     value := fEncryption.EncryptPKCS7(value,true);
-  frame.payload := Values[0]+#1+value;
+  frame.payload := Head+#1+value;
 end;
 
 function TWebSocketProtocolBinary.FrameIs(const frame: TWebSocketFrame;

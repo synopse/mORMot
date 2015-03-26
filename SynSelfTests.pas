@@ -12796,7 +12796,7 @@ begin
     TestOne('content',TEXT_CONTENT_TYPE);
     TestOne('{"content":1234}',JSON_CONTENT_TYPE);
     TestOne('"content"',JSON_CONTENT_TYPE);
-    TestOne('["json",2]','');
+    TestOne('["json",2]',JSON_CONTENT_TYPE);
     TestOne('binary'#0'data',BINARY_CONTENT_TYPE);
   finally
     protocol.Free;
