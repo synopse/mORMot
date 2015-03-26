@@ -8035,6 +8035,7 @@ procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
 
 /// revert the value as encoded by TTextWriter.AddInt18ToChars3() method
 function Chars3ToInt18(P: pointer): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
@@ -19762,16 +19763,8 @@ asm // eax=P, edx=Count, Value=ecx
        or eax,eax
        jz @ok0 // avoid GPF
        cmp edx,8
-       jmp @s2
-@ok0:  rep ret
-@ok20: lea eax,[eax+20]; ret
-@ok16: lea eax,[eax+16]; ret
-@ok12: lea eax,[eax+12]; ret
-@ok8:  lea eax,[eax+8]; ret
-@ok4:  lea eax,[eax+4]; ret
-@ok28: lea eax,[eax+28]; ret
-@ok24: lea eax,[eax+24]; ret
-       nop // align
+       jb @s2
+       nop; nop; nop // @s1 loop align
 @s1:   sub edx,8
        cmp [eax],ecx;    je @ok0
        cmp [eax+4],ecx;  je @ok4
@@ -19783,8 +19776,8 @@ asm // eax=P, edx=Count, Value=ecx
        cmp [eax+28],ecx; je @ok28
        cmp edx,8
        lea eax,[eax+32]  // preserve flags during 'cmp edx,8' computation
-@s2:   jae @s1
-       test edx,edx; jz @z
+       jae @s1
+@s2:   test edx,edx; jz @z
        cmp [eax],ecx;    je @ok0;  dec edx; jz @z
        cmp [eax+4],ecx;  je @ok4;  dec edx; jz @z
        cmp [eax+8],ecx;  je @ok8;  dec edx; jz @z
@@ -19793,6 +19786,14 @@ asm // eax=P, edx=Count, Value=ecx
        cmp [eax+20],ecx; je @ok20; dec edx; jz @z
        cmp [eax+24],ecx; je @ok24
 @z:    xor eax,eax // return nil if not found
+@ok0:  ret
+@ok28: lea eax,[eax+28]; ret
+@ok24: lea eax,[eax+24]; ret
+@ok20: lea eax,[eax+20]; ret
+@ok16: lea eax,[eax+16]; ret
+@ok12: lea eax,[eax+12]; ret
+@ok8:  lea eax,[eax+8];  ret
+@ok4:  lea eax,[eax+4]
 end;
 {$endif}
 

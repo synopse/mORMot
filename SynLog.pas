@@ -934,10 +934,11 @@ type
     fLogProcStack: array of cardinal;
     fLogProcStackCount: integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
-    /// used by ProcessOneLine
+    /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
     procedure SetLogProcMerged(const Value: boolean);
     function GetEventText(index: integer): RawUTF8;
+    function GetLogLevelFromText(LineBeg: PUTF8Char): TSynLogInfo;
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer=32); override;
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
@@ -3576,8 +3577,18 @@ end;
 constructor TSynLogFile.Create;
 var L: TSynLogInfo;
 begin
-  for L := low(TSynLogInfo) to high(TSynLogInfo) do // needed by ProcessOneLine
+  for L := low(TSynLogInfo) to high(TSynLogInfo) do
     fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^; // [3] -> e.g. 'UST4'
+end;
+
+function TSynLogFile.GetLogLevelFromText(LineBeg: PUTF8Char): TSynLogInfo;
+var P: PtrInt;
+begin
+  P := PtrInt(IntegerScan(@fLogLevelsTextMap[succ(sllNone)],
+    ord(high(TSynLogInfo)),PCardinal(LineBeg+fLineLevelOffset)^));
+  if P<>0 then
+    result := TSynLogInfo((P-PtrInt(@fLogLevelsTextMap[succ(sllNone)]))shr 2+1) else
+    result := sllNone;
 end;
 
 function TSynLogFile.EventCount(const aSet: TSynLogInfos): integer;
@@ -3937,57 +3948,56 @@ begin
     if LineBeg[8]=' ' then // YYYYMMDD HHMMSS is one char bigger than TimeStamp
       fLineLevelOffset := 19 else
       fLineLevelOffset := 18;
-    if LineBeg[fLineLevelOffset]='!' then begin // thread number = 1 -> '  !'
+    if (LineBeg[fLineLevelOffset]='!') or // ! = thread 1 
+       (GetLogLevelFromText(LineBeg)=sllNone) then begin
       inc(fLineLevelOffset,3);
       fThreadsCount := fLinesMax;
       SetLength(fThreads,fLinesMax);
     end;
     fLineTextOffset := fLineLevelOffset+4;
   end;
-  V := PCardinal(LineBeg+fLineLevelOffset)^;
-  for L := succ(sllNone) to high(TSynLogInfo) do
-    if V=fLogLevelsTextMap[L] then begin
-      fLevels[fCount-1] := L; // need exact match of level text
-      include(fLevelUsed,L);
-      case L of
-      sllEnter: begin
-        if Cardinal(fLogProcStackCount)>=Cardinal(length(fLogProcStack)) then
-          SetLength(fLogProcStack,length(fLogProcStack)+256);
-        fLogProcStack[fLogProcStackCount] := fLogProcNaturalCount;
-        inc(fLogProcStackCount);
-        if Cardinal(fLogProcNaturalCount)>=Cardinal(length(fLogProcNatural)) then
-          SetLength(fLogProcNatural,length(fLogProcNatural)+32768);
-        // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
-        inc(fLogProcNaturalCount);
-      end;
-      sllLeave:
-      if (LineEnd-LineBeg>10) and (LineEnd[-4]='.') and (LineEnd[-8]='.') and
-         (fLogProcStackCount>0) then begin // 00.020.006
-        MS := DecodeMicroSec(PByte(LineEnd-10));
-        if MS>=0 then begin
-          dec(fLogProcStackCount);
-          fLogProcNatural[fLogProcStack[fLogProcStackCount]].Time := MS;
-        end;
-      end;
-      end;
-      if fThreads<>nil then begin
-        if fThreadsCount<fLinesMax then begin
-          fThreadsCount := fLinesMax;
-          SetLength(fThreads,fLinesMax);
-        end;
-        V := Chars3ToInt18(LineBeg+fLineLevelOffset-5);
-        fThreads[fCount-1] := V;
-        if V>fThreadMax then begin
-          fThreadMax := V;
-          if V>=fThreadsRowsCount then begin
-            fThreadsRowsCount := V+256;
-            SetLength(fThreadsRows,fThreadsRowsCount);
-          end;
-        end;
-        inc(fThreadsRows[V]);
-      end;
-      break;
+  L := GetLogLevelFromText(LineBeg);
+  if L=sllNone then
+    exit;
+  fLevels[fCount-1] := L; // need exact match of level text
+  include(fLevelUsed,L);
+  case L of
+  sllEnter: begin
+    if Cardinal(fLogProcStackCount)>=Cardinal(length(fLogProcStack)) then
+      SetLength(fLogProcStack,length(fLogProcStack)+256);
+    fLogProcStack[fLogProcStackCount] := fLogProcNaturalCount;
+    inc(fLogProcStackCount);
+    if Cardinal(fLogProcNaturalCount)>=Cardinal(length(fLogProcNatural)) then
+      SetLength(fLogProcNatural,length(fLogProcNatural)+32768);
+    // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
+    inc(fLogProcNaturalCount);
+  end;
+  sllLeave:
+  if (LineEnd-LineBeg>10) and (LineEnd[-4]='.') and (LineEnd[-8]='.') and
+     (fLogProcStackCount>0) then begin // 00.020.006
+    MS := DecodeMicroSec(PByte(LineEnd-10));
+    if MS>=0 then begin
+      dec(fLogProcStackCount);
+      fLogProcNatural[fLogProcStack[fLogProcStackCount]].Time := MS;
     end;
+  end;
+  end;
+  if fThreads<>nil then begin
+    if fThreadsCount<fLinesMax then begin
+      fThreadsCount := fLinesMax;
+      SetLength(fThreads,fLinesMax);
+    end;
+    V := Chars3ToInt18(LineBeg+fLineLevelOffset-5);
+    fThreads[fCount-1] := V;
+    if V>fThreadMax then begin
+      fThreadMax := V;
+      if V>=fThreadsRowsCount then begin
+        fThreadsRowsCount := V+256;
+        SetLength(fThreadsRows,fThreadsRowsCount);
+      end;
+    end;
+    inc(fThreadsRows[V]);
+  end;
 end;
 
 function TSynLogFile.GetEventText(index: integer): RawUTF8;
