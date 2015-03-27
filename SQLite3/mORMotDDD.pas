@@ -1133,7 +1133,7 @@ begin
     raise EDDDRepository.CreateUTF8(self,'%.AggregateToTable(%,%,%=nil)',
       [self,aAggregate,aID,fTable]);
   aDest.ClearProperties;
-  aDest.ID := aID;
+  aDest.IDValue := aID;
   if aAggregate<>nil then
     for i := 0 to high(fAggregateProp) do
       AggregatePropToTable(aAggregate,fAggregateProp[i],aDest,fAggregateToTable[i]);

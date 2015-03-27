@@ -184,7 +184,7 @@ begin
   SetLength(tags,32);
   for n := 1 to length(tags) do begin
     tag.Ident := 'Tag'+UInt32ToUtf8(n);
-    tag.ID := n*2; // force test TSQLTags layout
+    tag.IDValue := n*2; // force test TSQLTags layout
     tags[n-1] := RestModel.Add(tag,true,true);
   end;
   fTagsLookup.Init(RestModel); // reload after initial fill

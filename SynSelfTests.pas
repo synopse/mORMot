@@ -6792,7 +6792,7 @@ begin
     T2.FillFrom(s);
     Check(T.SameValues(T2));
     Check(T2.GetJSONValues(false,true,soSelect)=s);
-    T.ID := 10;
+    T.fID := 10;
     s := T.GetJSONValues(true,true,soSelect);
     {$ifdef VERBOSE}writeln(s);{$endif}
     T2.ClearProperties;
@@ -8979,7 +8979,7 @@ begin
               Check(not Client.Retrieve(ids[i],R));
             R.ClearProperties;
             for i := 0 to high(ids) do begin
-              R.ID := ids[i];
+              R.fID := ids[i];
               Check(Client.Update(R),'test locking');
             end;
             for i := 0 to high(ids) do begin
@@ -9663,7 +9663,7 @@ begin
           Check(not aExternalClient.Retrieve(ids[i],RExt));
         RExt.ClearProperties;
         for i := 0 to high(ids) do begin
-          RExt.ID := ids[i];
+          RExt.fID := ids[i];
           Check(aExternalClient.Update(RExt),'test locking');
         end;
       finally
@@ -9731,7 +9731,7 @@ begin
         end;
         aExternalClient.TransactionBegin(TSQLRecordOnlyBlob);
         for i := BLOB_MAX downto 1 do begin
-          RBlob.ID := i;
+          RBlob.fID := i;
           RBlob.Data := Int32ToUtf8(i*2);
           Check(aExternalClient.Update(RBlob));
         end;
@@ -10132,7 +10132,7 @@ begin
     for i := 0 to high(IntArray) do begin
       Check(ClientDist.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
       Check((length(Data)=4) and (PInteger(pointer(Data))^=IntArray[i]));
-      V2.ID := IntArray[i]; // debug use - do NOT set ID in your programs!
+      V2.fID := IntArray[i]; // debug use - do NOT set ID in your programs!
       Check(V2.DataAsHex(ClientDist)=SynCommons.BinToHex(Data));
       a := Random;
       b := Random;
@@ -10164,7 +10164,7 @@ begin
       Check(not ClientDist.Retrieve(ids[i],V2));
     V2.ClearProperties;
     for i := 0 to high(ids) do begin
-      V2.ID := ids[i];
+      V2.fID := ids[i];
       Check(ClientDist.Update(V2),'test locking');
     end;
 //  time := GetTickCount; while time=GetTickCount do; time := GetTickCount;
@@ -10290,7 +10290,7 @@ begin
         Check(Client.UpdateBlob(TSQLRecordPeople,IntArray[i],'Data',@IntArray[i],4));
         Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
         Check((length(Data)=4) and (PInteger(pointer(Data))^=IntArray[i]));
-        V2.ID := IntArray[i]; // debug use - do NOT set ID in your programs!
+        V2.fID := IntArray[i]; // debug use - do NOT set ID in your programs!
         Check(V2.DataAsHex(Client)=SynCommons.BinToHex(Data));
         a := Random;
         b := Random;
@@ -10562,7 +10562,7 @@ begin
             V.FillClose;
             V.LastName := 'last';
             V.FirstName := 'first';
-            V.ID := 4294967297;
+            V.fID := 4294967297;
             Check(ClientDist.Add(V,true,True)=V.ID);
             V.ClearProperties;
             ClientDist.Retrieve(4294967297,V);
@@ -11323,7 +11323,7 @@ begin
       Check(GetCardinal(pointer(data.AccountNum))=c);
       people := TSQLRecordPeople.Create;
       try
-        people.ID := c;
+        people.fID := c;
         Inst.CC.FillPeople(people);
         Check(people.ID=c);
         Check(people.LastName=FormatUTF8('Last %',[c]));

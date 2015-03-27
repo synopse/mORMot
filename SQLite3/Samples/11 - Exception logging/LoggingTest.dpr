@@ -80,7 +80,7 @@ procedure TestsLog;
     Log := TSQLLog.Enter;
     People := TSQLRecordPeople.Create;
     try
-      People.ID := 16;
+      People.IDValue := 16;
       People.FirstName := 'Louis';
       People.LastName := 'Croivébaton';
       People.YearOfBirth := 1754;

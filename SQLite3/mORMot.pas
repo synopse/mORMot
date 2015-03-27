@@ -717,6 +717,8 @@ unit mORMot;
     - BREAKING CHANGE: added aSentData parameter to TNotifySQLEvent/OnUpdateEvent
     - BREAKING CHANGE: SQL "where" clause defined as PUTF8Char constant text
       have been changed into RawUTF8, to let the compiler fully handle Unicode
+    - BREAKING CHANGE: TSQLRecord.ID is a pure getter property - use the new
+      IDValue read/write property to access the ID of a true TSQLRecord instance
     - remove some unused TPropInfo methods, which were duplicates of the
       TSQLPropInfo cleaner class hierarchy: SetValue/GetValue/GetValueVar
       GetBinary/SetBinary GetVariant/SetVariant NormalizeValue/SameValue GetHash
@@ -5956,12 +5958,12 @@ type
     constructor CreateAndFillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 
-    {/ this method create a clone of the current record, with same ID and properties
-      - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
-        those fields don't contain any data, but a TSQLRecordMany instance
-        which allow to access to the pivot table data)
-      - you can override this method to allow custom copy of the object,
-        including (or not) published properties copy }
+    /// this method create a clone of the current record, with same ID and properties
+    // - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
+    // those fields don't contain any data, but a TSQLRecordMany instance
+    // which allow to access to the pivot table data)
+    // - you can override this method to allow custom copy of the object,
+    // including (or not) published properties copy }
     function CreateCopy: TSQLRecord; virtual;
     /// release the associated memory
     // - in particular, release all TSQLRecordMany instance created by the
@@ -6371,7 +6373,11 @@ type
     // - notice: the Setter should not be used usualy; you should not have to write
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record 
-    property ID: TID read GetID write fID;
+    property ID: TID read GetID;
+    /// this property gives direct access to the record's integer ID
+    // - using IDValue expects this TSQLRecord to be a true instance, not a
+    // transtyped sftID (i.e. TSQLRecord(aID))
+    property IDValue: TID read fID write fID;
     /// this read-only property can be used to retrieve the ID as a TSQLRecord object
     // - published properties of type TSQLRecord (one-to-many relationship) do not
     // store real class instances (only exception is if they inherit from
@@ -11288,7 +11294,7 @@ type
     // - implements REST PUT collection
     // - return true on success
     // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
-    function Update(Value: TSQLRecord; const CustomCSVFields: RawByteString): boolean; overload;
+    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8): boolean; overload;
     /// update a member from a supplied list of simple field values
     // - implements REST PUT collection
     // - the aSimpleFields parameters MUST follow explicitely both count and
@@ -28099,7 +28105,7 @@ begin
   result := EngineUpdate(TableIndex,Value.fID,JSONValues);
 end;
 
-function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawByteString): boolean;
+function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8): boolean;
 begin
   if (self=nil) or (Value=nil) then
     result := false else
@@ -29731,8 +29737,8 @@ DoRetry:
 {$ifndef LVCL}
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
-        fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,OnIdle,
-          FormatUTF8('% "%" background',[self,Model.Root]));
+        fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
+          OnIdle,FormatUTF8('% "%" background',[self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTML_UNAVAILABLE;
     end else
@@ -36055,7 +36061,8 @@ procedure TSQLRestStorage.StorageLock(WillModifyContent: boolean);
 begin
   EnterCriticalSection(fStorageCriticalSection);
   inc(fStorageCriticalSectionCount);
-  if WillModifyContent and fStorageLockShouldIncreaseOwnerInternalState and
+  if WillModifyContent and
+     fStorageLockShouldIncreaseOwnerInternalState and
      (Owner<>nil) then
     inc(Owner.InternalState);
 end;
