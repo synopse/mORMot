@@ -447,6 +447,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
     Start: TTimeLog;
     Timer: TPrecisionTimer;
     Res: TIDDynArray;
+    forceID: boolean;
     U, Server,DBName, MainDBName, Num, Time: RawUTF8;
     Rate, i: integer;
     {$ifdef USEMONGODB}
@@ -613,9 +614,16 @@ begin
           Value.Amount := (i+1)*0.01;
           Value.LastName := ValueLastName[i];
           Value.FirstName := ValueFirstName[i];
+          forceID := i and 3=1;
+          if forceID then
+            Value.fID := Res[i-1]+1;
+          {$ifdef UNIK}
+          if (Server='static') or (Server='SQL') then
+            forceID := false; // not yet in TSQLRestStorageInMemory.AddOne
+          {$endif}
           if aUseBatch then
-            Client.BatchAdd(Value,true) else
-            Res[i] := Client.Add(Value,true);
+            Client.BatchAdd(Value,true,forceID) else
+            Res[i] := Client.Add(Value,true,forceID);
           Value.BirthDate := Value.BirthDate+1;
         end;
         if aUseBatch then

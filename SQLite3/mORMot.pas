@@ -606,7 +606,7 @@ unit mORMot;
     - added TJSONObjectDecoder.DecodedRowID member and fix GPF issue in Decode()
     - change vague boolean parameter into a TSQLOccasion enumerate in
       TJSONObjectDecoder.EncodeAsSQLPrepared()
-    - added ForceID: boolean parameter to TSQLRest.AddOne() method
+    - added ForceID: boolean parameter to TSQLRest.Add() method
     - fixed random issue in TSQLRest.GetServerTimeStamp method (using wrongly
       TTimeLog direct arithmetic, therefore raising EncodeTime() errors)
     - internal cache added in TSQLRest.GetServerTimeStamp method for better speed
@@ -33675,7 +33675,7 @@ var EndOfObject: AnsiChar;
     Count: integer;
     batchOptions: TSQLRestBatchOptions;
     RunTable, RunningBatchTable: TSQLRecordClass;
-    RunTableIndex,i: integer;
+    RunTableIndex,i,TableIndex: integer;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
     CurrentContext: TSQLRestServerURIContext;
@@ -33706,20 +33706,19 @@ begin
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
   CurrentContext := ServiceContext.Request;
   if Table<>nil then begin
+    TableIndex := Model.GetTableIndexExisting(Table);
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
-    while not (Sent^ in ['{',#0]) do inc(Sent);
-    if Sent^<>'{' then
+    if not NextNotSpaceCharIs(Sent,'{') then
       raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing {',[self]);
-    inc(Sent);
     TableName := GetJSONPropName(Sent);
-    if (TableName='') or (Sent=nil) then
-      raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong "Table":"%"',
-        [self,TableName]);
-  end; // or '["cmd@Table":values,...]'
-  while not (Sent^ in ['[',#0]) do inc(Sent);
-  if Sent^<>'[' then
+    if (TableName='') or (Sent=nil) or
+       not IdemPropNameU(TableName,Model.TableProps[TableIndex].Props.SQLTableName) then
+      raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%): Wrong "Table":"%"',
+        [self,Table,TableName]);
+  end else // or '["cmd@Table":values,...]'
+    TableIndex := -1;
+  if not NextNotSpaceCharIs(Sent,'[') then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing [',[self]);
-  inc(Sent);
   if IdemPChar(Sent,'"AUTOMATICTRANSACTIONPERROW",') then begin
     inc(Sent,29);
     AutomaticTransactionPerRow := GetNextItemCardinal(Sent,',');
@@ -33749,7 +33748,10 @@ begin
         raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Missing CMD',[self]);
       MethodTable := PosChar(Method,'@');
       if MethodTable=nil then begin // e.g. '{"Table":[...,"POST",{object},...]}'
-        RunTableIndex := Model.GetTableIndexExisting(Table);
+        if TableIndex<0 then
+          raise EORMBatchException.CreateUTF8(
+            '%.EngineBatchSend: "..@Table" expected',[self]);
+        RunTableIndex := TableIndex;
         RunTable := Table;
       end else begin                // e.g. '[...,"POST@Table",{object},...]'
         RunTableIndex := Model.GetTableIndex(MethodTable+1);
@@ -33766,12 +33768,12 @@ begin
         SetLength(Results,Count+256+Count shr 3);
       Results[Count] := HTML_NOTMODIFIED;
       // get CRUD method (ignoring @ char if appended after method name)
-      if IdemPChar(Method,'DELETE') then
-        URIMethod := mDELETE else
       if IdemPChar(Method,'POST') then
         URIMethod := mPOST else
       if IdemPChar(Method,'PUT') then
         URIMethod := mPUT else
+      if IdemPChar(Method,'DELETE') then
+        URIMethod := mDELETE else
         URIMethod := mNone;
       // handle auto-committed transaction process
       if AutomaticTransactionPerRow>0 then begin
@@ -34567,7 +34569,7 @@ begin
     end;
   finally
     if result<=0 then
-      Rec.Free; // on success, will be freed by fValue TObjectList
+      Rec.Free; // on success, Rec is owned by fValue: TObjectList
   end;
 end;
 
@@ -34653,30 +34655,51 @@ begin
   ReloadFromFile;
 end;
 
+function TSQLRecordCompare(Item1,Item2: Pointer): integer;
+begin // we assume Item1<>nil and Item2<>nil in fValue[]
+  result := TSQLRecord(Item1).fID-TSQLRecord(Item2).fID;
+end;
+
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
   const SentData: RawUTF8): TID;
 var ndx,i: integer;
+    lastID: TID;
+    needSort: boolean;
 begin
   if (self=nil) or (Rec=nil) then begin
     result := -1; // mark error
     exit;
   end;
-  if ForceID then
-    if Rec.fID=0 then
-      raise EORMException.CreateUTF8('%.AddOne(%.ID=0)',[self,Rec]) else
-      result := Rec.fID else begin
-    if fValue.Count=0 then
-      result := 1 else // default ID for a void table
-      result := TSQLRecord(fValue[fValue.Count-1]).fID+1; // new ID compute
+  if fValue.Count=0 then
+    lastID := 0 else // default ID for a void table
+    lastID := TSQLRecord(fValue[fValue.Count-1]).fID; // ID in increasing order
+  needSort := false;
+  if ForceID then begin // check forced ID
+    if Rec.fID<=0 then
+      raise EORMException.CreateUTF8('%.AddOne(%.ForceID=0)',[self,Rec]);
+    if Rec.fID<=lastID then begin
+      if fUniqueFields<>nil then
+        raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) with unique '+
+          'fields is not implemented yet',[self,Rec,Rec.fID]);
+      if IDToIndex(Rec.fID)>=0 then
+        raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
+          [self,Rec,Rec.fID]);
+      needSort := true; // brutal, but working
+    end;
+    result := Rec.fID;
+  end else begin // not ForceID -> compute new ID
+    result := lastID+1;
     Rec.fID := result;
   end;
   ndx := fValue.Add(Rec);
+  if needSort then
+    fValue.Sort(TSQLRecordCompare);
   if fUniqueFields<>nil then
     for i := 0 to fUniqueFields.Count-1 do
     if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
       fValue.List[ndx] := nil; // avoid GPF within Delete()
       fValue.Delete(ndx);
-      result := -1; // duplicate unique fields -> error
+      result := 0; // duplicate unique fields -> error
       exit;
     end;
   fModified := true;
