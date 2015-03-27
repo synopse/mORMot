@@ -9235,7 +9235,7 @@ begin
   Props.Free;
   Props := TSQLDBSQLite3ConnectionProperties.Create('server','','','1234');
   json := Props.DefinitionToJSON(14);
-  Check(json='{"Kind":"TSQLDBSQLite3ConnectionProperties","ServerName":"server","DatabaseName":"","User":"","Password":"amFOmQ=="}');
+  Check(json='{"Kind":"TSQLDBSQLite3ConnectionProperties","ServerName":"server","DatabaseName":"","User":"","Password":"AxrRXw=="}');
   Props.DefinitionToFile('connectionprops.json');
   Props.Free;
   Props := TSQLDBConnectionProperties.CreateFromFile('connectionprops.json');

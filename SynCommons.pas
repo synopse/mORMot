@@ -23042,7 +23042,7 @@ begin
   d := pointer(data);
   key := key xor cardinal(len);
   for i := 0 to (len shr 2)-1 do begin
-    key := key xor crc32ctab[0,i xor $ff];
+    key := key xor crc32ctab[0,(cardinal(i) xor key)and 1023];
     d^ := d^ xor key;
     inc(d);
   end;
