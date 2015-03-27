@@ -108,7 +108,7 @@ interface
 /// this low-level helper can be used to free a WideString returned by COM/OLE
 // - WideString instances created with this unit can be safely sent to any
 // COM/OLE object, as soon as they are constant parameters, but not a "var"
-// parameter or a function result
+// parameter or a callback function result
 // - any WideString instance returned by a COM object should NOT be released
 // by Delphi automatically, since the following would create a memory error:
 // ! TrueBSTRWideStringVariable := '';

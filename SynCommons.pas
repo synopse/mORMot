@@ -14346,16 +14346,85 @@ end;
 
 // some minimal RTTI const and types
 
-procedure Exchg(P1,P2: PAnsiChar; count: integer);
-var c: AnsiChar;
+{$ifdef CPU64}
+procedure Exchg16(P1,P2: PInt64Array);
+var c: Int64;
 begin
-  while count>0 do begin
-    dec(count);
-    c := P1[count];
-    P1[count] := P2[count];
-    P2[count] := c;
-  end;
+  c := P1[0];
+  P1[0] := P2[0];
+  P2[0] := c;
+  c := P1[1];
+  P1[1] := P2[1];
+  P2[1] := c;
 end;
+{$else}
+procedure Exchg16(P1,P2: PIntegerArray);
+var c: integer;
+begin
+  c := P1[0];
+  P1[0] := P2[0];
+  P2[0] := c;
+  c := P1[1];
+  P1[1] := P2[1];
+  P2[1] := c;
+  c := P1[2];
+  P1[2] := P2[2];
+  P2[2] := c;
+  c := P1[3];
+  P1[3] := P2[3];
+  P2[3] := c;
+end;
+{$endif}
+
+procedure Exchg(P1,P2: PAnsiChar; count: integer);
+{$ifdef PUREPASCAL}
+var i,c: integer;
+    u: AnsiChar;
+begin
+  for i := 1 to count shr 2 do begin
+    c := PInteger(P1)^;
+    PInteger(P1)^ := PInteger(P2)^;
+    PInteger(P2)^ := c;
+    inc(P1,4);
+    inc(P2,4);
+  end;
+  if count and 3<>0 then
+    for i := 0 to (count and 3)-1 do begin
+      u := P1[i];
+      P1[i] := P2[i];
+      P2[i] := u;
+    end;
+end;
+{$else}
+asm // eax=P1, edx=P2, ecx=count
+   push ebx
+   push esi
+   push ecx
+   shr ecx,2
+   jz @2
+@4:dec ecx
+   mov ebx,[eax]
+   mov esi,[edx]
+   mov [eax],esi
+   mov [edx],ebx
+   lea eax,eax+4
+   lea edx,edx+4
+   jnz @4
+@2:pop ecx
+   and ecx,3
+   jz @0
+@1:dec ecx
+   mov bl,[eax]
+   mov bh,[edx]
+   mov [eax],bh
+   mov [edx],bl
+   lea eax,eax+1
+   lea edx,edx+1
+   jnz @1
+@0:pop esi
+   pop ebx
+end;
+{$endif}
 
 {$ifdef FPC}
 
@@ -30539,7 +30608,7 @@ begin
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
         Tmp := names[J]; names[J] := names[I]; names[I] := Tmp;
-        Exchg(@values[I],@values[J],sizeof(TVarData));
+        Exchg16(@values[I],@values[J]);
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -31653,6 +31722,15 @@ begin
         PInt64(P2)^ := i64;
         inc(P1,8);
         dec(P2,8);
+      end;
+    end;
+    16: begin
+      // optimized version for TVariantDynArray and such
+      P2 := P1+n*16;
+      for i := 1 to n shr 1 do begin
+        Exchg16(Pointer(P1),Pointer(P2));
+        inc(P1,16);
+        dec(P2,16);
       end;
     end;
     else begin
@@ -44293,9 +44371,10 @@ begin
     if IsIdle then
       break;
     case OnIdleProcessNotify of // Windows.GetTickCount64 res is 10-16 ms
-    0..20:   SleepHiRes(0);
-    21..100: SleepHiRes(1);
-    else     SleepHiRes(5);
+    0..20:    SleepHiRes(0);
+    21..100:  SleepHiRes(1);
+    101..900: SleepHiRes(5);
+    else      SleepHiRes(50);
     end;
   until false;
   // 2. process execution in the background thread
@@ -44601,6 +44680,9 @@ initialization
   Assert(SizeOf(TSynTableData)=sizeof(TVarData));
   Assert(SizeOf(TDocVariantData)=sizeof(TVarData));
   {$endif NOVARIANTS}
+  {$warnings OFF}
+  Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));
+  {$warnings ON}
 
 finalization
   GarbageCollectorFree;
