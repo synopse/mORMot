@@ -35021,26 +35021,28 @@ begin
 end;
 
 procedure TTextWriter.AddPointer(P: PtrUInt);
-{$ifndef CPU64}
-var C: PUTF8Char;
-{$endif}
 begin
   if B+sizeof(P)*2>=BEnd then
     FlushToStream;
 {$ifdef CPU64}
-  BinToHexDisplay(@P,PAnsiChar(B+1),sizeof(P));
+  if P and $ffffffff00000000<>0 then begin
+    BinToHexDisplay(@P,PAnsiChar(B+1),8);
+    inc(B,16);
+  end else begin // truncate to 8 hexa chars for most heap-allocated pointers
+    BinToHexDisplay(@P,PAnsiChar(B+1),4);
+    inc(B,8);
+  end;
 {$else}
-  C := B;
-  C[1] := HexChars[P shr 28];
-  C[2] := HexChars[(P shr 24) and $F];
-  C[3] := HexChars[(P shr 20) and $F];
-  C[4] := HexChars[(P shr 16) and $F];
-  C[5] := HexChars[(P shr 12) and $F];
-  C[6] := HexChars[(P shr 8) and $F];
-  C[7] := HexChars[(P shr 4) and $F];
-  C[8] := HexChars[P and $F];
+  B[8] := HexChars[P and $F]; P := P shr 4;
+  B[7] := HexChars[P and $F]; P := P shr 4;
+  B[6] := HexChars[P and $F]; P := P shr 4;
+  B[5] := HexChars[P and $F]; P := P shr 4;
+  B[4] := HexChars[P and $F]; P := P shr 4;
+  B[3] := HexChars[P and $F]; P := P shr 4;
+  B[2] := HexChars[P and $F]; P := P shr 4;
+  B[1] := HexChars[P];
+  inc(B,8);
 {$endif}
-  inc(B,sizeof(P)*2);
 end;
 
 procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
