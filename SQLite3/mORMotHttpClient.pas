@@ -243,7 +243,6 @@ type
     /// internal HTTP/1.1 compatible client
     fSocketClass: THttpClientSocketClass;
     fSocket: THttpClientSocket;
-    fSocketKeptAlive: cardinal;
     /// call fSocket.Request()
     function InternalRequest(const url, method: RawUTF8;
       var Header, Data, DataType: RawUTF8): Int64Rec; override;
@@ -592,10 +591,6 @@ end;
 function TSQLHttpClientWinSock.InternalRequest(const url, method: RawUTF8;
   var Header, Data, DataType: RawUTF8): Int64Rec;
 begin
-  if KeepAliveMS<>fSocketKeptAlive then begin
-    fSocketKeptAlive := KeepAliveMS;
-    fSocket.KeepAlive := KeepAliveMS+1000;
-  end;
   result.Lo := fSocket.Request(url,method,KeepAliveMS,Header,Data,DataType,false);
   result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
   Header := fSocket.HeaderGetText;

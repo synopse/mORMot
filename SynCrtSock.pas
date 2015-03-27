@@ -2664,20 +2664,23 @@ var timeval: TTimeval;
 begin
   if (self=nil) or (Sock<=0) then
     raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
-  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) or
-     (OptName=SO_KEEPALIVE) then begin
+  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) then begin
     {$ifndef MSWINDOWS} // POSIX expects a timeval parameter for time out values
     timeval.tv_sec := OptVal div 1000;
     timeval.tv_usec := (OptVal mod 1000)*1000;
     if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))=0 then
-    {$else}
+    {$else}             // WinAPI expects the time out directly as ms integer
     if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
     {$endif}
       exit;
   end else
-  if OptName=TCP_NODELAY then begin
+  if OptName=SO_KEEPALIVE then begin // boolean (0/1) value
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
+      exit;
+  end else
+  if OptName=TCP_NODELAY then begin // boolean (0/1) value
     if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
-    exit;
+      exit;
   end;
   raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
     [WSAGetLastError,OptName,OptVal]);
@@ -2702,6 +2705,7 @@ begin
     ReceiveTimeout := TimeOut;
     SendTimeout := TimeOut;
     TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
+    KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
   end;
 end;
 
@@ -3370,9 +3374,9 @@ end;
 
 constructor THttpServerGeneric.Create(CreateSuspended: Boolean);
 begin
-  inherited Create(CreateSuspended);
   SetServerName('mORMot/'+SYNOPSE_FRAMEWORK_VERSION+
     {$ifdef MSWINDOWS}' (Windows)'{$else}' (Linux)'{$endif});
+  inherited Create(CreateSuspended);
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
@@ -4194,7 +4198,7 @@ const
 
 constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
-  fOwner := Owner;
+  fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnTerminate := Owner.FOnHttpThreadTerminate;
   inherited Create(false);
 end;

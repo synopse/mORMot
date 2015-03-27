@@ -49,9 +49,10 @@ unit SynBidirSock;
   - first public release, corresponding to mORMot Framework 1.18
 
 
-   TODO: add TWebSocketClientRequest with the possibility to
-   - broadcast a message to several aCallingThread: THttpServerResp values
-   - send asynchronously (e.g. for SOA methods sending events with no result)
+   TODO: broadcast a message to several aCallingThread: THttpServerResp values
+     (add TWebSocketClientRequest? or asynch notifications may be enough, and
+      the "broadcast" feature should be implementation at application level,
+      using a list of callbacks)
 
    TODO: enhance TWebSocketServer process to use events, and not threads
    - current implementation has its threads spending most time waiting in loops
@@ -417,7 +418,7 @@ type
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
       aEvent: TSynLogInfo=sllTrace); virtual;
     function LastPingDelay: Int64;
-    procedure SetLastPingTicks;
+    procedure SetLastPingTicks(invalidPing: boolean=false);
     procedure SendPendingOutgoingFrames;
   public
     /// initialize the WebSockets process on a given connection
@@ -1266,13 +1267,17 @@ destructor TWebSocketProcess.Destroy;
 var frame: TWebSocketFrame;
 begin
   WebSocketLog.Enter(self);
-  if fState<>wpsClose then begin 
+  if (fState<>wpsClose) and (fInvalidPingSendCount=0) then
+  try
+    InterlockedIncrement(fProcessCount);
     fState := wpsDestroy;
     if fOutgoing.Count>0 then
       SendPendingOutgoingFrames;
     frame.opcode := focConnectionClose;
     if SendFrame(frame) then // notify clean closure
       GetFrame(frame,1000);  // expects an answer from the other side
+  finally
+    InterlockedDecrement(fProcessCount);
   end else
     fState := wpsDestroy;
   while fProcessCount>0 do
@@ -1547,16 +1552,13 @@ begin
           if (fSettings.HeartbeatDelay<>0) and
              (elapsed>fSettings.HeartbeatDelay) then begin
             request.opcode := focPing;
-            if SendFrame(request) then
-              fInvalidPingSendCount := 0 else
-            if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
-               (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
-              fState := wpsClose;
-              break; // will close the connection
-            end else begin
-              inc(fInvalidPingSendCount);
-              SetLastPingTicks; // avoid endless retry in case of broken socket
-            end;
+            if not SendFrame(request) then
+              if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
+                 (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+                fState := wpsClose;
+                break; // will close the connection
+              end else
+                SetLastPingTicks(true); // mark invalid, and avoid immediate retry
           end;
         end;
       finally
@@ -1565,7 +1567,7 @@ begin
       end;
       HiResDelay(fLastSocketTicks);
     except
-      SleepHiRes(50); // be optimistic: wait a little and retry
+      SleepHiRes(500); // be optimistic: wait a little and retry
     end;
   ProcessStop;
 end;
@@ -1583,10 +1585,13 @@ begin
   SHA.Final(Digest);
 end;
 
-procedure TWebSocketProcess.SetLastPingTicks;
+procedure TWebSocketProcess.SetLastPingTicks(invalidPing: boolean);
 begin
   Acquire;
   fLastSocketTicks := GetTickCount64;
+  if invalidPing then
+    inc(fInvalidPingSendCount) else
+    fInvalidPingSendCount := 0;
   Release;
 end;
 
@@ -1959,25 +1964,17 @@ end;
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aProtocol: TWebSocketProtocol);
 begin
-  fClientThread := TWebSocketProcessClientThread.Create(self);
   fMaskSentFrames := 128;
-  inherited Create(aSender,aProtocol,0,fClientThread,aSender.fSettings);
+  inherited Create(aSender,aProtocol,0,nil,aSender.fSettings);
+  // initialize the thread after everything is set (Execute may be instant)
+  fClientThread := TWebSocketProcessClientThread.Create(self);
+  fOwnerThread := fClientThread; 
 end;
 
 destructor TWebSocketProcessClient.Destroy;
 begin
   fClientThread.Terminate;
-  if fState<>wpsClose then
-  try
-    InterlockedIncrement(fProcessCount);
-    if fOutgoing.Count>0 then
-      SendPendingOutgoingFrames;
-    fClientThread.Terminate;
-  finally
-    InterlockedDecrement(fProcessCount);
-  end;
-  fClientThread.Free;
-  inherited Destroy;
+  inherited Destroy; // SendPendingOutgoingFrames + SendFrame(focConnectionClose)
 end;
 
 function TWebSocketProcessClient.ComputeContext(
@@ -1995,6 +1992,7 @@ constructor TWebSocketProcessClientThread.Create(
 begin
   fProcess := aProcess;
   inherited Create(false);
+  FreeOnTerminate := true;
 end;
 
 procedure TWebSocketProcessClientThread.Execute;
@@ -2006,8 +2004,6 @@ begin
     fThreadState := sClosed else
     fThreadState := sFinished;
 end;
-
-
 
 
 end.
