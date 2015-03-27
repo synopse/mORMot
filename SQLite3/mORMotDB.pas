@@ -297,7 +297,7 @@ type
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
     // - write all pending SQL statements to the external database 
-    procedure Commit(SessionID: cardinal=1); override;
+    procedure Commit(SessionID: cardinal=1; RaiseException: boolean=false); override;
     /// abort a transaction (implements REST ABORT Member)
     // - restore the previous state of the database, before the call to TransactionBegin 
     procedure RollBack(SessionID: cardinal=1); override;
@@ -1603,10 +1603,13 @@ begin
     result := false;
 end;
 
-procedure TSQLRestStorageExternal.Commit(SessionID: cardinal);
+procedure TSQLRestStorageExternal.Commit(SessionID: cardinal; RaiseException: boolean);
+const ACTION: array[boolean] of TSQLDBSharedTransactionAction = (
+        transCommitWithoutException, transCommitWithException);
 begin
-  inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
-  fProperties.SharedTransaction(SessionID,transCommit);
+  inherited Commit(SessionID,RaiseException);
+  // reset fTransactionActive + write all TSQLVirtualTableJSON
+  fProperties.SharedTransaction(SessionID,ACTION[RaiseException]);
 end;
 
 procedure TSQLRestStorageExternal.RollBack(SessionID: cardinal);

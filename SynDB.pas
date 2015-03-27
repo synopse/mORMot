@@ -1007,7 +1007,8 @@ type
   TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
 
   /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
-  TSQLDBSharedTransactionAction = (transBegin, transCommit, transRollback);
+  TSQLDBSharedTransactionAction = (transBegin,
+    transCommitWithoutException, transCommitWithException, transRollback);
 
   /// defines a callback signature able to handle multiple INSERT
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
@@ -4627,7 +4628,8 @@ begin
   result := ThreadSafeConnection;
   if result<>fSharedTransactions[index].Connection then
     raise ESQLDBException.CreateUTF8(
-      '%.SharedTransaction(sessionID=%) with mixed connections',[self,SessionID]);
+      '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
+        [self,SessionID,result,fSharedTransactions[index].Connection]);
 end;
 var i,n: integer;
 begin
@@ -4645,8 +4647,10 @@ begin
           move(fSharedTransactions[i+1],fSharedTransactions[i],(n-i)*sizeof(fSharedTransactions[0]));
           SetLength(fSharedTransactions,n);
           case action of
-          transCommit:   result.Commit;
-          transRollback: result.Rollback;
+          transCommitWithException, transCommitWithoutException:
+            result.Commit;
+          transRollback:
+            result.Rollback;
           end;
         end;
       end;
@@ -4668,11 +4672,14 @@ begin
       fSharedTransactions[n].Connection := result;
     end else
       raise ESQLDBException.CreateUTF8(
-        'Unexpected %.SharedTransaction(%)',[self,SessionID]);
+        'Unexpected %.SharedTransaction(%,%)',[self,SessionID,ord(action)]);
     end;
   except
-    on Exception do
+    on Exception do begin
       result := nil; // result.StartTransaction/Commit/Rollback failed
+      if action=transCommitWithException then
+        raise;
+    end;
   end;
 end;
 

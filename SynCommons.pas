@@ -42572,18 +42572,21 @@ begin
   if FieldName=nil then
     result := false else
     result :=
-      (pInteger(FieldName)^ and $ffdfdf=ord('I')+ord('D')shl 8) or
-      (PInteger(FieldName)^ and $dfdfdfdf=
-        ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
-        (PIntegerArray(FieldName)^[1] and $ffdf=ord('D'));
+      (PInteger(FieldName)^ and $ffdfdf=
+        ord('I')+ord('D')shl 8) or
+      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf=
+         ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+       (PIntegerArray(FieldName)^[1] and $ffdf=ord('D')));
 end;
 
 function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
 begin
   case FieldLen of
-  2: result := PWord(FieldName)^ and $dfdf=ord('I')+ord('D')shl 8;
-  5: result := (PInteger(FieldName)^ and $dfdfdfdf=
-    ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+  2: result :=
+    PWord(FieldName)^ and $dfdf=ord('I')+ord('D')shl 8;
+  5: result :=
+    (PInteger(FieldName)^ and $dfdfdfdf=
+      ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
     (ord(FieldName[4]) and $df=ord('D'));
   else result := false;
   end;
@@ -42591,9 +42594,13 @@ end;
 
 function IsRowIDShort(const FieldName: shortstring): boolean;
 begin
-  result := (pInteger(@FieldName)^ and $DFDFFF=2+ord('I')shl 8+ord('D')shl 16) or
-    (PInteger(@FieldName)^ and $dfdfdfff=5+ord('R')shl 8+ord('O')shl 16+ord('W')shl 24) and
-    (PIntegerArray(@FieldName)^[1] and $dfdf=ord('I')+ord('D')shl 8);
+  result :=
+    (PInteger(@FieldName)^ and $DFDFFF=
+      2+ord('I')shl 8+ord('D')shl 16) or
+    ((PIntegerArray(@FieldName)^[0] and $dfdfdfff=
+      5+ord('R')shl 8+ord('O')shl 16+ord('W')shl 24) and
+     (PIntegerArray(@FieldName)^[1] and $dfdf=
+       ord('I')+ord('D')shl 8));
 end;
 
 function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;

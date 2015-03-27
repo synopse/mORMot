@@ -427,7 +427,7 @@ type
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
     // - write all pending SQL statements to the disk
-    procedure Commit(SessionID: cardinal=1); override;
+    procedure Commit(SessionID: cardinal=1; RaiseException: boolean=false); override;
     /// abort a transaction (implements REST ABORT Member)
     // - restore the previous state of the database, before the call to TransactionBegin
     procedure RollBack(SessionID: cardinal=1); override;
@@ -1474,14 +1474,16 @@ begin
       result := true; // as TSQLRest.UpdateblobFields()
 end;
 
-procedure TSQLRestServerDB.Commit(SessionID: cardinal=1);
+procedure TSQLRestServerDB.Commit(SessionID: cardinal=1; RaiseException: boolean=false);
 begin
-  inherited Commit(SessionID); // reset fTransactionActive + write all TSQLVirtualTableJSON
+  inherited Commit(SessionID,RaiseException);
+  // reset fTransactionActive + write all TSQLVirtualTableJSON
   try
     DB.Commit; // will call DB.Lock
   except
-    on ESQLite3Exception do
-      ; // just catch exception
+    on Exception do
+      if RaiseException then
+        raise;  // default RaiseException=false will just ignore the exception
   end;
 end;
 

@@ -1137,6 +1137,7 @@ unit mORMot;
     - variant published properties will use getter/setter - ticket [479938b694]
     - double/currency published properties will use getter/setter as expected
     - fix TSQLRestClientURI.Commit/RollBack to work as expected
+    - added optional RaiseException parameter to TSQLRest.Commit for [fa702c126a] 
     - introducing TSQLRestServer.AuthenticationRegister/AuthenticationUnregister
       methods and associated TSQLRestServerAuthentication* classes, used also by
       TSQLRestClientURI.SetUser() to allow generic class-driven authentication
@@ -11505,7 +11506,9 @@ type
     // this method when accessed from RESTful clients in the same thread, e.g.:
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
-    procedure Commit(SessionID: cardinal); virtual;
+    // - by default, any exception will be catch and ignored, unless RaiseException
+    // is set to TRUE so that the caller would be able to handle it
+    procedure Commit(SessionID: cardinal; RaiseException: boolean=false); virtual;
     /// abort a transaction
     // - implements REST ABORT collection
     // - restore the previous state of the database, before the call to TransactionBegin
@@ -12987,7 +12990,7 @@ type
     {/ end a transaction
      - implements REST END collection
      - write all pending TSQLVirtualTableJSON data to the disk }
-    procedure Commit(SessionID: cardinal); override;
+    procedure Commit(SessionID: cardinal; RaiseException: boolean); override;
 
 {$ifdef MSWINDOWS}
     /// declare the server on the local machine as a Named Pipe: allows
@@ -14178,7 +14181,8 @@ type
   	  SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED): boolean; override; 
     /// end a transaction (calls REST END Member)
     // - by default, Client transaction will use here a pseudo session
-    procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
+    procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED;
+      RaiseException: boolean=false); override;
     /// abort a transaction (calls REST ABORT Member)
     // - by default, Client transaction will use here a pseudo session
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
@@ -14516,7 +14520,8 @@ type
     /// end a transaction
     // - implements REST END collection
     // - write all pending SQL statements to the disk }
-    procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
+    procedure Commit(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED;
+      RaiseException: boolean=false); override;
     /// abort a transaction
     // - implements REST ABORT collection
     // - restore the previous state of the database, before the call to TransactionBegin }
@@ -22052,15 +22057,16 @@ end;
 
 function StartWithID(P: PUTF8Char; out ID: TID): boolean;
 begin
-  if PCardinal(P)^ and $ffffdfdf=ord('I')+ord('D')shl 8+ord('"')shl 16+
-      ord(':')shl 24 then begin
+  if PCardinal(P)^ and $ffffdfdf=
+      ord('I')+ord('D')shl 8+ord('"')shl 16+ord(':')shl 24 then begin
     SetID(P+4,ID);
     result := true;
     exit;
   end else
-  if (PCardinal(P)^ and $dfdfdfdf=ord('R')+ord('O')shl 8+ord('W')shl 16+
-      ord('I')shl 24) and (PCardinalArray(P)^[1] and $ffffdf=
-      ord('D')+ord('"')shl 8+ord(':')shl 16) then begin
+  if (PCardinalArray(P)^[0] and $dfdfdfdf=
+       ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+     (PCardinalArray(P)^[1] and $ffffdf=
+       ord('D')+ord('"')shl 8+ord(':')shl 16) then begin
     SetID(P+7,ID);
     result := true;
     exit;
@@ -22098,13 +22104,12 @@ begin
     EndOfObject := P^;
     inc(P); // ignore end of object, i.e. ',' or ']'
     if ExtractID<>nil then
-      if JSONGetID(Beg,ExtractID^) and
-         not KeepIDField then begin // ignore the '"ID":203,' pair
-          PC := PosChar(Beg,',');
-          PC^ := '{';
-          SetString(result,PAnsiChar(PC),P-PC-1);
-          exit;
-        end;
+      if JSONGetID(Beg,ExtractID^) and not KeepIDField then begin
+        PC := PosChar(Beg,','); // ignore the '"ID":203,' pair
+        PC^ := '{';
+        SetString(result,PAnsiChar(PC),P-PC-1);
+        exit;
+      end;
     SetString(result,PAnsiChar(Beg),P-Beg-1);
   end;
 end;
@@ -27933,7 +27938,7 @@ begin
     result := UnLock(PSQLRecordClass(Rec)^,Rec.fID);
 end;
 
-procedure TSQLRest.Commit(SessionID: cardinal);
+procedure TSQLRest.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
   if self<>nil then begin
     fAcquireExecution[execORMWrite].Enter;
@@ -29541,9 +29546,10 @@ begin
   end;
 end;
 
-procedure TSQLRestClientURI.Commit(SessionID: cardinal);
+procedure TSQLRestClientURI.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
-  inherited Commit(CONST_AUTHENTICATION_NOT_USED); // reset fTransactionActiveSession flag
+  inherited Commit(CONST_AUTHENTICATION_NOT_USED,RaiseException);
+  // inherited Commit = reset fTransactionActiveSession flag
   URI(Model.Root,'END');
 end;
 
@@ -30740,10 +30746,10 @@ begin
   result := Model.UnLock(Table,aID);
 end;
 
-procedure TSQLRestServer.Commit(SessionID: cardinal);
+procedure TSQLRestServer.Commit(SessionID: cardinal; RaiseException: boolean);
 var i: integer;
 begin
-  inherited Commit(SessionID);
+  inherited Commit(SessionID,RaiseException);
   if self<>nil then
     for i := 0 to high(fStaticVirtualTable) do
     if fStaticVirtualTable[i]<>nil then
@@ -31869,13 +31875,13 @@ begin
     // this method is called with Root (-> Table=nil -> Static=nil)
     // mEND logic is just the opposite of mBEGIN: release static, then main
     if (Static<>nil) and (StaticKind=sVirtualTable) then
-      Static.Commit(Session) else
+      Static.Commit(Session,false) else
     if (Static=nil) and (Server.fTransactionTable<>nil) then begin
       Static := Server.StaticVirtualTable[Server.fTransactionTable];
       if Static<>nil then
-        Static.Commit(Session);
+        Static.Commit(Session,false);
     end;
-    Server.Commit(Session);
+    Server.Commit(Session,false);
     Call.OutStatus := HTML_SUCCESS; // 200 OK
   end;
   mABORT: begin      // ABORT=ROLLBACK
@@ -33683,7 +33689,7 @@ var EndOfObject: AnsiChar;
     end;
     for i := 0 to high(RunTableTransactions) do
       if RunTableTransactions[i]<>nil then begin
-        RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED);
+        RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED,true);
         RunTableTransactions[i] := nil;
       end;
     RowCountForCurrentTransaction := 0;
@@ -36574,9 +36580,9 @@ begin
     end;
 end;
 
-procedure TSQLRestClient.Commit(SessionID: cardinal);
+procedure TSQLRestClient.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
-  inherited;
+  inherited Commit(SessionID,RaiseException);
 end;
 
 function TSQLRestClient.TransactionBegin(aTable: TSQLRecordClass;

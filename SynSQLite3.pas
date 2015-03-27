@@ -3118,18 +3118,22 @@ const
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  if fTransactionActive then begin
-    Execute('ROLLBACK TRANSACTION;');
-    fTransactionActive := false;
-  end;
+  if fTransactionActive then
+    try
+      Execute('ROLLBACK TRANSACTION;');
+    finally
+      fTransactionActive := false;
+    end;
   Execute('BEGIN '+TBTOKENS[aBehavior]+'TRANSACTION;');
   fTransactionActive := true;
 end;
 
 procedure TSQLDataBase.Commit;
 begin
-  if (Self<>nil) and fTransactionActive then begin
+  if (Self<>nil) and fTransactionActive then
+  try
     Execute('COMMIT TRANSACTION;');
+  finally
     fTransactionActive := false;
   end;
 end;
