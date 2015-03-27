@@ -381,14 +381,19 @@ type
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
-    // - used only if WebSocketLog global variable is set
+    // - used only if WebSocketLog global variable is set to a TSynLog class
     LogDetails: set of (logHeartbeat,logTextFrameContent);
     /// will set the default values
     procedure SetDefaults;
-    /// will set LogDetails to its highest level
+    /// will set LogDetails to its highest level of verbosity
+    // - used only if WebSocketLog global variable is set
     procedure SetFullLog;
   end;
+
   /// points to parameters to be used for WebSockets process
+  // - using a pointer/reference type will allow in-place modification of
+  // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
+  // THttpClientWebSockets.Settings property
   PWebSocketProcessSettings = ^TWebSocketProcessSettings;
 
   /// generic WebSockets process, used on both client or server sides
@@ -652,6 +657,8 @@ type
 
 var
   /// if set, will log all WebSockets raw information
+  // - see also TWebSocketProcessSettings.LogDetails and
+  // TWebSocketProcessSettings.SetFullLog to setup even more verbose information 
   WebSocketLog: TSynLogClass;
 
   
@@ -671,6 +678,17 @@ function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
 begin
   result := GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode));
 end;
+
+procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
+const SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+var SHA: TSHA1;
+begin
+  SHA.Init;
+  SHA.Update(pointer(Base64),length(Base64));
+  SHA.Update(@salt[1],36);
+  SHA.Final(Digest);
+end;
+
 
 { TWebSocketProcessSettings }
 
@@ -1523,7 +1541,7 @@ begin
   ProcessStart;
   fState := wpsRun;
   while (fState<>wpsDestroy) and
-        (not TThreadHook(fOwnerThread).Terminated) do
+        not TThreadHook(fOwnerThread).Terminated do
     try
       InterlockedIncrement(fProcessCount);
       try
@@ -1572,19 +1590,6 @@ begin
   ProcessStop;
 end;
 
-
-{ -------------- WebSockets Server classes for bidirectional remote access }
-
-procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
-const SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-var SHA: TSHA1;
-begin
-  SHA.Init;
-  SHA.Update(pointer(Base64),length(Base64));
-  SHA.Update(@salt[1],36);
-  SHA.Final(Digest);
-end;
-
 procedure TWebSocketProcess.SetLastPingTicks(invalidPing: boolean);
 begin
   Acquire;
@@ -1618,6 +1623,8 @@ begin
       Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad)]);
 end;
 
+
+{ -------------- WebSockets Server classes for bidirectional remote access }
 
 { TWebSocketServer }
 
@@ -1830,7 +1837,6 @@ begin
   RequestProcess := TWebSocketServerResp(fOwnerThread).fServer.Request;
 end;
 
-
 procedure TWebSocketProcessServer.ProcessStart;
 var frame: TWebSocketFrame;
 begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
@@ -1968,13 +1974,15 @@ begin
   inherited Create(aSender,aProtocol,0,nil,aSender.fSettings);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
-  fOwnerThread := fClientThread; 
 end;
 
 destructor TWebSocketProcessClient.Destroy;
 begin
   fClientThread.Terminate;
   inherited Destroy; // SendPendingOutgoingFrames + SendFrame(focConnectionClose)
+  while fClientThread.fThreadState<sFinished do
+    SleepHiRes(1);
+  fClientThread.Free;
 end;
 
 function TWebSocketProcessClient.ComputeContext(
@@ -1991,8 +1999,8 @@ constructor TWebSocketProcessClientThread.Create(
   aProcess: TWebSocketProcessClient);
 begin
   fProcess := aProcess;
+  fProcess.fOwnerThread := self;
   inherited Create(false);
-  FreeOnTerminate := true;
 end;
 
 procedure TWebSocketProcessClientThread.Execute;

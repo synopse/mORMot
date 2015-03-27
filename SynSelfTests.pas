@@ -788,6 +788,8 @@ type
     /// test via TSQLHttpClientWinSock instances over OS's socket API server
     // - this test won't work within the Delphi IDE debugger
     procedure SocketAPI;
+    //// test via TSQLHttpClientWebsockets instances
+    procedure Websockets;
     {$ifdef USELIBCURL}
     /// test via TSQLHttpClientCurl using libcurl library
     procedure _libcurl;
@@ -12453,8 +12455,14 @@ begin
     TSQLRestClientURIMessage(result).DoNotProcessMessages := true;
   end else
   {$endif}
-  if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then
-    result := TSQLHttpClientGenericClass(fTestClass).Create(ClientIP,HTTP_DEFAULTPORT,fModel) else
+  if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then begin
+    result := TSQLHttpClientGenericClass(fTestClass).Create(ClientIP,HTTP_DEFAULTPORT,fModel);
+    if fTestClass=TSQLHttpClientWebsockets then
+      with (result as TSQLHttpClientWebsockets) do begin
+        WebSockets.Settings.SetFullLog;
+        WebSocketsUpgrade('wskey');
+      end;
+  end else
     raise ESynException.CreateUTF8('Invalid fTestClass=%',[fTestClass]);
 end;
 
@@ -12512,8 +12520,11 @@ begin
     if fTestClass=TSQLRestClientURIMessage then
       fDatabase.ExportServerMessage('test') else
     {$endif}
-    if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then
+    if fTestClass.InheritsFrom(TSQLHttpClientGeneric) then begin
       fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[fDataBase],'+',aHttp);
+      if aHttp=useBidirSocket then
+        fHttpServer.WebSocketsEnable(fDatabase,'wskey').Settings.SetFullLog;
+    end;
   end;
   // 2. Perform the tests
   fRunningThreadCount := fMinThreads;
@@ -12578,7 +12589,7 @@ begin
       {$endif}
         fRunningThreadCount := fRunningThreadCount+20;
   until fRunningThreadCount>fMaxThreads;
-  // 3. Cleanup for this protocol (keep the same threadpool)
+  // 3. Cleanup for this protocol (but reuse the same threadpool)
   DatabaseClose;
   Check(fDatabase=nil);
 end;
@@ -12620,6 +12631,11 @@ begin
   {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
+end;
+
+procedure TTestMultiThreadProcess.Websockets;
+begin
+  Test(TSQLHttpClientWebsockets,useBidirSocket);
 end;
 
 {$ifdef USELIBCURL}
@@ -12894,9 +12910,7 @@ begin
   Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicClientDriven)<>nil);
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
-  fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).
-    Settings.SetFullLog;
-  WebSocketLog := TSQLLog;
+  fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).Settings.SetFullLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
 end;
 

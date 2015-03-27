@@ -84,6 +84,7 @@ uses
   mORMot, // for TSQLLog
   {$endif}
   SynLog,
+  SynBidirSock, // for WebSocketLog
   SynTests,
   SynSelfTests;
 
@@ -111,7 +112,8 @@ type
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
-  // exit;
+  //
+  exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
 {$ifdef MSWINDOWS}
@@ -165,6 +167,7 @@ begin
     PerThreadLog := ptIdentifiedInOnFile;
     //HighResolutionTimeStamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
+    WebSocketLog := TSQLLog;
   end
   else
     TSQLLog.Family.Level := []; // NO log by default (ignore expected ERROR 400)
