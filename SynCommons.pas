@@ -14407,8 +14407,8 @@ asm // eax=P1, edx=P2, ecx=count
    mov esi,[edx]
    mov [eax],esi
    mov [edx],ebx
-   lea eax,eax+4
-   lea edx,edx+4
+   lea eax,[eax+4]
+   lea edx,[edx+4]
    jnz @4
 @2:pop ecx
    and ecx,3
@@ -14418,8 +14418,8 @@ asm // eax=P1, edx=P2, ecx=count
    mov bh,[edx]
    mov [eax],bh
    mov [edx],bl
-   lea eax,eax+1
-   lea edx,edx+1
+   lea eax,[eax+1]
+   lea edx,[edx+1]
    jnz @1
 @0:pop esi
    pop ebx
