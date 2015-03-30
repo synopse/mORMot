@@ -43,7 +43,7 @@ begin
   try
     protocol := TWebSocketProtocolEcho.Create('meow','');
     protocol.OnIncomingFrame := protocol.EchoFrame;
-    Server.Protocols.Add(protocol);
+    Server.WebSocketProtocols.Add(protocol);
     TextColor(ccLightGreen);
     writeln('WebSockets Chat Server running on localhost:8888'#13#10);
     TextColor(ccWhite);
