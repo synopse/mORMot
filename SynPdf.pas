@@ -836,6 +836,11 @@ type
     /// write indirect object to specified stream
     // - this method called by parent object
     procedure WriteValueTo(var W: TPdfWrite);
+    /// low-level force the object to be saved now
+    // - you should not use this low-level method, unless you want to force
+    // the FSaveAtTheEnd internal flag to be set to force, so that
+    // TPdfDocument.SaveToStreamDirectPageFlush would flush the object content 
+    procedure ForceSaveNow;
     /// the associated PDF Object Number
     // - If you set an object number higher than zero, the object is considered
     // as indirect. Otherwise, the object is considered as direct object.
@@ -1408,7 +1413,9 @@ type
     // and before a final SaveToStreamDirectEnd call
     // - see TPdfDocumentGDI.SaveToStream() in this unit, and
     // TGDIPages.ExportPDFStream() in mORMotReport.pas for real use cases
-    procedure SaveToStreamDirectPageFlush; virtual;
+    // - you can set FlushCurrentPageNow=true to force the current page to be
+    // part of the flushed content
+    procedure SaveToStreamDirectPageFlush(FlushCurrentPageNow: boolean=false); virtual;
     /// prepare to save the PDF file content into a specified Stream
     // - shall be made once after a SaveToStreamDirectBegin() call
     // - is called by SaveToStream() method
@@ -2585,7 +2592,7 @@ type
     // !   finally
     // !     Free;
     // !   end;
-    procedure SaveToStreamDirectPageFlush; override;
+    procedure SaveToStreamDirectPageFlush(FlushCurrentPageNow: boolean=false); override;
     /// the VCL Canvas of the current page
     property VCLCanvas: TCanvas read GetVCLCanvas;
     /// the VCL Canvas size of the current page
@@ -3281,6 +3288,11 @@ end;
 constructor TPdfObject.Create;
 begin
   FObjectNumber := -1;
+end;
+
+procedure TPdfObject.ForceSaveNow;
+begin
+  FSaveAtTheEnd := False;
 end;
 
 procedure TPdfObject.InternalWriteTo(W: TPdfWrite);
@@ -5803,11 +5815,13 @@ begin
   fSaveToStreamWriter.Add(PDFHEADER[fFileformat]);
 end;
 
-procedure TPdfDocument.SaveToStreamDirectPageFlush;
+procedure TPdfDocument.SaveToStreamDirectPageFlush(FlushCurrentPageNow: boolean);
 var i: integer;
 begin
   if (self=nil) or (fSaveToStreamWriter=nil) or (FCanvas.FPage=nil) then
     raise EPdfInvalidOperation.Create('SaveToStreamDirectPageFlush');
+  if FlushCurrentPageNow then
+    FCanvas.FPage.FSaveAtTheEnd := false;
   for i := 1 to FXref.ItemCount-1 do  // ignore FXref[0] = root PDF_FREE_ENTRY
     with FXref.Items[i] do
     if (ByteOffset<=0) and not Value.FSaveAtTheEnd then begin
@@ -8547,7 +8561,7 @@ begin
   SaveToStreamDirectEnd;
 end;
 
-procedure TPdfDocumentGDI.SaveToStreamDirectPageFlush;
+procedure TPdfDocumentGDI.SaveToStreamDirectPageFlush(FlushCurrentPageNow: boolean);
 var P: TPdfPageGDI;
 begin
   if fRawPages.Count>0 then begin
