@@ -9351,8 +9351,8 @@ type
     FunctionName: RawUTF8;
     /// if the function needs a special process
     // - e.g. funcCountStar for the special Count(*) expression or
-    // funcDistinct for distinct(...) aggregation
-    FunctionKnown: (funcNone, funcCountStar, funcDistinct);
+    // funcDistinct, funcMax for distinct(...)/max(...) aggregation
+    FunctionKnown: (funcNone, funcCountStar, funcDistinct, funcMax);
   end;
 
   /// the recognized SELECT expressions for TSynTableStatement
@@ -42732,7 +42732,9 @@ begin
       P := GotoNextNotSpace(P+1);
     end else begin
       if IdemPropNameU(Prop,'DISTINCT') then
-        select.FunctionKnown := funcDistinct;
+        select.FunctionKnown := funcDistinct else
+      if IdemPropNameU(Prop,'MAX') then
+        select.FunctionKnown := funcMax;
       select.Field := GetPropIndex;
       if select.Field<0 then
         exit;
