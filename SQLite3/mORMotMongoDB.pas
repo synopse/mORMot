@@ -475,7 +475,7 @@ begin
       VariantToInt64(doc.Values[i],Int64(result));
       if (Occasion=soUpdate) or (result=0) then
         doc.Delete(i) else  // update does not expect any $set:{_id:..}
-        MissingID := false; // leave true if value is not an integer (=0) 
+        MissingID := false; // leave true if value is not an integer (=0)
     end else begin
       ndx := fStoredClassProps.Props.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
@@ -488,7 +488,7 @@ begin
       varInteger: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
       case info.SQLFieldType of
         sftBoolean:
-          Variant(V^) := boolean(V^.VInteger);
+          Variant(V^) := boolean(V^.VInteger); // store true boolean BSON
       end;
       varString: // handle some TEXT values
       case info.SQLFieldType of
@@ -501,7 +501,7 @@ begin
           blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
           if blob='' then
             SetVariantNull(Variant(V^)) else begin
-            typenfo := (info as TSQLPropInfoRTTIDynArray).PropType; 
+            typenfo := (info as TSQLPropInfoRTTIDynArray).PropType;
             if typenfo=TypeInfo(TByteDynArray) then
               js := '' else // embedded BLOB type stored as BSON binary
               js := DynArraySaveJSON(typenfo,blob);
@@ -514,7 +514,7 @@ begin
         // sftObject,sftVariant,sftUTF8Custom were already converted to object from JSON
       end;
     end;
-  if Occasion=soInsert then  
+  if Occasion=soInsert then
     if MissingID then begin
       result := EngineNextID;
       doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
@@ -524,6 +524,10 @@ begin
         fEngineLastID := result;
       LeaveCriticalSection(fStorageCriticalSection);
     end;
+  if fStoredClassRecordProps.RecordVersionField<>nil then
+    doc.AddValue(fStoredClassProps.ExternalDB.
+      FieldNames[fStoredClassRecordProps.RecordVersionField.PropertyIndex],
+      Owner.InternalRecordVersionCompute);
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;

@@ -1346,124 +1346,135 @@ type
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
   TCreateTime = type TTimeLog;
 
+  /// a monotonic version number, used to track changes on a table
+  // - add such a published field to any TSQLRecord will allow tracking of
+  // record modifications - note that only a single field of this type should
+  // be defined for a given record
+  // - note that this published field is NOT part of the record "simple fields":
+  // by default, the version won't be retrieved from the DB, nor will be sent
+  // from a client - the Engine*() CRUD method will take care of computing the
+  // monotonic version number, just before storage to the persistence engine
+  // - such a field will use a separated TSQLRecordTableDeletion table to
+  // track the deleted items
+  TRecordVersion = type Int64;
+
   /// the available types for any SQL field property, as managed with the
   // database driver
+  // - sftUnknown: unknown or not defined field type
+  // - sftAnsiText: a WinAnsi encoded TEXT, forcing a NOCASE collation
+  // (TSQLRecord Delphi property was declared as AnsiString or string before
+  // Delphi 2009)
+  // - sftUTF8Text is UTF-8 encoded TEXT, forcing a SYSTEMNOCASE collation,
+  // i.e. using UTF8IComp() (TSQLRecord property was declared as RawUTF8,
+  // RawUnicode or WideString - or string in Delphi 2009+)
+  //- sftEnumerate is an INTEGER value corresponding to an index in any
+  // enumerate Delphi type; storage is an INTEGER value (fast, easy and size
+  // efficient); at display, this integer index will be converted into the
+  // left-trimed lowercased chars of the enumerated type text conversion:
+  // TOpenType(1) = otDone -> 'Done'
+  /// - sftSet is an INTEGER value corresponding to a bitmapped set of
+  // enumeration; storage is an INTEGER value (fast, easy and size efficient);
+  // displayed as an integer by default, sets with an enumeration type with
+  // up to 64 elements is allowed yet (stored as an Int64)
+  // - sftInteger is an INTEGER (Int64 precision, as expected by SQLite3) field
+  // - sftID is an INTEGER field pointing to the ID/ROWID of another record of
+  // a table, defined by the class type of the TSQLRecord inherited property;
+  // coherency is always ensured: after a delete, all values pointing to
+  // it is reset to 0
+  // - sftRecord is an INTEGER field pointing to the ID/ROWID of another
+  // record: TRecordReference=Int64 Delphi property which can be typecasted to
+  // RecordRef; coherency is always ensured: after a delete, all values
+  // pointing to it are reset to 0 by the ORM
+  // - sftBoolean is an INTEGER field for a boolean value: 0 is FALSE,
+  // anything else TRUE (encoded as JSON 'true' or 'false' constants)
+  // - sftFloat is a FLOAT (floating point double precision, cf. SQLite3)
+  // field, defined as double (or single) published properties definition
+  // - sftDateTime is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
+  // corresponding to a TDateTime Delphi property: a ISO8601 collation is
+  // forced for such column, for proper date/time sorting and searching
+  // - sftTimeLog is an INTEGER field for coding a date and time (not SQLite3
+  // compatible), which should be defined as TTimeLog=Int64 Delphi property,
+  // ready to be typecasted to the TTimeLogBits optimized type for efficient
+  // timestamp storage, with a second resolution
+  // - sftCurrency is a FLOAT containing a 4 decimals floating point value,
+  // compatible with the Currency Delphi type, which minimizes rounding errors
+  // in monetary calculations which may occur with sftFloat type
+  // - sftObject is a TEXT containing an ObjectToJSON serialization, able to
+  // handle published properties of any not TPersistent as JSON object,
+  // TStrings or TRawUTF8List  as JSON arrays of strings, TCollection or
+  // TObjectList as JSON arrays of JSON objects
+  // - sftVariant is a TEXT containing a variant value encoded as JSON:
+  // string values are stored between quotes, numerical values directly stored,
+  // and JSON objects or arrays will be handled as TDocVariant custom types
+  // - sftBlob is a BLOB field (TSQLRawBlob Delphi property), and won't be
+  // retrieved by default (not part of ORM "simple types"), to save bandwidth
+  /// - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
+  // property will be retrieved by default, i.e. is recognized as a "simple
+  // field", and will use Base64 encoding during JSON transmission, or a true
+  // JSON array, depending on the database back-end (e.g. MongoDB)
+  // - sftBlobCustom is a custom property, stored as BLOB field: such
+  // properties are defined by adding a TSQLPropInfoCustom instance, overriding
+  // TSQLRecord.InternalRegisterCustomProperties virtual method - they will
+  // be retrieved by default, i.e. recognized as "simple fields"
+  // - sftUTF8Custom is a custom property, stored as JSON in a TEXT field,
+  // defined by overriding TSQLRecord.InternalRegisterCustomProperties
+  // virtual method, and adding a TSQLPropInfoCustom instance, e.g. via
+  // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI();
+  // they will be retrieved by default, i.e. recognized as "simple fields"
+  // - sftMany is a 'many to many' field (TSQLRecordMany Delphi property);
+  // nothing is stored in the table row, but in a separate pivot table: so
+  // there is nothing to retrieve here; in contrast to other TSQLRecord
+  // published properties, which contains an INTEGER ID, the TSQLRecord.Create
+  // will instanciate a true TSQLRecordMany instance to handle this pivot table
+  // via its dedicated ManyAdd/FillMany/ManySelect methods - as a result, such
+  // properties won't be retrieved by default, i.e. not recognized as "simple
+  // fields" unless you used the dedicated methods
+  // - sftModTime is an INTEGER field containing the TModTime value, aka time
+  // of the record latest update; TModTime (just like TTimeLog or TCreateTime)
+  // published property can be typecasted to the TTimeLogBits memory structure;
+  // the value of this field is automatically updated with the current
+  // date and time each time a record is updated (with external DB, it will
+  // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
+  // virtual method of TSQLRecord; note also that only RESTful PUT/POST access
+  // will change this field value: manual SQL statements (like
+  // 'UPDATE Table SET Column=0') won't change its content; note also that
+  // this is automated on Delphi client side, so only within TSQLRecord ORM use
+  // (a pure AJAX application should fill such fields explicitely before sending)
+  // - sftCreateTime is an INTEGER field containing the TCreateTime time
+  // of the record creation; TCreateTime (just like TTimeLog or TModTime)
+  // published property can be typecasted to the TTimeLogBits memory structure;
+  // the value of this field is automatically updated with the current
+  // date and time when the record is created (with external DB, it will
+  // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
+  // virtual method of TSQLRecord; note also that only RESTful PUT/POST access
+  // will set this field value: manual SQL statements (like
+  // 'INSERT INTO Table ...') won't set its content; note also that this is
+  // automated on Delphi client side, so only within TSQLRecord ORM use (a
+  // pure AJAX application should fill such fields explicitely before sending)
+  // - sftTID is an INTEGER field containing a TID pointing to another record;
+  // since regular TSQLRecord published properties (i.e. sftID kind of field)
+  // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
+  // Win32, defining TID published properties would allow to store the ID
+  // as signed 64 bit, e.g. up to 9,223,372,036,854,775,808; despite to
+  // sftID kind of record, coherency is NOT ensured: after a deletion, all
+  // values pointing to are NOT reset to 0 - it is up to your business logic
+  // to ensure data coherency as expected
+  // - sftRecordVersion is an INTEGER field containing a TRecordVersion
+  // monotonic number: adding such a published field to any TSQLRecord will
+  // allow tracking of record modifications, at storage level; by design,
+  // such a field won't be part of "simple types", so won't be transmitted
+  // between the clients and the server, but will be updated at any write
+  // operation by the low-level Engine*() storage methods - such a field
+  // will use a TSQLRecordTableDeletion table to track the deleted items
   TSQLFieldType = (
-    /// unknown or not defined field type
-    sftUnknown,
-    /// a WinAnsi encoded TEXT: force a NOCASE collation
-    // (TSQLRecord Delphi property was declared as AnsiString or string before
-    // Delphi 2009)
-    sftAnsiText,
-    /// UTF-8 encoded TEXT: force a SYSTEMNOCASE collation, i.e. using UTF8IComp()
-    // (TSQLRecord property was declared as RawUTF8, RawUnicode or WideString -
-    // or string in Delphi 2009+)
-    sftUTF8Text,
-    /// an INTEGER value corresponding to an index in any enumerate Delphi type
-    // - storage is an INTEGER value (fast, easy and storage efficient)
-    // - display convert this integer index into the left-trimed lowercased chars
-    // of the enumerated type text conversion: TOpenType(1) = otDone -> 'Done'
-    sftEnumerate,
-    // an INTEGER value corresponding to a bitmaped set of enumeration
-    // - storage is an INTEGER value (fast, easy and storage efficient)
-    // - displayed as an integer by default
-    // - sets with an enumeration type with up to 32 elements is allowed 
-    sftSet,
-    /// an INTEGER (Int64 precision, as expected by SQLite3) field
-    sftInteger,
-    /// an INTEGER field pointing to the ID/ROWID of another record of a table
-    // defined by the class type of the TSQLRecord inherited property
-    // - coherency is always ensured: after a delete, all values pointing to
-    // it is reset to 0
-    sftID,
-    /// an INTEGER field pointing to the ID/ROWID of another record
-    // (TRecordReference=Int64 Delphi property which can be typecasted to RecordRef)
-    // - coherency is always ensured: after a delete, all values pointing to
-    // it is reset to 0
-    sftRecord,
-    /// an INTEGER field for a boolean value: 0 is FALSE, anything else TRUE
-    // (encoded as JSON 'true' or 'false' constants)
-    sftBoolean,
-    /// a FLOAT (floating point double precision, cf. SQLite3) field
-    sftFloat,
-    /// a ISO 8601 encoded TEXT field - SQLite3 compatible;
-    // - a ISO8601 collation is forced 
-   	// - corresponds to a TDateTime Delphi property
-    sftDateTime,
-    /// an INTEGER field for coding a date and time - not SQLite3 compatible
-    // - TTimeLog=Int64 Delphi property which can be typecasted to Iso8601
-    sftTimeLog,
-    /// a FLOAT containing a 4 decimals floating point value
-    // (Currency Delphi property minimizes rounding errors in monetary
-    // calculations which may occur with sftFloat type)
-    sftCurrency,
-    /// a TEXT containing an ObjectToJSON serialization
-    // - able to handle published properties of any not TPersistent as JSON object,
-    // TStrings or TRawUTF8List  as JSON arrays of strings, TCollection or
-    // TObjectList as JSON arrays of JSON objects
-    sftObject,
+    sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,
+    sftInteger, sftID, sftRecord, sftBoolean,
+    sftFloat, sftDateTime, sftTimeLog, sftCurrency, sftObject,
     {$ifndef NOVARIANTS}
-    /// a TEXT containing a variant value encoded as JSON
-    // - string values are stored between quotes, numerical values directly
-    // - JSON objects or arrays will be handled as TDocVariant custom types  
     sftVariant,
     {$endif}
-    /// a BLOB field (TSQLRawBlob Delphi property)
-    // - not retrieved by default
-    sftBlob,
-    /// a dynamic array, stored as BLOB field
-    // - is retrieved by default, i.e. is recognized as a "simple" field
-    // - will use Base64 encoding in JSON content, or a true JSON array,
-    // depending on the database back-end (e.g. MongoDB)
-    sftBlobDynArray,
-    /// a custom property, stored as BLOB field
-    // - defined by overriding TSQLRecord.InternalRegisterCustomProperties
-    // virtual method, and adding a TSQLPropInfoCustom instance
-    sftBlobCustom,
-    /// a custom property, stored as JSON in a TEXT field
-    // - defined by overriding TSQLRecord.InternalRegisterCustomProperties
-    // virtual method, and adding a TSQLPropInfoCustom instance, e.g. via
-    // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI()
-    sftUTF8Custom,
-    /// a 'many to many' field (TSQLRecordMany Delphi property)
-    // - nothing is stored in the table row, but in a separate pivot table: so
-    // there is nothing to retrieve here
-    // - in contrast to other TSQLRecord properties, which contains an INTEGER
-    // ID, the TSQLRecord.Create will instanciate a TSQLRecordMany instance
-    // to handle this pivot table via its dedicated ManyAdd/FillMany/ManySelect methods
-    sftMany,
-    /// an INTEGER field containing the TModTime time of the record latest update
-    // - TModTime=TCreateTime=TTimeLog=Int64 Delphi property which can be
-    // typecasted to TTimeLogBits memory structure
-    // - the value of this field is automatically updated with the current
-    // date and time each time a record is updated (with external DB, it will
-    // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
-    // virtual method of TSQLRecord
-    // - note only RESTful PUT/POST access will change this field value: manual
-    // SQL statements (like 'UPDATE Table SET Column=0') won't change its content
-    // - note also that this is automated on Delphi client side, so only within
-    // TSQLRecord ORM use (an AJAX application should handle this explicitely)
-    sftModTime,
-    /// an INTEGER field containing the TCreateTime time of the record creation
-    // - TModTime=TCreateTime=TTimeLog=Int64 Delphi property which can be
-    // typecasted to TTimeLogBits memory structure
-    // - the value of this field is automatically updated with the current
-    // date and time when the record is created (with external DB, it will
-    // use the Server time, as retrieved from SynDB) - see ComputeFieldsBeforeWrite
-    // virtual method of TSQLRecord
-    // - note only RESTful PUT/POST access will set this field value: manual
-    // SQL statements (like 'INSERT INTO Table ...') won't set its content
-    // - note also that this is automated on Delphi client side, so only within
-    // TSQLRecord ORM use (an AJAX application should handle this explicitely)
-    sftCreateTime,
-    /// an INTEGER field containing a TID pointing to another record
-    // - regular TSQLRecord published properties (i.e. sftID kind of field)
-    // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
-    // Win32, so defining TID published properties would allow to store the ID
-    // as signed 64 bit, e.g. up to 9,223,372,036,854,775,808
-    // - despite to sftID kind of record, coherency is NOT ensured: after a
-    // delete, all values pointing to are NOT reset to 0
-    sftTID);
+    sftBlob, sftBlobDynArray, sftBlobCustom, sftUTF8Custom, sftMany,
+    sftModTime, sftCreateTime, sftTID, sftRecordVersion);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -1519,8 +1530,11 @@ type
 
 const
   /// kind of fields not retrieved during normal query, update or adding
+  // - by definition, BLOB are excluded to save transmission bandwidth
+  // - by design, TSQLRecordMany properties are stored in an external pivot table
+  // - by convenience, the TRecordVersion number is for internal use only
   NOT_SIMPLE_FIELDS: TSQLFieldTypes =
-    [sftUnknown, sftBlob, sftMany];
+    [sftUnknown, sftBlob, sftMany, sftRecordVersion];
 
   /// kind of fields which can be copied from one TSQLRecord instance to another
   COPIABLE_FIELDS: TSQLFieldTypes =
@@ -1592,6 +1606,14 @@ type
     // calling Decode(P: PUTF8Char) to perform the process
     procedure Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
       Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
+    /// can be used after Decode() to add a new field in FieldNames/FieldValues
+    // - so that EncodeAsSQL() will include this field in the generated SQL
+    // - the caller should ensure that the FieldName is not already used in
+    // FieldNames[] (this method won't do any check)
+    // - the caller should ensure that the supplied FieldValue will match
+    // the quoting/inlining expectations of Decode(TJSONObjectDecoderParams) -
+    // e.g. that string values are quoted if needed
+    procedure AddField(const FieldName,FieldValue: RawUTF8);
     /// encode as a SQL-ready INSERT or UPDATE statement
     // - after a successfull call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
@@ -1729,8 +1751,8 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // - sftFloat is returned for any floating point value, even if it was
 // declared as sftCurrency type
 // - sftInteger is returned for any INTEGER stored value, even if it was declared
-// as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftBoolean or
-// sftModTime / sftCreateTime / sftTimeLog type
+// as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
+// sftBoolean or sftModTime / sftCreateTime / sftTimeLog type
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 
 
@@ -4190,6 +4212,11 @@ type
     property CascadeDelete: boolean read fCascadeDelete;
   end;
 
+  /// information about a TRecordVersion published property
+  // - identified as a sftRecordVersion kind of property, to track changes
+  TSQLPropInfoRTTIRecordVersion = class(TSQLPropInfoRTTIInt64)
+  end;
+
   /// information about a TSQLRecord class TSQLRecord property
   // - kind sftID, which are pointer(RecordID), not any true class instance
   // - will store the content just as an integer value
@@ -4295,6 +4322,7 @@ type
     fSQLTableUpdateBlobFields: RawUTF8;
     fSQLTableRetrieveBlobFields: RawUTF8;
     fSQLTableRetrieveAllFields: RawUTF8;
+    fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
     fWeakZeroClass: TObject;
     /// the associated TSQLModel instances
     // - e.g. allow O(1) search of a TSQLRecordClass in a model
@@ -4585,6 +4613,11 @@ type
     property RecordManySourceProp: TSQLPropInfoRTTIInstance read fRecordManySourceProp;
     /// for a TSQLRecordMany class, points to the Dest property RTTI
     property RecordManyDestProp: TSQLPropInfoRTTIInstance read fRecordManyDestProp;
+    /// points to any TRecordVersion field
+    // - contains nil if no such sftRecordVersion field do exist
+    // - will be used by low-level storage engine to compute and store the
+    // monotonic version number during any write operation
+    property RecordVersionField: TSQLPropInfoRTTIRecordVersion read fRecordVersionField;
     /// the Table name in the database in uppercase with a final '.'
     // - e.g. 'TEST.' for TSQLRecordTest class
     // - can be used with IdemPChar() for fast check of a table name
@@ -4632,7 +4665,7 @@ type
     // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
     property SQLTableName: RawUTF8 read fSQLTableName;
     /// returns 'COL1,COL2' with all COL* set to all field names, including
-    // RowID and BLOBs
+    // RowID, TRecordVersion and BLOBs
     // - this won't change depending on the ORM settings: so it can be safely
     // computed here and not in TSQLModelRecordProperties
     // - used e.g. by TSQLRest.InternalListJSON()
@@ -5306,11 +5339,12 @@ type
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
   // - itoNoIndex4TID won't create indexes for TID fields
+  // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
-    itoNoIndex4TID);
+    itoNoIndex4TID, itoNoIndex4RecordVersion);
 
   /// the options to be specified for TSQLRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
@@ -6616,7 +6650,7 @@ type
      - returns the Field Type
      - return generic string Text, i.e. UnicodeString for Delphi 2009+,
        ready to be displayed to the VCL, for sftEnumerate, sftTimeLog
-       and sftRecord/sftID/sftTID
+       and sftRecord/sftRecordVersion/sftID/sftTID
      - returns '' as string Text, if text can by displayed directly
        with Get*() methods above
      - returns '' for other properties kind, if UTF8ToString is nil,
@@ -7735,7 +7769,7 @@ type
     // via a "ALTER TABLE" statement
     function GetSQLAddField(aTableIndex, aFieldIndex: integer): RawUTF8;
     /// return the TRecordReference pointing to the specified record 
-    function RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference;
+    function RecordReference(Table: TSQLRecordClass; ID: TID): TRecordReference; 
     /// return the table class correspondig to a TRecordReference
     function RecordReferenceTable(const Ref: TRecordReference): TSQLRecordClass;
     /// return TRUE if the specified field of this class was marked as unique
@@ -7933,7 +7967,7 @@ type
     /// fill Value with the corresponding parameters
     // - since 6 bits are used for the table index, aTable MUST appear in the
     // first 64 items of the associated TSQLModel.Tables[] array
-    procedure From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID); overload;
+    procedure From(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID); 
     /// get a ready to be displayed text from the stored Table and ID
     // - display 'Record 2301' e.g.
     function Text(Model: TSQLModel): RawUTF8; overload;
@@ -12513,18 +12547,49 @@ type
     class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; override;
   end;
 
+  /// common ancestor for tracking TSQLRecord modifications
+  // - e.g. TSQLRecordHistory and TSQLRecordVersion will inherit from this class
+  // to track TSQLRecord changes
+  TSQLRecordModification = class(TSQLRecord)
+  protected
+    fModifiedRecord: TID;
+    fTimeStamp: TModTime;
+  public
+    /// returns the modified record table, as stored in ModifiedRecord
+    function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
+    function ModifiedTableIndex: integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the modified record ID, as stored in ModifiedRecord
+    function ModifiedID: TID;
+      {$ifdef HASINLINE}inline;{$endif}
+  published
+    /// identifies the modified record
+    // - ID and table index in TSQLModel is stored as one RecordRef integer
+    // - you can use ModifiedTable/ModifiedID to retrieve the TSQLRecord item
+    // - in case of the record deletion, all matching TSQLRecordHistory won't
+    // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
+    // property is a plain TID/Int64, not a TRecordReference field
+    property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
+    /// when the modification was recorded
+    // - even if in most cases, this timestamp may be synchronized over TSQLRest
+    // instances (thanks to TSQLRestClientURI.ServerTimeStampSynchronize), it
+    // is not safe to use this field as absolute: you should rather rely on
+    // pure monotonic ID/RowID increasing values (see e.g. TSQLRecordVersion)
+    property TimeStamp: TModTime read fTimeStamp write fTimeStamp;
+  end;
+
   /// common ancestor for tracking changes on TSQLRecord tables
   // - used by TSQLRestServer.TrackChanges() method for simple fields history
   // - TSQLRestServer.InternalUpdateEvent will use this table to store individual
   // row changes as SentDataJSON, then will compress them in History BLOB
   // - note that any layout change of the tracked TSQLRecord table (e.g. adding
   // a new property) would break the internal data format, so will void the table
-  TSQLRecordHistory = class(TSQLRecord)
+  TSQLRecordHistory = class(TSQLRecordModification)
   protected
-    fModifiedRecord: TID;
     fEvent: TSQLHistoryEvent;
     fSentData: RawUTF8;
-    fTimeStamp: TModTime;
     fHistory: TSQLRawBlob;
     // BLOB storage layout is: RTTIheader + offsets + recordsdata
     fHistoryModel: TSQLModel;
@@ -12543,14 +12608,8 @@ type
     constructor CreateHistory(aClient: TSQLRest; aTable: TSQLRecordClass; aID: TID);
     /// finalize any internal memory
     destructor Destroy; override;
-    /// returns the modified record table, as stored in ModifiedRecord
-    function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
-    /// returns the record table index in the TSQLModel, as stored in ModifiedRecord
-    function ModifiedTableIndex: integer;
-    /// returns the modified record ID, as stored in ModifiedRecord
-    function ModifiedID: TID;
     /// called when the associated table is created in the database
-    // - create index on History(ModifiedRecord,History) for process speed-up
+    // - create index on History(ModifiedRecord,Event) for process speed-up
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
   public
@@ -12611,13 +12670,6 @@ type
     function HistorySave(Server: TSQLRestServer;
       LastRec: TSQLRecord=nil): boolean;
   published
-    /// identifies the modified record
-    // - ID and table index in TSQLModel is stored as one RecordRef integer
-    // - you can use ModifiedTable/ModifiedID to retrieve the TSQLRecord item
-    // - in case of the record deletion, all matching TSQLRecordHistory won't
-    // be touched by TSQLRestServer.AfterDeleteForceCoherency(): so this
-    // property is a plain TID/Int64, not a TRecordReference field
-    property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
     // - otherwise, SentDataJSON may contain the latest values as JSON
@@ -12627,8 +12679,6 @@ type
     // to avoid using a CLOB here - perhaps it may not be enough for huge
     // records - feedback is welcome...
     property SentDataJSON: RawUTF8 index 4000 read fSentData write fSentData;
-    /// when the modification was recorded
-    property TimeStamp: TModTime read fTimeStamp write fTimeStamp;
     /// after some events are written as individual SentData content, they
     // will be gathered and compressed within one BLOB field
     // - use HistoryOpen/HistoryCount/HistoryGet to access the stored data after
@@ -12647,6 +12697,16 @@ type
   // !  TSQLRecordMyHistory = class(TSQLRecordHistory);
   // - as expected by TSQLRestServer.TrackChanges() method
   TSQLRecordHistoryClass = class of TSQLRecordHistory;
+
+  /// ORM table used to store the deleted items of a versioned table
+  // - the ID/RowID primary key of this table would be the version number
+  // (i.e. value computed by TSQLRestServer.InternalRecordVersionCompute) 
+  // - the ModifiedRecord published field will track the deleted row
+  TSQLRecordTableDeleted = class(TSQLRecordModification);
+
+  /// class-reference type (metaclass) to specify the storage table to be used
+  // for tracking TSQLRecord deletion
+  TSQLRecordTableDeletedClass = class of TSQLRecordTableDeleted;
 
   /// defines what is stored in a TSQLRestTempStorageItem entry
   TSQLRestTempStorageItemKind = set of (itemInsert,itemFakeID);
@@ -12674,6 +12734,8 @@ type
   // - purpose of this class is to gather write operations (Add/Update/Delete)
   // - inherited implementations may send all updates at once to a server (i.e.
   // "asynchronous write"), or maintain a versioned image of the content
+  // - all public methods (AddCopy/AddOwned/Update/Delete/FlushAsBatch) are
+  // thread-safe, protected by a mutex lock
   TSQLRestTempStorage = class(TSynCriticalSection)
   protected
     fStoredClass: TSQLRecordClass;
@@ -12890,8 +12952,11 @@ type
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
+    fRecordVersionMax: integer;
+    fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
+    fTrackChangesHistoryTableIndexCount: cardinal;
     fTrackChangesHistory: array of record
       CurrentRow: integer;
       MaxSentDataJsonRow: integer;
@@ -12932,6 +12997,12 @@ type
     // and MultiFieldValue() public functions
     function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
     function InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
+    /// will retrieve the monotonic value of a TRecordVersion field from the DB
+    procedure InternalRecordVersionMaxFromExisting; virtual;
+    procedure InternalRecordVersionDelete(TableIndex: integer; ID: TID;
+      Batch: TSQLRestBatch); virtual;
+    procedure InternalRecordVersionHandle(var Decoder: TJSONObjectDecoder;
+      RecordVersionField: TSQLPropInfoRTTIRecordVersion); virtual;
     /// this method is overridden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
     procedure SetNoAJAXJSON(const Value: boolean); virtual;
@@ -13082,8 +13153,11 @@ type
     procedure TrackChangesFlush(aTableHistory: TSQLRecordHistoryClass); virtual;
     /// check if OnUpdateEvent or change tracked has been defined for this table
     // - is used internally e.g. by TSQLRestServerDB.MainEngineUpdateField to
-    // ensure that the updated ID fields will be computed as expected 
+    // ensure that the updated ID fields will be computed as expected
     function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
+    /// will compute the next monotonic value for a TRecordVersion field
+    // - you may override this method to customize the returned Int64 value
+    function InternalRecordVersionCompute: TID; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -13537,6 +13611,11 @@ type
     // - during authentication, this class will be used for every TSQLAuthGroup
     // table access
     property SQLAuthGroupClass: TSQLAuthGroupClass read fSQLAuthGroupClass;
+    /// the class inheriting from TSQLRecordTableDeleted, as defined in the model
+    // - during authentication, this class will be used for storing a trace of
+    // every deletion of table rows containing a TRecordVersion published field
+    property SQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass
+      read fSQLRecordVersionDeleteTable;
     /// the class inheriting from TAuthSession to handle in-memory sessions
     // - since all sessions data remain in memory, ensure they are not taking
     // too much resource (memory or process time)
@@ -13610,6 +13689,7 @@ type
     fOutInternalStateForcedRefresh: boolean; 
     procedure StorageLock(WillModifyContent: boolean); virtual;
     procedure StorageUnLock; virtual;
+    procedure RecordVersionFieldHandle(var Decoder: TJSONObjectDecoder);
     /// override this method if you want to update the refresh state
     // - returns FALSE if the static table content was not modified (default
     // method implementation is to always return FALSE)
@@ -15530,8 +15610,8 @@ function UTF8CompareBoolean(P1,P2: PUTF8Char): PtrInt;
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareUInt32(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftInteger, sftTID, or
-// sftTimeLog / sftModTime / sftCreateTime UTF-8 encoded values in the SQLite3
+/// special comparaison function for sorting sftInteger, sftTID, sftRecordVersion
+// or sftTimeLog / sftModTime / sftCreateTime UTF-8 encoded values in the SQLite3
 // database or JSON content
 function UTF8CompareInt64(P1,P2: PUTF8Char): PtrInt;
 
@@ -16261,7 +16341,8 @@ const
      ftUnknown,   // sftMany
      ftInt64,     // sftModTime
      ftInt64,     // sftCreateTime
-     ftInt64);    // sftTID
+     ftInt64,     // sftTID
+     ftInt64);    // sftRecordVersion = TRecordVersion
 
 
 function TSQLPropInfo.SQLDBFieldType: TSQLDBFieldType;
@@ -16339,8 +16420,10 @@ const
     varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
  // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
     varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
- // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID
-    varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64);
+ // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
+    varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
+ // sftRecordVersion,
+    varInt64);
 var tempCopy: RawByteString;
     err: integer;
 begin
@@ -16365,7 +16448,7 @@ begin
       not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
   sftEnumerate:
     result.VInteger := GetInteger(Value);
-  sftInteger, sftID, sftTID, sftRecord, sftSet,
+  sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion,
   sftTimeLog, sftModTime, sftCreateTime:
     SetInt64(Value,result.VInt64);
   sftMany:
@@ -16516,6 +16599,8 @@ begin
       C := TSQLPropInfoRTTITID;
     sftRecord: // = TRecordReference
       C := TSQLPropInfoRTTIInstance;
+    sftRecordVersion:
+      C := TSQLPropInfoRTTIRecordVersion;
     sftMany:
       C := TSQLPropInfoRTTIMany;
     sftObject:
@@ -20544,7 +20629,8 @@ var
     nil,
     UTF8CompareInt64,    // TModTime
     UTF8CompareInt64,    // TCreateTime
-    UTF8CompareInt64);   // TID
+    UTF8CompareInt64,    // TID
+    UTF8CompareInt64);   // TRecordVersion
 
 type
   /// a static object is used for smaller recursive stack size and faster code
@@ -21189,7 +21275,7 @@ begin
       for F := 0 to FieldCount-1 do begin
         case fFieldType[F].ContentType of
         sftInteger, sftBlob, sftBlobCustom, sftUTF8Custom, sftRecord,
-        sftID, sftTID, sftSet, sftCurrency:
+        sftRecordVersion, sftID, sftTID, sftSet, sftCurrency:
           inc(aResult[F],8);
         else inc(aResult[F],Utf8FirstLineToUnicodeLength(U^));
         end;
@@ -21562,7 +21648,7 @@ IsDateTime:
       on {$ifdef LVCL}Exception{$else}EConvertError{$endif} do
         Text := '';
     end;
-  sftEnumerate, sftSet, sftRecord, sftID, sftTID,
+  sftEnumerate, sftSet, sftRecord, sftID, sftTID, sftRecordVersion,
   sftTimeLog, sftModTime, sftCreateTime: begin
     Value := GetInt64(Get(Row,Field),err);
     if err<>0 then
@@ -21575,7 +21661,7 @@ IsDateTime:
       end;
       sftTimeLog, sftModTime, sftCreateTime:
         goto IsDateTime;
-{      sftID, sftTID, sftSet:
+{      sftID, sftTID, sftSet, sftRecordVersion:
         result := sftUTF8Text; // will display INTEGER field as number }
       sftRecord:
         if (Value<>0) and 
@@ -22016,6 +22102,14 @@ begin
   Assert(P-pointer(result)=length(result));
 end;
 
+procedure TJSONObjectDecoder.AddField(const FieldName,FieldValue: RawUTF8);
+begin
+  if FieldCount=MAX_SQLFIELDS then
+    raise EParsingException.CreateUTF8(
+      'Too many fields for TJSONObjectDecoder.AddField(%)',[FieldName]);
+  FieldNames[FieldCount] := FieldName;
+  FieldValues[FieldCount] := FieldValue;
+end;
 
 const
   FROMINLINED: array[boolean] of TJSONObjectDecoderParams = (
@@ -23882,13 +23976,13 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Kind of
     tkInteger: begin
       result := sftInteger;
-      exit;
+      exit; // direct exit is faster in generated asm code (Delphi 7 at least)
     end;
     tkInt64:
       if (@self=TypeInfo(TRecordReference)) or
          (@self=TypeInfo(TRecordReferenceToBeDeleted)) then begin
         result := sftRecord;
-        exit; // direct exit is faster in generated asm code (Delphi 7 at least)
+        exit;
       end else
       if @self=TypeInfo(TCreateTime) then begin
         result := sftCreateTime;
@@ -23904,6 +23998,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end else
       if @self=TypeInfo(TID) then begin
         result := sftTID;
+        exit;
+      end else
+      if @self=TypeInfo(TRecordVersion) then begin
+        result := sftRecordVersion;
         exit;
       end else
       if (ord(Name[1]) and $df=ord('T')) and // T...ID pattern in type name -> TID
@@ -24680,8 +24778,8 @@ begin
     aClient.Retrieve(FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),self);
 end;
 
-class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
-  Options: TSQLInitializeTableOptions);
+class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var f: integer;
 begin // is not part of TSQLRecordProperties because has been declared as virtual
   if (self<>nil) and (Server<>nil) then begin
@@ -24689,13 +24787,15 @@ begin // is not part of TSQLRecordProperties because has been declared as virtua
       if (FieldName='') or IsRowID(pointer(FieldName)) then
         Server.CreateSQLIndex(self,'ID',true); // for external tables
     with RecordProps do
+    // automatic column indexation of fields which are commonly searched by value
     for f := 0 to Fields.Count-1 do
       with Fields.List[f] do
-      if ((aIsUnique in Attributes) and not (itoNoIndex4UniqueField in Options)) or
-         ((SQLFieldType=sftRecord) and not (itoNoIndex4RecordReference in Options)) or
-         ((SQLFieldType=sftID) and not (itoNoIndex4NestedRecord in Options)) or
-         ((SQLFieldType=sftTID) and not (itoNoIndex4TID in Options)) then
-        if (FieldName='') or IdemPropNameU(FieldName,Name) then
+      if (FieldName='') or IdemPropNameU(FieldName,Name) then
+        if ((aIsUnique in Attributes) and not (itoNoIndex4UniqueField in Options)) or
+           ((SQLFieldType=sftRecord) and not (itoNoIndex4RecordReference in Options)) or
+           ((SQLFieldType=sftRecordVersion) and not (itoNoIndex4RecordVersion in Options)) or
+           ((SQLFieldType=sftID) and not (itoNoIndex4NestedRecord in Options)) or
+           ((SQLFieldType=sftTID) and not (itoNoIndex4TID in Options)) then
             Server.CreateSQLIndex(self,Name,false);
   end; // failure in Server.CreateSQLIndex() above is ignored (may already exist)
 end;
@@ -27830,17 +27930,26 @@ function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   const WhereClause: RawUTF8): boolean;
 var SQL: RawUTF8;
-    i: integer;
+    n,L,i: integer;
     T: TSQLTableJSON;
 begin
   result := false;
-  if (self<>nil) and (Table<>nil) and (length(FieldName)=length(FieldValue)) then
+  n := length(FieldName);
+  if (self<>nil) and (Table<>nil) and (n=length(FieldValue)) then
   with Table.RecordProps do begin
-    if (length(FieldName)=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then
-      SQL := 'SELECT COUNT(*) FROM '+SQLTableName+' WHERE '+WhereClause else begin
+    if (n=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then
+      SQL := 'SELECT COUNT(*) FROM '+SQLTableName+' WHERE '+WhereClause else
+    if (n=1) and IdemPChar(pointer(FieldName[0]),'MAX(') then begin
+      L := length(FieldName[0]);
+      if (FieldName[L]<>')') or not IsFieldName(copy(FieldName[0],5,L-5)) then
+        exit; // prevent SQL error or security breach
+      SQL := 'SELECT '+FieldName[0];
+      if WhereClause<>'' then
+        SQL := SQL+' WHERE '+WhereClause;
+    end else begin
       for i := 0 to high(FieldName) do
         if not IsFieldName(FieldName[i]) then
-          exit else // prevent SQL error
+          exit else // prevent SQL error or security breach
           if SQL='' then
             SQL := 'SELECT '+FieldName[i] else
             SQL := SQL+','+FieldName[i];
@@ -30553,7 +30662,7 @@ end;
 {$endif FPC}
 
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
-var t,n: integer;
+var t: integer;
 begin
   // specific server initialization
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
@@ -30562,17 +30671,22 @@ begin
   fModel := aModel;
   fSQLAuthUserClass := TSQLAuthUser;
   fSQLAuthGroupClass := TSQLAuthGroup;
+  fSQLRecordVersionDeleteTable := TSQLRecordTableDeleted;
+  for t := 0 to high(Model.Tables) do
+  if fModel.Tables[t].RecordProps.RecordVersionField<>nil then begin
+    fSQLRecordVersionDeleteTable := fModel.AddTableInherited(TSQLRecordTableDeleted);
+    break;
+  end;
   fSessionClass := TAuthSession;
-  if aHandleUserAuthentication then
-    // default mORMot authentication schemes
+  if aHandleUserAuthentication then // default mORMot authentication schemes
     AuthenticationRegister([TSQLRestServerAuthenticationDefault
       {$ifdef SSPIAUTH},TSQLRestServerAuthenticationSSPI{$endif}]);
-  n := length(Model.Tables);
-  SetLength(fTrackChangesHistory,n);
-  if n>64 then
-    n := 64;
-  SetLength(fTrackChangesHistoryTableIndex,n);
-  for t := 0 to n-1 do
+  fTrackChangesHistoryTableIndexCount := length(Model.Tables);
+  SetLength(fTrackChangesHistory,fTrackChangesHistoryTableIndexCount);
+  if fTrackChangesHistoryTableIndexCount>64 then
+    fTrackChangesHistoryTableIndexCount := 64; // rows are identified as RecordRef
+  SetLength(fTrackChangesHistoryTableIndex,fTrackChangesHistoryTableIndexCount);
+  for t := 0 to fTrackChangesHistoryTableIndexCount-1 do
     fTrackChangesHistoryTableIndex[t] := -1;
   // abstract MVC initalization
   inherited Create(aModel);
@@ -30868,6 +30982,64 @@ begin
     result := MainEngineList(SQL,false,nil);
   if result='[]'#$A then
     result := '';
+end;
+
+procedure TSQLRestServer.InternalRecordVersionMaxFromExisting;
+var m: integer;
+    field: TSQLPropInfoRTTIRecordVersion;
+    current,max: Int64;
+begin
+  current := 0;
+  for m := 0 to Model.TablesMax do begin
+    field := Model.Tables[m].RecordProps.RecordVersionField;
+    if field<>nil then
+      if OneFieldValue(Model.Tables[m],'max('+field.Name+')','',[],[],max) then
+        if max>current then
+          current := max;
+  end;
+  if OneFieldValue(fSQLRecordVersionDeleteTable,'max(ID)','',[],[],max) and
+     (max>current) then
+    fRecordVersionMax := max else
+    fRecordVersionMax := current;
+end;
+
+function TSQLRestServer.InternalRecordVersionCompute: TID;
+begin
+  if fRecordVersionMax=0 then begin
+    fAcquireExecution[execORMWrite].Enter;
+    try
+      if fRecordVersionMax=0 then // check twice to avoid race condition
+        InternalRecordVersionMaxFromExisting;
+      result := InterlockedIncrement(fRecordVersionMax);
+    finally
+      fAcquireExecution[execORMWrite].Leave;
+    end;
+  end else
+    result := InterlockedIncrement(fRecordVersionMax);
+end;          
+
+procedure TSQLRestServer.InternalRecordVersionHandle(
+  var Decoder: TJSONObjectDecoder; RecordVersionField: TSQLPropInfoRTTIRecordVersion);
+begin
+  if RecordVersionField<>nil then
+    Decoder.AddField(
+      RecordVersionField.Name,Int64ToUtf8(InternalRecordVersionCompute));
+end;
+
+procedure TSQLRestServer.InternalRecordVersionDelete(TableIndex: integer;
+  ID: TID; Batch: TSQLRestBatch);
+var deleted: TSQLRecordTableDeleted;
+begin 
+  deleted := fSQLRecordVersionDeleteTable.Create;
+  try
+    deleted.IDValue := InternalRecordVersionCompute;
+    deleted.ModifiedRecord := RecordReference(TableIndex,ID);
+    if Batch<>nil then
+      Batch.Add(deleted,True,True) else
+      Add(deleted,True,True);
+  finally
+    deleted.Free;
+  end;
 end;
 
 function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -33205,28 +33377,33 @@ begin
 end;
 
 
-{ TSQLRecordHistory }
 
-function TSQLRecordHistory.ModifiedTableIndex: integer;
+{ TSQLRecordModification }
+
+function TSQLRecordModification.ModifiedID: TID;
 begin
   if self=nil then
     result := 0 else
-    result := RecordRef(fModifiedRecord).TableIndex;
+    result := RecordRef(fModifiedRecord).ID;
 end;
 
-function TSQLRecordHistory.ModifiedTable(Model: TSQLModel): TSQLRecordClass;
+function TSQLRecordModification.ModifiedTable(
+  Model: TSQLModel): TSQLRecordClass;
 begin
   if (self=nil) or (Model=nil) then
     result := nil else
     result := RecordRef(fModifiedRecord).Table(Model);
 end;
 
-function TSQLRecordHistory.ModifiedID: TID;
+function TSQLRecordModification.ModifiedTableIndex: integer;
 begin
   if self=nil then
     result := 0 else
-    result := RecordRef(fModifiedRecord).ID;
+    result := RecordRef(fModifiedRecord).TableIndex;
 end;
+
+
+{ TSQLRecordHistory }
 
 class procedure TSQLRecordHistory.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
@@ -33649,7 +33826,7 @@ begin
           self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
         result := true else begin
       // simple fields modification
-      if (aTableIndex<length(fTrackChangesHistoryTableIndex)) and
+      if (cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount) and
          (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
         DoTrackChanges;
       if Assigned(OnUpdateEvent) then
@@ -33675,7 +33852,7 @@ begin
     tableIndex := Model.GetTableIndexExisting(aTable[t]);
     if aTable[t].InheritsFrom(TSQLRecordHistory) then
       raise EORMException.CreateUTF8('%.TrackChanges([%]) not allowed',[self,aTable[t]]);
-    if tableIndex<length(fTrackChangesHistoryTableIndex) then begin
+    if cardinal(tableIndex)<fTrackChangesHistoryTableIndexCount then begin
       fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
       if TableHistoryIndex>=0 then
         with fTrackChangesHistory[TableHistoryIndex] do begin
@@ -33692,7 +33869,7 @@ end;
 function TSQLRestServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean;
 begin
   result := (self<>nil) and (Assigned(OnUpdateEvent) or
-    ((aTableIndex<length(fTrackChangesHistoryTableIndex)) and
+    ((cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount) and
      (fTrackChangesHistoryTableIndex[aTableIndex]>=0)));
 end;
 
@@ -33743,16 +33920,38 @@ begin
   if Rest=nil then
     result := MainEngineDelete(TableModelIndex,ID) else
     result := Rest.EngineDelete(TableModelIndex,ID);
+  if result then
+    if Model.TableProps[TableModelIndex].Props.RecordVersionField<>nil then
+      InternalRecordVersionDelete(TableModelIndex,ID,nil);
 end;
 
 function TSQLRestServer.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
 var Rest: TSQLRest;
+    Batch: TSQLRestBatch;
+    i: integer;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
-  if Rest=nil then
-    result := MainEngineDeleteWhere(TableModelIndex,SQLWhere,IDs) else
-    result := Rest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+  case length(IDs) of
+  0: result := false;
+  1: result := EngineDelete(TableModelIndex,IDs[0]);
+  else begin
+    Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+    if Rest=nil then
+      result := MainEngineDeleteWhere(TableModelIndex,SQLWhere,IDs) else
+      result := Rest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
+    if (Model.TableProps[TableModelIndex].Props.RecordVersionField=nil) or
+       not result then
+      exit;
+    Batch := TSQLRestBatch.Create(Self,Model.Tables[TableModelIndex],1000);
+    try
+      for i := 0 to high(IDs) do
+        InternalRecordVersionDelete(TableModelIndex,IDs[i],Batch);
+      BatchSend(Batch); // allow faster deletion for engines allowing it
+    finally
+      Batch.Free;
+    end;
+  end;
+  end;
 end;
 
 function TSQLRestServer.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -36195,6 +36394,16 @@ begin
   dec(fStorageCriticalSectionCount);
   assert(fStorageCriticalSectionCount>=0);
   LeaveCriticalSection(fStorageCriticalSection);
+end;
+
+procedure TSQLRestStorage.RecordVersionFieldHandle(var Decoder: TJSONObjectDecoder);
+begin
+  if fStoredClassRecordProps.RecordVersionField=nil then
+    exit;
+  if Owner=nil then
+    raise EORMException.CreateUTF8('Owner=nil for %.%: TRecordVersion',
+      [fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]);
+  Owner.InternalRecordVersionHandle(Decoder,fStoredClassRecordProps.RecordVersionField);
 end;
 
 function TSQLRestStorage.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -39293,14 +39502,23 @@ begin
         include(ModCreateTimeFieldsBits,i);
         goto Simple;
       end;
+      sftRecordVersion: begin
+        if fRecordVersionField<>nil then
+          raise EModelException.CreateUTF8('%: only a single TRecordVersion '+
+           'field is allowed per class',[Table]);
+        fRecordVersionField := F as TSQLPropInfoRTTIRecordVersion;
+        fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
+        CopiableFields[nCopiableFields] := F;
+        inc(nCopiableFields);
+      end; // TRecordVersion is a copiable but not a simple field!
       else begin
-        // this code follows NOT_SIMPLE_FIELDS const
+        // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         include(SimpleFieldsBits[soSelect],i);
         fSQLTableSimpleFieldsNoRowID := fSQLTableSimpleFieldsNoRowID+F.Name+',';
         fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
-        CopiableFields[nCopiableFields] := F;
+        CopiableFields[nCopiableFields] := F; 
         inc(nCopiableFields);
       end;
     end;
@@ -39399,7 +39617,8 @@ const
     '',                              // sftMany
     ' INTEGER, ',                    // sftModTime
     ' INTEGER, ',                    // sftCreateTime
-    ' INTEGER, ');                   // sftTID
+    ' INTEGER, ',                    // sftTID
+    ' INTEGER, ');                   // sftRecordVersion
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then
     result := '' else

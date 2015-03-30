@@ -689,7 +689,8 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftInt64,     // sftMany
        ftInt64,     // sftModTime
        ftInt64,     // sftCreateTime
-       ftInt64);    // sftTID
+       ftInt64,     // sftTID
+       ftInt64);    // sftRecordVersion
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
@@ -873,7 +874,7 @@ begin
             name := 'ID' else // RowID may be reserved (e.g. for Oracle)
             name := fStoredClassRecordProps.Fields.List[Field-1].Name;
           W.AddShort(' as ');
-          if (FunctionName='') or (FunctionKnown=funcDistinct) then
+          if (FunctionName='') or (FunctionKnown in [funcDistinct,funcMax]) then
             W.AddString(name) else begin
             W.Add('"');
             W.AddString(FunctionName);
@@ -1042,6 +1043,7 @@ begin
           soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
             Decode.Decode(P,nil,pQuoted,0,true);
           end;
+          RecordVersionFieldHandle(Decode);
           if Fields=nil then begin
             Decode.AssignFieldNamesTo(Fields);
             SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
@@ -1735,6 +1737,7 @@ begin
       result := UpdatedID; // SentData='' -> no column to update
       exit;
     end;
+    RecordVersionFieldHandle(Decoder);
     // compute SQL statement and associated bound parameters
     SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
     if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007
@@ -1794,10 +1797,13 @@ begin
   Decoder.DecodedFieldNames := pointer(ExternalFields);
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
     StoredClassProps.ExternalDB.RowIDFieldName,BatchOptions);
-  if Occasion=soUpdate then begin
-    Types[Decoder.FieldCount] := ftInt64; // add "where ID=?" parameter
-    inc(Decoder.FieldCount);
-  end;
+  if Occasion=soUpdate then
+    if Decoder.FieldCount=MAX_SQLFIELDS then
+      raise EParsingException.CreateUTF8('Too many fields for '+
+        '%.JSONDecodedPrepareToSQL',[self]) else begin
+      Types[Decoder.FieldCount] := ftInt64; // add "where ID=?" parameter
+      inc(Decoder.FieldCount);
+    end;
 end;
 
 procedure TSQLRestStorageExternal.EngineAddForceSelectMaxID;

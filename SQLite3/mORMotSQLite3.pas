@@ -773,12 +773,15 @@ end;
 
 function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
-var SQL: RawUTF8;
+var Props: TSQLRecordProperties;
+    SQL: RawUTF8;
+    Decoder: TJSONObjectDecoder;
 begin
   result := 0;
   if TableModelIndex<0 then
     exit;
-  SQL := fModel.TableProps[TableModelIndex].Props.SQLTableName;
+  Props := fModel.TableProps[TableModelIndex].Props;
+  SQL := Props.SQLTableName;
   if fBatchMethod<>mNone then begin
     result := 0; // indicates error
     if SentData='' then begin
@@ -813,7 +816,10 @@ begin
   if trim(SentData)='' then
     SQL := SQL+' DEFAULT VALUES;' else begin
     JSONGetID(pointer(SentData),result);
-    SQL := SQL+GetJSONObjectAsSQL(SentData,false,true,result)+';';
+    Decoder.Decode(SentData,nil,pInlined,result,false);
+    if Props.RecordVersionField<>nil then
+      InternalRecordVersionHandle(decoder,Props.RecordVersionField);
+    SQL := SQL+Decoder.EncodeAsSQL(false)+';';
   end;
   if InternalExecute(SQL,true,nil,nil,nil,PInt64(@result)) then
     InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
@@ -1331,15 +1337,22 @@ end;
 
 function TSQLRestServerDB.MainEngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
+var Props: TSQLRecordProperties;
+    Decoder: TJSONObjectDecoder;
+    SQL: RawUTF8;
 begin
   if (TableModelIndex<0) or (ID<=0) then
     result := false else
   if SentData='' then // update with no simple field -> valid no-op
     result := true else begin
     // this SQL statement use :(inlined params): for all values
+    Props := fModel.TableProps[TableModelIndex].Props;
+    Decoder.Decode(SentData,nil,pInlined,ID,false);
+    if Props.RecordVersionField<>nil then
+      InternalRecordVersionHandle(decoder,Props.RecordVersionField);
+    SQL := Decoder.EncodeAsSQL(true);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
-      [Model.TableProps[TableModelIndex].Props.SQLTableName,
-       GetJSONObjectAsSQL(SentData,true,true),ID]);
+      [Props.SQLTableName,SQL,ID]);
     InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
   end;
 end;
@@ -1377,45 +1390,58 @@ end;
 
 function TSQLRestServerDB.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
-var WhereID: TID;
+var Props: TSQLRecordProperties;
+    WhereID,RecordVersion: TID;
     i: integer;
-    JSON: RawUTF8;
+    JSON,IDs: RawUTF8;
     ID: TIDDynArray;
 begin
   result := false;
   if (TableModelIndex<0) or (SetFieldName='') then
     exit;
-  with Model.TableProps[TableModelIndex].Props do
-  if Fields.IndexByName(SetFieldName)>=0 then begin
+  Props := Model.TableProps[TableModelIndex].Props;
+  if Props.Fields.IndexByName(SetFieldName)>=0 then begin
     WhereID := 0;
     if IsRowID(pointer(WhereFieldName)) then begin
       WhereID := GetInt64(Pointer(WhereValue));
       if WhereID<=0 then
         exit; // limitation: will only check for update from RowID
     end else
-      if Fields.IndexByName(WhereFieldName)<0 then
+      if Props.Fields.IndexByName(WhereFieldName)<0 then
         exit;
-    if InternalUpdateEventNeeded(TableModelIndex) then begin
+    if InternalUpdateEventNeeded(TableModelIndex) or
+       (Props.RecordVersionField<>nil) then begin
       if WhereID>0 then begin
         SetLength(ID,1);
         ID[0] := WhereID;
       end else
         if not InternalExecute(FormatUTF8('select RowID from % where %=:(%):',
-           [SQLTableName,WhereFieldName,WhereValue]),true,nil,nil,@ID) then
+           [Props.SQLTableName,WhereFieldName,WhereValue]),true,nil,nil,@ID) then
           exit else
           if ID=nil then begin
             result := true; // nothing to update, but return success
             exit;
           end;
       for i := 0 to high(ID) do
-        if not RecordCanBeUpdated(Table,ID[i],seUpdate) then
+        if not RecordCanBeUpdated(Props.Table,ID[i],seUpdate) then
           exit;
       if Length(ID)=1 then
-        result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
-          [SQLTableName,SetFieldName,SetValue,ID[0]]) else
-        result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
-          [SQLTableName,SetFieldName,SetValue,
-           Int64DynArrayToCSV(TInt64DynArray(ID),length(ID))]);
+        if Props.RecordVersionField=nil then
+          result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
+            [Props.SQLTableName,SetFieldName,SetValue,ID[0]]) else
+          result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
+            [Props.SQLTableName,SetFieldName,SetValue,
+             Props.RecordVersionField,InternalRecordVersionCompute,ID[0]]) else begin
+        IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
+        if Props.RecordVersionField=nil then
+          result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
+            [Props.SQLTableName,SetFieldName,SetValue,IDs]) else begin
+          RecordVersion := InternalRecordVersionCompute;
+          result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID IN (%)',
+            [Props.SQLTableName,SetFieldName,SetValue,
+             Props.RecordVersionField,RecordVersion,IDs]);
+        end;
+      end;
       if not result then
         exit;
       JSON := '{"'+SetFieldName+'":'+SetValue+'}';
@@ -1424,11 +1450,11 @@ begin
     end else begin
       if IsRowID(pointer(WhereFieldName)) then begin
         WhereID := GetInt64(Pointer(WhereValue));
-        if (WhereID<=0) or not RecordCanBeUpdated(Table,WhereID,seUpdate) then
+        if (WhereID<=0) or not RecordCanBeUpdated(Props.Table,WhereID,seUpdate) then
           exit; // limitation: will only check for update from RowID
       end;
       result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
-        [SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
+        [Props.SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
     end;
   end;
 end;

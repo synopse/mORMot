@@ -163,7 +163,7 @@ type
     wCurrency, wSingle, wDouble, wDateTime,
     wRawUTF8, wString, wRawJSON, wBlob,
     wGUID, wCustomAnswer, wRecord, wArray, wVariant,
-    wObject, wSQLRecord, wInterface);
+    wObject, wSQLRecord, wInterface, wRecordVersion);
   /// supported languages typesets
   TWrapperLanguage = (
     lngDelphi, lngPascal, lngCS, lngJava);
@@ -177,7 +177,9 @@ const
  // sftObject,                     sftVariant,         sftBlob, sftBlobDynArray,
     cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif} cpkBlob, cpkDefault,
  // sftBlobCustom,sftUTF8Custom,sftMany, sftModTime,sftCreateTime, sftTID
-    cpkDefault,   cpkRecord,  cpkDefault,cpkModTime,cpkCreateTime, cpkDefault);
+    cpkDefault,   cpkRecord,  cpkDefault,cpkModTime,cpkCreateTime, cpkDefault,
+ // sftRecordVersion
+    cpkDefault);
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer','byte','word','integer','integer','int64','int64','int64','int64');
@@ -190,47 +192,51 @@ const
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'RawUTF8','String', 'RawJSON',
-    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', '', ''),
+    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', '', '',
+    'TRecordVersion'),
    // lngPascal
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
     'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
-    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID', ''),
+    'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID', '',
+    'TRecordVersion'),
    // lngCS
    ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
     'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'decimal', 'single', 'double', 'double', 'string', 'string', 'dynamic',
-    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID', ''),
+    'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID', '',
+    'TRecordVersion'),
    // lngJava
    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
-    'String', 'byte[]', '', '', 'Object', '', 'TID', ''));
+    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'));
                        
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
-    (wUnknown,   // sftUnknown
-     wString,    // sftAnsiText
-     wRawUTF8,   // sftUTF8Text
-     wEnum,      // sftEnumerate
-     wSet,       // sftSet
-     wUnknown,   // sftInteger - wUnknown to force exact type 
-     wSQLRecord, // sftID
-     wReference, // sftRecord
-     wBoolean,   // sftBoolean
-     wUnknown,   // sftFloat - wUnknown to force exact type
-     wDateTime,  // sftDateTime
-     wTimeLog,   // sftTimeLog
-     wCurrency,  // sftCurrency
-     wObject,    // sftObject
-     wVariant,   // sftVariant
-     wBlob,      // sftBlob
-     wBlob,      // sftBlobDynArray
-     wRecord,    // sftBlobCustom
-     wRecord,    // sftUTF8Custom
-     wUnknown,   // sftMany
-     wModTime,   // sftModTime
-     wCreateTime,// sftCreateTime
-     wID);       // sftID
+    (wUnknown,        // sftUnknown
+     wString,         // sftAnsiText
+     wRawUTF8,        // sftUTF8Text
+     wEnum,           // sftEnumerate
+     wSet,            // sftSet
+     wUnknown,        // sftInteger - wUnknown to force exact type
+     wSQLRecord,      // sftID
+     wReference,      // sftRecord
+     wBoolean,        // sftBoolean
+     wUnknown,        // sftFloat - wUnknown to force exact type
+     wDateTime,       // sftDateTime
+     wTimeLog,        // sftTimeLog
+     wCurrency,       // sftCurrency
+     wObject,         // sftObject
+     wVariant,        // sftVariant
+     wBlob,           // sftBlob
+     wBlob,           // sftBlobDynArray
+     wRecord,         // sftBlobCustom
+     wRecord,         // sftUTF8Custom
+     wUnknown,        // sftMany
+     wModTime,        // sftModTime
+     wCreateTime,     // sftCreateTime
+     wID,             // sftID
+     wRecordVersion); // sftRecordVersion
 
   TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
   //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
