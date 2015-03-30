@@ -972,7 +972,8 @@ unit mORMot;
     - moved SQLFromSelectWhere() from a global function to a TSQLModel method
       (to prepare "Table per class hierarchy" mapping in mORMot)
     - SQLParamContent() / ExtractInlineParameters() functions moved to SynCommons
-    - added TSQLRecordHistory and TSQLRestServer.TrackChanges() for [a78ffe992b] 
+    - added TSQLRecordHistory and TSQLRestServer.TrackChanges() for [a78ffe992b]
+    - added TSQLRestTempStorage "asynchronous write" for [cac2e379f0] 
     - TSQLAuthUser and TSQLAuthGroup have now "index ..." attributes to their
       RawUTF8 properties, to allow direct handling in external databases
     - added TSQLModelRecordProperties.FTS4WithoutContent() method to allow
@@ -12647,19 +12648,128 @@ type
   // - as expected by TSQLRestServer.TrackChanges() method
   TSQLRecordHistoryClass = class of TSQLRecordHistory;
 
-  /// common ancestor for tracking TSQLRecord last state, i.e. enable replication
-  // - each node would have its own replication table, then all nodes will
-  // synchronize using their own local state information
-  // - the ID/RowID primary key of this table would be pre-computed, and unique
-  // among all nodes
-  TSQLRecordReplication = class(TSQLRecord)
-  protected
-  published
+  /// defines what is stored in a TSQLRestTempStorageItem entry
+  TSQLRestTempStorageItemKind = set of (itemInsert,itemFakeID);
+
+  /// used to store an entry in the TSQLRestTempStorage class
+  TSQLRestTempStorageItem = record
+    /// the ID of this entry
+    // - after an AddCopy(ForceID=false), is a "fake" ID, which is > maxInt
+    ID: TID;
+    /// the stored item, either after adding or updating
+    // - equals nil if the item has been deleted
+    Value: TSQLRecord;
+    /// identify the fields stored in the Value instance
+    // - e.g. an Update() - or even an Add() - may only have set only simple or
+    // specific fields
+    ValueFields: TSQLFieldBits;
+    /// what is stored in this entry
+    Kind: TSQLRestTempStorageItemKind;
   end;
 
-  /// class-reference type (metaclass) to specify the storage table to be used
-  // for tracking TSQLRecord last state, i.e. replication
-  TSQLRecordReplicationClass = class of TSQLRecordReplication;
+  /// used to store the entries in the TSQLRestTempStorage class
+  TSQLRestTempStorageItemDynArray = array of TSQLRestTempStorageITem;
+
+  /// abstract class used for temporary in-memory storage of TSQLRecord
+  // - purpose of this class is to gather write operations (Add/Update/Delete)
+  // - inherited implementations may send all updates at once to a server (i.e.
+  // "asynchronous write"), or maintain a versioned image of the content
+  TSQLRestTempStorage = class(TSynCriticalSection)
+  protected
+    fStoredClass: TSQLRecordClass;
+    fStoredClassRecordProps: TSQLRecordProperties;
+    fItem: TSQLRestTempStorageItemDynArray;
+    fItems: TDynArray;
+    fLastFakeID: TID;
+    fCount: integer;
+    function InternalSetFields(const FieldNames: RawUTF8; out Fields: TSQLFieldBits): boolean;
+    procedure InternalAddItem(const item: TSQLRestTempStorageItem);
+  public
+    /// initialize the temporary storage for a given class
+    constructor Create(aClass: TSQLRecordClass);
+    /// finalize this temporary storage instance
+    destructor Destroy; override;
+    /// add a copy of a TSQLRecord to the internal storage list
+    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is false, a "fake" ID is returned, which may be used later
+    // on for Update() calls - WARNING: but this ID should not be stored as
+    // a cross reference in another record, since it is private to this storage;
+    // the definitive ID will be returned eventually after proper persistence
+    // (e.g. sent as TSQLRestBatch to a mORMot server)
+    // - FieldNames can be the CSV list of field names to be set
+    // - if FieldNames is '', will set all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will set ALL fields, including BLOBs
+    // - this method will clone the supplied Value, and make its own copy
+    // for its internal storage - consider use AddOwned() if the caller does
+    // not need to store the instance afterwards
+    function AddCopy(Value: TSQLRecord; ForceID: boolean;
+      const FieldNames: RawUTF8=''): TID; overload;
+    /// add and own a TSQLRecord in the internal storage list
+    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is false, a "fake" ID is returned, which may be used later
+    // on for Update() calls - WARNING: but this ID should not be stored as
+    // a cross reference in another record, since it is private to this storage;
+    // the definitive ID will be returned eventually after proper persistence
+    // (e.g. sent as TSQLRestBatch to a mORMot server)
+    // - FieldNames can be the CSV list of field names to be set
+    // - if FieldNames is '', will set all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will set ALL fields, including BLOBs
+    // - this method will store the supplied Value, and let its internal
+    // storage owns it and manage its lifetime - consider use AddCopy() if the
+    // caller does need to store this instance afterwards
+    // - returns 0 in case of error (e.g. ForceID and no or duplicated Value.ID)
+    function AddOwned(Value: TSQLRecord; ForceID: boolean;
+      const FieldNames: RawUTF8=''): TID; overload;
+    /// add, update or delete a TSQLRecord in the internal storage list
+    // - could be used from a TNotifySQLEvent/InternalUpdateEvent(seAdd) callback
+    // - here the value to be added is supplied as a JSON object and a ID field
+    // - returns false in case of error (e.g. duplicated ID or void JSON)
+    function FromEvent(Event: TSQLEvent; ID: TID; const JSON: RawUTF8): boolean;
+    /// add and own a TSQLRecord in the internal storage list
+    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is false, a "fake" ID is returned, which may be used later
+    // on for Update() calls - WARNING: but this ID should not be stored as
+    // a cross reference in another record, since it is private to this storage;
+    // the definitive ID will be returned eventually after proper persistence
+    // (e.g. sent as TSQLRestBatch to a mORMot server)
+    // - this overloaded version expects the fields to be specified as bits
+    // - this method will store the supplied Value, and let its internal
+    // storage owns it and manage its lifetime - consider use AddCopy() if the
+    // caller does need to store this instance afterwards
+    // - returns 0 in case of error (e.g. ForceID and no or duplicated Value.ID)
+    function AddOwned(Value: TSQLRecord; ForceID: boolean;
+      const Fields: TSQLFieldBits): TID; overload;
+    /// mark a TSQLRecord as deleted in the internal storage list
+    procedure Delete(const ID: TID);
+    /// update a TSQLRecord and store the new values in the internal storage list
+    // - Value.ID is used to identify the record to be updated (which may be
+    // a just added "fake" ID)
+    // - FieldNames can be the CSV list of field names to be updated
+    // - if FieldNames is '', will update all simple fields, excluding BLOBs
+    // - if FieldNames is '*', will update ALL fields, including BLOBs
+    // - the supplied Value won't be owned by this instance: the caller should
+    // release it when Value is no longer needed
+    // - returns false in case of error (e.g. unknwown ID or invalid fields)
+    function Update(Value: TSQLRecord; const FieldNames: RawUTF8=''): boolean; overload;
+    /// update a TSQLRecord and store the new values in the internal storage list
+    // - Value.ID is used to identify the record to be updated (which may be
+    // a just added "fake" ID)
+    // - this overloaded version expects the fields to be specified as bits
+    // - the supplied Value won't be owned by this instance: the caller should
+    // release it when Value is no longer needed
+    // - returns false in case of error (e.g. unknwown ID or no field set)
+    function Update(Value: TSQLRecord; const Fields: TSQLFieldBits): boolean; overload;
+    /// convert the internal list as a TSQLRestBatch instance, ready to be
+    // sent to the server
+    function FlushAsBatch(Rest: TSQLRest;
+      AutomaticTransactionPerRow: cardinal=1000): TSQLRestBatch; 
+    /// direct access to the low-level storage list
+    // - the Count property is the number of items, length(Item) is the capacity
+    // - the list is stored in increasing ID order
+    property Item: TSQLRestTempStorageItemDynArray read fItem;
+    /// how many entries are stored in the low-level storage list
+    property Count: integer read fCount;
+  end;
 
   /// how TSQLRestServer should maintain its statistical information
   // - used by TSQLRestServer.StatLevels property
@@ -38802,6 +38912,228 @@ function TSQLRecordMany.InternalIDFromSourceDest(aClient: TSQLRest;
 begin
   SetID(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
     FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))),result);
+end;
+
+
+{ TSQLRestTempStorage }
+
+constructor TSQLRestTempStorage.Create(aClass: TSQLRecordClass);
+begin
+  inherited Create;
+  fStoredClass := aClass;
+  fStoredClassRecordProps := aClass.RecordProps;
+  fItems.InitSpecific(
+    TypeInfo(TSQLRestTempStorageItemDynArray),fItem,djInt64,@fCount);
+  fItems.Sorted := true;
+  // space for 524287 fake items (our sorted array would not like bigger extent)
+  fLastFakeID := $100000000000;
+end;
+
+destructor TSQLRestTempStorage.Destroy;
+var i: integer;
+begin
+  for i := 0 to fCount-1 do
+    fItem[i].Value.Free;
+  inherited;
+end;
+
+procedure TSQLRestTempStorage.InternalAddItem(const item: TSQLRestTempStorageItem);
+begin
+  fItems.Add(item);
+  if (fCount>1) and (fItem[fCount-2].ID>item.ID) then
+    fItems.Sort else // ensure IDs are in increasing order
+    fItems.Sorted := true; // pessimistic fItems.Add() did reset to false
+end;
+
+function TSQLRestTempStorage.InternalSetFields(const FieldNames: RawUTF8;
+  out Fields: TSQLFieldBits): Boolean;
+begin
+  if FieldNames='' then
+    Fields := fStoredClassRecordProps.SimpleFieldsBits[soUpdate] else
+  if FieldNames='*' then
+    FillChar(Fields,sizeof(Fields),255) else
+    if not fStoredClassRecordProps.FieldIndexsFromCSV(FieldNames,Fields) then begin
+      result := false; // invalid FieldNames content
+      exit;
+    end;
+  result := True;
+end;
+
+function TSQLRestTempStorage.AddCopy(Value: TSQLRecord;
+  ForceID: boolean; const FieldNames: RawUTF8): TID;
+begin
+  if (self=nil) or (Value=nil) then
+    result := 0 else
+    result := AddOwned(Value.CreateCopy,ForceID,FieldNames);
+end;
+
+function TSQLRestTempStorage.AddOwned(Value: TSQLRecord; ForceID: boolean;
+  const Fields: TSQLFieldBits): TID;
+var item: TSQLRestTempStorageItem;
+begin
+  result := 0;
+  if (self=nil) or (Value=nil) or
+     (ForceID and (Value.IDValue=0)) or
+     IsZero(Fields) then
+    exit;
+  item.ValueFields := Fields;
+  Acquire;
+  try
+    if ForceID then begin
+      item.ID := Value.IDValue;
+      if fItems.Find(item)>=0 then begin
+        Value.Free; // avoid memory leak
+        exit; // this forced ID is already existing!
+      end;
+      item.Kind := [itemInsert];
+    end else begin
+      inc(fLastFakeID);
+      item.ID := fLastFakeID;
+      Value.IDValue := fLastFakeID;
+      item.Kind := [itemInsert,itemFakeID];
+    end;
+    item.Value := Value; // instance will be owned by the list
+    InternalAddItem(item);
+  finally
+    Release;
+  end;
+  result := item.ID;
+end;
+
+function TSQLRestTempStorage.AddOwned(Value: TSQLRecord;
+  ForceID: boolean; const FieldNames: RawUTF8): TID;
+var fields: TSQLFieldBits;
+begin
+  if (self=nil) or not InternalSetFields(FieldNames,fields) then
+    result := 0 else
+    result := AddOwned(Value,ForceID,fields);
+end;
+
+procedure TSQLRestTempStorage.Delete(const ID: TID);
+var i: integer;
+    item: TSQLRestTempStorageItem;
+begin
+  if (self=nil) or (ID=0) then
+    exit;
+  Acquire;
+  try
+    i := fItems.Find(ID);
+    if i>=0 then
+    with fItem[i] do begin
+      FreeAndNil(Value); // Value=nil indicates deleted reord
+      if itemInsert in Kind then
+        fItems.Delete(i); // Add + Delete in place -> ignore this entry
+      exit;
+    end;
+    item.ID := ID;
+    item.Value := nil;  // Value=nil indicates deleted record 
+    FillChar(item.ValueFields,sizeof(item.ValueFields),0);
+    InternalAddItem(item);
+  finally
+    Release;
+  end;
+end;
+
+function TSQLRestTempStorage.Update(Value: TSQLRecord;
+  const Fields: TSQLFieldBits): boolean;
+var i,f: integer;
+    item: TSQLRestTempStorageItem;
+    existing: ^TSQLRestTempStorageItem;
+begin
+  result := false;
+  if (self=nil) or (Value=nil) or (Value.IDValue=0) or
+     IsZero(fields) then
+    exit;
+  item.ID := Value.IDValue;
+  item.ValueFields := Fields;
+  Acquire;
+  try
+    i := fItems.Find(item);
+    if i>=0 then begin
+      existing := @fItem[i];
+      if existing.Value=nil then
+        exit; // impossible to update a deleted record
+      existing^.ValueFields := existing^.ValueFields+item.ValueFields;
+      for f := 0 to fStoredClassRecordProps.Fields.Count-1 do
+        if f in item.ValueFields then
+          fStoredClassRecordProps.Fields.List[f].CopyValue(Value,existing^.Value);
+    end else begin
+      item.Value := Value.CreateCopy;
+      FillChar(item.ValueFields,sizeof(item.ValueFields),0);
+      InternalAddItem(item);
+    end;
+    result := true;
+  finally
+    Release;
+  end;
+end;
+
+function TSQLRestTempStorage.Update(Value: TSQLRecord;
+  const FieldNames: RawUTF8): boolean;
+var fields: TSQLFieldBits;
+begin
+  if (self<>nil) and InternalSetFields(FieldNames,fields) then
+    result := Update(Value,fields) else
+    result := false;
+end;
+
+function TSQLRestTempStorage.FlushAsBatch(Rest: TSQLRest;
+  AutomaticTransactionPerRow: cardinal): TSQLRestBatch;
+var i: integer;
+begin
+  if (self=nil) or (fCount=0) then begin
+    result := nil;
+    exit;
+  end;
+  result := TSQLRestBatch.Create(Rest,fStoredClass,AutomaticTransactionPerRow,[]);
+  Acquire;
+  try
+    for i := 0 to fCount-1 do
+    with fItem[i] do
+      if Value=nil then
+        result.Delete(ID) else begin
+        if itemInsert in Kind then
+          result.Add(Value,true,not(itemFakeID in Kind),ValueFields) else
+          result.Update(Value,ValueFields);
+        FreeAndNil(Value);
+      end;
+    fItems.Clear;
+  finally
+    Release;
+  end;
+end;
+
+function TSQLRestTempStorage.FromEvent(Event: TSQLEvent; ID: TID;
+  const JSON: RawUTF8): boolean;
+var Value: TSQLRecord;
+    fields: TSQLFieldBits;
+begin
+  if (self=nil) or (ID=0) then begin
+    result := false;
+    exit;
+  end;
+  if Event=seDelete then begin
+    Delete(ID);
+    result := true;
+    exit;
+  end;
+  FillChar(fields,SizeOf(fields),0);
+  Value := fStoredClass.Create;
+  try
+    Value.FillFrom(JSON,@fields);
+    Value.IDValue := ID;
+    case Event of
+    seAdd: begin
+      result := AddOwned(Value,True,fields)<>0;
+      Value := nil; // owned by the list
+    end;
+    seUpdate,seUpdateBlob: 
+      result := Update(Value,fields);
+    else result := false;
+    end;
+  finally
+    Value.Free;
+  end;
 end;
 
 
