@@ -839,6 +839,7 @@ unit mORMot;
     - TSQLRecord.CreateAndFillPrepareMany() will raise an exception when run
       on a TSQLRecord with no many-to-many published field
     - introducing new TSQLRecord.EnginePrepareMany() method
+    - added optional FieldBits output parameter to TSQLRecord.FillFrom/FillValue
     - fixed TSQLRecordMany Source/Dest fields serialization - see [22ce911c715]
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
@@ -6295,31 +6296,35 @@ type
      - create a TSQLTable from the JSON data
      - call FillPrepare() then FillRow(Row) }
     procedure FillFrom(const JSONTable: RawUTF8; Row: integer); overload;
-    {/ fill all published properties of this object from a JSON object result
-      - use JSON data, as exported by GetJSONValues()
-      - JSON data may be expanded or not
-      - make an internal copy of the JSONTable RawUTF8 before calling
-       FillFrom() below}
-    procedure FillFrom(const JSONRecord: RawUTF8); overload;
-    {/ fill all published properties of this object from a JSON result
-      - the data inside P^ is modified (unescaped and transformed): don't call
-       FillFrom(pointer(JSONRecordUTF8)) but FillFrom(JSONRecordUTF8) which makes
-       a temporary copy of the JSONRecordUTF8 text
-      - use JSON data, as exported by GetJSONValues()
-      - JSON data may be expanded or not }
-    procedure FillFrom(P: PUTF8Char); overload;
+    /// fill all published properties of this object from a JSON object result
+    // - use JSON data, as exported by GetJSONValues()
+    // - JSON data may be expanded or not
+    // - make an internal copy of the JSONTable RawUTF8 before calling
+    // FillFrom() below}
+    // - if FieldBits is defined, it will store the identified field index
+    procedure FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits=nil); overload;
+    /// fill all published properties of this object from a JSON result
+    // - the data inside P^ is modified (unescaped and transformed): don't call
+    // FillFrom(pointer(JSONRecordUTF8)) but FillFrom(JSONRecordUTF8) which makes
+    // a temporary copy of the JSONRecordUTF8 text
+    // - use JSON data, as exported by GetJSONValues()
+    // - JSON data may be expanded or not
+    // - if FieldBits is defined, it will store the identified field index
+    procedure FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits=nil); overload;
     {/ fill all published properties of this object from another object
       - source object must be a parent or of the same class as the current record
       - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
         those fields don't contain any data, but a TSQLRecordMany instance
         which allow to access to the pivot table data) }
     procedure FillFrom(aRecord: TSQLRecord); overload;
-    {/ fill a published property value of this object from a UTF-8 encoded value
-     - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
-     - use this method to fill a BLOB property, i.e. a property defined with
-       type TSQLRawBlob, since by default all BLOB properties are not
-       set by the standard Retrieve() method (to save bandwidth) }
-    procedure FillValue(PropName, Value: PUTF8Char; wasString: boolean);
+    /// fill a published property value of this object from a UTF-8 encoded value
+    // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
+    // - use this method to fill a BLOB property, i.e. a property defined with
+    // type TSQLRawBlob, since by default all BLOB properties are not
+    // set by the standard Retrieve() method (to save bandwidth)
+    // - if FieldBits is defined, it will store the identified field index
+    procedure FillValue(PropName, Value: PUTF8Char; wasString: boolean;
+      FieldBits: PSQLFieldBits=nil);
 
     {/ return true if all published properties values in Other are identical to
      the published properties of this object
@@ -24637,25 +24642,29 @@ begin
   end;
 end;
 
-procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8);
+procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits);
 var tmp: pointer; // FillFrom() modifies the buffer memory: work on a copy
+    buf: array[0..511] of AnsiChar; // avoid a heap allocation in most cases
     P: PUTF8Char;
     L: integer;
 begin
   P := pointer(JSONRecord);
   if P<>nil then begin
     L := PInteger(P-4)^+1; // +1 for last #0
-    getmem(tmp,L);
+    if L<=sizeof(buf) then
+      tmp := @buf else
+      getmem(tmp,L);
     try
-      move(P^,tmp^,L); // make a working copy of the JSON text (including #1)
-      FillFrom(tmp); // now we can safely call FillFrom()
+      move(P^,tmp^,L); // make a working copy of the JSON text (including #0)
+      FillFrom(tmp,FieldBits); // now we can safely call FillFrom()
     finally
-      Freemem(tmp);
+      if tmp<>@buf then
+        Freemem(tmp);
     end;
   end;
 end;
 
-procedure TSQLRecord.FillFrom(P: PUTF8Char);
+procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
 (* two possible formats = first not expanded, 2nd is expanded (most useful)
  {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
   "ValDate","Next",0,0,"abcde+¬ef+á+¬","abcde+¬ef+á+¬","abcde+¬ef+á+¬",
@@ -24686,7 +24695,7 @@ begin
       F[i] := GetJSONField(P,P); 
     for i := 0 to n do begin
       Value := GetJSONFieldOrObjectOrArray(P,@wasString,nil,true);
-      FillValue(F[i],Value,wasString); // set properties from values
+      FillValue(F[i],Value,wasString,FieldBits); // set properties from values
     end;
   end else
   if P^='{' then begin
@@ -24696,7 +24705,7 @@ begin
       Prop := GetJSONPropName(P);
       if (Prop=nil) or (P=nil) then break;
       Value := GetJSONFieldOrObjectOrArray(P,@wasString,nil,true);
-      FillValue(Prop,Value,wasString); // set property from value
+      FillValue(Prop,Value,wasString,FieldBits); // set property from value
     until P=nil;
   end;
 end;
@@ -24793,15 +24802,19 @@ begin
     fFill.UnMap;
 end;
 
-procedure TSQLRecord.FillValue(PropName: PUTF8Char; Value: PUTF8Char; wasString: boolean);
+procedure TSQLRecord.FillValue(PropName: PUTF8Char; Value: PUTF8Char;
+  wasString: boolean; FieldBits: PSQLFieldBits);
 var field: TSQLPropInfo;
 begin
   if self<>nil then
     if IsRowID(pointer(PropName)) then
       SetID(Value,fID) else begin
       field := RecordProps.Fields.ByName(PropName);
-      if field<>nil then
+      if field<>nil then begin
         field.SetValue(self,Value,wasString);
+        if FieldBits<>nil then
+          Include(FieldBits^,field.PropertyIndex);
+      end;
     end;
 end;
 
