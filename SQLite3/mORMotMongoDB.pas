@@ -525,9 +525,13 @@ begin
       LeaveCriticalSection(fStorageCriticalSection);
     end;
   if fStoredClassRecordProps.RecordVersionField<>nil then
-    doc.AddValue(fStoredClassProps.ExternalDB.
-      FieldNames[fStoredClassRecordProps.RecordVersionField.PropertyIndex],
-      Owner.InternalRecordVersionCompute);
+    if Owner=nil then
+      raise EORMMongoDBException.CreateUTF8(
+        '%.DocFromJSON: Owner=nil + %.%: TRecordVersion',
+        [self,fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]) else
+      doc.AddValue(fStoredClassProps.ExternalDB.
+        FieldNames[fStoredClassRecordProps.RecordVersionField.PropertyIndex],
+        Owner.InternalRecordVersionCompute);
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;

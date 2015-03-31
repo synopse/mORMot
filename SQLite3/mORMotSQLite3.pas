@@ -1761,6 +1761,8 @@ begin
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchID[0]);
+      if Props.RecordVersionField<>nil then
+        InternalRecordVersionHandle(Decode,Props.RecordVersionField);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
       if InternalExecute(SQL,true) then
         InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[0],fBatchValues[0],nil);
@@ -1785,6 +1787,8 @@ begin
           P := UniqueRawUTF8(privateCopy);
           while P^ in [#1..' ','{','['] do inc(P);
           Decode.Decode(P,nil,pNonQuoted,fBatchID[ndx]);
+          if Props.RecordVersionField<>nil then
+            InternalRecordVersionHandle(Decode,Props.RecordVersionField);
           inc(ndx);
           DecodeSaved := false;
         end;

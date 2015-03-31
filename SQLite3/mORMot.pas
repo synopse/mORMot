@@ -22004,7 +22004,6 @@ begin
       W.AddShort(' where ');
       W.AddString(UpdateIDFieldName);
       W.Add('=','?');
-      W.SetText(result);
     end;
     soInsert: begin
       if boInsertOrIgnore in BatchOptions then
@@ -22024,11 +22023,11 @@ begin
         W.CancelLastComma;
         W.Add(')');
       end;
-      W.SetText(result);
     end;
     else
       raise EORMException.Create('Invalid EncodeAsSQLPrepared() call');
     end;
+    W.SetText(result);
   finally
     W.Free;
   end;
@@ -22109,6 +22108,7 @@ begin
       'Too many fields for TJSONObjectDecoder.AddField(%)',[FieldName]);
   FieldNames[FieldCount] := FieldName;
   FieldValues[FieldCount] := FieldValue;
+  inc(FieldCount);
 end;
 
 const
