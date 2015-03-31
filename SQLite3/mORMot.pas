@@ -27541,6 +27541,8 @@ begin
   {$ifdef WITHLOG}
   fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
   {$endif}
+  for cmd := Low(cmd) to high(cmd) do
+    FreeAndNil(fAcquireExecution[cmd]); // should be done BEFORE private GC
   if fPrivateGarbageCollector<>nil then begin
     for i := fPrivateGarbageCollector.Count-1 downto 0 do // last in, first out
     try
@@ -27551,8 +27553,6 @@ begin
     end;
     fPrivateGarbageCollector.Free;
   end;
-  for cmd := Low(cmd) to high(cmd) do
-    fAcquireExecution[cmd].Free;
   inherited Destroy;
 end;
 

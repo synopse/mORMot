@@ -3449,6 +3449,9 @@ destructor TSQLDataBase.Destroy;
 var S: TSQLite3Statement;
 {$endif}
 begin
+  {$ifdef WITHLOG}
+  fLog.Enter(self);
+  {$endif}
   if DB<>0 then
   try
     Rollback; // any unfinished transaction is rollbacked

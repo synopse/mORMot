@@ -1010,6 +1010,9 @@ end;
 destructor TSQLRestServerDB.Destroy;
 var i: integer;
 begin
+  {$ifdef WITHLOG}
+  fLogClass.Enter(self);
+  {$endif}
   try
     if fRegisteredVirtualTableModules<>nil then
       with fRegisteredVirtualTableModules do
