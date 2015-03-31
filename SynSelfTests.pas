@@ -516,6 +516,8 @@ type
     /// check the PCRE-based REGEX function
     procedure RegexpFunction;
     {$endif TEST_REGEXP}
+    /// test the TRecordVersion field 
+    procedure _TRecordVersion;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -8066,6 +8068,112 @@ end;
 {$endif TEST_REGEXP}
 
 type
+  TSQLRecordPeopleVersioned = class(TSQLRecordPeople)
+  protected
+    fVersion: TRecordVersion;
+  published
+    property Version: TRecordVersion read fVersion write fVersion;
+  end;
+  TSQLRestServerHook = class(TSQLRestServer);
+
+
+procedure TTestSQLite3Engine._TRecordVersion;
+var Model: TSQLModel;
+    Client,Client2: TSQLRestClientDB;
+    Rec,Rec1,Rec2: TSQLRecordPeopleVersioned;
+    IDs: TIDDynArray;
+    i,n: integer;
+procedure CreateClient;
+begin
+  Client := TSQLRestClientDB.Create(Model,nil,'testversion.db3',
+    TSQLRestServerDB,false,'');
+  Client.Server.DB.Synchronous := smOff;
+  Client.Server.DB.LockingMode := lmExclusive;
+end;
+procedure CreateClient2;
+begin
+  DeleteFile('testversionreplicated.db3');
+  Client2 := TSQLRestClientDB.Create(Model,nil,'testversionreplicated.db3',
+    TSQLRestServerDB,False,'');
+  Client2.Server.DB.Synchronous := smOff;
+  Client2.Server.DB.LockingMode := lmExclusive;
+  Client2.Server.CreateMissingTables;
+end;
+procedure TestClient2;
+var res: TRecordVersion;
+begin
+  res := Client2.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Client);
+  Check(res=TSQLRestServerHook(Client.Server).fRecordVersionMax);
+  Rec1.FillPrepare(Client,'order by ID','*');
+  Rec2.FillPrepare(Client2,'order by ID','*');
+  Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
+  while Rec1.FillOne do begin
+    Check(Rec2.FillOne);
+    Check(Rec1.SameRecord(Rec2));
+    Check(Rec1.Version=Rec2.Version);
+  end;
+end;
+begin
+  DeleteFile('testversion.db3');
+  Model := TSQLModel.Create([TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted]);
+  CreateClient;
+  try
+    Client.Server.CreateMissingTables;
+    Rec1 := TSQLRecordPeopleVersioned.Create;
+    Rec2 := TSQLRecordPeopleVersioned.Create;
+    Rec := TSQLRecordPeopleVersioned.CreateAndFillPrepare(JS); // 1001 input rows
+    try
+      CreateClient2;
+      TestClient2;
+      n := Rec.FillTable.RowCount;
+      Check(n>100);
+      for i := 0 to 9 do begin // first test raw direct add
+        Check(Rec.FillOne);
+        Client.Add(Rec,true,true);
+      end;
+      TestClient2;
+      Client.Free;
+      CreateClient; // test TSQLRestServer.InternalRecordVersionMaxFromExisting
+      Client.BatchStart(TSQLRecordPeopleVersioned,10000); // fast add via Batch
+      while Rec.FillOne do
+        Check(Client.BatchAdd(Rec,true,true)>=0);
+      Check(Client.BatchSend(IDs)=HTML_SUCCESS);
+      Check(n=length(IDs)+10);
+      Check(Rec.FillRewind);
+      for i := 0 to 9 do
+        Check(Rec.FillOne);
+      for i := 0 to high(IDs) do
+        if Rec.FillOne then
+          Check(IDs[i]=Rec.IDValue) else
+          Check(false);
+      TestClient2;
+      Check(Rec.FillRewind);
+      for i := 0 to 9 do begin
+        Check(Rec.FillOne);
+        Rec.YearOfBirth := Rec.YearOfBirth+1;
+        if i and 3=1 then
+          Check(Client.Delete(TSQLRecordPeopleVersioned,Rec.IDValue)) else
+          Check(Client.Update(Rec));
+        if i and 3=2 then begin
+          Rec.YearOfBirth := Rec.YearOfBirth+4;
+          Check(Client.Update(Rec),'update twice to increase Version');
+        end;
+      end;
+      TestClient2;
+      TestClient2;
+    finally
+      Rec.Free;
+      Rec2.Free;
+      Rec1.Free;
+    end;
+  finally
+    Client.Free;
+    Client2.Free;
+    Model.Free;
+  end;
+end;
+
+type
    TSQLRecordMapBox = class(TSQLRecordRTree)
    protected
      fMinX, fMaxX, fMinY, fMaxY: double;
@@ -10188,6 +10296,7 @@ begin
   Check(Hash32(call.OutBody)=Hash);
 end;
 var ClientDist: TSQLRestClientURI;
+    json: RawUTF8;
 begin
   V := TSQLRecordPeople.Create;
   VA := TSQLRecordPeopleArray.Create;
@@ -10411,10 +10520,10 @@ begin
           DeleteFile('People.json');
           DeleteFile('People.data');
           Server.StaticDataCreate(TSQLRecordPeople,'People.data',true);
-          JS := Demo.ExecuteJSON('SELECT * From People');
+          json := Demo.ExecuteJSON('SELECT * From People');
           aStatic := Server.StaticDataServer[TSQLRecordPeople] as TSQLRestStorageInMemory;
           Check(aStatic<>nil);
-          aStatic.LoadFromJSON(JS); // test Add() and JSON fast loading
+          aStatic.LoadFromJSON(json); // test Add() and JSON fast loading
           for i := 0 to aStatic.Count-1 do begin
             Check(Client.Retrieve(aStatic.ID[i],V),'test statement+bind speed');
             Check(V.SameRecord(aStatic.Items[i]),'static retrieve');

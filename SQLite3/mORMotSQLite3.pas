@@ -1434,12 +1434,12 @@ begin
             [Props.SQLTableName,SetFieldName,SetValue,ID[0]]) else
           result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
             [Props.SQLTableName,SetFieldName,SetValue,
-             Props.RecordVersionField,InternalRecordVersionCompute,ID[0]]) else begin
+             Props.RecordVersionField,RecordVersionCompute,ID[0]]) else begin
         IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
         if Props.RecordVersionField=nil then
           result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
             [Props.SQLTableName,SetFieldName,SetValue,IDs]) else begin
-          RecordVersion := InternalRecordVersionCompute;
+          RecordVersion := RecordVersionCompute;
           result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID IN (%)',
             [Props.SQLTableName,SetFieldName,SetValue,
              Props.RecordVersionField,RecordVersion,IDs]);
@@ -1816,7 +1816,7 @@ begin
           SetLength(Values,MAX_PARAMS);
         for f := 0 to fieldCount-1 do
           if Decode.FieldTypeApproximation[f]=ftaNull then
-            SetBit(ValuesNull[0],valuesCount) else
+            SetBit(ValuesNull[0],valuesCount+f) else
             Values[valuesCount+f] := Decode.FieldValues[f];
         inc(ValuesCount,fieldCount);
         inc(rowCount);

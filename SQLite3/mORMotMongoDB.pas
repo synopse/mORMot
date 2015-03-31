@@ -458,7 +458,7 @@ var i, ndx: integer;
     blob: RawByteString;
     info: TSQLPropInfo;
     typenfo: pointer;
-    js: RawUTF8;
+    js, RecordVersionName: RawUTF8;
     MissingID: boolean;
     V: PVarData;
 begin
@@ -524,14 +524,17 @@ begin
         fEngineLastID := result;
       LeaveCriticalSection(fStorageCriticalSection);
     end;
-  if fStoredClassRecordProps.RecordVersionField<>nil then
-    if Owner=nil then
-      raise EORMMongoDBException.CreateUTF8(
-        '%.DocFromJSON: Owner=nil + %.%: TRecordVersion',
-        [self,fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]) else
-      doc.AddValue(fStoredClassProps.ExternalDB.
-        FieldNames[fStoredClassRecordProps.RecordVersionField.PropertyIndex],
-        Owner.InternalRecordVersionCompute);
+  if fStoredClassRecordProps.RecordVersionField<>nil then begin
+    RecordVersionName := fStoredClassProps.ExternalDB.FieldNames[
+      fStoredClassRecordProps.RecordVersionField.PropertyIndex];
+    if doc.GetValueIndex(RecordVersionName)<0 then
+      if Owner=nil then
+        raise EORMMongoDBException.CreateUTF8(
+          '%.DocFromJSON: unexpected Owner=nil with %.%: TRecordVersion',
+          [self,fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]) else
+      // compute new monotonic TRecordVersion value if not supplied by sender
+      doc.AddValue(RecordVersionName,Owner.RecordVersionCompute);
+  end;
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;

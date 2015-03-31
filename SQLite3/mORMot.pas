@@ -973,7 +973,9 @@ unit mORMot;
       (to prepare "Table per class hierarchy" mapping in mORMot)
     - SQLParamContent() / ExtractInlineParameters() functions moved to SynCommons
     - added TSQLRecordHistory and TSQLRestServer.TrackChanges() for [a78ffe992b]
-    - added TSQLRestTempStorage "asynchronous write" for [cac2e379f0] 
+    - added TSQLRestTempStorage "asynchronous write" for [cac2e379f0]
+    - added TSQLRestServer.RecordVersionSynchronize() and the new TRecordVersion
+      field kind to maintain a remote versioning of rows - see [3453f314d9]
     - TSQLAuthUser and TSQLAuthGroup have now "index ..." attributes to their
       RawUTF8 properties, to allow direct handling in external databases
     - added TSQLModelRecordProperties.FTS4WithoutContent() method to allow
@@ -1554,8 +1556,10 @@ type
   /// the available options for TSQLRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
+  // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
+  // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
   TSQLRestBatchOption = (
-    boInsertOrIgnore);
+    boInsertOrIgnore, boInsertOrReplace);
 
   /// a set of options for TSQLRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
@@ -1577,10 +1581,6 @@ type
       (ftaNumber,ftaBoolean,ftaString,ftaDate,ftaNull,ftaBlob,ftaObject,ftaArray);
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
-    /// size of the TEXT data (in bytes) in FieldValues[]
-    FieldValueLen: integer;
-    /// size of the TEXT data (in bytes) in FieldNames[]
-    FieldNameLen: integer;
     /// set to TRUE if parameters are to be :(...): inlined
     InlinedParams: boolean;
     /// internal pointer over field names to be used after Decode() call
@@ -1608,12 +1608,12 @@ type
       Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// can be used after Decode() to add a new field in FieldNames/FieldValues
     // - so that EncodeAsSQL() will include this field in the generated SQL
-    // - the caller should ensure that the FieldName is not already used in
-    // FieldNames[] (this method won't do any check)
+    // - caller should ensure that the FieldName is not already defined in
+    // FieldNames[] (e.g. when the TRecordVersion field is forced)
     // - the caller should ensure that the supplied FieldValue will match
     // the quoting/inlining expectations of Decode(TJSONObjectDecoderParams) -
     // e.g. that string values are quoted if needed
-    procedure AddField(const FieldName,FieldValue: RawUTF8);
+    procedure AddFieldValue(const FieldName,FieldValue: RawUTF8);
     /// encode as a SQL-ready INSERT or UPDATE statement
     // - after a successfull call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
@@ -1636,6 +1636,8 @@ type
     /// returns TRUE if the specified array match the decoded fields names
     // - after a successfull call to Decode()
     function SameFieldNames(const Fields: TRawUTF8DynArray): boolean;
+    /// search for a field name in the current identified FieldNames[] 
+    function FindFieldName(const FieldName: RawUTF8): integer;
   end;
 
 /// set the TID (=64 bits integer) value from the numerical text stored in P^
@@ -4214,8 +4216,7 @@ type
 
   /// information about a TRecordVersion published property
   // - identified as a sftRecordVersion kind of property, to track changes
-  TSQLPropInfoRTTIRecordVersion = class(TSQLPropInfoRTTIInt64)
-  end;
+  TSQLPropInfoRTTIRecordVersion = class(TSQLPropInfoRTTIInt64);
 
   /// information about a TSQLRecord class TSQLRecord property
   // - kind sftID, which are pointer(RecordID), not any true class instance
@@ -5430,7 +5431,8 @@ type
     /// used to compute the updated field bits during a fill
     // - will return Props.SimpleFieldsBits[soUpdate] if no fill is in process
     procedure ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties; out Bits: TSQLFieldBits);
-
+    /// return all mapped fields, or [] if nil
+    function TableMapFields: TSQLFieldBits;
     /// the TSQLTable stated as FillPrepare() parameter
     // - the internal temporary table is stored here for TSQLRecordMany
     // - this instance is freed by TSQLRecord.Destroy if fTable.OwnerMustFree=true 
@@ -5461,6 +5463,9 @@ type
     fBatchCount: integer;
     fDeletedRecordRef: TIDDynArray;
     fDeletedCount: integer;
+    fAddCount: integer;
+    fUpdateCount: integer;
+    fDeleteCount: integer;
     procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
     /// close a BATCH sequence started by Start method
@@ -5535,8 +5540,10 @@ type
     // if they will be Base64-encoded within the JSON content) - CustomFields
     // could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
     // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
-    // - this method will always compute and send any TModTime fields
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer; virtual;
+    // - this method will always compute and send any TModTime fields, unless
+    // DoNotAutoComputeFields is set to true
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): integer; virtual;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -5555,6 +5562,12 @@ type
     property Rest: TSQLRest read fRest;
     /// read only access to the main associated TSQLRecord class (if any)
     property Table: TSQLRecordClass read fTable;
+    /// how many times Add() has been called for this BATCH process
+    property AddCount: integer read fAddCount;
+    /// how many times Update() has been called for this BATCH process
+    property UpdateCount: integer read fUpdateCount;
+    /// how many times Delete() has been called for this BATCH process
+    property DeleteCount: integer read fDeleteCount;
   end;
 
   /// root class for defining and mapping database records
@@ -6312,8 +6325,8 @@ type
       ! while Rec.FillOne do
       !   dosomethingwith(Rec);
       ! if Rec.FillRewind then
-      ! while Rec.FillOne do
-      !   dosomeotherthingwith(Rec);
+      !   while Rec.FillOne do
+      !     dosomeotherthingwith(Rec);
     }
     function FillRewind: boolean;
     {/ close any previous FillPrepare..FillOne loop
@@ -12717,9 +12730,17 @@ type
 
   /// ORM table used to store the deleted items of a versioned table
   // - the ID/RowID primary key of this table would be the version number
-  // (i.e. value computed by TSQLRestServer.InternalRecordVersionCompute) 
-  // - the ModifiedRecord published field will track the deleted row
-  TSQLRecordTableDeleted = class(TSQLRecordModification);
+  // (i.e. value computed by TSQLRestServer.InternalRecordVersionCompute),
+  // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
+  // TSQLRestServer.RecordVersionSynchronizeFrom could easily ask for the
+  // deleted rows of a given table with a single WHERE clause on the ID/RowID)
+  // - the Deleted published field will track the deleted row
+  TSQLRecordTableDeleted = class(TSQLRecord)
+  protected
+    fDeleted: TID;
+  published
+    property Deleted: TID read fDeleted write fDeleted;
+  end;
 
   /// class-reference type (metaclass) to specify the storage table to be used
   // for tracking TSQLRecord deletion
@@ -12970,6 +12991,7 @@ type
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
     fRecordVersionMax: integer;
+    fRecordVersionDeleteIgnore: boolean;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
@@ -13015,11 +13037,15 @@ type
     function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
     function InternalListRawUTF8(TableIndex: integer; const SQL: RawUTF8): RawUTF8;
     /// will retrieve the monotonic value of a TRecordVersion field from the DB
-    procedure InternalRecordVersionMaxFromExisting; virtual;
+    procedure InternalRecordVersionMaxFromExisting(RetrieveNext: PID); virtual;
     procedure InternalRecordVersionDelete(TableIndex: integer; ID: TID;
       Batch: TSQLRestBatch); virtual;
     procedure InternalRecordVersionHandle(var Decoder: TJSONObjectDecoder;
       RecordVersionField: TSQLPropInfoRTTIRecordVersion); virtual;
+    /// will compute the next monotonic value for a TRecordVersion field
+    // - you may override this method to customize the returned Int64 value
+    // (e.g. to support several synchronization nodes)
+    function InternalRecordVersionComputeNext: TID; virtual;
     /// this method is overridden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
     procedure SetNoAJAXJSON(const Value: boolean); virtual;
@@ -13173,8 +13199,14 @@ type
     // ensure that the updated ID fields will be computed as expected
     function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
     /// will compute the next monotonic value for a TRecordVersion field
-    // - you may override this method to customize the returned Int64 value
-    function InternalRecordVersionCompute: TID; virtual;
+    function RecordVersionCompute: TID; 
+    /// will retrieve all the updated from another (distant) TSQLRest for a
+    // given TSQLRecord table, using its TRecordVersion field
+    // - both remote Source and local TSQLRestSever should have the supplied
+    // aTable in their data model
+    // - returns 0 on error, or the latest retrieved version number
+    function RecordVersionSynchronize(aTable: TSQLRecordClass;
+      Source: TSQLRest): TRecordVersion; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -21899,7 +21931,6 @@ var EndOfObject: AnsiChar;
       end;
       end;
     end;
-    Inc(FieldValueLen,length(FieldValues[ndx]));
   end;
 
 var FieldName: RawUTF8;
@@ -21907,8 +21938,6 @@ var FieldName: RawUTF8;
     FieldIsRowID: Boolean;
 begin
   FieldCount := 0;
-  FieldValueLen := 0;
-  FieldNameLen := 0;
   DecodedRowID := 0;
   FillChar(FieldTypeApproximation,sizeof(FieldTypeApproximation),0);
   InlinedParams := Params=pInlined;
@@ -21921,8 +21950,6 @@ begin
         FieldNames[0] := 'RowID';
       FieldValues[0] := Int64ToUtf8(RowID); // Int64ToUtf8(RowID,FieldValues[0]) fails on D2007
       FieldCount := 1;
-      FieldNameLen := Length(FieldNames[0]);
-      FieldValueLen := Length(FieldValues[0]);
       DecodedRowID := RowID;
     end;
     repeat
@@ -21940,7 +21967,6 @@ begin
         end else
         if ReplaceRowIDWithID then
           FieldName := 'ID';
-      inc(FieldNameLen,length(FieldName));
       FieldNames[FieldCount] := FieldName;
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
@@ -21959,10 +21985,8 @@ begin
       raise EParsingException.Create('Too many inlines in TJSONObjectDecoder');
     DecodedFieldNames := pointer(Fields);
     FieldCount := length(Fields);
-    for F := 0 to FieldCount-1 do begin
-      inc(FieldNameLen,length(Fields[F]));
+    for F := 0 to FieldCount-1 do
       GetSQLValue(F); // update EndOfObject
-    end;
   end;
 end;
 
@@ -22014,7 +22038,7 @@ begin
       W.AddString(TableName);
       W.AddShort(' set ');
       for F := 0 to FieldCount-1 do begin // append 'COL1=?,COL2=?'
-        W.AddString(DecodedFieldNames[F]);
+        W.AddString(DecodedFieldNames^[F]);
         W.AddShort('=?,');
       end;
       W.CancelLastComma;
@@ -22025,13 +22049,15 @@ begin
     soInsert: begin
       if boInsertOrIgnore in BatchOptions then
         W.AddShort('insert or ignore into ') else
+      if boInsertOrReplace in BatchOptions then
+        W.AddShort('insert or replace into ') else
         W.AddShort('insert into ');
       W.AddString(TableName);
       if FieldCount=0 then
         W.AddShort(' default values') else begin
         W.Add(' ','(');
         for F := 0 to FieldCount-1 do begin // append 'COL1,COL2'
-          W.AddString(DecodedFieldNames[F]);
+          W.AddString(DecodedFieldNames^[F]);
           W.Add(',');
         end;
         W.CancelLastComma;
@@ -22051,80 +22077,65 @@ begin
 end;
 
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
-var F, Len: integer;
-    P: PUTF8Char;
+var F: integer;
+    W: TTextWriter;
+procedure AddValue;
+begin
+  if InlinedParams then
+    W.AddShort(':(');
+  W.AddString(FieldValues[F]);
+  if InlinedParams then
+    W.AddShort('):,') else
+    W.Add(',');
+end;
 begin
   result := '';
   if FieldCount=0 then
     exit;
-  if InlinedParams then
-    Len := FieldNameLen+FieldValueLen+6*FieldCount else
-    Len := FieldNameLen+FieldValueLen+2*FieldCount;
-  if Update then begin
-    // returns 'COL1='VAL1',COL2=VAL2' (UPDATE SET format)
-    SetLength(result,Len-1); // -1 for last ','
-    P := pointer(result);
-    for F := 0 to FieldCount-1 do begin
-      P := AppendRawUTF8ToBuffer(P,DecodedFieldNames[F]);
-      if InlinedParams then begin
-        PInteger(P)^ := Ord('=')+Ord(':')shl 8+Ord('(')shl 16;
-        inc(P,3);
-      end else begin
-        P^ := '=';
-        inc(P);
+  W := TTextWriter.CreateOwnedStream(2048);
+  try
+    if Update then begin
+      for F := 0 to FieldCount-1 do begin // append 'COL1=...,COL2=...'
+        W.AddString(DecodedFieldNames^[F]);
+        W.Add('=');
+        AddValue;
       end;
-      P := AppendRawUTF8ToBuffer(P,FieldValues[F]);
-      if InlinedParams then begin
-        PWord(P)^ := Ord(')')+Ord(':')shl 8;
-        P[2] := ',';
-        // PInteger(P)^ := Ord(')')+Ord(':')shl 8+Ord(',')shl 16; may corrupt mem
-        inc(P,3);
-      end else begin
-        P^ := ',';
-        inc(P);
+      W.CancelLastComma;
+    end else begin // returns ' (COL1,COL2) VALUES ('VAL1',VAL2)'
+      W.Add(' ','(');
+      for F := 0 to FieldCount-1 do begin // append 'COL1,COL2'
+        W.AddString(DecodedFieldNames^[F]);
+        W.Add(',');
       end;
+      W.CancelLastComma;
+      W.AddShort(') VALUES (');
+      for F := 0 to FieldCount-1 do
+        AddValue;
+      W.CancelLastComma;
+      W.Add(')');
     end;
-    dec(P);
-    P^ := #0; // trim last ','
-  end else begin
-    // returns ' (COL1,COL2) VALUES ('VAL1',VAL2)' (INSERT format)
-    SetLength(result,Len+11);
-    P := pointer(result);
-    PWord(P)^ := Ord(' ')+ord('(')shl 8;
-    inc(P,2);
-    for F := 0 to FieldCount-1 do begin
-      P := AppendRawUTF8ToBuffer(P,DecodedFieldNames[F]);
-      P^ := ',';
-      inc(P);
-    end;
-    P := AppendRawUTF8ToBuffer(P-1,') VALUES (');
-    for F := 0 to FieldCount-1 do begin
-      if InlinedParams then begin
-        PWord(P)^ := Ord(':')+Ord('(')shl 8;
-        inc(P,2);
-      end;
-      P := AppendRawUTF8ToBuffer(P,FieldValues[F]);
-      if InlinedParams then begin
-        PWord(P)^ := Ord(')')+Ord(':')shl 8;
-        P[2] := ',';
-        inc(P,3);
-      end else begin
-        P^ := ',';
-        inc(P);
-      end;
-    end;
-    P[-1] := ')';
+    W.SetText(result);
+  finally
+    W.Free;
   end;
-  Assert(P-pointer(result)=length(result));
 end;
 
-procedure TJSONObjectDecoder.AddField(const FieldName,FieldValue: RawUTF8);
+function TJSONObjectDecoder.FindFieldName(const FieldName: RawUTF8): integer;
+begin
+  for result := 0 to FieldCount-1 do
+    if IdemPropNameU(FieldNames[result],FieldName) then
+      exit; 
+  result := -1;
+end;
+
+procedure TJSONObjectDecoder.AddFieldValue(const FieldName,FieldValue: RawUTF8);
 begin
   if FieldCount=MAX_SQLFIELDS then
     raise EParsingException.CreateUTF8(
       'Too many fields for TJSONObjectDecoder.AddField(%)',[FieldName]);
   FieldNames[FieldCount] := FieldName;
   FieldValues[FieldCount] := FieldValue;
+  FieldTypeApproximation[FieldCount] := ftaNumber;
   inc(FieldCount);
 end;
 
@@ -24564,6 +24575,13 @@ begin
     result := fJoinedFields;
 end;
 
+function TSQLRecordFill.TableMapFields: TSQLFieldBits;
+begin
+  if self=nil then
+    fillchar(result,sizeof(result),0) else
+    result := fTableMapFields;
+end;
+
 procedure TSQLRecordFill.AddMap(aRecord: TSQLRecord; aField: TSQLPropInfo;
   aIndex: integer);
 begin
@@ -26945,10 +26963,10 @@ begin
   if self=nil then
     raise EModelException.Create('nil.GetTableIndexExisting');
   if aTable=nil then
-    raise EModelException.CreateUTF8('aTable=nil for % with root=%',[self,Root]);
+    raise EModelException.CreateUTF8('aTable=nil for % "%"',[self,Root]);
   result := GetTableIndex(aTable);
   if result<0 then
-    raise EModelException.CreateUTF8('% should be part of the % with root=%',
+    raise EModelException.CreateUTF8('% should be part of the % "%"',
       [aTable,self,Root]);
 end;
 
@@ -27324,6 +27342,9 @@ procedure TSQLRestBatch.Reset(aTable: TSQLRecordClass;
 begin
   fBatch.Free;
   fBatchCount := 0;
+  fAddCount := 0;
+  fUpdateCount := 0;
+  fDeleteCount := 0;
   fDeletedCount := 0;
   fBatch := TJSONSerializer.CreateOwnedStream;
   fBatch.Expand := true;
@@ -27410,6 +27431,7 @@ begin
   fBatch.Add(',');
   result := fBatchCount;
   inc(fBatchCount);
+  inc(fAddCount);
 end;
 
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
@@ -27429,6 +27451,7 @@ begin
   fBatch.Add(',');
   result := fBatchCount;
   inc(fBatchCount);
+  inc(fDeleteCount);
 end;
 
 function TSQLRestBatch.Delete(ID: TID): integer;
@@ -27445,6 +27468,7 @@ begin
   fBatch.Add(',');
   result := fBatchCount;
   inc(fBatchCount);
+  inc(fDeleteCount);
 end;
 
 function TSQLRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
@@ -27467,7 +27491,7 @@ begin
 end;
 
 function TSQLRestBatch.Update(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits): integer;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var Props: TSQLRecordProperties;
     FieldBits: TSQLFieldBits;
     ID, tableIndex: integer;
@@ -27497,7 +27521,8 @@ begin
   SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
     true,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
-  Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
+  if not DoNotAutoComputeFields then
+    Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
   Value.GetJSONValues(fBatch);
   fBatch.Add(',');
   if fCalledWithinRest and
@@ -27508,6 +27533,7 @@ begin
       RecordReference(tableIndex,ID));
   result := fBatchCount;
   inc(fBatchCount);
+  inc(fUpdateCount);
 end;
 
 
@@ -27958,9 +27984,9 @@ begin
       SQL := 'SELECT COUNT(*) FROM '+SQLTableName+' WHERE '+WhereClause else
     if (n=1) and IdemPChar(pointer(FieldName[0]),'MAX(') then begin
       L := length(FieldName[0]);
-      if (FieldName[L]<>')') or not IsFieldName(copy(FieldName[0],5,L-5)) then
+      if (FieldName[0][L]<>')') or not IsFieldName(copy(FieldName[0],5,L-5)) then
         exit; // prevent SQL error or security breach
-      SQL := 'SELECT '+FieldName[0];
+      SQL := 'SELECT '+FieldName[0]+' FROM '+SQLTableName;
       if WhereClause<>'' then
         SQL := SQL+' WHERE '+WhereClause;
     end else begin
@@ -31007,61 +31033,191 @@ begin
     result := '';
 end;
 
-procedure TSQLRestServer.InternalRecordVersionMaxFromExisting;
+const
+  SQLRECORDVERSION_DELETEID_SHIFT = 58;
+  SQLRECORDVERSION_DELETEID_RANGE = 1 shl SQLRECORDVERSION_DELETEID_SHIFT;
+  
+procedure TSQLRestServer.InternalRecordVersionMaxFromExisting(RetrieveNext: PID);
 var m: integer;
     field: TSQLPropInfoRTTIRecordVersion;
-    current,max: Int64;
+    current,max,mDeleted: Int64;
 begin
-  current := 0;
-  for m := 0 to Model.TablesMax do begin
-    field := Model.Tables[m].RecordProps.RecordVersionField;
-    if field<>nil then
-      if OneFieldValue(Model.Tables[m],'max('+field.Name+')','',[],[],max) then
-        if max>current then
-          current := max;
-  end;
-  if OneFieldValue(fSQLRecordVersionDeleteTable,'max(ID)','',[],[],max) and
-     (max>current) then
-    fRecordVersionMax := max else
+  fAcquireExecution[execORMWrite].Enter;
+  try
+    if fRecordVersionMax<>0 then
+      exit; // check twice to avoid race condition
+    current := 0;
+    for m := 0 to Model.TablesMax do begin
+      field := Model.Tables[m].RecordProps.RecordVersionField;
+      if field<>nil then begin
+        if OneFieldValue(Model.Tables[m],'max('+field.Name+')','',[],[],max) then
+          if max>current then
+            current := max;
+        mDeleted := Int64(m) shl SQLRECORDVERSION_DELETEID_SHIFT;
+        if OneFieldValue(fSQLRecordVersionDeleteTable,'max(ID)','ID>? and ID<?',
+           [],[mDeleted,mDeleted+SQLRECORDVERSION_DELETEID_RANGE],max) then begin
+          max := max and pred(SQLRECORDVERSION_DELETEID_RANGE);
+          if max>current then
+            current := max;
+        end;
+      end;
+    end;
+    if RetrieveNext<>nil then begin
+      inc(current);
+      RetrieveNext^ := current;
+    end;
     fRecordVersionMax := current;
+  finally
+    fAcquireExecution[execORMWrite].Leave;
+  end;
 end;
 
-function TSQLRestServer.InternalRecordVersionCompute: TID;
+function TSQLRestServer.InternalRecordVersionComputeNext: TID;
 begin
-  if fRecordVersionMax=0 then begin
-    fAcquireExecution[execORMWrite].Enter;
-    try
-      if fRecordVersionMax=0 then // check twice to avoid race condition
-        InternalRecordVersionMaxFromExisting;
-      result := InterlockedIncrement(fRecordVersionMax);
-    finally
-      fAcquireExecution[execORMWrite].Leave;
-    end;
-  end else
+  if fRecordVersionMax=0 then
+    InternalRecordVersionMaxFromExisting(@result) else
     result := InterlockedIncrement(fRecordVersionMax);
-end;          
+end;
+
+function TSQLRestServer.RecordVersionCompute: TID;
+begin
+  result := InternalRecordVersionComputeNext;
+  if result>=SQLRECORDVERSION_DELETEID_RANGE then
+    raise EORMException.CreateUTF8('%.InternalRecordVersionCompute=% overflow: '+
+      '%.ID should be < 2^%)',[self,result,fSQLRecordVersionDeleteTable,
+      SQLRECORDVERSION_DELETEID_SHIFT]);
+end;
 
 procedure TSQLRestServer.InternalRecordVersionHandle(
   var Decoder: TJSONObjectDecoder; RecordVersionField: TSQLPropInfoRTTIRecordVersion);
 begin
-  if RecordVersionField<>nil then
-    Decoder.AddField(
-      RecordVersionField.Name,Int64ToUtf8(InternalRecordVersionCompute));
+  if RecordVersionField=nil then
+    exit; // no TRecordVersion field to track
+  if Decoder.FindFieldName(RecordVersionField.Name)<0 then
+    // only compute new monotonic TRecordVersion if not already supplied by sender 
+    Decoder.AddFieldValue(RecordVersionField.Name,Int64ToUtf8(RecordVersionCompute));
 end;
 
 procedure TSQLRestServer.InternalRecordVersionDelete(TableIndex: integer;
   ID: TID; Batch: TSQLRestBatch);
 var deleted: TSQLRecordTableDeleted;
-begin 
+begin
+  if fRecordVersionDeleteIgnore then
+    exit;
   deleted := fSQLRecordVersionDeleteTable.Create;
   try
-    deleted.IDValue := InternalRecordVersionCompute;
-    deleted.ModifiedRecord := RecordReference(TableIndex,ID);
+    deleted.IDValue := RecordVersionCompute+
+      Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+    deleted.Deleted := ID;
     if Batch<>nil then
       Batch.Add(deleted,True,True) else
       Add(deleted,True,True);
   finally
     deleted.Free;
+  end;
+end;
+
+function TSQLRestServer.RecordVersionSynchronize(aTable: TSQLRecordClass;
+  Source: TSQLRest): TRecordVersion;
+var TableIndex,UpdatedRow,DeletedRow: integer;
+    Props: TSQLRecordProperties;
+    UpdatedVersion,DeletedVersion: TRecordVersion;
+    ListUpdated,ListDeleted: TSQLTableJSON;
+    Writer: TSQLRestBatch;
+    Rec: TSQLRecord;
+    DeletedMinID: TID;
+    Deleted: TSQLRecordTableDeleted;
+    IDs: TIDDynArray;
+begin
+  result := 0;
+  {$ifdef WITHLOG}
+  fLogClass.Enter(self);
+  {$endif}
+  if Source=nil then
+    raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Source=nil)',[self]);
+  TableIndex := Model.GetTableIndexExisting(aTable);
+  Props := Model.TableProps[TableIndex].Props;
+  if Props.RecordVersionField=nil then
+    raise EORMException.CreateUTF8(
+      '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,aTable]);
+  fAcquireExecution[execORMWrite].Enter;
+  try
+    if fRecordVersionMax=0 then
+      InternalRecordVersionMaxFromExisting(nil);
+    ListUpdated := Source.MultiFieldValues(aTable,'*','%>? order by %',
+      [Props.RecordVersionField.Name,Props.RecordVersionField.Name],[fRecordVersionMax]);
+    ListDeleted := nil;
+    if ListUpdated<>nil then
+    try
+      DeletedMinID := Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+      ListDeleted := Source.MultiFieldValues(fSQLRecordVersionDeleteTable,'ID,Deleted',
+        'ID>? and ID<?',
+         [DeletedMinID+fRecordVersionMax,DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
+      if (ListUpdated.RowCount=0) and (ListDeleted.RowCount=0) then begin
+        result := fRecordVersionMax;
+        exit; // nothing new
+      end;
+      Rec := aTable.Create;
+      Deleted := fSQLRecordVersionDeleteTable.Create;
+      Writer := TSQLRestBatch.Create(self,nil,10000);
+      try // apply all changes in increasing version order
+        fRecordVersionDeleteIgnore := True;
+        Rec.FillPrepare(ListUpdated);
+        Deleted.FillPrepare(ListDeleted);
+        UpdatedRow := 1;
+        DeletedRow := 1;
+        UpdatedVersion := 0;
+        DeletedVersion := 0;
+        result := 0;
+        repeat
+          if UpdatedVersion=0 then
+            if UpdatedRow<=ListUpdated.RowCount then begin
+              Rec.FillRow(UpdatedRow);
+              UpdatedVersion := Props.RecordVersionField.PropInfo.GetInt64Prop(Rec);
+              inc(UpdatedRow);
+            end;
+          if DeletedVersion=0 then
+            if DeletedRow<=ListDeleted.RowCount then begin
+              Deleted.FillRow(DeletedRow);
+              DeletedVersion := Deleted.ID and pred(SQLRECORDVERSION_DELETEID_RANGE);
+              inc(DeletedRow);
+            end;
+          if (UpdatedVersion=0) and (DeletedVersion=0) then
+            break; // no more update available
+          if (UpdatedVersion>0) and
+             ((DeletedVersion=0) or (UpdatedVersion<DeletedVersion)) then begin
+            if (fRecordVersionMax=0) or
+               (OneFieldValue(aTable,'ID',Rec.IDValue)='') then
+              Writer.Add(Rec,true,true,Rec.FillContext.TableMapFields,true) else
+              Writer.Update(Rec,[],true);
+            fRecordVersionMax := UpdatedVersion;
+            UpdatedVersion := 0;
+          end else
+          if DeletedVersion>0 then begin
+            Writer.Delete(aTable,Deleted.Deleted);
+            Writer.Add(Deleted,true,true,[],true);
+            fRecordVersionMax := DeletedVersion;
+            DeletedVersion := 0;
+          end;
+        until false;
+        if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
+          result := fRecordVersionMax;
+          InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
+            [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Source],sllDebug);
+        end else
+          InternalLog('%.RecordVersionSynchronize BatchSend() failed',[ClassType],sllError);
+      finally
+        fRecordVersionDeleteIgnore := false;
+        Writer.Free;
+        Deleted.Free;
+        Rec.Free;
+      end;
+    finally
+      ListUpdated.Free;
+      ListDeleted.Free;
+    end;
+  finally
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 
@@ -34858,6 +35014,7 @@ end;
 
 destructor TSQLRestServerMonitor.Destroy;
 begin
+  TSQLLog.Enter(self);
   ObjArrayClear(fPerTable[false]);
   ObjArrayClear(fPerTable[true]);
   inherited;
@@ -34872,6 +35029,7 @@ end;
 
 procedure TSQLRestServerMonitor.ClientDisconnect;
 begin
+  TSQLLog.Enter(self);
   if fClientsCurrent>0 then
     dec(fClientsCurrent);
 end;
