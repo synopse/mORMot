@@ -12734,12 +12734,14 @@ type
   // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
   // TSQLRestServer.RecordVersionSynchronizeFrom could easily ask for the
   // deleted rows of a given table with a single WHERE clause on the ID/RowID)
-  // - the Deleted published field will track the deleted row
   TSQLRecordTableDeleted = class(TSQLRecord)
   protected
-    fDeleted: TID;
+    fDeleted: Int64;
   published
-    property Deleted: TID read fDeleted write fDeleted;
+    /// this Deleted published field will track the deleted row
+    // - defined as Int64 and not TID, to avoid the generation of the index on
+    // this column, which is not needed here (all requests are about ID/RowID) 
+    property Deleted: Int64 read fDeleted write fDeleted;
   end;
 
   /// class-reference type (metaclass) to specify the storage table to be used
