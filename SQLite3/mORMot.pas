@@ -11184,7 +11184,24 @@ type
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8=''): RawJSON;
+      const aCustomFieldsCSV: RawUTF8=''): RawJSON; overload;
+    /// get a list of members from a SQL statement as RawJSON
+    // - implements REST GET collection
+    // - this overloaded version expect the SQLWhere clause to be already
+    // prepared with inline parameters using a previous FormatUTF8() call
+    // - aCustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - returns the raw JSON array content with all items on success, with
+    // our expanded / not expanded JSON format - so can be used with SOA methods
+    // and RawJSON results, for direct process from the client side
+    // - returns '' on error
+    // - the data is directly retrieved from raw JSON as returned by the database
+    // without any conversion, so this method would be the fastest, but complex
+    // types like dynamic array would be returned as Base64-encoded blob value -
+    // if you need proper JSON access to those, see RetrieveDocVariantArray()
+    function RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
+      const aCustomFieldsCSV: RawUTF8=''): RawJSON; overload;
     {$ifndef NOVARIANTS}
     /// get a list of all members from a SQL statement as a TDocVariant
     // - implements REST GET collection
@@ -28011,10 +28028,16 @@ end;
 
 function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): RawJSON;
+begin
+  result := RetrieveListJSON(Table,
+    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),aCustomFieldsCSV)
+end;
+
+function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
+  const aCustomFieldsCSV: RawUTF8): RawJSON;
 var sql: RawUTF8;
 begin
-  sql := SQLComputeForSelect(Table,aCustomFieldsCSV,
-    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
+  sql := SQLComputeForSelect(Table,aCustomFieldsCSV,SQLWhere);
   if sql='' then
     result := '' else
     result := EngineList(sql);
