@@ -30422,10 +30422,21 @@ end;
 
 function TDocVariantData.InitJSON(const JSON: RawUTF8;
   aOptions: TDocVariantOptions): boolean;
-var tmp: RawUTF8;
+var tmp: pointer;
+    buf: array[0..511] of AnsiChar; // avoid memory allocation in most cases
+    L: integer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make private copy
-  result := InitJSONInPlace(pointer(tmp),aOptions)<>nil;
+  L := length(JSON);
+  if L<sizeof(buf) then
+    tmp := @buf else
+    GetMem(tmp,L+1); // +1 to include ending #0
+  Move(Pointer(JSON)^,tmp^,L+1); // make private copy
+  try
+    result := InitJSONInPlace(tmp,aOptions)<>nil;
+  finally
+    if tmp<>@buf then
+      FreeMem(tmp);
+  end;
 end;
 
 procedure TDocVariantData.InitCopy(const SourceDocVariant: variant;
