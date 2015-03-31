@@ -6488,7 +6488,7 @@ type
     fFieldLengthMean: TIntegerDynArray;
     fFieldLengthMeanSum: integer;
   protected
-    fRowCount,
+    fRowCount: integer;
     fFieldCount: integer;
     /// contains the data, as returned by sqlite3_get_table()
     fResults: PPUTF8CharArray;
@@ -19388,7 +19388,7 @@ function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char
 var Index: integer;
 begin
   Index := FieldIndex(pointer(FieldName));
-  if (Index<0) or (cardinal(Row-1)>=cardinal(RowCount)) then
+  if (Index<0) or (cardinal(Row-1)>=cardinal(fRowCount)) then
     result := nil else
     result := fResults[Index+Row*FieldCount];
 end;
@@ -19403,14 +19403,14 @@ begin
     SetLength(oldIDColumn,n);
     move(fIDColumn[0],oldIDColumn[0],n*sizeof(PUTF8Char));
   end;
-  i := (RowCount+1)*FieldCount;
+  i := (fRowCount+1)*FieldCount;
   SetLength(oldResults,i);
   move(fResults[0],oldResults[0],i*sizeof(PUTF8Char));
   // put marked IDs first
   n := 1; // copy row data (first row=0 i.e. idents is left as it is)
   R := @fResults[FieldCount];
   j := FieldCount;
-  for i := 1 to RowCount do begin
+  for i := 1 to fRowCount do begin
     if GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
@@ -19423,7 +19423,7 @@ begin
   nSet := n-1;
   // put unmarked IDs
   j := FieldCount;
-  for i := 1 to RowCount do begin
+  for i := 1 to fRowCount do begin
     if not GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
@@ -19433,9 +19433,9 @@ begin
     end;
     inc(j,FieldCount);
   end;
-  assert(n-1=RowCount);
+  assert(n-1=fRowCount);
   // recalcultate Bits[]
-  fillchar(Bits,(RowCount shr 3)+1,0);
+  fillchar(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
     SetBit(Bits,i); // slow but accurate
 end;
@@ -19453,14 +19453,14 @@ begin
     exit; // no 'ID' field
   // 2. alloc new arrays of PUTF8Char
   dec(fFieldCount);
-  R := RowCount+1;
+  R := fRowCount+1;
   SetLength(fIDColumn,R);               // will contain the ID column data
   SetLength(fNotIDColumn,R*FieldCount); // will be the new fResults[]
   // 3. copy fResults[] into new arrays
   S := @fResults[0];
   D1 := @fNotIDColumn[0];
   D2 := @fIDColumn[0];
-  for R := 0 to RowCount do
+  for R := 0 to fRowCount do
     for F := 0 to FieldCount do begin // we have FieldCount := FieldCount-1
       if F<>FID then begin
         D1^ := S^; // copy not ID column into fNotIDColumn[]
@@ -19478,7 +19478,7 @@ end;
 
 function TSQLTable.IDColumnHiddenValue(Row: integer): TID;
 begin
-  if (self=nil) or (fResults=nil) or (Row<=0) or (Row>RowCount) then
+  if (self=nil) or (fResults=nil) or (Row<=0) or (Row>fRowCount) then
     result := 0 else
     if Assigned(fIDColumn) then // get hidden ID column UTF-8 content
       SetID(fIDColumn[Row],result) else
@@ -19496,8 +19496,8 @@ begin
       exit;
   end else
     FID := 0; // make compiler happy
-  n := GetBitsCount(Bits,RowCount);
-  if n=RowCount then begin
+  n := GetBitsCount(Bits,fRowCount);
+  if n=fRowCount then begin
     IDColumnHiddenValues(IDs); // all selected -> direct get all IDs
     exit;
   end;
@@ -19506,14 +19506,14 @@ begin
     exit;
   n := 0;
   if Assigned(fIDColumn) then begin
-    for i := 1 to RowCount do
+    for i := 1 to fRowCount do
     if GetBit(Bits,i-1) then begin
       IDs[n] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
       inc(n);
     end;
   end else begin
     inc(FID,FieldCount); // [i*FieldCount+FID] = [(i+1)*FieldCount+FID] below
-    for i := 0 to RowCount-1 do
+    for i := 0 to fRowCount-1 do
     if GetBit(Bits,i) then begin
       IDs[n] := GetInt64(fResults[i*FieldCount+FID]); // get ID column UTF-8 content
       inc(n);
@@ -19525,7 +19525,7 @@ procedure TSQLTable.IDColumnHiddenValues(var IDs: TIDDynArray);
 var n, i, FID: integer;
     U: PPUTF8Char;
 begin
-  n := RowCount;
+  n := fRowCount;
   if not Assigned(fIDColumn) then begin
     FID := fFieldIndexID; // get ID column field index
     if FID<0 then
@@ -19536,11 +19536,11 @@ begin
   if n=0 then
     exit;
   if Assigned(fIDColumn) then begin
-    for i := 1 to RowCount do
+    for i := 1 to fRowCount do
       IDs[i-1] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
-    for i := 0 to RowCount-1 do begin
+    for i := 0 to fRowCount-1 do begin
       IDs[i] := GetInt64(U^);
       inc(U,FieldCount);
     end;
@@ -19604,33 +19604,33 @@ begin
     // search aID as UTF-8 in fIDColumn[] or fResults[]
     Int64ToUtf8(aID,ID);
     if Assigned(fIDColumn) then begin // get hidden ID column UTF-8 content
-      for result := 1 to RowCount do
+      for result := 1 to fRowCount do
         if StrComp(fIDColumn[result],pointer(ID))=0 then
           exit;
     end else begin
       FID := fFieldIndexID;  // get ID column field index
       if FID>=0 then begin
         U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
-        for result := 1 to RowCount do
+        for result := 1 to fRowCount do
           if StrComp(U^,pointer(ID))=0 then
             exit else
             inc(U,FieldCount);
       end;
     end;
   end;
-  result := RowCount; // not found -> return last row index
+  result := fRowCount; // not found -> return last row index
 end;
 
 procedure TSQLTable.DeleteRow(Row: integer);
 begin
-  if (Row<1) or (Row>RowCount) then
+  if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
   if Assigned(fIDColumn) then
-    if Row<RowCount then
-      move(fIDColumn[Row+1],fIDColumn[Row],(RowCount-Row)*sizeof(PUTF8Char));
-  if Row<RowCount then begin
+    if Row<fRowCount then
+      move(fIDColumn[Row+1],fIDColumn[Row],(fRowCount-Row)*sizeof(PUTF8Char));
+  if Row<fRowCount then begin
     Row := Row*FieldCount; // convert row index into position in fResults[]
-    move(fResults[Row+FieldCount],fResults[Row],(RowCount*FieldCount-Row)*sizeof(pointer));
+    move(fResults[Row+FieldCount],fResults[Row],(fRowCount*FieldCount-Row)*sizeof(pointer));
   end;
   dec(fRowCount);
 end;
@@ -19658,7 +19658,7 @@ var Values: TVariantDynArray;
     V: PPUtf8CharArray;
     f: integer;
 begin
-  if (self=nil) or (Row<1) or (Row>RowCount) then
+  if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
   if length(fFieldNames)<>fFieldCount then
     InitFieldNames;
@@ -19675,20 +19675,20 @@ end;
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
 var r: integer;
 begin
-  if (self=nil) or (RowCount=0) then
+  if (self=nil) or (fRowCount=0) then
     exit;
-  SetLength(docs,RowCount);
+  SetLength(docs,fRowCount);
   if readonly then begin
     if SQLTableRowVariantType=nil then
       SQLTableRowVariantType := SynRegisterCustomVariantType(TSQLTableRowVariant);
-    for r := 0 to RowCount-1 do
+    for r := 0 to fRowCount-1 do
     with TSQLTableRowVariantData(docs[r]) do begin
       VType := SQLTableRowVariantType.VarType;
       VTable := self;
       VRow := r+1;
     end;
   end else
-    for r := 0 to RowCount-1 do
+    for r := 0 to fRowCount-1 do
       ToDocVariant(r+1,docs[r]);
 end;
 
@@ -19708,7 +19708,7 @@ begin
   if cardinal(Field)>=cardinal(FieldCount) then
     exit; // out of range
   U := @fResults[Field+FieldCount];  // U^ = column UTF-8 content for this field
-  for i := 1 to RowCount do begin
+  for i := 1 to fRowCount do begin
     U^[0] := #0; // just void UTF-8 content text
     inc(U,FieldCount);
   end;
@@ -19834,7 +19834,7 @@ begin
       // not found from fQueryTables/fQueryColumnTypes[]: get from content
       if IsRowID(fResults[f]) then
         FieldType := sftInteger else
-      for i := 1 to RowCount do begin
+      for i := 1 to fRowCount do begin
         FieldType := UTF8ContentType(fResults[i*FieldCount+f]);
         if FieldType<>sftUnknown then begin
           if (FieldType in [sftInteger,sftFloat]) and
@@ -19879,7 +19879,7 @@ end;
 
 function TSQLTable.Get(Row, Field: integer): PUTF8Char;
 begin
-  if (self=nil) or (fResults=nil) or (cardinal(Row)>cardinal(RowCount)) or
+  if (self=nil) or (fResults=nil) or (cardinal(Row)>cardinal(fRowCount)) or
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := nil else
     result := fResults[Row*FieldCount+Field];
@@ -19888,7 +19888,7 @@ end;
 function TSQLTable.GetU(Row,Field: integer): RawUTF8;
 var P: PUTF8Char;
 begin
-  if (self=nil) or (fResults=nil) or (cardinal(Row)>cardinal(RowCount)) or
+  if (self=nil) or (fResults=nil) or (cardinal(Row)>cardinal(fRowCount)) or
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
@@ -20176,9 +20176,9 @@ begin
   Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) then
     exit;
-  SetLength(Values,RowCount);
+  SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  for i := 0 to RowCount-1 do begin
+  for i := 0 to fRowCount-1 do begin
     SetString(Values[i],PAnsiChar(U^),StrLen(U^));
     inc(U,FieldCount); // go to next row
   end;
@@ -20191,9 +20191,9 @@ begin
   Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) then
     exit;
-  SetLength(Values,RowCount);
+  SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  for i := 0 to RowCount-1 do begin
+  for i := 0 to fRowCount-1 do begin
     SetInt64(U^,Values[i]);
     inc(U,FieldCount); // go to next row
   end;
@@ -20205,11 +20205,11 @@ var i, L: integer;
     P: PUTF8Char;
 begin
   result := '';
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (RowCount=0) then
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   L := 0;
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  for i := 1 to RowCount do begin
+  for i := 1 to fRowCount do begin
     inc(L,StrLen(U^)+1);
     inc(U,FieldCount); // go to next row
   end;
@@ -20218,10 +20218,10 @@ begin
   SetLength(result,L-1); // L-1 = don't add a last ','
   P := pointer(result);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  for i := 1 to RowCount do begin
+  for i := 1 to fRowCount do begin
     L := StrLen(U^);
     move(U^^,P^,L);
-    if i=RowCount then // don't add a last ','
+    if i=fRowCount then // don't add a last ','
       break;
     P[L] := Sep;
     inc(P,L+1);
@@ -20238,15 +20238,15 @@ var W: TJSONWriter;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
-    if (self=nil) or (FieldCount<=0) or (RowCount<=0) then begin
+    if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then begin
       W.CancelAllVoid;
       exit;
     end;
     // check range
     if RowLast=0 then
-      RowLast := RowCount else
-    if RowLast>RowCount then
-      RowLast := RowCount;
+      RowLast := fRowCount else
+    if RowLast>fRowCount then
+      RowLast := fRowCount;
     if RowFirst<=0 then
       RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
     // get col names and types
@@ -20303,7 +20303,7 @@ var U: PPUTF8Char;
     F,R,FMax: integer;
     W: TTextWriter;
 begin
-  if (self=nil) or (FieldCount<=0) or (RowCount<=0) then
+  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
     exit;
   W := TTextWriter.Create(Dest,16384);
   try
@@ -20313,7 +20313,7 @@ begin
       CommaSep := #9;
     FMax := FieldCount-1;
     U := pointer(fResults);
-    for R := 0 to RowCount do
+    for R := 0 to fRowCount do
       for F := 0 to FMax do begin
         if Tab or (not IsStringJSON(U^)) then
           W.AddNoJSONEscape(U^) else begin
@@ -20348,7 +20348,7 @@ begin
     W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" '+
       'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" '+
       'xmlns:rs="urn:schemas-microsoft-com:rowset" xmlns:z="#RowsetSchema">');
-    if (self<>nil) and (FieldCount>0) or (RowCount>0) then begin
+    if (self<>nil) and (FieldCount>0) or (fRowCount>0) then begin
       // retrieve normalized field names and types
       if length(fFieldNames)<>fFieldCount then
         InitFieldNames;
@@ -20359,9 +20359,9 @@ begin
         fieldType[f] := SQLFieldTypeToDB[fFieldType[f].ContentType];
       // check range
       if RowLast=0 then
-        RowLast := RowCount else
-      if RowLast>RowCount then
-        RowLast := RowCount;
+        RowLast := fRowCount else
+      if RowLast>fRowCount then
+        RowLast := fRowCount;
       if RowFirst<=0 then
         RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
       // write schema from col names and types
@@ -20461,7 +20461,7 @@ begin
         W.Add(FieldCount);
         W.AddShort('" />');
         U := pointer(fResults);
-        for R := 0 to RowCount do begin
+        for R := 0 to fRowCount do begin
           W.AddShort('<table:table-row>');
           for F := 1 to FieldCount do begin
             W.AddShort('<table:table-cell office:value-type="string"><text:p>');
@@ -20918,8 +20918,8 @@ begin
   if PCurrentRow=nil then
     Sort.CurrentRow := -1 else
     Sort.CurrentRow := PCurrentRow^;
-  if RowCount>1 then
-    Sort.QuickSort(1,RowCount); // ignore first row = field names -> (1,RowCount)
+  if fRowCount>1 then
+    Sort.QuickSort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
   if PCurrentRow<>nil then
     PCurrentRow^ := Sort.CurrentRow;
 end;
@@ -21001,7 +21001,7 @@ procedure TSQLTable.SortFields(const Fields: array of integer;
 var Sort: TUTF8QuickSortMulti;
     i: integer;
 begin
-  if (self=nil) or (RowCount<=1) or (FieldCount<=0) or (length(Fields)=0) then
+  if (self=nil) or (fRowCount<=1) or (FieldCount<=0) or (length(Fields)=0) then
     exit;
   Sort.FieldCount := FieldCount;
   Sort.IndexMax := high(Fields);
@@ -21027,7 +21027,7 @@ begin
       Sort.Index[i].Desc := true;
   Sort.Results := fResults;
   Sort.IDColumn := @fIDColumn[0];
-  Sort.QuickSort(1,RowCount); // ignore first row = field names -> (1,RowCount)
+  Sort.QuickSort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
 end;
 
 function TSQLTable.SortCompare(Field: integer): TUTF8Compare;
@@ -21104,19 +21104,19 @@ var R,Item: TSQLRecord;
     i: integer;
 begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
-  if (self=nil) or (RowCount=0) then
+  if (self=nil) or (fRowCount=0) then
     exit;
   R := TSQLRecordClass(T).Create;
   try
     R.FillPrepare(self);
     Row := @fResults[FieldCount];     // Row^ points to first row of data
     {$ifdef ISDELPHIXE3}
-    result.Count := RowCount;         // faster than manual Add()
-    for i := 0 to RowCount-1 do begin
+    result.Count := fRowCount;         // faster than manual Add()
+    for i := 0 to fRowCount-1 do begin
       Item := TSQLRecordClass(T).Create;
       PPointerArray(result.List)[i] := Item;
     {$else}
-    for i := 0 to RowCount-1 do begin
+    for i := 0 to fRowCount-1 do begin
       Item := TSQLRecordClass(T).Create;
       Result.Add(Item);
     {$endif}
@@ -21137,7 +21137,7 @@ begin
   if DestList=nil then
     exit;
   DestList.Clear;
-  if (self=nil) or (RowCount=0) then
+  if (self=nil) or (fRowCount=0) then
     exit;
   if RecordType=nil then begin
     RecordType := QueryRecordType;
@@ -21147,9 +21147,9 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    DestList.Count := RowCount;       // faster than manual Add()
+    DestList.Count := fRowCount;       // faster than manual Add()
     Row := @fResults[FieldCount];     // Row^ points to first row of data
-    for i := 0 to RowCount-1 do begin // TObjectList will free each instance
+    for i := 0 to fRowCount-1 do begin // TObjectList will free each instance
       DestList.List[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),TSQLRecord(DestList.List[i]));
       Inc(Row,FieldCount); // next data row
@@ -21175,14 +21175,14 @@ begin
       exit;
   end;
   result := true;
-  if RowCount=0 then
+  if fRowCount=0 then
     exit;
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    SetLength(arr,RowCount);        // faster than manual Add()
+    SetLength(arr,fRowCount);        // faster than manual Add()
     Row := @fResults[FieldCount];   // Row^ points to first row of data
-    for i := 0 to RowCount-1 do begin
+    for i := 0 to fRowCount-1 do begin
       arr[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),arr[i]);
       Inc(Row,FieldCount); // next data row
@@ -21304,7 +21304,7 @@ begin
   // 1. count of every possible enumerated value into EnumCounts[]
   SetLength(EnumCounts,P^.MaxValue+1); // EnumCounts[] := 0
   U := @fResults[FieldCount+F]; // start reading after first Row (= Field Names)
-  for R := 1 to RowCount do begin
+  for R := 1 to fRowCount do begin
     n := GetInteger(U^);
     if n<=P^.MaxValue then // update count of every enumerated value
       inc(EnumCounts[n]) else
@@ -21328,7 +21328,7 @@ begin
     result := fFieldLengthMeanSum;
     exit;
   end;
-  if RowCount=0 then begin
+  if fRowCount=0 then begin
     // no data: calculate field length from first row (i.e. Field Names)
     U := @fResults[0];
     for F := 0 to FieldCount-1 do begin
@@ -21340,7 +21340,7 @@ begin
     if not Assigned(fFieldType) then
       InitFieldTypes;
     U := @fResults[FieldCount]; // start reading after first Row
-    for R := 1 to RowCount do // sum all lengths by field
+    for R := 1 to fRowCount do // sum all lengths by field
       for F := 0 to FieldCount-1 do begin
         case fFieldType[F].ContentType of
         sftInteger, sftBlob, sftBlobCustom, sftUTF8Custom, sftRecord,
@@ -21359,7 +21359,7 @@ begin
           CalculateEnumerates(F,ContentTypeInfo);
         end;
     end;
-    Tot := RowCount;
+    Tot := fRowCount;
   end;
   result := 0;
   for F := 0 to FieldCount-1 do begin
@@ -21414,7 +21414,7 @@ begin
       end else begin
         // compute by reading all data rows
         U := @fResults[FieldCount+Field];
-        for i := 1 to RowCount do begin
+        for i := 1 to fRowCount do begin
           len := StrLen(U^);
           if len>result then
             result := len;
@@ -21488,7 +21488,7 @@ var U: PPUTF8Char;
     tmp: array[0..23] of AnsiChar;
 begin
   result := 0;
-  if (StartRow<=0) or (StartRow>RowCount) or (aUpperValue='') or
+  if (self=nil) or (StartRow<=0) or (StartRow>fRowCount) or (aUpperValue='') or
      (cardinal(FieldIndex)>=cardinal(FieldCount)) then
     exit;
   Search := pointer(aUpperValue);
@@ -21526,7 +21526,7 @@ begin
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
-    while cardinal(result)<=cardinal(RowCount) do begin
+    while cardinal(result)<=cardinal(fRowCount) do begin
       i := GetInteger(U^,err);
       if (err=0) and (i in EnumValues) then
         exit; // we found a matching field
@@ -21538,7 +21538,7 @@ begin
   end;
   // special cases: conversion from INTEGER to text before search
   if Kind in [sftTimeLog,sftModTime,sftCreateTime] then
-    while cardinal(result)<=cardinal(RowCount) do begin
+    while cardinal(result)<=cardinal(fRowCount) do begin
       SetInt64(U^,Val64);
       if Val64<>0 then begin
         tmp[TTimeLogBits(Val64).Text(tmp,true,' ')] := #0;
@@ -21551,7 +21551,7 @@ begin
   else
   if ((Kind in [sftRecord,sftID,sftTID]) and
      (Client<>nil) and Client.InheritsFrom(TSQLRest) and (CL.Model<>nil)) then
-    while cardinal(result)<=cardinal(RowCount) do begin
+    while cardinal(result)<=cardinal(fRowCount) do begin
       SetInt64(U^,Val64);
       if Val64<>0 then begin
         if Kind=sftRecord then
@@ -21568,7 +21568,7 @@ begin
   else
   // by default, search as UTF-8 encoded text
   if Lang<>sndxNone then begin
-    while cardinal(result)<=cardinal(RowCount) do
+    while cardinal(result)<=cardinal(fRowCount) do
     if SoundEx.UTF8(U^) then
       exit else begin
       inc(U,FieldCount); // ignore all other fields -> jump to next row data
@@ -21578,7 +21578,7 @@ begin
   if UnicodeComparison then begin
     // slowest but always accurate Unicode comparison
     UpperUnicode := UTF8DecodeToRawUnicodeUI(RawUTF8(Search),@UpperUnicodeLen);
-    while cardinal(result)<=cardinal(RowCount) do
+    while cardinal(result)<=cardinal(fRowCount) do
     if FindUnicode(pointer(Utf8DecodeToRawUnicode(U^,0)),
        pointer(UpperUnicode),UpperUnicodeLen) then
       exit else begin
@@ -21587,7 +21587,7 @@ begin
     end
   end else
     // default fast Win1252 search
-    while cardinal(result)<=cardinal(RowCount) do
+    while cardinal(result)<=cardinal(fRowCount) do
     if FindUTF8(U^,Search) then
       exit else begin
       inc(U,FieldCount); // ignore all other fields -> jump to next row data
@@ -21602,7 +21602,7 @@ function TSQLTable.SearchValue(const aUpperValue: RawUTF8;
 var F, Row: integer;
 begin
   result := 0;
-  if (self=nil) or (StartRow<=0) or (StartRow>RowCount) or (aUpperValue='') then
+  if (self=nil) or (StartRow<=0) or (StartRow>fRowCount) or (aUpperValue='') then
     exit;
   // search in all fields values
   for F := 0 to FieldCount-1 do begin
@@ -21620,7 +21620,7 @@ begin
   result := 0;
   if (self=nil) or (aValue='') or (cardinal(FieldIndex)>cardinal(fFieldCount)) then
     exit;
-  for result := 1 to RowCount do
+  for result := 1 to fRowCount do
     if UTF8IComp(Get(result,FieldIndex),pointer(aValue))=0 then
       exit;
   result := 0;
@@ -22428,7 +22428,7 @@ begin
       exit;
     end;
     // 2. initialize and fill fResults[] PPUTF8CharArray memory
-    max := (RowCount+1)*FieldCount;
+    max := (fRowCount+1)*FieldCount;
     SetLength(fJSONResults,max);
     fResults := @fJSONResults[0];
     // unescape+zeroify JSONData + fill fResults[] to proper place
@@ -24657,7 +24657,7 @@ end;
 
 function TSQLRecordFill.Fill(aRow: integer): Boolean;
 begin
-  if (self=nil) or (Table=nil) or (cardinal(aRow)>cardinal(Table.RowCount)) then
+  if (self=nil) or (Table=nil) or (cardinal(aRow)>cardinal(Table.fRowCount)) then
     Result := False else begin
     Fill(@Table.fResults[aRow*Table.FieldCount]);
     Result := True;
@@ -24667,7 +24667,7 @@ end;
 function TSQLRecordFill.Fill(aRow: integer; aDest: TSQLRecord): Boolean;
 begin
   if (self=nil) or (aDest=nil) or
-     (Table=nil) or (cardinal(aRow)>cardinal(Table.RowCount)) then
+     (Table=nil) or (cardinal(aRow)>cardinal(Table.fRowCount)) then
     Result := False else begin
     Fill(@Table.fResults[aRow*Table.FieldCount],aDest);
     Result := True;
@@ -25043,8 +25043,8 @@ end;
 function TSQLRecord.FillOne: boolean;
 begin
   if (self=nil) or (fFill=nil) or (fFill.Table=nil) or
-     (fFill.Table.RowCount=0) or // also check if FillTable is emtpy
-     (cardinal(fFill.FillCurrentRow)>cardinal(fFill.Table.RowCount)) then
+     (fFill.Table.fRowCount=0) or // also check if FillTable is emtpy
+     (cardinal(fFill.FillCurrentRow)>cardinal(fFill.Table.fRowCount)) then
     result := false else begin
     FillRow(fFill.FillCurrentRow);
     inc(fFill.fFillCurrentRow);
@@ -25054,7 +25054,7 @@ end;
 
 function TSQLRecord.FillRewind: boolean;
 begin
-  if (self=nil) or (fFill=nil) or (fFill.Table=nil) or (fFill.Table.RowCount=0) then
+  if (self=nil) or (fFill=nil) or (fFill.Table=nil) or (fFill.Table.fRowCount=0) then
     result := false else begin
     fFill.fFillCurrentRow := 1;
     result := true;
@@ -27804,11 +27804,11 @@ begin
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
-    if (T.FieldCount<>1) or (T.RowCount<=0) then
+    if (T.FieldCount<>1) or (T.fRowCount<=0) then
       exit;
     // get row values
-    SetLength(Data,T.RowCount);
-    for i := 1 to T.RowCount do // ignore fResults[0] i.e. field name
+    SetLength(Data,T.fRowCount);
+    for i := 1 to T.fRowCount do // ignore fResults[0] i.e. field name
       Data[i-1] := T.fResults[i];
     result := true;
   finally
@@ -27833,8 +27833,8 @@ begin
       SQLFromSelect(Table.SQLTableName,'ID,'+FieldName,WhereClause,''));
     if T<>nil then
     try
-      if (T.FieldCount=2) and (T.RowCount>0) then begin
-        for Row := 1 to T.RowCount do begin // ignore Row 0 i.e. field names
+      if (T.FieldCount=2) and (T.fRowCount>0) then begin
+        for Row := 1 to T.fRowCount do begin // ignore Row 0 i.e. field names
           aID := GetInt64(T.Get(Row,0));
           Strings.AddObject(T.GetString(Row,1),pointer(aID));
           if (IDToIndex<>nil) and (aID=IDToIndex^) then begin
@@ -27866,24 +27866,24 @@ begin
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
-    if (T.FieldCount<>1) or (T.RowCount<=0) then
+    if (T.FieldCount<>1) or (T.fRowCount<=0) then
       exit;
     // calculate row values CSV needed memory
     SepLen := length(Separator);
     Len := 0;
-    for i := 1 to T.RowCount do // ignore fResults[0] i.e. field name
+    for i := 1 to T.fRowCount do // ignore fResults[0] i.e. field name
       inc(Len,StrLen(T.fResults[i])+SepLen);
     dec(Len,SepLen);
     SetLength(result,Len);
     // add row values as CSV
     P := pointer(result);
-    for i := 1 to T.RowCount do begin // ignore fResults[0] i.e. field name
+    for i := 1 to T.fRowCount do begin // ignore fResults[0] i.e. field name
       L := StrLen(T.fResults[i]);
       if L<>0 then begin
         move(T.fResults[i]^,P^,L);
         inc(P,L);
       end;
-      if i=T.RowCount then
+      if i=T.fRowCount then
         break;
       move(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
@@ -27937,7 +27937,7 @@ begin
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
-    if (T.FieldCount<>1) or (T.RowCount<=0) then
+    if (T.FieldCount<>1) or (T.fRowCount<=0) then
       exit;
     T.GetRowValues(0,Data);
     if SQL<>nil then
@@ -28021,7 +28021,7 @@ begin
     T := ExecuteList([Table],SQL);
     if T<>nil then
     try
-      if (T.FieldCount<>length(FieldName)) or (T.RowCount<=0) then
+      if (T.FieldCount<>length(FieldName)) or (T.fRowCount<=0) then
         exit;
       // get field values from the first (and unique) row
       for i := 0 to T.FieldCount-1 do
@@ -28043,7 +28043,7 @@ begin
   if T=nil then
     result := false else
     try
-      if T.RowCount>=1 then begin
+      if T.fRowCount>=1 then begin
         Value.FillFrom(T,1); // fetch data from first result row
         result := true;
       end else begin
@@ -28123,7 +28123,7 @@ begin
       if FirstRecordID<>nil then
         FirstRecordID^ := T.IDColumnHiddenValue(1);
       if LastRecordID<>nil then
-        LastRecordID^ := T.IDColumnHiddenValue(T.RowCount);
+        LastRecordID^ := T.IDColumnHiddenValue(T.fRowCount);
     finally
       T.Free;
     end;
@@ -28724,7 +28724,7 @@ begin
       'SELECT RowID FROM '+Table.RecordProps.SQLTableName+' LIMIT 1');
   if T<>nil then
   try
-    Result := T.RowCount>0;
+    Result := T.fRowCount>0;
   finally
     T.Free;
   end else
@@ -31055,7 +31055,7 @@ end;
 
 const
   SQLRECORDVERSION_DELETEID_SHIFT = 58;
-  SQLRECORDVERSION_DELETEID_RANGE = 1 shl SQLRECORDVERSION_DELETEID_SHIFT;
+  SQLRECORDVERSION_DELETEID_RANGE = Int64(1) shl SQLRECORDVERSION_DELETEID_SHIFT;
 
 procedure TSQLRestServer.InternalRecordVersionMaxFromExisting(RetrieveNext: PID);
 var m: integer;
@@ -31147,6 +31147,9 @@ function TSQLRestServer.RecordVersionSynchronize(aTable: TSQLRecordClass;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
 begin
+  {$ifdef WITHLOG}
+  fLogClass.Enter(self);
+  {$endif}
   result := 0;
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
@@ -31198,10 +31201,12 @@ begin
     try
       DeletedMinID := Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
       ListDeleted := Source.MultiFieldValues(fSQLRecordVersionDeleteTable,
-        'ID,Deleted','ID>? and ID<?',[DeletedMinID+RecordVersion,
+        'ID,Deleted','ID>? and ID<? order by ID',[DeletedMinID+RecordVersion,
          DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
+      if ListDeleted=nil then
+        exit; // DB error
       result := TSQLRestBatch.Create(self,nil,10000);
-      if (ListUpdated.RowCount=0) and (ListDeleted.RowCount=0) then
+      if (ListUpdated.fRowCount=0) and (ListDeleted.fRowCount=0) then
         exit; // nothing new
       Rec := aTable.Create;
       Deleted := fSQLRecordVersionDeleteTable.Create;
@@ -31214,15 +31219,15 @@ begin
         DeletedVersion := 0;
         repeat // compute all changes in increasing version order
           if UpdatedVersion=0 then
-            if UpdatedRow<=ListUpdated.RowCount then begin
+            if UpdatedRow<=ListUpdated.fRowCount then begin
               Rec.FillRow(UpdatedRow);
               UpdatedVersion := Props.RecordVersionField.PropInfo.GetInt64Prop(Rec);
               inc(UpdatedRow);
             end;
           if DeletedVersion=0 then
-            if DeletedRow<=ListDeleted.RowCount then begin
+            if DeletedRow<=ListDeleted.fRowCount then begin
               Deleted.FillRow(DeletedRow);
-              DeletedVersion := Deleted.ID and pred(SQLRECORDVERSION_DELETEID_RANGE);
+              DeletedVersion := Deleted.IDValue and pred(SQLRECORDVERSION_DELETEID_RANGE);
               inc(DeletedRow);
             end;
           if (UpdatedVersion=0) and (DeletedVersion=0) then
@@ -35813,11 +35818,11 @@ begin
     if T.fFieldIndexID<0 then
       exit; // no ID field -> load is impossible -> error
     // ensure ID were stored in an increasing order
-    if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.RowCount,T.FieldCount) then begin
+    if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then begin
       // force sorted by ID -> faster IDToIndex()
       T.SortFields(T.fFieldIndexID,true,nil,sftInteger);
       // if data is corrupted, IDs may not be unique -> check it now
-      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.RowCount,T.FieldCount) then
+      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then
         exit; // some duplicated ID fields -> error
     end;
     // create TSQLRecord instances with data from T
@@ -37220,7 +37225,7 @@ begin
        BinToBase64WithMagic(DataTableBlobField)]);
   if Res<>nil then
   try
-    if (Res.FieldCount<>1) or (Res.RowCount<=0) then
+    if (Res.FieldCount<>1) or (Res.fRowCount<=0) then
       exit;
     Res.GetRowValues(0,TInt64DynArray(DataID));
     result := true;
@@ -39294,7 +39299,7 @@ begin
     exit;
   aTable.OwnerMustFree := true;
   FillPrepare(aTable); // temporary storage for FillRow, FillOne and FillRewind
-  result := aTable.RowCount;
+  result := aTable.fRowCount;
 end;
 
 function TSQLRecordMany.FillMany(aClient: TSQLRest; aSourceID: TID;

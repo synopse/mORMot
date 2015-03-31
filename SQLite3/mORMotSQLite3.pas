@@ -671,13 +671,13 @@ begin
       n := 0;
       JSONCached := R.ExecuteJSON(aDB.DB,aSQL,Expand,@n); // Expand=true for AJAX
       inherited CreateFromTables(Tables,aSQL,JSONCached);
-      Assert(n=RowCount);
+      Assert(n=fRowCount);
     finally
       aDB.UnLockJSON(JSONCached,n);
     end
   else begin
     inherited CreateFromTables(Tables,aSQL,JSONCached);
-    Assert(n=RowCount);
+    Assert(n=fRowCount);
   end;
 end;
 
