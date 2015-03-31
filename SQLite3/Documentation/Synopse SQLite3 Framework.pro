@@ -626,7 +626,7 @@ label="         Featuring";
 For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
 For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
 For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
-If you need a HTTP server, a proxy redirection, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
+If you need a HTTP server, a proxy @*redirection@, master/slave @*replication@, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
 The table content of this document makes it clear: this is no ordinary piece of software.
 The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
@@ -1121,7 +1121,7 @@ If you entered the {\i Delphi} world years ago, you may be pretty fluent with th
 - "Almost" standard (each DB has its own column typing system).
 {\i @**NoSQL@} is a new paradigm, named as such in early 2009 (even if some database engines, like {\i Lotus Domino}, may fit the definition since decades):
 - {\i NoSQL} stands for "Not Only SQL" - which is more positive than "no SQL";
-- Designed to scale for the web and @*BigData@ (e.g. Amazon, Google, Facebook), e.g. via easy replication and simple API;
+- Designed to scale for the web and @*BigData@ (e.g. Amazon, Google, Facebook), e.g. via easy @*replication@ and simple API;
 - Relying on no standard (for both data modeling and querying);
 - A lot of diverse implementations, covering any data use - @http://nosql-database.org lists more than 150 engines.
 We can identify two main families of NoSQL databases:
@@ -1893,6 +1893,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
 |{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
+|{\f1\fs20 @*TRecordVersion@}|INTEGER|64 bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
 |%
 \page
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
@@ -2005,7 +2006,7 @@ You can optionally specify the associated table, using a custom {\f1\fs20 TID} t
 Those three published fields would be able to store a {\f1\fs20 Int64} foreign key, and will botall have one {\i index} created on the database.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or TSQLRecordClientToBeDeletedID - will define how the deletion process will be processed.
 By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so no deletion tracking would take place.
 On the other hand, {\i following the type naming convention}, the others {\f1\fs20 OrderedBy} and {\f1\fs20 OrderedByCascade} properties will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model.\line In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} or {\f1\fs20 'TSQLRecordClientToBeDeletedID'}  type names, and search for a {\f1\fs20 TSQLRecord} associated by trimming {\f1\fs20 *[ToBeDeleted]ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will be able to track any {\f1\fs20 TSQLRecordClient} deletion: for any row pointing to the deleted record, it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0, or that the row containing the {\f1\fs20 OrderedByCascade} property will be deleted. Note that the framework won't define a {\f1\fs20 ON DELETE SET DEFAULT} or {\f1\fs20 ON DELETE CASCADE} foreign key via SQL, but emulate them {\i at ORM level}.
-:  TRecordReference and TRecordReferenceToBeDeleted
+:148  TRecordReference and TRecordReferenceToBeDeleted
 {\f1\fs20 TSQLRecord} or {\f1\fs20 TID} published properties are associated with a single {\f1\fs20 TSQLRecord} joined table. You could use {\f1\fs20 @**TRecordReference@} or {\f1\fs20 @**TRecordReferenceToBeDeleted@} published properties to store a reference to any record on any table of the data model.
 In fact, such properties will store in a {\f1\fs20 Int64} value a reference to both a {\f1\fs20 TSQLRecord} class (therefore defining a table), and one {\f1\fs20 ID} (to define the row).
 You could later on use e.g. {\f1\fs20 @*TSQLRest@.Retrieve(Reference)} to get a record content in one step.
@@ -2746,7 +2747,7 @@ As such, {\i data sharing} with {\i mORMot} will benefit of RDBMS back-end, as a
 Data sharding just feels natural, from the @*ORM@ point of view.
 But defining a pivot table is a classic and powerful use of relational database, and will unleash its power:
 - When data is huge, you can query only for the needed data, without having to load the whole content (it is something similar to {\i @*lazy loading@} in ORM terminology);
-- In a master/detail data model, sometimes it can be handy to access directly to the detail records, e.g. for data consolidation;
+- In a @*master/detail@ data model, sometimes it can be handy to access directly to the detail records, e.g. for data consolidation;
 - And, last but not least, the pivot table is the natural way of storing data associated with "@*has many through@" relationship (e.g. association time or corresponding permissions).
 :    Introducing TSQLRecordMany
 A dedicated class, inheriting from the standard {\f1\fs20 @*TSQLRecord@} class (which is the base of all objects stored in our ORM), has been created, named {\f1\fs20 @*TSQLRecordMany@}. This table will turn the "many to many" relationship into two "one to many" relationships pointing in opposite directions. It shall contain at least two {\f1\fs20 TSQLRecord} (i.e. INTEGER) @*published properties@, named "{\f1\fs20 Source}" and "{\f1\fs20 Dest}" (name is mandatory, because the ORM will share for exact matches). The first pointing to the source record (the one with a {\f1\fs20 TSQLRecordMany} published property) and the second to the destination record.
@@ -3184,6 +3185,67 @@ You can tune how packing is defined for a given {\f1\fs20 TSQLRecord} table, by 
 !  aTableHistory: TSQLRecordHistoryClass=nil; aMaxHistoryRowBeforeBlob: integer=1000;
 !  aMaxHistoryRowPerRecord: integer=10; aMaxUncompressedBlobSize: integer=64*1024); virtual;
 Take a look at the documentation of this method (or the comments in its declaration code) for further information.\line Default options will let {\f1\fs20 TSQLRestServer.TrackChangesFlush()} be called after 1000 individual {\f1\fs20 TSQLRecordHistory.SentDataJSON} rows are stored, then will compress them into a BLOB once 10 JSON rows are available for a given record, ensuring that the uncompressed BLOB size for a single record won't use more than 64 KB of memory (but probably much less in the database, since it is stored with very high compression rate).
+:147 Master/slave replication
+As stated during @26@, the ORM is able to maintain a revision number for any {\f1\fs20 TSQLRecord} table, so that it the table may be easily synchronized remotely by another {\f1\fs20 TSQLRestServer} instance.\line If you define a {\f1\fs20 @**TRecordVersion@} published property, the ORM core will fill this field just before any write with a monotonically increasing revision number, and will take care of any deletion, so that those modifications may be replayed later on any other database.
+This synchronization will work as a strict @**master/slave@ @**replication@ scheme, as a one-way on demand refresh of a replicated table. Each write operation on the master database on a given table may be easily reflected on one or several slave databases, with almost no speed nor storage size penalty.
+:  Enable synchronization
+In order to enable this @*replication@ mechanism, you should define a {\f1\fs20 @TRecordVersion@} published property in the {\f1\fs20 TSQLRecord} class type definition:
+!  TSQLRecordPeopleVersioned = class(TSQLRecordPeople)
+!  protected
+!    fFirstName: RawUTF8;
+!    fLastName: RawUTF8;
+!    fVersion: TRecordVersion;
+!  published
+!    property FirstName: RawUTF8 read fFirstName write fFirstName;
+!    property LastName: RawUTF8 read fLastName write fLastName;
+!    property Version: TRecordVersion read fVersion write fVersion;
+!  end;
+Only a single {\f1\fs20 TRecordVersion} field is allowed per {\f1\fs20 TSQLRecord} class - it would not mean anything to manage more than one field of this type.
+Note that this field will be somewhat "hidden" to most ORM process: a regular {\f1\fs20 TSQLRest.Retrieve} won't fill this {\f1\fs20 Version} property, since it is an internal implementation detail. If you want to lookup its value, you would have to explicitly state its field name at retrieval. Any {\f1\fs20 TRecordVersion} is indeed considered as a "non simple field", just like BLOB fields, so would need explicit retrieval of its value.
+In practice, any {\f1\fs20 TSQLRest.Add} and {\f1\fs20 TSQLRest.Update} on this {\f1\fs20 TSQLRecordPeopleVersioned} class will increase this {\f1\fs20 Version} revision number field, and a {\f1\fs20 TSQLRest.Delete} will populate an external {\f1\fs20 @*TSQLRecordTableDelete@} table with the {\f1\fs20 ID} of the deleted record, associated with a {\f1\fs20 TRecordVersion} revision.
+As consequences:
+- The monotonic {\f1\fs20 TRecordVersion} number is shared at {\f1\fs20 TSQLRestServer} level, among all tables containing a {\f1\fs20 TRecordVersion} published field;
+- The {\f1\fs20 TSQLRecordTableDelete} table should be part of the {\f1\fs20 TSQLModel}, in conjunction with {\f1\fs20 TSQLRecordPeopleVersioned};
+- If the {\f1\fs20 TSQLRecordTableDelete} table is not part of the {\f1\fs20 TSQLModel}, the {\f1\fs20 TSQLRestServer} will add it - but you should better make it explicitly appearing in the data model;
+- A single {\f1\fs20 TSQLRecordTableDelete} table will maintain the list of all deleted data rows, of all tables containing a {\f1\fs20 TRecordVersion} published field;
+- The {\f1\fs20 TSQLRecordPeopleVersioned} table appearance order in the {\f1\fs20 TSQLModel} will matter, since {\f1\fs20 TSQLRecordTableDelete.ID} will use this table index order in the database model to identify the table type of the deleted row - in a similar way to @148@.
+All the synchronization preparation will be taken care by the ORM kernel on its own, during any write operation. There is nothing particular to maintain or setup, in addition to this {\f1\fs20 TRecordVersion} field definition, and the global {\f1\fs20 TSQLRecordTableDelete} table.
+:  From master to slave
+To replicate this {\f1\fs20 TSQLRecordPeopleVersioned} table from another {\f1\fs20 TSQLRestServer} instance, just call the following method:
+! aServer.RecordVersionSynchronize(TSQLRecordPeopleVersioned,aClient);
+This single line will request a remote server via a {\f1\fs20 Client: TSQLRestClientURI} connection (which may be over @*HTTP@) for any pending modifications since its last call, then will fill the local {\f1\fs20 aServer: TSQLRestServer} database so that the local {\f1\fs20 TSQLRecordPeopleVersioned} table will contain the very same content as the remote master {\f1\fs20 TSQLRestServer}.
+You can safely call {\f1\fs20 TSQLRestServer.RecordVersionSynchronize} from several clients, to replicate the master data in several databases.
+Only the modified data will be transmitted over the wire, as two REST/JSON queries (one for the insertions/updates, another for the deletions), and all the local write process will use optimized BATCH writing - see @28@. This means that the synchronization process will try to use as minimal bandwidth and resources as possible, on both sides.
+Of course, the slaves should be considered as read-only, otherwise the version numbers may conflict, and the whole synchronization may become a failure. But you can safely replicate servers in cascade, if needed: the version numbers will be propagated from masters to slaves, and the data will always be in a consistent way.
+:  Replication use cases
+We may consider a very common corporate infrastructure:
+\graph HostingReplication Corporate Servers Replication
+subgraph cluster_0 {
+label="Main Office";
+\Main又erver\External DB
+}
+subgraph cluster_1 {
+label="           Office A";
+\Main又erver\Local又erver A\HTTP
+\Local又erver A\Client 1
+\Local又erver A\Client 2
+\Local又erver A\Client 3\local孓etwork
+}
+subgraph cluster_2 {
+label="          Office B";
+\Main又erver\Local又erver B\HTTP
+\Local又erver B\Client  1
+\Local又erver B\Client  2
+\Local又erver B\Client  3
+\Local又erver B\Client  4\local孓etwork
+}
+\
+This kind of installation, with a main central office, and a network of local offices, would benefit from this @*master/slave@ @*replication@. Simple {\i @*redirection@} may be used - see @93@ - but it would expect the work to continue, even in case of {\i Internet} network failure. REST redirection would expect a 100% connection uplink, which may be critical in some cases.
+You could therefore implement replication in several ways:
+- Either the main office is the master, and any write would be push to the {\i Main Server}, whereas local offices would have a replicated copy of the information - drawback is that in case of network failure, the local office would be able to only read the data;
+- Or each local office may host its own data in a dedicated table, synchronized as a master database; the main office will replicate (as a slave) the private data of each local servers; in addition, all this data gathered by the {\i Main Server} may be further replication to the other local offices, and be still accessible in read mode - in case of network failure, all the data is available on the local servers, and the local private table is still writable.
+Of course, the second solution seems preferable, even if a bit more difficult to implement. The ablity of all local offices to work offline on their own private data, but still having all the other data accessible as read-only, would be a huge ROI.
+As a benefit of using replication, the central main server would be less stressed, since most of the process would take place in local servers, and the main office server would only be used for shared data backup and read-only gathering of the other local databases. Only a small network bandwith would be necessary (much less than a pure web solution), and CPU/storage resources would be minimal.
 :Daily ORM
 %cartoon03.png
 When you compare @*ORM@ and standard @*SQL@, some aspects must be highlighted.
@@ -3192,7 +3254,7 @@ The ORM code is much more readable than the SQL. You do not have to switch your 
 Another good impact is the naming consistency. For example, what about if you want to rename your table? Just change the class definition, and your IDE will do all refactoring for you, without any risk of missing a hidden SQL statement anywhere. Do you want to rename or delete a field? Change the class definition, and the {\i Delphi} compiler will let you know all places where this property was used in your code. Do you want to add a field to an existing database? Just add the property definition, and the framework will create the missing field in the database schema for you.
 Another risk-related improvement is about the @**strong type@ checking, included into the {\i Delphi} language during compile time, and only during execution time for the SQL. You will avoid most runtime exceptions for your database access: your clients will thank you for that. In one word, forget about field typing mismatch or wrong type assignment in your database tables. Strong typing is great in such cases for code SQA, and if you worked with some scripting languages (like {\i @*JavaScript@}, Python or Ruby), you should have wished to have this feature in your project!
 It is worth noting that our framework allows writing triggers and stored procedures (or like @*stored procedure@s) in {\i Delphi} code, and can create key indexing and perform foreign key checking in class definition.
-Another interesting feature is the enhanced Grid component supplied with this framework, and the @*AJAX@-ready orientation, by using natively @*JSON@ flows for @*Client-Server@ data streaming. The @*REST@ protocol can be used in most application, since the framework provides you with an easy to use "Refresh" and caching mechanism. You can even work off line, with a local database replication of the remote data.
+Another interesting feature is the enhanced Grid component supplied with this framework, and the @*AJAX@-ready orientation, by using natively @*JSON@ flows for @*Client-Server@ data streaming. The @*REST@ protocol can be used in most application, since the framework provides you with an easy to use "Refresh" and caching mechanism. You can even work off line, with a local database @*replication@ of the remote data.
 For Client-Server - see @6@ - you do not have to open a connection to the database, just create an instance of a {\f1\fs20 TSQLRestClient} object (with the communication layer you want to use: direct access, Windows Messages, named pipe or @*HTTP@), and use it as any normal {\i Delphi} object. All the @*SQL@ coding or communication and error handling will be done by the framework. The same code can be used in the Client or Server side: the parent {\f1\fs20 @*TSQLRest@} object is available on both sides, and its properties and methods are strong enough to access the data.
 : ORM is not Database
 It is worth emphasizing that you should not think about the @*ORM@ like a mapping of an existing DB schema. This is an usual mistake in ORM design.
@@ -4275,7 +4337,7 @@ The exact process of these in-memory tables is that each time you write some new
 When you write the data to file, the whole file is rewritten: it seems not feasible to write the data to disk at every write - in this case, SQLite3 in exclusive mode will be faster, since it will write only the new data, not the whole table content.
 This may sound like a limitation, but on our eyes, it could be seen more like a feature. For a particular table, we do not need nor want to have a whole RDBMS/SQL engine, just direct and fast access to a {\f1\fs20 TObjectList}. The feature is to integrate it with our @*REST@ engine, and still be able to store your data in a regular database later ({\i SQLite3} or external), if it appears that {\f1\fs20 TSQLRestStorageInMemory} storage is too limited for your process.
 :93  Redirect to an external TSQLRest
-Sometimes, having all database process hosted in a single process may not be enough. You can use the {\f1\fs20 TSQLRestServer.RemoteDataCreate()} method to instantiate a {\f1\fs20 TSQLRestStorageRemote} class which will redirect all ORM operation to a specified {\f1\fs20 TSQLRest} instance, may be remote (via {\f1\fs20 TSQLRestClientHttp}) or in-process ({\f1\fs20 TSQLRestServer}).
+Sometimes, having all database process hosted in a single process may not be enough. You can use the {\f1\fs20 TSQLRestServer.RemoteDataCreate()} method to instantiate a {\f1\fs20 TSQLRestStorageRemote} class which will redirect all ORM operation to a specified {\f1\fs20 TSQLRest} instance, may be remote (via {\f1\fs20 TSQLRestClientHttp}) or in-process ({\f1\fs20 TSQLRestServer}). REST @**redirection@ may be enough in simple use cases, when full @147@ could be oversized.
 For instance, in {\f1\fs20 TTestExternalDatabase} regression tests, you would find the following code:
 !  aExternalClient := TSQLRestClientDB.Create(fExternalModel,nil,'testExternal.db3',TSQLRestServerDB);
 !!  historyDB := TSQLRestServerDB.Create(
@@ -4333,6 +4395,7 @@ You will benefit of the caching abilities - see @39@ - of each {\f1\fs20 TSQLRes
 Furthermore, even on a single-siter server, a {\f1\fs20 TSQLRecordHistory} table, or more generaly any aggregation data may benefit to be hosted locally or on cheap storage, whereas the main database would stay on SSD or SAS. Thanks to this redirection feature, you can tune your hosting as expected.
 Finally, if your purpose is to redirect all tables of a given {\f1\fs20 TSQLRestServer} to another remote {\f1\fs20 TSQLRestServer} (for security or hosting purpose), you may consider using {\f1\fs20 TSQLRestServerRemoteDB} instead. This class will redirect all tables to one external instance.
 Note that both {\f1\fs20 TSQLRestStorageRemote} and {\f1\fs20 TSQLRestServerRemoteDB} classes do not support yet the {\i Virtual Tables} mechanism of {\i SQlite3}. So if you use those features, you may not be able to run JOINed queries from the redirected instance: in fact, the main SQlite3 engine will complain about a missing {\f1\fs20 MyHistory} table in "{\f1\fs20 testExternal.db3}". We will eventually define the needed {\f1\fs20 TSQLVirtualTableRemote} and {\f1\fs20 TSQLVirtualTableCursorRemote} classes to implement this feature.
+Sadly, this redirection pattern won't work if the connection is lost. The main office server needs to be always accessible so that the local offices would continue to work. You may consider using @147@ to allow the local offices to work with their own local copy of the master data. @*Replication@ sounds in fact preferred than simple redirection, especially in terms of network and resource use, in some cases.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
 The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
@@ -9990,7 +10053,7 @@ There are several solutions able to compile to {\i JavaScript}.\line In fact, we
 - Low-level languages, like {\i Emscripten} (compiling C/C++ from LLVM byte-code, using {\i asm.js}).
 Of course, from our point of view, use of modern {\i object pascal} is of great interest, since it will leverage our own coding skills, and make us able to share code between client and server sides.
 :   Beyond JavaScript
-The so-called {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
+The {\i Smart Pascal} language brings strong typing, true @*OOP@ to {\i JavaScript}, including classes, partial classes, interfaces, inheritance, polymorphism, virtual and abstract classes and methods, helpers, closures, lambdas, enumerations and sets, getter/setter expressions, operator overloading, contract programming. But you can still unleash the power of {\i JavaScript} (some may say "the good parts"), if needed: the {\f1\fs20 variant} type is used to allow dynamic typing, and you can write some {\i JavaScript} code as an {\f1\fs20 asm .. end} block.\line See @http://en.wikipedia.org/wiki/The_Smart_Pascal_programming_language
 The resulting HTML5 project is self-sufficient with no external {\i JavaScript} library, and is compiled as a single {\f1\fs20 index.html} file (including its {\f1\fs20 css}, if needed). The {\i JavaScript} code generated by the compiler (written in {\i Delphi} by Eric Grange), is of very high quality, optimized for best execution performance (either in JIT or V8), has low memory consumption, and can be compressed and/or obfuscated.
 The {\f1\fs20 SmartCL} runtime library encapsulate HTML5 APIs in a set of pure pascal classes and functions, and an IDE with an integrated form designer is available. You can debug your application directly within the IDE (since revision 2.1 - even if it is not yet always stable) or within your browser (IE, Chrome or FireBug have great debuggers), with step-by-step execution of the object pascal code (if you define "{\i Add source map (for debugging)}" in {\f1\fs20 Project Options} / {\f1\fs20 Linker}).
 Using a third-party tool like {\i @*PhoneGap@} - see @http://phonegap.com - you would be able to supply your customers with true native {\i iOS} or {\i Android} applications, running without any network, and accessing the full power of any modern {\i Smart Phone}. Resulting applications will be much smaller in size than the one generated by {\i Delphi} FMX (a simple {\i Smart} RESTful client with a login form and ORM + SOA tests is zipped as 40 KB), and will work seamlessly on all HTML5 platforms, including most mobile (like Windows Phone, Blackberry, Firefox OS, or webOS) or desktop (Windows, @*Linux@, BSD, MacOS) architectures.
@@ -11448,7 +11511,7 @@ But you may find out some (good?) reasons which main induce another design:
 - Your main data would be hosted on high performance SSD / NAS drives with safe RAID, but some data should better be hosted on cheaper storage (e.g. @85@);
 - You are selling one product, to be run on several environments (debugging / production, starter / corporate editions, centralized / P2P design...), depending on your clients demand;
 - Whatever your IT people or managers want {\i mORMot} to.
-Also consider per-table redirection - see @93@ - for even more advanced hosting abilities. See for instance @%%HostingRedirection@ diagram.
+Also consider per-table @*redirection@ - see @93@, or @147@, for even more advanced hosting abilities. See for instance the @%%HostingRedirection@ and @%%HostingReplication@ diagrams.
 The possibilities are endless, so we would here below only present some typical use-cases.
 :  Shared server
 This is the easiest configuration: one HTTP server instance, which serves both ORM and Services. On practice, this is perfectly working and scalable.
