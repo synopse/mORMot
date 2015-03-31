@@ -33183,8 +33183,11 @@ begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     {$ifdef WITHLOG}
-    fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
-      [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
+    if Ctxt=nil then
+      fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/%',
+        [User.LogonName,IDCardinal],self) else
+      fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
+        [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
     {$endif}
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self,fSessions.List[aSessionIndex],Ctxt);
