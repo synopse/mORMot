@@ -798,12 +798,12 @@ type
     procedure Locked;
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amUnlocked
     procedure Unlocked;
-    /// test via TSQLRestClientDB instances with AcquireWriteMode=amBackgroundThread
-    procedure BackgroundThread;
     {$ifndef LVCL}
     /// test via TSQLRestClientDB instances with AcquireWriteMode=amMainThread
     procedure MainThread;
     {$endif}
+    /// test via TSQLRestClientDB instances with AcquireWriteMode=amBackgroundThread
+    procedure BackgroundThread;
   end;
 
   /// SOA callback definition as expected by TTestBidirectionalRemoteConnection
@@ -12627,7 +12627,7 @@ procedure TTestMultiThreadProcess.SocketAPI;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
   {$ifndef FPC}
-  if DebugHook=0 then
+  if DebugHook=0 then 
   {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
@@ -12635,7 +12635,12 @@ end;
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  Test(TSQLHttpClientWebsockets,useBidirSocket);
+  {$WARN SYMBOL_PLATFORM OFF}
+  {$ifndef FPC}
+  if DebugHook=0 then
+  {$endif}
+    Test(TSQLHttpClientWebsockets,useBidirSocket);
+  {$WARN SYMBOL_PLATFORM ON}
 end;
 
 {$ifdef USELIBCURL}
