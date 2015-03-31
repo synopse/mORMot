@@ -13202,24 +13202,24 @@ type
     function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
     /// will compute the next monotonic value for a TRecordVersion field
     function RecordVersionCompute: TID;
-    /// will retrieve all the updated from another (distant) TSQLRest for a
+    /// will apply all the updates from another (distant) TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field
     // - both remote Source and local TSQLRestSever should have the supplied
-    // aTable in their data model, at the same position
-    // - returns 0 on error, or the latest retrieved version number
-    function RecordVersionSynchronize(aTable: TSQLRecordClass;
+    // Table class in each of their data model
+    // - returns 0 on error, or the latest applied revision number
+    function RecordVersionSynchronize(Table: TSQLRecordClass;
       Source: TSQLRest): TRecordVersion;
-    /// will retrieve all the updated from another (distant) TSQLRest for a
+    /// will retrieve all the updates from another (distant) TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field, and a supplied
     // TRecordVersion monotonic value
     // - both remote Source and local TSQLRestSever should have the supplied
-    // aTable in their data model, at the same position
-    // - returns nil on error or if nothing new was found, or a TSQLRestBatch
-    // instance containing all modifications since previous call
+    // Table class in each of their data model
+    // - returns nil if nothing new was found, or a TSQLRestBatch instance
+    // containing all modifications since RecordVersion revision
     // - when executing the returned TSQLRestBatch on the database, you should
     // set TSQLRestServer.RecordVersionDeleteIgnore := true so that the
     // TRecordVersion fields would be forced from the supplied value
-    function RecordVersionSynchronizeToBatch(aTable: TSQLRecordClass;
+    function RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
       Source: TSQLRest; var RecordVersion: TRecordVersion): TSQLRestBatch; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
@@ -31142,7 +31142,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionSynchronize(aTable: TSQLRecordClass;
+function TSQLRestServer.RecordVersionSynchronize(Table: TSQLRecordClass;
   Source: TSQLRest): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
@@ -31153,8 +31153,13 @@ begin
   result := 0;
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
-  Writer := RecordVersionSynchronizeToBatch(aTable,Source,fRecordVersionMax);
-  if Writer<>nil then
+  Writer := RecordVersionSynchronizeToBatch(Table,Source,fRecordVersionMax);
+  if Writer=nil then
+    exit; // error
+  if Writer.Count=0 then begin // nothing new
+    result := fRecordVersionMax;
+    Writer.Free;
+  end else
   try
     fAcquireExecution[execORMWrite].Enter;
     fRecordVersionDeleteIgnore := true;
@@ -31171,9 +31176,9 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionSynchronizeToBatch(aTable: TSQLRecordClass;
+function TSQLRestServer.RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
   Source: TSQLRest; var RecordVersion: TRecordVersion): TSQLRestBatch;
-var TableIndex,UpdatedRow,DeletedRow: integer;
+var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Props: TSQLRecordProperties;
     UpdatedVersion,DeletedVersion: TRecordVersion;
     ListUpdated,ListDeleted: TSQLTableJSON;
@@ -31187,19 +31192,20 @@ begin
   {$endif}
   if Source=nil then
     raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Source=nil)',[self]);
-  TableIndex := Model.GetTableIndexExisting(aTable);
+  TableIndex := Model.GetTableIndexExisting(Table);
+  SourceTableIndex := Source.Model.GetTableIndexExisting(Table); // <>TableIndex?
   Props := Model.TableProps[TableIndex].Props;
   if Props.RecordVersionField=nil then
     raise EORMException.CreateUTF8(
-      '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,aTable]);
+      '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,Table]);
   fAcquireExecution[execORMWrite].Enter;
   try
-    ListUpdated := Source.MultiFieldValues(aTable,'*','%>? order by %',
+    ListUpdated := Source.MultiFieldValues(Table,'*','%>? order by %',
       [Props.RecordVersionField.Name,Props.RecordVersionField.Name],[RecordVersion]);
     ListDeleted := nil;
     if ListUpdated<>nil then
     try
-      DeletedMinID := Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+      DeletedMinID := Int64(SourceTableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
       ListDeleted := Source.MultiFieldValues(fSQLRecordVersionDeleteTable,
         'ID,Deleted','ID>? and ID<? order by ID',[DeletedMinID+RecordVersion,
          DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
@@ -31207,8 +31213,8 @@ begin
         exit; // DB error
       result := TSQLRestBatch.Create(self,nil,10000);
       if (ListUpdated.fRowCount=0) and (ListDeleted.fRowCount=0) then
-        exit; // nothing new
-      Rec := aTable.Create;
+        exit; // nothing new -> returns void TSQLRestBach with Count=0
+      Rec := Table.Create;
       Deleted := fSQLRecordVersionDeleteTable.Create;
       try
         Rec.FillPrepare(ListUpdated);
@@ -31235,14 +31241,14 @@ begin
           if (UpdatedVersion>0) and
              ((DeletedVersion=0) or (UpdatedVersion<DeletedVersion)) then begin
             if (RecordVersion=0) or
-               (OneFieldValue(aTable,'ID',Rec.IDValue)='') then
+               (OneFieldValue(Table,'ID',Rec.IDValue)='') then
               result.Add(Rec,true,true,Rec.FillContext.TableMapFields,true) else
               result.Update(Rec,[],true);
             RecordVersion := UpdatedVersion;
             UpdatedVersion := 0;
           end else
           if DeletedVersion>0 then begin
-            result.Delete(aTable,Deleted.Deleted);
+            result.Delete(Table,Deleted.Deleted);
             result.Add(Deleted,true,true,[],true);
             RecordVersion := DeletedVersion;
             DeletedVersion := 0;
