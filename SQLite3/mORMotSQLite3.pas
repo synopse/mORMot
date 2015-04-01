@@ -537,6 +537,9 @@ type
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
+    /// contains some textual information about the latest Exception raised
+    // during SQL statement execution 
+    property StatementLastException: RawUTF8 read fStatementLastException;
   end;
 
   /// REST client with direct access to a SQLite3 database
@@ -744,21 +747,27 @@ end;
 
 procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
 begin
-  fStatementTimer^.Pause;
-  fStatementTimer^.ComputeTime;
-  {$ifdef WITHLOG}
-  with fLogFamily.SynLog do
-  if E=nil then 
-    Log(sllSQL,'% % %',[fStatementTimer^.Time,Msg,fStatementSQL],self) else
-    Log(sllError,'% for % // %',[E,fStatementSQL,fStatementGenericSQL],self);
-  {$endif}
-  if fStatement=@fStaticStatement then
-    fStaticStatement.Close;
-  fStatement := nil;
-  fStatementSQL := '';
-  fStatementGenericSQL := '';
-  if E<>nil then
-    fStatementLastException := FormatUTF8('% %',[E,ObjectToJSON(E)]);
+  try
+    if fStatementTimer<>nil then begin
+      fStatementTimer^.Pause;
+      fStatementTimer^.ComputeTime;
+      {$ifdef WITHLOG}
+      with fLogFamily.SynLog do
+      if E=nil then
+        Log(sllSQL,'% % %',[fStatementTimer^.Time,Msg,fStatementSQL],self) else
+        Log(sllError,'% for % // %',[E,fStatementSQL,fStatementGenericSQL],self);
+      {$endif}
+      fStatementTimer := nil;
+    end;
+  finally
+    if fStatement=@fStaticStatement then
+      fStaticStatement.Close;
+    fStatement := nil;
+    fStatementSQL := '';
+    fStatementGenericSQL := '';
+    if E<>nil then
+      fStatementLastException := FormatUTF8('% %',[E,ObjectToJSONDebug(E)]);
+  end;
 end;
 
 procedure TSQLRestServerDB.FlushStatementCache;
@@ -1231,8 +1240,8 @@ begin
           MS.Free;
         end;
         GetAndPrepareStatementRelease(nil,
-          FormatUTF8('returned % row% as % bytes',
-            [RowCount,PLURAL_FORM[RowCount>1],length(result)]));
+          FormatUTF8('returned % row% as % byte%',[RowCount,
+            PLURAL_FORM[RowCount>1],length(result),PLURAL_FORM[length(result)>1]]));
       except
         on E: ESQLite3Exception do
           GetAndPrepareStatementRelease(E);
