@@ -10413,6 +10413,23 @@ type
     property ExpectMangledURI: boolean read fExpectMangledURI write SetExpectMangledURI;
   end;
 
+  /// event signature triggerred when a callback instance is released
+  // - used by TServiceContainerServer for its OnCallbackReleasedOnClientSide
+  // and OnCallbackReleasedOnServerSide event properties
+  // - the supplied Instance will be a TInterfacedObjectFakeServer, and the
+  // Callback would be a pointer to the corresponding interface value
+  // - assigned implementation should be as fast a possible, since this event
+  // will be executed in a global lock for all server-side callbacks
+  TOnCallbackReleased = procedure(Sender: TServiceContainer;
+    Instance: TInterfacedObject; Callback: pointer) of object;
+
+  /// how TServiceContainerServer would handle SOA callbacks
+  // - by default, a callback released on the client side will log a warning
+  // and continue the execution but coRaiseExceptionIfReleasedByClient can be
+  // set to raise an Exception in this case
+  TServiceCallbackOptions = set of (
+    coRaiseExceptionIfReleasedByClient);
+
   /// a services provider class to be used on the server side
   // - this will maintain a list of true implementation classes
   TServiceContainerServer = class(TServiceContainer)
@@ -10420,6 +10437,9 @@ type
     fPublishSignature: boolean;
     fConnectionID: Int64;
     fFakeCallbacks: TObjectListLocked; // TInterfacedObjectFakeServer instances
+    fOnCallbackReleasedOnClientSide: TOnCallbackReleased;
+    fOnCallbackReleasedOnServerSide: TOnCallbackReleased;
+    fCallbackOptions: TServiceCallbackOptions;
     /// make some garbage collection when session is finished
     procedure OnCloseSession(aSessionID: cardinal); virtual;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
@@ -10449,6 +10469,17 @@ type
     // - is set to FALSE by default, for security reasons: only "_contract_"
     // pseudo method is available - see TServiceContainer.ContractExpected
     property PublishSignature: boolean read fPublishSignature write fPublishSignature;
+    /// this event will be launched when a callback interface is notified as
+    // relased on the Client side
+    property OnCallbackReleasedOnClientSide: TOnCallbackReleased
+      read fOnCallbackReleasedOnClientSide;
+    /// this event will be launched when a callback interface is relased on
+    // the Server side
+    property OnCallbackReleasedOnServerSide: TOnCallbackReleased
+      read fOnCallbackReleasedOnServerSide;
+    /// defines how SOA callbacks will be handled
+    property CallbackOptions: TServiceCallbackOptions read fCallbackOptions
+      write fCallbackOptions;
   end;
 
   /// a services provider class to be used on the client side
@@ -12732,7 +12763,7 @@ type
   // - the ID/RowID primary key of this table would be the version number
   // (i.e. value computed by TSQLRestServer.InternalRecordVersionCompute),
   // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
-  // TSQLRestServer.RecordVersionSynchronizeFrom could easily ask for the
+  // TSQLRestServer.RecordVersionSynchronizeToBatch() could easily ask for the
   // deleted rows of a given table with a single WHERE clause on the ID/RowID)
   TSQLRecordTableDeleted = class(TSQLRecord)
   protected
@@ -42375,6 +42406,7 @@ type
     fServer: TSQLRestServer;
     fLowLevelConnectionID: Int64;
     fReleasedOnClientSide: boolean;
+    fFakeInterface: Pointer;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
@@ -42707,6 +42739,7 @@ begin
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aID;
   inherited Create(aFactory,CallbackInvoke,nil);
+  Get(fFakeInterface);
 end;
 
 destructor TInterfacedObjectFakeServer.Destroy;
@@ -42728,8 +42761,15 @@ begin // here aClientDrivenID^ = FakeCall ID
     fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+
       'the client side, so I% callback notification was NOT sent',
       [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.InterfaceDotMethodName],sllWarning);
-    result := true; // do not raise an exception here: just log warning
-    // TODO: option to raise an exception (i.e. result := false) on request
+    if (fServer.Services<>nil) and
+       (coRaiseExceptionIfReleasedByClient in
+        (fServer.Services as TServiceContainerServer).CallbackOptions) then begin
+      if aErrorMsg<>nil then
+        aErrorMsg^ := FormatUTF8('%.CallbackInvoke(I%): instance has been '+
+          'released on client side',[self,aMethod.InterfaceDotMethodName]);
+      result := false; // will raise an exception
+    end else
+      result := true; // do not raise an exception here: just log warning
   end else begin
     if aMethod.ArgsOutputValuesCount=0 then
       aResult := nil; // no result -> asynchronous non blocking callback
@@ -42756,7 +42796,7 @@ begin
     Par := @NULL_SHORTSTRING; // as expected by TServiceMethod.InternalExecute
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
   instance := TInterfacedObjectFakeServer.Create(Self,factory,ID);
-  instance.Get(Obj);
+  PPointer(Obj)^ := instance.fFakeInterface;
   (Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
 end;
 
@@ -45034,6 +45074,9 @@ begin
         if not fReleasedOnClientSide then begin
           connectionID := fLowLevelConnectionID;
           callbackID := ClientDrivenID;
+          if Assigned(OnCallbackReleasedOnServerSide) then
+            OnCallbackReleasedOnServerSide(
+              self,fFakeCallbacks.List[i],fFakeInterface);
         end;
       fFakeCallbacks.Delete(i);
     end;
@@ -45061,6 +45104,9 @@ begin
       if (fLowLevelConnectionID=aConnectionID) and
          (ClientDrivenID=cardinal(aFakeID)) then begin
         fReleasedOnClientSide := true;
+        if Assigned(OnCallbackReleasedOnClientSide) then
+          OnCallbackReleasedOnClientSide(
+            self,fFakeCallbacks.List[i],fFakeInterface);
         result := true;
         exit;
       end;
