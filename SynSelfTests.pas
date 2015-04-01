@@ -8102,14 +8102,14 @@ end;
 procedure TestClient2;
 var res: TRecordVersion;
 begin
-  res := Client2.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Client);
+  res := Client2.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Client,500);
   Check(res=TSQLRestServerHook(Client.Server).fRecordVersionMax);
   Rec1.FillPrepare(Client,'order by ID','*');
   Rec2.FillPrepare(Client2,'order by ID','*');
   Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
   while Rec1.FillOne do begin
     Check(Rec2.FillOne);
-    Check(Rec1.SameRecord(Rec2));
+    Check(Rec1.SameRecord(Rec2),'simple fields');
     Check(Rec1.Version=Rec2.Version);
   end;
 end;

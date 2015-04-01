@@ -13206,21 +13206,26 @@ type
     // given TSQLRecord table, using its TRecordVersion field
     // - both remote Source and local TSQLRestSever should have the supplied
     // Table class in each of their data model
+    // - by default, all the updates are retrieved, but you can define a value
+    // to ChunkRowLimit, so that the updates would be retrieved by smaller chunks
     // - returns 0 on error, or the latest applied revision number
     function RecordVersionSynchronize(Table: TSQLRecordClass;
-      Source: TSQLRest): TRecordVersion;
+      Source: TSQLRest; ChunkRowLimit: integer=0): TRecordVersion;
     /// will retrieve all the updates from another (distant) TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field, and a supplied
     // TRecordVersion monotonic value
     // - both remote Source and local TSQLRestSever should have the supplied
     // Table class in each of their data model
+    // - by default, all the updates are retrieved, but you can define a value
+    // to MaxRowLimit, so that the updates would be retrieved by smaller chunks
     // - returns nil if nothing new was found, or a TSQLRestBatch instance
     // containing all modifications since RecordVersion revision
     // - when executing the returned TSQLRestBatch on the database, you should
     // set TSQLRestServer.RecordVersionDeleteIgnore := true so that the
     // TRecordVersion fields would be forced from the supplied value
     function RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
-      Source: TSQLRest; var RecordVersion: TRecordVersion): TSQLRestBatch; virtual;
+      Source: TSQLRest; var RecordVersion: TRecordVersion;
+      MaxRowLimit: integer=0): TSQLRestBatch; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -31143,7 +31148,7 @@ begin
 end;
 
 function TSQLRestServer.RecordVersionSynchronize(Table: TSQLRecordClass;
-  Source: TSQLRest): TRecordVersion;
+  Source: TSQLRest; ChunkRowLimit: integer): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
 begin
@@ -31153,33 +31158,43 @@ begin
   result := 0;
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
-  Writer := RecordVersionSynchronizeToBatch(Table,Source,fRecordVersionMax);
-  if Writer=nil then
-    exit; // error
-  if Writer.Count=0 then begin // nothing new
-    result := fRecordVersionMax;
-    Writer.Free;
-  end else
-  try
-    fAcquireExecution[execORMWrite].Enter;
-    fRecordVersionDeleteIgnore := true;
-    if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
+  repeat
+    Writer := RecordVersionSynchronizeToBatch(Table,Source,fRecordVersionMax,ChunkRowLimit);
+    if Writer=nil then
+      exit; // error
+    if Writer.Count=0 then begin // nothing new (e.g. reached last chunk)
       result := fRecordVersionMax;
-      InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
-        [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Source],sllDebug);
+      Writer.Free;
+      break;
     end else
-      InternalLog('%.RecordVersionSynchronize BatchSend() failed',[ClassType],sllError);
-  finally
-    fRecordVersionDeleteIgnore := false;
-    fAcquireExecution[execORMWrite].Leave;
-    Writer.Free;
-  end;
+    try
+      fAcquireExecution[execORMWrite].Enter;
+      fRecordVersionDeleteIgnore := true;
+      if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
+        InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
+          [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Source],sllDebug);
+        if ChunkRowLimit=0 then begin
+          result := fRecordVersionMax;
+          break;
+        end;
+      end else begin
+        InternalLog('%.RecordVersionSynchronize BatchSend() failed',[ClassType],sllError);
+        fRecordVersionMax := 0; // force recompute the maximum from DB 
+        break;
+      end;
+    finally
+      fRecordVersionDeleteIgnore := false;
+      fAcquireExecution[execORMWrite].Leave;
+      Writer.Free;
+    end;
+  until false;
 end;
 
 function TSQLRestServer.RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
-  Source: TSQLRest; var RecordVersion: TRecordVersion): TSQLRestBatch;
+  Source: TSQLRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer): TSQLRestBatch;
 var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Props: TSQLRecordProperties;
+    Where: RawUTF8;
     UpdatedVersion,DeletedVersion: TRecordVersion;
     ListUpdated,ListDeleted: TSQLTableJSON;
     Rec: TSQLRecord;
@@ -31200,15 +31215,21 @@ begin
       '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,Table]);
   fAcquireExecution[execORMWrite].Enter;
   try
-    ListUpdated := Source.MultiFieldValues(Table,'*','%>? order by %',
+    Where := '%>? order by %';
+    if MaxRowLimit>0 then
+      Where := FormatUTF8('% limit %',[Where,MaxRowLimit]);
+    ListUpdated := Source.MultiFieldValues(Table,'*',Where,
       [Props.RecordVersionField.Name,Props.RecordVersionField.Name],[RecordVersion]);
     ListDeleted := nil;
     if ListUpdated<>nil then
     try
       DeletedMinID := Int64(SourceTableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+      Where := 'ID>? and ID<? order by ID';
+      if MaxRowLimit>0 then
+        Where := FormatUTF8('% limit %',[Where,MaxRowLimit]);
       ListDeleted := Source.MultiFieldValues(fSQLRecordVersionDeleteTable,
-        'ID,Deleted','ID>? and ID<? order by ID',[DeletedMinID+RecordVersion,
-         DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
+        'ID,Deleted',Where,[DeletedMinID+RecordVersion,
+        DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
       if ListDeleted=nil then
         exit; // DB error
       result := TSQLRestBatch.Create(self,nil,10000);
