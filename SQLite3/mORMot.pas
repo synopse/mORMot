@@ -1630,6 +1630,8 @@ type
     // - you can specify some options, e.g. boInsertOrIgnore for soInsert
     function EncodeAsSQLPrepared(const TableName: RawUTF8; Occasion: TSQLOccasion;
       const UpdateIDFieldName: RawUTF8; BatchOptions: TSQLRestBatchOptions): RawUTF8;
+    /// encode the FieldNames/FieldValues[] as a JSON object
+    procedure EncodeAsJSON(out result: RawUTF8);
     /// set the specified array to the fields names
     // - after a successfull call to Decode()
     procedure AssignFieldNamesTo(var Fields: TRawUTF8DynArray);
@@ -5579,6 +5581,27 @@ type
     /// this event handler will be triggerred by each Add/Update/Delete method
     property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
   end;
+
+  /// a callback interface used to notify a TSQLRecord modification in real time
+  // - will be used e.g. by TSQLRestServer.RecordVersionSynchronizeCallback()
+  // - all methods of this interface will be called asynchronously when
+  // transmitted via our WebSockets implementation, since they are defined as
+  // plain procedures
+  // - each callback instance should be private to a specific TSQLRecord 
+  IRestRecordVersionCallback = interface(IInvokable)
+    ['{8598E6BE-3590-4F76-9449-7AF7AF4241B0}']
+    /// this event will be raised on any Add on a versioned record
+    // - the supplied JSON object will contain the TRecordVersion field
+    procedure Added(const NewContent: RawJSON);
+    /// this event will be raised on any Update on a versioned record
+    // - the supplied JSON object will contain the TRecordVersion field
+    procedure Updated(const ModifiedContent: RawJSON);
+    /// this event will be raised on any Delete on a versioned record
+    procedure Deleted(const ID: TID; const Revision: TRecordVersion);
+  end;
+
+  /// a list of callback interfaces to notify TSQLRecord modifications
+  IRestRecordVersionCallbackDynArray = array of IRestRecordVersionCallback;
 
   /// root class for defining and mapping database records
   // - inherits a class from TSQLRecord, and add published properties to describe
@@ -13036,6 +13059,7 @@ type
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
+    fNotificationCallbacks: array of IRestRecordVersionCallbackDynArray;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
@@ -13083,8 +13107,13 @@ type
     procedure InternalRecordVersionMaxFromExisting(RetrieveNext: PID); virtual;
     procedure InternalRecordVersionDelete(TableIndex: integer; ID: TID;
       Batch: TSQLRestBatch); virtual;
-    procedure InternalRecordVersionHandle(var Decoder: TJSONObjectDecoder;
+    procedure InternalRecordVersionHandle(Occasion: TSQLOccasion;
+      TableIndex: integer; var Decoder: TJSONObjectDecoder;
       RecordVersionField: TSQLPropInfoRTTIRecordVersion); virtual;
+    procedure InternalRecordVersionCallbackNotify(
+      var Callbacks: IRestRecordVersionCallbackDynArray;
+      Occasion: TSQLOccasion; const DeletedID: TID;
+      const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
     /// will compute the next monotonic value for a TRecordVersion field
     // - you may override this method to customize the returned Int64 value
     // (e.g. to support several synchronization nodes)
@@ -13267,6 +13296,19 @@ type
     function RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
       Source: TSQLRest; var RecordVersion: TRecordVersion;
       MaxRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TSQLRestBatch; virtual;
+    /// register a callback interface which will be called each time a write
+    // operation is performed on a given TSQLRecord with a TRecordVersion field
+    // - the callback process would be blocking for the ORM write point of view:
+    // so it should be as fast as possible, or asynchronous - note that regular
+    // callbacks using WebSockets, as implemented by SynBidirSock.pas and
+    // mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode, are asynchronous
+    // - if the supplied RecordVersion is not the latest on the server side,
+    // this method will return FALSE and the caller should synchronize again via
+    // RecordVersionSynchronize() to avoid any missing update
+    // - if the supplied RecordVersion is the latest on the server side,
+    // this method will return TRUE and put the Callback notification in place
+    function RecordVersionSynchronizeCallback(Table: TSQLRecordClass;
+      RecordVersion: TRecordVersion; const Callback: IRestRecordVersionCallback): boolean;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -13804,7 +13846,8 @@ type
     fOutInternalStateForcedRefresh: boolean;
     procedure StorageLock(WillModifyContent: boolean); virtual;
     procedure StorageUnLock; virtual;
-    procedure RecordVersionFieldHandle(var Decoder: TJSONObjectDecoder);
+    procedure RecordVersionFieldHandle(Occasion: TSQLOccasion;
+      var Decoder: TJSONObjectDecoder);
     /// override this method if you want to update the refresh state
     // - returns FALSE if the static table content was not modified (default
     // method implementation is to always return FALSE)
@@ -22180,6 +22223,28 @@ begin
       W.CancelLastComma;
       W.Add(')');
     end;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TJSONObjectDecoder.EncodeAsJSON(out result: RawUTF8);
+var F: integer;
+    W: TTextWriter;
+begin
+  if FieldCount=0 then
+    exit;
+  W := TTextWriter.CreateOwnedStream(2048);
+  try
+    W.Add('{');
+    for F := 0 to FieldCount-1 do begin
+      W.AddFieldName(DecodedFieldNames^[F]);
+      W.AddQuotedStringAsJSON(FieldValues[F]);
+      W.Add(',');
+    end;
+    W.CancelLastComma;
+    W.Add('}');
     W.SetText(result);
   finally
     W.Free;
@@ -31171,30 +31236,43 @@ begin
       SQLRECORDVERSION_DELETEID_SHIFT]);
 end;
 
-procedure TSQLRestServer.InternalRecordVersionHandle(
-  var Decoder: TJSONObjectDecoder; RecordVersionField: TSQLPropInfoRTTIRecordVersion);
+procedure TSQLRestServer.InternalRecordVersionHandle(Occasion: TSQLOccasion;
+  TableIndex: integer; var Decoder: TJSONObjectDecoder;
+  RecordVersionField: TSQLPropInfoRTTIRecordVersion);
+var json: RawUTF8;
 begin
   if RecordVersionField=nil then
     exit; // no TRecordVersion field to track
   if Decoder.FindFieldName(RecordVersionField.Name)<0 then
     // only compute new monotonic TRecordVersion if not already supplied by sender
     Decoder.AddFieldValue(RecordVersionField.Name,Int64ToUtf8(RecordVersionCompute));
+  if (fNotificationCallbacks<>nil) and
+     (fNotificationCallbacks[TableIndex]<>nil) then begin
+    Decoder.EncodeAsJSON(json);
+    InternalRecordVersionCallbackNotify(
+      fNotificationCallbacks[TableIndex],Occasion,0,0,json);
+   end;
 end;
 
 procedure TSQLRestServer.InternalRecordVersionDelete(TableIndex: integer;
   ID: TID; Batch: TSQLRestBatch);
 var deleted: TSQLRecordTableDeleted;
+    revision: TRecordVersion;
 begin
   if fRecordVersionDeleteIgnore then
     exit;
   deleted := fSQLRecordVersionDeleteTable.Create;
   try
-    deleted.IDValue := RecordVersionCompute+
-      Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
+    revision := RecordVersionCompute;
+    deleted.IDValue := revision+Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
     deleted.Deleted := ID;
     if Batch<>nil then
       Batch.Add(deleted,True,True) else
       Add(deleted,True,True);
+    if (fNotificationCallbacks<>nil) and
+       (fNotificationCallbacks[TableIndex]<>nil) then
+      InternalRecordVersionCallbackNotify(
+        fNotificationCallbacks[TableIndex],soDelete,ID,revision,'');
   finally
     deleted.Free;
   end;
@@ -31342,6 +31420,27 @@ begin
   finally
     fAcquireExecution[execORMWrite].Leave;
   end;
+end;
+
+function TSQLRestServer.RecordVersionSynchronizeCallback(Table: TSQLRecordClass;
+  RecordVersion: TRecordVersion; const Callback: IRestRecordVersionCallback): boolean;
+var tableIndex: integer;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  tableIndex := Model.GetTableIndexExisting(Table);
+  fAcquireExecution[execORMWrite].Enter;
+  try
+    if RecordVersion<>fRecordVersionMax then
+      exit; // there are some missing items on the client side
+    if fNotificationCallbacks=nil then
+      SetLength(fNotificationCallbacks,Model.TablesMax+1);
+    InterfaceArrayAdd(fNotificationCallbacks[tableIndex],Callback);
+  finally
+    fAcquireExecution[execORMWrite].Leave;
+  end;
+  result := true;
 end;
 
 function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -36703,14 +36802,16 @@ begin
   LeaveCriticalSection(fStorageCriticalSection);
 end;
 
-procedure TSQLRestStorage.RecordVersionFieldHandle(var Decoder: TJSONObjectDecoder);
+procedure TSQLRestStorage.RecordVersionFieldHandle(Occasion: TSQLOccasion;
+  var Decoder: TJSONObjectDecoder);
 begin
   if fStoredClassRecordProps.RecordVersionField=nil then
     exit;
   if Owner=nil then
     raise EORMException.CreateUTF8('Owner=nil for %.%: TRecordVersion',
       [fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]);
-  Owner.InternalRecordVersionHandle(Decoder,fStoredClassRecordProps.RecordVersionField);
+  Owner.InternalRecordVersionHandle(Occasion,fStoredClassProps.TableIndex,
+    Decoder,fStoredClassRecordProps.RecordVersionField);
 end;
 
 function TSQLRestStorage.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -42432,6 +42533,7 @@ type
     fLowLevelConnectionID: Int64;
     fReleasedOnClientSide: boolean;
     fFakeInterface: Pointer;
+    fRaiseExceptionOnInvokeError: boolean;
     function CallbackInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
@@ -42786,9 +42888,10 @@ begin // here aClientDrivenID^ = FakeCall ID
     fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+
       'the client side, so I% callback notification was NOT sent',
       [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.InterfaceDotMethodName],sllWarning);
-    if (fServer.Services<>nil) and
-       (coRaiseExceptionIfReleasedByClient in
-        (fServer.Services as TServiceContainerServer).CallbackOptions) then begin
+    if fRaiseExceptionOnInvokeError or
+       ((fServer.Services<>nil) and
+        (coRaiseExceptionIfReleasedByClient in
+         (fServer.Services as TServiceContainerServer).CallbackOptions)) then begin
       if aErrorMsg<>nil then
         aErrorMsg^ := FormatUTF8('%.CallbackInvoke(I%): instance has been '+
           'released on client side',[self,aMethod.InterfaceDotMethodName]);
@@ -42800,6 +42903,37 @@ begin // here aClientDrivenID^ = FakeCall ID
       aResult := nil; // no result -> asynchronous non blocking callback
     result := fServer.OnNotifyCallback(fServer,aMethod.InterfaceDotMethodName,
       aParams,fLowLevelConnectionID,aClientDrivenID^,aResult,aErrorMsg);
+  end;
+end;
+
+procedure TSQLRestServer.InternalRecordVersionCallbackNotify(
+  var Callbacks: IRestRecordVersionCallbackDynArray; Occasion: TSQLOccasion;
+  const DeletedID: TID; const DeletedRevision: TRecordVersion;
+  const AddUpdateJson: RawUTF8);
+var i: integer;
+    instance: TObject;
+begin
+  fAcquireExecution[execORMWrite].Enter;
+  try
+    for i := length(Callbacks)-1 downto 0 do begin // downto for delete below
+      instance := ObjectFromInterface(Callbacks[i]);
+      if (instance<>nil) and
+         (PPointer(instance)^=TInterfacedObjectFakeServer) and
+         TInterfacedObjectFakeServer(instance).fReleasedOnClientSide then
+        // automatic removal of any released callback
+        InterfaceArrayDelete(Callbacks,i) else
+      try
+        case Occasion of
+        soInsert: Callbacks[i].Added(AddUpdateJson);
+        soUpdate: Callbacks[i].Updated(AddUpdateJson);
+        soDelete: Callbacks[i].Deleted(DeletedID,DeletedRevision);
+        end;
+      except // on notification error -> delete this entry
+        InterfaceArrayDelete(Callbacks,i);
+      end;
+    end;
+  finally
+    fAcquireExecution[execORMWrite].Leave;
   end;
 end;
 
@@ -46576,7 +46710,6 @@ begin
   O._AddRef;
   result := true;
 end;
-
 
 
 function ObjectFromInterface(const aValue: IInterface): TObject;

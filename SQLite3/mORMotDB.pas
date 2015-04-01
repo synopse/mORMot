@@ -1043,7 +1043,7 @@ begin
           soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
             Decode.Decode(P,nil,pQuoted,0,true);
           end;
-          RecordVersionFieldHandle(Decode);
+          RecordVersionFieldHandle(Occasion,Decode);
           if Fields=nil then begin
             Decode.AssignFieldNamesTo(Fields);
             SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
@@ -1737,7 +1737,7 @@ begin
       result := UpdatedID; // SentData='' -> no column to update
       exit;
     end;
-    RecordVersionFieldHandle(Decoder);
+    RecordVersionFieldHandle(Occasion,Decoder);
     // compute SQL statement and associated bound parameters
     SQL := JSONDecodedPrepareToSQL(Decoder,ExternalFields,Types,Occasion,[]);
     if Occasion=soUpdate then  // Int64ToUTF8(var) fails on D2007

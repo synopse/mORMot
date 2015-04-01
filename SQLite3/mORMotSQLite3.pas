@@ -827,7 +827,8 @@ begin
     JSONGetID(pointer(SentData),result);
     Decoder.Decode(SentData,nil,pInlined,result,false);
     if Props.RecordVersionField<>nil then
-      InternalRecordVersionHandle(decoder,Props.RecordVersionField);
+      InternalRecordVersionHandle(
+        soInsert,TableModelIndex,decoder,Props.RecordVersionField);
     SQL := SQL+Decoder.EncodeAsSQL(false)+';';
   end;
   if InternalExecute(SQL,true,nil,nil,nil,PInt64(@result)) then
@@ -1361,7 +1362,8 @@ begin
     Props := fModel.TableProps[TableModelIndex].Props;
     Decoder.Decode(SentData,nil,pInlined,ID,false);
     if Props.RecordVersionField<>nil then
-      InternalRecordVersionHandle(decoder,Props.RecordVersionField);
+      InternalRecordVersionHandle(
+        soUpdate,TableModelIndex,decoder,Props.RecordVersionField);
     SQL := Decoder.EncodeAsSQL(true);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
       [Props.SQLTableName,SQL,ID]);
@@ -1774,7 +1776,8 @@ begin
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchID[0]);
       if Props.RecordVersionField<>nil then
-        InternalRecordVersionHandle(Decode,Props.RecordVersionField);
+        InternalRecordVersionHandle(
+          soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
       if InternalExecute(SQL,true) then
         InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[0],fBatchValues[0],nil);
@@ -1800,7 +1803,8 @@ begin
           while P^ in [#1..' ','{','['] do inc(P);
           Decode.Decode(P,nil,pNonQuoted,fBatchID[ndx]);
           if Props.RecordVersionField<>nil then
-            InternalRecordVersionHandle(Decode,Props.RecordVersionField);
+            InternalRecordVersionHandle(
+              soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
           inc(ndx);
           DecodeSaved := false;
         end;
