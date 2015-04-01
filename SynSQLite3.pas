@@ -3085,17 +3085,21 @@ begin
 end;
 
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
+const PAGESIZE_OFFSET=16;
 var F: THandle;
     Header: array[0..2047] of AnsiChar;
 begin
+  result := false;
   F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
   if F=INVALID_HANDLE_VALUE then
-    result := false else begin
-    result := (FileRead(F,Header,sizeof(Header))=SizeOf(Header)) and
-      (Header='SQLite format 3') and not(Header[1024] in [#5,#10,#13]);
-    // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
-    FileClose(F);
-  end;
+    exit;
+  if (FileRead(F,Header,SizeOf(Header))=SizeOf(Header)) and
+     (Header='SQLite format 3') and (PWord(@Header[PAGESIZE_OFFSET])^=1024) then
+    // see https://www.sqlite.org/fileformat.html
+    if not(Header[1024] in [#5,#10,#13]) then
+      // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
+      result := true;
+  FileClose(F);
 end;
 
 
