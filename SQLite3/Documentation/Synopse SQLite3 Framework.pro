@@ -3242,8 +3242,42 @@ label="          Office B";
 \
 This kind of installation, with a main central office, and a network of local offices, would benefit from this @*master/slave@ @*replication@. Simple {\i @*redirection@} may be used - see @93@ - but it would expect the work to continue, even in case of {\i Internet} network failure. REST redirection would expect a 100% connection uplink, which may be critical in some cases.
 You could therefore implement replication in several ways:
-- Either the main office is the master, and any write would be push to the {\i Main Server}, whereas local offices would have a replicated copy of the information - drawback is that in case of network failure, the local office would be able to only read the data;
-- Or each local office may host its own data in a dedicated table, synchronized as a master database; the main office will replicate (as a slave) the private data of each local servers; in addition, all this data gathered by the {\i Main Server} may be further replication to the other local offices, and be still accessible in read mode - in case of network failure, all the data is available on the local servers, and the local private table is still writable.
+- Either the main office is the master, and any write would be push to the {\i Main Server}, whereas local offices would have a replicated copy of the information - drawback is that in case of network failure, the local office would be limited to read only data access;
+\graph HostingReplication1 Corporate Servers Master/Slave Replication With All Data On Main Server
+subgraph cluster_0 {
+label="Main Office";
+\Main¤Server\Local Data A¤Read/Write
+\Main¤Server\Local Data B¤Read/Write
+}
+subgraph cluster_1 {
+label="           Office A";
+\Local Data A¤Read Only\Main¤Server\Replication
+\Local Data B¤Read Only\Main¤Server
+}
+subgraph cluster_2 {
+label="          Office B";
+\Local Data A¤ Read Only\Main¤Server\Replication
+\Local Data B¤ Read Only\Main¤Server
+}
+\
+- Or each local office may host its own data in a dedicated table, synchronized as a master database; the main office will replicate (as a slave) the private data of each local server; in addition, all this data gathered by the {\i Main Server} may be further replicated to the other local offices, and be still accessible in read mode - in case of network failure, all the data is available on local servers, and the local private table is still writable.
+\graph HostingReplication2 Corporate Servers Master/Slave Replication With Private Local Data
+subgraph cluster_0 {
+label="Main Office";
+\Main¤Server\Local Data A¤ Read Only
+\Main¤Server\Local Data B¤ Read Only
+}
+subgraph cluster_1 {
+label="           Office A";
+\Local Data A¤Read/Write\Main¤Server\Replication
+\Local Data B¤Read Only\Main¤Server
+}
+subgraph cluster_2 {
+label="          Office B";
+\Local Data A¤Read Only\Main¤Server\Replication
+\Local Data B¤Read/Write\Main¤Server
+}
+\
 Of course, the second solution seems preferable, even if a bit more difficult to implement. The ablity of all local offices to work offline on their own private data, but still having all the other data accessible as read-only, would be a huge ROI.
 As a benefit of using replication, the central main server would be less stressed, since most of the process would take place in local servers, and the main office server would only be used for shared data backup and read-only gathering of the other local databases. Only a small network bandwith would be necessary (much less than a pure web solution), and CPU/storage resources would be minimal.
 :Daily ORM
