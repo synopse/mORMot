@@ -4,12 +4,13 @@
     <PathDelim Value="\"/>
     <Version Value="9"/>
     <BuildModes Active="Default"/>
-    <Units Count="4">
+    <Units Count="5">
       <Unit0>
         <Filename Value="mORMotOnAndroid.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="mORMotOnAndroid"/>
-        <CursorPos X="23" Y="79"/>
+        <TopLine Value="65"/>
+        <CursorPos Y="83"/>
         <ExtraEditorCount Value="1"/>
         <ExtraEditor1>
           <EditorIndex Value="-1"/>
@@ -24,10 +25,10 @@
         <Filename Value="Form_main.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Form_Main"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <CursorPos X="80" Y="124"/>
-        <UsageCount Value="147"/>
+        <TopLine Value="127"/>
+        <CursorPos X="45" Y="138"/>
+        <UsageCount Value="166"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit1>
@@ -36,7 +37,9 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="And_Jni_Bridge"/>
         <EditorIndex Value="3"/>
-        <UsageCount Value="29"/>
+        <TopLine Value="807"/>
+        <CursorPos X="16" Y="824"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit2>
@@ -44,12 +47,21 @@
         <Filename Value="..\src\Controls.java"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="608"/>
-        <CursorPos X="28" Y="620"/>
-        <UsageCount Value="27"/>
+        <UsageCount Value="46"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="Java"/>
       </Unit3>
+      <Unit4>
+        <Filename Value="..\src\App.java"/>
+        <IsPartOfProject Value="True"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="88"/>
+        <CursorPos X="48" Y="107"/>
+        <UsageCount Value="39"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Java"/>
+      </Unit4>
     </Units>
   </ProjectSession>
 </CONFIG>

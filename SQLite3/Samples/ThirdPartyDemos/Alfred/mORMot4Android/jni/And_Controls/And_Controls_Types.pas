@@ -1,4 +1,4 @@
-//
+﻿//
 //  And_Controls Base Type & Constant
 //
 //     simonsayz@naver.com / 최원식옹
@@ -8,13 +8,12 @@
 
 unit And_Controls_Types;
 
-{$mode delphi}
-{$packrecords c}
+{$IFDef FPC} {$mode delphi} {$packrecords c} {$EndIF}
 
 interface
 
 uses
-  SysUtils, Classes,
+  SysUtils, Types, Classes,
   And_Jni;
 
 Const
@@ -57,6 +56,16 @@ Const
  cLogModeOff            = False;
 
 Type
+ //----------------------------------------------------------------------------
+ // Base Types
+ //----------------------------------------------------------------------------
+ cInt    = Int32;
+ PInt32  = PjInt;
+ PSingle = PjFloat;
+
+ {$IfDef DCC}
+ pAnsiChar  = MarshaledAString;
+ {$EndIf}
  //----------------------------------------------------------------------------
  // General Types
  //----------------------------------------------------------------------------
@@ -109,6 +118,22 @@ Type
  //        XRef. Controls.java - Const
  //----------------------------------------------------------------------------
  //
+ TDirectory_Type        = ( DIRECTORY_ALARMS                     =     0,
+                            DIRECTORY_DCIM                       =     1,
+                            DIRECTORY_DOCUMENTS                  =     2,
+                            DIRECTORY_DOWNLOADS                  =     3,
+                            DIRECTORY_MOVIES                     =     4,
+                            DIRECTORY_MUSIC                      =     5,
+                            DIRECTORY_NOTIFICATIONS              =     6,
+                            DIRECTORY_PICTURES                   =     7,
+                            DIRECTORY_PODCASTS                   =     8,
+                            DIRECTORY_RINGTONES                  =     9,
+                            DIRECTORY_App                        = 10001,
+                            DIRECTORY_Files                      = 10002,
+                            DIRECTORY_SDCard                     = 10003,
+                            DIRECTORY_DataBase                   = 10004,
+                            DIRECTORY_Shared_Prefs               = 10005);
+ //
  TScreen_Style          = ( Screen_Style_Normal                  =  0,
                             Screen_Style_Full                    =  1);
  //
@@ -158,12 +183,14 @@ Type
                             AsyncTask_State_PostExecute          =  2,
                             AsyncTask_State_BackGround           =  3);
  //
+ TEdit_Style            = ( Edit_Style_SingleLine                =  0,
+                            Edit_Style_MultiLine                 =  1);                                                      
+ //
  TEdit_Type             = ( Edit_Type_Number                     =  0,
                             Edit_Type_Text                       =  1,
-                            Edit_Type_Text_Multi                 =  2,
-                            Edit_Type_Phone                      =  3,
-                            Edit_Type_PassNumber                 =  4,
-                            Edit_Type_PassText                   =  5);
+                            Edit_Type_Phone                      =  2,
+                            Edit_Type_PassNumber                 =  3,
+                            Edit_Type_PassText                   =  4);
  //
  THttp_Act              = ( Http_Act_Text                        =  0,
                             Http_Act_Download                    =  1,
@@ -285,10 +312,23 @@ Type
                            jLayout     : jObject;  // [Global] Java App          - Base Layout
                           End;
  TPaths                 = Record
-                           App         : String;   // ex. /data/app/com.kredix-1.apk
-                           Dat         : String;   // ex. /data/data/com.kredix/files
-                           Ext         : String;   // ex. /storage/emulated/0
-                           DCIM        : String;   // ex. /storage/emulated/0/DCIM
+                           //
+                           ALARMS        : String;
+                           DCIM          : String;
+                           DOCUMENTS     : String;
+                           DOWNLOADS     : String;
+                           MOVIES        : String;
+                           MUSIC         : String;
+                           NOTIFICATIONS : String;
+                           PICTURES      : String;
+                           PODCASTS      : String;
+                           RINGTONES     : String;
+                           //
+                           App           : String;
+                           Files         : String;
+                           SDCard        : String;
+                           DataBase      : String;
+                           Shared_Prefs  : String;
                           End;
  // Device Info.
  TDevice                = Record
@@ -404,7 +444,6 @@ Function  strEditType         ( EditType    : TEdit_Type          ) : String;
  begin
   Case EditType of
    Edit_Type_Text       : Result := 'TEXT';
-   Edit_Type_Text_Multi : Result := 'TEXT';
    Edit_Type_Number     : Result := 'NUMBER';
    Edit_Type_Phone      : Result := 'PHONE';
    Edit_Type_PassNumber : Result := 'PASSNUMBER';

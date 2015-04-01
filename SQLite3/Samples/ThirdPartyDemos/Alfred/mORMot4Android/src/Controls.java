@@ -8,7 +8,7 @@
 //
 //              LoadMan    / Jang,Yang-Ho
 //                           wkddidgh@naver.com
-//                           http://blog.naver.com/wkddidgh
+//
 //
 //              jmpessoa   / Jose Marques Pessoa
 //                           jmpessoa@hotmail.com   
@@ -55,7 +55,7 @@
 //               2014.12.22 ver0.21 Restructuring (Interlation #.03)
 //          
 //
-package com.kredix;
+package com.mormot;
 
 import android.app.Activity;
 import android.app.ActivityManager.RunningAppProcessInfo;
@@ -93,6 +93,7 @@ import android.opengl.GLSurfaceView;
 import android.opengl.GLU;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -103,7 +104,6 @@ import android.telephony.TelephonyManager;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
-import android.view.inputmethod.EditorInfo;
 import android.text.TextWatcher;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -127,6 +127,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
 import android.view.animation.TranslateAnimation;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -146,7 +147,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
-import java.lang.Object;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -155,7 +155,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -185,11 +185,54 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.ByteArrayBuffer;
 import org.apache.http.util.EntityUtils;
 
+import android.app.ActionBar;
+
+
 // -------------------------------------------------------------------------
 //   Constants
 // -------------------------------------------------------------------------
 class Const {
   public static final String LogHeader                  = "AndCtrls_Java";
+  //
+  public static final int Version_Base                  =     1; // 2008 Oct.
+  public static final int Version_Base_1_1              =     2; // 2009 Feb. Android 1.1
+  public static final int Version_CupCake               =     3; // 2009 May. Android 1.5
+  public static final int Version_Donut                 =     4; // 2009 Sep. Android 1.6
+  public static final int Version_Eclair                =     5; // 2009 Nov. Android 2.0
+  public static final int Version_Eclair_0_1            =     6; // 2009 Dec. Android 2.0.1
+  public static final int Version_Eclair_MR1            =     7; // 2010 Jan. Android 2.1
+  public static final int Version_Froyo                 =     8; // 2010 Jun  Android 2.2 
+  public static final int Version_GingerBread           =     9; // 2010 Nov. Android 2.3
+  public static final int Version_GingerBread_MR1       =    10; // 2011 Feb. Android 2.3.3
+  public static final int Version_HoneyComb             =    11; // 2011 Feb. Android 3.0
+  public static final int Version_HoneyComb_MR1         =    12; // 2011 May. Android 3.1
+  public static final int Version_HoneyComb_MR2         =    13; // 2011 Jun. Android 3.2
+  public static final int Version_Ice_Cream_SandWich    =    14; // 2011 Oct. Android 4.0
+  public static final int Version_Ice_Cream_SandWich_MR1=    15; // 2011 Dec. Android 4.0.3
+  public static final int Version_Jelly_Bean            =    16; // 2012 Jun. Android 4.1
+  public static final int Version_Jelly_Bean_MR1        =    17; // 2012 Nov. Android 4.2
+  public static final int Version_Jelly_Bean_MR2        =    18; // 2013 Jul. Android 4.3
+  public static final int Version_KitKat                =    19; // 2013 Oct. Android 4.4
+  public static final int Version_KitKat_Watch          =    20; //           Android 4.4W
+  public static final int Version_LolliPop              =    21; // 
+  public static final int Version_Cur_Development       = 10000; // 
+  //
+  public static final int DIRECTORY_ALARMS              =     0; 
+  public static final int DIRECTORY_DCIM                =     1;
+  public static final int DIRECTORY_DOCUMENTS           =     2;
+  public static final int DIRECTORY_DOWNLOADS           =     3;
+  public static final int DIRECTORY_MOVIES              =     4;
+  public static final int DIRECTORY_MUSIC               =     5;
+  public static final int DIRECTORY_NOTIFICATIONS       =     6;
+  public static final int DIRECTORY_PICTURES            =     7;
+  public static final int DIRECTORY_PODCASTS            =     8;
+  public static final int DIRECTORY_RINGTONES           =     9;
+  public static final int DIRECTORY_App                 = 10001;
+  public static final int DIRECTORY_Files               = 10002; 
+  public static final int DIRECTORY_SDCard              = 10003;
+  public static final int DIRECTORY_DataBase            = 10004;
+  public static final int DIRECTORY_Shared_Prefs        = 10005;
+  
   //
   public static final int ScreenStyle_Normal            =  0;
   public static final int ScreenStyle_Full              =  1;
@@ -240,12 +283,14 @@ class Const {
   public static final int AsyncTask_State_PostExecute   =  2;
   public static final int AsyncTask_State_BackGround    =  3;
   //
+  public static final int Edit_Style_SingleLine         =  0;
+  public static final int Edit_Style_MultiLine          =  1;
+  //
   public static final int Edit_Type_Number              =  0;
   public static final int Edit_Type_Text                =  1;
-  public static final int Edit_Type_Text_Multi          =  2;
-  public static final int Edit_Type_Phone               =  3;
-  public static final int Edit_Type_PassNumber          =  4;
-  public static final int Edit_Type_PassText            =  5;
+  public static final int Edit_Type_Phone               =  2;
+  public static final int Edit_Type_PassNumber          =  3;
+  public static final int Edit_Type_PassText            =  4;
   //
   public static final int Http_Act_Text                 =  0;
   public static final int Http_Act_Download             =  1;
@@ -254,6 +299,8 @@ class Const {
   public static final int Http_State_Xfer               =  0;
   public static final int Http_State_Done               =  1;
   public static final int Http_State_Error              =  2;
+  //
+  public static final String Http_Boundary              = "---------------------------7df9330d90b18";
 }
 
 // -------------------------------------------------------------------------
@@ -397,6 +444,23 @@ class jForm {
                    { controls.appLayout.removeView(layout); } };
   }
 
+  public  void SetTitle ( boolean visible ) {
+    //Activity host = (Activity) controls.activity;
+    Log.d(Const.LogHeader,"Setting visibility of titlebar");
+    if (visible)
+    {
+      controls.activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+      controls.activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    }
+    else
+    {
+      controls.activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+      controls.activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+      //controls.activity.requestWindowFeature(Window.FEATURE_NO_TITLE);
+      //controls.activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    }
+  }
+
   //
   public  void SetEnabled ( boolean enabled ) {
     Log.d(Const.LogHeader,"Parent Form Enabled "+ Integer.toString(layout.getChildCount()));
@@ -463,7 +527,7 @@ class jTextView extends TextView {
     setLayoutParams(lparams);
   }
 
-  // LORDMAN 2013-08-13
+  // 2013.08.13 LORDMAN added property
   public  void setTextAlignment( int align ) {
     switch ( align ) {
      case 0 : { setGravity( Gravity.LEFT              ); }; break;
@@ -537,19 +601,12 @@ class jEditText extends EditText {
     lparams = new RelativeLayout.LayoutParams(100,100);
     lparams.setMargins        ( 50, 50,0,0);
     // 1 Line
-    // this.setSingleLine();
-    setSingleLine(false);
-    setGravity(Gravity.LEFT | Gravity.TOP);
-    setInputType(EditorInfo.TYPE_CLASS_TEXT | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
-
-    //this.setRawInputType();
-    setMaxLines(10);
-    setMinLines(10);
-    setHorizontallyScrolling(false);
+    this.setSingleLine();
+    // 
     setHorizontalScrollBarEnabled(false);
-    setLines(10);
-
-    // Init Event : http://socome.tistory.com/15
+    setHorizontallyScrolling(true);    
+    
+    //
     onKeyListener = new OnKeyListener() {
       public  boolean onKey(View v, int keyCode, KeyEvent event) {
         if ((keyCode           == KeyEvent.KEYCODE_ENTER) &&
@@ -606,7 +663,7 @@ class jEditText extends EditText {
     setLayoutParams(lparams);
   }
 
-  // LORDMAN 2013-08-13
+  // 2013.08.13 LORDMAN  added Property
   public  void setTextAlignment( int align ) {
     switch ( align ) {
      case 0 : { setGravity( Gravity.LEFT              ); }; break;
@@ -620,17 +677,31 @@ class jEditText extends EditText {
    };
   }
 
+  // 2015.03.04 DonAlfredo added Multiline & patch
+  public void setMultiLine( int editStyle ) {
+    switch (editStyle) {
+     case Const.Edit_Style_MultiLine : { setOnKeyListener(null);
+                                         setSingleLine(false);
+                                         setInputType(getInputType() | EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE);
+                                         setHorizontallyScrolling(false);
+                                         setGravity( getGravity() | Gravity.TOP );
+                                         break; }
+     default                         : { setOnKeyListener(onKeyListener);
+                                         setSingleLine(true);
+                                         setInputType(getInputType() & (~EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE));
+                                         setHorizontallyScrolling(true);
+                                         setGravity( getGravity() & (~Gravity.TOP ) );
+                                         break; }                                  
+    }
+  }  
+
+
   //
   public  void setParent( android.view.ViewGroup viewgroup ) {
     if (parent != null) { parent.removeView(this); }
     parent = viewgroup;
     viewgroup.addView(this,lparams);
   }
-  public void setListener( boolean setting ) {
-    if (setting) {setOnKeyListener(onKeyListener);}
-    else {setOnKeyListener(null);}
-  }
-
 
   // Free object except Self, Pascal Code Free the class.
   public  void Free() {
@@ -1351,8 +1422,8 @@ class jViewFlipper extends ViewFlipper {
     //
     int obj = 112321321;
     imagebtn = new jImageBtn(context,ctrls,obj);
-    imagebtn.setButton("/data/data/com.kredix/files/btn1_1.png",
-                       "/data/data/com.kredix/files/btn1_2.png");
+    imagebtn.setButton("/data/data/com.mormot.mORMotDemoOnAndroid/files/btn1_1.png",
+                       "/data/data/com.mormot.mORMotDemoOnAndroid/files/btn1_2.png");
     //tView2.View.addView(imagebtn);
     addView(imagebtn);
     //
@@ -1926,21 +1997,11 @@ class jGLSurfaceView extends GLSurfaceView {
 //  CameraView
 //      2014.11.17
 //
-//  Ref. http://android-er.blogspot.kr/2011/01/start-camera-auto-focusing-autofocus.html
-//       http://pheadra.tistory.com/entry/onPreviewFramebyte-data-Camera-camera%EC%97%90%EC%84%9C-%EC%9D%B4%EB%AF%B8%EC%A7%80-%EB%B9%BC%EC%98%A4%EB%8A%94-%EB%B0%A9%EB%B2%95
-//       http://sampleprogramz.com/android/surfaceview.php  
-//       http://stackoverflow.com/questions/1032258/android-how-to-save-a-preview-frame-as-jpeg-image
-//       http://stackoverflow.com/questions/11220711/how-to-copy-surfaceview-to-bitmap
-//       http://stackoverflow.com/questions/17439682/android-file-i-o-openfileinput-undefined
-//       http://stackoverflow.com/questions/18289544/taking-screenshot-programmatically-doesnt-capture-the-contents-of-surfaceview
-//       http://stackoverflow.com/questions/9325861/converting-yuv-rgbimage-processing-yuv-during-onpreviewframe-in-android
-//       http://vissel.tistory.com/184
-//       https://code.google.com/p/android/issues/detail?id=823
-//       http://k1rha.tistory.com/m/post/135
-//
 // -------------------------------------------------------------------------
 //
-//   Galaxy Note 3  Preview Size
+//   Preview Size / getSupportedPreviewSizes()
+//   -------------------------------------------------------
+//   Galaxy Note 3
 //    1920,1080
 //    1440,1080
 //    1280, 720
@@ -1949,7 +2010,7 @@ class jGLSurfaceView extends GLSurfaceView {
 //     800, 400
 //     720, 480
 //     640, 480
-//     352, 288
+//     352, 288   /Default
 //     320, 240
 //     176, 144
 //
@@ -1961,7 +2022,7 @@ class jGLSurfaceView extends GLSurfaceView {
 //
 //
 class jCameraView extends SurfaceView implements SurfaceHolder.Callback,
-	                                               Camera.PreviewCallback {
+                                                 Camera.PreviewCallback {
   // Java-Pascal Interface
   private int               PasObj   = 0;      // Pascal Obj
   private Controls          controls = null;   // Control Class for Event
@@ -2002,12 +2063,12 @@ class jCameraView extends SurfaceView implements SurfaceHolder.Callback,
     // Call Back
     //--------------------------------------------------------------------------
     autoFocusCallback = new AutoFocusCallback() {
-		@Override
-		public void onAutoFocus(boolean arg0, Camera arg1) {
-			//camera.takePicture(shutterCallback, rawCallback, jpegCallback);
-	 		Toast.makeText(controls.activity, "autoFocus", 2000).show();
-		 }
-	  };
+    @Override
+    public void onAutoFocus(boolean arg0, Camera arg1) {
+      //camera.takePicture(shutterCallback, rawCallback, jpegCallback);
+      Toast.makeText(controls.activity, "autoFocus", 2000).show();
+     }
+    };
 
     jpegCallback = new PictureCallback() {
       public void onPictureTaken(byte[] data, Camera camera) {
@@ -2581,9 +2642,151 @@ class jHttp {
 
   //---------------------------------------------------------------------------
   // Upload File
-  // http://egloos.zum.com/surprisen/v/2387313
-  //---------------------------------------------------------------------------
+  // http://www.cuelogic.com/blog/android-code-to-upload-download-large-files-to-server-2
+  //
+  // Test Server Code
+  // --------------------------------------------------------------------------
+  // <html>
+  // <head>
+  //	<title>Upload Test</title>
+  // </head>
+  // <body>
+  // <%
+  //    Dim Upload, UpForm
+  //    Set Upload = Server.CreateObject("TABSUpload4.Upload")
+  //    Upload.Start "E:\web\LocalUser\app\www\maxpaper"
+  //    Set UpForm = Upload.Form("uploadFile")
+  //	UpForm.Save "E:\web\LocalUser\app\www\maxpaper\file", False
+  //	Response.Write "FileName:" & UpForm.FileName & "<br>"
+  //    Set Upload = Nothing
+  // %>
+  // </body>
+  // </html>
+  //
 
+  private class UploadTask extends AsyncTask<String, Integer, String> {
+
+    private Context context;
+    private PowerManager.WakeLock mWakeLock;
+    private String rst = "";
+
+    public UploadTask(Context context) {
+        this.context = context;
+    }
+
+    @Override
+    protected void onPreExecute() {
+      super.onPreExecute();
+      // PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+      // mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,getClass().getName());
+      // mWakeLock.acquire();
+    }
+
+    @Override
+    protected void onProgressUpdate(Integer... progress) {
+      super.onProgressUpdate(progress);
+      //
+      controls.pOnHttpState(PasObj,Const.Http_Act_Upload,Const.Http_State_Xfer,progress[0],localFileText);
+    }
+
+    @Override
+    protected void onPostExecute(String result) {
+      // mWakeLock.release();
+      if (rst == "") { controls.pOnHttpState(PasObj,Const.Http_Act_Upload,Const.Http_State_Error,100,rst); }
+      else           { controls.pOnHttpState(PasObj,Const.Http_Act_Upload,Const.Http_State_Done ,100,rst); }
+    }
+
+    @Override
+    protected String doInBackground(String... sUrl) {
+        FileInputStream   input  = null;
+        DataOutputStream  output = null;
+        HttpURLConnection conn   = null;
+        rst = "";
+        try { URL url = new URL(sUrl[0]);
+              conn = (HttpURLConnection) url.openConnection();
+              conn.setDoInput        (true  );
+              conn.setDoOutput       (true  );
+              conn.setUseCaches      (false );
+
+              conn.setRequestMethod  ("POST");
+              conn.setRequestProperty("Connection","Keep-Alive");
+              conn.setRequestProperty("Content-Type","multipart/form-data; boundary="+Const.Http_Boundary);
+              //
+              output = new DataOutputStream(conn.getOutputStream());
+              //
+              output.writeBytes("--" + Const.Http_Boundary + "\r\n");
+              output.writeBytes("Content-Disposition: form-data; name=\"uploadFile\"; "+
+                                "filename=\"" + localFileText + "\"\r\n");
+              output.writeBytes("Content-Type: text/plain" + "\r\n\r\n");
+              //
+              input  = new FileInputStream (new File(localFileText));
+
+              int totalSize      = input.available();
+              int total          = 0;
+              int totalSav       = 0;
+              int curUpload      = 0;
+              int maxBufferSize  = 1 * 4096;
+              int bytesRead;
+              int bytesAvailable = input.available();
+              int bufferSize     = Math.min(bytesAvailable,maxBufferSize);
+              byte buffer[]      = new byte[4096];
+
+              // Read File
+              bytesRead = input.read(buffer,0,bufferSize);
+              try   { while(bytesRead >0) {
+                       try   { output.write(buffer,0,bufferSize);           }
+                       catch (OutOfMemoryError e) { return ("outOfMemory"); }
+                      bytesAvailable = input.available();
+
+                      // current upload
+                      curUpload = (totalSize-bytesAvailable);
+                      if ( (curUpload-totalSav) >= (100/totalSize)) {
+                       publishProgress((int) ( (curUpload * 100 / totalSize) ));
+                       totalSav = total;
+                      }
+
+                      bufferSize     = Math.min(bytesAvailable, maxBufferSize);
+                      bytesRead      = input.read(buffer,0,bufferSize); } }
+              catch (Exception e) { return ("error"); }
+              //
+              output.writeBytes("\r\n");
+              output.writeBytes("--" + Const.Http_Boundary + "--"+"\r\n");
+
+              // Responses from the server (code and message)
+	      int serverResponseCode = conn.getResponseCode();
+	      String serverResponseMessage = conn.getResponseMessage();
+	      Log.d(Const.LogHeader,"Server Response Code " + " " + serverResponseCode);
+	      Log.d(Const.LogHeader,"Server Response Message "+ serverResponseMessage);
+
+              input.close();
+              output.flush();
+
+              InputStream is = conn.getInputStream();
+              int ch;
+              StringBuffer b = new StringBuffer();
+              while (( ch = is.read() ) != -1) {b.append( (char)ch ); }
+
+              String response = b.toString();
+              Log.d(Const.LogHeader,"Response"+response); }
+        catch (Exception e) { return e.toString(); }
+        finally {
+            try   { if ((output != null) && (input != null )) { rst = localFileText; }
+                    if (output != null) output.close();
+                    if (input  != null) input.close ();  }
+            catch (IOException ignored) {  }
+            if (conn != null) conn.disconnect();  }
+        return null;
+    }
+  }
+
+  // Sample File /data/data/com.kredix/files/alex.jpg
+  public  void uploadFile ( String url, String localFile ) {
+    urlText       = url;
+    localFileText = localFile;
+    //
+    final UploadTask uploadTask = new UploadTask(controls.activity);
+    uploadTask.execute(url);
+  }
 
 }
 
@@ -2658,6 +2861,7 @@ public  class Controls {
  public   RelativeLayout appLayout;                                    // Base Layout
  public   int            screenStyle       = Const.ScreenStyle_Normal; // Noral,Full
  public   int            screenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+ public   int            SDKVer            = android.os.Build.VERSION.SDK_INT;
 
  // Jave -> Pascal Function ( Pascal Side = Event )
  public  native int  pOnAppScreenStyle      ();
@@ -2705,7 +2909,8 @@ public  class Controls {
  public  int  jOnAppScreenStyle()                  { return(pOnAppScreenStyle());        }
  public  int  jOnAppScreenOrientation()            { return(pOnAppScreenOrientation());  }
  //
- public  void jOnAppCreate(RelativeLayout layout ) { pOnAppCreate(layout);               }
+ public  void jOnAppCreate(RelativeLayout layout ) { Log.d(Const.LogHeader,"####### jOnAppCreate"); 
+ 	                                                   pOnAppCreate(layout);               }
  public  void jOnAppNewIntent()                    { pOnAppNewIntent();                  }
  public  void jOnAppDestroy()                      { pOnAppDestroy();                    }
  public  void jOnAppPause()                        { pOnAppPause();                      }
@@ -2786,6 +2991,19 @@ public  class Controls {
  public  void appKillProcess() {
    this.activity.finish();
  }
+
+ public  void appSetTitleBar(boolean visible) {
+    final ActionBar actionBar = this.activity.getActionBar();
+    if (visible)
+    {
+      actionBar.show();
+    }
+    else
+    {
+      actionBar.hide();
+    }
+ }
+
 
  // -------------------------------------------------------------------------
  //  Asset Related
@@ -2958,6 +3176,10 @@ public  class Controls {
    ((jForm)form).SetVisible(visible);
  }
 
+ public  void jForm_SetTitle (java.lang.Object form, boolean visible) {
+   ((jForm)form).SetTitle(visible);
+ }
+
  public  void jForm_SetEnabled (java.lang.Object form, boolean enabled) {
    ((jForm)form).SetEnabled(enabled);
  }
@@ -2994,33 +3216,79 @@ public  class Controls {
  //  Android path
  // -------------------------------------------------------------------------
 
- // Result : /data/app/com.kredix-1.apk
- public  String getPathApp (android.content.Context context,String pkgName) {
-   String PathApp = "";
-   try {
-    PathApp = this.activity.getPackageManager().getApplicationInfo( pkgName, 0 ).sourceDir;
-   }
-   catch ( NameNotFoundException e ) {}
-   return ( PathApp );
+ // jmpessoa 
+ // 2015.03.03 merged by funcions simonsayz
+ // 
+ // ref. http://developer.android.com/reference/android/os/Environment.html#DIRECTORY_ALARMS
+ public String getPath(int _directory, String pkgName) {
+  
+  File   filePath = null;
+  String path     = "";
+    
+  switch(_directory) {                         
+   case Const.DIRECTORY_ALARMS        : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_ALARMS);
+                                          path     = filePath.getPath(); 
+                                          break;}
+   case Const.DIRECTORY_DCIM          : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM  ); 
+                                          path     = filePath.getPath(); 
+                                          break;}
+   case Const.DIRECTORY_DOCUMENTS     : { if (SDKVer >= Const.Version_KitKat) 
+                                            { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS );
+                                              path     = filePath.getPath(); }
+                                          else 
+                                            { path = activity.getFilesDir().getAbsolutePath(); 
+                                              path = path.substring(0, path.lastIndexOf("/")) + "/documents";
+                                              File file = new File(path);
+                                              file.mkdirs();
+                                              path     = file.getPath(); }
+                                          break;  }
+   case Const.DIRECTORY_DOWNLOADS     : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS     );
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_MOVIES        : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES        ); 
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_MUSIC         : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC         );
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_NOTIFICATIONS : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_NOTIFICATIONS ); 
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_PICTURES      : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES      ); 
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_PODCASTS      : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS      ); 
+                                          path     = filePath.getPath();
+                                          break; }
+   case Const.DIRECTORY_RINGTONES     : { filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES     ); 
+                                          path     = filePath.getPath();
+                                          break; }
+   //
+   case Const.DIRECTORY_App           : { try    { path = activity.getPackageManager().getApplicationInfo( pkgName, 0 ).sourceDir; }
+   	                                      catch  ( NameNotFoundException e) {}           
+                                          break; }
+   case Const.DIRECTORY_Files         : { path = activity.getFilesDir().getAbsolutePath();                                            
+                                          break; }
+   case Const.DIRECTORY_SDCard        : { if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED) == true)
+                                            { filePath = Environment.getExternalStorageDirectory();
+                                            	path     = filePath.getPath(); }                                     
+                                          break; }
+   case Const.DIRECTORY_DataBase      : { path = activity.getFilesDir().getPath();
+                                          path = path.substring(0, path.lastIndexOf("/")) + "/databases";      
+                                          File file = new File(path);
+                                          file.mkdirs();
+                                          path      = file.getPath();
+                                          break; }
+   case Const.DIRECTORY_Shared_Prefs  : { path      = activity.getFilesDir().getPath();
+                                          path      = path.substring(0, path.lastIndexOf("/")) + "/shared_prefs";           
+                                          File file = new File(path);
+                                          file.mkdirs();
+                                          path      = file.getPath();
+                                          break; }                               
+  }                                  
+  return path;
  }
-
- // Result : /data/data/com/kredix/files
- public  String getPathDat (android.content.Context context) {
-   String PathDat = this.activity.getFilesDir().getAbsolutePath();
-   return ( PathDat );
- }
-
- // Result : /storage/emulated/0
- public  String getPathExt() {
-   File FileExt = Environment.getExternalStorageDirectory();
-   return ( FileExt.getPath() );
- }
-
- // Result : /storage/emulated/0/DCIM
- public  String getPathDCIM() {
-   File FileDCIM =  Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-   return ( FileDCIM.getPath() );
- }
+ 
 
  // -------------------------------------------------------------------------
  //  Android Device
@@ -3171,6 +3439,11 @@ public  class Controls {
    ((jTextView)textview).setTextAlignment(align);
  }
 
+ // 2015.03.04 DonAlfredo added Property
+ public  void jEditText_setEditStyle(java.lang.Object edittext, int editStyle) {
+   ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_TEXT); ((jEditText)edittext).setMultiLine(editStyle); 
+ }  
+    
  // LORDMAN 2013-08-27
  public  void jEditText_setEnabled(java.lang.Object edittext, boolean enabled ) {
    jEditText obj = (jEditText)edittext;
@@ -3255,8 +3528,7 @@ public  class Controls {
  public  void jEditText_setEditType(java.lang.Object edittext, int editType) {
     switch (editType) {
     case Const.Edit_Type_Number     : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_NUMBER); break; }
-    case Const.Edit_Type_Text       : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_TEXT  ); ((jEditText)edittext).setListener(true); break; }
-    case Const.Edit_Type_Text_Multi : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE ); ((jEditText)edittext).setListener(false); break; }
+    case Const.Edit_Type_Text       : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_TEXT  ); break; }
     case Const.Edit_Type_Phone      : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_PHONE);  break; }
     case Const.Edit_Type_PassNumber : { ((jEditText)edittext).setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
                                         ((jEditText)edittext).setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance()); break; }
@@ -3826,11 +4098,11 @@ public  class Controls {
  }
 
  public  void jCameraView_captureStart(java.lang.Object surfaceview) {
- 	((jCameraView)surfaceview).captureStart();
+  ((jCameraView)surfaceview).captureStart();
  }
 
  public  void jCameraView_captureStop(java.lang.Object surfaceview) {
- 	((jCameraView)surfaceview).captureStop();
+  ((jCameraView)surfaceview).captureStop();
  }
 
  // -------------------------------------------------------------------------
@@ -3976,6 +4248,11 @@ public  class Controls {
  public  void jHttp_downloadFile(java.lang.Object http, String url,String localFile) {
    ((jHttp)http).downloadFile(url,localFile);
  }
+
+ public  void jHttp_uploadFile(java.lang.Object http, String url,String localFile) {
+   ((jHttp)http).uploadFile(url,localFile);
+ }
+
 
  // -------------------------------------------------------------------------
  //  Bitmap

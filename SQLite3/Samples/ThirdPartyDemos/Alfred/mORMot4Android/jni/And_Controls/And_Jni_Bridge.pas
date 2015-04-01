@@ -1,4 +1,4 @@
-//
+﻿//
 //  Pascal-Java Interface Unit
 //
 //   main.pas
@@ -36,13 +36,12 @@
 //
 unit And_Jni_Bridge;
 
-{$mode delphi}
-{$packrecords c}
+{$IfDef FPC} {$mode delphi} {$packrecords c} {$EndIf}
 
 interface
 
 uses
-  SysUtils,Classes,ctypes,
+  SysUtils,Types,Classes,
   And_jni,And_Controls_Types;
 
  //----------------------------------------------------------------------------
@@ -61,10 +60,7 @@ uses
  // System
  Procedure jSystem_GC                          (Const Env : TEnv);
  Function  jSystem_GetTick                     (Const Env : TEnv) : LongInt;
- Function  jSystem_GetPathApp                  (Const Env : TEnv) : String;
- Function  jSystem_GetPathDat                  (Const Env : TEnv) : String;
- Function  jSystem_GetPathExt                  (Const Env : TEnv) : String;
- Function  jSystem_GetPathDCIM                 (Const Env : TEnv) : String;
+ Function  jSystem_GetPath                     (Const Env : TEnv; DirectoryType : TDirectory_Type) : String;
 
  // Device Info
  Function  jDevice_GetScreenStyle              (Const Env : TEnv ) : TScreen_Style;
@@ -86,6 +82,7 @@ uses
  // App - Activity
  Procedure jApp_Finish                         (Const Env : TEnv);
  Procedure jApp_KillProcess                    (Const Env : TEnv);
+ Procedure jApp_SetTitleBar                    (Const Env : TEnv; visible:boolean);
 
  // Asset
  Function  jAsset_SaveToFile                   (Const Env : TEnv; Asset,FileName :String) : Boolean;
@@ -112,6 +109,7 @@ uses
 
  Function  jForm_GetLayoutG                    (Const Env : TEnv; Form     : jObject) : jObject;
  Procedure jForm_SetVisibility                 (Const Env : TEnv; Form     : jObject; visible : Boolean);
+ Procedure jForm_SetTitle                      (Const Env : TEnv; Form     : jObject; visible : Boolean);
  Procedure jForm_SetEnabled                    (Const Env : TEnv; Form     : jObject; enabled : Boolean);
 
  // TextView
@@ -130,9 +128,9 @@ uses
  // EditText
  Function  jEditText_Create                    (Const Env : TEnv; pasObj   : TObject) : jObject;
  Procedure jEditText_Free                      (Const Env : TEnv; EditText : jObject);
- Procedure jEditText_setParent                 (Const Env : TEnv; EditText : jObject;ViewGroup : jObject);
- Procedure jEditText_setEnabled                (Const Env : TEnv; EditText : jObject; enabled : Boolean);
-
+ Procedure jEditText_setParent                 (Const Env : TEnv; EditText : jObject; ViewGroup : jObject);
+ Procedure jEditText_setEnabled                (Const Env : TEnv; EditText : jObject; enabled   : Boolean);
+ 
  Procedure jEditText_setXYWH                   (Const Env : TEnv; EditText : jObject;x,y,w,h : integer);
  Function  jEditText_getText                   (Const Env : TEnv; EditText : jObject) : String;
  Procedure jEditText_setText                   (Const Env : TEnv; EditText : jObject; Str : String);
@@ -142,6 +140,7 @@ uses
  Procedure jEditText_SetFocus                  (Const Env : TEnv; EditText : jObject);
  Procedure jEditText_immShow                   (Const Env : TEnv; EditText : jObject);
  Procedure jEditText_immHide                   (Const Env : TEnv; EditText : jObject);
+ Procedure jEditText_setEditStyle              (Const Env : TEnv; EditText : jObject; editStyle : TEdit_Style);
  Procedure jEditText_setEditType               (Const Env : TEnv; EditText : jObject; editType : TEdit_Type);
  Procedure jEditText_maxLength                 (Const Env : TEnv; EditText : jObject; size  : DWord);
  Procedure jEditText_getCursorPos              (Const Env : TEnv; EditText : jObject; Var x,y : Integer);
@@ -343,6 +342,7 @@ uses
  Procedure jHttp_Free                          (Const Env : TEnv;      Http : jObject);
  Procedure jHttp_getText                       (Const Env : TEnv;      Http : jObject; url : String);
  Procedure jHttp_DownloadFile                  (Const Env : TEnv;      Http : jObject; url : String; localFile : String);
+ Procedure jHttp_UploadFile                    (Const Env : TEnv;      Http : jObject; url : String; localFile : String);
 
  // Camera Activity
  Procedure jTakePhoto                          (Const Env : TEnv; FileName : String);
@@ -353,14 +353,12 @@ uses
 
 implementation
 
-{$linklib jnigraphics}
-
 Const
  NDKLibLog      = 'liblog.so';
  libjnigraphics = 'libjnigraphics.so';
 
 // log
-Function __android_log_write(prio:longint;tag,text:pchar):longint; cdecl; external NDKLibLog;
+Function __android_log_write(prio:longint;tag,text:pAnsiChar):longint; cdecl; external NDKLibLog;
 
 // jnigraphics
 Function AndroidBitmap_getInfo      (env: PJNIEnv; jbitmap: jobject; info: PAndroid_Bitmap_Info): cint; cdecl; external libjnigraphics;
@@ -370,12 +368,76 @@ Function AndroidBitmap_unlockPixels (env: PJNIEnv; jbitmap: jobject): cint; cdec
 //------------------------------------------------------------------------------
 // Android Helper Functions
 //------------------------------------------------------------------------------
+Type
+ {$IfDef DCC}
+ pAnsiChar  = MarshaledAString;
+ {$EndIf}
+
+ StrToPAnsi = Record
+               Bytes: array of Byte;
+               Function Str(const Value: string) : PAnsiChar;
+              end;
+
+Function StrToPAnsi.Str(const Value: string) : PAnsiChar;
+ Var
+  i : Integer;
+begin
+ SetLength( Bytes, Length(Value) + 1 );
+ for i := 0 to Length(Value) - 1 do
+  begin
+   Bytes[i] := Ord(Value[i]) and 255;
+  end;
+ Bytes[Length(Value)] := 0;
+ //
+ Result := @Bytes[0];
+end;
+
+// Delphi Only
+Function UTFToStr( UTF : PChar ) : String;
+ Var
+  Ptr  : PByte;
+  PtrS : PByte;
+  i,j  : Integer;
+ begin
+  {$IfDef FPC}
+   Result := String(UTF);
+   Exit;
+  {$EndIf}
+  //
+  Result := '';
+  Ptr    := pByte(UTF);
+  PtrS   := Ptr;
+  //
+  i    := 0;
+  if Ptr^ = 0 then
+   begin
+    Result := '';
+    Exit;
+   end;
+  //
+  While ( Ptr^ <> 0 ) do
+   begin
+    Inc(i);
+    Inc(Ptr);
+   end;
+  //
+  Ptr := PtrS;
+  for j := 1 to i do
+   begin
+    Result := Result + Char(Ptr^);
+    Inc(Ptr);
+   end;
+ end;
 
 // Log
-Procedure jLog(Const Msg : String; LogType : TAndroid_Log = Android_Log_DEBUG);
+procedure jLog(Const Msg : String; LogType : TAndroid_Log = Android_Log_DEBUG);
+ Var
+  S : StrToPAnsi;
  begin
-  If gLog then
-   __android_log_write(Integer(LogType),'AndCtrls_Pas',PChar(Msg));
+  if gLog then
+   __android_log_write(Integer(LogType),'AndCtrls_Pas',
+                       {$IfDef FPC} PChar(Msg)            {$EndIf}
+                       {$IfDef Dcc} PAnsiChar(S.Str(Msg)) {$EndIf} );
  end;
 
 //
@@ -393,7 +455,7 @@ Function jGetMethodID(Const Env : TEnv;
  begin
   //
   Result := True;
-  If Method_ <> nil then Exit;
+  {$IFDef FPC} If Method_ <> nil then Exit; {$EndIF}
   Method_ := Env.jEnv^.GetMethodID( Env.jEnv, Env.jClass, FuncName, FuncSig);
   Result := Method_ <> nil;
   If Not(Result) then
@@ -406,7 +468,7 @@ Function  jGetStrLength (Const Env : TEnv; Str : String): Integer;
   _cFuncName = 'getStrLength';
   _cFuncSig  = '(Ljava/lang/String;)I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -422,7 +484,7 @@ Function  jGetStrDateTime (Const Env : TEnv): String;
   _cFuncName = 'getStrDateTime';
   _cFuncSig  = '()Ljava/lang/String;';
  Var
-  _jMethod  : jMethodID = nil;
+  _jMethod  : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jString  : jString;
   _jBoolean : jBoolean;
   _jStrUTF  : PChar;
@@ -450,7 +512,7 @@ Procedure jSystem_GC      (Const Env : TEnv);
   _cFuncName = 'systemGC';
   _cFuncSig  = '()V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
   Env.jEnv^.CallVoidMethod(Env.jEnv, Env.jControls,_jMethod);
@@ -462,26 +524,30 @@ Function  jSystem_GetTick (Const Env : TEnv) : LongInt;
   _cFuncName = 'getTick';
   _cFuncSig  = '()J';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
   Result     := Env.jEnv^.CallLongMethod(Env.jEnv, Env.jControls,_jMethod);
  end;
 
-// "/data/app/com.kredix-1.apk"
-Function  jSystem_GetPathApp  (Const Env : TEnv) : String;
+//
+Function  jSystem_GetPath (Const Env : TEnv; DirectoryType : TDirectory_Type) : String;
  Const
-  _cFuncName = 'getPathApp';
-  _cFuncSig  = '(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;';
+  _cFuncName = 'getPath';
+  _cFuncSig  = '(ILjava/lang/String;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  AppName  : String;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
   _jString : jString;
   _jBoolean: jBoolean;
   _jStrUTF : PChar;
  begin
+  //
+  AppName := Env.AppName;
+  //
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
-  _jParams[0].l := 0; // Context
+  _jParams[0].i := LongInt(DirectoryType);
   _jParams[1].l := Env.jEnv^.NewStringUTF(Env.jEnv, pchar(Env.AppName) );
   _jString      := Env.jEnv^.CallObjectMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParams);
   Env.jEnv^.DeleteLocalRef(Env.jEnv,_jParams[1].l);
@@ -490,87 +556,13 @@ Function  jSystem_GetPathApp  (Const Env : TEnv) : String;
    False: begin
            _jBoolean := JNI_False;
            _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-           Result    := String( _jStrUTF );
+           Result    := UTFToStr (_jStrUTF);
            Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
           end;
   end;
-  jLog('System_PathApp:'+ Result);
+  jLog('System_Path:'+ Result);
  end;
 
-// "/data/data/com.kredix/files"
-Function  jSystem_GetPathDat  (Const Env : TEnv) : String;
- Const
-  _cFuncName = 'getPathDat';
-  _cFuncSig  = '(Landroid/content/Context;)Ljava/lang/String;';
- Var
-  _jMethod : jMethodID = nil;
-  _jParam  : jValue;
-  _jString : jString;
-  _jBoolean: jBoolean;
-  _jStrUTF : PChar;
- begin
-  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
-  _jParam.l := 0; // context;
-  _jString  := Env.jEnv^.CallObjectMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParam);
-  Case _jString = nil of
-   True : Result    := '';
-   False: begin
-           _jBoolean := JNI_False;
-           _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-           Result    := String( _jStrUTF );
-           Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
-          end;
-  end;
-  jLog('System_PathDat:'+ Result);
- end;
-
-Function  jSystem_GetPathExt  (Const Env : TEnv) : String;
- Const
-  _cFuncName = 'getPathExt';
-  _cFuncSig  = '()Ljava/lang/String;';
- Var
-  _jMethod : jMethodID = nil;
-  _jString : jString;
-  _jBoolean: jBoolean;
-  _jStrUTF : PChar;
- begin
-  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
-  _jString  := Env.jEnv^.CallObjectMethod(Env.jEnv, Env.jControls,_jMethod);
-  Case _jString = nil of
-   True : Result    := '';
-   False: begin
-           _jBoolean := JNI_False;
-           _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-           Result    := String( _jStrUTF );
-           Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
-          end;
-  end;
-  jLog('System_PathExt:'+ Result);
- end;
-
-Function  jSystem_GetPathDCIM (Const Env : TEnv) : String;
- Const
-  _cFuncName = 'getPathDCIM';
-  _cFuncSig  = '()Ljava/lang/String;';
- Var
-  _jMethod  : jMethodID = nil;
-  _jString  : jString;
-  _jBoolean : jBoolean;
-  _jStrUTF  : PChar;
- begin
-  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
-  _jString  := Env.jEnv^.CallObjectMethod(Env.jEnv, Env.jControls,_jMethod);
-  Case _jString = nil of
-   True : Result    := '';
-   False: begin
-           _jBoolean := JNI_False;
-           _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-           Result    := String( _jStrUTF );
-           Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
-          end;
-  end;
-  jLog('System_PathDCIM:'+ Result);
- end;
 
 //-----------------------------------------------------------------------------
 // Device
@@ -581,7 +573,7 @@ Function jDevice_GetScreenStyle  (Const Env : TEnv ) : TScreen_Style;
   _cFuncName = 'systemGetScreenStyle';
   _cFuncSig  = '()I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
   Rst      : LongInt;
  begin
@@ -595,7 +587,7 @@ Procedure jDevice_SetScreenStyle (Const Env : TEnv; ScreenStyle: TScreen_Style);
   _cFuncName = 'systemSetScreenStyle';
   _cFuncSig  = '(I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -608,7 +600,7 @@ Function jDevice_GetScreenOrientation (Const Env : TEnv ) : TScreen_Orientation;
   _cFuncName = 'systemGetScreenOrientation';
   _cFuncSig  = '()I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
   Rst      : LongInt;
  begin
@@ -622,7 +614,7 @@ Procedure jDevice_SetScreenOrientation (Const Env : TEnv; orientation : TScreen_
   _cFuncName = 'systemSetScreenOrientation';
   _cFuncSig  = '(I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -636,10 +628,14 @@ Function  jDevice_GetScreenWH (Const Env : TEnv ) : TWH;
   _cFuncName = 'getScreenWH';
   _cFuncSig  = '(Landroid/content/Context;)I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
   _wh      : Integer;
  begin
+  //
+  Result.Height := 0;
+  Result.Width  := 0;
+  //
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
   _jParam.l     := 0;// context;
   _wh           := Env.jEnv^.CallIntMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParam);
@@ -653,7 +649,7 @@ Function  jDevice_GetModel (Const Env : TEnv) : String;
   _cFuncName = 'getDevModel';
   _cFuncSig  = '()Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jString : jString;
   _jBoolean: jBoolean;
   _jStrUTF : PChar;
@@ -665,7 +661,7 @@ Function  jDevice_GetModel (Const Env : TEnv) : String;
   False: begin
           _jBoolean := JNI_False;
           _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-          Result    := String( _jStrUTF );
+          Result    := UTFToStr( _jStrUTF );
           Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
          end;
  end;
@@ -677,7 +673,7 @@ Function  jDevice_GetVersion (Const Env : TEnv) : String;
   _cFuncName = 'getDevVersion';
   _cFuncSig  = '()Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jString : jString;
   _jBoolean: jBoolean;
   _jStrUTF : PChar;
@@ -689,7 +685,7 @@ Function  jDevice_GetVersion (Const Env : TEnv) : String;
   False: begin
           _jBoolean := JNI_False;
           _jStrUTF  := Env.jEnv^.GetStringUTFChars(Env.jEnv,_jString,@_jBoolean);
-          Result    := String( _jStrUTF );
+          Result    := UTFtoStr( _jStrUTF );
           Env.jEnv^.ReleaseStringUTFChars(Env.jEnv,_jString,_jStrUTF);
          end;
  end;
@@ -701,7 +697,7 @@ Function  jDevice_GetPhoneNumber(Const Env : TEnv) : String;
   _cFuncName = 'getDevPhoneNumber';
   _cFuncSig  = '()Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jString : jString;
   _jBoolean: jBoolean;
   _jStrUTF : PChar;
@@ -725,7 +721,7 @@ Function  jDevice_GetID(Const Env : TEnv) : String;
   _cFuncName = 'getDevDeviceID';
   _cFuncSig  = '()Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jString : jString;
   _jBoolean: jBoolean;
   _jStrUTF : PChar;
@@ -749,7 +745,7 @@ Function  jDevice_GetNetwork(Const Env : TEnv) : TNetwork_Type;
   _cFuncName = 'getDevNetwork';
   _cFuncSig  = '()I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   Rst      : Integer;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -767,7 +763,7 @@ Procedure jClass_setNull (Const Env : TEnv; ClassObj : jClass);
   _cFuncName = 'classSetNull';
   _cFuncSig  = '(Ljava/lang/Class;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -781,7 +777,7 @@ Function  jClass_chkNull (Const Env : TEnv; ClassObj : jClass) : Boolean;
   _cFuncName = 'classChkNull';
   _cFuncSig  = '(Ljava/lang/Class;)Z';
  Var
-  _jMethod  : jMethodID = nil;
+  _jMethod  : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam   : jValue;
   _jBoolean : jBoolean;
  begin
@@ -798,7 +794,8 @@ Procedure jApp_Finish (Const Env : TEnv);
 Const
  _cFuncName = 'appFinish';
  _cFuncSig  = '()V';
- _jMethod   : jMethodID = nil;
+Var
+ _jMethod   : jMethodID {$IFDef FPC} = nil {$EndIf};
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
  Env.jEnv^.CallVoidMethod(Env.jEnv, Env.jControls,_jMethod);
@@ -810,11 +807,26 @@ Const
  _cFuncName = 'appKillProcess';
  _cFuncSig  = '()V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
  Env.jEnv^.CallVoidMethod(Env.jEnv, Env.jControls,_jMethod);
 end;
+
+
+Procedure jApp_SetTitleBar(Const Env : TEnv; visible:boolean);
+Const
+ _cFuncName = 'appSetTitleBar';
+ _cFuncSig  = '(Z)V';
+Var
+ _jMethod : jMethodID = nil;
+ _jParam : jValue;
+begin
+ jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
+ _jParam.z := Byte(visible);
+ Env.jEnv^.CallVoidMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParam);
+end;
+
 
 // Asset
 //  src     'test.txt'
@@ -825,7 +837,7 @@ Function  jAsset_SaveToFile( Const Env : TEnv; Asset,FileName :String ) : Boolea
   _cFuncName = 'assetSaveToFile';
   _cFuncSig  = '(Ljava/lang/String;Ljava/lang/String;)Z';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -866,7 +878,7 @@ Function  jImage_getWH       ( Const Env : TEnv; filename : String ) : TWH;
   _cFuncName = 'Image_getWH';
   _cFuncSig  = '(Ljava/lang/String;)I';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
   _wh      : Integer;
  begin
@@ -886,7 +898,7 @@ Function  jImage_resample              (Const Env : TEnv; filename : String; siz
   _cFuncName = 'Image_resample';
   _cFuncSig  = '(Ljava/lang/String;I)Landroid/graphics/Bitmap;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
   _jObject : jObject;
  begin
@@ -904,7 +916,7 @@ Procedure jImage_save                  (Const Env : TEnv; Bitmap : jObject; file
   _cFuncName = 'Image_save';
   _cFuncSig  = '(Landroid/graphics/Bitmap;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
   _jObject : jObject;
  begin
@@ -922,7 +934,7 @@ Const
  _cFuncName = 'view_SetVisible';
  _cFuncSig  = '(Landroid/view/View;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -940,7 +952,7 @@ Const
  _cFuncName = 'view_SetBackGroundColor';
  _cFuncSig  = '(Landroid/view/View;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -955,7 +967,7 @@ Const
  _cFuncName = 'view_Invalidate';
  _cFuncSig  = '(Landroid/view/View;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -973,7 +985,7 @@ Function  jForm_Create (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jForm_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
   _jC      : jClass;
  begin
@@ -991,7 +1003,7 @@ Procedure jForm_Free      (Const Env : TEnv; Form    : jObject);
   _cFuncName = 'jForm_Free';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1006,7 +1018,7 @@ Procedure jForm_Show (Const Env : TEnv; Form : jObject;  Effect : TAnimation_Eff
   _cFuncName = 'jForm_Show';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   //
@@ -1022,7 +1034,7 @@ Procedure jForm_Close     (Const Env : TEnv; Form : jObject; Effect : TAnimation
   _cFuncName = 'jForm_Close';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   //
@@ -1038,7 +1050,7 @@ Function  jForm_GetLayoutG (Const Env : TEnv; Form : jObject) : jObject;
   _cFuncName = 'jForm_GetLayout';
   _cFuncSig  = '(Ljava/lang/Object;)Landroid/widget/RelativeLayout;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   //
@@ -1053,6 +1065,20 @@ Function  jForm_GetLayoutG (Const Env : TEnv; Form : jObject) : jObject;
 Procedure jForm_SetVisibility (Const Env : TEnv; Form : jObject; visible : Boolean);
  Const
   _cFuncName = 'jForm_SetVisible';
+  _cFuncSig  = '(Ljava/lang/Object;Z)V';
+ Var
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
+  _jParams : array[0..1] of jValue;
+ begin
+  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
+  _jParams[0].l := Form;
+  _jParams[1].z := Byte(visible);
+  Env.jEnv^.CallVoidMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParams);
+ end;
+
+Procedure jForm_SetTitle (Const Env : TEnv; Form : jObject; visible : Boolean);
+ Const
+  _cFuncName = 'jForm_SetTitle';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
   _jMethod : jMethodID = nil;
@@ -1070,7 +1096,7 @@ Procedure jForm_SetEnabled    (Const Env : TEnv; Form : jObject; enabled : Boole
   _cFuncName = 'jForm_SetEnabled';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1090,7 +1116,7 @@ Const
  _cFuncName = 'jTextView_Create';
  _cFuncSig  = '(I)Ljava/lang/Object;';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..0] of jValue;
  cls: jClass;
 begin
@@ -1107,7 +1133,7 @@ Procedure jTextView_Free (Const Env : TEnv; TextView : jObject);
   _cFuncName = 'jTextView_Free';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1122,7 +1148,7 @@ Procedure jTextView_setParent(Const Env : TEnv; TextView : jObject;ViewGroup : j
   _cFuncName = 'jTextView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   //
@@ -1138,7 +1164,7 @@ Procedure jTextView_setEnabled (Const Env : TEnv; TextView : jObject; enabled : 
   _cFuncName = 'jTextView_setEnabled';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1153,7 +1179,7 @@ Procedure jTextView_setXYWH(Const Env : TEnv; TextView : jObject;x,y,w,h : integ
   _cFuncName = 'jTextView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   //
@@ -1172,7 +1198,7 @@ Function jTextView_getText(Const Env : TEnv; TextView : jObject) : String;
   _cFuncName = 'jTextView_getText';
   _cFuncSig  = '(Ljava/lang/Object;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -1199,7 +1225,7 @@ Procedure jTextView_setText (Const Env : TEnv; TextView : jObject; Str : String)
   _cFuncName = 'jTextView_setText';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   //
@@ -1216,7 +1242,7 @@ Procedure jTextView_setTextColor (Const Env : TEnv; TextView : jObject; color : 
   _cFuncName = 'jTextView_setTextColor';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1231,7 +1257,7 @@ Procedure jTextView_setTextSize (Const Env : TEnv; TextView : jObject; size : DW
   _cFuncName = 'jTextView_setTextSize';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1247,7 +1273,7 @@ Procedure jTextView_setTextAlignment (Const Env : TEnv; TextView : jObject; alig
   _cFuncName = 'jTextView_setTextAlignment';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1266,7 +1292,7 @@ Function jEditText_Create(Const Env : TEnv; pasObj : TObject ) : jObject;
   _cFuncName = 'jEditText_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1281,7 +1307,7 @@ Procedure jEditText_Free (Const Env : TEnv; EditText : jObject);
   _cFuncName = 'jEditText_Free';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1296,7 +1322,7 @@ Procedure jEditText_setXYWH(Const Env : TEnv; EditText : jObject;x,y,w,h : integ
   _cFuncName = 'jEditText_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1315,7 +1341,7 @@ Procedure jEditText_setParent(Const Env : TEnv;
   _cFuncName = 'jEditText_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1331,7 +1357,7 @@ Const
  _cFuncName = 'jEditText_setEnabled';
  _cFuncSig  = '(Ljava/lang/Object;Z)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1346,7 +1372,7 @@ Function jEditText_getText(Const Env : TEnv; EditText : jObject) : String;
   _cFuncName = 'jEditText_getText';
   _cFuncSig  = '(Ljava/lang/Object;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -1373,7 +1399,7 @@ Procedure jEditText_setText(Const Env : TEnv;
   _cFuncName = 'jEditText_setText';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1390,7 +1416,7 @@ Const
  _cFuncName = 'jEditText_setTextColor';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1406,7 +1432,7 @@ Const
  _cFuncName = 'jEditText_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1422,7 +1448,7 @@ Const
  _cFuncName = 'jEditText_setHint';
  _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1438,7 +1464,7 @@ Const
  _cFuncName = 'jEditText_SetFocus';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1452,7 +1478,7 @@ Const
  _cFuncName = 'jEditText_immShow';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1466,7 +1492,7 @@ Const
  _cFuncName = 'jEditText_immHide';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1474,14 +1500,29 @@ begin
  Env.jEnv^.CallVoidMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParams);
 end;
 
-// LORDMAN   - 2013-07-26
-// SimonSayz - 2015-02-28 / convert int to type
+// 2015.03.04 DonAlfredo added Property
+Procedure jEditText_setEditStyle (Const Env : TEnv; EditText : jObject; editStyle : TEdit_Style);
+Const
+ _cFuncName = 'jEditText_setEditStyle';
+ _cFuncSig  = '(Ljava/lang/Object;I)V';
+Var
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
+ _jParams : array[0..1] of jValue;
+begin
+ jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
+ _jParams[0].l := EditText;
+ _jParams[1].i := Integer(editStyle);
+ Env.jEnv^.CallVoidMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParams);
+end;
+
+// 2013.07.26 LORDMAN    added Property
+// 2015.02.28 SimonSayz  convert int to type
 Procedure jEditText_setEditType (Const Env : TEnv; EditText : jObject; editType : TEdit_Type);
 Const
  _cFuncName = 'jEditText_setEditType';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1496,7 +1537,7 @@ Const
  _cFuncName = 'jEditText_maxLength';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1511,13 +1552,13 @@ Const
  _cFuncName = 'jEditText_GetCursorPos';
  _cFuncSig  = '(Ljava/lang/Object;)[I';
 Var
- _jMethod   : jMethodID = nil;
+ _jMethod   : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam    : jValue;
  _jIntArray : jintArray;
  _jBoolean  : jBoolean;
  //
- PInt    : PInteger;
- PIntSav : PInteger;
+ PInt    : PInt32;
+ PIntSav : PInt32;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
  _jParam.l  := EditText;
@@ -1537,7 +1578,7 @@ Const
  _cFuncName = 'jEditText_SetCursorPos';
  _cFuncSig  = '(Ljava/lang/Object;II)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..2] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1553,7 +1594,7 @@ Const
  _cFuncName = 'jEditText_setTextAlignment';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1569,7 +1610,7 @@ Const
  _cFuncName = 'jEditText_setEditable';
  _cFuncSig  = '(Ljava/lang/Object;Z)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1588,7 +1629,7 @@ Function jButton_Create(Const Env : TEnv;  pasObj: TObject) : jObject;
   _cFuncName = 'jButton_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1603,7 +1644,7 @@ Procedure jButton_Free (Const Env : TEnv; Button : jObject);
    _cFuncName = 'jButton_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1619,7 +1660,7 @@ Procedure jButton_setXYWH(Const Env : TEnv;
   _cFuncName = 'jButton_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1638,7 +1679,7 @@ Procedure jButton_setParent(Const Env : TEnv;
   _cFuncName = 'jButton_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1654,7 +1695,7 @@ Procedure jButton_setText(Const Env : TEnv;
   _cFuncName = 'jButton_setText';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1672,7 +1713,7 @@ Function jButton_getText(Const Env : TEnv;
   _cFuncName = 'jButton_getText';
   _cFuncSig  = '(Ljava/lang/Object;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -1696,7 +1737,7 @@ Const
  _cFuncName = 'jButton_setTextColor';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1712,7 +1753,7 @@ Const
  _cFuncName = 'jButton_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1728,7 +1769,7 @@ Procedure jButton_setOnClick(Const Env : TEnv;
   _cFuncName = 'Button_setOnClick';
   _cFuncSig  = '(Landroid/widget/Button;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1746,7 +1787,7 @@ Function jCheckBox_Create(Const Env : TEnv; pasObj : TObject ) : jObject;
   _cFuncName = 'jCheckBox_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1761,7 +1802,7 @@ Procedure jCheckBox_Free (Const Env : TEnv; CheckBox : jObject);
    _cFuncName = 'jCheckBox_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1777,7 +1818,7 @@ Procedure jCheckBox_setXYWH(Const Env : TEnv;
   _cFuncName = 'jCheckBox_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1796,7 +1837,7 @@ Procedure jCheckBox_setParent(Const Env : TEnv;
   _cFuncName = 'jCheckBox_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1812,7 +1853,7 @@ Function jCheckBox_getText(Const Env : TEnv; CheckBox : jObject) : String;
   _cFuncName = 'jCheckBox_getText';
   _cFuncSig  = '(Ljava/lang/Object;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -1836,7 +1877,7 @@ Procedure jCheckBox_setText(Const Env : TEnv;
   _cFuncName = 'jCheckBox_setText';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1853,7 +1894,7 @@ Const
  _cFuncName = 'jCheckBox_setTextColor';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1868,7 +1909,7 @@ Const
  _cFuncName = 'jCheckBox_isChecked';
  _cFuncSig  = '(Ljava/lang/Object;)Z';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : jValue;
  _jBool   : jBoolean;
 begin
@@ -1885,7 +1926,7 @@ Const
  _cFuncName = 'jCheckBox_setChecked';
  _cFuncSig  = '(Ljava/lang/Object;Z)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1901,7 +1942,7 @@ Const
  _cFuncName = 'jCheckBox_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1920,7 +1961,7 @@ Function jRadioButton_Create(Const Env : TEnv; pasObj : TObject ) : jObject;
   _cFuncName = 'jRadioButton_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1935,7 +1976,7 @@ Procedure jRadioButton_Free (Const Env : TEnv; RadioButton : jObject);
    _cFuncName = 'jRadioButton_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1951,7 +1992,7 @@ Procedure jRadioButton_setXYWH(Const Env : TEnv;
   _cFuncName = 'jRadioButton_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1970,7 +2011,7 @@ Procedure jRadioButton_setParent(Const Env : TEnv;
   _cFuncName = 'jRadioButton_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -1986,7 +2027,7 @@ Function jRadioButton_getText(Const Env : TEnv; RadioButton : jObject) : String;
   _cFuncName = 'jRadioButton_getText';
   _cFuncSig  = '(Ljava/lang/Object;)Ljava/lang/String;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
   _jString : jString;
   _jBoolean: jBoolean;
@@ -2010,7 +2051,7 @@ Procedure jRadioButton_setText(Const Env : TEnv;
   _cFuncName = 'jRadioButton_setText';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2027,7 +2068,7 @@ Const
  _cFuncName = 'jRadioButton_setTextColor';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2042,7 +2083,7 @@ Const
  _cFuncName = 'jRadioButton_isChecked';
  _cFuncSig  = '(Ljava/lang/Object;)Z';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : jValue;
  _jBool   : jBoolean;
 begin
@@ -2059,7 +2100,7 @@ Const
  _cFuncName = 'jRadioButton_setChecked';
  _cFuncSig  = '(Ljava/lang/Object;Z)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2075,7 +2116,7 @@ Const
  _cFuncName = 'jRadioButton_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2094,7 +2135,7 @@ Function jProgressBar_Create(Const Env : TEnv; pasObj : TObject; Style : DWord )
   _cFuncName = 'jProgressBar_Create';
   _cFuncSig  = '(II)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2110,7 +2151,7 @@ Procedure jProgressBar_Free (Const Env : TEnv; ProgressBar : jObject);
    _cFuncName = 'jProgressBar_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2126,7 +2167,7 @@ Procedure jProgressBar_setXYWH(Const Env : TEnv;
   _cFuncName = 'jProgressBar_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2145,7 +2186,7 @@ Procedure jProgressBar_setParent(Const Env : TEnv;
   _cFuncName = 'jProgressBar_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2160,7 +2201,7 @@ Const
  _cFuncName = 'jProgressBar_getProgress';
  _cFuncSig  = '(Ljava/lang/Object;)I';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2175,7 +2216,7 @@ Const
  _cFuncName = 'jProgressBar_setProgress';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2195,7 +2236,7 @@ Function  jImageView_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jImageView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2210,7 +2251,7 @@ Procedure jImageView_Free   (Const Env : TEnv; ImageView : jObject);
    _cFuncName = 'jImageView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2226,7 +2267,7 @@ Procedure jImageView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jImageView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2245,7 +2286,7 @@ Procedure jImageView_setParent(Const Env : TEnv;
   _cFuncName = 'jImageView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2261,7 +2302,7 @@ Procedure jImageView_setImage(Const Env : TEnv;
   _cFuncName = 'jImageView_setImage';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2281,7 +2322,7 @@ Function  jListView_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jListView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..5] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2296,7 +2337,7 @@ Procedure jListView_Free   (Const Env : TEnv; ListView : jObject);
    _cFuncName = 'jListView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2312,7 +2353,7 @@ Procedure jListView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jListView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2331,7 +2372,7 @@ Procedure jListView_setParent(Const Env : TEnv;
   _cFuncName = 'jListView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2347,7 +2388,7 @@ Const
   _cFuncName = 'jListView_setTextColor';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2363,7 +2404,7 @@ Const
  _cFuncName = 'jListView_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2380,7 +2421,7 @@ Const
  _cFuncName = 'jListView_setItemPosition';
  _cFuncSig  = '(Ljava/lang/Object;II)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..2] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2396,7 +2437,7 @@ Procedure jListView_add(Const Env : TEnv; ListView : jObject; Str : String);
   _cFuncName = 'jListView_add';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2412,7 +2453,7 @@ Const
  _cFuncName = 'jListView_clear';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2426,7 +2467,7 @@ Const
  _cFuncName = 'jListView_delete';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2445,7 +2486,7 @@ Function  jScrollView_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jScrollView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2460,7 +2501,7 @@ Procedure jScrollView_Free   (Const Env : TEnv; ScrollView : jObject);
    _cFuncName = 'jScrollView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2476,7 +2517,7 @@ Procedure jScrollView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jScrollView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2495,7 +2536,7 @@ Procedure jScrollView_setParent(Const Env : TEnv;
   _cFuncName = 'jScrollView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2511,7 +2552,7 @@ Procedure jScrollView_setScrollSize(Const Env : TEnv;
   _cFuncName = 'jScrollView_setScrollSize';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2527,7 +2568,7 @@ Function jScrollView_getView(Const Env : TEnv;
   _cFuncName = 'jScrollView_getView';
   _cFuncSig  = '(Ljava/lang/Object;)Landroid/view/ViewGroup;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2546,7 +2587,7 @@ Function  jHorizontalScrollView_Create  (Const Env : TEnv; pasObj : TObject) : j
   _cFuncName = 'jHorizontalScrollView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2561,7 +2602,7 @@ Procedure jHorizontalScrollView_Free   (Const Env : TEnv; ScrollView : jObject);
    _cFuncName = 'jHorizontalScrollView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2577,7 +2618,7 @@ Procedure jHorizontalScrollView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jHorizontalScrollView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2596,7 +2637,7 @@ Procedure jHorizontalScrollView_setParent(Const Env : TEnv;
   _cFuncName = 'jHorizontalScrollView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2612,7 +2653,7 @@ Procedure jHorizontalScrollView_setScrollSize(Const Env : TEnv;
   _cFuncName = 'jHorizontalScrollView_setScrollSize';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2628,7 +2669,7 @@ Function jHorizontalScrollView_getView(Const Env : TEnv;
   _cFuncName = 'jHorizontalScrollView_getView';
   _cFuncSig  = '(Ljava/lang/Object;)Landroid/view/ViewGroup;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2646,7 +2687,7 @@ Const
  _cFuncName = 'jViewFlipper_Create';
  _cFuncSig  = '(I)Ljava/lang/Object;';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..0] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2660,7 +2701,7 @@ Const
  _cFuncName = 'jViewFlipper_Free';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2676,7 +2717,7 @@ Const
  _cFuncName = 'jViewFlipper_setXYWH';
  _cFuncSig  = '(Ljava/lang/Object;IIII)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..4] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2694,7 +2735,7 @@ Const
  _cFuncName = 'jViewFlipper_setParent';
  _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2713,7 +2754,7 @@ Function  jWebView_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jWebView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2728,7 +2769,7 @@ Procedure jWebView_Free   (Const Env : TEnv; WebView : jObject);
    _cFuncName = 'jWebView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2744,7 +2785,7 @@ Procedure jWebView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jWebView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2763,7 +2804,7 @@ Procedure jWebView_setParent(Const Env : TEnv;
   _cFuncName = 'jWebView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2779,7 +2820,7 @@ Const
  _cFuncName = 'jWebView_setJavaScript';
  _cFuncSig  = '(Ljava/lang/Object;Z)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2795,7 +2836,7 @@ Procedure jWebView_loadURL(Const Env : TEnv;
   _cFuncName = 'jWebView_loadURL';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2815,7 +2856,7 @@ Const
  _cFuncName = 'jCanvas_Create';
  _cFuncSig  = '(I)Ljava/lang/Object;';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2829,7 +2870,7 @@ Const
  _cFuncName = 'jCanvas_Free';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2845,7 +2886,7 @@ Const
  _cFuncName = 'jCanvas_setStrokeWidth';
  _cFuncSig  = '(Ljava/lang/Object;F)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2860,7 +2901,7 @@ Const
  _cFuncName = 'jCanvas_setStyle';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2875,7 +2916,7 @@ Const
  _cFuncName = 'jCanvas_setColor';
  _cFuncSig  = '(Ljava/lang/Object;I)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2890,7 +2931,7 @@ Const
  _cFuncName = 'jCanvas_setTextSize';
  _cFuncSig  = '(Ljava/lang/Object;F)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2905,7 +2946,7 @@ Const
  _cFuncName = 'jCanvas_drawLine';
  _cFuncSig  = '(Ljava/lang/Object;FFFF)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..4] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2923,7 +2964,7 @@ Const
 _cFuncName = 'jCanvas_drawPoint';
 _cFuncSig  = '(Ljava/lang/Object;FF)V';
 Var
-_jMethod : jMethodID = nil;
+_jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
 _jParams : Array[0..2] of jValue;
 begin
 jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2939,7 +2980,7 @@ Const
  _cFuncName = 'jCanvas_drawText';
  _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;FF)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..3] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2958,7 +2999,7 @@ Const
  _cFuncName = 'jCanvas_drawBitmap';
  _cFuncSig  = '(Ljava/lang/Object;Landroid/graphics/Bitmap;IIII)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..5] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2982,7 +3023,7 @@ Function  jBitmap_Create  (Const Env : TEnv;
   _cFuncName = 'jBitmap_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -2997,7 +3038,7 @@ Procedure jBitmap_Free   (Const Env : TEnv; jbitmap : jObject);
    _cFuncName = 'jBitmap_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParam  : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3013,7 +3054,7 @@ Procedure jBitmap_loadFile(Const Env : TEnv;
   _cFuncName = 'jBitmap_loadFile';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3030,7 +3071,7 @@ Procedure jBitmap_createBitmap(Const Env : TEnv;
   _cFuncName = 'jBitmap_createBitmap';
   _cFuncSig  = '(Ljava/lang/Object;II)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..2] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3047,13 +3088,13 @@ Procedure jBitmap_getWH(Const Env : TEnv;
   _cFuncName = 'jBitmap_getWH';
   _cFuncSig  = '(Ljava/lang/Object;)[I';
  Var
-  _jMethod   : jMethodID = nil;
+  _jMethod   : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam    : jValue;
   _jIntArray : jintArray;
   _jBoolean  : jBoolean;
   //
-  PInt       : PInteger;
-  PIntSav    : PInteger;
+  PInt       : PInt32;
+  PIntSav    : PInt32;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
   _jParam.l  := jbitmap;
@@ -3073,7 +3114,7 @@ Const
  _cFuncName = 'jBitmap_getJavaBitmap';
  _cFuncSig  = '(Ljava/lang/Object;)Landroid/graphics/Bitmap;';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3091,7 +3132,7 @@ Function  jView_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3106,7 +3147,7 @@ Procedure jView_Free   (Const Env : TEnv; View : jObject);
    _cFuncName = 'jView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3122,7 +3163,7 @@ Procedure jView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3140,7 +3181,7 @@ Procedure jView_setParent(Const Env : TEnv; View : jObject;ViewGroup : jObject);
   _cFuncName = 'jView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3155,7 +3196,7 @@ Procedure jView_setjCanvas(Const Env : TEnv; View : jObject;jCanvas : jObject);
   _cFuncName = 'jView_setjCanvas';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3171,7 +3212,7 @@ Const
  _cFuncName = 'jView_saveView';
  _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParams : Array[0..1] of jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3190,7 +3231,7 @@ Function  jGLSurfaceView_Create(Const Env : TEnv; pasObj : TObject; version : TG
   _cFuncName = 'jGLSurfaceView_Create';
   _cFuncSig  = '(II)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3206,7 +3247,7 @@ Procedure jGLSurfaceView_Free   (Const Env : TEnv; GLSurfaceView : jObject);
    _cFuncName = 'jGLSurfaceView_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3222,7 +3263,7 @@ Procedure jGLSurfaceView_setXYWH(Const Env : TEnv;
   _cFuncName = 'jGLSurfaceView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3241,7 +3282,7 @@ Procedure jGLSurfaceView_setParent(Const Env : TEnv;
   _cFuncName = 'jGLSurfaceView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3255,7 +3296,7 @@ Procedure jGLSurfaceView_SetAutoRefresh(Const Env : TEnv; glView : jObject; Acti
   _cFuncName = 'jGLSurfaceView_SetAutoRefresh';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3269,7 +3310,7 @@ Procedure jGLSurfaceView_Refresh(Const Env : TEnv; glView : jObject);
   _cFuncName = 'jGLSurfaceView_Refresh';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   Env.jVM^.AttachCurrentThread(Env.jVM,@Env.jEnv,nil);
@@ -3283,7 +3324,7 @@ Procedure jGLSurfaceView_deleteTexture(Const Env : TEnv; glView : jObject; id : 
   _cFuncName = 'jGLSurfaceView_deleteTexture';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   Env.jVM^.AttachCurrentThread(Env.jVM,@Env.jEnv,nil);
@@ -3298,14 +3339,14 @@ Procedure jGLSurfaceView_getBmpArray(Const Env : TEnv;filename : String);
   _cFuncName = 'getBmpArray';
   _cFuncSig  = '(Ljava/lang/String;)[I';
  Var
-  _jMethod   : jMethodID = nil;
+  _jMethod   : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam    : jValue;
   _jIntArray : jintArray;
   _jBoolean  : jBoolean;
   //
   Size : Integer;
-  PInt : PInteger;
-  PIntS: PInteger;
+  PInt : PInt32;
+  PIntS: PInt32;
   i    : Integer;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3329,7 +3370,7 @@ Procedure jGLSurfaceView_requestGLThread(Const Env : TEnv; glView : jObject);
   _cFuncName = 'jGLSurfaceView_glThread';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   Env.jVM^.AttachCurrentThread(Env.jVM,@Env.jEnv,nil);
@@ -3348,7 +3389,7 @@ Function  jCameraView_Create(Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jCameraView_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3363,7 +3404,7 @@ Procedure jCameraView_Free   (Const Env : TEnv; SurfaceView : jObject);
   _cFuncName = 'jCameraView_Free';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3378,7 +3419,7 @@ Procedure jCameraView_setXYWH(Const Env : TEnv; SurfaceView : jObject;x,y,w,h : 
   _cFuncName = 'jCameraView_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3396,7 +3437,7 @@ Procedure jCameraView_setParent(Const Env : TEnv; SurfaceView : jObject;ViewGrou
   _cFuncName = 'jCameraView_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3411,7 +3452,7 @@ Procedure jCameraView_saveImage (Const Env : TEnv; SurfaceView : jObject; fileNa
   _cFuncName = 'jCameraView_saveImage';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3430,7 +3471,7 @@ Function jTimer_Create (Const Env : TEnv; pasObj : TObject): jObject;
   _cFuncName = 'jTimer_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3445,7 +3486,7 @@ Procedure jTimer_Free   (Const Env : TEnv; Timer : jObject);
    _cFuncName = 'jTimer_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3459,7 +3500,7 @@ Procedure jTimer_SetInterval(Const Env : TEnv; Timer  : jObject; Interval : Inte
   _cFuncName = 'jTimer_SetInterval';
   _cFuncSig  = '(Ljava/lang/Object;I)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3473,7 +3514,7 @@ Procedure jTimer_SetEnabled (Const Env : TEnv; Timer  : jObject; Active : Boolea
   _cFuncName = 'jTimer_SetEnabled';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3492,7 +3533,7 @@ Function jDialogYN_Create (Const Env : TEnv; pasObj : TObject;
   _cFuncName = 'jDialogYN_Create';
   _cFuncSig  = '(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3515,7 +3556,7 @@ Procedure jDialogYN_Free   (Const Env : TEnv; DialogYN : jObject);
    _cFuncName = 'jDialogYN_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3529,7 +3570,7 @@ Const
  _cFuncName = 'jDialogYN_Show';
  _cFuncSig  = '(Ljava/lang/Object;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3547,7 +3588,7 @@ Function jDialogProgress_Create (Const Env : TEnv; pasObj : TObject;
   _cFuncName = 'jDialogProgress_Create';
   _cFuncSig  = '(ILjava/lang/String;Ljava/lang/String;)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..2] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3566,7 +3607,7 @@ Procedure jDialogProgress_Free (Const Env : TEnv; DialogProgress : jObject);
   _cFuncName = 'jDialogProgress_Free';
   _cFuncSig  = '(Ljava/lang/Object;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3584,7 +3625,7 @@ Procedure jToast (Const Env : TEnv; Str : String);
   _cFuncName = 'jToast';
   _cFuncSig  = '(Ljava/lang/String;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3603,7 +3644,7 @@ Function  jImageBtn_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jImageBtn_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..0] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3618,7 +3659,7 @@ Procedure jImageBtn_Free   (Const Env : TEnv; ImageBtn : jObject);
    _cFuncName = 'jImageBtn_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3634,7 +3675,7 @@ Procedure jImageBtn_setXYWH(Const Env : TEnv;
   _cFuncName = 'jImageBtn_setXYWH';
   _cFuncSig  = '(Ljava/lang/Object;IIII)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..4] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3653,7 +3694,7 @@ Procedure jImageBtn_setParent(Const Env : TEnv;
   _cFuncName = 'jImageBtn_setParent';
   _cFuncSig  = '(Ljava/lang/Object;Landroid/view/ViewGroup;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3669,7 +3710,7 @@ Procedure jImageBtn_setButton(Const Env : TEnv;
   _cFuncName = 'jImageBtn_setButton';
   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : array[0..2] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3688,7 +3729,7 @@ Procedure jImageBtn_SetEnabled (Const Env : TEnv;
   _cFuncName = 'jImageBtn_setEnabled';
   _cFuncSig  = '(Ljava/lang/Object;Z)V';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParams : Array[0..1] of jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3707,7 +3748,7 @@ Function  jAsyncTask_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jAsyncTask_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3723,7 +3764,7 @@ Procedure jAsyncTask_Free   (Const Env : TEnv; AsyncTask : jObject);
    _cFuncName = 'jAsyncTask_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3739,7 +3780,7 @@ Procedure jAsyncTask_Execute(Const Env : TEnv; AsyncTask : jObject);
    _cFuncName = 'jAsyncTask_Execute';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jLog('jAsyncTask_Execute');
@@ -3756,7 +3797,7 @@ Procedure jAsyncTask_setProgress(Const Env : TEnv; AsyncTask : jObject;Progress 
    _cFuncName = 'jAsyncTask_setProgress';
    _cFuncSig  = '(Ljava/lang/Object;I)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : Array[0..1] of jValue;
   begin
    jLog('jAsyncTask_setProgress');
@@ -3777,7 +3818,7 @@ Function  jHttp_Create  (Const Env : TEnv; pasObj : TObject) : jObject;
   _cFuncName = 'jHttp_Create';
   _cFuncSig  = '(I)Ljava/lang/Object;';
  Var
-  _jMethod : jMethodID = nil;
+  _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
   _jParam  : jValue;
  begin
   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3793,7 +3834,7 @@ Procedure jHttp_Free   (Const Env : TEnv; Http : jObject);
    _cFuncName = 'jHttp_Free';
    _cFuncSig  = '(Ljava/lang/Object;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : jValue;
   begin
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3809,7 +3850,7 @@ Procedure jHttp_getText(Const Env : TEnv; Http : jObject; url : String);
    _cFuncName = 'jHttp_getText';
    _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : array[0..1] of jValue;
   begin
    jLog('jHttp_getText');
@@ -3826,10 +3867,29 @@ Procedure jHttp_DownloadFile(Const Env : TEnv; Http : jObject; url : String; loc
    _cFuncName = 'jHttp_downloadFile';
    _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V';
   Var
-   _jMethod : jMethodID = nil;
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
    _jParams : array[0..2] of jValue;
   begin
    jLog('jHttp_downloadFile');
+   jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
+   _jParams[0].l := Http;
+   _jParams[1].l := Env.jEnv^.NewStringUTF(Env.jEnv, pchar(url      ) );
+   _jParams[2].l := Env.jEnv^.NewStringUTF(Env.jEnv, pchar(localFile) );
+   Env.jEnv^.CallVoidMethodA(Env.jEnv, Env.jControls,_jMethod,@_jParams);
+   Env.jEnv^.DeleteLocalRef(Env.jEnv,_jParams[1].l);
+   Env.jEnv^.DeleteLocalRef(Env.jEnv,_jParams[2].l);
+  end;
+
+//
+Procedure jHttp_UploadFile(Const Env : TEnv; Http : jObject; url : String; localfile : String);
+  Const
+   _cFuncName = 'jHttp_uploadFile';
+   _cFuncSig  = '(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V';
+  Var
+   _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
+   _jParams : array[0..2] of jValue;
+  begin
+   jLog('jHttp_uploadFile');
    jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
    _jParams[0].l := Http;
    _jParams[1].l := Env.jEnv^.NewStringUTF(Env.jEnv, pchar(url      ) );
@@ -3847,7 +3907,7 @@ Const
  _cFuncName = 'takePhoto';
  _cFuncSig  = '(Ljava/lang/String;)V';
 Var
- _jMethod : jMethodID = nil;
+ _jMethod : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jParam  : jValue;
 begin
  jGetMethodID(Env,_cFuncName,_cFuncSig,_jMethod);
@@ -3865,7 +3925,7 @@ Const
  _cFuncName = 'benchMark';
  _cFuncSig  = '()[F';
 Var
- _jMethod      : jMethodID = nil;
+ _jMethod      : jMethodID {$IFDef FPC} = nil {$EndIf};
  _jFloatArray  : jFloatArray;
  _jBoolean     : jBoolean;
  PFloat        : PSingle;

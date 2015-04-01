@@ -85,6 +85,9 @@
 //               2015.02.28 ver0.25 Fixed AsyncTask,
 //                                  added Camera Preview
 //               2015.03.01 ver0.26 added jHttp (get,download)
+//               2015.03.04 ver0.27 added jHttp (get,download,upload)
+//               2015.03.04         added multiline property to TextView  
+//                                        by DonAlfredo
 //
 //
 //------------------------------------------------------------------------------
@@ -145,22 +148,17 @@ jVideoView
 
 unit And_Controls;
 
-{$mode delphi}
-{$packrecords c}
+{$IFDef FPC} {$mode delphi} {$packrecords c} {$EndIf}
 
 interface
 
 uses
-  SysUtils, Classes, Math,
+  SysUtils, Types, Classes, Math,
   And_jni,And_jni_Bridge,And_Controls_Types;
 
 // ----------------------------------------------------------------------------
 //  Event Handler  : Java -> Pascal
 // ----------------------------------------------------------------------------
-
-// JNI
-function  JNI_OnLoad                           (vm:PJavaVM;reserved:pointer):jint; cdecl;
-Procedure JNI_OnUnload                         (vm:PJavaVM;reserved:pointer); cdecl;
 
 // App Event
 Procedure Java_Event_pOnAppCreate              (env: PJNIEnv; this: jObject; layout : jObject); cdecl;
@@ -229,6 +227,8 @@ Type
    //
    Procedure SetScreenStyle      ( ScreenStyle       : TScreen_Style       );
    Procedure SetScreenOrientation( ScreenOrientation : TScreen_Orientation );
+   Procedure SetTitleBar( visible:boolean );
+
    // Property
    property Lock              : Boolean             read FLock        write FLock;
    Property Paths             : TPaths              read FPaths;
@@ -250,6 +250,7 @@ Type
    FOwner         : jForm;
    FEnabled       : Boolean;
    FVisible       : Boolean;
+   FTitle         : Boolean;
    FColor         : TColor;       // Background Color
 
    FFormState     : TFormState;
@@ -271,6 +272,7 @@ Type
 
    Procedure setEnabled (Value : Boolean);
    Procedure setVisible (Value : Boolean);
+   Procedure setTitle   (Value : Boolean);
    Procedure setColor   (Value : TColor );
  protected
    Procedure GenEvent_OnClick(Obj: TObject);
@@ -296,6 +298,7 @@ Type
    property View         : jObject        read FjLayout       write FjLayout;
    property Enabled      : Boolean        read FEnabled       write SetEnabled;
    property Visible      : Boolean        read FVisible       write SetVisible;
+   property Title        : Boolean        read FTitle         write SetTitle;
    property Name         : String         read FName          write FName;
    property Color        : TColor         read FColor         write SetColor;
    property Width        : integer        read FScreenWH.Width;
@@ -329,7 +332,7 @@ Type
     FVisible   : Boolean;
     FColor     : TColor;
     FFontColor : TColor;
-    FFontSize  : DWOrd;
+    FFontSize  : DWord;
     FEnabled   : Boolean;
 
     FxyWH      : TxyWH;
@@ -379,6 +382,7 @@ Type
     FColor    : TColor;
     FFontColor: TColor;
     FFontSize : DWOrd;
+    FEditStyle: TEdit_Style;
     FEditType : TEdit_Type;
     FHint     : String;
 
@@ -398,6 +402,7 @@ Type
     Procedure SetFontSize (Value : DWord  );
     Procedure SetHint     (Value : String );
     //
+    Procedure SetEditStyle(Value : TEdit_Style);
     Procedure SetEditType (Value : TEdit_Type);
     Procedure SetMaxLength(Value     : DWord     );
     Function  GetCursorPos           : TXYi;
@@ -417,21 +422,22 @@ Type
     Procedure immShow;
     Procedure immHide;
     // Property
-    property Parent    : jObject    read FjPLayout     write SetParent;
-    property Visible   : Boolean    read FVisible      write SetVisible;
-    property Color     : TColor     read FColor        write SetColor;
-    property FontColor : TColor     read FFontColor    write SetFontColor;
-    property FontSize  : DWord      read FFontSize     write SetFontSize;
-    property XYWH      : TXYWH      read FXYWH         write SetXYWH;
-    property Text      : string     read GetText       write SetText;
-    property Hint      : string     read FHint         write SetHint;
-    property EditType  : TEdit_Type read FEditType     write SetEditType;
-    property MaxLength : DWord                         write SetMaxLength;
-    property CursorPos : TXYi       read GetCursorPos  write SetCursorPos;
-    property Alignment : DWord                         write SetTextAlignment;
-    // Event
-    property OnEnter   : TOnNotify  read FOnEnter      write FOnEnter;
-    property OnChange  : TOnChange  read FOnChange     write FOnChange;
+    property Parent    : jObject     read FjPLayout     write SetParent;
+    property Visible   : Boolean     read FVisible      write SetVisible;
+    property Color     : TColor      read FColor        write SetColor;
+    property FontColor : TColor      read FFontColor    write SetFontColor;
+    property FontSize  : DWord       read FFontSize     write SetFontSize;
+    property XYWH      : TXYWH       read FXYWH         write SetXYWH;
+    property Text      : string      read GetText       write SetText;
+    property Hint      : string      read FHint         write SetHint;
+    property EditStyle : TEdit_Style read FEditStyle    write SetEditStyle;
+    property EditType  : TEdit_Type  read FEditType     write SetEditType;
+    property MaxLength : DWord                          write SetMaxLength;
+    property CursorPos : TXYi        read GetCursorPos  write SetCursorPos;
+    property Alignment : DWord                          write SetTextAlignment;
+    // Event 
+    property OnEnter   : TOnNotify   read FOnEnter      write FOnEnter;
+    property OnChange  : TOnChange   read FOnChange     write FOnChange;
   end;
 
   // ------------------------------------------------------------------
@@ -1147,6 +1153,7 @@ Type
 
  // Helper Function
  Procedure jAppInit        ( Var App           : jApp;
+                             JVM               : PJavaVm;
                              AppName           : String;
                              ScreenStyle       : TScreen_Style;
                              ScreenOrientation : TScreen_Orientation;
@@ -1199,10 +1206,9 @@ Var
 
 implementation
 
-Var
- _lVM : PJavaVM;
 
 Procedure jAppInit        ( Var App           : jApp;
+                            JVM               : PJavaVM;
                             AppName           : String;
                             ScreenStyle       : TScreen_Style;
                             ScreenOrientation : TScreen_Orientation;
@@ -1210,6 +1216,7 @@ Procedure jAppInit        ( Var App           : jApp;
                             OnAppCreate       : TOnAppCreate);
  begin
   App                           := jApp.Create;
+  App.Env.jVM                   := jVM;
   App.Env.AppName               := AppName;
   App.Device.ScreenStyle        := ScreenStyle;
   App.Device.ScreenOrientation  := ScreenOrientation;
@@ -1225,10 +1232,23 @@ Function jObjHex  ( jObj : jObject ) : String;
 
 Procedure jGetPaths     ( Var Paths : TPaths );
  begin
-  Paths.App                := jSystem_GetPathApp    (App.Env);
-  Paths.Dat                := jSystem_GetPathDat    (App.Env);
-  Paths.Ext                := jSystem_GetPathExt    (App.Env);
-  Paths.DCIM               := jSystem_GetPathDCIM   (App.Env);
+  //
+  Paths.ALARMS        := jSystem_GetPath(App.Env,DIRECTORY_ALARMS       );
+  Paths.DCIM          := jSystem_GetPath(App.Env,DIRECTORY_DCIM         );
+  Paths.DOCUMENTS     := jSystem_GetPath(App.Env,DIRECTORY_DOCUMENTS    );
+  Paths.DOWNLOADS     := jSystem_GetPath(App.Env,DIRECTORY_DOWNLOADS    );
+  Paths.MOVIES        := jSystem_GetPath(App.Env,DIRECTORY_MOVIES       );
+  Paths.MUSIC         := jSystem_GetPath(App.Env,DIRECTORY_MUSIC        );
+  Paths.NOTIFICATIONS := jSystem_GetPath(App.Env,DIRECTORY_NOTIFICATIONS);
+  Paths.PICTURES      := jSystem_GetPath(App.Env,DIRECTORY_PICTURES     );
+  Paths.PODCASTS      := jSystem_GetPath(App.Env,DIRECTORY_PODCASTS     );
+  Paths.RINGTONES     := jSystem_GetPath(App.Env,DIRECTORY_RINGTONES    );
+  //
+  Paths.App           := jSystem_GetPath(App.Env,DIRECTORY_App          );
+  Paths.Files         := jSystem_GetPath(App.Env,DIRECTORY_Files        );
+  Paths.SDCard        := jSystem_GetPath(App.Env,DIRECTORY_SDCard       );
+  Paths.DataBase      := jSystem_GetPath(App.Env,DIRECTORY_DataBase     );
+  Paths.Shared_Prefs  := jSystem_GetPath(App.Env,DIRECTORY_Shared_Prefs );
  end;
 
 Procedure jGetDevice   ( Var Device : TDevice );
@@ -1245,8 +1265,11 @@ Procedure jGetDevice   ( Var Device : TDevice );
 //
 Function  Asset_SaveToFile( AssetName,FileName :String; OverWrite : Boolean =  False ) : Boolean;
  begin
+  Exit;
   Result := False;
+  jLog('#Before Asset#');
   If Not(Overwrite) and FileExists(FileName) then Exit;
+  jLog('#After Asset#');
   Result := jAsset_SaveToFile (App.Env, AssetName, FileName );
  end;
 
@@ -1255,9 +1278,11 @@ Function  Memory_SaveToFile(ptr : Pointer; Len : Integer; FileName : String) : B
  Var
   FStream : TFileStream;
  begin
+  Result := False;
   FStream := TFileStream.Create(FileName,fmCreate);
   FStream.WriteBuffer(ptr^,len);
   FStream.Free;
+  Result := FileExists(FileName);
  end;
 
 Procedure Dbg (Const Msg : String; LogType : TAndroid_Log = Android_Log_DEBUG);
@@ -1560,27 +1585,6 @@ Procedure  YUV_to_Img  ( Width,Height : Integer;
       Img.pRGBs_[K].B := ( b shr 10) and $FF;
      end;
    end;
- end;
-
-
-//------------------------------------------------------------------------------
-//  JNI Event
-//      JNI_OnLoad
-//      JNI_Unload
-//------------------------------------------------------------------------------
-
-Function JNI_OnLoad(vm:PJavaVM;reserved:pointer):jint; cdecl;
- begin
-  jLog('JNI_OnLoad');
-  //
-  Result := JNI_VERSION_1_6;
-  _lVM   := vm;
- end;
-
-Procedure JNI_OnUnload(vm:PJavaVM;reserved:pointer); cdecl;
- begin
-  jLog('JNI_OnUnload');
-  //
  end;
 
 //------------------------------------------------------------------------------
@@ -1913,10 +1917,22 @@ Constructor jApp.Create;
   Env.jControls  := nil;
   Env.jLayout    := nil;
   //
-  FPaths.App     := '';
-  FPaths.Dat     := '';
-  FPaths.DCIM    := '';
-  FPaths.Ext     := '';
+  FPaths.ALARMS        := '';
+  FPaths.DCIM          := '';
+  FPaths.DOCUMENTS     := '';
+  FPaths.DOWNLOADS     := '';
+  FPaths.MOVIES        := '';
+  FPaths.MUSIC         := '';
+  FPaths.NOTIFICATIONS := '';
+  FPaths.PICTURES      := '';
+  FPaths.PODCASTS      := '';
+  FPaths.RINGTONES     := '';
+  //
+  FPaths.App           := '';
+  FPaths.Files         := '';
+  FPaths.SDCard        := '';
+  FPaths.DataBase      := '';
+  FPaths.Shared_Prefs  := '';
   //
   FLock          := False;
   //
@@ -1935,8 +1951,7 @@ Procedure jApp.Init(env: PJNIEnv; Controls : jObject; layout: jObject);
  Var
   JVM : JavaVM;
  begin
-  // Jni
-  App.Env.jVM            := _lVM; // by JNI_OnLoad
+  // App.Env.jVM         := _lVM; // by JNI_OnLoad
   App.Env.jEnv           := Env;
   //
   App.Env.jClass         := Env^.NewGlobalRef(Env,Env^.GetObjectClass(Env,Controls));
@@ -1969,6 +1984,12 @@ Procedure jApp.SetScreenOrientation( ScreenOrientation : TScreen_Orientation );
   Device.ScreenOrientation := ScreenOrientation;
   jDevice_SetScreenOrientation(App.Env,Device.ScreenOrientation);
  end;
+
+Procedure jApp.SetTitleBar( visible:boolean );
+ begin
+  jApp_SetTitleBar(App.Env,visible);
+ end;
+
 
 Function  jApp.GetLog : Boolean;
  begin
@@ -2024,7 +2045,7 @@ Destructor jForm.Destroy;
   Self.View := nil;
   //
   jSystem_GC(App.Env);
-  Self      := nil;
+  {$IfDef FPC} Self      := nil; {$EndIf}
  end;
 
 Procedure jForm.Free;
@@ -2042,6 +2063,12 @@ Procedure jForm.setVisible(Value: Boolean);
 begin
  FVisible := Value;
  jForm_SetVisibility(App.Env, FjObject ,FVisible);
+end;
+
+Procedure jForm.setTitle(Value: Boolean);
+begin
+ FTitle := Value;
+ jForm_SetTitle(App.Env, FjObject ,FTitle);
 end;
 
 Procedure jForm.setColor(Value: TColor);
@@ -2158,7 +2185,7 @@ Destructor jTextView.Destroy;
     jTextView_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jTextView.Free;
@@ -2251,6 +2278,7 @@ Constructor jEditText.Create(Owner: jForm);
   FjObject   := jEditText_Create(App.Env, self);
   FFontColor := clBlack;
   FFontSize  := 15;
+  FEditStyle := Edit_Style_SingleLine;
   FEditType  := Edit_Type_Text;
   FHint      := '';
  end;
@@ -2264,7 +2292,7 @@ Destructor jEditText.Destroy;
     jEditText_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jEditText.Free;
@@ -2344,6 +2372,13 @@ Procedure jEditText.immHide();
  begin
   jEditText_immHide(App.Env, FjObject );
  end;
+ 
+// 2013.07.26 LORDMAN 
+// 2015.03.04 DonAlfredo
+Procedure jEditText.SetEditStyle(Value : TEdit_Style);
+ begin
+  jEditText_setEditStyle(App.Env, FjObject,Value);
+ end; 
 
 // LORDMAN - 2013-07-26
 Procedure jEditText.SetEditType(Value : TEdit_Type);
@@ -2423,7 +2458,7 @@ Destructor jButton.Destroy;
     jButton_Free   (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jButton.Free;
@@ -2515,7 +2550,7 @@ Destructor jCheckBox.Destroy;
     jCheckBox_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jCheckBox.Free;
@@ -2613,7 +2648,7 @@ Destructor jRadioButton.Destroy;
     jRadioButton_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jRadioButton.Free;
@@ -2709,7 +2744,7 @@ Destructor jProgressBar.Destroy;
     jProgressBar_Free(App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jProgressBar.Free;
@@ -2780,7 +2815,7 @@ Destructor jImageView.Destroy;
     jImageView_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jImageView.Free;
@@ -2859,7 +2894,7 @@ Destructor jListView.Destroy;
     jListView_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jListView.Free;
@@ -2964,7 +2999,7 @@ Destructor jScrollView.Destroy;
     jScrollView_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jScrollView.Free;
@@ -3034,7 +3069,7 @@ Destructor jHorizontalScrollView.Destroy;
     jHorizontalScrollView_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jHorizontalScrollView.Free;
@@ -3101,7 +3136,7 @@ Destructor jViewFlipper.Destroy;
     jViewFlipper_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jViewFlipper.Free;
@@ -3164,7 +3199,7 @@ Destructor jWebView.Destroy;
     jWebView_Free  (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jWebView.Free;
@@ -3234,7 +3269,7 @@ Destructor jBitmap.Destroy;
     jBitmap_Free   (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jBitmap.Free;
@@ -3279,7 +3314,7 @@ Destructor jCanvas.Destroy;
     jCanvas_Free   (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jCanvas.Free;
@@ -3362,7 +3397,7 @@ Destructor jView.Destroy;
     //
     FjCanvas.Free;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jView.Free;
@@ -3512,7 +3547,7 @@ Destructor jCameraView.Destroy;
     jCameraView_Free     (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jCameraView.Free;
@@ -3576,7 +3611,7 @@ Destructor jTimer.Destroy;
     jTimer_Free    (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jTimer.Free;
@@ -3622,7 +3657,7 @@ Destructor jDialogYN.Destroy;
     jDialogYN_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jDialogYN.Free;
@@ -3667,7 +3702,7 @@ Destructor jDialogProgress.Destroy;
     jDialogProgress_Free(App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jDialogProgress.Free;
@@ -3698,7 +3733,7 @@ Destructor jImageBtn.Destroy;
     jImageBtn_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jImageBtn.Free;
@@ -3782,7 +3817,7 @@ Destructor jAsyncTask.Destroy;
     jAsyncTask_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jAsyncTask.Free;
@@ -3834,14 +3869,14 @@ Constructor jHttp.Create(Owner: jForm);
 
 Destructor jHttp.Destroy;
  begin
-  jLog('AND_Control : jHttp.Destroy');
+  jLog('jHttp.Destroy');
   inherited;
   IF FjObject <> nil then
    begin
     jHttp_Free (App.Env, FjObject);
     FjObject := nil;
    end;
-  Self := nil;
+  {$IFDef FPC} Self := nil; {$EndIf}
  end;
 
 Procedure jHttp.Free;
@@ -3858,13 +3893,12 @@ Procedure jHttp.getText(url : String);
 
 Procedure jHttp.DownloadFile(url : String; localFile : string);
  begin
-  FBusy := True;
   jHttp_DownloadFile(App.Env, FjObject,url,localFile);
  end;
 
 Procedure jHttp.UploadFile  (url : String; localFile : string);
  begin
-  FBusy := True;
+  jHttp_UploadFile(App.Env, FjObject,url,localFile);
  end;
 
 procedure jHttp.GenEvent_OnHttpEvent(Obj: TObject;

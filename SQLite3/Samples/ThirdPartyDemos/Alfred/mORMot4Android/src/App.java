@@ -5,7 +5,7 @@
 //   Author : Simon,Choi 
 //  
 //
-package com.kredix;
+package com.mormot;
 
 //
 import java.lang.Override;
@@ -15,9 +15,12 @@ import android.content.res.Configuration;
 import android.content.pm.ActivityInfo; 
 import android.widget.RelativeLayout;
 import android.view.WindowManager;
+import android.view.Window;
 import android.view.View;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 
 // http://stackoverflow.com/questions/16282294/show-title-bar-from-code
 public class App extends Activity {
@@ -90,6 +93,32 @@ public class App extends Activity {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
       controls.jOnAppActivityResult(requestCode,resultCode,data);                                       
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu)
+    {
+      menu.add(Menu.NONE, 0, Menu.NONE, "History").setIcon(R.drawable.ic_menu_recent_history)
+          .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+      menu.add(Menu.NONE, 1, Menu.NONE, "Quit").setIcon(R.drawable.ic_menu_search)
+          .setShowAsAction(MenuItem.SHOW_AS_ACTION_WITH_TEXT);
+
+
+      //return true;
+      return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
+    	//check selected menu item
+    	if(item.getItemId() == 1)
+    	{
+    		//close the Activity
+    		this.finish();
+    		return true;
+    	}
+    	return false;
     }
 
 }

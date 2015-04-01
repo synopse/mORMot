@@ -9,11 +9,9 @@
 //
 //
 //
-unit And_Jni;
-{$ifdef fpc}
-// {$mode delphi}
- {$packrecords c}
-{$endif}
+unit And_jni;
+
+{$ifdef fpc} {$mode delphi} {$packrecords c} {$endif}
 
 interface
 
@@ -35,6 +33,11 @@ const JNI_FALSE=0;
 
       JNI_COMMIT=1;     // copy content, do not free buffer
       JNI_ABORT=2;      // free buffer w/o copying back
+
+{$IfDef DCC}
+type
+ pChar = MarshaledAString;
+{$EndIf}
 
 (*
  * Type definitions.
