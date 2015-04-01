@@ -42821,7 +42821,7 @@ begin
     Par := @NULL_SHORTSTRING; // as expected by TServiceMethod.InternalExecute
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
   instance := TInterfacedObjectFakeServer.Create(Self,factory,ID);
-  PPointer(Obj)^ := instance.fFakeInterface;
+  pointer(Obj) := instance.fFakeInterface;
   (Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
 end;
 
