@@ -1424,12 +1424,12 @@ begin
     end;
     if len<FRAME_LEN2BYTES then begin
       hdr.len8 := len or fMaskSentFrames;
-      fSocket.Snd(@hdr,2);
+      fSocket.SockSend(@hdr,2);
     end else
     if len<65536 then begin
       hdr.len8 := FRAME_LEN2BYTES or fMaskSentFrames;
       hdr.len32 := swap(len);
-      fSocket.Snd(@hdr,4);
+      fSocket.SockSend(@hdr,4);
     end else begin
       hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
       hdr.len64 := bswap32(len);
@@ -1441,8 +1441,8 @@ begin
       exit;
     end;
     if fMaskSentFrames<>0 then
-      fSocket.Snd(@hdr.mask,4);
-    fSocket.Snd(pointer(Frame.payload),len);
+      fSocket.SockSend(@hdr.mask,4);
+    fSocket.SockSend(pointer(Frame.payload),len);
     fSocket.SockSendFlush; // send at once up to 64 KB
     SetLastPingTicks;
   except

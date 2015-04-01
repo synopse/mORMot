@@ -703,9 +703,8 @@ begin
       if GetLastError<>ERROR_PIPE_CONNECTED then
         exit;
     ltSocketSync: begin
-      fSocket.Sock := hListen;
+      fSocket.OpenBind('','',false, accept(hListen,Sin));
       Assert(False,'if fSocket.SockCanRead(1000)=0 then exit;');
-      fSocket.Sock := accept(hListen,Sin);
       if fSocket.Sock<0 then
         exit; // invalid socket
     end;

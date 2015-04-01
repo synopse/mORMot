@@ -142,6 +142,8 @@ unit SynCrtSock;
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
   - added optional parameter to set buffer size for TCrtSocket.CreateSockIn
     and TCrtSocket.CreateSockOut methods
+  - renamed misleading TCrtSocket.Snd method as overloaded SockSend, and
+    refactored public fields as read/only properties
   - added THttpServerRequest.UseSSL property to check if connection is secured
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
@@ -332,43 +334,41 @@ type
   // - either TCP/IP, UDP/IP or Unix sockets
   TCrtSocketLayer = (cslTCP, cslUDP, cslUNIX);
 
+  PTextFile = ^TextFile;
+  
   /// Fast low-level Socket implementation
-  // - direct access to the OS (Windows, Linux) network layer
+  // - direct access to the OS (Windows, Linux) network layer API
   // - use Open constructor to create a client to be connected to a server
   // - use Bind constructor to initialize a server
-  // - use direct access to low level Windows or Linux network layer
-  // - use SockIn and SockOut (after CreateSock*) to read or write data
+  // - use SockIn and SockOut (after CreateSock*) to read/readln or write/writeln
   //  as with standard Delphi text files (see SendEmail implementation)
-  // - if app is multi-threaded, use faster SockSend() instead of SockOut^
-  //  for direct write access to the socket; but SockIn^ is much faster than
-  // SockRecv() thanks to its internal buffer, even on multi-threaded app
-  // (at least under Windows, it may be up to 10 times faster)
-  // - but you can decide whatever to use none, one or both SockIn/SockOut
+  // - even if you do not use read(SockIn^), you may call CreateSockIn then
+  // read the (binary) content via SockInRead/SockInPending methods, which would
+  // benefit of the SockIn^ input buffer to maximize reading speed  
+  // - to write data, CreateSockOut and write(SockOut^) is not mandatory: you
+  // rather may use SockSend() overloaded methods, followed by a SockFlush call 
+  // - in fact, you can decide whatever to use none, one or both SockIn/SockOut
+  // - since this class rely on its internal optimized buffering system,
+  // TCP_NODELAY is set to disable the Nagle algorithm
   // - our classes are (much) faster than the Indy or Synapse implementation
   TCrtSocket = class
   protected
-    /// raise an ECrtSocket exception on error (called by Open/Bind constructors)
-    procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
-      aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
+    fSock: TSocket;
+    fServer: SockString;
+    fPort: SockString;
+    fSockIn: PTextFile;
+    fSockOut: PTextFile;
+    fTimeOut: cardinal;
+    fBytesIn: Int64;
+    fBytesOut: Int64;
+    fSockInEof: boolean;
+    /// updated by every SockSend() call
+    fSndBuf: SockString;
+    fSndBufLen: integer;
+    /// close and shutdown the connection (called from Destroy)
+    procedure Close;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer);
   public
-    /// initialized after Open() with socket
-    Sock: TSocket;
-    /// initialized after Open() with Server name
-    Server: SockString;
-    /// initialized after Open() with port number
-    Port: SockString;
-    /// after CreateSockIn, use Readln(SockIn,s) to read a line from the opened socket
-    SockIn: ^TextFile;
-    /// after CreateSockOut, use Writeln(SockOut,s) to send a line to the opened socket
-    SockOut: ^TextFile;
-    /// if higher than 0, read loop will wait for incoming data till
-    // TimeOut milliseconds (default value is 10000) - used also in SockSend()
-    TimeOut: cardinal;
-    /// total bytes received
-    BytesIn,
-    /// total bytes sent
-    BytesOut: Int64;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: cardinal=10000); reintroduce; virtual;
@@ -377,6 +377,10 @@ type
       aTimeOut: cardinal=10000);
     /// bind to aPort
     constructor Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
+    /// low-level internal method called by Open() and Bind() constructors
+    // - raise an ECrtSocket exception on error 
+    procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
+      aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
@@ -414,6 +418,9 @@ type
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line
     procedure SockSend(const Line: SockString=''); overload;
+    /// append P^ data into SndBuf (used by SockSend(), e.g.)
+    // - call SockSendFlush to send it through the network via SndLow()
+    procedure SockSend(P: pointer; Len: integer); overload;
     /// flush all pending data to be sent
     procedure SockSendFlush;
     /// fill the Buffer with Length bytes
@@ -444,12 +451,9 @@ type
     // - raise ECrtSocket exception on socket error
     // - line content is ignored
     procedure SockRecvLn; overload;
-    /// append P^ data into SndBuf (used by SockSend(), e.g.)
-    // - call SockSendFlush to send it through the network via SndLow()
-    procedure Snd(P: pointer; Len: integer);
     /// direct send data through network
     // - raise a ECrtSocket exception on any error
-    // - bypass the SndBuf or SockOut^ buffers
+    // - bypass the SockSend() or SockOut^ buffers
     procedure SndLow(P: pointer; Len: integer);
     /// direct send data through network
     // - return false on any error, true on success
@@ -480,13 +484,23 @@ type
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
     property KeepAlive: Integer index SO_KEEPALIVE write SetInt32OptionByIndex;
-  private
-    SockInEof: boolean;
-    /// updated by every Snd()
-    SndBuf: SockString;
-    SndBufLen: integer;
-    /// close and shutdown the connection (called from Destroy)
-    procedure Close;
+    /// initialized after Open() with socket
+    property Sock: TSocket read fSock;
+    /// initialized after Open() with Server name
+    property Server: SockString read fServer;
+    /// initialized after Open() with port number
+    property Port: SockString read fPort;
+    /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
+    property SockIn: PTextFile read fSockIn;
+    /// after CreateSockOut, use Writeln(SockOut^S,s) to send a line to the opened socket
+    property SockOut: PTextFile read fSockOut;
+    /// if higher than 0, read loop will wait for incoming data till
+    // TimeOut milliseconds (default value is 10000) - used also in SockSend()
+    property TimeOut: cardinal read fTimeOut;
+    /// total bytes received
+    property BytesIn: Int64 read fBytesIn;
+    /// total bytes sent
+    property BytesOut: Int64 read fBytesOut;
   end;
 
   /// event used to compress or uncompress some data during HTTP protocol
@@ -2577,10 +2591,10 @@ begin
   // Recv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
-    inc(Sock.BytesIn, Size);
+    inc(Sock.fBytesIn, Size);
     result := 0; // no error
   end else begin
-    Sock.SockInEof := true; // error -> mark end of SockIn
+    Sock.fSockInEof := true; // error -> mark end of SockIn
     result := -WSAGetLastError();
     // result <0 will update ioresult and raise an exception if {$I+}
   end;
@@ -2649,12 +2663,12 @@ begin
     exit; // no opened connection to close
   Shutdown(Sock,SHUT_WR);
   CloseSocket(Sock); // SO_LINGER usually set to 5 or 10 seconds
-  Sock := -1; // don't change Server or Port, since may try to reconnect
+  fSock := -1; // don't change Server or Port, since may try to reconnect
 end;
 
 constructor TCrtSocket.Create(aTimeOut: cardinal);
 begin
-  TimeOut := aTimeOut;
+  fTimeOut := aTimeOut;
 end;
 
 procedure TCrtSocket.SetInt32OptionByIndex(OptName, OptVal: integer);
@@ -2692,21 +2706,21 @@ const BINDTXT: array[boolean] of string = ('open','bind');
 begin
   if aSock<0 then begin
     if aPort='' then
-      Port := '80' else // default port is 80 (HTTP)
-      Port := aPort;
-    Server := aServer;
-    Sock := CallServer(aServer,Port,doBind,aLayer); // OPEN or BIND
+      fPort := '80' else // default port is 80 (HTTP)
+      fPort := aPort;
+    fServer := aServer;
+    fSock := CallServer(aServer,Port,doBind,aLayer); // OPEN or BIND
+    if fSock<0 then
+      raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
+        [BINDTXT[doBind],aServer,Port,WSAGetLastError]);
+    if TimeOut>0 then begin // set timeout in OPEN/BIND modes
+      ReceiveTimeout := TimeOut;
+      SendTimeout := TimeOut;
+    end;
   end else
-    Sock := aSock; // ACCEPT mode -> socket is already created by caller
-  if Sock<0 then
-    raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
-      [BINDTXT[doBind],aServer,Port,WSAGetLastError]);
-  if (aSock<0) and (TimeOut>0) then begin // set timeout in OPEN/BIND modes
-    ReceiveTimeout := TimeOut;
-    SendTimeout := TimeOut;
-    TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
-    KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
-  end;
+    fSock := aSock; // ACCEPT mode -> socket is already created by caller
+  TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
+  KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -2716,38 +2730,38 @@ begin
   for i := 0 to high(Values) do
   with Values[i] do
   case VType of
-    vtString:     Snd(@VString^[1],pByte(VString)^);
-    vtAnsiString: Snd(VAnsiString,length(SockString(VAnsiString)));
+    vtString:     SockSend(@VString^[1],pByte(VString)^);
+    vtAnsiString: SockSend(VAnsiString,length(SockString(VAnsiString)));
 {$ifdef UNICODE}
     vtUnicodeString: begin
       tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
-      Snd(@tmp[1],length(tmp));
+      SockSend(@tmp[1],length(tmp));
     end;
 {$endif}
-    vtPChar:      Snd(VPChar,StrLen(VPChar));
-    vtChar:       Snd(@VChar,1);
-    vtWideChar:   Snd(@VWideChar,1); // only ansi part of the character
+    vtPChar:      SockSend(VPChar,StrLen(VPChar));
+    vtChar:       SockSend(@VChar,1);
+    vtWideChar:   SockSend(@VWideChar,1); // only ansi part of the character
     vtInteger:    begin
       Str(VInteger,tmp);
-      Snd(@tmp[1],length(tmp));
+      SockSend(@tmp[1],length(tmp));
     end;
   end;
-  Snd(@CRLF, 2);
+  SockSend(@CRLF, 2);
 end;
 
 procedure TCrtSocket.SockSend(const Line: SockString);
 begin
   if Line<>'' then
-    Snd(pointer(Line),length(Line));
-  Snd(@CRLF, 2);
+    SockSend(pointer(Line),length(Line));
+  SockSend(@CRLF, 2);
 end;
 
 procedure TCrtSocket.SockSendFlush;
 begin
-  if SndBufLen=0 then
+  if fSndBufLen=0 then
     exit;
-  SndLow(pointer(SndBuf),SndBufLen);
-  SndBufLen := 0;
+  SndLow(pointer(fSndBuf),fSndBufLen);
+  fSndBufLen := 0;
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
@@ -2768,7 +2782,7 @@ begin
     if SentLen<0 then
       exit;
     dec(Len,SentLen);
-    inc(BytesOut,SentLen);
+    inc(fBytesOut,SentLen);
     if Len<=0 then break;
     inc(PtrUInt(P),SentLen);
   until false;
@@ -2826,10 +2840,10 @@ begin
     if (result=0) and (SockReceivePending(aTimeOut)>0) then begin
       // non data in SockIn^.Buffer, but some at socket level -> retrieve now
       backup := TimeOut;
-      TimeOut := 0;
+      fTimeOut := 0;
       if InputSock(PTextRec(SockIn)^)=NO_ERROR then 
         result := BufEnd-BufPos;
-      TimeOut := backup;
+      fTimeOut := backup;
     end;
   end;
 end;
@@ -2844,18 +2858,18 @@ begin
   inherited;
 end;
 
-procedure TCrtSocket.Snd(P: pointer; Len: integer);
+procedure TCrtSocket.SockSend(P: pointer; Len: integer);
 begin
   if Len<=0 then
     exit;
-  if PByte(SndBuf)=nil then
+  if PByte(fSndBuf)=nil then
     if Len<2048 then // 2048 is still FASTMM4 small block size
-      SetLength(SndBuf,2048) else
-      SetLength(SndBuf,Len) else
-    if Len+SndBufLen>pInteger(PAnsiChar(pointer(SndBuf))-4)^ then
-      SetLength(SndBuf,pInteger(PAnsiChar(pointer(SndBuf))-4)^+Len+2048);
-  move(P^,PAnsiChar(pointer(SndBuf))[SndBufLen],Len);
-  inc(SndBufLen,Len);
+      SetLength(fSndBuf,2048) else
+      SetLength(fSndBuf,Len) else
+    if Len+fSndBufLen>pInteger(PAnsiChar(pointer(fSndBuf))-4)^ then
+      SetLength(fSndBuf,pInteger(PAnsiChar(pointer(fSndBuf))-4)^+Len+2048);
+  move(P^,PAnsiChar(pointer(fSndBuf))[fSndBufLen],Len);
+  inc(fSndBufLen,Len);
 end;
 
 const
@@ -2868,7 +2882,7 @@ begin
     exit; // initialization already occured
   if InputBufferSize<SOCKMINBUFSIZE then
     InputBufferSize := SOCKMINBUFSIZE;
-  GetMem(SockIn,sizeof(TTextRec)+InputBufferSize);
+  GetMem(fSockIn,sizeof(TTextRec)+InputBufferSize);
   fillchar(SockIn^,sizeof(TTextRec),0);
   with TTextRec(SockIn^) do begin
     Handle := PtrInt(self);
@@ -2889,7 +2903,7 @@ begin
     exit; // initialization already occured
   if OutputBufferSize<SOCKMINBUFSIZE then
     OutputBufferSize := SOCKMINBUFSIZE;
-  GetMem(SockOut,sizeof(TTextRec)+OutputBufferSize);
+  GetMem(fSockOut,sizeof(TTextRec)+OutputBufferSize);
   fillchar(SockOut^,sizeof(TTextRec),0);
   with TTextRec(SockOut^) do begin
     Handle := PtrInt(self);
@@ -2922,7 +2936,7 @@ begin
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
       if Size<=0 then
         exit;
-      inc(BytesIn, Size);
+      inc(fBytesIn, Size);
       dec(Length,Size);
       inc(PByte(Buffer),Size);
     until Length=0;
@@ -3652,11 +3666,11 @@ begin
   finally
     if Sock<>nil then begin // add transfert stats to main socket
       EnterCriticalSection(fProcessCS);
-      inc(Sock.BytesIn,ClientSock.BytesIn);
-      inc(Sock.BytesOut,ClientSock.BytesOut);
+      inc(Sock.fBytesIn,ClientSock.BytesIn);
+      inc(Sock.fBytesOut,ClientSock.BytesOut);
       LeaveCriticalSection(fProcessCS);
-      ClientSock.BytesIn := 0;
-      ClientSock.BytesOut := 0;
+      ClientSock.fBytesIn := 0;
+      ClientSock.fBytesOut := 0;
     end;
     Context.Free;
   end;
