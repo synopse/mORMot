@@ -427,6 +427,8 @@ unit SynCommons;
   - introducing TObjectDynArrayWrapper class and IObjectDynArray interface
   - introducing T*ObjArray dynamic array storage via ObjArrayAdd/ObjArrayFind/
     ObjArrayDelete/ObjArraySort and ObjArrayClear functions
+  - introducing T*InterfaceArray dynamic array storage via InterfaceArrayAdd/
+    InterfaceArrayFind/InterfaceArrayDelete functions
   - added TPersistentWithCustomCreate, TInterfacedObjectWithCustomCreate and
     TSynPersistent abstract classes, allowing to define virtual constructors for
     TPersistent kind of objects (used e.g. with internal JSON serialization,
@@ -4567,6 +4569,25 @@ procedure ObjArrayClear(var aObjArray);
 procedure ObjArrayObjArrayClear(var aObjArray);
 
 
+/// wrapper to add an item to a T*InterfaceArray dynamic array storage
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
+
+/// wrapper to search an item in a T*InterfaceArray dynamic array storage
+// - search is performed by address/reference, not by content
+// - return -1 if the item is not found in the dynamic array, or the index of
+// the matching entry otherwise
+function InterfaceArrayFind(var aInterfaceArray; const aItem: IUnknown): integer;
+
+/// wrapper to delete an item in a T*InterfaceArray dynamic array storage
+// - search is performed by address/reference, not by content
+// - do nothing if the item is not found in the dynamic array
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): integer; overload;
+
+/// wrapper to delete an item in a T*InterfaceArray dynamic array storage
+// - do nothing if the item is not found in the dynamic array
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer); overload;
+
+
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
@@ -5775,6 +5796,11 @@ type
     /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
     // - Instance must be not nil
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar);
+    /// append a quoted string as JSON, with in-place decoding
+    // - if QuotedString does not start with ', it will written directly
+    // (i.e. expects to be a number)
+    // - as used e.g. by TJSONObjectDecoder.EncodeAsJSON
+    procedure AddQuotedStringAsJSON(const QuotedString: RawUTF8);
     /// append an array of integers as CSV
     procedure AddCSVInteger(const Integers: array of Integer); overload;
     /// append an array of doubles as CSV
@@ -33963,6 +33989,44 @@ begin
   end;
 end;
 
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
+var a: TInterfaceDynArray absolute aInterfaceArray;
+begin
+  result := length(a);
+  SetLength(a,result+1);
+  a[result] := aItem;
+end;
+
+function InterfaceArrayFind(var aInterfaceArray; const aItem: IUnknown): integer;
+begin
+  for result := 0 to length(TPointerDynArray(aInterfaceArray))-1 do
+    if TPointerDynArray(aInterfaceArray)[result]=Pointer(aItem) then
+      exit;
+  result := -1;
+end;
+
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer);
+var n: integer;
+    a: TInterfaceDynArray absolute aInterfaceArray;
+begin
+  n := length(a);
+  if cardinal(aItemIndex)>=cardinal(n) then
+    exit; // out of range
+  a[aItemIndex] := nil;
+  dec(n);
+  if n>aItemIndex then
+    Move(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(IInterface));
+  TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
+  SetLength(a,n);
+end;
+
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): integer;
+begin
+  result := InterfaceArrayFind(aInterfaceArray,aItem);
+  if result>=0 then
+    InterfaceArrayDelete(aInterfaceArray,result);
+end;
+
 
 { TObjectHash }
 
@@ -35931,6 +35995,32 @@ begin
     FlushToStream;
   move(Text[1],B[1],ord(Text[0]));
   inc(B,ord(Text[0]));
+end;
+
+procedure TTextWriter.AddQuotedStringAsJSON(const QuotedString: RawUTF8);
+var L: integer;
+    P,B: PUTF8Char;
+begin
+  L := length(QuotedString);
+  if L>0 then
+  if (QuotedString[1]='''') and (QuotedString[L]='''') then begin
+    Add('"');
+    P := pointer(QuotedString);
+    inc(P);
+    repeat
+      B := P;
+      while P[0]<>'''' do inc(P);
+      if P[1]<>'''' then
+        break; // end quote
+      inc(P);
+      AddJSONEscape(B,P-B);
+      inc(P); // ignore double quote
+    until false;
+    if P-B<>0 then
+      AddJSONEscape(B,P-B);
+    Add('"');
+  end else
+    AddNoJSONEscape(pointer(QuotedString),length(QuotedString));
 end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
