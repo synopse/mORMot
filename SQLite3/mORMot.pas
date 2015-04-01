@@ -1110,7 +1110,7 @@ unit mORMot;
       not thread-safe when run directly on server side
     - fixed ticket [027bb9678d] - now TSQLRecordRTree class works as expected
     - fixed ticket [876a097316] about TSQLRest.Add() when ForcedID<>0
-    - added DoNotAutoComputeFields optional parameter to TSQLRest(Batch).Add()
+    - added DoNotAutoComputeFields optional param to TSQLRest(Batch).Add/Update
     - implement ticket [e3f9742865] for enhanced JSON in woHumanReadable mode
     - fixed GPF issue in TServiceFactoryServer after instance time-out deletion
     - added TSQLPropInfo.PropertyIndex member
@@ -5446,6 +5446,13 @@ type
     property JoinedFields: boolean read GetJoinedFields;
   end;
 
+  TSQLRestBatch = class;
+
+  /// event signature triggered by TSQLRestBatch.OnWrite
+  TOnBatchWrite = procedure(Sender: TSQLRestBatch; Event: TSQLOccasion;
+    Table: TSQLRecordClass; const ID: TID; Value: TSQLRecord;
+    const ValueFields: TSQLFieldBits) of object;
+
   /// used to store a BATCH sequence of writing operations
   // - is used by TSQLRest to process BATCH requests using BatchSend() method,
   // or TSQLRestClientURI for its Batch*() methods
@@ -5466,6 +5473,7 @@ type
     fAddCount: integer;
     fUpdateCount: integer;
     fDeleteCount: integer;
+    fOnWrite: TOnBatchWrite;
     procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
     /// close a BATCH sequence started by Start method
@@ -5568,6 +5576,8 @@ type
     property UpdateCount: integer read fUpdateCount;
     /// how many times Delete() has been called for this BATCH process
     property DeleteCount: integer read fDeleteCount;
+    /// this event handler will be triggerred by each Add/Update/Delete method
+    property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
   end;
 
   /// root class for defining and mapping database records
@@ -13241,7 +13251,7 @@ type
     // to ChunkRowLimit, so that the updates would be retrieved by smaller chunks
     // - returns 0 on error, or the latest applied revision number
     function RecordVersionSynchronize(Table: TSQLRecordClass;
-      Source: TSQLRest; ChunkRowLimit: integer=0): TRecordVersion;
+      Source: TSQLRest; ChunkRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TRecordVersion;
     /// will retrieve all the updates from another (distant) TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field, and a supplied
     // TRecordVersion monotonic value
@@ -13256,7 +13266,7 @@ type
     // TRecordVersion fields would be forced from the supplied value
     function RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
       Source: TSQLRest; var RecordVersion: TRecordVersion;
-      MaxRowLimit: integer=0): TSQLRestBatch; virtual;
+      MaxRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TSQLRestBatch; virtual;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -27473,6 +27483,8 @@ begin
       ForceID := true; // same format as TSQLRestClient.Add
     if IsZero(CustomFields) then
       FieldBits := Props.SimpleFieldsBits[soInsert] else
+    if DoNotAutoComputeFields then
+      FieldBits := CustomFields else
       FieldBits := CustomFields+Props.ModCreateTimeFieldsBits;
     SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
       (Value.ID<>0) and ForceID,FieldBits);
@@ -27488,6 +27500,8 @@ begin
   result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
+  if Assigned(fOnWrite) then
+    fOnWrite(self,soInsert,PSQLRecordClass(Value)^,Value.ID,Value,FieldBits);
 end;
 
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
@@ -27508,6 +27522,8 @@ begin
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
+  if Assigned(fOnWrite) then
+    fOnWrite(self,soDelete,Table,ID,nil,[]);
 end;
 
 function TSQLRestBatch.Delete(ID: TID): integer;
@@ -27525,6 +27541,8 @@ begin
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
+  if Assigned(fOnWrite) then
+    fOnWrite(self,soDelete,fTable,ID,nil,[]);
 end;
 
 function TSQLRestBatch.PrepareForSending(out Data: RawUTF8): boolean;
@@ -27573,6 +27591,8 @@ begin
   // same format as TSQLRest.Update, BUT including the ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
+  if DoNotAutoComputeFields then
+    FieldBits := CustomFields else
     FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
   SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
     true,FieldBits);
@@ -27590,6 +27610,8 @@ begin
   result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
+  if Assigned(fOnWrite) then
+    fOnWrite(self,soUpdate,PSQLRecordClass(Value)^,Value.ID,Value,FieldBits);
 end;
 
 
@@ -31179,7 +31201,7 @@ begin
 end;
 
 function TSQLRestServer.RecordVersionSynchronize(Table: TSQLRecordClass;
-  Source: TSQLRest; ChunkRowLimit: integer): TRecordVersion;
+  Source: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
 begin
@@ -31190,7 +31212,8 @@ begin
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
   repeat
-    Writer := RecordVersionSynchronizeToBatch(Table,Source,fRecordVersionMax,ChunkRowLimit);
+    Writer := RecordVersionSynchronizeToBatch(
+      Table,Source,fRecordVersionMax,ChunkRowLimit,OnWrite);
     if Writer=nil then
       exit; // error
     if Writer.Count=0 then begin // nothing new (e.g. reached last chunk)
@@ -31222,7 +31245,8 @@ begin
 end;
 
 function TSQLRestServer.RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
-  Source: TSQLRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer): TSQLRestBatch;
+  Source: TSQLRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer;
+  OnWrite: TOnBatchWrite): TSQLRestBatch;
 var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Props: TSQLRecordProperties;
     Where: RawUTF8;
@@ -31264,6 +31288,7 @@ begin
       if ListDeleted=nil then
         exit; // DB error
       result := TSQLRestBatch.Create(self,nil,10000);
+      result.OnWrite := OnWrite;
       if (ListUpdated.fRowCount=0) and (ListDeleted.fRowCount=0) then
         exit; // nothing new -> returns void TSQLRestBach with Count=0
       Rec := Table.Create;
