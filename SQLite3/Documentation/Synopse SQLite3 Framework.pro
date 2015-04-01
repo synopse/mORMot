@@ -3198,7 +3198,7 @@ In order to enable this @*replication@ mechanism, you should define a {\f1\fs20 
 !  published
 !    property FirstName: RawUTF8 read fFirstName write fFirstName;
 !    property LastName: RawUTF8 read fLastName write fLastName;
-!    property Version: TRecordVersion read fVersion write fVersion;
+!!    property Version: TRecordVersion read fVersion write fVersion;
 !  end;
 Only a single {\f1\fs20 TRecordVersion} field is allowed per {\f1\fs20 TSQLRecord} class - it would not mean anything to manage more than one field of this type.
 Note that this field will be somewhat "hidden" to most ORM process: a regular {\f1\fs20 TSQLRest.Retrieve} won't fill this {\f1\fs20 Version} property, since it is an internal implementation detail. If you want to lookup its value, you would have to explicitly state its field name at retrieval. Any {\f1\fs20 TRecordVersion} is indeed considered as a "non simple field", just like BLOB fields, so would need explicit retrieval of its value.

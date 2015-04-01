@@ -149,13 +149,15 @@ unit SynSQLite3;
   - added TSQLRequest.BindS()/FieldS()/FieldDeclaredTypeS() methods for direct
     string process
   - now TSQLRequest.Bind(col,'') will bind '' void text instead of null value
-  - added TSQLDataBase.CacheSize and LockingMode properties for performance tuning
+  - added TSQLDataBase.CacheSize, PageSize and LockingMode properties 
   - added TSQLDataBase.MemoryMappedMB for optional Memory-Mapped I/O process
   - added TSQLDatabase.LogResultMaximumSize property to reduce logged extend
   - added TSQLDataBase.Log property to customize the logging class (e.g. to
     match the one used by TSQLRestServerDB)
   - added TSQLDataBase.LockAndFlushCache method to be used instead of Lock('ALTER')
   - added TSQLDataBase.Lock() method to be used instead of Lock('S')
+  - TSQLDataBase.DBOpen will set the default page size to 4KB for a better
+    performance as a server, and allowing bigger database sizes 
   - added sqlite3.open_v2() support and optional flags for TSQLDataBase.Create()
     plus associated read-only TSQLDataBase.OpenV2Flags property
   - added sqlite3.column_text16() - to be used e.g. for UnicodeString in
@@ -2598,6 +2600,8 @@ type
     function GetLockingMode: TSQLLockingMode;
     function GetCacheSize: cardinal;
     procedure SetCacheSize(const Value: cardinal);
+    function GetPageSize: cardinal;
+    procedure SetPageSize(const Value: cardinal);
     function GetMemoryMappedMB: cardinal;
     procedure SetMemoryMappedMB(const Value: cardinal);
     function GetLimit(Category: TSQLLimitCategory): integer;
@@ -2888,13 +2892,27 @@ type
     property BusyTimeout: Integer read fBusyTimeout write SetBusyTimeout;
     /// auery or change the suggested maximum number of database disk pages
     // that SQLite will hold in memory at once per open database file
-    // - default suggested cache size is 2000 pages
+    // - DBOpen method will set this cache size to a big 10000 default, which
+    // sounds reasonnable in the context of a server application (will use
+    // up to 40 MB of memory cache, with the default PageSize of 4096 bytes)
     // - when you change the cache size using the cache_size pragma, the change
     // only endures for the current session. The cache size reverts to the
     // default value when the database is closed and reopened
     // - we do not handle negative values here (i.e. KB of RAM), since it won't
     // work if the linked SQLite3 library is version 3.7.9 and earlier
     property CacheSize: cardinal read GetCacheSize write SetCacheSize;
+    /// query or change the page size of the database
+    // - the page size must be a power of two between 512 and 65536 inclusive
+    // - DBOpen method will set the PageSize to 4096 (if the database is not
+    // encrypted), which sounds better than the default 1024 value - you should
+    // not have to set this property usually 
+    // - setting this property will only cause an immediate change in the page
+    // size if it is issued while the database is still empty, prior to the
+    // first CREATE TABLE statement; if this property is used to specify a new
+    // page size just prior to running the VACUUM command and if the database
+    // is not in WAL journal mode then VACUUM will change the page size to the
+    // new value for the newly created database file
+    property PageSize: cardinal read GetPageSize write SetPageSize;
     /// query or change the Write-Ahead Logging mode for the database
     // - beginning with version 3.7 of the SQLite3 engine, a new "Write-Ahead Log"
     // option (hereafter referred to as "WAL") is optionaly available
@@ -3971,6 +3989,13 @@ begin
   if Assigned(sqlite3.key) and (fPassword<>'') and
      (fFileName<>SQLITE_MEMORY_DATABASE_NAME) and (fFileName<>'') then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
+  // tune up execution speed
+  if not fIsMemory then begin
+    if fPassword='' then
+      PageSize := 4096 else
+      PageSize := 1024; // our encryption scheme expect a page size of 1024
+    CacheSize := 10000;
+  end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
   sqlite3.create_collation(DB,'SYSTEMNOCASE',SQLITE_UTF8,nil,Utf8SQLCompNoCase);
@@ -4013,11 +4038,9 @@ begin
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
-  // tune up execution speed
-  if not fIsMemory then
-    CacheSize := 10000;
   {$ifdef WITHLOG}
-  Log.Log(sllDB,'"%" database file opened',[FileName],self);
+  Log.Log(sllDB,'"%" database file opened with PageSize=% and CacheSize=%',
+    [FileName,PageSize,CacheSize],self);
   {$endif}
 end;
 
@@ -4039,6 +4062,16 @@ end;
 procedure TSQLDataBase.SetCacheSize(const Value: cardinal);
 begin
   ExecuteNoException('PRAGMA cache_size='+UInt32ToUTF8(Value));
+end;
+
+function TSQLDataBase.GetPageSize: cardinal;
+begin
+  result := ExecuteNoExceptionInt64('PRAGMA page_size');
+end;
+
+procedure TSQLDataBase.SetPageSize(const Value: cardinal);
+begin
+  ExecuteNoException('PRAGMA page_size='+UInt32ToUTF8(Value));
 end;
 
 procedure TSQLDataBase.SetSynchronous(const Value: TSQLSynchronousMode);
