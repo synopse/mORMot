@@ -534,6 +534,9 @@ begin
           [self,fStoredClass,fStoredClassRecordProps.RecordVersionField.Name]) else
       // compute new monotonic TRecordVersion value if not supplied by sender
       doc.AddValue(RecordVersionName,Owner.RecordVersionCompute);
+    if (Owner<>nil) and (Owner.Services<>nil) then
+      (Owner.Services as TServiceContainerServer).RecordVersionNotifyAddUpdate(
+        Occasion,fStoredClassProps.TableIndex,doc);
   end;
   if doc.Kind<>dvObject then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
