@@ -10479,7 +10479,7 @@ type
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
     function FakeCallbackRelease(aConnectionID: Int64; aFakeID: integer): boolean;
-    procedure RecordVersionCallbackNotify(TableIndex: integer; 
+    procedure RecordVersionCallbackNotify(TableIndex: integer;
       Occasion: TSQLOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
   public
@@ -10566,6 +10566,28 @@ type
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
     destructor Destroy; override;
+  end;
+
+  /// this class is able to write all remote ORM notifications to the local DB
+  // - could be supplied as callback parameter, possibly via WebSockets
+  // transmission, to TSQLRestServer.RecordVersionSynchronizeCallback()
+  TServiceRecordVersionCallback = class(TInterfacedCallback,IServiceRecordVersionCallback)
+  protected
+    fTable: TSQLRecordClass;
+    fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
+    // local TSQLRecordTableDeleted.ID follows current Model
+    fTableDeletedIDOffset: Int64;
+    procedure SetCurrentRevision(const Revision: TRecordVersion);
+  public
+    /// initialize the instance able to apply callbacks for a given table on
+    // a local REST server
+    constructor Create(aRest: TSQLRestServer; aTable: TSQLRecordClass); reintroduce;
+    /// this event will be raised on any Add on a versioned record
+    procedure Added(const NewContent: RawJSON); virtual;
+    /// this event will be raised on any Update on a versioned record
+    procedure Updated(const ModifiedContent: RawJSON); virtual;
+    /// this event will be raised on any Delete on a versioned record
+    procedure Deleted(const ID: TID; const Revision: TRecordVersion); virtual;
   end;
 
   /// for TSQLRestCache, stores a table values
@@ -11445,12 +11467,14 @@ type
     // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
     // - this method will always compute and send any TModTime fields
     // - this method will call EngineUpdate() to perform the request
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): boolean; overload; virtual;
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): boolean; overload; virtual;
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
     // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
-    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8): boolean; overload;
+    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+      DoNotAutoComputeFields: boolean=false): boolean; overload;
     /// update a member from a supplied list of simple field values
     // - implements REST PUT collection
     // - the aSimpleFields parameters MUST follow explicitely both count and
@@ -13134,7 +13158,7 @@ type
     /// will compute the next monotonic value for a TRecordVersion field
     // - you may override this method to customize the returned Int64 value
     // (e.g. to support several synchronization nodes)
-    function InternalRecordVersionComputeNext: TID; virtual;
+    function InternalRecordVersionComputeNext: TRecordVersion; virtual;
     /// this method is overridden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
     procedure SetNoAJAXJSON(const Value: boolean); virtual;
@@ -13288,7 +13312,9 @@ type
     // ensure that the updated ID fields will be computed as expected
     function InternalUpdateEventNeeded(aTableIndex: integer): boolean;
     /// will compute the next monotonic value for a TRecordVersion field
-    function RecordVersionCompute: TID;
+    function RecordVersionCompute: TRecordVersion;
+    /// read only access to the current monotonic value for a TRecordVersion field
+    function RecordVersionCurrent: TRecordVersion;
     /// will apply all the updates from another (distant) TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field
     // - both remote Source and local TSQLRestSever should have the supplied
@@ -14485,7 +14511,8 @@ type
     // - server must return Status 200/HTML_SUCCESS OK on success
     // - this overridden method will call BeforeUpdateEvent and also update BLOB
     // fields, if any ForceBlobTransfert is set and CustomFields=[]
-    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): boolean; override;
+    function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): boolean; override;
     /// get a member from its ID
     // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
@@ -27673,9 +27700,9 @@ begin
   // same format as TSQLRest.Update, BUT including the ID
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
-  if DoNotAutoComputeFields then
-    FieldBits := CustomFields else
-    FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
+    if DoNotAutoComputeFields then
+      FieldBits := CustomFields else
+      FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
   SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
     true,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
@@ -28469,8 +28496,8 @@ begin
   result := BatchSend(Batch,Res);
 end;
 
-function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID; Action: TSQLEvent;
-  ErrorMsg: PRawUTF8 = nil): boolean;
+function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
+  Action: TSQLEvent; ErrorMsg: PRawUTF8=nil): boolean;
 begin
   result := true; // accept by default -> override this method to customize this
 end;
@@ -28486,8 +28513,8 @@ begin
   end;
 end;
 
-function TSQLRest.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-  var IDs: TIDDynArray): boolean;
+function TSQLRest.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
+  const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
 var i: integer;
 begin
   result := false;
@@ -28516,7 +28543,8 @@ begin
   result := Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
 end;
 
-function TSQLRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits): boolean;
+function TSQLRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): boolean;
 var JSONValues: RawUTF8;
     TableIndex: integer;
     FieldBits: TSQLFieldBits;
@@ -28527,7 +28555,8 @@ begin
     exit;
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  Value.ComputeFieldsBeforeWrite(self,seUpdate); // update sftModTime fields
+  if not DoNotAutoComputeFields then
+    Value.ComputeFieldsBeforeWrite(self,seUpdate); // update sftModTime fields
   if IsZero(CustomFields) then
     if (Value.fFill<>nil) and (Value.fFill.Table<>nil) and
        (Value.fFill.fTableMapRecordManyInstances=nil) then
@@ -28535,8 +28564,10 @@ begin
       FieldBits := Value.fFill.fTableMapFields+Value.RecordProps.FieldBits[sftModTime] else
       // update all simple/custom fields (also for FillPrepareMany)
       FieldBits := Value.RecordProps.SimpleFieldsBits[soUpdate] else
-    // CustomFields<>[] -> update specified and TModTime fields
-    FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
+    // CustomFields<>[] -> update specified (and TModTime fields)
+    if DoNotAutoComputeFields then
+      FieldBits := CustomFields else
+      FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
   if IsZero(FieldBits) then begin
     result := true; // a TSQLRecord with NO simple fields (e.g. ID/blob pair)
     exit;
@@ -28546,11 +28577,13 @@ begin
   result := EngineUpdate(TableIndex,Value.fID,JSONValues);
 end;
 
-function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8): boolean;
+function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+  DoNotAutoComputeFields: boolean): boolean;
 begin
   if (self=nil) or (Value=nil) then
     result := false else
-    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields));
+    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields),
+      DoNotAutoComputeFields);
 end;
 
 function TSQLRest.Update(aTable: TSQLRecordClass; aID: TID;
@@ -31233,7 +31266,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.InternalRecordVersionComputeNext: TID;
+function TSQLRestServer.InternalRecordVersionComputeNext: TRecordVersion;
 begin
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(@result) else begin
@@ -31244,13 +31277,23 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionCompute: TID;
+function TSQLRestServer.RecordVersionCompute: TRecordVersion;
 begin
   result := InternalRecordVersionComputeNext;
   if result>=SQLRECORDVERSION_DELETEID_RANGE then
     raise EORMException.CreateUTF8('%.InternalRecordVersionCompute=% overflow: '+
       '%.ID should be < 2^%)',[self,result,fSQLRecordVersionDeleteTable,
       SQLRECORDVERSION_DELETEID_SHIFT]);
+end;
+
+function TSQLRestServer.RecordVersionCurrent: TRecordVersion;
+begin
+  if self=nil then
+    result := 0 else begin
+    if fRecordVersionMax=0 then
+      InternalRecordVersionMaxFromExisting(nil);
+    result := fRecordVersionMax;
+  end;
 end;
 
 procedure TSQLRestServer.InternalRecordVersionHandle(Occasion: TSQLOccasion;
@@ -31323,7 +31366,7 @@ begin
         end;
       end else begin
         InternalLog('%.RecordVersionSynchronize BatchSend() failed',[ClassType],sllError);
-        fRecordVersionMax := 0; // force recompute the maximum from DB 
+        fRecordVersionMax := 0; // force recompute the maximum from DB
         break;
       end;
     finally
@@ -31416,6 +31459,8 @@ begin
           end else
           if DeletedVersion>0 then begin
             result.Delete(Table,Deleted.Deleted);
+            Deleted.IDValue := DeletedVersion+ // local ID follows current Model
+              Int64(TableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
             result.Add(Deleted,true,true,[],true);
             RecordVersion := DeletedVersion;
             DeletedVersion := 0;
@@ -31437,10 +31482,14 @@ end;
 function TSQLRestServer.RecordVersionSynchronizeCallback(Table: TSQLRecordClass;
   RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
 begin
-  if (self=nil) or (fServices=nil) then
-    result := false else
-    result := (fServices as TServiceContainerServer).RecordVersionSynchronizeCallback(
-      Model.GetTableIndexExisting(Table),RecordVersion,Callback);
+  if self=nil then begin
+    result := false;
+    exit;
+  end;
+  if fServices=nil then
+    fServices := TServiceContainerServer.Create(self);
+  result := TServiceContainerServer(fServices).RecordVersionSynchronizeCallback(
+    Model.GetTableIndexExisting(Table),RecordVersion,Callback);
 end;
 
 function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -37313,9 +37362,11 @@ begin
   end;
 end;
 
-function TSQLRestClient.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits): boolean;
+function TSQLRestClient.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+  DoNotAutoComputeFields: boolean): boolean;
 begin
-  result := BeforeUpdateEvent(Value) and inherited Update(Value,CustomFields);
+  result := BeforeUpdateEvent(Value) and
+    inherited Update(Value,CustomFields,DoNotAutoComputeFields);
   if result then begin
     if (fForceBlobTransfert<>nil) and IsZero(CustomFields) and
        fForceBlobTransfert[Model.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
@@ -45274,30 +45325,34 @@ procedure TServiceContainerServer.RecordVersionCallbackNotify(TableIndex: intege
 var i: integer;
     instance: TObject;
 begin
-  fRest.fAcquireExecution[execORMWrite].Enter;
   try
-    for i := length(fRecordVersionCallback[TableIndex])-1 downto 0 do begin // downto for delete below
-      instance := ObjectFromInterface(fRecordVersionCallback[TableIndex][i]);
-      if (instance<>nil) and
-         (instance.ClassType=TInterfacedObjectFakeServer) and
-         TInterfacedObjectFakeServer(instance).fReleasedOnClientSide then
-        // automatic removal of any released callback
-        InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i) else
-      try
-        case Occasion of
-        soInsert: fRecordVersionCallback[TableIndex][i].
-          Added(AddUpdateJson);
-        soUpdate: fRecordVersionCallback[TableIndex][i].
-          Updated(AddUpdateJson);
-        soDelete: fRecordVersionCallback[TableIndex][i].
-          Deleted(DeletedID,DeletedRevision);
+    fRest.fAcquireExecution[execORMWrite].Enter;
+    try
+      for i := length(fRecordVersionCallback[TableIndex])-1 downto 0 do begin
+        // downto for InterfaceArrayDelete() below
+        instance := ObjectFromInterface(fRecordVersionCallback[TableIndex][i]);
+        if (instance<>nil) and
+           (instance.ClassType=TInterfacedObjectFakeServer) and
+           TInterfacedObjectFakeServer(instance).fReleasedOnClientSide then
+          // automatic removal of any released callback
+          InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i) else
+        try
+          case Occasion of
+          soInsert: fRecordVersionCallback[TableIndex][i].
+            Added(AddUpdateJson);
+          soUpdate: fRecordVersionCallback[TableIndex][i].
+            Updated(AddUpdateJson);
+          soDelete: fRecordVersionCallback[TableIndex][i].
+            Deleted(DeletedID,DeletedRevision);
+          end;
+        except // on notification error -> delete this entry
+          InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i);
         end;
-      except // on notification error -> delete this entry
-        InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i);
       end;
+    finally
+      fRest.fAcquireExecution[execORMWrite].Leave;
     end;
-  finally
-    fRest.fAcquireExecution[execORMWrite].Leave;
+  except // ignore any exception here
   end;
 end;
 
@@ -46449,7 +46504,7 @@ begin
           smvCurrency:
             Int64s[IndexVar] := StrToCurr64(Val);
           smvRawUTF8:
-            RawUTF8s[IndexVar] := Val;
+            SetString(RawUTF8s[IndexVar],Val,StrLen(Val));
           smvString:
             UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
           smvWideString:
@@ -46610,6 +46665,79 @@ begin
     if GetInterface(fInterface,Obj) then
       fRest.Services.CallBackUnRegister(IInvokable(Obj));
   inherited Destroy;
+end;
+
+
+{ TServiceRecordVersionCallback }
+
+constructor TServiceRecordVersionCallback.Create(aRest: TSQLRestServer;
+  aTable: TSQLRecordClass);
+begin
+  fRecordVersionField := aTable.RecordProps.RecordVersionField;
+  if fRecordVersionField=nil then
+    raise EServiceException.CreateUTF8('%.Create: % has no TRecordVersion field',
+      [self,aTable]);
+  fTableDeletedIDOffset := Int64(aRest.Model.GetTableIndexExisting(aTable)) shl 58;
+  inherited Create(aRest,IServiceRecordVersionCallback);
+  fTable := aTable;
+end;
+
+procedure TServiceRecordVersionCallback.SetCurrentRevision(
+  const Revision: TRecordVersion);
+begin
+  with TSQLRestServer(fRest) do
+    if Revision<=fRecordVersionMax then
+      raise EServiceException.CreateUTF8('%.SetCurrentRevision(%) on %: previous was %',
+        [self,Revision,fTable,fRecordVersionMax]) else
+      fRecordVersionMax := Revision;
+end;
+
+procedure TServiceRecordVersionCallback.Added(const NewContent: RawJSON);
+var rec: TSQLRecord;
+begin
+  rec := fTable.Create;
+  try
+    rec.FillFrom(NewContent);
+    fRest.Add(rec,true,true,true);
+    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+  finally
+    rec.Free;
+  end;
+end;
+
+procedure TServiceRecordVersionCallback.Updated(
+  const ModifiedContent: RawJSON);
+var rec: TSQLRecord;
+    fields: TSQLFieldBits;
+begin
+  rec := fTable.Create;
+  try
+    rec.FillFrom(ModifiedContent,@fields);
+    fRest.Update(rec,fields,true);
+    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+  finally
+    rec.Free;
+  end;
+end;
+
+procedure TServiceRecordVersionCallback.Deleted(const ID: TID;
+  const Revision: TRecordVersion);
+var del: TSQLRecordTableDeleted;
+begin
+  del := TSQLRecordTableDeleted.Create;
+  try
+    fRest.fAcquireExecution[execORMWrite].Enter;
+    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
+    del.IDValue := fTableDeletedIDOffset+Revision;
+    del.Deleted := ID;
+    fRest.Add(del,true,true,true);
+    fRest.Delete(fTable,ID);
+    SetCurrentRevision(Revision);
+  finally
+    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := false;
+    fRest.fAcquireExecution[execORMWrite].Leave;
+    del.Free;
+  end;
 end;
 
 
@@ -46785,25 +46913,37 @@ type
 {$endif}
 {$endif}
 begin
-  if aValue=nil then
-    result := nil else
-    {$ifdef ISDELPHI2010}
-    result := aValue as TObject; // slower but always working
-    {$else}
-    {$ifdef FPC}
-    result := aValue as TObject;
-    {$else}
-    with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
-    case Stub of // address of VMT[0] entry, i.e. QueryInterface
-      $04244483: result := pointer(PtrInt(aValue)+ShortJmp);
-      $04244481: result := pointer(PtrInt(aValue)+LongJmp);
-      else // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
-      if Stub=PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then
-        result := TInterfacedObjectFake(pointer(aValue)).SelfFromInterface else
-        result := nil;
+  if aValue=nil then begin
+    result := nil;
+    exit;
+  end;
+  {$ifdef ISDELPHI2010}
+  result := aValue as TObject; // slower but always working
+  {$else}
+  {$ifdef FPC}
+  result := aValue as TObject;
+  {$else}
+  with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
+  case Stub of // address of VMT[0] entry, i.e. QueryInterface
+    $04244483: begin
+      result := pointer(PtrInt(aValue)+ShortJmp);
+      exit;
     end;
-    {$endif}
-    {$endif}
+    $04244481: begin
+      result := pointer(PtrInt(aValue)+LongJmp);
+      exit;
+    end;
+    else // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
+    if Stub=PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then begin
+      result := TInterfacedObjectFake(pointer(aValue)).SelfFromInterface;
+      exit;
+    end else begin
+      result := nil;
+      exit;
+    end;
+  end;
+  {$endif}
+  {$endif}
 end;
 
 procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);

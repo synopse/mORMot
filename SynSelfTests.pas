@@ -29,7 +29,7 @@ unit SynSelfTests;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -516,7 +516,7 @@ type
     /// check the PCRE-based REGEX function
     procedure RegexpFunction;
     {$endif TEST_REGEXP}
-    /// test the TRecordVersion field 
+    /// test the TRecordVersion field
     procedure _TRecordVersion;
   end;
 
@@ -814,7 +814,7 @@ type
     procedure AsynchEvent(a: integer);
     function Value: Integer;
   end;
-  
+
   /// SOA service definition as expected by TTestBidirectionalRemoteConnection
   IBidirService = interface(IInvokable)
     ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
@@ -2916,7 +2916,7 @@ begin
     Check(IsZero(pointer(W),length(W)));
     Check(FormatUTF8(U,[])=U);
 {$ifndef DELPHI5OROLDER}
-    res := FormatUTF8(U,[],[]); // Delphi 5 bug with high([])>0 :( 
+    res := FormatUTF8(U,[],[]); // Delphi 5 bug with high([])>0 :(
     Check(length(res)=Length(u));
     Check(res=u);
     Check(FormatUTF8('%',[U])=U);
@@ -4313,10 +4313,10 @@ type
   end;
   TTestCustomJSONGitHubs = array of TTestCustomJSONGitHub;
   TTestCustomJSON2Title = packed record
-    TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL: RawUTF8; 
+    TITYPE,TIID,TICID,TIDSC30,TIORDER,TIDEL: RawUTF8;
   end;
   TTestCustomJSON2Trans = packed record
-    TRTYPE: RawUTF8;   
+    TRTYPE: RawUTF8;
     TRDATE: TDateTime;
     TRAA: RawUTF8;
     TRCAT1, TRCAT2, TRCAT3, TRACID: TTestCustomJSON2Title;
@@ -4573,7 +4573,7 @@ procedure TestGit(Options: TJSONCustomParserSerializationOptions);
 var i: Integer;
     U: RawUTF8;
     git,git2: TTestCustomJSONGitHubs;
-begin                        
+begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
     __TTestCustomJSONGitHub).Options := Options;
   FillChar(git,sizeof(git),0);
@@ -7426,7 +7426,7 @@ begin
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
   Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
-  // 3. test consistency with Padlock engine down results 
+  // 3. test consistency with Padlock engine down results
 {$ifdef USEPADLOCK}
   if not padlock_available then exit;
   padlock_available := false;  // force PadLock engine down
@@ -7695,7 +7695,7 @@ begin
   try
     with TPdfDocument.Create do
     try
-      Info.CreationDate := FIXED_DATE; // force fixed date and creator for Hash32() 
+      Info.CreationDate := FIXED_DATE; // force fixed date and creator for Hash32()
       Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
       //CompressionMethod := cmNone; useful for debugg purposes of metafile enum
       AddPage;
@@ -7750,7 +7750,7 @@ begin
         Doc := TPdfDocument.Create;
         try
           Doc.GeneratePDF15File := True;
-          Doc.Info.CreationDate := FIXED_DATE; // force fixed date for Hash32() 
+          Doc.Info.CreationDate := FIXED_DATE; // force fixed date for Hash32()
           Doc.Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
           Doc.DefaultPaperSize := psA4;
           Page := Doc.AddPage;
@@ -7891,9 +7891,9 @@ begin
   end;
   EncryptedFile := (password<>'');
   Demo := TSQLDataBase.Create(TempFileName,password);
-  Demo.Synchronous := smOff;      
+  Demo.Synchronous := smOff;
   Demo.LockingMode := lmExclusive;
-  if ClassType=TTestFileBasedMemoryMap then 
+  if ClassType=TTestFileBasedMemoryMap then
     Demo.MemoryMappedMB := 256; // will do nothing for SQLite3 < 3.7.17
   R.Prepare(Demo.DB,'select mod(?,?)');
   for i1 := 0 to 100 do
@@ -7976,12 +7976,12 @@ begin
   end else
   {$endif}
   if ClassType=TTestFileBasedMemoryMap then begin // force re-open to test reading
-    FreeAndNil(Demo); 
+    FreeAndNil(Demo);
     Demo := TSQLDataBase.Create(TempFileName,password);
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
-    Demo.MemoryMappedMB := 256; 
-    Demo.UseCache := true; 
+    Demo.MemoryMappedMB := 256;
+    Demo.UseCache := true;
   end;
   Demo.GetTableNames(Names);
   Check(length(Names)=1);
@@ -8074,38 +8074,32 @@ type
   published
     property Version: TRecordVersion read fVersion write fVersion;
   end;
-  TSQLRestServerHook = class(TSQLRestServer);
-
 
 procedure TTestSQLite3Engine._TRecordVersion;
 var Model: TSQLModel;
-    Client,Client2: TSQLRestClientDB;
+    Master,Slave1,Slave2: TSQLRestClientDB;
+    Slave2Callback: IServiceRecordVersionCallback;
     Rec,Rec1,Rec2: TSQLRecordPeopleVersioned;
     IDs: TIDDynArray;
     i,n: integer;
-procedure CreateClient;
+function CreateClient(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestClientDB;
 begin
-  Client := TSQLRestClientDB.Create(Model,nil,'testversion.db3',
-    TSQLRestServerDB,false,'');
-  Client.Server.DB.Synchronous := smOff;
-  Client.Server.DB.LockingMode := lmExclusive;
+  if DeleteDBFile then
+    DeleteFile(DBFileName);
+  result := TSQLRestClientDB.Create(Model,nil,DBFileName,TSQLRestServerDB,false,'');
+  result.Server.DB.Synchronous := smOff;
+  result.Server.DB.LockingMode := lmExclusive;
+  result.Server.CreateMissingTables;
 end;
-procedure CreateClient2;
-begin
-  DeleteFile('testversionreplicated.db3');
-  Client2 := TSQLRestClientDB.Create(Model,nil,'testversionreplicated.db3',
-    TSQLRestServerDB,False,'');
-  Client2.Server.DB.Synchronous := smOff;
-  Client2.Server.DB.LockingMode := lmExclusive;
-  Client2.Server.CreateMissingTables;
-end;
-procedure TestClient2;
+procedure Test(Slave: TSQLRestClientDB; Synchronize: boolean=true);
 var res: TRecordVersion;
 begin
-  res := Client2.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Client,500);
-  Check(res=TSQLRestServerHook(Client.Server).fRecordVersionMax);
-  Rec1.FillPrepare(Client,'order by ID','*');
-  Rec2.FillPrepare(Client2,'order by ID','*');
+  if Synchronize then
+    res := Slave.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Master,500) else
+    res := Slave.Server.RecordVersionCurrent;
+  Check(res=Master.Server.RecordVersionCurrent);
+  Rec1.FillPrepare(Master,'order by ID','*');
+  Rec2.FillPrepare(Slave,'order by ID','*');
   Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
   while Rec1.FillOne do begin
     Check(Rec2.FillOne);
@@ -8114,30 +8108,30 @@ begin
   end;
 end;
 begin
-  DeleteFile('testversion.db3');
   Model := TSQLModel.Create([TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted]);
-  CreateClient;
+  Master := CreateClient('testversion.db3',true);
+  Slave1 := CreateClient('testversionreplicated.db3',true);
+  Slave2 := CreateClient('testversioncallback.db3',true);
   try
-    Client.Server.CreateMissingTables;
     Rec1 := TSQLRecordPeopleVersioned.Create;
     Rec2 := TSQLRecordPeopleVersioned.Create;
     Rec := TSQLRecordPeopleVersioned.CreateAndFillPrepare(JS); // 1001 input rows
     try
-      CreateClient2;
-      TestClient2;
+      Test(Slave1);
+      Test(Slave2);
       n := Rec.FillTable.RowCount;
       Check(n>100);
       for i := 0 to 9 do begin // first test raw direct add
         Check(Rec.FillOne);
-        Client.Add(Rec,true,true);
+        Master.Add(Rec,true,true);
       end;
-      TestClient2;
-      Client.Free;
-      CreateClient; // test TSQLRestServer.InternalRecordVersionMaxFromExisting
-      Client.BatchStart(TSQLRecordPeopleVersioned,10000); // fast add via Batch
+      Test(Slave1);
+      Master.Free; // test TSQLRestServer.InternalRecordVersionMaxFromExisting
+      Master := CreateClient('testversion.db3',false);
+      Master.BatchStart(TSQLRecordPeopleVersioned,10000); // fast add via Batch
       while Rec.FillOne do
-        Check(Client.BatchAdd(Rec,true,true)>=0);
-      Check(Client.BatchSend(IDs)=HTML_SUCCESS);
+        Check(Master.BatchAdd(Rec,true,true)>=0);
+      Check(Master.BatchSend(IDs)=HTML_SUCCESS);
       Check(n=length(IDs)+10);
       Check(Rec.FillRewind);
       for i := 0 to 9 do
@@ -8146,29 +8140,38 @@ begin
         if Rec.FillOne then
           Check(IDs[i]=Rec.IDValue) else
           Check(false);
-      TestClient2;
+      Test(Slave1);
+      Test(Slave2);
+      Slave2Callback := TServiceRecordVersionCallback.Create(
+        Slave2.Server,TSQLRecordPeopleVersioned);
+      Master.Server.RecordVersionSynchronizeCallback(TSQLRecordPeopleVersioned,
+        Slave2.Server.RecordVersionCurrent,Slave2Callback);
       Check(Rec.FillRewind);
       for i := 0 to 9 do begin
         Check(Rec.FillOne);
         Rec.YearOfBirth := Rec.YearOfBirth+1;
         if i and 3=1 then
-          Check(Client.Delete(TSQLRecordPeopleVersioned,Rec.IDValue)) else
-          Check(Client.Update(Rec));
+          Check(Master.Delete(TSQLRecordPeopleVersioned,Rec.IDValue)) else
+          Check(Master.Update(Rec));
         if i and 3=2 then begin
           Rec.YearOfBirth := Rec.YearOfBirth+4;
-          Check(Client.Update(Rec),'update twice to increase Version');
+          Check(Master.Update(Rec),'update twice to increase Version');
         end;
       end;
-      TestClient2;
-      TestClient2;
+      Test(Slave1);
+      Test(Slave1);
+      Test(Slave2,false);
+      Test(Slave2,true);
     finally
       Rec.Free;
       Rec2.Free;
       Rec1.Free;
     end;
   finally
-    Client.Free;
-    Client2.Free;
+    Slave2Callback := nil;
+    Slave2.Free;
+    Slave1.Free;
+    Master.Free;
     Model.Free;
   end;
 end;
@@ -8403,7 +8406,7 @@ begin
     Rec2.Free;
     Rec.Free;
   end;
-  // test average speed for a 5 KB request 
+  // test average speed for a 5 KB request
   Resp := Client.List([TSQLRecordPeople],'*',CLIENTTEST_WHERECLAUSE);
   Check(Resp<>nil);
   Resp.Free;
@@ -8870,7 +8873,7 @@ end;
 
 type
   TSQLRecordMyHistory = class(TSQLRecordHistory);
-  
+
 procedure TTestExternalDatabase.ExternalRecords;
 var SQL: RawUTF8;
 begin
@@ -9322,7 +9325,7 @@ begin
       DoTest(TSQLDBWinHTTPConnectionProperties.Create(ADDR,'root','user','pass'),'winhttp');
       DoTest(TSQLDBWinINetConnectionProperties.Create(ADDR,'root','user','pass'),'wininet');
       {$endif}
-      {$ifdef USELIBCURL}                  
+      {$ifdef USELIBCURL}
       DoTest(TSQLDBCurlConnectionProperties.Create(ADDR,'root','user','pass'),'libcurl');
       {$endif}
     finally
@@ -10854,7 +10857,7 @@ begin
           // ensure data sorted in increasing order for both fields
           aF := Comp1(pointer(J.Get(aR,F1)),pointer(J.Get(aR+1,F1)));
           Check(aF<=0,'SortCompare');
-          if aF=0 then // 1st field idem -> check sorted by 2nd field 
+          if aF=0 then // 1st field idem -> check sorted by 2nd field
             Check(Comp2(pointer(J.Get(aR,F2)),pointer(J.Get(aR+1,F2)))<=0);
         end;
       end;
@@ -11542,7 +11545,7 @@ begin
         if InterfaceTypeInfo<>TypeInfo(ITestPerThread) then
           SetOptions([],aOptions);
      end;
-end;  
+end;
 
 procedure TTestServiceOrientedArchitecture.ClientTest(aRouting: TSQLRestServerURIContextClass;
   aResultAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean;{$endif}
@@ -12682,7 +12685,7 @@ begin
               Check(false,format('Duplicate ID %d for thread %d and %d',[fIDs[j],i,n]));
         end;
     // 2.5. Execution sequence is with 1,2,5,10,30,50 concurent threads
-    if fRunningThreadCount=1 then 
+    if fRunningThreadCount=1 then
       fRunningThreadCount := 2 else
     if fRunningThreadCount=2 then
        fRunningThreadCount := 5 else
@@ -12736,7 +12739,7 @@ procedure TTestMultiThreadProcess.SocketAPI;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
   {$ifndef FPC}
-  if DebugHook=0 then 
+  if DebugHook=0 then
   {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
@@ -13064,7 +13067,7 @@ begin
   Rest.Services.Resolve(IBidirService,I);
   if CheckFailed(Assigned(I)) then
     exit;
-  subscribed := TBidirCallbackInterfacedObject.Create; 
+  subscribed := TBidirCallbackInterfacedObject.Create;
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
     I.LaunchCallback(d);
@@ -13077,7 +13080,7 @@ begin
     I.LaunchCallback(d);
   end;
   WaitUntilNotified;
-  subscribed := TBidirCallback.Create(Rest,IBidirCallback); 
+  subscribed := TBidirCallback.Create(Rest,IBidirCallback);
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
     I.LaunchCallback(d);
@@ -13143,6 +13146,7 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
+
 
 
 initialization
