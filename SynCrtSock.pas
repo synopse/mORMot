@@ -841,6 +841,8 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aURL,aMethod,aInHeaders,aInContent,aInContentType: SockString);
+    /// append some lines to the InHeaders input parameter
+    procedure AddInHeader(additionalHeader: SockString);
     /// input parameter containing the caller URI
     property URL: SockString read fURL;
     /// input parameter containing the caller method (GET/POST...)
@@ -3381,6 +3383,15 @@ begin
   fOutContentType := '';
   fOutCustomHeaders := '';
   fUseSSL := false;
+end;
+
+procedure THttpServerRequest.AddInHeader(additionalHeader: SockString);
+begin
+  additionalHeader := Trim(additionalHeader);
+  if additionalHeader<>'' then
+    if fInHeaders='' then
+      fInHeaders := additionalHeader else
+      fInHeaders := fInHeaders+#13#10+additionalHeader;
 end;
 
 

@@ -684,10 +684,15 @@ end;
 
 function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
 var i,methodIndex,fakeCallID: integer;
-    url,root,interfmethod,interf,id,method,head: RawUTF8;
+    url,root,interfmethod,interf,id,method,head,frames: RawUTF8;
     instance: pointer;
     factory: TInterfaceFactory;
     WR: TTextWriter;
+procedure CallCurrentFrame;
+begin
+  factory.Methods[factory.MethodIndexCurrentFrameCallback].InternalExecute(
+    [instance],pointer(frames),nil,head,result,[],false,nil,nil);
+end;
 begin
   result := HTML_BADREQUEST;
   if (Ctxt=nil) or
@@ -711,7 +716,7 @@ begin
     if i<0 then
       exit;
     if interfmethod='_free_' then begin
-      fFakeCallbacks.List[i].ReleasedFromServer := true; 
+      fFakeCallbacks.List[i].ReleasedFromServer := true;
       result := HTML_SUCCESS;
       exit;
     end;
@@ -719,6 +724,10 @@ begin
     factory := fFakeCallbacks.List[i].Factory;
   finally
     fFakeCallbacks.Release;
+  end;
+  if (Ctxt.InHeaders<>'') and
+     (factory.MethodIndexCurrentFrameCallback>=0) then begin
+    frames := FindIniNameValue(pointer(Ctxt.InHeaders),'SEC-WEBSOCKET-FRAME: ');
   end;
   split(interfmethod,'.',interf,method);
   methodIndex := factory.FindMethodIndex(method);
@@ -729,6 +738,8 @@ begin
     WR := TJSONSerializer.CreateOwnedStream;
     try
       WR.AddShort('{"result":[');
+      if frames='[0]' then
+        CallCurrentFrame; // call before the first method of the jumbo frame
       if not factory.Methods[methodIndex].InternalExecute([instance],
          pointer(Ctxt.InContent),WR,head,result,[],False,nil,nil) then
         result := HTML_SERVERERROR else begin
@@ -743,6 +754,8 @@ begin
           Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
         Ctxt.OutContent := WR.Text;
       end;
+      if frames='[1]' then
+        CallCurrentFrame; // call after the last method of the jumbo frame
     finally
       WR.Free;
     end;

@@ -156,7 +156,7 @@ type
     fName: RawUTF8;
     fURI: RawUTF8;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame); virtual; abstract;
+      var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
     function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; virtual; 
@@ -195,7 +195,7 @@ type
   protected
     fOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame); override;
+      var request: TWebSocketFrame; const info: RawUTF8); override;
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
@@ -217,7 +217,7 @@ type
   TWebSocketProtocolRest = class(TWebSocketProtocol)
   protected
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame); override;
+      var request: TWebSocketFrame; const info: RawUTF8); override;
     procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); virtual; abstract;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
@@ -276,7 +276,7 @@ type
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame); override;
+      var request: TWebSocketFrame; const info: RawUTF8); override;
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
@@ -796,7 +796,7 @@ begin
 end;
 
 procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame);
+  var request: TWebSocketFrame; const info: RawUTF8);
 begin
   if Assigned(OnInComingFrame) and
      Sender.InheritsFrom(TWebSocketProcessServer) then
@@ -818,7 +818,7 @@ end;
 { TWebSocketProtocolRest }
 
 procedure TWebSocketProtocolRest.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame);
+  var request: TWebSocketFrame; const info: RawUTF8);
 var Ctxt: THttpServerRequest;
     onRequest: TOnHttpServerRequest;
     status: cardinal;
@@ -832,7 +832,9 @@ begin
     try
       if not FrameToInput(request,noAnswer,Ctxt) then
         raise ESynBidirSocket.CreateUTF8('%.ProcessOne: invalid frame',[self]);
-      request.payload := '';
+      request.payload := ''; // release memory ASAP
+      if info<>'' then
+        Ctxt.AddInHeader(info);
       status := onRequest(Ctxt);
       if (Ctxt.OutContentType=HTTP_RESP_NORESPONSE) or noAnswer then
         exit;
@@ -1155,8 +1157,8 @@ begin
 end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame);
-var jumbo: RawByteString;
+  var request: TWebSocketFrame; const info: RawUTF8);
+var jumbo,jumboInfo: RawByteString;
     i: integer;
     frames: TWebSocketFrameDynArray;
 begin
@@ -1166,11 +1168,16 @@ begin
       raise ESynBidirSocket.CreateUTF8(
         'Invalid content for %.ProcessIncomingFrame(frames)',[self]);
     for i := 0 to high(frames) do begin
+      if i=0 then
+        jumboInfo:= 'Sec-WebSocket-Frame: [0]' else
+      if i=high(frames) then
+        jumboInfo := 'Sec-WebSocket-Frame: [1]' else
+        jumboInfo := '';
       Sender.Log(frames[i],'GetSubFrame');
-      ProcessIncomingFrame(Sender,frames[i]);
+      inherited ProcessIncomingFrame(Sender,frames[i],jumboInfo);
     end;
   end else
-    inherited ProcessIncomingFrame(Sender,request);
+    inherited ProcessIncomingFrame(Sender,request,info);
 end;
 
 
@@ -1554,7 +1561,7 @@ begin
           focPong:
             continue;
           focText,focBinary:
-            fProtocol.ProcessIncomingFrame(self,request);
+            fProtocol.ProcessIncomingFrame(self,request,'');
           focConnectionClose: begin
             SendFrame(request);
             fState := wpsClose;
@@ -1842,14 +1849,14 @@ var frame: TWebSocketFrame;
 begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
   inherited;
   frame.opcode := focContinuation;
-  fProtocol.ProcessIncomingFrame(self,frame);
+  fProtocol.ProcessIncomingFrame(self,frame,'');
 end;
 
 procedure TWebSocketProcessServer.ProcessStop;
 var frame: TWebSocketFrame;
 begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
   frame.opcode := focConnectionClose;
-  fProtocol.ProcessIncomingFrame(self,frame);
+  fProtocol.ProcessIncomingFrame(self,frame,'');
   inherited;
 end;
 

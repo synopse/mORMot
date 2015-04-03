@@ -8204,7 +8204,7 @@ begin
         Master.RecordVersionSynchronizeSubscribe(TSQLRecordPeopleVersioned,
           Slave2.RecordVersionCurrent,Slave2Callback);
       Test.Check(Rec.FillRewind);
-      for i := 0 to 9 do begin
+      for i := 0 to 20 do begin
         Test.Check(Rec.FillOne);
         Rec.YearOfBirth := Rec.YearOfBirth+1;
         if i and 3=1 then
@@ -8219,10 +8219,10 @@ begin
       TestMasterSlave(Master,Slave1,MasterAccess);
       if Test is TTestBidirectionalRemoteConnection then begin
         timeout := GetTickCount64+3000;
-        while Slave2.RecordVersionCurrent<>Master.RecordVersionCurrent do
-          if GetTickCount64>timeout then
-            break else
-            sleep(1); // wait until all asynchronous callbacks were received
+        repeat sleep(1) 
+        until (GetTickCount64>timeout) or // wait all callbacks to be received
+              (Slave2.RecordVersionCurrent=Master.RecordVersionCurrent);
+        Slave2Callback := nil; // wait the whole batch to be processed 
       end;
       TestMasterSlave(Master,Slave2,nil);
       TestMasterSlave(Master,Slave2,MasterAccess);

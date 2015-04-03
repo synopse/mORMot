@@ -9058,6 +9058,7 @@ type
     {$endif}
     fFakeVTable: array of pointer;
     fFakeStub: PByteArray;
+    fMethodIndexCurrentFrameCallback: Integer;
     function GetInterfaceName: RawUTF8;
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
@@ -9114,6 +9115,14 @@ type
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
     property MethodsCount: cardinal read fMethodsCount;
+    /// identifies a CurrentFrame() method in this interface 
+    // - i.e. the index in Methods[] of the following signature:
+    // ! procedure CurrentFrame(isLast: boolean);
+    // - this method will be called e.g. by TSQLHttpClientWebsockets.CallbackRequest
+    // for interface callbacks in case of WebSockets jumbo frames, to allow e.g.
+    // faster database access via a batch
+    // - contains -1 if no such method do exist in the interface definition
+    property MethodIndexCurrentFrameCallback: Integer read fMethodIndexCurrentFrameCallback;
     /// the registered Interface low-level Delphi RTTI type
     property InterfaceTypeInfo: PTypeInfo read fInterfaceTypeInfo;
     /// the registered Interface GUID
@@ -10441,6 +10450,14 @@ type
     procedure Updated(const ModifiedContent: RawJSON);
     /// this event will be raised on any Delete on a versioned record
     procedure Deleted(const ID: TID; const Revision: TRecordVersion);
+    /// allow to optimize process for WebSockets "jumbo frame" items 
+    // - this method may be called with isLast=false before the first method
+    // call of this interface, then with isLast=true after the call of the
+    // last method of the "jumbo frame"
+    // - match TInterfaceFactory.MethodIndexCurrentFrameCallback signature
+    // - allow e.g. to create a temporary TSQLRestBatch for jumbo frames
+    // - if individual frames are received, this method won't be called
+    procedure CurrentFrame(isLast: boolean);
   end;
 
   /// a list of callback interfaces to notify TSQLRecord modifications
@@ -10575,19 +10592,26 @@ type
   protected
     fTable: TSQLRecordClass;
     fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
-    // local TSQLRecordTableDeleted.ID follows current Model
+    fBatch: TSQLRestBatch;
+    // local TSQLRecordTableDeleted.ID follows current Model -> pre-compute offset
     fTableDeletedIDOffset: Int64;
     procedure SetCurrentRevision(const Revision: TRecordVersion);
   public
     /// initialize the instance able to apply callbacks for a given table on
     // a local REST server
     constructor Create(aRest: TSQLRestServer; aTable: TSQLRecordClass); reintroduce;
+    /// finalize this callback instance
+    destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
     procedure Added(const NewContent: RawJSON); virtual;
     /// this event will be raised on any Update on a versioned record
     procedure Updated(const ModifiedContent: RawJSON); virtual;
     /// this event will be raised on any Delete on a versioned record
     procedure Deleted(const ID: TID; const Revision: TRecordVersion); virtual;
+    /// match TInterfaceFactory.MethodIndexCurrentFrameCallback signature,
+    // so that TSQLHttpClientWebsockets.CallbackRequest will call it
+    // - it will create a temporary TSQLRestBatch for the whole "jumbo frame"
+    procedure CurrentFrame(isLast: boolean); virtual;
   end;
 
   /// for TSQLRestCache, stores a table values
@@ -27596,7 +27620,7 @@ begin
       FieldBits := CustomFields else
       FieldBits := CustomFields+Props.ModCreateTimeFieldsBits;
     SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
-      (Value.ID<>0) and ForceID,FieldBits);
+      (Value.IDValue<>0) and ForceID,FieldBits);
     fTablePreviousSendData := PSQLRecordClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
       Value.ComputeFieldsBeforeWrite(fRest,seAdd);
@@ -27610,7 +27634,7 @@ begin
   inc(fBatchCount);
   inc(fAddCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self,soInsert,PSQLRecordClass(Value)^,Value.ID,Value,FieldBits);
+    fOnWrite(self,soInsert,PSQLRecordClass(Value)^,Value.IDValue,Value,FieldBits);
 end;
 
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
@@ -27682,7 +27706,7 @@ begin
   result := -1;
   if (Value=nil) or (fBatch=nil) then
     exit;
-  ID := Value.ID;
+  ID := Value.IDValue;
   if (ID<=0) or not fRest.RecordCanBeUpdated(Value.RecordClass,ID,seUpdate) then
     exit; // invalid parameters, or not opened BATCH sequence
   Props := Value.RecordProps;
@@ -27720,7 +27744,7 @@ begin
   inc(fBatchCount);
   inc(fUpdateCount);
   if Assigned(fOnWrite) then
-    fOnWrite(self,soUpdate,PSQLRecordClass(Value)^,Value.ID,Value,FieldBits);
+    fOnWrite(self,soUpdate,PSQLRecordClass(Value)^,Value.IDValue,Value,FieldBits);
 end;
 
 
@@ -29768,7 +29792,7 @@ begin
         on E: Exception do
           if (fClient<>nil) and not Terminated then
             fClient.InternalLog('%.Execute fatal error: %'+
-              'some events were not transmitted',[self,E],sllWarning);
+              'some events were not transmitted',[ClassType,E],sllWarning);
       end;
     end;
 end;
@@ -31631,7 +31655,7 @@ begin
     end;
     if not cascadeOK then
       InternalLog('%.AfterDeleteForceCoherency() failed to handle field %.%',
-        [Self,Model.Tables[TableIndex],FieldType.Name],sllWarning);
+        [ClassType,Model.Tables[TableIndex],FieldType.Name],sllWarning);
   end;
 end;
 
@@ -34482,6 +34506,9 @@ var EndOfObject: AnsiChar;
         URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
   end;
 begin
+  {$ifdef WITHLOG}
+  fLogClass.Enter(self);
+  {$endif}
   Sent := pointer(Data);
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
@@ -34564,7 +34591,8 @@ begin
         if RunTableTransactions[RunTableIndex]=nil then
           if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
             RunTableTransactions[RunTableIndex] := RunningRest else
-            InternalLog('%.TransactionBegin failed -> no transaction',[RunningRest],sllWarning);
+            InternalLog('%.EngineBatchSend: %.TransactionBegin failed -> no transaction',
+              [ClassType,RunningRest.ClassType],sllWarning);
       end;
       // handle batch pending request sending (if table or method changed)
       if (RunningBatchRest<>nil) and
@@ -43225,6 +43253,7 @@ begin
   if fMethodsCount=0 then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): interface has no RTTI',[self,aInterface^.Name]);
+  fMethodIndexCurrentFrameCallback := -1;
   SetLength(fMethods,fMethodsCount);
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
@@ -43304,6 +43333,10 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         ArgsManagedLast := a;
       end;
     end;
+    if (ArgsOutputValuesCount=0) and (ArgsInputValuesCount=1) and
+       IdemPropNameU(URI,'CurrentFrame') and
+       (Args[1].ValueType=smvBoolean) then
+      fMethodIndexCurrentFrameCallback := m;
   end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
@@ -46695,11 +46728,14 @@ end;
 
 procedure TServiceRecordVersionCallback.Added(const NewContent: RawJSON);
 var rec: TSQLRecord;
+    fields: TSQLFieldBits;
 begin
   rec := fTable.Create;
   try
-    rec.FillFrom(NewContent);
-    fRest.Add(rec,true,true,true);
+    rec.FillFrom(NewContent,@fields);
+    if fBatch=nil then
+      fRest.Add(rec,true,true,true) else
+      fBatch.Add(rec,true,true,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
   finally
     rec.Free;
@@ -46714,7 +46750,9 @@ begin
   rec := fTable.Create;
   try
     rec.FillFrom(ModifiedContent,@fields);
-    fRest.Update(rec,fields,true);
+    if fBatch=nil then
+      fRest.Update(rec,fields,true) else
+      fBatch.Update(rec,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
   finally
     rec.Free;
@@ -46727,17 +46765,70 @@ var del: TSQLRecordTableDeleted;
 begin
   del := TSQLRecordTableDeleted.Create;
   try
-    fRest.fAcquireExecution[execORMWrite].Enter;
-    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
     del.IDValue := fTableDeletedIDOffset+Revision;
     del.Deleted := ID;
-    fRest.Add(del,true,true,true);
-    fRest.Delete(fTable,ID);
+    if fBatch=nil then
+    try
+      fRest.fAcquireExecution[execORMWrite].Enter;
+      TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
+      fRest.Add(del,true,true,true);
+      fRest.Delete(fTable,ID);
+    finally
+      TSQLRestServer(fRest).fRecordVersionDeleteIgnore := false;
+      fRest.fAcquireExecution[execORMWrite].Leave;
+    end else begin
+      fBatch.Add(del,true,true);
+      fBatch.Delete(fTable,ID);
+    end;
     SetCurrentRevision(Revision);
+  finally
+    del.Free;
+  end;
+end;
+
+procedure TServiceRecordVersionCallback.CurrentFrame(isLast: boolean);
+procedure Error(const msg: RawUTF8);
+begin
+  fRest.InternalLog('%.CurrentFrame(%) on %: %',[self,isLast,fTable,msg],sllError);
+end;
+begin
+  if isLast then begin
+    if fBatch=nil then
+      Error('unexpected last frame');
+  end else
+    if fBatch<>nil then
+      Error('previous active BATCH -> send pending');
+  if fBatch<>nil then
+  try
+    fRest.fAcquireExecution[execORMWrite].Enter;
+    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
+    fRest.BatchSend(fBatch);
   finally
     TSQLRestServer(fRest).fRecordVersionDeleteIgnore := false;
     fRest.fAcquireExecution[execORMWrite].Leave;
-    del.Free;
+    FreeAndNil(fBatch);
+  end;
+  if not isLast then
+    fBatch := TSQLRestBatch.Create(fRest,nil,10000);
+end;
+
+destructor TServiceRecordVersionCallback.Destroy;
+var timeOut: Int64;
+begin
+  try
+    if fBatch<>nil then begin
+      timeOut := GetTickCount64+2000;
+      repeat
+        sleep(1); // allow 2 seconds to process all pending frames 
+        if fBatch=nil then
+          exit;
+      until GetTickCount64>timeOut;
+      fRest.InternalLog('%.Destroy on %: active BATCH',[self,fTable],sllError);
+      fRest.BatchSend(fBatch);
+      fBatch.Free;
+    end;
+  finally
+    inherited Destroy;
   end;
 end;
 
