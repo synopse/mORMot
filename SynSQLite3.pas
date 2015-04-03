@@ -3094,8 +3094,8 @@ begin
   if F=INVALID_HANDLE_VALUE then
     exit;
   if (FileRead(F,Header,SizeOf(Header))=SizeOf(Header)) and
-     (Header='SQLite format 3') and (PWord(@Header[PAGESIZE_OFFSET])^=1024) then
-    // see https://www.sqlite.org/fileformat.html
+     (PWord(@Header[PAGESIZE_OFFSET])^=4) and (Header='SQLite format 3') then
+    // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
     if not(Header[1024] in [#5,#10,#13]) then
       // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
       result := true;
