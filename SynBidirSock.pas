@@ -853,7 +853,7 @@ var Method,InContentType: RawByteString;
 begin
   if not IdemPropNameU(Ctxt.Method,'POST') then
     Method := Ctxt.Method;
-  if (Ctxt.InContent<>'') and
+  if (Ctxt.InContent<>'') and (Ctxt.InContentType<>'') and
      not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE) then
     InContentType := Ctxt.InContentType;
   FrameCompress('request',[Method,Ctxt.URL,Ctxt.InHeaders,ord(aNoAnswer)],

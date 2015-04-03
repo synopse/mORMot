@@ -929,7 +929,8 @@ begin
         result := true;
       end else
         if aErrorMsg<>nil then
-          aErrorMsg^ := FormatUTF8('% returned status=%',[aConnectionID,status]);
+          aErrorMsg^ := FormatUTF8('%.NotifyCallback(%) returned status=%',
+            [self,aConnectionID,status]);
     finally
       ctxt.Free;
     end;

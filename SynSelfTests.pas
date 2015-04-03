@@ -516,7 +516,7 @@ type
     /// check the PCRE-based REGEX function
     procedure RegexpFunction;
     {$endif TEST_REGEXP}
-    /// test the TRecordVersion field
+    /// test Master/Slave replication using TRecordVersion field 
     procedure _TRecordVersion;
   end;
 
@@ -847,6 +847,8 @@ type
     procedure SOACallbackViaJSONWebsockets;
     /// test callbacks via interface-based services over binary WebSockets
     procedure SOACallbackViaBinaryWebsockets;
+    /// test Master/Slave replication using TRecordVersion field over WebSockets
+    procedure _TRecordVersion;
   end;
 
   /// a test case for all shared DDD types and services
@@ -8074,106 +8076,172 @@ type
   published
     property Version: TRecordVersion read fVersion write fVersion;
   end;
+  ITestMasterSlave = interface(IInvokable)
+    ['{1637D540-305C-44C3-BFFD-C3B7669BE3E8}']
+    function Subscribe(const revision: TRecordVersion;
+      const callback: IServiceRecordVersionCallback): boolean;
+  end;
+  TTestMasterSlave = class(TInterfacedObject,ITestMasterSlave)
+  public
+    function Subscribe(const revision: TRecordVersion;
+      const callback: IServiceRecordVersionCallback): boolean;
+  end;
 
-procedure TTestSQLite3Engine._TRecordVersion;
+function TTestMasterSlave.Subscribe(const revision: TRecordVersion;
+  const callback: IServiceRecordVersionCallback): boolean;
+begin
+  result := ServiceContext.Factory.RestServer.RecordVersionSynchronizeSubscribe(
+    TSQLRecordPeopleVersioned,revision,callback);
+end;
+
+procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileName);
+procedure TestMasterSlave(Master,Slave: TSQLRestServer; SynchronizeFromMaster: TSQLRest);
+var res: TRecordVersion;
+    Rec1,Rec2: TSQLRecordPeopleVersioned;
+begin
+  if SynchronizeFromMaster<>nil then
+    res := Slave.RecordVersionSynchronize(TSQLRecordPeopleVersioned,SynchronizeFromMaster,500) else
+    res := Slave.RecordVersionCurrent;
+  Test.Check(res=Master.RecordVersionCurrent);
+  Rec1 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Master,'order by ID','*');
+  Rec2 := TSQLRecordPeopleVersioned.CreateAndFillPrepare(Slave,'order by ID','*');
+  try
+    Test.Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
+    while Rec1.FillOne do begin
+      Test.Check(Rec2.FillOne);
+      Test.Check(Rec1.SameRecord(Rec2),'simple fields');
+      Test.Check(Rec1.Version=Rec2.Version);
+    end;
+  finally
+    Rec1.Free;
+    Rec2.Free;
+  end;
+end;
 var Model: TSQLModel;
-    Master,Slave1,Slave2: TSQLRestClientDB;
+    Master,Slave1,Slave2: TSQLRestServerDB;
+    MasterAccess: TSQLRestClientURI;
     Slave2Callback: IServiceRecordVersionCallback;
-    Rec,Rec1,Rec2: TSQLRecordPeopleVersioned;
+    subscribe: ITestMasterSlave;
     IDs: TIDDynArray;
+    Rec: TSQLRecordPeopleVersioned;
     i,n: integer;
-function CreateClient(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestClientDB;
+    timeout: Int64;
+function CreateServer(const DBFileName: TFileName; DeleteDBFile: boolean): TSQLRestServerDB;
 begin
   if DeleteDBFile then
     DeleteFile(DBFileName);
-  result := TSQLRestClientDB.Create(Model,nil,DBFileName,TSQLRestServerDB,false,'');
-  result.Server.DB.Synchronous := smOff;
-  result.Server.DB.LockingMode := lmExclusive;
-  result.Server.CreateMissingTables;
+  result := TSQLRestServerDB.Create(Model,DBFileName,false,'');
+  result.DB.Synchronous := smOff;
+  result.DB.LockingMode := lmExclusive;
+  result.CreateMissingTables;
 end;
-procedure Test(Slave: TSQLRestClientDB; Synchronize: boolean=true);
-var res: TRecordVersion;
+procedure CreateMaster(DeleteDBFile: boolean);
+var serv: TSQLHttpServer;
+    ws: TSQLHttpClientWebsockets;
 begin
-  if Synchronize then
-    res := Slave.Server.RecordVersionSynchronize(TSQLRecordPeopleVersioned,Master,500) else
-    res := Slave.Server.RecordVersionCurrent;
-  Check(res=Master.Server.RecordVersionCurrent);
-  Rec1.FillPrepare(Master,'order by ID','*');
-  Rec2.FillPrepare(Slave,'order by ID','*');
-  Check(Rec1.FillTable.RowCount=Rec2.FillTable.RowCount);
-  while Rec1.FillOne do begin
-    Check(Rec2.FillOne);
-    Check(Rec1.SameRecord(Rec2),'simple fields');
-    Check(Rec1.Version=Rec2.Version);
-  end;
+  Master := CreateServer('testversion'+DBExt,DeleteDBFile);
+  if Test is TTestBidirectionalRemoteConnection then begin
+    serv := TTestBidirectionalRemoteConnection(Test).fHttpServer;
+    Test.Check(serv.AddServer(Master));
+    serv.WebSocketsEnable(Master,'key2').Settings.SetFullLog;
+    ws := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
+    ws.WebSockets.Settings.SetFullLog;
+    Test.Check(ws.WebSocketsUpgrade('key2')='');
+    MasterAccess := ws;
+  end else
+    MasterAccess := TSQLRestClientDB.Create(Master);
 end;
 begin
-  Model := TSQLModel.Create([TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted]);
-  Master := CreateClient('testversion.db3',true);
-  Slave1 := CreateClient('testversionreplicated.db3',true);
-  Slave2 := CreateClient('testversioncallback.db3',true);
+  Model := TSQLModel.Create(
+    [TSQLRecordPeople,TSQLRecordPeopleVersioned,TSQLRecordTableDeleted],'root0');
+  CreateMaster(true);
+  Slave1 := CreateServer('testversionreplicated'+DBExt,true);
+  Slave2 := CreateServer('testversioncallback'+DBExt,true);
   try
-    Rec1 := TSQLRecordPeopleVersioned.Create;
-    Rec2 := TSQLRecordPeopleVersioned.Create;
-    Rec := TSQLRecordPeopleVersioned.CreateAndFillPrepare(JS); // 1001 input rows
-    try
-      Test(Slave1);
-      Test(Slave2);
+    Rec := TSQLRecordPeopleVersioned.CreateAndFillPrepare(StringFromFile('Test1.json'));
+    try // Rec contains 1001 input rows of data
+      TestMasterSlave(Master,Slave1,MasterAccess);
+      TestMasterSlave(Master,Slave2,MasterAccess);
       n := Rec.FillTable.RowCount;
-      Check(n>100);
+      Test.Check(n>100);
       for i := 0 to 9 do begin // first test raw direct add
-        Check(Rec.FillOne);
+        Test.Check(Rec.FillOne);
         Master.Add(Rec,true,true);
       end;
-      Test(Slave1);
+      TestMasterSlave(Master,Slave1,MasterAccess);
+      if Test is TTestBidirectionalRemoteConnection then
+        Test.Check(TTestBidirectionalRemoteConnection(Test).fHttpServer.
+          RemoveServer(Master));
       Master.Free; // test TSQLRestServer.InternalRecordVersionMaxFromExisting
-      Master := CreateClient('testversion.db3',false);
-      Master.BatchStart(TSQLRecordPeopleVersioned,10000); // fast add via Batch
-      while Rec.FillOne do
-        Check(Master.BatchAdd(Rec,true,true)>=0);
-      Check(Master.BatchSend(IDs)=HTML_SUCCESS);
-      Check(n=length(IDs)+10);
-      Check(Rec.FillRewind);
+      MasterAccess.Free;
+      CreateMaster(false);
+      MasterAccess.BatchStart(TSQLRecordPeopleVersioned,10000);
+      while Rec.FillOne do // fast add via Batch
+        Test.Check(MasterAccess.BatchAdd(Rec,true,true)>=0);
+      Test.Check(MasterAccess.BatchSend(IDs)=HTML_SUCCESS);
+      Test.Check(n=length(IDs)+10);
+      Test.Check(Rec.FillRewind);
       for i := 0 to 9 do
-        Check(Rec.FillOne);
+        Test.Check(Rec.FillOne);
       for i := 0 to high(IDs) do
         if Rec.FillOne then
-          Check(IDs[i]=Rec.IDValue) else
-          Check(false);
-      Test(Slave1);
-      Test(Slave2);
+          Test.Check(IDs[i]=Rec.IDValue) else
+          Test.Check(false);
+      TestMasterSlave(Master,Slave1,MasterAccess);
+      TestMasterSlave(Master,Slave2,MasterAccess);
       Slave2Callback := TServiceRecordVersionCallback.Create(
-        Slave2.Server,TSQLRecordPeopleVersioned);
-      Master.Server.RecordVersionSynchronizeCallback(TSQLRecordPeopleVersioned,
-        Slave2.Server.RecordVersionCurrent,Slave2Callback);
-      Check(Rec.FillRewind);
+        Slave2,TSQLRecordPeopleVersioned);
+      if Test is TTestBidirectionalRemoteConnection then begin
+        // asynchronous synchronization via websockets
+        Master.ServiceDefine(TTestMasterSlave,[ITestMasterSlave],sicShared).
+          ByPassAuthentication := true;
+        MasterAccess.ServiceDefine(ITestMasterSlave,sicShared);
+        Test.Check(MasterAccess.Services.Resolve(ITestMasterSlave,subscribe));
+        Test.Check(subscribe.Subscribe(Slave2.RecordVersionCurrent,Slave2Callback));
+        subscribe := nil;
+      end else
+        // direct synchronization within the same process 
+        Master.RecordVersionSynchronizeSubscribe(TSQLRecordPeopleVersioned,
+          Slave2.RecordVersionCurrent,Slave2Callback);
+      Test.Check(Rec.FillRewind);
       for i := 0 to 9 do begin
-        Check(Rec.FillOne);
+        Test.Check(Rec.FillOne);
         Rec.YearOfBirth := Rec.YearOfBirth+1;
         if i and 3=1 then
-          Check(Master.Delete(TSQLRecordPeopleVersioned,Rec.IDValue)) else
-          Check(Master.Update(Rec));
+          Test.Check(Master.Delete(TSQLRecordPeopleVersioned,Rec.IDValue)) else
+          Test.Check(Master.Update(Rec));
         if i and 3=2 then begin
           Rec.YearOfBirth := Rec.YearOfBirth+4;
-          Check(Master.Update(Rec),'update twice to increase Version');
+          Test.Check(Master.Update(Rec),'update twice to increase Version');
         end;
       end;
-      Test(Slave1);
-      Test(Slave1);
-      Test(Slave2,false);
-      Test(Slave2,true);
+      TestMasterSlave(Master,Slave1,MasterAccess);
+      TestMasterSlave(Master,Slave1,MasterAccess);
+      if Test is TTestBidirectionalRemoteConnection then begin
+        timeout := GetTickCount64+3000;
+        while Slave2.RecordVersionCurrent<>Master.RecordVersionCurrent do
+          if GetTickCount64>timeout then
+            break else
+            sleep(1); // wait until all asynchronous callbacks were received
+      end;
+      TestMasterSlave(Master,Slave2,nil);
+      TestMasterSlave(Master,Slave2,MasterAccess);
     finally
       Rec.Free;
-      Rec2.Free;
-      Rec1.Free;
     end;
   finally
     Slave2Callback := nil;
     Slave2.Free;
     Slave1.Free;
+    MasterAccess.Free;
     Master.Free;
     Model.Free;
   end;
+end;
+
+procedure TTestSQLite3Engine._TRecordVersion;
+begin
+  TestMasterSlaveRecordVersion(self,'.db3');
 end;
 
 type
@@ -13020,7 +13088,8 @@ const
 
 procedure TTestBidirectionalRemoteConnection.RunHttpServer;
 begin
-  TInterfaceFactory.RegisterInterfaces([TypeInfo(IBidirService),TypeInfo(IBidirCallback)]);
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(IBidirService),TypeInfo(IBidirCallback),TypeInfo(ITestMasterSlave)]);
   // sicClientDriven services expect authentication for sessions
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
@@ -13122,6 +13191,11 @@ end;
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaJSONWebsockets;
 begin
   SOACallbackViaWebsockets(true);
+end;
+
+procedure TTestBidirectionalRemoteConnection._TRecordVersion;
+begin
+  TestMasterSlaveRecordVersion(Self,'ws.db3');
 end;
 
 procedure TTestBidirectionalRemoteConnection.CleanUp;

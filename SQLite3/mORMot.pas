@@ -10426,7 +10426,7 @@ type
   end;
 
   /// a callback interface used to notify a TSQLRecord modification in real time
-  // - will be used e.g. by TSQLRestServer.RecordVersionSynchronizeCallback()
+  // - will be used e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribe()
   // - all methods of this interface will be called asynchronously when
   // transmitted via our WebSockets implementation, since they are defined as
   // plain procedures
@@ -10502,8 +10502,8 @@ type
     destructor Destroy; override;
     /// register a callback interface which will be called each time a write
     // operation is performed on a given TSQLRecord with a TRecordVersion field
-    // - called e.g. by TSQLRestServer.RecordVersionSynchronizeCallback
-    function RecordVersionSynchronizeCallback(TableIndex: integer;
+    // - called e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribe
+    function RecordVersionSynchronizeSubscribe(TableIndex: integer;
       RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
     /// notify any TRecordVersion callback for a table Add/Update from a
     // TDocVariant content
@@ -10570,7 +10570,7 @@ type
 
   /// this class is able to write all remote ORM notifications to the local DB
   // - could be supplied as callback parameter, possibly via WebSockets
-  // transmission, to TSQLRestServer.RecordVersionSynchronizeCallback()
+  // transmission, to TSQLRestServer.RecordVersionSynchronizeSubscribe()
   TServiceRecordVersionCallback = class(TInterfacedCallback,IServiceRecordVersionCallback)
   protected
     fTable: TSQLRecordClass;
@@ -13350,7 +13350,7 @@ type
     // RecordVersionSynchronize() to avoid any missing update
     // - if the supplied RecordVersion is the latest on the server side,
     // this method will return TRUE and put the Callback notification in place
-    function RecordVersionSynchronizeCallback(Table: TSQLRecordClass;
+    function RecordVersionSynchronizeSubscribe(Table: TSQLRecordClass;
       RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
@@ -31479,7 +31479,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionSynchronizeCallback(Table: TSQLRecordClass;
+function TSQLRestServer.RecordVersionSynchronizeSubscribe(Table: TSQLRecordClass;
   RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
 begin
   if self=nil then begin
@@ -31488,7 +31488,7 @@ begin
   end;
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
-  result := TServiceContainerServer(fServices).RecordVersionSynchronizeCallback(
+  result := TServiceContainerServer(fServices).RecordVersionSynchronizeSubscribe(
     Model.GetTableIndexExisting(Table),RecordVersion,Callback);
 end;
 
@@ -42678,7 +42678,7 @@ end;
 var resultType: TServiceMethodValueType; // type of value stored into result
 procedure InternalProcess;
 var Params: TJSONSerializer;
-    Error, ResArray: RawUTF8;
+    Error, ResArray, ParamsJSON: RawUTF8;
     arg, ValLen: integer;
     V: PPointer;
     R, Val: PUTF8Char;
@@ -42732,11 +42732,12 @@ begin
         AddJSON(Params,V);
     end;
     Params.CancelLastComma;
+    Params.SetText(ParamsJSON);
     // call remote server or stub implementation
     if method^.ArgsResultIsServiceCustomAnswer then
       ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
       ServiceCustomAnswerPoint := nil;
-    if not fInvoke(method^,Params.Text,@ResArray,@Error,@fClientDrivenID,
+    if not fInvoke(method^,ParamsJSON,@ResArray,@Error,@fClientDrivenID,
        ServiceCustomAnswerPoint) then
       RaiseError('''%''',[Error]);
   finally
@@ -45294,7 +45295,7 @@ begin
   end;
 end;
 
-function TServiceContainerServer.RecordVersionSynchronizeCallback(
+function TServiceContainerServer.RecordVersionSynchronizeSubscribe(
   TableIndex: integer; RecordVersion: TRecordVersion;
   const Callback: IServiceRecordVersionCallback): boolean;
 var instance: TObject;
