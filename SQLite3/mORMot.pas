@@ -34476,6 +34476,7 @@ var EndOfObject: AnsiChar;
     Sent, Method, MethodTable: PUTF8Char;
     AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
     RunTableTransactions: array of TSQLRest;
+    RunMainTransaction: boolean;
     ID: TID;
     Count: integer;
     batchOptions: TSQLRestBatchOptions;
@@ -34496,6 +34497,8 @@ var EndOfObject: AnsiChar;
       if RunTableTransactions[i]<>nil then begin
         RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED,true);
         RunTableTransactions[i] := nil;
+        if RunTableTransactions[i]=Self then
+          RunMainTransaction := false;
       end;
     RowCountForCurrentTransaction := 0;
   end;
@@ -34537,6 +34540,7 @@ begin
   end else
     AutomaticTransactionPerRow := 0;
   SetLength(RunTableTransactions,Model.TablesMax+1);
+  RunMainTransaction := false;
   RowCountForCurrentTransaction := 0;
   if IdemPChar(Sent,'"OPTIONS",') then begin
     inc(Sent,10);
@@ -34589,8 +34593,13 @@ begin
           PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
         inc(RowCountForCurrentTransaction);
         if RunTableTransactions[RunTableIndex]=nil then
-          if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then
-            RunTableTransactions[RunTableIndex] := RunningRest else
+          // initiate transaction for this table if not started yet
+          if (RunStatic<>nil) or not RunMainTransaction then
+            if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then begin
+              RunTableTransactions[RunTableIndex] := RunningRest;
+              if RunStatic=nil then
+                RunMainTransaction := true;
+            end else
             InternalLog('%.EngineBatchSend: %.TransactionBegin failed -> no transaction',
               [ClassType,RunningRest.ClassType],sllWarning);
       end;
