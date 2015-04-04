@@ -32,6 +32,7 @@ unit SynCommons;
    - Aleksandr (sha)
    - Alfred Glaenzer (alf)
    - BigStar
+   - itSDS
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -28704,7 +28705,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
-      ptInt64,ptID:PInt64(Data)^ := GetInt64(PropValue);
+      ptInt64,ptID:SetInt64(PropValue,PInt64(Data)^);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
       ptRawUTF8:   PRawUTF8(Data)^ := PropValue;
@@ -29970,11 +29971,12 @@ begin
       VBoolean := true;
       exit;
     end else
-    if not wasString then begin // try if not a number
-      Dot := JSON;
+    if (not wasString) and (JSON^ in ['0'..'9','+','-']) then begin
+      // try if not an integer/currency number
+      Dot := JSON+1;
       repeat
         case Dot^ of
-        '0'..'9','+','-':
+        '0'..'9':
           inc(Dot);
         '.':
           if (Dot[2]<>#0) and (Dot[3]<>#0) and (Dot[4]<>#0) and (Dot[5]<>#0) then
@@ -29984,7 +29986,7 @@ begin
             exit;
           end;
         #0: begin // integer number
-          VInt64 := GetInt64(JSON);
+          SetInt64(JSON,VInt64);
           if (VInt64<=high(integer)) and (VInt64>=low(integer)) then
             VType := varInteger else
             VType := varInt64;
@@ -29994,7 +29996,7 @@ begin
         end;
       until false;
       VDouble := GetExtended(JSON,err);
-      if err=0 then begin // floating-point number
+      if err=0 then begin // (scientific) floating-point number
         VType := varDouble;
         exit;
       end;

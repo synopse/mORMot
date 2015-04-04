@@ -3864,6 +3864,27 @@ begin
   Check(boolean(v));
   ValueVarToVariant('true',sftBoolean,TVarData(v),false,t);
   Check(boolean(v));
+  GetVariantFromJSON('0',False,V,nil);
+  Check(TVarData(v).VType=varInteger);
+  Check(v=0);
+  GetVariantFromJSON('0123',False,V,nil);
+  Check(TVarData(v).VType=varInteger);
+  Check(v=123);
+  GetVariantFromJSON('-123',False,V,nil);
+  Check(TVarData(v).VType=varInteger);
+  Check(v=-123);
+  GetVariantFromJSON('-123.12',False,V,nil);
+  Check(TVarData(v).VType=varCurrency);
+  Check(v=-123.12);
+  GetVariantFromJSON('123.1234',False,V,nil);
+  Check(TVarData(v).VType=varCurrency);
+  Check(v=123.1234);
+  GetVariantFromJSON('-123.12345',False,V,nil);
+  Check(TVarData(v).VType=varDouble);
+  CheckSame(v,-123.12345);
+  GetVariantFromJSON('1-123.12',False,V,nil);
+  Check(TVarData(v).VType=varString);
+  Check(v='1-123.12');
 end;
 
 type
