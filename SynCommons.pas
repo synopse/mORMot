@@ -29940,10 +29940,47 @@ begin
       ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
 end;
 
+function TextToVariantNumberType(json: PUTF8Char): word;
+begin
+  if json^ in ['0'..'9','+','-'] then begin
+    inc(json);
+    repeat
+      case json^ of
+      '0'..'9':
+        inc(json);
+      '.':
+        if (json[1] in ['0'..'9']) and (json[2] in [#0,'0'..'9']) then
+          if (json[3]=#0) or
+             ((json[3] in ['0'..'9']) and
+              (json[4]=#0) or
+              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
+            result := varCurrency; // currency ###.1234 number
+            exit;
+          end else begin
+          repeat // more than 4 decimals
+            inc(json)
+           until not (json^ in DigitFloatChars);
+           if json^=#0 then begin
+             result := varDouble; // (scientific floating pointer number)
+             exit;
+           end;
+           break;
+        end else
+        break;
+      #0: begin // integer number
+        result := varInt64;
+        exit;
+      end;
+      else break;
+      end;
+    until false;
+  end;
+  result := varString;
+end;
+
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean; var Value: variant;
   TryCustomVariants: PDocVariantOptions);
-var Dot: PUTF8Char;
-    err: integer;
+var err: integer;
 begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
@@ -29971,36 +30008,26 @@ begin
       VBoolean := true;
       exit;
     end else
-    if (not wasString) and (JSON^ in ['0'..'9','+','-']) then begin
-      // try if not an integer/currency number
-      Dot := JSON+1;
-      repeat
-        case Dot^ of
-        '0'..'9':
-          inc(Dot);
-        '.':
-          if (Dot[2]<>#0) and (Dot[3]<>#0) and (Dot[4]<>#0) and (Dot[5]<>#0) then
-            break else begin // currency ###.1234 number
-            VType := varCurrency;
-            VInt64 := StrToCurr64(JSON);
-            exit;
-          end;
-        #0: begin // integer number
-          SetInt64(JSON,VInt64);
-          if (VInt64<=high(integer)) and (VInt64>=low(integer)) then
-            VType := varInteger else
-            VType := varInt64;
-          exit;
-        end;
-        else break;
-        end;
-      until false;
-      VDouble := GetExtended(JSON,err);
-      if err=0 then begin // (scientific) floating-point number
+    if not wasString then
+      case TextToVariantNumberType(JSON) of
+      varInt64: begin
+        SetInt64(JSON,VInt64);
+        if (VInt64<=high(integer)) and (VInt64>=low(integer)) then
+          VType := varInteger else
+          VType := varInt64;
+        exit;
+      end;
+      varCurrency: begin
+        VInt64 := StrToCurr64(JSON);
+        VType := varCurrency;
+        exit;
+      end;
+      varDouble: begin
+        VDouble := GetExtended(JSON,err);
         VType := varDouble;
         exit;
       end;
-    end;
+      end;
     // found no numerical value -> return a string in the expected format
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
