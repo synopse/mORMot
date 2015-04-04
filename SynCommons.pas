@@ -29941,7 +29941,9 @@ begin
 end;
 
 function TextToVariantNumberType(json: PUTF8Char): word;
+var start: PUTF8Char;
 begin
+  start := json;
   if json^ in ['0'..'9','+','-'] then begin
     inc(json);
     repeat
@@ -29967,8 +29969,10 @@ begin
            break;
         end else
         break;
-      #0: begin // integer number
-        result := varInt64;
+      #0: begin
+        if json-start<=18 then // integer number (with Int64 precision)
+          result := varInt64 else
+          result := varDouble; // we may lost precision, but it is a number
         exit;
       end;
       else break;

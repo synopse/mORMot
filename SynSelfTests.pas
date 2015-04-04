@@ -3873,6 +3873,12 @@ begin
   GetVariantFromJSON('-123',False,V,nil);
   Check(TVarData(v).VType=varInteger);
   Check(v=-123);
+  GetVariantFromJSON('123456789012345678',False,V,nil);
+  Check(TVarData(v).VType=varInt64);
+  Check(v=123456789012345678);
+  GetVariantFromJSON('1234567890123456789',False,V,nil);
+  Check(TVarData(v).VType=varDouble);
+  CheckSame(v,1234567890123456789);
   GetVariantFromJSON('-123.1',False,V,nil);
   Check(TVarData(v).VType=varCurrency);
   Check(v=-123.1);
