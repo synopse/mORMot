@@ -3888,6 +3888,15 @@ begin
   GetVariantFromJSON('-123.12345',False,V,nil);
   Check(TVarData(v).VType=varDouble);
   CheckSame(v,-123.12345);
+  GetVariantFromJSON('-1.123e12',False,V,nil);
+  Check(TVarData(v).VType=varDouble);
+  CheckSame(v,-1.123e12);
+  GetVariantFromJSON('-123.123e-2',False,V,nil);
+  Check(TVarData(v).VType=varDouble);
+  CheckSame(v,-123.123e-2);
+  GetVariantFromJSON('-123.123ee2',False,V,nil);
+  Check(TVarData(v).VType=varString);
+  Check(v='-123.123ee2');
   GetVariantFromJSON('1-123.12',False,V,nil);
   Check(TVarData(v).VType=varString);
   Check(v='1-123.12');

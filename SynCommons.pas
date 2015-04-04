@@ -30024,8 +30024,10 @@ begin
       end;
       varDouble: begin
         VDouble := GetExtended(JSON,err);
-        VType := varDouble;
-        exit;
+        if err=0 then begin
+          VType := varDouble;
+          exit;
+        end;
       end;
       end;
     // found no numerical value -> return a string in the expected format
