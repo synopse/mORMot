@@ -10435,7 +10435,7 @@ type
   end;
 
   /// a callback interface used to notify a TSQLRecord modification in real time
-  // - will be used e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribe()
+  // - will be used e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribeMaster()
   // - all methods of this interface will be called asynchronously when
   // transmitted via our WebSockets implementation, since they are defined as
   // plain procedures
@@ -10450,7 +10450,7 @@ type
     procedure Updated(const ModifiedContent: RawJSON);
     /// this event will be raised on any Delete on a versioned record
     procedure Deleted(const ID: TID; const Revision: TRecordVersion);
-    /// allow to optimize process for WebSockets "jumbo frame" items 
+    /// allow to optimize process for WebSockets "jumbo frame" items
     // - this method may be called with isLast=false before the first method
     // call of this interface, then with isLast=true after the call of the
     // last method of the "jumbo frame"
@@ -10462,6 +10462,17 @@ type
 
   /// a list of callback interfaces to notify TSQLRecord modifications
   IServiceRecordVersionCallbackDynArray = array of IServiceRecordVersionCallback;
+
+  /// service definition for master/slave replication notifications subscribe
+  // - implemented by TServiceRecordVersion, as used by
+  // TSQLRestServer.RecordVersionSynchronizeMasterStart(), and expected by
+  // TSQLRestServer.RecordVersionSynchronizeSlaveStart()
+  IServiceRecordVersion = interface(IInvokable)
+    ['{06A355CA-19EB-4CC6-9D87-7B48967D1D9F}']
+    /// will register the supplied callback for the given table
+    function Subscribe(const SQLTableName: RawUTF8; const revision: TRecordVersion;
+      const callback: IServiceRecordVersionCallback): boolean;
+  end;
 
   /// event signature triggerred when a callback instance is released
   // - used by TServiceContainerServer for its OnCallbackReleasedOnClientSide
@@ -10519,9 +10530,9 @@ type
     destructor Destroy; override;
     /// register a callback interface which will be called each time a write
     // operation is performed on a given TSQLRecord with a TRecordVersion field
-    // - called e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribe
-    function RecordVersionSynchronizeSubscribe(TableIndex: integer;
-      RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
+    // - called e.g. by TSQLRestServer.RecordVersionSynchronizeSubscribeMaster
+    function RecordVersionSynchronizeSubscribeMaster(TableIndex: integer;
+      RecordVersion: TRecordVersion; const SlaveCallback: IServiceRecordVersionCallback): boolean;
     /// notify any TRecordVersion callback for a table Add/Update from a
     // TDocVariant content
     // - used e.g. by TSQLRestStorageMongoDB.DocFromJSON()
@@ -10554,6 +10565,17 @@ type
       write fCallbackOptions;
   end;
 
+  /// this class implements a service, which may be called to push notifications
+  // for master/slave replication
+  // - as used by TSQLRestServer.RecordVersionSynchronizeMasterStart(), and
+  // expected by TSQLRestServer.RecordVersionSynchronizeSlaveStart()
+  TServiceRecordVersion = class(TInterfacedObject,IServiceRecordVersion)
+  public
+    /// will register the supplied callback for the given table
+    function Subscribe(const SQLTableName: RawUTF8; const revision: TRecordVersion;
+      const callback: IServiceRecordVersionCallback): boolean;
+   end;
+
   /// a services provider class to be used on the client side
   // - this will maintain a list of fake implementation classes, which will
   // remotely call the server to make the actual process
@@ -10585,21 +10607,24 @@ type
     destructor Destroy; override;
   end;
 
-  /// this class is able to write all remote ORM notifications to the local DB
+  /// this class implements a callback interface, able to write all remote ORM
+  // notifications to the local DB
   // - could be supplied as callback parameter, possibly via WebSockets
-  // transmission, to TSQLRestServer.RecordVersionSynchronizeSubscribe()
+  // transmission, to TSQLRestServer.RecordVersionSynchronizeSubscribeMaster()
   TServiceRecordVersionCallback = class(TInterfacedCallback,IServiceRecordVersionCallback)
   protected
     fTable: TSQLRecordClass;
     fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
     fBatch: TSQLRestBatch;
+    fSlave: TSQLRestServer; // fRest is master remote access
     // local TSQLRecordTableDeleted.ID follows current Model -> pre-compute offset
     fTableDeletedIDOffset: Int64;
     procedure SetCurrentRevision(const Revision: TRecordVersion);
   public
     /// initialize the instance able to apply callbacks for a given table on
-    // a local REST server
-    constructor Create(aRest: TSQLRestServer; aTable: TSQLRecordClass); reintroduce;
+    // a local slave REST server from a remote master REST server
+    constructor Create(aSlave: TSQLRestServer; aMaster: TSQLRestClientURI;
+       aTable: TSQLRecordClass); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
@@ -13129,6 +13154,7 @@ type
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
+    fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
@@ -13339,32 +13365,75 @@ type
     function RecordVersionCompute: TRecordVersion;
     /// read only access to the current monotonic value for a TRecordVersion field
     function RecordVersionCurrent: TRecordVersion;
-    /// will apply all the updates from another (distant) TSQLRest for a
-    // given TSQLRecord table, using its TRecordVersion field
-    // - both remote Source and local TSQLRestSever should have the supplied
-    // Table class in each of their data model
-    // - by default, all the updates are retrieved, but you can define a value
+    /// synchronous master/slave replication from a slave TSQLRest 
+    // - apply all the updates from another (distant) master TSQLRest for a given
+    // TSQLRecord table, using its TRecordVersion field, to the calling slave 
+    // - both remote Master and local slave TSQLRestServer should have the supplied
+    // Table class in their data model (maybe in diverse order)
+    // - by default, all pending updates are retrieved, but you can define a value
     // to ChunkRowLimit, so that the updates would be retrieved by smaller chunks
     // - returns 0 on error, or the latest applied revision number
-    function RecordVersionSynchronize(Table: TSQLRecordClass;
-      Source: TSQLRest; ChunkRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TRecordVersion;
-    /// will retrieve all the updates from another (distant) TSQLRest for a
+    // - this method will use regular REST ORM commands, so will work with any
+    // communication channels: for real-time push synchronization, consider using
+    // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
+    // over a bidirectionnal communication channel like WebSockets
+    // - you can use RecordVersionSynchronizeSlaveToBatch if your purpose is
+    // to access the updates before applying to the current slave storage
+    function RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
+      Master: TSQLRest; ChunkRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TRecordVersion;
+    /// synchronous master/slave replication from a slave TSQLRest into a Batch 
+    // - will retrieve all the updates from a (distant) master TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field, and a supplied
-    // TRecordVersion monotonic value
+    // TRecordVersion monotonic value, into a TSQLRestBatch instance
     // - both remote Source and local TSQLRestSever should have the supplied
     // Table class in each of their data model
-    // - by default, all the updates are retrieved, but you can define a value
+    // - by default, all pending updates are retrieved, but you can define a value
     // to MaxRowLimit, so that the updates would be retrieved by smaller chunks
     // - returns nil if nothing new was found, or a TSQLRestBatch instance
     // containing all modifications since RecordVersion revision
     // - when executing the returned TSQLRestBatch on the database, you should
     // set TSQLRestServer.RecordVersionDeleteIgnore := true so that the
     // TRecordVersion fields would be forced from the supplied value
-    function RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
-      Source: TSQLRest; var RecordVersion: TRecordVersion;
+    // - usually, you should not need to use this method, but rather the more
+    // straightforward RecordVersionSynchronizeSlave()
+    function RecordVersionSynchronizeSlaveToBatch(Table: TSQLRecordClass;
+      Master: TSQLRest; var RecordVersion: TRecordVersion;
       MaxRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TSQLRestBatch; virtual;
-    /// register a callback interface which will be called each time a write
-    // operation is performed on a given TSQLRecord with a TRecordVersion field
+    /// initiate asynchronous master/slave replication on a master TSQLRest
+    // - allow synchronization of a TSQLRecord table, using its TRecordVersion
+    // field, for real-time master/slave replication on the master side
+    // - this method will register the IServiceRecordVersion service on the
+    // server side, so that RecordVersionSynchronizeStartSlave() would be able
+    // to receive push notifications of any updates
+    // - this method expects the communication channel to be bidirectional, e.g.
+    // a mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode
+    function RecordVersionSynchronizeMasterStart(ByPassAuthentication: boolean=false): boolean;
+    /// initiate asynchronous master/slave replication on a slave TSQLRest
+    // - start synchronization of a TSQLRecord table, using its TRecordVersion
+    // field, for real-time master/slave replication on the slave side
+    // - this method will first retrieve any pending modification by regular
+    // REST calls to RecordVersionSynchronizeSlave, then create and register a
+    // callback instance using RecordVersionSynchronizeSubscribeMaster()
+    // - this method expects the communication channel to be bidirectional, e.g.
+    // a TSQLHttpClientWebsockets
+    // - the modifications will be pushed by the master, then applied to the
+    // slave storage, until RecordVersionSynchronizeSlaveStop method is called
+    function RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
+      MasterRemoteAccess: TSQLRestClientURI): boolean;
+    /// finalize asynchronous master/slave replication on a slave TSQLRest
+    // - stop synchronization of a TSQLRecord table, using its TRecordVersion
+    // field, for real-time master/slave replication on the slave side
+    // - expect a previous call to RecordVersionSynchronizeSlaveStart
+    function RecordVersionSynchronizeSlaveStop(Table: TSQLRecordClass): boolean;
+    /// low-level callback registration for asynchronous master/slave replication
+    // - you should not have to use this method, but rather
+    // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
+    // RecordVersionSynchronizeSlaveStop methods
+    // - register a callback interface on the master side, which will be called
+    // each time a write operation is performed on a given TSQLRecord with a
+    // TRecordVersion field
+    // - the callback parameter could be a TServiceRecordVersionCallback instance,
+    // which would perform all update operations as expected
     // - the callback process would be blocking for the ORM write point of view:
     // so it should be as fast as possible, or asynchronous - note that regular
     // callbacks using WebSockets, as implemented by SynBidirSock.pas and
@@ -13374,8 +13443,8 @@ type
     // RecordVersionSynchronize() to avoid any missing update
     // - if the supplied RecordVersion is the latest on the server side,
     // this method will return TRUE and put the Callback notification in place
-    function RecordVersionSynchronizeSubscribe(Table: TSQLRecordClass;
-      RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
+    function RecordVersionSynchronizeSubscribeMaster(Table: TSQLRecordClass;
+      RecordVersion: TRecordVersion; const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
     /// this method is called internally after any successfull deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
@@ -31357,8 +31426,8 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionSynchronize(Table: TSQLRecordClass;
-  Source: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
+function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
+  Master: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
 begin
@@ -31369,8 +31438,8 @@ begin
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
   repeat
-    Writer := RecordVersionSynchronizeToBatch(
-      Table,Source,fRecordVersionMax,ChunkRowLimit,OnWrite);
+    Writer := RecordVersionSynchronizeSlaveToBatch(
+      Table,Master,fRecordVersionMax,ChunkRowLimit,OnWrite);
     if Writer=nil then
       exit; // error
     if Writer.Count=0 then begin // nothing new (e.g. reached last chunk)
@@ -31383,7 +31452,7 @@ begin
       fRecordVersionDeleteIgnore := true;
       if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
         InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
-          [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Source],sllDebug);
+          [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Master],sllDebug);
         if ChunkRowLimit=0 then begin
           result := fRecordVersionMax;
           break;
@@ -31401,8 +31470,8 @@ begin
   until false;
 end;
 
-function TSQLRestServer.RecordVersionSynchronizeToBatch(Table: TSQLRecordClass;
-  Source: TSQLRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer;
+function TSQLRestServer.RecordVersionSynchronizeSlaveToBatch(Table: TSQLRecordClass;
+  Master: TSQLRest; var RecordVersion: TRecordVersion; MaxRowLimit: integer;
   OnWrite: TOnBatchWrite): TSQLRestBatch;
 var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Props: TSQLRecordProperties;
@@ -31417,10 +31486,10 @@ begin
   {$ifdef WITHLOG}
   fLogClass.Enter(self);
   {$endif}
-  if Source=nil then
-    raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Source=nil)',[self]);
+  if Master=nil then
+    raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Master=nil)',[self]);
   TableIndex := Model.GetTableIndexExisting(Table);
-  SourceTableIndex := Source.Model.GetTableIndexExisting(Table); // <>TableIndex?
+  SourceTableIndex := Master.Model.GetTableIndexExisting(Table); // <>TableIndex?
   Props := Model.TableProps[TableIndex].Props;
   if Props.RecordVersionField=nil then
     raise EORMException.CreateUTF8(
@@ -31430,7 +31499,7 @@ begin
     Where := '%>? order by %';
     if MaxRowLimit>0 then
       Where := FormatUTF8('% limit %',[Where,MaxRowLimit]);
-    ListUpdated := Source.MultiFieldValues(Table,'*',Where,
+    ListUpdated := Master.MultiFieldValues(Table,'*',Where,
       [Props.RecordVersionField.Name,Props.RecordVersionField.Name],[RecordVersion]);
     ListDeleted := nil;
     if ListUpdated<>nil then
@@ -31439,7 +31508,7 @@ begin
       Where := 'ID>? and ID<? order by ID';
       if MaxRowLimit>0 then
         Where := FormatUTF8('% limit %',[Where,MaxRowLimit]);
-      ListDeleted := Source.MultiFieldValues(fSQLRecordVersionDeleteTable,
+      ListDeleted := Master.MultiFieldValues(fSQLRecordVersionDeleteTable,
         'ID,Deleted',Where,[DeletedMinID+RecordVersion,
         DeletedMinID+SQLRECORDVERSION_DELETEID_RANGE]);
       if ListDeleted=nil then
@@ -31503,8 +31572,8 @@ begin
   end;
 end;
 
-function TSQLRestServer.RecordVersionSynchronizeSubscribe(Table: TSQLRecordClass;
-  RecordVersion: TRecordVersion; const Callback: IServiceRecordVersionCallback): boolean;
+function TSQLRestServer.RecordVersionSynchronizeSubscribeMaster(Table: TSQLRecordClass;
+  RecordVersion: TRecordVersion; const SlaveCallback: IServiceRecordVersionCallback): boolean;
 begin
   if self=nil then begin
     result := false;
@@ -31512,8 +31581,95 @@ begin
   end;
   if fServices=nil then
     fServices := TServiceContainerServer.Create(self);
-  result := TServiceContainerServer(fServices).RecordVersionSynchronizeSubscribe(
-    Model.GetTableIndexExisting(Table),RecordVersion,Callback);
+  result := TServiceContainerServer(fServices).
+    RecordVersionSynchronizeSubscribeMaster(Model.GetTableIndexExisting(Table),
+      RecordVersion,SlaveCallback);
+end;
+
+function TSQLRestServer.RecordVersionSynchronizeMasterStart(
+  ByPassAuthentication: boolean): boolean;
+var factory: TServiceFactory;
+begin
+  if Services<>nil then begin
+    factory := Services.Info(TypeInfo(IServiceRecordVersion));
+    if factory<>nil then begin
+      result := TServiceFactoryServer(factory).ByPassAuthentication=ByPassAuthentication;
+      exit; // already registered with the same authentication parameter
+    end;
+  end;
+  factory := ServiceRegister(
+    TServiceRecordVersion,[TypeInfo(IServiceRecordVersion)],sicShared);
+  if factory<>nil then begin
+    if ByPassAuthentication then
+      TServiceFactoryServer(factory).ByPassAuthentication := true;
+    result := true;
+  end else
+    result := false;
+end;
+
+function TSQLRestServer.RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
+  MasterRemoteAccess: TSQLRestClientURI): boolean;
+var res,previous: TRecordVersion;
+    tableIndex: integer;
+    tableName: RawUTF8;
+    service: IServiceRecordVersion;
+    callback: IServiceRecordVersionCallback;
+    retry: integer;
+begin
+  result := false;
+  if (self=nil) or (MasterRemoteAccess=nil) then
+    exit;
+  tableIndex := Model.GetTableIndexExisting(Table);
+  if (fRecordVersionSlaveCallbacks<>nil) and
+     (fRecordVersionSlaveCallbacks[tableIndex]<>nil) then begin
+    InternalLog('%.RecordVersionSynchronizeSlaveStart(%): already running',[self,Table],sllWarning);
+    exit;
+  end;
+  tableName := Model.TableProps[tableIndex].Props.SQLTableName;
+  if not MasterRemoteAccess.Services.Resolve(TypeInfo(IServiceRecordVersion),service) then
+    if not MasterRemoteAccess.ServiceRegister([TypeInfo(IServiceRecordVersion)],sicShared) then
+      exit else
+    if not MasterRemoteAccess.Services.Resolve(TypeInfo(IServiceRecordVersion),service) then
+      exit;
+  res := 0;
+  retry := 0;
+  repeat
+    repeat // retrieve all pending versions (may retry up to 5 times)
+      previous := res;
+      res := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000);
+      if res=0 then begin
+        InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',[self,Table],sllError);
+        exit;
+      end;
+    until res=previous;
+    if callback=nil then
+      callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table);
+    if service.Subscribe(tableName,res,callback) then begin // push notifications
+      if fRecordVersionSlaveCallbacks=nil then
+        SetLength(fRecordVersionSlaveCallbacks,Model.TablesMax+1);
+      fRecordVersionSlaveCallbacks[tableIndex] := callback;
+      result := true;
+      exit;
+    end;
+    inc(retry);
+  until retry=5; // avoid endless loop (most of the time, not needed)
+  InternalLog('%.RecordVersionSynchronizeSlaveStart(%): retry failure',[self,Table],sllError);
+end;
+
+function TSQLRestServer.RecordVersionSynchronizeSlaveStop(Table: TSQLRecordClass): boolean;
+var tableIndex: integer;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  tableIndex := Model.GetTableIndexExisting(Table);
+  if (fRecordVersionSlaveCallbacks=nil) or
+     (fRecordVersionSlaveCallbacks[tableIndex]=nil) then begin
+    InternalLog('%.RecordVersionSynchronizeSlaveStop(%): not running',[self,Table],sllWarning);
+    exit;
+  end;
+  fRecordVersionSlaveCallbacks[tableIndex] := nil; // will notify the server
+  result := true;
 end;
 
 function TSQLRestServer.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
@@ -45337,9 +45493,9 @@ begin
   end;
 end;
 
-function TServiceContainerServer.RecordVersionSynchronizeSubscribe(
+function TServiceContainerServer.RecordVersionSynchronizeSubscribeMaster(
   TableIndex: integer; RecordVersion: TRecordVersion;
-  const Callback: IServiceRecordVersionCallback): boolean;
+  const SlaveCallback: IServiceRecordVersionCallback): boolean;
 var instance: TObject;
 begin
   result := false;
@@ -45351,8 +45507,8 @@ begin
       exit; // there are some missing items on the client side
     if fRecordVersionCallback=nil then
       SetLength(fRecordVersionCallback,fRest.Model.TablesMax+1);
-    InterfaceArrayAdd(fRecordVersionCallback[TableIndex],Callback);
-    instance := ObjectFromInterface(Callback);
+    InterfaceArrayAdd(fRecordVersionCallback[TableIndex],SlaveCallback);
+    instance := ObjectFromInterface(SlaveCallback);
     if (instance<>nil) and
        (instance.ClassType=TInterfacedObjectFakeServer) then
       TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
@@ -46122,6 +46278,29 @@ begin
 end;
 
 
+{ TServiceRecordVersion }
+
+function TServiceRecordVersion.Subscribe(const SQLTableName: RawUTF8;
+  const revision: TRecordVersion; const callback: IServiceRecordVersionCallback): boolean;
+var server: TSQLRestServer;
+    tableIndex: integer;
+begin
+  with PServiceRunningContext(@ServiceContext)^ do
+   if Factory<>nil then begin
+     server := Factory.Rest as TSQLRestServer;
+     if server<>nil then begin
+       tableIndex := server.Model.GetTableIndex(SQLTableName);
+       if tableIndex>=0 then begin
+         result := server.RecordVersionSynchronizeSubscribeMaster(
+           server.Model.Tables[tableIndex],revision,callback);
+         exit;
+       end;
+     end;
+   end;
+  result := false;
+end;
+
+
 { TServiceMethodArgument }
 
 procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
@@ -46713,26 +46892,28 @@ end;
 
 { TServiceRecordVersionCallback }
 
-constructor TServiceRecordVersionCallback.Create(aRest: TSQLRestServer;
-  aTable: TSQLRecordClass);
+constructor TServiceRecordVersionCallback.Create(aSlave: TSQLRestServer;
+  aMaster: TSQLRestClientURI; aTable: TSQLRecordClass);
 begin
+  if aSlave=nil then
+    raise EServiceException.CreateUTF8('%.Create(%): Slave=nil',[self,aTable]);
+  fSlave := aSlave;
   fRecordVersionField := aTable.RecordProps.RecordVersionField;
   if fRecordVersionField=nil then
     raise EServiceException.CreateUTF8('%.Create: % has no TRecordVersion field',
       [self,aTable]);
-  fTableDeletedIDOffset := Int64(aRest.Model.GetTableIndexExisting(aTable)) shl 58;
-  inherited Create(aRest,IServiceRecordVersionCallback);
+  fTableDeletedIDOffset := Int64(fSlave.Model.GetTableIndexExisting(aTable)) shl 58;
+  inherited Create(aMaster,IServiceRecordVersionCallback);
   fTable := aTable;
 end;
 
 procedure TServiceRecordVersionCallback.SetCurrentRevision(
   const Revision: TRecordVersion);
 begin
-  with TSQLRestServer(fRest) do
-    if Revision<=fRecordVersionMax then
-      raise EServiceException.CreateUTF8('%.SetCurrentRevision(%) on %: previous was %',
-        [self,Revision,fTable,fRecordVersionMax]) else
-      fRecordVersionMax := Revision;
+  if Revision<=fSlave.fRecordVersionMax then
+    raise EServiceException.CreateUTF8('%.SetCurrentRevision(%) on %: previous was %',
+      [self,Revision,fTable,fSlave.fRecordVersionMax]) else
+    fSlave.fRecordVersionMax := Revision;
 end;
 
 procedure TServiceRecordVersionCallback.Added(const NewContent: RawJSON);
@@ -46743,7 +46924,7 @@ begin
   try
     rec.FillFrom(NewContent,@fields);
     if fBatch=nil then
-      fRest.Add(rec,true,true,true) else
+      fSlave.Add(rec,true,true,true) else
       fBatch.Add(rec,true,true,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
   finally
@@ -46760,7 +46941,7 @@ begin
   try
     rec.FillFrom(ModifiedContent,@fields);
     if fBatch=nil then
-      fRest.Update(rec,fields,true) else
+      fSlave.Update(rec,fields,true) else
       fBatch.Update(rec,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
   finally
@@ -46778,13 +46959,13 @@ begin
     del.Deleted := ID;
     if fBatch=nil then
     try
-      fRest.fAcquireExecution[execORMWrite].Enter;
-      TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
-      fRest.Add(del,true,true,true);
-      fRest.Delete(fTable,ID);
+      fSlave.fAcquireExecution[execORMWrite].Enter;
+      fSlave.fRecordVersionDeleteIgnore := true;
+      fSlave.Add(del,true,true,true);
+      fSlave.Delete(fTable,ID);
     finally
-      TSQLRestServer(fRest).fRecordVersionDeleteIgnore := false;
-      fRest.fAcquireExecution[execORMWrite].Leave;
+      fSlave.fRecordVersionDeleteIgnore := false;
+      fSlave.fAcquireExecution[execORMWrite].Leave;
     end else begin
       fBatch.Add(del,true,true);
       fBatch.Delete(fTable,ID);
@@ -46809,16 +46990,16 @@ begin
       Error('previous active BATCH -> send pending');
   if fBatch<>nil then
   try
-    fRest.fAcquireExecution[execORMWrite].Enter;
-    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := true;
-    fRest.BatchSend(fBatch);
+    fSlave.fAcquireExecution[execORMWrite].Enter;
+    fSlave.fRecordVersionDeleteIgnore := true;
+    fSlave.BatchSend(fBatch);
   finally
-    TSQLRestServer(fRest).fRecordVersionDeleteIgnore := false;
-    fRest.fAcquireExecution[execORMWrite].Leave;
+    fSlave.fRecordVersionDeleteIgnore := false;
+    fSlave.fAcquireExecution[execORMWrite].Leave;
     FreeAndNil(fBatch);
   end;
   if not isLast then
-    fBatch := TSQLRestBatch.Create(fRest,nil,10000);
+    fBatch := TSQLRestBatch.Create(fSlave,nil,10000);
 end;
 
 destructor TServiceRecordVersionCallback.Destroy;
@@ -46832,8 +47013,8 @@ begin
         if fBatch=nil then
           exit;
       until GetTickCount64>timeOut;
-      fRest.InternalLog('%.Destroy on %: active BATCH',[self,fTable],sllError);
-      fRest.BatchSend(fBatch);
+      fSlave.InternalLog('%.Destroy on %: active BATCH',[self,fTable],sllError);
+      fSlave.BatchSend(fBatch);
       fBatch.Free;
     end;
   finally
