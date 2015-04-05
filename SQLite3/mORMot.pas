@@ -46902,7 +46902,8 @@ begin
   if fRecordVersionField=nil then
     raise EServiceException.CreateUTF8('%.Create: % has no TRecordVersion field',
       [self,aTable]);
-  fTableDeletedIDOffset := Int64(fSlave.Model.GetTableIndexExisting(aTable)) shl 58;
+  fTableDeletedIDOffset := Int64(fSlave.Model.GetTableIndexExisting(aTable))
+    shl SQLRECORDVERSION_DELETEID_SHIFT;
   inherited Create(aMaster,IServiceRecordVersionCallback);
   fTable := aTable;
 end;

@@ -3212,9 +3212,9 @@ As consequences:
 All the synchronization preparation will be taken care by the ORM kernel on its own, during any write operation. There is nothing particular to maintain or setup, in addition to this {\f1\fs20 TRecordVersion} field definition, and the global {\f1\fs20 TSQLRecordTableDelete} table.
 :  From master to slave
 To replicate this {\f1\fs20 TSQLRecordPeopleVersioned} table from another {\f1\fs20 TSQLRestServer} instance, just call the following method:
-! aServer.RecordVersionSynchronize(TSQLRecordPeopleVersioned,aClient);
+! aServer.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,aClient);
 This single line will request a remote server via a {\f1\fs20 Client: TSQLRestClientURI} connection (which may be over @*HTTP@) for any pending modifications since its last call, then will fill the local {\f1\fs20 aServer: TSQLRestServer} database so that the local {\f1\fs20 TSQLRecordPeopleVersioned} table will contain the very same content as the remote master {\f1\fs20 TSQLRestServer}.
-You can safely call {\f1\fs20 TSQLRestServer.RecordVersionSynchronize} from several clients, to replicate the master data in several databases.
+You can safely call {\f1\fs20 TSQLRestServer.RecordVersionSynchronizeSlave} from several clients, to replicate the master data in several databases.
 Only the modified data will be transmitted over the wire, as two REST/JSON queries (one for the insertions/updates, another for the deletions), and all the local write process will use optimized BATCH writing - see @28@. This means that the synchronization process will try to use as minimal bandwidth and resources as possible, on both sides.
 Of course, the slaves should be considered as read-only, otherwise the version numbers may conflict, and the whole synchronization may become a failure. But you can safely replicate servers in cascade, if needed: the version numbers will be propagated from masters to slaves, and the data will always be in a consistent way.
 :  Replication use cases
