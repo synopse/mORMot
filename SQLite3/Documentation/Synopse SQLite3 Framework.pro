@@ -1019,7 +1019,7 @@ label="Publishers";
 \Service 3\Publisher 2
 }
 \
-Since services are by definition stateless, some kind of {\i service composition} is commonly defined to provide some kind of logical multi-tier orchestration of services. A higher level service invokes several services to work as a self-contained, stateless service; as a result, lower-level services can still be stateless, but the consumer of the higher level service is able to safely process some kind of transactional process.
+Since most of those services are by definition @*stateless@, some kind of {\i service composition} is commonly defined to provide some kind of logical multi-tier orchestration of services. A higher level service invokes several services to work as a self-contained, stateless service; as a result, lower-level services can still be stateless, but the consumer of the higher level service is able to safely process some kind of transactional process.
 \graph ArchiSOAComposition Service Oriented Architecture - Logical View of Composition
 rankdir=LR;
 subgraph cluster0_ {
@@ -3188,6 +3188,7 @@ Take a look at the documentation of this method (or the comments in its declarat
 :147 Master/slave replication
 As stated during @26@, the ORM is able to maintain a revision number for any {\f1\fs20 TSQLRecord} table, so that it the table may be easily synchronized remotely by another {\f1\fs20 TSQLRestServer} instance.\line If you define a {\f1\fs20 @**TRecordVersion@} published property, the ORM core will fill this field just before any write with a monotonically increasing revision number, and will take care of any deletion, so that those modifications may be replayed later on any other database.
 This synchronization will work as a strict @**master/slave@ @**replication@ scheme, as a one-way on demand refresh of a replicated table. Each write operation on the master database on a given table may be easily reflected on one or several slave databases, with almost no speed nor storage size penalty.
+In addition to this {\i on demand} synchronization, a real-time notification mechanism, using {\i WebSockets} communication - see @150@ - may be defined.
 :  Enable synchronization
 In order to enable this @*replication@ mechanism, you should define a {\f1\fs20 @TRecordVersion@} published property in the {\f1\fs20 TSQLRecord} class type definition:
 !  TSQLRecordPeopleVersioned = class(TSQLRecordPeople)
@@ -3215,11 +3216,101 @@ To replicate this {\f1\fs20 TSQLRecordPeopleVersioned} table from another {\f1\f
 ! aServer.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,aClient);
 This single line will request a remote server via a {\f1\fs20 Client: TSQLRestClientURI} connection (which may be over @*HTTP@) for any pending modifications since its last call, then will fill the local {\f1\fs20 aServer: TSQLRestServer} database so that the local {\f1\fs20 TSQLRecordPeopleVersioned} table will contain the very same content as the remote master {\f1\fs20 TSQLRestServer}.
 You can safely call {\f1\fs20 TSQLRestServer.RecordVersionSynchronizeSlave} from several clients, to replicate the master data in several databases.
+Using a {\f1\fs20 TTimer} may increase responsiveness of a client application, and allow refresh of displayed data, with limited resources (e.g. with a 500 ms period, on a given screen).
 Only the modified data will be transmitted over the wire, as two REST/JSON queries (one for the insertions/updates, another for the deletions), and all the local write process will use optimized BATCH writing - see @28@. This means that the synchronization process will try to use as minimal bandwidth and resources as possible, on both sides.
-Of course, the slaves should be considered as read-only, otherwise the version numbers may conflict, and the whole synchronization may become a failure. But you can safely replicate servers in cascade, if needed: the version numbers will be propagated from masters to slaves, and the data will always be in a consistent way.
+In practice, you may define the {\i Master} side as such:
+!  MasterServer := TSQLRestServerDB.Create(MasterModel,'master.db3');
+!  HttpMasterServer := TSQLHttpServer.Create('8888',[MasterServer],'+',useBidirSocket);
+On the {\i Slave} side, the HTTP client would access the {\i Master} database as usual:
+!  MasterClient := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,MasterModel);
+Of course, the model should match for both {\f1\fs20 MasterServer} and {\f1\fs20 MasterClient} instances. This is why we used the same {\f1\fs20 MasterModel} variable name (probably defined in a shared unit).
+Assuming that the {\i slave} database has been defined as such:
+!  SlaveServer := TSQLRestServerDB.Create(SlaveModel,'slave.db3');
+Then you can run replication from the {\i slave} side with a single line, for a given table:
+!  SlaveServer.RecordVersionSynchronizeSlave(TSQLRecordPeopleVersioned,MasterClient);
+This command would process the replication as such:
+\graph ORMReplication01 ORM Replication Classes via REST
+subgraph cluster_0 {
+label="Master";
+\MasterServer¤(MasterModel)\master.db3
+}
+subgraph cluster_2 {
+label="       Slave";
+\MasterServer¤(MasterModel)\MasterClient¤(MasterModel)\HTTP
+\MasterClient¤(MasterModel)\MasterServer¤(MasterModel)
+\MasterClient¤(MasterModel)\SlaveServer¤(SlaveModel)\On Demand¤Replication
+\SlaveServer¤(SlaveModel)\MasterClient¤(MasterModel)
+\SlaveServer¤(SlaveModel)\slave.db3
+}
+\
+Of course, the slaves should be considered as read-only, otherwise the version numbers may conflict, and the whole synchronization may become a failure.
+But you can safely replicate servers in cascade, if needed: the version numbers will be propagated from masters to slaves, and the data will always be in a consistent way.
+\graph ORMReplication02 ORM Cascaded Replication Classes via REST
+subgraph cluster_0 {
+label="Master";
+\MasterServer¤(MasterModel)\master.db3
+}
+subgraph cluster_2 {
+label="     Slave 1";
+\MasterServer¤(MasterModel)\MasterClient¤(MasterModel)\HTTP
+\MasterClient¤(MasterModel)\MasterServer¤(MasterModel)
+\MasterClient¤(MasterModel)\SlaveServer1¤(SlaveModel1)\On Demand¤Replication
+\SlaveServer1¤(SlaveModel1)\MasterClient¤(MasterModel)
+\SlaveServer1¤(SlaveModel1)\slave1.db3
+}
+subgraph cluster_3 {
+label="       Slave 2";
+\SlaveServer1¤(SlaveModel1)\SlaveClient1¤(SlaveModel1)\HTTP
+\SlaveClient1¤(SlaveModel1)\SlaveServer1¤(SlaveModel1)
+\SlaveClient1¤(SlaveModel1)\SlaveServer2¤(SlaveModel2)\On Demand¤Replication
+\SlaveServer2¤(SlaveModel2)\SlaveClient1¤(SlaveModel1)
+\SlaveServer2¤(SlaveModel2)\slave2.db3
+}
+\
+This cascading Master/Slave replication design may be used in conjunction with the @*CQRS@ pattern ({\i Command Query Responsibility Segregation}). In fact, the {\i Slave 2} database may be a local read-only database instance, used only for reporting purposes, e.g. by marketing or management people, whereas the {\i Slave 1} may be the active read-only database, on which all local business process would read their data. As such, the {\i Slave 2} instance may be replicated much less often than than {\i Slave 1} database - which may be even be replicated in real time, as we will now see.
+:153  Real-time synchronization
+Sometimes, the on-demand synchronization is not enough.\line For instance, you may need to:
+- Synchronize a short list of always evolving items which should be reflected as soon as possible;
+- Involve some kind of ACID-like behavior (e.g. handle money!) in your replicated data;
+- Replicate not from a GUI application, but from a service, so use of a {\f1\fs20 TTimer} is not an option;
+- Combine REST requests (for ORM or services) and master/slave ORM replication on the same wire, e.g. in a multi-threaded application.
+In this case, the framework is able to use {\i WebSockets} and asynchronous callbacks to let the master/slave replication - see @149@ - take place without the need to ask explicitly for pending data. You would need to use {\f1\fs20 TSQLRestServer.RecordVersionSynchronizeMasterStart}, {\f1\fs20 TSQLRestServer.RecordVersionSynchronizeSlaveStart} and {\f1\fs20 TSQLRestServer.RecordVersionSynchronizeSlaveStop} methods over the proper kind of bidirectional connection.
+The first requirement is to allow {\i WebSockets} on your {\i Master} HTTP server, so initialize the {\f1\fs20 TSQLHttpServer} class as a {\f1\fs20 useBidirSocket} kind of server - see @140@:
+!  MasterServer := TSQLRestServerDB.Create(MasterModel,'master.db3');
+!  HttpMasterServer := TSQLHttpServer.Create('8888',[MasterServer],'+',useBidirSocket);
+!  HttpMasterServer.WebSocketsEnable(Server,'PrivateAESEncryptionKey');
+On the {\i Slave} side, the HTTP client should also be upgraded to support {\i WebSockets}:
+!  MasterClient := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,MasterModel);
+!  MasterClient.WebSocketsUpgrade('PrivateAESEncryptionKey');
+Of course, the model should match for both {\f1\fs20 MasterServer} and {\f1\fs20 MasterClient} instances. As the {\i WebSockets} protocol definition - here above the same {\f1\fs20 'PrivateAESEncryptionKey'} private key.
+Then you enable the real-time replication service on the {\i Master} side:
+!  MasterServer.RecordVersionSynchronizeMasterStart;
+In practice, it will publish a {\f1\fs20 IServiceRecordVersion} {\f1\fs20 interface}-based service on the server side - see @63@.
+Assuming that the {\i slave} database has been defined as such:
+!  SlaveServer := TSQLRestServerDB.Create(SlaveModel,'slave.db3');
+(in this case, the {\f1\fs20 SlaveModel} may not be the same as the {\f1\fs20 MasterModel}, but {\f1\fs20 TSQLRecordPeopleVersioned} should be part of both models)\line Then you can initiate real-time replication from the {\i slave} side with a single line, for a given table:
+!  SlaveServer.RecordVersionSynchronizeSlaveStart(TSQLRecordPeopleVersioned,MasterClient);
+The above command will subscribe to the remote {\f1\fs20 MasterSlave} replication service (i.e. {\f1\fs20 IServiceRecordVersion} {\f1\fs20 interface}), to receive any change concerning the {\f1\fs20 TSQLRecordPeopleVersioned} ORM table, using the {\f1\fs20 MasterClient} connection via {\i WebSockets}, and persist all updates into the local {\f1\fs20 SlaveServer} database.
+To stop the real-time notification for this ORM table, you could execute:
+!  SlaveServer.RecordVersionSynchronizeSlaveStop(TSQLRecordPeopleVersioned);
+Even if you do not call {\f1\fs20 RecordVersionSynchronizeSlaveStop()}, the replication will be stopped when the main {\f1\fs20 SlaveServer} instance will be released, and the {\f1\fs20 MasterServer} be {\i unsubscribe} this connection for its internal notification list.
+This typical replication may be represented as such:
+\graph ORMReplication1 ORM Real-Time Replication Classes
+subgraph cluster_0 {
+label="Master";
+\MasterServer¤(MasterModel)\master.db3
+}
+subgraph cluster_2 {
+label="       Slave";
+\MasterServer¤(MasterModel)\MasterClient¤(MasterModel)\WebSockets¤TCP/IP
+\MasterClient¤(MasterModel)\SlaveServer¤(SlaveModel)\Replication
+\SlaveServer¤(SlaveModel)\slave.db3
+}
+\
+The real-time notification details have been tuned, to consume as minimum bandwidth and resources as possible. For instance, if several modifications are to be notified on a slave connection in a short amount of time, the master is able to gather those modifications as a single {\i WebSockets} frame, which would be applied as a whole to the slave database, in a single BATCH transaction - see @28@.
 :  Replication use cases
 We may consider a very common corporate infrastructure:
-\graph HostingReplication Corporate Servers Replication
+\graph ORMReplication2 Corporate Servers Replication
 subgraph cluster_0 {
 label="Main Office";
 \Main¤Server\External DB
@@ -3240,10 +3331,10 @@ label="          Office B";
 \Local¤Server B\Client  4\local¤network
 }
 \
-This kind of installation, with a main central office, and a network of local offices, would benefit from this @*master/slave@ @*replication@. Simple {\i @*redirection@} may be used - see @93@ - but it would expect the work to continue, even in case of {\i Internet} network failure. REST redirection would expect a 100% connection uplink, which may be critical in some cases.
+This kind of installation, with a main central office, and a network of local offices, would benefit from this @*master/slave@ @*replication@. Simple {\i @*redirection@} may be used - see @93@ - but it would expect the work to continue, even in case of {\i Internet} network failure. REST redirection would expect a 100% connection up-link, which may be critical in some cases.
 You could therefore implement replication in several ways:
 - Either the main office is the master, and any write would be push to the {\i Main Server}, whereas local offices would have a replicated copy of the information - drawback is that in case of network failure, the local office would be limited to read only data access;
-\graph HostingReplication1 Corporate Servers Master/Slave Replication With All Data On Main Server
+\graph ORMReplication3 Corporate Servers Master/Slave Replication With All Data On Main Server
 subgraph cluster_0 {
 label="Main Office";
 \Main¤Server\Local Data A¤Read/Write
@@ -3261,25 +3352,41 @@ label="          Office B";
 }
 \
 - Or each local office may host its own data in a dedicated table, synchronized as a master database; the main office will replicate (as a slave) the private data of each local server; in addition, all this data gathered by the {\i Main Server} may be further replicated to the other local offices, and be still accessible in read mode - in case of network failure, all the data is available on local servers, and the local private table is still writable.
-\graph HostingReplication2 Corporate Servers Master/Slave Replication With Private Local Data
+\graph ORMReplication4 Corporate Servers Master/Slave Replication With Private Local Data
 subgraph cluster_0 {
 label="Main Office";
-\Main¤Server\Local Data A¤ Read Only
-\Main¤Server\Local Data B¤ Read Only
+\Main¤Server\Local Data A¤Reference¤Read Only
+\Main¤Server\Local Data B¤Reference¤Read Only
 }
 subgraph cluster_1 {
 label="           Office A";
-\Local Data A¤Read/Write\Main¤Server\Replication
-\Local Data B¤Read Only\Main¤Server
+\Local Data A¤Business¤Read/Write\Main¤Server\Replication
+\Local Data B¤Business¤Read Only\Main¤Server
 }
 subgraph cluster_2 {
 label="          Office B";
-\Local Data A¤Read Only\Main¤Server\Replication
-\Local Data B¤Read/Write\Main¤Server
+\Local Data A¤Business¤Read Only\Main¤Server\Replication
+\Local Data B¤Business¤Read/Write\Main¤Server
 }
 \
 Of course, the second solution seems preferable, even if a bit more difficult to implement. The ablity of all local offices to work offline on their own private data, but still having all the other data accessible as read-only, would be a huge ROI.
 As a benefit of using replication, the central main server would be less stressed, since most of the process would take place in local servers, and the main office server would only be used for shared data backup and read-only gathering of the other local databases. Only a small network bandwith would be necessary (much less than a pure web solution), and CPU/storage resources would be minimal.
+If needed, the @153@ would allow to have the main office data replicated in "near real-time" in the local offices databases, whereas the write operations would still safely take place on the main Office. Another cascading replication may take place within any node, with a on-demand refresh, e.g. a 1 hour period, to implement the @*CQRS@ pattern ({\i Command Query Responsibility Segregation}).
+\graph ORMReplication5 Corporate Servers Master/Slave Replication With CQRS
+subgraph cluster_0 {
+label="Main Office";
+\Main¤Server\Local Data A¤Reference¤Read Only
+\Main¤Server\Local Data B¤Reference¤Read Only
+}
+subgraph cluster_1 {
+label="          Office B";
+\Local Data A¤Business¤Read Only\Main¤Server\RealTime¤Replication
+\Local Data B¤Business¤Read/Write\Main¤Server
+\Local Data B¤Reporting¤Read Only\Local Data B¤Business¤Read/Write\OnDemand¤Replication
+\Local Data A¤Reporting¤Read Only\Local Data A¤Business¤Read Only\OnDemand¤Replication
+}
+\
+Following the CQRS pattern, some demanding Queries may take place in those read-only "Reporting" replicated databases, without impacting the main local databases, in which all actual "Business" would take place.
 :Daily ORM
 %cartoon03.png
 When you compare @*ORM@ and standard @*SQL@, some aspects must be highlighted.
@@ -3472,7 +3579,7 @@ As stated below, you can use any other database access layer, if you wish:
 This framework uses a compiled version of the official {\i SQLite3} library source code, and includes it natively into {\i Delphi} code. This framework therefore adds some very useful capabilities to the Standard {\i SQLite3} database engine, but keeping all its advantages, as listed in the previous paragraph of this document:
 - Can be either statically linked to the executable, or load external {\f1\fs20 sqlite3.dll};
 - Faster database access, through unified memory model, and usage of the {\f1\fs20 FastMM4} memory manager (which is almost 10 times faster than the default Windows memory manager for memory allocation);
-- Optional direct encryption of the data on the disk (up to AES-256 level, that is Top-Secret @*security@);
+- Optional direct encryption of the data on the disk (up to @*AES@-256 level, that is Top-Secret @*security@);
 - Use via {\i mORMot}'s @*ORM@ let database layout be declared once in the {\i Delphi} source code (as @*published properties@ of classes), avoiding most SQL writing, hence common field or table names mismatch;
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
@@ -3794,7 +3901,7 @@ Here we used the official {\f1\fs20 sqlite3.dll} library, as published in the @h
 |{\b SQLite3 (ext mem)}|129792|224386|436338
 |%
 :   Visual C++ compiled sqlite3.dll
-The {\i Open Source wxsqlite} project provides a {\f1\fs20 sqlite3.dll} library, compiled with {\i Visual C++}, and including RC4 and AES 128/256 encryption (better than the basic encryption implemented in {\f1\fs20 SynSQLite3Static.pas}) - not available in the official library.
+The {\i Open Source wxsqlite} project provides a {\f1\fs20 sqlite3.dll} library, compiled with {\i Visual C++}, and including RC4 and @*AES@ 128/256 encryption (better than the basic encryption implemented in {\f1\fs20 SynSQLite3Static.pas}) - not available in the official library.
 See @http://sourceforge.net/projects/wxcode/files/Components/wxSQLite3 to download the corresponding source code, and compiled {\f1\fs20 .dll}.
 \line {\i Writing speed}
 |%30%15%15%15%15
@@ -6783,21 +6890,23 @@ And you can optionally define some per domain / per sub-domain hosting redirecti
 !  HttpServer.DomainHostRedirect('blog.project.com','root/blog'); // MVC application
 In all cases, even if HTTP protocol is very network friendly (especially over the 80 port), you shall always acquire IT approval and advices before any deployment over a corporate network, at least to negotiate @*firewall@ settings.
 :  HTTP server(s)
-The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit:
-- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern;
-- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API.
+The {\f1\fs20 TSQLHttpServer} class is able to use any of two HTTP server classes, as defined in  {\f1\fs20 SynCrtSock} unit - and {\f1\fs20 SynBidirSock} for {\f1\fs20 WebSockets}:
+- {\f1\fs20 THttpServer} which is a light and tuned server featuring a thread pool and IOCP implementation pattern, on the raw Sockets API;
+- {\f1\fs20 THttpApiServer} which is based on {\i @*http.sys@} API;
+- {\f1\fs20 TWebSocketServer} which is a {\f1\fs20 THttpServer} server, able to upgrade to the {\i @*WebSockets@} protocol for asynchronous and bidirectional callbacks - see @150@.
 \graph HTTPServers THttpServerGeneric classes hierarchy
 \THttpApiServer\THttpServerGeneric
 \THttpServer\THttpServerGeneric
+\TWebSocketServer\THttpServer
 \THttpServerGeneric\TThread
 \
-On production, {\f1\fs20 THttpApiServer} seems to give the best results, and has a proven and secure implementation. It is also the only one class implementing @*HTTPS@ / @*SSL@ secure communication, if needed. That's why {\f1\fs20 TSQLHttpServer} will first try to use fastest {\i http.sys} kernel-mode server, then fall-back to the generic WinSock-based {\f1\fs20 THttpServer} class in case of failure. You can also force to use the second server if {\f1\fs20 useHttpSocket} is set at constructor level.
-You can specify which kind of HTTP server class is to be used, via the {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} of the {\f1\fs20 TSQLHttpServer.Create} constructor. By default, it would be {\f1\fs20 HTTP_DEFAULT_MODE} (i.e. {\f1\fs20 useHttpApi} over Windows), but you may specify {\f1\fs20 useHttpApiRegisteringURI} for automatic registration of the URI - see @109@ - or {\f1\fs20 useHttpSocket} to use the socket-based {\f1\fs20 THttpServer}.
+On production, {\f1\fs20 THttpApiServer} seems to give the best results, and has a proven and secure implementation. It is also the only one class implementing @*HTTPS@ / @*SSL@ secure communication, if needed. That's why {\f1\fs20 TSQLHttpServer} will first try to use fastest {\i http.sys} kernel-mode server, then fall-back to the generic sockets-based {\f1\fs20 THttpServer} class in case of failure.
+You can specify which kind of HTTP server class is to be used, via the {\f1\fs20 aHttpServerKind: TSQLHttpServerOptions} of the {\f1\fs20 TSQLHttpServer.Create} constructor. By default, it would be {\f1\fs20 HTTP_DEFAULT_MODE} (i.e. {\f1\fs20 useHttpApi} over Windows), but you may specify {\f1\fs20 useHttpApiRegisteringURI} for automatic registration of the URI - see @109@ - or {\f1\fs20 useHttpSocket} to use the socket-based {\f1\fs20 THttpServer}, or {\f1\fs20 useBidirSocket} for {\f1\fs20 TWebSocketServer}.
 The {\f1\fs20 THttpServerGeneric} abstract class provides one {\f1\fs20 OnRequest} property event, in which all high level process is to take place - it expects some input parameters, then will compute the output content to be sent as response:
 !TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 This event handler prototype is shared by both {\f1\fs20 TThread} classes instances able to implement a {\f1\fs20 HTTP/1.1} server.
 Both {\f1\fs20 THttpApiServer} and {\f1\fs20 THttpServer} classes will receive any incoming request, pass it to the {\f1\fs20 TSQLRestServer} instance matching the incoming URI request, via the {\f1\fs20 OnRequest} event handler.
-If the request is a remote ORM operation, a @*JSON@ response will be retrieved from the internal @*cache@ of the framework, or computed using the {\i @*SQLite3@} database engine. In case of a remote service access - see @11@ - the request will be computed on the server side, also marshalling the data as JSON.
+If the request is a remote ORM operation, a @*JSON@ response will be retrieved from the internal @*cache@ of the framework, or computed using the {\i @*SQLite3@} database engine. In case of a remote service access - see @11@ - the request will be computed on the server side, also marshalling the data as JSON. If you specified {\f1\fs20 useBidirSocket} kind of server, you may use remote service access via interfaces, with asynchronous callbacks - see @149@.
 The resulting JSON content will be compressed using our very optimized {\i @*SynLZ@} algorithm (20 times faster than Zip/Deflate for compression), if the client is a {\i Delphi} application knowing about {\i SynLZ} - for an @*AJAX@ client, it won't be compressed by default (even if you can enable the deflate algorithm - which may slow down the server).
 Then the response will be marked as to be sent back to the Client...
 :88  High-performance http.sys server
@@ -6879,8 +6988,9 @@ In fact, there are several implementation of a @**HTTP@/1.1 clients, according t
 \TSQLHttpClientWinGeneric\TSQLHttpClientGeneric
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
 \TSQLHttpClientCurl\TSQLHttpClientGeneric
+\TSQLHttpClientWebsockets\TSQLHttpClientWinSock
 \
-So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @**libcurl@} library is installed, especially if you want to use HTTPS.
+So you can select either {\f1\fs20 TSQLHttpClientWinSock}, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} for a HTTP/1.1 client, under {\i Windows}. By design, {\f1\fs20 TSQLHttpClientWinINet} or {\f1\fs20 TSQLHttpClientWinHTTP} are not available outside of Windows, but {\f1\fs20 TSQLHttpClientCurl} is a great option under Linux, if the {\f1\fs20 @**libcurl@} library is installed, especially if you want to use HTTPS.\line The {\f1\fs20 TSQLHttpClientWebsockets} class has the ability to {\i upgrade} the HTTP connection to the {\i @*WebSockets@} protocol, and would be used for dual ways callbacks - see @149@.
 Each class has its own architecture, and attaches itself to a Windows communication library, all based on {\i WinSock} API. As stated by their name, {\f1\fs20 TSQLHttpClientWinSock} will call directly the {\i WinSock} API, {\f1\fs20 TSQLHttpClientWinINet} will call {\i WinINet} API (as used by IE 6) and {\f1\fs20 TSQLHttpClientWinHTTP} will cal the latest {\i WinHTTP} API:
 - {\i WinSock} is the common user-space API to access the sockets stack of Windows, i.e. IP connection - it's able to handle any IP protocol, including TCP/IP, UDP/IP, and any protocol over it (including HTTP);
 - {\i WinINet} was designed as an HTTP API client platform that allowed the use of interactive message dialogs such as entering user credentials - it's able to handle HTTP and FTP protocols;
@@ -6906,7 +7016,7 @@ Here are some PROs and CONs of the available solutions, under {\i Windows}:
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
 Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
-Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a global lock. See @25@.
+Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a lock. See @25@.
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL encryption yet.
@@ -6954,8 +7064,8 @@ $httpcfg delete ssl -i 0.0.0.0:8005
 $netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
-:  AES encryption over HTTP
-In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and AES-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
+:151  AES encryption over HTTP
+In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and @**AES@-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
 Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
 ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
@@ -6966,6 +7076,7 @@ $ ACCEPT-ENCODING: synshaaes
 Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CTR/256 encryption.
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
 On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
+You may note that our {\i @*WebSockets@} client/server implementation - see @150@ - is also able to use a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
@@ -7676,7 +7787,7 @@ For instance, here is how the Client-side caching is tested about one individual
 !    (...)
 In the above code, {\f1\fs20 Client.Cache.Clear} is used to reset all cache settings (i.e. not only flush the cache content, but delete all settings previously made with {\f1\fs20 Cache.SetCache()} or {\f1\fs20 Cache.SetTimeOut()} calls. So in the above code, a global cache is first enabled for the whole {\f1\fs20 TSQLRecordPeople} table, then the cache settings are reset, then cache is enabled for only the particular {\f1\fs20 Rec} record.\line To reset the cache content (e.g. if you consider some values may be deprecated), just call the {\f1\fs20 Cache.Flush} methods (able to flush the in-memory cache for all tables, a given table, or a given record).
 It's worth warning once again that it's up to the code responsibility to ensure that these caches are consistent over the network. Server side and client side have their own coherency profile to be ensured. The caching policy has to match your data model, and application use cases.
-{\i On the Client side}, only local CRUD operations are tracked. According to the stateless design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
+{\i On the Client side}, only local CRUD operations are tracked. According to the @*stateless@ design, adding a time out value does definitively make sense, unless the corresponding data is known to be dedicated to this particular client (like a @*session@ data). If no time out period is set, it's up to the client to flush its own cache on purpose, by using {\f1\fs20 TSQLRestClient.Cache.Flush()} methods.
 {\i On the Server side}, all CRUD operations of the @*ORM@ (like {\f1\fs20 Add / Update / Delete}) will be tracked, and cache will be notified of any data change. But direct SQL statements changing table contents (like a {\f1\fs20 UPDATE} or a {\f1\fs20 DELETE} over one or multiple rows with a {\f1\fs20 WHERE} clause) are not tracked by the current implementation: in such case, you'll have to manually flush the server cache content, to enforce data coherency. If such statements did occur on the server side, {\f1\fs20 TSQLRestServer.Cache.Flush()} methods are to be called, e.g. in the services which executed the corresponding SQL. If such non-CRUD statements did occur on the client side, it is possible to ensure that the server content is coherent with the client side, via a dedicated {\f1\fs20 TSQLRestClientURI.ServerCacheFlush()} method, which will call a dedicated standard service on the server to flush its cache content on purpose.
 :23Server side SQL/ORM process
 %cartoon02.png
@@ -8048,7 +8159,7 @@ When used over a slow network (e.g. over the Internet), you can set the optional
 In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
-This stateless @9@ model, would enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
+This @*stateless@ @9@ model, would enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
 :95 Returning file content
 Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
@@ -8724,9 +8835,11 @@ You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs}
 In real world, especially when your application relies heavily on services, the @49@ implementation pattern has some drawbacks:
 - Most content marshaling is to be done by hand, so may introduce implementation issues;
 - Client and server side code does not have the same implementation pattern, so you will have to code explicitly data marshaling twice, for both client and server ({\i DataSnap} and WCF both suffer from a similar issue, by which client classes shall be coded separately, most time generated by a Wizard);
+- You can not easily {\i test} your services, unless you write a lot of code to emulate a "fake" service implementation;
 - The services do not have any hierarchy, and are listed as a plain list, which is not very convenient;
 - It is difficult to synchronize several service calls within a single context, e.g. when a workflow is to be handled during the application process (you have to code some kind of state machine on both sides, and define all session handling by hand);
-- @*Security@ is handled globally for the user, or should be checked by hand in the implementation method (using the {\f1\fs20 Ctxt.Session*} members).
+- @*Security@ is handled globally for the user, or should be checked by hand in the implementation method (using the {\f1\fs20 Ctxt.Session*} members);
+- There is no way of implementing service {\i callbacks}, using e.g. {\i @*WebSockets@}.
 You can get rid of those limitations with the interface-based service implementation of {\i mORMot}. For a detailed introduction and best practice guide to @*SOA@, see @17@. All commonly expected SOA features are now available in the current implementation of the {\i mORMot} framework (including service catalog aka "broker", via the optional publication of {\f1\fs20 interface} signatures).
 \page
 : Implemented features
@@ -8742,7 +8855,9 @@ Here are the key features of the current implementation of services using interf
 |Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE7
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
-|Stateless|Following a standard request/reply pattern
+|@*Stateless@|Following a standard request/reply pattern
+|Statefull|Server side implementation may be synchronized with client-side interface, e.g. over {\i @*WebSockets@}
+|Dual way|You can define callbacks, using e.g. {\i @*WebSockets@} for immediate notification
 |Signed|The contract is checked to be consistent before any remote execution
 |Secure|Every service and/or methods can be enabled or disabled on need
 |Safe|Using extended RESTful authentication - see @18@
@@ -8787,7 +8902,7 @@ In fact, parameters expectations are the following:
 - Only exception is that you can't have a function returning a {\f1\fs20 class} instance (how will know when to release the instance in this case?), but such instances can be passed as {\f1\fs20 const}, {\f1\fs20 var} or {\f1\fs20 out} parameters (and {\f1\fs20 published} properties will be serialized within the JSON message);
 - In fact, the {\f1\fs20 @*TCollection@} kind of parameter is not directly handled by the framework: you shall define a {\f1\fs20 @*TInterfacedCollection@} class, overriding its {\f1\fs20 GetClass} abstract virtual method (otherwise the server side won't be able to create the kind of collection as expected);
 - Special {\f1\fs20 @*TServiceCustomAnswer@} kind of record can be used as {\f1\fs20 function} result to specify a custom content (with specified encoding, to be used e.g. for @*AJAX@ or HTML consumers) - in this case, no {\f1\fs20 var} nor {\f1\fs20 out} parameters values shall be defined in the method (only the BLOB value is returned).
-:  Available types for methods parameters
+:154  Available types for methods parameters
 Handled types of parameters are:
 |%30%70
 |\b Delphi type|Remarks\b0
@@ -8808,6 +8923,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular {\i Delphi} {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding before {\i Delphi} 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
 |{\f1\fs20 variant}|Transmitted as JSON, with support of @80@ for objects and arrays; OLE {\f1\fs20 variant} arrays are not handled: use {\f1\fs20 _Arr([]) _ArrFast([])} instead
 |{\f1\fs20 @*TServiceCustomAnswer@}|If used as a {\f1\fs20 function} result (not as parameter), the supplied content will be transmitted directly to the client (with no JSON @*serialization@); in this case, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed in the method - it will be compatible with both our {\f1\fs20 TServiceFactoryClient} implementation, and any other service consumers (e.g. @*AJAX@)
+|{\f1\fs20 interface}|A callback instance could be specified, to allow asynchronous notification, using e.g. {\i WebSockets} - see @149@
 |%
 You can therefore define complex {\f1\fs20 interface} types, as such:
 !type
@@ -9444,6 +9560,266 @@ Then a particular SQL statement can be executed as such:
 !end;
 Here, {\f1\fs20 TSQLTableToGrid.Create()}, from the {\f1\fs20 mORMotUI} unit, will "inject" the returned data to a standard {\f1\fs20 TDrawGrid}, using a {\f1\fs20 TSQLTableJSON} instance to un-serialize the returned JSON content.
 Note that in case of any exception (connection failure, or server side error, e.g. wrong SQL statement), the {\f1\fs20 ShowExecption()} method is used to notify the user with appropriate information.
+\page
+:149 Asynchronous callbacks
+When publishing @*SOA@ services, most of them are defined as {\i @*stateless@}, in a typical query/answer pattern - see @17@. This fits exactly with the {\i @*RESTful@} approach of @63@, as proposed by the framework.
+But it may happen that a client application (or service) needs to know the state of a given service. In a pure {\i stateless} implementation, it will have to {\i query} the server for any state change, i.e. for any pending notification - this is called {\i polling}.
+{\i Polling} may take place for instance:
+- When a time consuming work is to be processed on the server side. In this case, the client could not wait for it to be finished, without raising a timeout on the HTTP connection: as a workaround, the client may start the work, then ask for its progress status regularly using a timer and a dedicated method call;
+- When an unpredictable event is to be notified from the server side. In this case, the client should ask regularly (using a timer, e.g. every second), for any pending event, then react on purpose.
+It may therefore sounds preferred, and in some case necessary, to have the ability to let the server {\i notify} one or several clients without any prior query, nor having the requirement of a client-side timer:
+- {\i Polling} may be pretty resource consuming on both client and server sides, and add some unwanted latency;
+- If immediate notification is needed, some kind of "long polling" algorithm may take place, i.e. the server will wait for a long time before returning the notification state if no event did happen: in this case, a dedicated connection is required, in addition to the REST one;
+- In an @*event-driven@ systems, a lot of messages are sent to the clients: a proper @*publish/subscribe@ mechanism is preferred, otherwise the complexity of polling methods may increase and become inefficient and unmaintainable;
+- Explicit push notifications may be necessary, e.g. when a lot of potential events, associated with a complex set of parameters, are likely to be sent by the client.
+Our {\i mORMot} framework is therefore able to easily implement asynchronous callbacks over {\i WebSockets}, defining the callbacks as {\f1\fs20 interface} parameters in service method definitions - see @154@.
+:150  WebSockets support
+By definition, HTTP connections are stateless and one-way, i.e. a client sends a request to the server, which replies back with an answer. There is no way to let the server send a message to the client, without a prior request from the client side.
+{\i @**WebSockets@} is a communication protocol which is able to {\i upgrade} a regular HTTP connection into a dual-way communication wire. After a safe handshake, the underlying TCP/IP socket is able to be accessed directly, via a set of lightweight {\i frames} over an application-defined {\i protocol}, without the HTTP overhead.
+The {\f1\fs20 SynBidirSock.pas} unit implements low-level server and client {\i WebSockets} communication.
+The {\f1\fs20 TWebSocketProtocol} class defines an abstract {\i WebSockets protocol}, currently implemented as several classes:
+\graph HierTWebSocketProtocolJSON TWebSocketProtocolJSON classes hierarchy
+\TWebSocketProtocolChat\TWebSocketProtocol
+\TWebSocketProtocolRest\TWebSocketProtocol
+\TWebSocketProtocolBinary\TWebSocketProtocolRest
+\TWebSocketProtocolJSON\TWebSocketProtocolRest
+\
+For our @63@, we would still need to make {\i RESTful} requests, so the basic {\i WebSockets} framing has been enhanced to support {\f1\fs20 TWebSocketProtocolRest} REST-compatible protocols, able to use the single connection for both REST queries and asynchronous notifications.\line Two classes are available for your @*SOA@ applications:
+- {\f1\fs20 TWebSocketProtocolJSON} as a "pure" JSON light protocol;
+- {\f1\fs20 TWebSocketProtocolBinary} as a binary proprietary protocol, with optional frame compression and @*AES@ encryption (using @*AES-NI@ hardware instructions, if available).
+In practice, on the server side, you would start your {\f1\fs20 TSQLHttpServer} by specifying {\f1\fs20 useBidirSocket} as kind of server:
+! HttpServer := TSQLHttpServer.Create('8888',[Server],'+',useBidirSocket);
+Under the hood, it will instantiate a {\f1\fs20 TWebSocketServer} HTTP server, as defined in {\f1\fs20 mORMotHttpServer.pas}, based on the sockets API, able to upgrade the HTTP protocol into {\i WebSockets}. Our @88@ is not yet able to switch to {\i WebSockets} - and at API level, it would require at least {\i Windows 8} or {\i Windows 2012 Server}.
+Then you enable {\i WebSockets} for the {\f1\fs20 TWebSocketProtocolBinary} protocol, with an encryption key:
+!   HttpServer.WebSocketsEnable(Server,'encryptionkey');
+On the client side, you would use a {\f1\fs20 TSQLHttpClientWebsockets} instance, as defined in {\f1\fs20 mORMotHttpClient.pas}, then explicitly upgrade the connection to use {\i WebSockets} (since by default, it will stick to the HTTP protocol):
+!  Client := TSQLHttpClientWebsockets.Create('127.0.0.1','8888',TSQLModel.Create([]));
+!  Client.WebSocketsUpgrade('encryptionkey');
+The expected protocol detail should match the one on the server, i.e. {\f1\fs20 'encryptionkey'} encryption over our binary protocol.
+Once upgraded to {\i WebSockets}, you may use regular REST commands, as usual:
+!  Client.ServerTimeStampSynchronize;
+But in addition to regular query/answer commands as defined for @63@, you would be able to define callbacks using {\f1\fs20 interface} parameters to the service methods.
+Under the hood, both client and server will communicate using {\i WebSockets} frames, maintaining the connection active using heartbeats (via ping/pong frames), and with clean connection shutdown, from any side. You can use the {\f1\fs20 Settings} property of the {\f1\fs20 TWebSocketServerRest} instance, as returned by {\f1\fs20 TSQLHttpServer.WebSocketsEnable()}, to customize the low-level {\i WebSockets} protocol (e.g. timeouts or heartbeats) on the server side. The {\f1\fs20 TSQLHttpClientWebsockets.WebSockets}.{\f1\fs20 Settings} property would allow the same, on the client side.
+We have observed, from our regression tests and internal benchmarking, that using our {\i WebSockets} may be faster than regular HTTP, since its frames would be sent as once, whereas HTTP headers and body are not sent in the same TCP packet, and compression would be available for the whole frame, whereas HTTP headers are not compressed. The ability to use strong AES encryption would make this mean of communication even safer than plain HTTP, even with @151@.
+:152   Using a callback to notify long term end-of-process
+An example is better than 100 talks.\line So let's take a look at the {\f1\fs20 Project31LongWorkServer.dpr} and {\f1\fs20 Project31LongWorkClient.dpr} samples, from the {\f1\fs20 SQLite3\\Samples\\31 - WebSockets} sub-folder. They will implement a client/server application, in which the client launches a long term process on the server side, then is notified when the process is done, either with success, or failure.
+First we define the interfaces to be used, in a shared {\f1\fs20 Project31LongWorkCallbackInterface.pas} unit:
+!type
+!  ILongWorkCallback = interface(IInvokable)
+!    ['{425BF199-19C7-4B2B-B1A4-A5BE7A9A4748}']
+!    procedure WorkFinished(const workName: string; timeTaken: integer);
+!    procedure WorkFailed(const workName, error: string);
+!  end;
+!
+!  ILongWorkService = interface(IInvokable)
+!    ['{09FDFCEF-86E5-4077-80D8-661801A9224A}']
+!    procedure StartWork(const workName: string; const onFinish: ILongWorkCallback);
+!    function TotalWorkCount: Integer;
+!  end;
+The only specific definition is the {\f1\fs20 const onFinish: ILongWorkCallback} parameter, supplied to the {\f1\fs20 ILongWorkService.StartWork()} method. The client will create a class implementing {\f1\fs20 ILongWorkCallback}, then specify it as parameter to this method. On the server side, a "fake" class will implement {\f1\fs20 ILongWorkCallback}, then will call back the client using the very same {\i WebSockets} connection, when any of its methods will be executed.
+As you can see, a single callback {\f1\fs20 interface} instance may have several methods, with their own set of parameters (here {\f1\fs20 WorkFinished} and {\f1\fs20 WorkFailed}), so that the callback may be quite expressive. Any kind of usual parameters would be transmitted, after serialization: {\f1\fs20 string}, {\f1\fs20 integer}, but even {\f1\fs20 record}, {\i dynamic arrays}, {\f1\fs20 @*TSQLRecord@} or {\f1\fs20 @*TPersistent@} values.
+When the {\f1\fs20 ILongWorkCallback} instance will be released on the client side, the server will  be notified, so that any further notification won't create a connection error. We will see later how to handle those events.
+:   Client service consumption
+The client may be connected to the server as such (see the {\f1\fs20 Project31LongWorkClient.dpr} sample source code for the full details, including error handling):
+!var Client: TSQLHttpClientWebsockets;
+!    workName: string;
+!    Service: ILongWorkService;
+!    callback: ILongWorkCallback;
+!begin
+!  Client := TSQLHttpClientWebsockets.Create('127.0.0.1','8888',TSQLModel.Create([]));
+!!  Client.WebSocketsUpgrade(PROJECT31_TRANSMISSION_KEY);
+!  Client.ServiceDefine([ILongWorkService],sicShared);
+!  Client.Services.Resolve(ILongWorkService,Service);
+Then we define our callback, using a dedicated class:
+!type
+!  TLongWorkCallback = class(TInterfacedCallback,ILongWorkCallback)
+!  protected
+!    procedure WorkFinished(const workName: string; timeTaken: integer);
+!    procedure WorkFailed(const workName, error: string);
+!  end;
+!
+!procedure TLongWorkCallback.WorkFailed(const workName, error: string);
+!begin
+!  writeln(#13'Received callback WorkFailed(',workName,') with message "',error,'"');
+!end;
+!
+!procedure TLongWorkCallback.WorkFinished(const workName: string;
+!  timeTaken: integer);
+!begin
+!  writeln(#13'Received callback WorkFinished(',workName,') in ',timeTaken,'ms');
+!end;
+Then we specify this kind of callback as parameter to start a long term work:
+!!    callback := TLongWorkCallback.Create(Client,ILongWorkCallback);
+!    try
+!      repeat
+!        readln(workName);
+!        if workName='' then
+!          break;
+!!        Service.StartWork(workName,callback);
+!      until false;
+!    finally
+!      callback := nil; // the server will be notified and release its "fake" class
+!      Service := nil;  // release the service local instance BEFORE Client.Free
+!    end;
+As you can see, the client is able to start one or several work processes, then expects to be notified of the process ending on its callback {\f1\fs20 interface} instance, without explicitly polling the server for its state, since the connection was upgraded to {\i WebSockets} via a call to {\f1\fs20 TSQLHttpClientWebsockets.WebSocketsUpgrade()}.
+:   Server side implementation
+The server would define the working thread as such (see the {\f1\fs20 Project31LongWorkServer.dpr} sample source code for the full details):
+!type
+!  TLongWorkServiceThread = class(TThread)
+!  protected
+!!    fCallback: ILongWorkCallback;
+!    fWorkName: string;
+!    procedure Execute; override;
+!  public
+!    constructor Create(const workName: string; const callback: ILongWorkCallback);
+!  end;
+!
+!constructor TLongWorkServiceThread.Create(const workName: string;
+!  const callback: ILongWorkCallback);
+!begin
+!  inherited Create(false);
+!!  fCallback := Callback;
+!  fWorkName := workName;
+!  FreeOnTerminate := true;
+!end;
+!
+!procedure TLongWorkServiceThread.Execute;
+!var tix: Int64;
+!begin
+!  tix := GetTickCount64;
+!!  Sleep(5000+Random(1000)); // some hard work
+!  if Random(100)>20 then
+!!    fCallback.WorkFinished(fWorkName,GetTickCount64-tix) else
+!!    fCallback.WorkFailed(fWorkName,'expected random failure');
+!end;
+The callback is expected to be supplied as a {\f1\fs20 ILongWorkCallback} interface instance, then stored in a {\f1\fs20 fCallback} protected field for further notification.\line Some work is done in the {\f1\fs20 TLongWorkServiceThread.Execute} method (here just a {\f1\fs20 Sleep()} of more than 5 seconds), and the end-of-work notification is processed, as success or failure (depending on random in this fake process class), on either of the {\f1\fs20 ILongWorkCallback} interface methods.
+The following {\f1\fs20 class} will define, implement and register the {\f1\fs20 ILongWorkService} service on the server side:
+!type
+!  TLongWorkService = class(TInterfacedObject,ILongWorkService)
+!  protected
+!    fTotalWorkCount: Integer;
+!  public
+!    procedure StartWork(const workName: string; const onFinish: ILongWorkCallback);
+!    function TotalWorkCount: Integer;
+!  end;
+!
+!procedure TLongWorkService.StartWork(const workName: string;
+!  const onFinish: ILongWorkCallback);
+!begin
+!  InterlockedIncrement(fTotalWorkCount);
+!!  TLongWorkServiceThread.Create(workName,onFinish);
+!end;
+!
+!function TLongWorkService.TotalWorkCount: Integer;
+!begin
+!  result := fTotalWorkCount;
+!end;
+!
+!var HttpServer: TSQLHttpServer;
+!    Server: TSQLRestServerFullMemory;
+!begin
+!  Server := TSQLRestServerFullMemory.CreateWithOwnModel([]);
+!!  Server.ServiceDefine(TLongWorkService,[ILongWorkService],sicShared);
+!  HttpServer := TSQLHttpServer.Create('8888',[Server],'+',useBidirSocket);
+!!  HttpServer.WebSocketsEnable(Server,PROJECT31_TRANSMISSION_KEY);
+!...
+Purpose of those methods is just to create and launch the {\f1\fs20 TLongWorkServiceThread} process from a client request, then maintain a total count of started works, in a {\f1\fs20 sicShared} service instance - see @92@ - hosted in a {\f1\fs20 useBidirSocket} kind of HTTP server.
+We have to explicitly call {\f1\fs20 TSQLHttpServer.WebSocketsEnable()} so that this server would be able to upgrade to our {\i WebSockets} protocol, using our binary framing, and the very same encryption key as on the client side - shared as a {\f1\fs20 PROJECT31_TRANSMISSION_KEY} constant in the sample, but which may be safely stored on both sides.
+:  Publish-subscribe for events
+In @*event-driven@ architectures, the {\i @**publish-subscribe@} messaging pattern is a way of letting senders (called {\i publishers}) transmit messages to their receivers (called {\i subscribers}), without any prior knowledge of who those subscribers are. In practice, the {\i subscribers} will express interest for a set of messages, which will be sent by the {\i publisher} to all the {\i subscribers} of a given message, as soon as it is be notified.
+In our @63@ implementation, messages are gathered in {\f1\fs20 interface} types, and each message defined as a single method, their content being the methods parameters.\line Most of the SOA alternative (in Java or C#) do require class definition for messages. Our KISS approach will just use method parameters values as message definition.
+To maintain a list of {\i subscribers}, the easiest is to store a {\i dynamic array} of {\f1\fs20 interface} instances, on the {\i publisher} side.
+:   Defining the interfaces
+We will now implement a simple {\i chat} service, able to let several clients communicate together, broadcasting any message to all the other connected instances. This sample is also located in the the {\f1\fs20 SQLite3\\Samples\\31 - WebSockets} sub-folder, as {\f1\fs20 Project31ChatServer.dpr} and {\f1\fs20 Project31ChatClient.dpr}.
+So you first define the callback interface, and the service interface:
+!type
+!  IChatCallback = interface(IInvokable)
+!    ['{EA7EFE51-3EBA-4047-A356-253374518D1D}']
+!    procedure BlaBla(const pseudo, msg: string);
+!  end;
+!
+!  IChatService = interface(IInvokable)
+!    ['{C92DCBEA-C680-40BD-8D9C-3E6F2ED9C9CF}']
+!    procedure Join(const pseudo: string; const callback: IChatCallback);
+!    procedure BlaBla(const pseudo,msg: string);
+!    procedure CallbackReleased(const callback: IInvokable);
+!  end;
+Those interface types will be shared by both server and client sides, in the common {\f1\fs20 Project31ChatCallbackInterface.pas} unit. The definition is pretty close to what we wrote when @152@. The only additional method is {\f1\fs20 IChatServer.CallbackReleased()}, which, by convention, will be called on the server side when any {\f1\fs20 callback} interface instance is released on the client side.
+As such, the {\f1\fs20 IChatService.Join()} method will implement the {\i subscription} to the chat service, whereas {\f1\fs20 IChatServer.CallbackReleased()} will be called when the client-side callback instance will be released (i.e. when its variable will be assigned to {\f1\fs20 nil}), to {\i unsubscribe} for the chat service.
+:   Writing the Publisher
+On the server side, each call to {\f1\fs20 IChatService.Join()} would {\i subscribe} to an internal list of connections, simply stored as an {\f1\fs20 array of IChatCallback}:
+!type
+!  TChatService = class(TInterfacedObject,IChatService)
+!  protected
+!!    fConnected: array of IChatCallback;
+!  public
+!    procedure Join(const pseudo: string; const callback: IChatCallback);
+!    procedure BlaBla(const pseudo,msg: string);
+!    procedure CallbackReleased(const callback: IInvokable);
+!  end;
+!
+!procedure TChatService.Join(const pseudo: string;
+!  const callback: IChatCallback);
+!begin
+!!  InterfaceArrayAdd(fConnected,callback);
+!end;
+The {\f1\fs20 InterfaceArrayAdd()} function, as defined in {\f1\fs20 SynCommons.pas}, is a simple wrapper around any {\i dynamic array} of {\f1\fs20 interface} instances, so that you may use it, or the associated {\f1\fs20 InterfaceArrayFind()} or {\f1\fs20 InterfaceArrayDelete()} functions, to maintain the list of subscriptions.
+Then a remote call to the {\f1\fs20 IChatService.BlaBla()} method should be broadcasted to all connected clients, just by calling the {\f1\fs20 IChatCallback.BlaBla()} method:
+!procedure TChatService.BlaBla(const pseudo,msg: string);
+!var i: integer;
+!begin
+!  for i := 0 to high(fConnected) do
+!!    fConnected[i].BlaBla(pseudo,msg);
+!end;
+Note that every call to {\f1\fs20 IChatCallback.BlaBla()} within the loop would be made via {\i @*WebSockets@}, in an asynchronous and non blocking way, so that even in case of huge number of clients, the {\f1\fs20 IChatService.BlaBla()} method won't block. In case of high numbers of messages, the framework is even able to {\i gather} push notification messages into a single bigger message, to reduce the resource use.
+On the server side, the service implementation has been registered as such:
+!  Server.ServiceDefine(TChatService,[IChatService],sicShared).
+!    SetOptions([],[optExecLockedPerInterface]);
+Here, the {\f1\fs20 optExecLockedPerInterface} option has been set, so that all method calls would be made thread-safe, so that concurrent access to the internal {\f1\fs20 fConnected[]} list would be safe. Since a global list of connections is to be maintained, the service life time is defined as {\f1\fs20 sicShared} - see @92@.
+The following method will be called by the server, when a client callback instance is released (either explicitly, or if the connection is broken), so could be used to {\i unsubscribe} to the notification, simply by deleting the callback from the internal {\f1\fs20 fConnected[]} array:
+!procedure TChatService.CallbackReleased(const callback: IInvokable);
+!begin
+!!  InterfaceArrayDelete(fConnected,callback);
+!end;
+The framework will in fact recognize the following method definition in any {\f1\fs20 interface} type for a service:
+!   procedure CallbackReleased(const callback: IInvokable);
+When a callback {\f1\fs20 interface} parameter (in our case, {\f1\fs20 IChatCallback}) will be released on the client side, this method will be called with the corresponding {\f1\fs20 interface} instance as parameter. You do not have to call explicitly any method on the client side to {\i unsubscribe} a service: assigning {\i nil} to a callback variable, or feeing the {\f1\fs20 class} instance owning it as a field on the {\i subscriber} side, will automatically unregister it on the {\i publisher} side.
+:   Consuming the service from the Subscriber side
+On the client side, you implement the {\f1\fs20 IChatCallback} callback interface:
+!type
+!  TChatCallback = class(TInterfacedCallback,IChatCallback)
+!  protected
+!    procedure BlaBla(const pseudo, msg: string);
+!  end;
+!
+!procedure TChatCallback.BlaBla(const pseudo, msg: string);
+!begin
+!  writeln(#13'@',pseudo,' ',msg);
+!end;
+Then you subscribe to your remote service as such:
+!!var Service: IChatService;
+!!    callback: IChatCallback;
+!...
+!    Client.ServiceDefine([IChatService],sicShared);
+!!    if not Client.Services.Resolve(IChatService,Service) then
+!      raise EServiceException.Create('Service IChatService unavailable');
+!...
+!!      callback := TChatCallback.Create(Client,IChatCallback);
+!!      Service.Join(pseudo,callback);
+!...
+!    try
+!      repeat
+!        readln(msg);
+!        if msg='' then
+!          break;
+!!        Service.BlaBla(pseudo,msg);
+!      until false;
+!    finally
+!!      callback := nil; // will unsubscribe from the remote publisher
+!      Service := nil;  // release the service local instance BEFORE Client.Free
+!    end;
+You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
+If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshaling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and JSON marshalling over TCP/IP).
 \page
 : Implementation details
 :77  Security
