@@ -2,6 +2,7 @@
 program Project31LongWorkClient;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
   SysUtils,
   Classes,
   SynCommons,
