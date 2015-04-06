@@ -4842,7 +4842,8 @@ type
     procedure InternalExecuteSOAByInterface; virtual;
     /// event raised by ExecuteMethod() for interface parameters
     // - match TServiceMethodInternalExecuteCallback signature
-    procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj);
+    procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo;
+      out Obj);
     /// initialize the execution context
     // - this method has been declared as protected, since it shuold never be
     // called outside the TSQLRestServer.URI() method workflow
@@ -9058,6 +9059,7 @@ type
     {$endif}
     fFakeVTable: array of pointer;
     fFakeStub: PByteArray;
+    fMethodIndexCallbackReleased: Integer;
     fMethodIndexCurrentFrameCallback: Integer;
     function GetInterfaceName: RawUTF8;
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
@@ -9115,7 +9117,15 @@ type
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
     property MethodsCount: cardinal read fMethodsCount;
-    /// identifies a CurrentFrame() method in this interface 
+    /// identifies a CallbackReleased() method in this interface
+    // - i.e. the index in Methods[] of the following signature:
+    // ! procedure CallbackReleased(const callback: IInvokable);
+    // - this method will be called e.g. by TInterfacedCallback.Destroy, when
+    // a callback is released on the client side so that you may be able e.g. to
+    // unsubscribe the callback from an interface list (via InterfaceArrayDelete)
+    // - contains -1 if no such method do exist in the interface definition
+    property MethodIndexCallbackReleased: Integer read fMethodIndexCallbackReleased;
+    /// identifies a CurrentFrame() method in this interface
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CurrentFrame(isLast: boolean);
     // - this method will be called e.g. by TSQLHttpClientWebsockets.CallbackRequest
@@ -10475,8 +10485,8 @@ type
   end;
 
   /// event signature triggerred when a callback instance is released
-  // - used by TServiceContainerServer for its OnCallbackReleasedOnClientSide
-  // and OnCallbackReleasedOnServerSide event properties
+  // - used by TServiceContainerServer.OnCallbackReleasedOnClientSide
+  // and TServiceContainerServer.OnCallbackReleasedOnServerSide event properties
   // - the supplied Instance will be a TInterfacedObjectFakeServer, and the
   // Callback would be a pointer to the corresponding interface value
   // - assigned implementation should be as fast a possible, since this event
@@ -10506,7 +10516,7 @@ type
     procedure OnCloseSession(aSessionID: cardinal); virtual;
     procedure FakeCallbackAdd(aFakeInstance: TObject);
     procedure FakeCallbackRemove(aFakeInstance: TObject);
-    function FakeCallbackRelease(aConnectionID: Int64; aFakeID: integer): boolean;
+    procedure FakeCallbackRelease(Ctxt: TSQLRestServerURIContext);
     procedure RecordVersionCallbackNotify(TableIndex: integer;
       Occasion: TSQLOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
@@ -10554,6 +10564,11 @@ type
     property PublishSignature: boolean read fPublishSignature write fPublishSignature;
     /// this event will be launched when a callback interface is notified as
     // relased on the Client side
+    // - as an alternative, you may define the following method on the
+    // registration service interface type, which would be called when a
+    // callback registered via this service is released (e.g. to unsubscribe
+    // the callback from an interface list, via InterfaceArrayDelete):
+    // ! procedure CallbackReleased(const callback: IInvokable);
     property OnCallbackReleasedOnClientSide: TOnCallbackReleased
       read fOnCallbackReleasedOnClientSide;
     /// this event will be launched when a callback interface is relased on
@@ -10604,6 +10619,7 @@ type
     constructor Create(aRest: TSQLRest; const aGUID: TGUID);
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
+    // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
     destructor Destroy; override;
   end;
 
@@ -13938,10 +13954,15 @@ type
     // - it will flush the server result cache
     // - this method shall be called by the clients when the Server cache may be
     // not consistent any more (e.g. after a direct write to an external database)
-    // - ModelRoot/CacheFlush URI will flush the whole Server cache, for all tables
-    // - ModelRoot/CacheFlush/TableName URI will flush the specified table cache
-    // - ModelRoot/CacheFlush/TableName/TableID URI will flush the content of the
-    // specified record
+    // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
+    // for all tables
+    // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
+    // table cache
+    // - GET ModelRoot/CacheFlush/TableName/TableID URI will flush the content
+    // of the specified record
+    // - in addition, POST ModelRoot/CacheFlush/_callback_ URI will be called
+    // automatically by the client, to notify the server that an interface
+    // callback instance has been released
     procedure CacheFlush(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/Batch URI
     // - will execute a set of RESTful commands, in a single step, with optional
@@ -33674,7 +33695,6 @@ begin
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
-var callbackID: integer;
 begin
   case Ctxt.Method of
   mGET: begin
@@ -33686,14 +33706,8 @@ begin
     Ctxt.Success;
   end;
   mPOST:
-    if Ctxt.URIBlobFieldName='_callback_' then begin
-      callbackID := GetInteger(pointer(Ctxt.Call^.InBody));
-      InternalLog('FakeCallbackRelease(%)',[callbackID],sllDebug);
-      if (callbackID>0) and
-         (Services as TServiceContainerServer).FakeCallbackRelease(
-          Ctxt.Call^.LowLevelConnectionID,callbackID) then
-        Ctxt.Success;
-    end;
+    if Ctxt.URIBlobFieldName='_callback_' then
+      (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt);
   end;
 end;
 
@@ -42775,6 +42789,7 @@ type
   protected
     fServer: TSQLRestServer;
     fLowLevelConnectionID: Int64;
+    fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
     fFakeInterface: Pointer;
     fRaiseExceptionOnInvokeError: boolean;
@@ -43108,6 +43123,7 @@ constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContex
   aFactory: TInterfaceFactory; aFakeID: Integer);
 begin
   fServer := aRequest.Server;
+  fService := aRequest.Service;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aFakeID;
   inherited Create(aFactory,CallbackInvoke,nil);
@@ -43153,22 +43169,28 @@ end;
 
 procedure TSQLRestServerURIContext.ExecuteCallback(var Par: PUTF8Char;
   ParamInterfaceInfo: PTypeInfo; out Obj);
-var FakeID: integer;
+var FakeID: PtrInt;
     factory: TInterfaceFactory;
     instance: TInterfacedObjectFakeServer;
 begin
   if not Assigned(Server.OnNotifyCallback) then
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [Server,ParamInterfaceInfo^.Name]);
-  FakeID := GetInteger(GetJSONField(Par,Par));
-  if FakeID<=0 then
+  FakeID := GetInteger(GetJSONField(Par,Par)); // GetInteger returns a PtrInt
+  if FakeID=0 then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.ExecuteCallback FakeID=% for % parameter at %',
       [self,FakeID,ParamInterfaceInfo^.Name,URIWithoutSignature]);
   if Par=nil then
+    Par := @NULL_SHORTSTRING; // allow e.g. '[12345]'
+  if ParamInterfaceInfo=TypeInfo(IInvokable) then begin // IInvokable=pointer
+    pointer(Obj) := pointer(FakeID); 
+    exit;
+  end;
+  if Par=nil then
     Par := @NULL_SHORTSTRING; // as expected by TServiceMethod.InternalExecute
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
-  instance := TInterfacedObjectFakeServer.Create(Self,factory,FakeID);
+  instance := TInterfacedObjectFakeServer.Create(self,factory,FakeID);
   pointer(Obj) := instance.fFakeInterface;
   (Server.Services as TServiceContainerServer).FakeCallbackAdd(instance);
 end;
@@ -43419,6 +43441,7 @@ begin
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): interface has no RTTI',[self,aInterface^.Name]);
   fMethodIndexCurrentFrameCallback := -1;
+  fMethodIndexCallbackReleased := -1;
   SetLength(fMethods,fMethodsCount);
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
@@ -43498,10 +43521,16 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         ArgsManagedLast := a;
       end;
     end;
-    if (ArgsOutputValuesCount=0) and (ArgsInputValuesCount=1) and
-       IdemPropNameU(URI,'CurrentFrame') and
-       (Args[1].ValueType=smvBoolean) then
-      fMethodIndexCurrentFrameCallback := m;
+    if (ArgsOutputValuesCount=0) and (ArgsInputValuesCount=1) then
+      case Args[1].ValueType of
+      smvBoolean:
+        if IdemPropNameU(URI,'CurrentFrame') then
+          fMethodIndexCurrentFrameCallback := m;
+      smvInterface:
+        if (Args[1].ArgTypeInfo=TypeInfo(IInvokable)) and
+           IdemPropNameU(URI,'CallbackReleased') then
+          fMethodIndexCallbackReleased := m;
+      end;
   end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
@@ -45438,6 +45467,7 @@ end;
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
 var i,callbackID: integer;
     connectionID: Int64;
+    fake: TInterfacedObjectFakeServer;
     server: TSQLRestServer;
 begin
   if (self=nil) or (fFakeCallbacks=nil) then
@@ -45448,14 +45478,13 @@ begin
   try
     i := fFakeCallbacks.IndexOf(aFakeInstance);
     if i>=0 then begin
-      with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do
-        if not fReleasedOnClientSide then begin
-          connectionID := fLowLevelConnectionID;
-          callbackID := ClientDrivenID;
-          if Assigned(OnCallbackReleasedOnServerSide) then
-            OnCallbackReleasedOnServerSide(
-              self,fFakeCallbacks.List[i],fFakeInterface);
-        end;
+      fake := fFakeCallbacks.List[i];
+      if not fake.fReleasedOnClientSide then begin
+        connectionID := fake.fLowLevelConnectionID;
+        callbackID := fake.ClientDrivenID;
+        if Assigned(OnCallbackReleasedOnServerSide) then
+          OnCallbackReleasedOnServerSide(self,fake,fake.fFakeInterface);
+      end;
       fFakeCallbacks.Delete(i);
     end;
   finally
@@ -45468,26 +45497,43 @@ begin
   end;
 end;
 
-function TServiceContainerServer.FakeCallbackRelease(
-  aConnectionID: Int64; aFakeID: integer): boolean;
+procedure TServiceContainerServer.FakeCallbackRelease(Ctxt: TSQLRestServerURIContext);
 var i: integer;
+    fake: TInterfacedObjectFakeServer;
+    connectionID: Int64;
+    fakeID: cardinal;
 begin
-  result := false;
-  if (self=nil) or (fFakeCallbacks=nil) then
+  if (self=nil) or (fFakeCallbacks=nil) or (Ctxt=nil) then
     exit;
+  connectionID := Ctxt.Call^.LowLevelConnectionID;
+  fakeID := GetCardinal(pointer(Ctxt.Call^.InBody));
+  if (fakeID=0) or (connectionID=0) then
+    exit;
+  fRest.InternalLog('%.FakeCallbackRelease(%) remote call',[ClassType,fakeID],sllDebug);
   try
     fFakeCallbacks.Lock;
-    for i := 0 to fFakeCallbacks.Count-1 do
-      with TInterfacedObjectFakeServer(fFakeCallbacks.List[i]) do
-      if (fLowLevelConnectionID=aConnectionID) and
-         (ClientDrivenID=cardinal(aFakeID)) then begin
-        fReleasedOnClientSide := true;
+    for i := 0 to fFakeCallbacks.Count-1 do begin
+      fake := fFakeCallbacks.List[i];
+      if (fake.fLowLevelConnectionID=connectionID) and
+         (fake.ClientDrivenID=fakeID) then begin
+        fake.fReleasedOnClientSide := true;
         if Assigned(OnCallbackReleasedOnClientSide) then
-          OnCallbackReleasedOnClientSide(
-            self,fFakeCallbacks.List[i],fFakeInterface);
-        result := true;
+          OnCallbackReleasedOnClientSide(self,fake,fake.fFakeInterface);
+        if fake.fService.fInterface.MethodIndexCallbackReleased>=0 then begin
+          // emulate a call to CallbackReleased(callback: IInvokable)
+          Ctxt.ServiceMethodIndex := fake.fService.fInterface.MethodIndexCallbackReleased;
+          Ctxt.Service := fake.fService;
+          fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
+          Ctxt.ServiceParameters :=
+            pointer(FormatUTF8('[%]',[PtrInt(fake.fFakeInterface)]));
+          fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
+            Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
+          fake.fService.ExecuteMethod(Ctxt); 
+        end else
+          Ctxt.Success;
         exit;
       end;
+    end;
   finally
     fFakeCallbacks.UnLock;
   end;
@@ -45713,7 +45759,6 @@ constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer; aInterface
   aInstanceCreation: TServiceInstanceImplementation;
   aImplementationClass: TInterfacedClass; const aContractExpected: RawUTF8;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
-var m,a: integer;
 begin
   // extract RTTI from the interface
   if aInstanceCreation<>sicPerThread then
@@ -45732,6 +45777,11 @@ begin
   if fImplementationClassInterfaceEntry=nil then
     raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
       [self,fImplementationClass,fInterfaceURI]) else
+  if (fInterface.MethodIndexCallbackReleased>=0) and
+     (InstanceCreation<>sicShared) then
+    raise EServiceException.CreateUTF8('%.Create: I%() should be run as sicShared',
+      [self,fInterface.fMethods[fInterface.MethodIndexCallbackReleased].
+       InterfaceDotMethodName]);
   // initialize the shared instance or client driven parameters
   case InstanceCreation of
   sicShared: begin
@@ -45757,13 +45807,6 @@ begin
     end;
   end;
   SetLength(fStats,fInterface.MethodsCount);
-  for m := 0 to fInterface.MethodsCount-1 do
-    with fInterface.Methods[m] do
-    if ArgsUsedCount[smvvInterface]<>0 then
-      for a := 1 to length(Args)-1 do
-        if Args[a].ValueType=smvInterface then begin // prepare callback event
-
-        end;
 end;
 
 procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
@@ -46062,7 +46105,8 @@ begin
              WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
              fExecution[Ctxt.ServiceMethodIndex].Options,
              Ctxt.ForceServiceResultAsJSONObject,
-             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif},Ctxt.ExecuteCallback) then begin
+             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif},
+             Ctxt.ExecuteCallback) then begin
           Error('execution failed (probably due to bad input parameters)');
           exit; // wrong request
         end;
