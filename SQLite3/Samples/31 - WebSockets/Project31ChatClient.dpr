@@ -66,8 +66,8 @@ begin
         Service.BlaBla(pseudo,msg);
       until false;
     finally
-      callback := nil;
-      Service := nil; // release the service local instance BEFORE Client.Free
+      callback := nil; // will unsubscribe from the remote publisher
+      Service := nil;  // release the service local instance BEFORE Client.Free
     end;
   finally
     Client.Free;

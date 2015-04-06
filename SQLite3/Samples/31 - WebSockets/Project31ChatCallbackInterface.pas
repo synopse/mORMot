@@ -13,16 +13,14 @@ type
     procedure BlaBla(const pseudo, msg: string);
   end;
 
-  IChatService = interface(IInvokable)
+  IChatService = interface(IServiceWithCallbackReleased)
     ['{C92DCBEA-C680-40BD-8D9C-3E6F2ED9C9CF}']
     procedure Join(const pseudo: string; const callback: IChatCallback);
-    procedure BlaBla(const pseudo,msg: string);
-    // match TInterfaceFactory.MethodIndexCallbackReleased method signature
-    procedure CallbackReleased(const callback: IInvokable);
+    procedure BlaBla(const pseudo, msg: string);
   end;
 
 const
-  PROJECT31_TRANSMISSION_KEY = 'longwork_privatekey';
+  PROJECT31_TRANSMISSION_KEY = 'meow_privatekey';
 
   
 implementation

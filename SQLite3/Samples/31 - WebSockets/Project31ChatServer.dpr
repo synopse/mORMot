@@ -15,7 +15,7 @@ uses
 {$APPTYPE CONSOLE}
 
 type
-  TChatService = class(TInterfacedObjectLocked,IChatService)
+  TChatService = class(TInterfacedObject,IChatService)
   protected
     fConnected: array of IChatCallback;
   public
