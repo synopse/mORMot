@@ -434,6 +434,7 @@ unit SynCommons;
     TSynPersistent abstract classes, allowing to define virtual constructors for
     TPersistent kind of objects (used e.g. with internal JSON serialization,
     for interface-based services, or for DDD objects)
+  - introducing TInterfacedObjectLocked class
   - introducing TSynAuthentication class for simple generic authentication
   - introducing TSynConnectionDefinition class used e.g. for JSON-defined
     runtime instantiation of a TSQLDBConnectionProperties or TSQLRest instance
@@ -4418,6 +4419,23 @@ type
     // inherited classes may safely override this default void implementation
     constructor Create; virtual;
   end;
+
+  /// adding locking methods to a TInterfacedObject with virtual constructor
+  TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fLock: TRTLCriticalSection;
+    PaddingForLock: array[0..11] of Int64; // just like TSynCriticalSection
+  public
+    /// initialize the object instance, and its associated lock
+    constructor Create; override;
+    /// release the instance (including the locking resource)
+    destructor Destroy; override;
+    /// lock the instance for exclusive access
+    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
+    /// release the instance for exclusive access
+    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+  end;
+  
   {$M-}
 
   /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
@@ -6468,7 +6486,8 @@ type
     PaddingForLock: array[0..9] of Int64; // just like TSynCriticalSection
   public
     /// initialize the list instance
-    // - the stored TObject instances will be owned by this TObjectListLocked
+    // - the stored TObject instances will be owned by this TObjectListLocked,
+    // unless AOwnsObjects is set to false
     constructor Create(AOwnsObjects: Boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
@@ -34188,6 +34207,30 @@ end;
 
 constructor TInterfacedObjectWithCustomCreate.Create;
 begin // nothing to do by default - overridden constructor may add custom code
+end;
+
+{ TInterfacedObjectLocked }
+
+constructor TInterfacedObjectLocked.Create;
+begin
+  inherited Create;
+  InitializeCriticalSection(fLock);
+end;
+
+destructor TInterfacedObjectLocked.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fLock);
+end;
+
+procedure TInterfacedObjectLocked.Lock;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TInterfacedObjectLocked.UnLock;
+begin
+  LeaveCriticalSection(fLock);
 end;
 
 
