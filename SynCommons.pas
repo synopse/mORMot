@@ -4588,6 +4588,8 @@ procedure ObjArrayClear(var aObjArray);
 procedure ObjArrayObjArrayClear(var aObjArray);
 
 
+{$ifndef DELPHI5OROLDER}
+
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
 
@@ -4606,6 +4608,7 @@ function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): integ
 // - do nothing if the item is not found in the dynamic array
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer); overload;
 
+{$endif DELPHI5OROLDER}
 
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
@@ -34043,6 +34046,8 @@ begin
   end;
 end;
 
+{$ifndef DELPHI5OROLDER}
+
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
 var a: TInterfaceDynArray absolute aInterfaceArray;
 begin
@@ -34080,6 +34085,8 @@ begin
   if result>=0 then
     InterfaceArrayDelete(aInterfaceArray,result);
 end;
+
+{$endif DELPHI5OROLDER}
 
 
 { TObjectHash }
