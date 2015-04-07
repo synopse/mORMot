@@ -6331,6 +6331,7 @@ function ObjectToJSON(Value: TObject;
 
 
 type
+{$ifndef LVCL}
   /// implements a cross-platform enhanced mutex
   // - includes a TryEnter method for older versions of Delphi (e.g. Delphi 6-7)
   // - fix potential CPU cache conflict, as reported by
@@ -6346,6 +6347,7 @@ type
     {$endif}
     {$endif}
   end;
+{$endif}
 
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
   // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
@@ -38758,6 +38760,7 @@ begin
 {$endif}
 end;
 
+{$ifndef LVCL}
 
 { TSynCriticalSection }
 
@@ -38770,6 +38773,7 @@ end;
 {$endif}
 {$endif}
 
+{$endif LVCL}
 
 { TSynCache }
 

@@ -1049,6 +1049,7 @@ unit mORMot;
     - fixed BATCH process to generate valid JSON content
     - fixed BATCH process to check for the TSQLAccessRights of the current
       logged user just like other CRUD methods, as reported by [27cf02be50]
+    - ensure BATCH process take place within execORMWrite context [c47b9ef5800]
     - added optional CustomFields parameter to TSQLRest.BatchUpdate()
       and BatchAdd() methods - TModTime fields will always be sent
     - implemented automatic transaction generation during BATCH process via
@@ -13180,6 +13181,7 @@ type
 {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
+    fPublishedMethodBatchIndex: integer;
     fStats: TSQLRestServerMonitor;
     fStatLevels: TSQLRestServerMonitorLevels;
     fShutdownRequested: boolean;
@@ -31037,6 +31039,7 @@ end;
 
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
 var t: integer;
+    tmp: RawUTF8;
 begin
   // specific server initialization
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
@@ -31077,6 +31080,10 @@ begin
   ServiceMethodRegisterPublishedMethods('',self);
   ServiceMethodByPassAuthentication('Auth');
   ServiceMethodByPassAuthentication('TimeStamp');
+  tmp := 'Batch';
+  fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
+  if fPublishedMethodBatchIndex<0 then
+    raise EORMException.CreateUTF8('%.Create: no Batch method!',[self]);
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
@@ -32741,6 +32748,10 @@ var OK: boolean;
     Blob: PPropInfo;
     SQLSelect, SQLWhere, SQLSort, SQLDir: RawUTF8;
 begin
+  if MethodIndex=Server.fPublishedMethodBatchIndex then begin
+    ExecuteSOAByMethod; // run the BATCH process in execORMWrite context
+    exit;
+  end;
   if not Call.RestAccessRights^.CanExecuteORMWrite(
      Method,Table,TableIndex,TableID,self) then begin
     Call.OutStatus := HTML_FORBIDDEN;
@@ -33536,7 +33547,9 @@ begin
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
-          Ctxt.Command := execSOAByMethod else
+          if Ctxt.MethodIndex=fPublishedMethodBatchIndex then
+            Ctxt.Command := execORMWrite else
+            Ctxt.Command := execSOAByMethod else
         if Ctxt.Service<>nil then
           Ctxt.Command := execSOAByInterface else
         if Ctxt.Method in [mLOCK,mGET,mUNLOCK,mSTATE] then
