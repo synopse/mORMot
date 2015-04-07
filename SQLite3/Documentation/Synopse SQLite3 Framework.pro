@@ -619,14 +619,14 @@ label="         Featuring";
 }
 =SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle
 =NoSQLDB=MongoDB\nIn-Memory\nFiles
-=Services=Method-based Services\nInterface-based Services\nRemote (Saas) Services
-=Featured=User Management - Security & Rights又essions - Logging - Performance - Profiling士ttp.sys - MultiCore - Unit Testing - Mocks/Stubs三emplates (MVC) - JavaScript Engine - JSON卜eporting - PDF - Automated UI
+=Services=Method-based Services\nInterface-based Services\nAsynchronous (Push) Services\nRemote (Saas) Services
+=Featured=User Management - Security & Rights - Sessions - Replication下nit Testing - Mocks/Stubs - Logging - Performance - Profiling士ttp.sys - WebSockets - MultiCore - Templates (MVC) 入SON - JavaScript Engine -  Reporting - PDF - UI
 \
 {\i mORMot} offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.
 For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
 For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
 For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
-If you need a HTTP server, a proxy @*redirection@, master/slave @*replication@, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
+If you need a HTTP server, a proxy @*redirection@, master/slave @*replication@, @*publish-subscribe@, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
 The table content of this document makes it clear: this is no ordinary piece of software.
 The {\i mORMot} framework provides an Open Source {\i self-sufficient set of units} (even {\i Delphi} starter edition is enough) for creating any {\i Multi-@*tier@} application, up to the most complex {\i @*Domain-Driven@} design - see @54@:
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
@@ -9727,6 +9727,11 @@ Purpose of those methods is just to create and launch the {\f1\fs20 TLongWorkSer
 We have to explicitly call {\f1\fs20 TSQLHttpServer.WebSocketsEnable()} so that this server would be able to upgrade to our {\i WebSockets} protocol, using our binary framing, and the very same encryption key as on the client side - shared as a {\f1\fs20 PROJECT31_TRANSMISSION_KEY} constant in the sample, but which may be safely stored on both sides.
 :  Publish-subscribe for events
 In @*event-driven@ architectures, the {\i @**publish-subscribe@} messaging pattern is a way of letting senders (called {\i publishers}) transmit messages to their receivers (called {\i subscribers}), without any prior knowledge of who those subscribers are. In practice, the {\i subscribers} will express interest for a set of messages, which will be sent by the {\i publisher} to all the {\i subscribers} of a given message, as soon as it is be notified.
+\graph PublishSubscribe1 Publish-Subscribe Pattern
+\Publisher\Subscriber 1\Event
+\Publisher\Subscriber 2\Event
+\Publisher\Subscriber 3
+\
 In our @63@ implementation, messages are gathered in {\f1\fs20 interface} types, and each message defined as a single method, their content being the methods parameters.\line Most of the SOA alternative (in Java or C#) do require class definition for messages. Our KISS approach will just use method parameters values as message definition.
 To maintain a list of {\i subscribers}, the easiest is to store a {\i dynamic array} of {\f1\fs20 interface} instances, on the {\i publisher} side.
 :   Defining the interfaces
@@ -9744,7 +9749,13 @@ So you first define the callback interface, and the service interface:
 !    procedure BlaBla(const pseudo,msg: string);
 !    procedure CallbackReleased(const callback: IInvokable);
 !  end;
-Those interface types will be shared by both server and client sides, in the common {\f1\fs20 Project31ChatCallbackInterface.pas} unit. The definition is pretty close to what we wrote when @152@. The only additional method is {\f1\fs20 IChatServer.CallbackReleased()}, which, by convention, will be called on the server side when any {\f1\fs20 callback} interface instance is released on the client side.
+Those interface types will be shared by both server and client sides, in the common {\f1\fs20 Project31ChatCallbackInterface.pas} unit. The definition is pretty close to what we wrote when @152@.
+\graph PublishSubscribeChat Chat Application using Publish-Subscribe
+\IChatService\IChatCallback 1\BlaBla()
+\IChatService\IChatCallback 2\BlaBla()
+\IChatService\IChatCallback 3
+\
+The only additional method is {\f1\fs20 IChatServer.CallbackReleased()}, which, by convention, will be called on the server side when any {\f1\fs20 callback} interface instance is released on the client side.
 As such, the {\f1\fs20 IChatService.Join()} method will implement the {\i subscription} to the chat service, whereas {\f1\fs20 IChatServer.CallbackReleased()} will be called when the client-side callback instance will be released (i.e. when its variable will be assigned to {\f1\fs20 nil}), to {\i unsubscribe} for the chat service.
 :   Writing the Publisher
 On the server side, each call to {\f1\fs20 IChatService.Join()} would {\i subscribe} to an internal list of connections, simply stored as an {\f1\fs20 array of IChatCallback}:
@@ -9775,7 +9786,7 @@ Note that every call to {\f1\fs20 IChatCallback.BlaBla()} within the loop would 
 On the server side, the service implementation has been registered as such:
 !  Server.ServiceDefine(TChatService,[IChatService],sicShared).
 !    SetOptions([],[optExecLockedPerInterface]);
-Here, the {\f1\fs20 optExecLockedPerInterface} option has been set, so that all method calls would be made thread-safe, so that concurrent access to the internal {\f1\fs20 fConnected[]} list would be safe. Since a global list of connections is to be maintained, the service life time is defined as {\f1\fs20 sicShared} - see @92@.
+Here, the {\f1\fs20 optExecLockedPerInterface} option has been set, so that all method calls would be made thread-safe: concurrent access to the internal {\f1\fs20 fConnected[]} list would be protected by a lock. Since a global list of connections is to be maintained, the service life time has been defined as {\f1\fs20 sicShared} - see @92@.
 The following method will be called by the server, when a client callback instance is released (either explicitly, or if the connection is broken), so could be used to {\i unsubscribe} to the notification, simply by deleting the callback from the internal {\f1\fs20 fConnected[]} array:
 !procedure TChatService.CallbackReleased(const callback: IInvokable);
 !begin
@@ -9783,7 +9794,7 @@ The following method will be called by the server, when a client callback instan
 !end;
 The framework will in fact recognize the following method definition in any {\f1\fs20 interface} type for a service:
 !   procedure CallbackReleased(const callback: IInvokable);
-When a callback {\f1\fs20 interface} parameter (in our case, {\f1\fs20 IChatCallback}) will be released on the client side, this method will be called with the corresponding {\f1\fs20 interface} instance as parameter. You do not have to call explicitly any method on the client side to {\i unsubscribe} a service: assigning {\i nil} to a callback variable, or feeing the {\f1\fs20 class} instance owning it as a field on the {\i subscriber} side, will automatically unregister it on the {\i publisher} side.
+When a callback {\f1\fs20 interface} parameter (in our case, {\f1\fs20 IChatCallback}) will be released on the client side, this method will be called with the corresponding {\f1\fs20 interface} instance as parameter. You do not have to call explicitly any method on the client side to {\i unsubscribe} a service: assigning {\i nil} to a callback variable, or freeing the {\f1\fs20 class} instance owning it as a field on the {\i subscriber} side, will automatically unregister it on the {\i publisher} side.
 :   Consuming the service from the Subscriber side
 On the client side, you implement the {\f1\fs20 IChatCallback} callback interface:
 !type
