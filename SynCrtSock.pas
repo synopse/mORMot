@@ -2715,12 +2715,12 @@ begin
     if fSock<0 then
       raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
         [BINDTXT[doBind],aServer,Port,WSAGetLastError]);
-    if TimeOut>0 then begin // set timeout in OPEN/BIND modes
-      ReceiveTimeout := TimeOut;
-      SendTimeout := TimeOut;
-    end;
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
+  if TimeOut>0 then begin // set timout values for both directions
+    ReceiveTimeout := TimeOut;
+    SendTimeout := TimeOut;
+  end;
   TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
   KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
 end;
