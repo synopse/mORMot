@@ -34680,6 +34680,7 @@ var EndOfObject: AnsiChar;
     RunMainTransaction: boolean;
     ID: TID;
     Count: integer;
+    timeoutTix: Int64;
     batchOptions: TSQLRestBatchOptions;
     RunTable, RunningBatchTable: TSQLRecordClass;
     RunTableIndex,i,TableIndex: integer;
@@ -34734,10 +34735,6 @@ begin
   if IdemPChar(Sent,'"AUTOMATICTRANSACTIONPERROW",') then begin
     inc(Sent,29);
     AutomaticTransactionPerRow := GetNextItemCardinal(Sent,',');
-    if (AutomaticTransactionPerRow>0) and (TransactionActiveSession<>0) then begin
-      InternalLog('Active Transaction -> ignore AutomaticTransactionPerRow',sllWarning);
-      AutomaticTransactionPerRow := 0;
-    end;
   end else
     AutomaticTransactionPerRow := 0;
   SetLength(RunTableTransactions,Model.TablesMax+1);
@@ -34795,14 +34792,22 @@ begin
         inc(RowCountForCurrentTransaction);
         if RunTableTransactions[RunTableIndex]=nil then
           // initiate transaction for this table if not started yet
-          if (RunStatic<>nil) or not RunMainTransaction then
-            if RunningRest.TransactionBegin(RunTable,CONST_AUTHENTICATION_NOT_USED) then begin
-              RunTableTransactions[RunTableIndex] := RunningRest;
-              if RunStatic=nil then
-                RunMainTransaction := true;
-            end else
-            InternalLog('%.EngineBatchSend: %.TransactionBegin failed -> no transaction',
-              [ClassType,RunningRest.ClassType],sllWarning);
+          if (RunStatic<>nil) or not RunMainTransaction then begin
+            timeoutTix := GetTickCount64+2000;
+            repeat
+              if RunningRest.TransactionBegin(RunTable, // acquire transaction
+                   CONST_AUTHENTICATION_NOT_USED) then begin
+                RunTableTransactions[RunTableIndex] := RunningRest;
+                if RunStatic=nil then
+                  RunMainTransaction := true;
+                Break;
+              end;
+              if GetTickCount64>timeoutTix then
+                raise EORMBatchException.CreateUTF8(
+                  '%.EngineBatchSend: %.TransactionBegin timeout',[self,RunningRest]);
+              SleepHiRes(1); // retry in 1 ms
+            until false;
+          end;
       end;
       // handle batch pending request sending (if table or method changed)
       if (RunningBatchRest<>nil) and
@@ -34837,7 +34842,8 @@ begin
             [self,ErrMsg]);
         OK := EngineDelete(RunTableIndex,ID);
         if OK then begin
-          fCache.NotifyDeletion(RunTable,ID);
+          if fCache<>nil then
+            fCache.NotifyDeletion(RunTableIndex,ID);
           if (RunningBatchRest<>nil) or
              AfterDeleteForceCoherency(RunTable,ID) then
             Results[Count] := HTML_SUCCESS; // 200 OK
@@ -34855,8 +34861,8 @@ begin
             [self,ErrMsg]);
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
-        if ID<>0 then
-          fCache.Notify(RunTable,ID,Value,soInsert);
+        if (ID<>0) and (fCache<>nil) then
+          fCache.Notify(RunTableIndex,ID,Value,soInsert);
       end;
       mPUT: begin // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
         Value := JSONGetObject(Sent,@ID,EndOfObject,false);
@@ -34868,8 +34874,8 @@ begin
         OK := EngineUpdate(RunTableIndex,ID,Value);
         if OK then begin
           Results[Count] := HTML_SUCCESS; // 200 OK
-          fCache.NotifyDeletion(RunTable,ID); // Value does not have CreateTime e.g.
-          // or may be complete -> update won't work as expected -> delete from cache
+          if fCache<>nil then // JSON Value may be uncomplete -> delete from cache
+            fCache.NotifyDeletion(RunTableIndex,ID);
         end;
       end;
       else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
