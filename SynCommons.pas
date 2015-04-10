@@ -8044,6 +8044,10 @@ function Base64ToBin(const s: RawByteString): RawByteString; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from Base64 encoded text into binary data
+procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
 
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC
 // '\uFFF0base64encodedbinary' content into binary
@@ -18491,6 +18495,11 @@ begin
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
+begin
+  Base64ToBin(sp,len,result);
+end;
+
+procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
 var resultLen: PtrInt;
 begin
   resultLen := Base64ToBinLength(sp,len);
