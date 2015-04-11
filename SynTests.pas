@@ -247,7 +247,8 @@ type
     property TestCaseIndex: integer read fTestCaseIndex;
   published
     { all published methods of the children will be run as individual tests
-      - these methods must be declared as procedure with no parameter }
+      - these methods must be declared as procedure with no parameter
+      - the method name will be used, after "uncamelcasing", for display }
   end;
 
   /// class-reference type (metaclass) of a test case
