@@ -5036,7 +5036,7 @@ type
     // a generic VCL string content: so before Delphi 2009, you may loose
     // some characters at decoding from UTF-8 input buffer
     // - raise an EParsingException if the parameter is not found
-    property Input[const ParamName: RawUTF8]: variant read GetInput;
+    property Input[const ParamName: RawUTF8]: variant read GetInput; default;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
     // a generic VCL string content: so before Delphi 2009, you may loose
