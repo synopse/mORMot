@@ -9833,6 +9833,42 @@ You could easily implement more complex {\i publish/subscribe} mechanisms, inclu
 If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshaling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and JSON marshalling over TCP/IP).
 \page
 : Implementation details
+:  Error handling
+Usually, in Delphi application (like in most high-level languages), errors are handled via {\i exceptions}. By default, any {\f1\fs20 Exception} raised on the server side, within an {\f1\fs20 interface}-based service method, will be intercepted, and transmitted as an error to the client side, then a safe but somewhat obfuscated {\f1\fs20 EInterfaceFactoryException} will be raised on the client side, containing additional information serialized as JSON.
+You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not value objects, but true class instances, with some methods, potentially and a specific behavior within the Delphi language. A Delphi {\f1\fs20 exception} is something very specific, and would not be easily converted into e.g. a JavaScript, Java or C# exception.\line Furthermore, re-creating and raising an instance of the same {\f1\fs20 exception} which occurred on the server side would induce a strong dependency of the client code. For instance, if the server side raise a {\f1\fs20 ESQLDBOracle} exception, linking your client side with the whole {\f1\fs20 SynDBOracle.pas} unit just for exception would be a huge issue. The {\f1\fs20 ESQLDBOracle} exception, by itself, contains a link to an {\i Oracle} statement instance, which would be lost when transmitted over the wire. Some client platforms (e.g. mobile or AJAX) do not even have any knowledge of what an {\i Oracle} database is...\line As such, {\f1\fs20 exception} are not good candidate on serialization, and transmission per value, from the server side to the client side. We would NOT be in favor of propagating exceptions to the client side.
+This is why exceptions should better be intercepted on the server side, with a {\f1\fs20 try .. except} block within the service methods, then converted into low level DTO types, specific to the service, then explicitly transmitted as error codes to the client.
+For instance, you may use an {\i enumerate}, in conjunction with a variant for additional structured information (as a string or a more complex {\f1\fs20 TDocVariant}), to transmit an error to the client side.
+See for instance how {\f1\fs20 ICQRSQuery}, and its associated {\f1\fs20 TCQRSResult} enumeration, are defined in {\f1\fs20 mORMotDDD.pas}:
+!type
+!  TCQRSResult =
+!    (cqrsSuccess, cqrsSuccessWithMoreData,
+!     cqrsUnspecifiedError, cqrsBadRequest,
+!     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
+!     cqrsInternalError, cqrsDDDValidationFailed,
+!     cqrsInvalidContent, cqrsAlreadyExists,
+!     ...
+!
+!  ICQRSQuery = interface(IInvokable)
+!    ['{923614C8-A639-45AD-A3A3-4548337923C9}']
+!    function GetLastError: TCQRSResult;
+!    function GetLastErrorInfo: variant;
+!  end;
+The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub of mock of the interfaces, methods will return as successful, as expected - see @62@.
+When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSResult} enumeration value is returned as result, so that error would be transmitted directly:
+!function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
+!...
+!begin
+!!  CqrsBeginMethod(qaNone,result);
+!  try
+!....
+!    CqrsSetResult(cqrsSuccess);
+!  except
+!!    on E: Exception do
+!!      CqrsSetResult(E,cqrsInternalError);
+!  end;
+!end;
+The {\f1\fs20 mORMotDDD.pas} unit defines, in the {\f1\fs20 TCQRSQueryObject} abstract {\f1\fs20 class}, some protected methods to handle errors and exceptions as expected by {\f1\fs20 ICQRSQuery}, e.g. the {\f1\fs20 TCQRSQueryObject.CqrsSetResult()} method will set {\f1\fs20 result := cqrsInternalError} and serialize the {\f1\fs20 E: Exception} within the internal variant used for additional error, ready to be retrieved using {\f1\fs20 ICQRSQuery.GetLastErrorInfo}.
+{\f1\fs20 Exception}s are very useful to interrupt a process in case of a catastrophic failure, but they are not the best method for transmitting errors over remote services. Some newer languages (e.g. {\i Google}'s {\f1\fs20 Go}), would even not define any exception types, but rely on returned values, to transmit the errors. - see @https://golang.org/doc/faq#exceptions - in our client-server error handling design, we followed the same idea.
 :77  Security
 As stated in the features grid of @63@, a complete @*security@ pattern is available when using client-server services. In a @17@, securing messages between clients and services is essential to protecting data.
 Security is implemented at several levels, following the main security patterns of {\i mORMot} - see @43@:
