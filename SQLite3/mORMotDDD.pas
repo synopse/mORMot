@@ -899,7 +899,9 @@ begin
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
+  {$ifdef WITHLOG}
   Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self],self);
+  {$endif}
 end;
 
 constructor TDDDRepositoryRestFactory.Create(const aInterface: TGUID;
@@ -912,7 +914,9 @@ end;
 
 destructor TDDDRepositoryRestFactory.Destroy;
 begin
+  {$ifdef WITHLOG}
   Rest.LogClass.Add.Log(sllDDDInfo,'Destroying %',[self],self);
+  {$endif}
   fAggregateRTTI.Free;
   ObjArrayClear(fGarbageCollector);
   inherited;
@@ -1265,7 +1269,9 @@ begin
   result := TDDDRepositoryRestFactory.Create(
     aInterface,aImplementation,aAggregate,aRest,aTable,TableAggregatePairs,self);
   ObjArrayAdd(fFactory,result);
+  {$ifdef WITHLOG}
   aRest.LogClass.Add.Log(sllDDDInfo,'Added factory % to %',[result,self],self);
+  {$endif}
 end;
 
 destructor TDDDRepositoryRestManager.Destroy;
@@ -1313,9 +1319,11 @@ end;
 procedure TDDDRepositoryRestQuery.AfterInternalCqrsSetResult;
 begin
   inherited AfterInternalCqrsSetResult;
+  {$ifdef WITHLOG}
   if (fLastError<>cqrsSuccess) and
      (sllDDDError in Factory.Rest.LogFamily.Level) then
     Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext],self);
+  {$endif}
 end;
 
 function TDDDRepositoryRestQuery.CqrsBeginMethod(aAction: TCQRSQueryAction;
@@ -1745,15 +1753,21 @@ end;
 
 function TDDDMonitoredDaemon.Start: TCQRSResult;
 var i: integer;
+    {$ifdef WITHLOG}
     Log: ISynLog;
+    {$endif}
     dummy: variant;
 begin
+  {$ifdef WITHLOG}
   Log := Rest.LogClass.Enter(self);
+  {$endif}
   if fProcessClass=nil then
     raise EDDDException.CreateUTF8('%.Start with no fProcessClass',[self]);
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
+  {$ifdef WITHLOG}
   Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount],self);
+  {$endif}
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
@@ -1764,13 +1778,17 @@ end;
 function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 var i: integer;
     allfinished: boolean;
+    {$ifdef WITHLOG}
     Log: ISynLog;
+    {$endif}
 begin
   fProcessTimer.Pause;
   CqrsBeginMethod(qaNone,result);
   try
     if fProcess<>nil then begin
+      {$ifdef WITHLOG}
       Log := Rest.LogClass.Enter(self);
+      {$endif}
       for i := 0 to high(fProcess) do
         fProcess[i].Terminate;
       repeat
@@ -1783,7 +1801,9 @@ begin
           end;
       until allfinished;
       Information := GetStatus;
+      {$ifdef WITHLOG}
       Log.Log(sllTrace,'Stopped %',[Information],self);
+      {$endif}
       ObjArrayClear(fProcess);
     end;
     CqrsSetResult(cqrsSuccess);

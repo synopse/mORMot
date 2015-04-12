@@ -7862,8 +7862,10 @@ var
 
 function TTestSQLite3Engine.OnBackupProgress(Sender: TSQLDatabaseBackupThread): Boolean;
 begin
+  {$ifdef WITHLOG}
   if Sender.Step in backupFinished then
     SQLite3Log.Add.Log(sllDB,'Background backup finished in '+BackupTimer.Stop);
+  {$endif}
   BackupProgressStep := Sender.Step;
   result := true;
 end;
