@@ -16131,7 +16131,8 @@ threadvar
   // service context (on the server side)
   // - is set by TServiceFactoryServer.ExecuteMethod() just before calling the
   // implementation method of a service, allowing to retrieve the current
-  // execution context
+  // execution context - Request member is set from a client/server execution:
+  // Request.Server is the safe access point to the underlying TSQLRestServer
   // - its content is reset to zero out of the scope of a method execution
   // - when used, a local copy or a PServiceRunningContext pointer should better
   // be created, since accessing a threadvar has a non negligible performance
@@ -31041,6 +31042,8 @@ constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: 
 var t: integer;
     tmp: RawUTF8;
 begin
+  if aModel=nil then
+    raise EORMException.CreateUTF8('%.Create(Model=nil)',[self]);
   // specific server initialization
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fVirtualTableDirect := true; // faster direct Static call by default
