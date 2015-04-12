@@ -8026,11 +8026,10 @@ This method, like all Server-side methods, MUST have the same exact parameter de
 Then we implement this method:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !begin
-!  with Ctxt do
-!    Results([Input['a']+Input['b']]);
+!  Ctxt.Results([Ctxt['a']+Ctxt['b']]);
 !end;
-The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
-Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
+The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}. The {\f1\fs20 Ctxt.Input[]} array property, returning {\f1\fs20 variant} values, has been defined as {\f1\fs20 default} array property for the {\f1\fs20 TSQLRestServerURIContext} class, so writing {\f1\fs20 Ctxt['a']} is the same as writing {\f1\fs20 Ctxt.Input['a']}.
+Therefore, the code above using {\f1\fs20 Ctxt[]} or {\f1\fs20 Ctxt.Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
 Those methods would raise an {\f1\fs20 EParsingException} exception if the parameter is not available at the URI. So you may want to use {\f1\fs20 InputExists[]} or even {\f1\fs20 InputIntOrVoid[] InputDoubleOrVoid[] InputUTF8OrVoid[] InputOrVoid[]} methods, which won't raise any exception but return a void value (i.e. either {\f1\fs20 0}, {\f1\fs20 ""} or {\f1\fs20 Unassigned}).
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !begin
@@ -8076,10 +8075,11 @@ On the Client side, you can use the {\f1\fs20 CallBackGetResult} method to call 
 This Client-Server protocol uses JSON here, as encoded server-side via {\f1\fs20 Ctxt.Results()} method, but you can serve any kind of data, binary, HTML, whatever... just by overriding the content type on the server with {\f1\fs20 Ctxt.Returns()}.
 \page
 : Direct parameter marshalling on server side
-We have used above the {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
-Here is how we may implement the fastest possible parameters parsing:
+We have used above the {\f1\fs20 Ctxt[]} and {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
+Here is how we may implement the fastest possible parameters parsing - see sample {\f1\fs20 Project06Server.dpr}:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !var a,b: double;
+!begin
 !  if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
 !    while Ctxt.Parameters<>nil do begin
 !      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
@@ -8114,7 +8114,7 @@ Or you can return some binary file, retrieving the corresponding MIME type from 
 !    content: RawByteString;
 !    contentType: RawUTF8;
 !begin
-!  fileName :=  'c:\data\'+ExtractFileName(Ctxt.Input['filename']);
+!  fileName :=  'c:\data\'+ExtractFileName(Ctxt['filename']); // or Ctxt.Input['filename']
 !  content := StringFromFile(fileName);
 !  if content='' then
 !    Ctxt.Error('',HTML_NOTFOUND) else
@@ -9834,10 +9834,12 @@ If you compare with existing client/server SOA solutions (in Delphi, Java, C# or
 \page
 : Implementation details
 :  Error handling
-Usually, in Delphi application (like in most high-level languages), errors are handled via {\i exceptions}. By default, any {\f1\fs20 Exception} raised on the server side, within an {\f1\fs20 interface}-based service method, will be intercepted, and transmitted as an error to the client side, then a safe but somewhat obfuscated {\f1\fs20 EInterfaceFactoryException} will be raised on the client side, containing additional information serialized as JSON.
-You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not value objects, but true class instances, with some methods, potentially and a specific behavior within the Delphi language. A Delphi {\f1\fs20 exception} is something very specific, and would not be easily converted into e.g. a JavaScript, Java or C# exception.\line Furthermore, re-creating and raising an instance of the same {\f1\fs20 exception} which occurred on the server side would induce a strong dependency of the client code. For instance, if the server side raise a {\f1\fs20 ESQLDBOracle} exception, linking your client side with the whole {\f1\fs20 SynDBOracle.pas} unit just for exception would be a huge issue. The {\f1\fs20 ESQLDBOracle} exception, by itself, contains a link to an {\i Oracle} statement instance, which would be lost when transmitted over the wire. Some client platforms (e.g. mobile or AJAX) do not even have any knowledge of what an {\i Oracle} database is...\line As such, {\f1\fs20 exception} are not good candidate on serialization, and transmission per value, from the server side to the client side. We would NOT be in favor of propagating exceptions to the client side.
+Usually, in Delphi applications (like in most high-level languages), errors are handled via {\i exceptions}. By default, any {\f1\fs20 Exception} raised on the server side, within an {\f1\fs20 interface}-based service method, will be intercepted, and transmitted as an HTTP error to the client side, then a safe but somewhat obfuscated {\f1\fs20 EInterfaceFactoryException} will be raised, containing additional information serialized as JSON.
+You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not value objects, but true {\f1\fs20 class} instances, with some methods and potentially internal references to other objects. Most of the time, they are tied to a particular execution context, and even some low-level implementation details. A Delphi {\f1\fs20 exception} is even something very specific, and would not be easily converted into e.g. a {\i JavaScript}, {\i Java} or C# exception.
+In practice, re-creating and raising an instance of the same {\f1\fs20 Exception class} which occurred on the server side would induce a strong dependency of the client code towards the server implementation details. For instance, if the server side raises a {\f1\fs20 ESQLDBOracle} exception, translating it on the other end would link your client side with the whole {\f1\fs20 SynDBOracle.pas} unit, which certainly not worth it. The {\f1\fs20 ESQLDBOracle} exception, by itself, contains a link to an {\i Oracle} statement instance, which would be lost when transmitted over the wire. Some client platforms (e.g. mobile or AJAX) do not even have any knowledge of what an {\i Oracle} database is...\line As such, {\f1\fs20 exception} are not good candidate on serialization, and transmission per value, from the server side to the client side. We would NOT be in favor of propagating exceptions to the client side.
 This is why exceptions should better be intercepted on the server side, with a {\f1\fs20 try .. except} block within the service methods, then converted into low level DTO types, specific to the service, then explicitly transmitted as error codes to the client.
-For instance, you may use an {\i enumerate}, in conjunction with a variant for additional structured information (as a string or a more complex {\f1\fs20 TDocVariant}), to transmit an error to the client side.
+The first rule is that raising {\f1\fs20 exception} should be {\i exceptional} - as its name states: {\f1\fs20 exception}al. I mean, service code should not raise an {\f1\fs20 exception} in normal execution, even in case of wrong input. For instance, a wrong input parameter should lead into an application level error, transmitted as an enumeration item and/or some additional (probably text) information, but the business logic should never raise any {\f1\fs20 exception}. Only in case of low-level unexpected event (e.g. a SQL level failure, a GPF or Access Violation, a communication error with another trusted internal service), the server side may enter in {\i panic} mode, and raise an {\f1\fs20 exception}. Remember that {\f1\fs20 exception}s are intercepted by {\f1\fs20 SynLog.pas} and can be easily logged by our @16@: you would be able to identify the execution context, and find a full stack trace of the issue. But most common errors should be handled at business logic level, even defined in each service layers.
+In practice, you may use an {\i enumerate}, in conjunction with a {\f1\fs20 variant} for additional structured information (as a {\f1\fs20 string} or a more complex {\f1\fs20 TDocVariant}), to transmit an error to the client side. You may define dedicated types at every layer, e.g. with {\f1\fs20 interface} types for {\i Domain} services, or {\i Application} services.
 See for instance how {\f1\fs20 ICQRSQuery}, and its associated {\f1\fs20 TCQRSResult} enumeration, are defined in {\f1\fs20 mORMotDDD.pas}:
 !type
 !  TCQRSResult =
@@ -9853,8 +9855,8 @@ See for instance how {\f1\fs20 ICQRSQuery}, and its associated {\f1\fs20 TCQRSRe
 !    function GetLastError: TCQRSResult;
 !    function GetLastErrorInfo: variant;
 !  end;
-The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub of mock of the interfaces, methods will return as successful, as expected - see @62@.
-When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSResult} enumeration value is returned as result, so that error would be transmitted directly:
+The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub or mock of the interfaces, fake methods will return as successful, as expected - see @62@.
+When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSResult} enumeration value can be returned as result, so that error would be transmitted directly:
 !function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 !...
 !begin
@@ -9867,8 +9869,9 @@ When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSRe
 !!      CqrsSetResult(E,cqrsInternalError);
 !  end;
 !end;
-The {\f1\fs20 mORMotDDD.pas} unit defines, in the {\f1\fs20 TCQRSQueryObject} abstract {\f1\fs20 class}, some protected methods to handle errors and exceptions as expected by {\f1\fs20 ICQRSQuery}, e.g. the {\f1\fs20 TCQRSQueryObject.CqrsSetResult()} method will set {\f1\fs20 result := cqrsInternalError} and serialize the {\f1\fs20 E: Exception} within the internal variant used for additional error, ready to be retrieved using {\f1\fs20 ICQRSQuery.GetLastErrorInfo}.
-{\f1\fs20 Exception}s are very useful to interrupt a process in case of a catastrophic failure, but they are not the best method for transmitting errors over remote services. Some newer languages (e.g. {\i Google}'s {\f1\fs20 Go}), would even not define any exception types, but rely on returned values, to transmit the errors. - see @https://golang.org/doc/faq#exceptions - in our client-server error handling design, we followed the same idea.
+But such {\f1\fs20 exception} should be {\f1\fs20 exception}al, as we already stated.
+The {\f1\fs20 mORMotDDD.pas} unit defines, in the {\f1\fs20 TCQRSQueryObject} abstract {\f1\fs20 class}, some protected methods to handle errors and {\f1\fs20 exception}s as expected by {\f1\fs20 ICQRSQuery}. For instance, the {\f1\fs20 TCQRSQueryObject.CqrsSetResult()} method will set {\f1\fs20 result := cqrsInternalError} and serialize the {\f1\fs20 E: Exception} within the internal variant used for additional error, ready to be retrieved using {\f1\fs20 ICQRSQuery.GetLastErrorInfo}.
+{\f1\fs20 Exception}s are very useful to interrupt a process in case of a catastrophic failure, but they are not the best method for transmitting errors over remote services. Some newer languages (e.g. {\i Google}'s {\f1\fs20 Go}), would even not define any {\f1\fs20 exception} type at language or RTL level, but rely on returned values, to transmit the errors in between execution contexts - see @https://golang.org/doc/faq#exceptions: in our client-server error handling design, we followed the same idea.
 :77  Security
 As stated in the features grid of @63@, a complete @*security@ pattern is available when using client-server services. In a @17@, securing messages between clients and services is essential to protecting data.
 Security is implemented at several levels, following the main security patterns of {\i mORMot} - see @43@:
