@@ -7747,10 +7747,13 @@ type
     // - initialize the fIsUnique[] array from "stored AS_UNIQUE" (i.e. "stored
     // false") published properties of every TSQLRecordClass
     constructor Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8='root'); reintroduce; overload;
+    /// you should not use this constructor, but one of the overloaded versions,
+    // specifying the associated TSQLRecordClass  
+    constructor Create; reintroduce; overload;
     /// clone an existing Database Model
     // - all supplied classes won't be redefined as non-virtual:
     // VirtualTableExternalRegister explicit calls are not mandatory here
-    constructor Create(CloneFrom: TSQLModel); overload;
+    constructor Create(CloneFrom: TSQLModel); reintroduce; overload;
     /// initialize the Database Model from an User Interface parameter structure
     // - this constructor will reset all supplied classes to be defined as
     // non-virtual (i.e. Kind=rSQLite3): VirtualTableExternalRegister explicit
@@ -7759,7 +7762,7 @@ type
       TabParametersCount, TabParametersSize: integer;
       const NonVisibleTables: array of TSQLRecordClass;
       Actions: PTypeInfo=nil; Events: PTypeInfo=nil;
-      const aRoot: RawUTF8='root'); overload;
+      const aRoot: RawUTF8='root'); reintroduce; overload;
     /// release associated memory
     destructor Destroy; override;
     /// add the class if it doesn't exist yet
@@ -27130,6 +27133,8 @@ begin
     raise EModelException.CreateUTF8('%.Create(CloneFrom=nil)',[self]);
   fTables := CloneFrom.fTables;
   fTablesMax := CloneFrom.fTablesMax;
+  if fTablesMax<>High(fTables) then
+    raise EModelException.CreateUTF8('%.Create: incorrect CloneFrom.TableMax',[self]);
   fRoot := CloneFrom.fRoot;
   fActions := CloneFrom.fActions;
   fEvents := CloneFrom.fEvents;
@@ -27166,6 +27171,11 @@ begin
   fRestOwner := Owner;
   SetActions(Actions);
   SetEvents(Events);
+end;
+
+constructor TSQLModel.Create;
+begin
+  raise EModelException.CreateUTF8('Plain %.Create is not allowed: use overloaded Create()',[self]);
 end;
 
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8);
