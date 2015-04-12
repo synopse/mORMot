@@ -403,7 +403,8 @@ type
     // fields, so the following will ensure that all text fields will be
     // trimmed for spaces:
     // !   AddFilterOrValidate(['*'],TSynFilterTrim.Create);
-    // - filters and validators will be applied to the
+    // - filters and validators will be applied to a specified aggregate using
+    // AggregateFilterAndValidate() method
     // - the same filtering classes as with the ORM can be applied to DDD's
     // aggregates, e.g. TSynFilterUpperCase, TSynFilterLowerCase or
     // TSynFilterTrim

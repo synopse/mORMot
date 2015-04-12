@@ -18,6 +18,9 @@ type
 { TServiceServer }
 
 procedure TServiceServer.Sum(Ctxt: TSQLRestServerURIContext);
+// begin // the following would be faster to write, a bit slower to execute:
+//   Ctxt.Results([Ctxt['a']+Ctxt['b']]);
+// end;
 var a,b: double;
 begin
   if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
