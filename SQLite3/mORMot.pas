@@ -869,7 +869,8 @@ unit mORMot;
     - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
       as requested by feature request [842906425928]
     - added TSynAuthenticationRest e.g. for SynDBRemote to check REST users
-    - added TSQLRestServer.OnSessionCreate / OnSessionClosed methods
+    - added TSQLRestServer.OnSessionCreate / OnSessionClosed / OnSessionFailed
+      callbacks, and TSQLRestServerURIContext.AuthenticationFailed virtual method
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
     - CreateMissingTables() method is not declared as virtual in TSQLRestServer
@@ -13325,6 +13326,14 @@ type
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
     // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
+    /// this event handler will be executed when a session failed to initialize
+    // - e.g. if the URI signature is invalid, or OnSessionCreate event handler
+    // aborted the session creation by returning TRUE (in this later case,
+    // the Session parameter is not nil)
+    // - you can access the current execution context from the Ctxt parameter,
+    // e.g. to retrieve the caller's IP:
+    // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
+    OnSessionFailed: TNotifySQLSession;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
     // - Ctxt is nil if the session is closed due to a timeout
@@ -33545,8 +33554,11 @@ begin
       // 2. handle security
       if (not Ctxt.Authenticate) or
          ((Ctxt.Service<>nil) and
-           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
-        Ctxt.AuthenticationFailed else
+           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then begin
+        Ctxt.AuthenticationFailed;
+        if Assigned(OnSessionFailed) then
+          OnSessionFailed(self,nil,Ctxt);
+      end else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -33795,6 +33807,8 @@ begin
             [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
         {$endif}
         Ctxt.Call^.OutStatus := HTML_NOTALLOWED;
+        if Assigned(OnSessionFailed) then
+          OnSessionFailed(self,nil,Ctxt);
         exit; // user already connected -> error 404
       end;
   Session := fSessionClass.Create(Ctxt,User);
@@ -33806,6 +33820,8 @@ begin
         [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
          fStats.ClientsCurrent,fSessions.Count],self);
       {$endif}
+      if Assigned(OnSessionFailed) then
+        OnSessionFailed(self,Session,Ctxt);
       User := nil;
       FreeAndNil(Session); // returning TRUE aborts the session creation
       exit;
@@ -33825,6 +33841,8 @@ begin
     for i := 0 to length(fSessionAuthentication)-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
         exit;
+    if Assigned(OnSessionFailed) then
+      OnSessionFailed(self,nil,Ctxt);
   finally
     fSessions.UnLock;
   end;
