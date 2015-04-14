@@ -71,7 +71,7 @@ begin
     RootURI);
   TSQLNoteKind.AddFilterOrValidate('Name',TSynValidateText.Create('{MinLength:3}'));
   TSQLNote.AddFilterOrValidate('Ident',TSynValidateText.Create('{MinLength:3}'));
-  TSQLNoteFile.AddFilterOrValidate('FileName',TSynValidateText.Create);
+  TSQLNoteFile.AddFilterOrValidate('FileName',TSynValidateNonVoidText.Create);
   TSQLNoteFile.AddFilterOrValidate('FileName',TSynValidateText.Create('{MaxPunctCount:0}'));
 end;
 
