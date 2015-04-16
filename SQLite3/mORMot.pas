@@ -4829,10 +4829,12 @@ type
     function GetInputInt(const ParamName: RawUTF8): Int64;
     function GetInputDouble(const ParamName: RawUTF8): Double;
     function GetInputUTF8(const ParamName: RawUTF8): RawUTF8;
+    function GetInputString(const ParamName: RawUTF8): string;
     function GetInputIntOrVoid(const ParamName: RawUTF8): Int64;
     function GetInputHexaOrVoid(const ParamName: RawUTF8): cardinal;
     function GetInputDoubleOrVoid(const ParamName: RawUTF8): Double;
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
+    function GetInputStringOrVoid(const ParamName: RawUTF8): string;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
@@ -5015,6 +5017,11 @@ type
     /// retrieve one input parameter from its URI name as RawUTF8
     // - raise an EParsingException if the parameter is not found
     property InputUTF8[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8;
+    /// retrieve one input parameter from its URI name as a VCL string
+    // - raise an EParsingException if the parameter is not found
+    // - prior to Delphi 2009, some Unicode characters may be missing in the
+    // returned AnsiString value
+    property InputString[const ParamName: RawUTF8]: string read GetInputString;
     /// retrieve one input parameter from its URI name as Int64
     // - returns 0 if the parameter is not found
     property InputIntOrVoid[const ParamName: RawUTF8]: Int64 read GetInputIntOrVoid;
@@ -5027,6 +5034,17 @@ type
     /// retrieve one input parameter from its URI name as RawUTF8
     // - returns '' if the parameter is not found
     property InputUTF8OrVoid[const ParamName: RawUTF8]: RawUTF8 read GetInputUTF8OrVoid;
+    /// retrieve one input parameter from its URI name as a VCL string
+    // - returns '' if the parameter is not found
+    // - prior to Delphi 2009, some Unicode characters may be missing in the
+    // returned AnsiString value
+    property InputStringOrVoid[const ParamName: RawUTF8]: string read GetInputStringOrVoid;
+    /// retrieve one input parameter from its URI name as RawUTF8
+    // - returns FALSE and call Error(ErrorMessageForMissingParameter) - which
+    // may be a resourcestring - if the parameter is not found
+    // - returns TRUE and set Value if the parameter is found
+    function InputUTF8OrError(const ParamName: RawUTF8; out Value: RawUTF8;
+      const ErrorMessageForMissingParameter: string): boolean;
    /// return TRUE if the input parameter is available at URI
     // - even if InputUTF8['param']='', there may be '..?param=&another=2'
     property InputExists[const ParamName: RawUTF8]: Boolean read GetInputExists;
@@ -5039,10 +5057,19 @@ type
     property Input[const ParamName: RawUTF8]: variant read GetInput; default;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
-    // a generic VCL string content: so before Delphi 2009, you may loose
-    // some characters at decoding from UTF-8 input buffer
+    // a RawUTF8: so before Delphi 2009, you won't loose any Unicode character,
+    // but you should convert its value to AnsiString using UTF8ToString()
     // - returns Unassigned if the parameter is not found
     property InputOrVoid[const ParamName: RawUTF8]: variant read GetInputOrVoid;
+    /// retrieve one input parameter from its URI name as variant
+    // - returns FALSE and call Error(ErrorMessageForMissingParameter) - which
+    // may be a resourcestring - if the parameter is not found
+    // - returns TRUE and set Value if the parameter is found
+    // - if the parameter value is text, it is stored in the variant as
+    // a RawUTF8: so before Delphi 2009, you won't loose any Unicode character,
+    // but you should convert its value to AnsiString using UTF8ToString()
+    function InputOrError(const ParamName: RawUTF8; out Value: variant;
+      const ErrorMessageForMissingParameter: string): boolean;
     /// retrieve all input paramters from URI as a variant JSON object
     // - returns Unassigned if no parameter was defined
     property InputAsTDocVariant: variant read GetInputAsTDocVariant;
@@ -6084,10 +6111,14 @@ type
         for conveniency }
     function GetSQLSet: RawUTF8;
     /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
-    // - layout and fields are set at TJSONSerializer construction
+    // - layout and fields should have been set at TJSONSerializer construction:
+    // to append some content to an existing TJsonSerializer, call the
+    // AppendAsJsonObject() method
     procedure GetJSONValues(W : TJSONSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
-    // - layout and fields are set at TJSONSerializer construction
+    // - layout and fields should have been set at TJSONSerializer construction:
+    // to append some content to an existing TJsonSerializer, call the
+    // AppendAsJsonObject() method
     // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
   	// and the supplied TJSONSerializer instance will be freed by this method
     procedure GetJSONValuesAndFree(JSON : TJSONSerializer); overload;
@@ -6110,6 +6141,11 @@ type
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; withID: boolean;
       const Fields: TSQLFieldBits): RawUTF8; overload;
+    /// will append the record fields as an expanded JSON object
+    // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
+    // method will add the JSON object directly to any TJSONSerializer
+    procedure AppendAsJsonObject(W: TJSONSerializer;
+      const Fields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]);
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TFileBufferWriter); overload;
@@ -6755,8 +6791,12 @@ type
     // of the returned data (by default, all rows are retrieved)
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
       RowFirst: integer=0; RowLast: integer=0); overload;
-    /// same as above, but returning result into a RawUTF8
+    /// same as the overloaded method, but returning result into a RawUTF8
     function GetJSONValues(Expand: boolean): RawUTF8; overload;
+    /// same as the overloaded method, but appending an array to a TTextWriter
+    // - will call W.FlushToStream, then append all content
+    procedure GetJSONValues(W: TTextWriter; Expand: boolean;
+      RowFirst: integer=0; RowLast: integer=0); overload;
     /// save the table in CSV format
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -7078,7 +7118,7 @@ type
     property QueryTables: TSQLRecordClassDynArray read fQueryTables;
     /// contains the associated SQL statement on Query
     property QuerySQL: RawUTF8 read fQuerySQL;
-    /// read-only access to the number of data Row in this table
+    /// read-only access to the number of data Rows in this table
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself
     property RowCount: integer read GetRowCount;
@@ -20577,6 +20617,16 @@ begin
   end;
 end;
 
+procedure TSQLTable.GetJSONValues(W: TTextWriter; Expand: boolean;
+  RowFirst: integer=0; RowLast: integer=0);
+begin
+  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
+    W.Add('[',']') else begin
+    W.FlushToStream;
+    GetJSONValues(W.Stream,Expand,RowFirst,RowLast);
+  end;
+end;
+
 procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar=',';
   AddBOM: boolean=false);
 var U: PPUTF8Char;
@@ -25509,6 +25559,27 @@ begin
   W.CancelLastComma; // cancel last ','
   if W.Expand then
     W.Add('}');
+end;
+
+procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; const Fields: TSQLFieldBits);
+var i: integer;
+    Props: TSQLPropInfoList;
+begin
+  if Self=nil then begin
+    W.AddShort('null');
+    exit;
+  end;
+  Props := RecordProps.Fields;
+  W.AddShort('{"ID":');
+  W.Add(fID);
+  for i := 0 to Props.Count-1 do
+    if i in Fields then begin
+      W.Add(',','"');
+      W.AddNoJSONEscape(pointer(Props.List[i].Name));
+      W.Add('"',':');
+      Props.List[i].GetJSONValues(Self,W);
+    end;
+  W.Add('}');
 end;
 
 procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
@@ -32995,6 +33066,41 @@ begin
     result := fInput[i*2+1];
 end;
 
+function TSQLRestServerURIContext.InputUTF8OrError(const ParamName: RawUTF8;
+  out Value: RawUTF8; const ErrorMessageForMissingParameter: string): boolean;
+var i: integer;
+begin
+  i := GetInputNameIndex(ParamName);
+  if i<0 then begin
+    if ErrorMessageForMissingParameter='' then
+      Error(FormatUTF8('Missing "%" parameter',[ParamName])) else
+      Error(StringToUTF8(ErrorMessageForMissingParameter));
+    result := false;
+  end else begin
+    Value := fInput[i*2+1];
+    result := true;
+  end;
+end;
+
+function TSQLRestServerURIContext.GetInputString(const ParamName: RawUTF8): string;
+var i: integer;
+begin
+  i := GetInputNameIndex(ParamName);
+  if i<0 then
+    raise EParsingException.CreateUTF8('%.GetInputString(%): parameter not found',
+      [self,ParamName]);
+  result := UTF8ToString(fInput[i*2+1]);
+end;
+
+function TSQLRestServerURIContext.GetInputStringOrVoid(const ParamName: RawUTF8): string;
+var i: integer;
+begin
+  i := GetInputNameIndex(ParamName);
+  if i<0 then
+    result := '' else
+    result := UTF8ToString(fInput[i*2+1]);
+end;
+
 function TSQLRestServerURIContext.GetInputExists(const ParamName: RawUTF8): Boolean;
 begin
   result := GetInputNameIndex(ParamName)>=0;
@@ -33010,6 +33116,15 @@ end;
 function TSQLRestServerURIContext.GetInputOrVoid(const ParamName: RawUTF8): variant;
 begin
   GetVariantFromJSON(pointer(GetInputUTF8OrVoid(ParamName)),false,Result);
+end;
+
+function TSQLRestServerURIContext.InputOrError(const ParamName: RawUTF8;
+  out Value: variant; const ErrorMessageForMissingParameter: string): boolean;
+var ValueUTF8: RawUTF8;
+begin
+  result := InputUTF8OrError(ParamName,ValueUTF8,ErrorMessageForMissingParameter);
+  if result then
+    GetVariantFromJSON(pointer(ValueUTF8),False,Value);
 end;
 
 function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
@@ -43094,7 +43209,7 @@ begin
           smvInt64:      SetInt64(Val,PInt64(V)^);
           smvDouble,smvDateTime: PDouble(V)^ := GetExtended(Val);
           smvCurrency:   PInt64(V)^   := StrToCurr64(Val);
-          smvRawUTF8:    PRawUTF8(V)^ := Val;
+          smvRawUTF8:    SetString(PRawUTF8(V)^,PAnsiChar(Val),StrLen(Val));
           smvString:     UTF8DecodeToString(Val,StrLen(Val),PString(V)^);
           smvWideString: UTF8ToWideString(Val,StrLen(Val),PWideString(V)^);
           else RaiseError('ValueType=%',[ord(ValueType)]);
