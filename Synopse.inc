@@ -71,7 +71,7 @@
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     http://synopse.info/forum/viewtopic.php?id=1394
   - enhanced FPC compatibility
-  - now handles Delphi XE3, XE4, XE5, XE6 and XE7 (32 and 64 bit)
+  - now handles Delphi XE3, XE4, XE5, XE6, XE7 and XE8 (32 and 64 bit)
 
 }
 

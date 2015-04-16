@@ -1551,8 +1551,13 @@ begin
     fRestServer := aRestServer;
   if aViews=nil then
     aViews := TMVCViewsMustache.Create(
-      aApplication.fFactory.InterfaceTypeInfo,fRestServer.LogClass,'.html') else
+      aApplication.fFactory.InterfaceTypeInfo,
+    {$ifdef WITHLOG}
+        fRestServer.LogClass,'.html') else
     aViews.fLogClass := fRestServer.LogClass;
+    {$else}
+        TSQLLog,'.html');
+    {$endif}
   inherited Create(aApplication,aViews);
   fPublishOptions := aPublishOptions;
   if aSubURI<>'' then

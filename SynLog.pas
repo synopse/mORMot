@@ -46,9 +46,9 @@ unit SynLog;
 
   Version 1.18
   - first public release, extracted from SynCommons.pas unit
-  - BREAKING CHANGE: PWinAnsiChar type for constant text parameters has been
-    changed into RawUTF8, to allow logging of any Unicode text 
-  - Delphi XE4/XE5/XE6/XE7 compatibility (Windows target platform only)
+  - BREAKING CHANGE: PWinAnsiChar type for constant text format parameters has
+    been changed into a RawUTF8, to please all supported platforms and compilers  
+  - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
   - added TSynLogFile.Freq read-only property

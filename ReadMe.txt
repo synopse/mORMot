@@ -49,7 +49,7 @@ Contributors
 
   
 Synopse mORMot is an Open Source Client-Server ORM SOA MVC framework
-for Delphi 6 up to XE7 and FPC, targeting Windows/Linux for the server,
+for Delphi 6 up to XE8 and FPC, targeting Windows/Linux for the server,
 and any platform for clients (including mobile or AJAX).
 
 The main features of mORMot are therefore:

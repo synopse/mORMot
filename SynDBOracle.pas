@@ -1837,6 +1837,8 @@ begin
       mode := OCI_STMT_CACHE;
     end else
       mode := OCI_DEFAULT;
+    if Props.UserID='SYS' then
+      mode := mode or OCI_SYSDBA;
     Check(self,nil,SessionBegin(fContext,fError,fSession,OCI_CRED_RDBMS,mode),fError);
     Check(self,nil,TypeByName(fEnv,fError,fContext,Pointer(type_owner_name),length(type_owner_name),
       Pointer(type_NymberListName),length(type_NymberListName),nil,0,OCI_DURATION_SESSION,OCI_TYPEGET_HEADER,

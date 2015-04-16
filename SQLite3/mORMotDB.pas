@@ -719,8 +719,12 @@ begin
   log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
 end;
 begin
+  {$ifdef WITHLOG}
   log := Owner.LogClass.Add;
   log.Enter(self);
+  {$else}
+  log := nil;
+  {$endif}
   inherited Create(aClass,aServer);
   // initialize external DB properties
   fTableName := StoredClassProps.ExternalDB.TableName;

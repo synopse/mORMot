@@ -136,7 +136,7 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 : Expected Use
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
-This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi} XE7.
+This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi} XE8.
 On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64 bit compiler included in latest {\i Delphi} XE2 and up).
 For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
@@ -464,7 +464,7 @@ The {\i Synopse mORMot Framework} shall provide User Interface and Report genera
 Such a ribbon-oriented interface shall be made available, in a per-table approach, and associated reports.
 Here is a sample of screen content, using proprietary TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE7:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE8:
 %synfilevcl.png
 
 [SRS-DI-2.3.1]
@@ -570,7 +570,7 @@ DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
 %IamLost.png
-{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to XE7 and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
+{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to XE8 and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
 The main features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
 - {\i SOA}: organize your business logic into @*REST@ services;
@@ -708,7 +708,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from {\i Delphi} 6 up to XE7 and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to XE8 and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
@@ -1353,7 +1353,7 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage.
 Other shared features available in {\f1\fs20 SynTests.pas} and {\f1\fs20 SynLog.pas} would be detailed later, i.e. @*Test@ing and @*Log@ging - see @12@.
 :32 Unicode and UTF-8
-Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE7 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
+Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE8 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
 Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
@@ -1452,7 +1452,7 @@ Here is how those new methods work:
 !  if GroupA.Find(v)<0 then // fast binary search
 !    ShowMessage('Error: 1500 not found!');
 Some unique methods like {\f1\fs20 Slice, Reverse} or {\f1\fs20 AddArray} are also available, and mimic well-known Python methods.
-Still closer to the generic paradigm, working for {\i Delphi} 6 up to XE7, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
+Still closer to the generic paradigm, working for {\i Delphi} 6 up to XE8, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
 :  Capacity handling via an external Count
 One common speed issue with the default usage of {\f1\fs20 TDynArray} is that the internal memory buffer is reallocated when you change its length, just like a regular {\i Delphi} {\i dynamic array}.
 That is, whenever you call {\f1\fs20 Add} or {\f1\fs20 Delete} methods, an internal call to {\f1\fs20 SetLength(DynArrayVariable)} is performed. This could be slow, because it always executes some extra code, including a call to {\f1\fs20 ReallocMem}.
@@ -8026,11 +8026,10 @@ This method, like all Server-side methods, MUST have the same exact parameter de
 Then we implement this method:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !begin
-!  with Ctxt do
-!    Results([Input['a']+Input['b']]);
+!  Ctxt.Results([Ctxt['a']+Ctxt['b']]);
 !end;
-The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}.
-Therefore, the code above using {\f1\fs20 Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
+The {\f1\fs20 Ctxt} variable publish some properties named {\f1\fs20 InputInt[] InputDouble[] InputUTF8[]} and {\f1\fs20 Input[]} able to retrieve directly a parameter value from its name, respectively as {\f1\fs20 Integer/Int64}, {\f1\fs20 @*double@}, {\f1\fs20 RawUTF8} or {\f1\fs20 variant}. The {\f1\fs20 Ctxt.Input[]} array property, returning {\f1\fs20 variant} values, has been defined as {\f1\fs20 default} array property for the {\f1\fs20 TSQLRestServerURIContext} class, so writing {\f1\fs20 Ctxt['a']} is the same as writing {\f1\fs20 Ctxt.Input['a']}.
+Therefore, the code above using {\f1\fs20 Ctxt[]} or {\f1\fs20 Ctxt.Input[]} will introduce a conversion via a {\f1\fs20 variant}, which may be a bit slower, and in case of {\f1\fs20 string} content, may loose some content for older non Unicode versions of {\i Delphi}. So it is a good idea to use the exact expected {\f1\fs20 Input*[]} property corresponding to your value type. It does make sense even more when handling text, i.e. {\f1\fs20 InputUTF8[]} is to be used in such case. For our floating-point computation method, we may have coded it as such:
 Those methods would raise an {\f1\fs20 EParsingException} exception if the parameter is not available at the URI. So you may want to use {\f1\fs20 InputExists[]} or even {\f1\fs20 InputIntOrVoid[] InputDoubleOrVoid[] InputUTF8OrVoid[] InputOrVoid[]} methods, which won't raise any exception but return a void value (i.e. either {\f1\fs20 0}, {\f1\fs20 ""} or {\f1\fs20 Unassigned}).
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !begin
@@ -8076,10 +8075,11 @@ On the Client side, you can use the {\f1\fs20 CallBackGetResult} method to call 
 This Client-Server protocol uses JSON here, as encoded server-side via {\f1\fs20 Ctxt.Results()} method, but you can serve any kind of data, binary, HTML, whatever... just by overriding the content type on the server with {\f1\fs20 Ctxt.Returns()}.
 \page
 : Direct parameter marshalling on server side
-We have used above the {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
-Here is how we may implement the fastest possible parameters parsing:
+We have used above the {\f1\fs20 Ctxt[]} and {\f1\fs20 Ctxt.Input*[]} properties to retrieve the input parameters. This is pretty easy to use and powerful, but the supplied {\f1\fs20 Ctxt} gives full access to the input and output context.
+Here is how we may implement the fastest possible parameters parsing - see sample {\f1\fs20 Project06Server.dpr}:
 !procedure TSQLRestServerTest.Sum(Ctxt: TSQLRestServerURIContext);
 !var a,b: double;
+!begin
 !  if UrlDecodeNeedParameters(Ctxt.Parameters,'A,B') then begin
 !    while Ctxt.Parameters<>nil do begin
 !      UrlDecodeDouble(Ctxt.Parameters,'A=',a);
@@ -8114,7 +8114,7 @@ Or you can return some binary file, retrieving the corresponding MIME type from 
 !    content: RawByteString;
 !    contentType: RawUTF8;
 !begin
-!  fileName :=  'c:\data\'+ExtractFileName(Ctxt.Input['filename']);
+!  fileName :=  'c:\data\'+ExtractFileName(Ctxt['filename']); // or Ctxt.Input['filename']
 !  content := StringFromFile(fileName);
 !  if content='' then
 !    Ctxt.Error('',HTML_NOTFOUND) else
@@ -8687,7 +8687,7 @@ If you compare with existing mocking frameworks, even in other languages / platf
 - Most common parameters and results can be defined as simple {\f1\fs20 array of const} in the {\i Delphi} code, or by supplying JSON arrays (needed e.g. for more complex structures like {\f1\fs20 record} values);
 - Execution trace retrieval in easy to read or write text format (and not via complex "fluent" interface e.g. with {\f1\fs20 When} clauses);
 - Auto-release of the {\f1\fs20 TInterfaceStub TInterfaceMock TInterfaceMockSpy} generator instance, when the interface is no longer required, to minimize the code to type, and avoid potential memory leaks;
-- Works from {\i Delphi} 6 up to XE7 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
+- Works from {\i Delphi} 6 up to XE8 - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
 - Very good performance (the faster {\i Delphi} mocking framework, for sure), due to very low overhead and its reuse of {\i mORMot}'s low-level interface-based services kernel using JSON serialization, which does not rely on the slow and limited {\f1\fs20 TVirtualInterface}.
 :  Stubbing complex return values
 Just imagine that the {\f1\fs20 ForgotMyPassword} method does perform an internal test:
@@ -8852,7 +8852,7 @@ Here are the key features of the current implementation of services using interf
 |Server factory|You can get an implementation on the server side
 |Client factory|You can get a "fake" implementation on the client side, remotely calling the server to execute the process
 |Cross-platform clients|A {\i mORMot} server is able to generate cross-platform client code via a set of templates - see @86@
-|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE7
+|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE8
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
 |@*Stateless@|Following a standard request/reply pattern
@@ -9833,6 +9833,45 @@ You could easily implement more complex {\i publish/subscribe} mechanisms, inclu
 If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshaling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and JSON marshalling over TCP/IP).
 \page
 : Implementation details
+:  Error handling
+Usually, in Delphi applications (like in most high-level languages), errors are handled via {\i exceptions}. By default, any {\f1\fs20 Exception} raised on the server side, within an {\f1\fs20 interface}-based service method, will be intercepted, and transmitted as an HTTP error to the client side, then a safe but somewhat obfuscated {\f1\fs20 EInterfaceFactoryException} will be raised, containing additional information serialized as JSON.
+You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not value objects, but true {\f1\fs20 class} instances, with some methods and potentially internal references to other objects. Most of the time, they are tied to a particular execution context, and even some low-level implementation details. A Delphi {\f1\fs20 exception} is even something very specific, and would not be easily converted into e.g. a {\i JavaScript}, {\i Java} or C# exception.
+In practice, re-creating and raising an instance of the same {\f1\fs20 Exception class} which occurred on the server side would induce a strong dependency of the client code towards the server implementation details. For instance, if the server side raises a {\f1\fs20 ESQLDBOracle} exception, translating it on the other end would link your client side with the whole {\f1\fs20 SynDBOracle.pas} unit, which certainly not worth it. The {\f1\fs20 ESQLDBOracle} exception, by itself, contains a link to an {\i Oracle} statement instance, which would be lost when transmitted over the wire. Some client platforms (e.g. mobile or AJAX) do not even have any knowledge of what an {\i Oracle} database is...\line As such, {\f1\fs20 exception} are not good candidate on serialization, and transmission per value, from the server side to the client side. We would NOT be in favor of propagating exceptions to the client side.
+This is why exceptions should better be intercepted on the server side, with a {\f1\fs20 try .. except} block within the service methods, then converted into low level DTO types, specific to the service, then explicitly transmitted as error codes to the client.
+The first rule is that raising {\f1\fs20 exception} should be {\i exceptional} - as its name states: {\f1\fs20 exception}al. I mean, service code should not raise an {\f1\fs20 exception} in normal execution, even in case of wrong input. For instance, a wrong input parameter should lead into an application level error, transmitted as an enumeration item and/or some additional (probably text) information, but the business logic should never raise any {\f1\fs20 exception}. Only in case of low-level unexpected event (e.g. a SQL level failure, a GPF or Access Violation, a communication error with another trusted internal service), the server side may enter in {\i panic} mode, and raise an {\f1\fs20 exception}. Remember that {\f1\fs20 exception}s are intercepted by {\f1\fs20 SynLog.pas} and can be easily logged by our @16@: you would be able to identify the execution context, and find a full stack trace of the issue. But most common errors should be handled at business logic level, even defined in each service layers.
+In practice, you may use an {\i enumerate}, in conjunction with a {\f1\fs20 variant} for additional structured information (as a {\f1\fs20 string} or a more complex {\f1\fs20 TDocVariant}), to transmit an error to the client side. You may define dedicated types at every layer, e.g. with {\f1\fs20 interface} types for {\i Domain} services, or {\i Application} services.
+See for instance how {\f1\fs20 ICQRSQuery}, and its associated {\f1\fs20 TCQRSResult} enumeration, are defined in {\f1\fs20 mORMotDDD.pas}:
+!type
+!  TCQRSResult =
+!    (cqrsSuccess, cqrsSuccessWithMoreData,
+!     cqrsUnspecifiedError, cqrsBadRequest,
+!     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
+!     cqrsInternalError, cqrsDDDValidationFailed,
+!     cqrsInvalidContent, cqrsAlreadyExists,
+!     ...
+!
+!  ICQRSQuery = interface(IInvokable)
+!    ['{923614C8-A639-45AD-A3A3-4548337923C9}']
+!    function GetLastError: TCQRSResult;
+!    function GetLastErrorInfo: variant;
+!  end;
+The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub or mock of the interfaces, fake methods will return as successful, as expected - see @62@.
+When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSResult} enumeration value can be returned as result, so that error would be transmitted directly:
+!function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
+!...
+!begin
+!!  CqrsBeginMethod(qaNone,result);
+!  try
+!....
+!    CqrsSetResult(cqrsSuccess);
+!  except
+!!    on E: Exception do
+!!      CqrsSetResult(E,cqrsInternalError);
+!  end;
+!end;
+But such {\f1\fs20 exception} should be {\f1\fs20 exception}al, as we already stated.
+The {\f1\fs20 mORMotDDD.pas} unit defines, in the {\f1\fs20 TCQRSQueryObject} abstract {\f1\fs20 class}, some protected methods to handle errors and {\f1\fs20 exception}s as expected by {\f1\fs20 ICQRSQuery}. For instance, the {\f1\fs20 TCQRSQueryObject.CqrsSetResult()} method will set {\f1\fs20 result := cqrsInternalError} and serialize the {\f1\fs20 E: Exception} within the internal variant used for additional error, ready to be retrieved using {\f1\fs20 ICQRSQuery.GetLastErrorInfo}.
+{\f1\fs20 Exception}s are very useful to interrupt a process in case of a catastrophic failure, but they are not the best method for transmitting errors over remote services. Some newer languages (e.g. {\i Google}'s {\f1\fs20 Go}), would even not define any {\f1\fs20 exception} type at language or RTL level, but rely on returned values, to transmit the errors in between execution contexts - see @https://golang.org/doc/faq#exceptions: in our client-server error handling design, we followed the same idea.
 :77  Security
 As stated in the features grid of @63@, a complete @*security@ pattern is available when using client-server services. In a @17@, securing messages between clients and services is essential to protecting data.
 Security is implemented at several levels, following the main security patterns of {\i mORMot} - see @43@:
@@ -12722,26 +12761,27 @@ DDD then favors some patterns to use those objects efficiently.
 The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).\line In fact, Delphi is ahead of Java or C#, since it allows {\f1\fs20 virtual} constructors to be defined. Those {\f1\fs20 virtual} constructors are in fact a clean and efficient way of implementing a {\i Factory}, and also fulfill @*SOLID@ principles, especially the {\i @Liskov substitution principle@}: the parent class define an {\i abstract} constructor on which you rely, but the implementation will take place in the {\i overridden} constructor.
 The {\i Factory pattern} can also be used to create {\f1\fs20 interface} instances - see @46@. Main benefit is that alternative implementations may be easily interchanged. Such abstraction helps testing - see @62@ - but also introduces interface-based services - see @63@.
 {\i @**Repository@ pattern} is used to save and dispense each {\i Aggregate Root}.\line It matches the "@*Layer Supertype@" pattern (see above), e.g. via our {\i mORMot} {\f1\fs20 TSQLRecord} and {\f1\fs20 TSQLRest} classes and their Client-Server @*ORM@ features, or via dedicated repository classes - saving data is indeed a concern orthogonal to the model itself. DDD architects claim that persistence is infrastructure, not domain. You may benefit in defining your own repository interface, if the standard ORM / CRUD operations are not enough.
-:  Avoid domain leaking
-:   What "may" be transmitted
-In practice, if your domain is properly defined, most of your {\i Value Objects} may be used with no translation, so {\i may} be sent to the outer world. Even {\i Entities} may be transmitted directly, since their methods should not refer to nothing but their internal properties, so may be of some usefulness outside the domain itself.
-Only the {\i Aggregates} should better be isolated and stay at the {\i Application layer}, given access to its methods and nested objects via proper high-level remote {\i Services} - see @102@ - which should not be published to the outer world either.
-:   DTO and Events
-But experience told us (sometimes in a painful manner), that some cross-cutting types should better be defined, especially at {\i Application layer} and {\i Presentation layer} levels:
+:  DTO and Events to avoid domain leaking
+The main DDD architecture principle - and benefit - is to isolate the domain code. As will be defined by the {\i @*Hexagonal architecture@} - see @155@, everything is made to ensure that the domain won't "leak" outside its core. The domain objects and services are the most precious part of any DDD project, especially in the long term, so proper isolation and uncoupling sound mandatory.
+The {\i Aggregates} should always be isolated and stay at the {\i Application layer}, given access to its methods and nested objects via proper high-level remote {\i Services} - see @102@ - which should not be published directly to the outer world either.
+In practice, if your domain is properly defined, most of your {\i Value Objects} {\i may} be sent to the outer world, without explicit translation. Even {\i Entities} may be transmitted directly, since their methods should not refer to nothing but their internal properties, so may be of some usefulness outside the domain itself.
+But the real world may be rough and cruel, and optimism would better be replaced by some kind of pragmatism, and a pinch of cynicism. DDD experience told its pioneers (sometimes in a painful manner), that {\i @*adapter@s} types should better be defined, especially at {\i Application layer} and {\i Presentation layer} levels.
+As a result, a new family of objects would secure any DDD implementation:
 - {\i Data Transfer Objects} (@**DTO@) are transmission objects, which purpose is to not send your domain across the wire (i.e. separate your layers, following the {\i @**Anti-Corruption Layer@} pattern). It encourages you to create gatekeepers (e.g. in the Application layer) that work to prevent non-domain concepts from leaking into your model.
-- {\i Commands} and {\i Events} are some kind of DTO, since they communicate data about an event and they themselves encapsulate no behavior.
-Those kind of objects are needed to isolate the domain from the outer world.\line Using such dedicated types may help {\i uncoupling} the domain, for several reasons:
+- {\i @*Commands@} and {\i @*Events@} are some kind of DTO, since they communicate data about an event and they themselves encapsulate no behavior.
+Using such dedicated types would eventually help {\i uncoupling} the domain, for several reasons:
 - You can refactor your domain, without the need to modify the published interfaces, but just the tiny {\i Anti-Corruption layer}: no need for your customers to spend money upgrading their client applications, just because your domain changed; no fear to refine your precious domain code, in which you put all your money and expectations, just because it may be unpleasant to your customers.
 - End-user application expectations won't pollute your domain. For instance, you would better define a per-customer set of public APIs, rather than exposing your domain services. In practice, a "one to rule them all" public API may sound like a good idea at first, but it will eventually end up as a monstrous, flat, unreadable and anemic interface, far away from @47@.
 - Since the domain tends to be as generic as possible, its objects may sometimes be overkill to the end user applications: if some properties would never be used, or would always be void, why would you pollute your end user code, and waste bandwidth or resources? Just stick to what is needed.
 - Dedicated types would help focusing on the needed use cases, so would ease documentation, maintainability, testing and integration with client applications: even translating your {\i Ubiquitous language} objects into more common or expected terms in the presentation layer would be beneficial.
-- Consider that in your company, the {\i Domain} and {\i Infrastructure} layers may be maintained by your most valuable teams, whereas some less skilled developers (or even {\i offshore} teams) may be involved on {\i Application} and {\i Presentation} layers. Writing adapter classes is not difficult, and would help your company focus and invest on where long term ROI is more likely to appear. Some access right may be involved at source code level: it may be safe that only the wiser programmers would be allowed to touch the domain code, and even protect your most valuable code from being copied and stolen.
-In {\i mORMot}, we try to let the framework do all the plumbing, letting those types be implemented via interfaces over simple dedicated types like {\f1\fs20 record}s or {\i dynamic arrays}, avoiding the need to define them by hand - see @154@ and @149@. So defining DTOs, {\i Commands} and {\i Events} in dedicated {\i Anti-Corruption layers} should be pretty much quick, easy and safe.
+- Consider that in your company, the {\i Domain} and {\i Infrastructure} layers may be maintained by your most valuable teams, whereas some less skilled developers (or even {\i offshore} teams) may be involved on {\i Application} and {\i Presentation} layers. Writing {\i adapter/translator} classes is not difficult, and would help your company focus and invest on where long term ROI is more likely to appear. Some access restrictions may therefore appear at source code level: it may be safe that only the wiser programmers would be allowed to modify the domain code, and even hide the domain implementation by publishing only its interfaces, protecting your most valuable intellectual property from being copied and stolen.
+In {\i mORMot}, we try to let the framework do all the plumbing, letting those types be implemented via {\f1\fs20 interface}s over simple dedicated types like {\f1\fs20 record}s or {\i dynamic arrays} - see @154@ and @149@. So defining DTOs, {\i Commands} and {\i Events} in dedicated {\i Anti-Corruption layers} would be pretty much quick, easy and safe.
 :102  Services
 {\i @*Aggregate root@s} (and sometimes {\i Entities}), with all their methods, often end up as {\i state machines}, and the behavior matches accordingly.\line In the domain, since {\i Aggregate roots} are the only kind of entities to which your software may hold a reference, they tend to be the main access point of any process. It could be handy to publish their methods as stateless @*Service@s, isolated at {\i Application layer} level.
 {\i Domain services pattern} is used to model primary operations.\line Domain Services give you a tool for modeling processes that do not have an identity or life-cycle in your domain, that is, that are not linked to one aggregate root, perhaps none, or several. In this terminology, services are not tied to a particular person, place, or thing in my application, but tend to embody processes. They tend to be named after verbs or business activities that domain experts introduce into the so-called {\i Ubiquitous Language}. If you follow the interface segregation principle - see @47@, your domain services should be exposed as dedicated client-oriented methods. Do not leak your domain! In DDD, you develop your {\i Application layer} services directly from the needs of your client applications, letting the {\i Domain layer} focus on the business logic.
-{\i @**Unit Of Work@} can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems.\line In short, it implements transactional process at Domain level, and may be implemented either at service or ORM level. It features so-called @**Persistence Ignorance@, meaning that your domain code may not be tied to a particular persistence implementation, but "hydrate" {\i Aggregate roots} class instances as abstractly as possible.
-:  Clean Uncoupled Architecture
+{\i @**Unit Of Work@} can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems.\line In short, it implements transactional process at Domain level, and may be implemented either at service or ORM level. It features so-called @**Persistence Ignorance@, meaning that your domain code may not be tied to a particular persistence implementation, but "hydrate" {\i Aggregate roots} class instances as abstractly as possible.\line A {\i @**dual-phase@ commit} approach - with some methods preparing and validation the data, then applying it by a dedicated {\f1\fs20 Commit} command in a second step - may be defined. In this pattern, the repository is just some simple storage, and data consistency would take place at domain level: for instance, you would not define any @*SQL@ constraints, but validate your data {\i before} storing the information. Your business rules should be written in high level domain code, and you may forget about the {\f1\fs20 FOREIGN KEY}, or {\f1\fs20 CHECK} SQL syntax flavors. As a result, you may safely change from a SQL database to a @*NoSQL@ engine, or even a {\f1\fs20 TObjectList}. You would be able to define and maintain any complex business rules, using the {\i Ubiquitous Language} of your domain. And a change of business logic would not impact the database metadata, which may be painful to modify.
+The DDD Services may therefore be stateless for most of the time, but allowing some flavor of transactional process, when needed. The uppermost/peripheral architecture layers - i.e. {\i Application} or {\i Presentation Layers} - would ensure that those services would be propertly orchestrated. The application {\i workflows} would not be defined in the domain core itself, but in those outer layers, resulting in a cleaner, uncoupled architecture.
+:155  Clean Uncoupled Architecture
 If you follow properly the DDD patterns, your classic @7@ architecture will evolve into a so-called {\i @**Clean Architecture@} or {\i @**Hexagonal architecture@}.
 Even if {\i physically}, this kind of architecture may still look like a classic {\i layered} design (with presentation on the top, business logic in the middle and a database at the bottom - and in this case we speak of {\i N-Layered Domain-Oriented Architecture}), DDD tries to isolate the {\i Domain Model} from any dependency, including technical details.
 As a consequence, the {\i logical} architecture of any DDD solution should appear as such:
@@ -12773,7 +12813,7 @@ label="Application\nServices";
 \Behavior Tests\Workflows\validate
 \Infrastructure\Workflows\implements
 \User Interface\Workflows\exposes
-\DB力RM\Infrastructure
+\Database力RM/ODM\Infrastructure
 \File又ystem\Infrastructure
 \Web又ervices\Infrastructure
 \Mocks又tubs\Behavior Tests
@@ -12786,7 +12826,7 @@ label="Technical\nImplementations";
 That kind of architecture is not designed in layers any more, but more like an Onion.
 At the core of the bulb - sorry, of the system, you have the {\i Domain Model}.\line It implements all {\i @*Value Objects@} and {\i @*Entity Objects@}, including their state and behavior, and associated unit tests.
 Around this core, you find {\i Domain @*Service@s} which add some more behavior to the inner model.\line Typically, you will find here abstract interfaces that provides persistence ({\i Aggregates} saving and retrieving via the {\i @*Repository@} pattern), let Domain objects properties and methods be defined (via the {\i @*Factory@} pattern), or access to third-party services (for service composition in a @*SOA@ world, or e.g. to send a notification email).
-Then {\i Application @*Service@s} will define the {\i workflows} of all end-user applications.\line Even if the core Domain is to be as stable as possible, this outer layer is what will change more often, depending on the applications consuming the {\i Domain Services}. Typically, workflows will consist in deshydrating some {\i Aggregates} via the {\i Repository} interface, then call the {\i Domain} logic (via its objects methods, or for primary operations with wider Domain services), call any external service, and validate ("commit", following Unit-Of-Work or transactional terms) objects modifications.
+Then {\i Application @*Service@s} will define the {\i workflows} of all end-user applications.\line Even if the core Domain is to be as stable as possible, this outer layer is what will change more often, depending on the applications consuming the {\i Domain Services}. Typically, workflows will consist in deshydrating some {\i Aggregates} via the {\i Repository} interface, then call the {\i Domain} logic (via its objects methods, or for primary operations with wider Domain services), call any external service, and validate ("commit", following Unit-Of-Work or transactional terms) objects modifications. Some non data-centric process would also benefit from a {\i @*dual-phase@ commit} pattern, to allow safe orchestration of uncoupled domain and third party services.
 Out on the edges you see User Interface, Infrastructure (including e.g. database persistence), and Tests. This outer layer is separated from the other three internal layers, which are sometimes called {\i Application Core}.\line This is where all technical particularities will be concentrated, e.g. where RDBMS / SQL / ORM mapping will be defined, or platform-specific code will reside. This is the right level to test your end-user workflows, e.g. using @**Behavior-Driven Development@ (abbreviated BDD), with the help of your Domain experts.
 The premise of this Architecture is that {\i it controls coupling}. The main rule is that all coupling is toward the center: all code can depend on layers more central, but code cannot depend on layers further out from the core. This is clearly stated in the @%%mORMotDesignOnion@ diagram: just follow the arrows, and you will find out the coupling order. This architecture is unashamedly biased toward object-oriented programming, and it puts objects before all others.
 This {\i Clean Architecture} relies heavily on the {\i Dependency Inversion} principle - see @47@. It emphasizes the use of {\f1\fs20 interface}s for behavior contracts, and it forces the externalization of infrastructure to dedicated implementation classes. The {\i Application Core} needs implementation of core interfaces, and if those implementing classes reside at the edges of the application, we need some mechanism for injecting that code at runtime so the application can do something useful. {\i mORMot}'s @63@ provide all needed process to access, even remotely, e.g. to persistence or any third party services, in an abstract way.
@@ -12933,7 +12973,7 @@ And even better, testing-driven coding can be encouraged:
 It could sounds like a waste of time, but such coding improve your code quality a lot, and, at least, it help you write and optimize every implementation feature.
 The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), the {\f1\fs20 SynTests.pas} unit is very much integrated with other elements of the framework (like logging), is cross-platform and cross-compiler, and provides a complete {\i stubbing / mocking} mechanism to cover @62@.
 :  Involved classes in Unitary testing
-The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTests.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE7 and FPC, no external dependency).
+The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTests.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to XE8 and FPC, no external dependency).
 The following diagram defines this class hierarchy:
 \graph HierTSynTest TSynTest classes hierarchy
 \TSynTests\TSynTest
@@ -13412,7 +13452,7 @@ Follow these steps:
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
-- {\i Delphi} 6 up to {\i Delphi} XE7 compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
+- {\i Delphi} 6 up to {\i Delphi} XE8 compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
 - Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
 - Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
@@ -13973,7 +14013,7 @@ The {\i Office UI licensing program} was designed by {\i Microsoft} for software
 If you want to design your user interface using a Office 2007/2010 ribbon look, please take a look at those official guidelines: @http://msdn.microsoft.com/en-us/library/cc872782.aspx
 Here is the screen content, using the TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE7:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to XE8:
 %synfilevcl.png
 We did not use yet the Ribbon component as was introduced in {\i Delphi} 2009. Its action-driven design won't make it easy to interface with the event-driven design of our User Interface handling, and we have to confess that this component has rather bad reputation (at least in the {\i Delphi} 2009 version). Feel free to adapt our Open Source code to use it - we'll be very pleased to release a new version supporting it, but we don't have time nor necessity to do it by ourself.
 :  Enumeration types

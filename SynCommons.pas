@@ -447,6 +447,7 @@ unit SynCommons;
   - now FileSize() function won't raise any exception if the file does not exist
     and will return any size > 2 GB as expected
   - faster PosEx() function in pure pascal mode (based on Avatar Zondertau work)
+  - introducing StreamToRawByteString() / RawByteStringToStream() functions
   - added StringDynArrayToRawUTF8DynArray() and StringListToRawUTF8DynArray()
   - added CSVToRawUTF8DynArray() overloaded functions
   - added GetLastCSVItem() function and dedicated HashPointer() function
@@ -2995,11 +2996,11 @@ function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
 /// read a File content into a String
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
-// - uses RawByteString for byte storage, thatever the codepage is
+// - uses RawByteString for byte storage, whatever the codepage is
 function StringFromFile(const FileName: TFileName): RawByteString;
 
 /// create a File from a string content
-// - uses RawByteString for byte storage, thatever the codepage is
+// - uses RawByteString for byte storage, whatever the codepage is
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean=false): boolean;
 
@@ -3022,6 +3023,20 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean=f
 // - if AssumeUTF8IfNoBOM is TRUE, any file without any BOM marker will be
 // interpreted as UTF-8
 function AnyTextFileToRawUTF8(const FileName: TFileName; AssumeUTF8IfNoBOM: boolean=false): RawUTF8;
+
+/// read a TStream content into a String
+// - it will read binary or text content from the current position until the
+// end (using TStream.Size)
+// - uses RawByteString for byte storage, whatever the codepage is
+function StreamToRawByteString(aStream: TStream): RawByteString;
+
+/// create a TStream from a string content
+// - uses RawByteString for byte storage, whatever the codepage is
+// - in fact, the returned TStream is a TRawByteString instance, since this
+// function is just a wrapper around:
+// ! result := TRawByteStringStream.Create(aString);
+function RawByteStringToStream(const aString: RawByteString): TStream;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// read an UTF-8 text from a TStream
 // - format is Length(Integer):Text, i.e. the one used by WriteStringToStream
@@ -8171,7 +8186,7 @@ function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
-// - uses RawByteString for binary content hashing, thatever the codepage is
+// - uses RawByteString for binary content hashing, whatever the codepage is
 function Hash32(const Text: RawByteString): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -19489,6 +19504,26 @@ begin
   finally
     Map.UnMap;
   end;
+end;
+
+function StreamToRawByteString(aStream: TStream): RawByteString;
+var current,size: Int64;
+begin
+  result := '';
+  if aStream=nil then
+    exit;
+  current := aStream.Position;
+  size := aStream.Size-current;
+  if (size=0) or (size>maxInt) then
+    exit;
+  SetLength(result,size);
+  aStream.Read(pointer(result)^,size);
+  aStream.Position := current;
+end;
+
+function RawByteStringToStream(Const aString: RawByteString): TStream;
+begin
+  result := TRawByteStringStream.Create(aString);
 end;
 
 function ReadStringFromStream(S: TStream; MaxAllowedSize: integer): RawUTF8;
@@ -44889,4 +44924,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

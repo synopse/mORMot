@@ -869,7 +869,8 @@ unit mORMot;
     - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
       as requested by feature request [842906425928]
     - added TSynAuthenticationRest e.g. for SynDBRemote to check REST users
-    - added TSQLRestServer.OnSessionCreate / OnSessionClosed methods
+    - added TSQLRestServer.OnSessionCreate / OnSessionClosed / OnSessionFailed
+      callbacks, and TSQLRestServerURIContext.AuthenticationFailed virtual method
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
     - CreateMissingTables() method is not declared as virtual in TSQLRestServer
@@ -5035,7 +5036,7 @@ type
     // a generic VCL string content: so before Delphi 2009, you may loose
     // some characters at decoding from UTF-8 input buffer
     // - raise an EParsingException if the parameter is not found
-    property Input[const ParamName: RawUTF8]: variant read GetInput;
+    property Input[const ParamName: RawUTF8]: variant read GetInput; default;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
     // a generic VCL string content: so before Delphi 2009, you may loose
@@ -7746,10 +7747,13 @@ type
     // - initialize the fIsUnique[] array from "stored AS_UNIQUE" (i.e. "stored
     // false") published properties of every TSQLRecordClass
     constructor Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8='root'); reintroduce; overload;
+    /// you should not use this constructor, but one of the overloaded versions,
+    // specifying the associated TSQLRecordClass  
+    constructor Create; reintroduce; overload;
     /// clone an existing Database Model
     // - all supplied classes won't be redefined as non-virtual:
     // VirtualTableExternalRegister explicit calls are not mandatory here
-    constructor Create(CloneFrom: TSQLModel); overload;
+    constructor Create(CloneFrom: TSQLModel); reintroduce; overload;
     /// initialize the Database Model from an User Interface parameter structure
     // - this constructor will reset all supplied classes to be defined as
     // non-virtual (i.e. Kind=rSQLite3): VirtualTableExternalRegister explicit
@@ -7758,7 +7762,7 @@ type
       TabParametersCount, TabParametersSize: integer;
       const NonVisibleTables: array of TSQLRecordClass;
       Actions: PTypeInfo=nil; Events: PTypeInfo=nil;
-      const aRoot: RawUTF8='root'); overload;
+      const aRoot: RawUTF8='root'); reintroduce; overload;
     /// release associated memory
     destructor Destroy; override;
     /// add the class if it doesn't exist yet
@@ -13325,6 +13329,14 @@ type
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
     // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
+    /// this event handler will be executed when a session failed to initialize
+    // - e.g. if the URI signature is invalid, or OnSessionCreate event handler
+    // aborted the session creation by returning TRUE (in this later case,
+    // the Session parameter is not nil)
+    // - you can access the current execution context from the Ctxt parameter,
+    // e.g. to retrieve the caller's IP:
+    // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
+    OnSessionFailed: TNotifySQLSession;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
     // - Ctxt is nil if the session is closed due to a timeout
@@ -16131,7 +16143,8 @@ threadvar
   // service context (on the server side)
   // - is set by TServiceFactoryServer.ExecuteMethod() just before calling the
   // implementation method of a service, allowing to retrieve the current
-  // execution context
+  // execution context - Request member is set from a client/server execution:
+  // Request.Server is the safe access point to the underlying TSQLRestServer
   // - its content is reset to zero out of the scope of a method execution
   // - when used, a local copy or a PServiceRunningContext pointer should better
   // be created, since accessing a threadvar has a non negligible performance
@@ -27120,6 +27133,8 @@ begin
     raise EModelException.CreateUTF8('%.Create(CloneFrom=nil)',[self]);
   fTables := CloneFrom.fTables;
   fTablesMax := CloneFrom.fTablesMax;
+  if fTablesMax<>High(fTables) then
+    raise EModelException.CreateUTF8('%.Create: incorrect CloneFrom.TableMax',[self]);
   fRoot := CloneFrom.fRoot;
   fActions := CloneFrom.fActions;
   fEvents := CloneFrom.fEvents;
@@ -27156,6 +27171,11 @@ begin
   fRestOwner := Owner;
   SetActions(Actions);
   SetEvents(Events);
+end;
+
+constructor TSQLModel.Create;
+begin
+  raise EModelException.CreateUTF8('Plain %.Create is not allowed: use overloaded Create()',[self]);
 end;
 
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8);
@@ -31041,6 +31061,8 @@ constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: 
 var t: integer;
     tmp: RawUTF8;
 begin
+  if aModel=nil then
+    raise EORMException.CreateUTF8('%.Create(Model=nil)',[self]);
   // specific server initialization
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fVirtualTableDirect := true; // faster direct Static call by default
@@ -33542,8 +33564,11 @@ begin
       // 2. handle security
       if (not Ctxt.Authenticate) or
          ((Ctxt.Service<>nil) and
-           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
-        Ctxt.AuthenticationFailed else
+           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then begin
+        Ctxt.AuthenticationFailed;
+        if Assigned(OnSessionFailed) then
+          OnSessionFailed(self,nil,Ctxt);
+      end else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -33792,6 +33817,8 @@ begin
             [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
         {$endif}
         Ctxt.Call^.OutStatus := HTML_NOTALLOWED;
+        if Assigned(OnSessionFailed) then
+          OnSessionFailed(self,nil,Ctxt);
         exit; // user already connected -> error 404
       end;
   Session := fSessionClass.Create(Ctxt,User);
@@ -33803,6 +33830,8 @@ begin
         [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
          fStats.ClientsCurrent,fSessions.Count],self);
       {$endif}
+      if Assigned(OnSessionFailed) then
+        OnSessionFailed(self,Session,Ctxt);
       User := nil;
       FreeAndNil(Session); // returning TRUE aborts the session creation
       exit;
@@ -33822,6 +33851,8 @@ begin
     for i := 0 to length(fSessionAuthentication)-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
         exit;
+    if Assigned(OnSessionFailed) then
+      OnSessionFailed(self,nil,Ctxt);
   finally
     fSessions.UnLock;
   end;
