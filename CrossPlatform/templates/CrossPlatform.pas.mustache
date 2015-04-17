@@ -159,6 +159,9 @@ function {{name}}2Variant(const _array: {{name}}): variant;
 {{/withHelpers}}
 
 implementation
+
+{$HINTS OFF} // for H2164 hints of unused variables
+
 {{#withEnumerates}}
 
 { Some helpers for enumerates types }
@@ -178,7 +181,7 @@ end;
 {{/fromVariant}}{{#nestedSimpleArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}},jvArray);
   SetLength(result.{{fullPropName}},_arr^.Count);
   for _a := 0 to high(result.{{fullPropName}}) do
-    result.{{fullPropName}}[_a] := _arr^.Values[_a];
+    result.{{fullPropName}}[_a] := {{#fromVariant}}{{fromVariant}}({{/fromVariant}}_arr^.Values[_a]{{#fromVariant}}){{/fromVariant}};
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  _arr := JSONVariantDataSafe(_variant.{{fullPropName}},jvArray);
   SetLength(result.{{fullPropName}},_arr^.Count);
   for _a := 0 to high(result.{{fullPropName}}) do
@@ -193,7 +196,7 @@ end;
 {{/isSimple}}{{#nestedRecord}}{{>getrec}}{{/nestedRecord}}{{#toVariant}}  res.SetPath('{{fullPropName}}',{{toVariant}}(_record.{{fullPropName}}));
 {{/toVariant}}{{#nestedSimpleArray}}  with res.EnsureData('{{fullPropName}}')^ do
     for i := 0 to high(_record.{{fullPropName}}) do
-      AddValue(_record.{{fullPropName}}[i]);
+      AddValue({{#toVariant}}{{toVariant}}({{/toVariant}}_record.{{fullPropName}}[i]{{#toVariant}}){{/toVariant}});
 {{/nestedSimpleArray}}{{#nestedRecordArray}}  with res.EnsureData('{{fullPropName}}')^ do
     for i := 0 to high(_record.{{fullPropName}}) do
     with AddItem^, _record.{{fullPropName}}[i] do begin
@@ -249,6 +252,8 @@ end;
 
 {{/arrays}}
 {{/withArrays}}
+
+{$HINTS ON} // for H2164 hints of unused variables
 
 function GetModel(const aRoot: string): TSQLModel;
 begin

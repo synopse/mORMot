@@ -28,8 +28,9 @@ unit mORMotWrappers;
   Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
-  Contributor(s):
+  Contributor(s) (for this unit and the .mustache templates):
   - Sabbiolina
+  - Stefan Diestelmann
 
   
   Alternatively, the contents of this file may be used under the terms of
