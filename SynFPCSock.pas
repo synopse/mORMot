@@ -783,7 +783,7 @@ begin
 {$IFDEF DARWIN}
   if result <> INVALID_SOCKET then begin
     on_off := 1;
-    synsock.SetSockOpt(result,integer(SOL_SOCKET),integer(SO_NOSIGPIPE),@on_off,SizeOf(integer));
+    fpSetSockOpt(result,integer(SOL_SOCKET),integer(SO_NOSIGPIPE),@on_off,SizeOf(integer));
   end;
 {$ENDIF}
 end;

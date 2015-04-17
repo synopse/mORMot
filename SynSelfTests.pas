@@ -7448,7 +7448,7 @@ begin
         AES.outStreamCreated.Free;
       end;
     end;
-    {$ifdef CPUARM}
+    {$ifndef NOTPUREPASCALNORCPU64DELPHI}
     break;
     {$else}
     if noaesni then begin
@@ -11381,7 +11381,7 @@ begin
   result := GetThreadID;
   with PServiceRunningContext(@ServiceContext)^ do
     if Request<>nil then
-      if Result<>Request.ServiceInstanceID then
+      if PtrUInt(Result)<>Request.ServiceInstanceID then
         raise Exception.Create('Unexpected ServiceInstanceID');
 end;
 
@@ -11390,13 +11390,13 @@ begin
   result := fThreadIDAtCreation;
 end;
 
-function TServicePerThread.GetContextServiceInstanceID: TThreadID;
+function TServicePerThread.GetContextServiceInstanceID: cardinal;
 begin
   with PServiceRunningContext(@ServiceContext)^ do
     if Request=nil then
       result := 0 else begin
       result := Request.ServiceInstanceID;
-      if result<>GetThreadID then
+      if result<>PtrUInt(GetThreadID) then
         raise Exception.Create('Unexpected ThreadID');
     end;
 end;
@@ -11638,22 +11638,22 @@ begin
   case GlobalInterfaceTestMode of
   itmDirect: begin
     Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
-    Check(Inst.CT.GetCurrentRunningThreadID=0);
+    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
     Check(Inst.CT.GetContextServiceInstanceID=0);
   end;
   itmClient, itmPerInterfaceThread: begin
     Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
-    Check(Inst.CT.GetCurrentRunningThreadID=0);
+    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmLocked, itmMainThread: begin
     Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
-    Check(Inst.CT.GetCurrentRunningThreadID<>0);
+    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)<>0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmHttp: begin
     Check(Inst.CT.GetCurrentRunningThreadID<>0);
-    Check(Inst.CT.GetCurrentThreadID<>MainThreadID);
+    Check(PtrUInt(Inst.CT.GetCurrentThreadID)<>MainThreadID);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   end;
@@ -12939,7 +12939,7 @@ begin
   SetCurrentThreadName('% #%',[self,fID]);
   Rec := TSQLRecordPeople.Create;
   try
-    Rec.LastName := 'Thread '+CardinalToHex(GetCurrentThreadId);
+    Rec.LastName := 'Thread '+CardinalToHex(PtrUInt(GetCurrentThreadId));
     while not Terminated do
     case FixedWaitFor(fEvent,INFINITE) of
       wrSignaled:

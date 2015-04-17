@@ -3630,7 +3630,7 @@ begin // this is a bit complex, but we have to avoid any collision
         UnixCreateTime := CurrentTime;
         LatestCounterOverflowUnixCreateTime := UnixCreateTime;
         if CollisionCount>0 then begin
-          ProcessID := GetCurrentThreadId;
+          ProcessID := PtrUInt(GetCurrentThreadId);
           CollisionCount := 0;
         end;
       end;
@@ -3639,9 +3639,9 @@ begin // this is a bit complex, but we have to avoid any collision
       {$ifdef MSWINDOWS}
       PCardinal(@MachineID)^ := ComputeMachineID;
       {$else}
-      PCardinal(@MachineID)^ := MainThreadID; // temporary workaround
+      PCardinal(@MachineID)^ := PtrUInt(MainThreadID); // temporary workaround
       {$endif}
-      ProcessID := GetCurrentThreadId;
+      ProcessID := PtrUInt(GetCurrentThreadId);
       FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
       Counter := FirstCounter;
       LatestCounterOverflowUnixCreateTime := UnixCreateTime;

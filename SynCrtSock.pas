@@ -3334,7 +3334,7 @@ begin
     repeat
       rec := trim(GetNextItem(P));
       if rec='' then continue;
-      if pos(SockString('<'),rec)=0 then
+      if pos({$ifdef UNICODE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
       ToList := ToList+rec+', ';
