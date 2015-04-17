@@ -40,6 +40,7 @@ unit SynPdf;
    Sinisa (sinisav)
    Pierre le Riche
    MChaos
+   Mehrdad Momeni (nosa)
    Marsh
 
   Alternatively, the contents of this file may be used under the terms of
@@ -271,7 +272,8 @@ unit SynPdf;
   - added PDF Group Content methods for creating layered content - thanks
     Harald for the patch! see SynPdfLayers.dpr in sample 05
   - added TPdfFormWithCanvas class - thanks Harald! see SynPdfFormCanvas.dpr
-  - EMR_INTERSECTCLIPRECT fix supplied by Marsh - thanks for the patch!
+  - EMR_INTERSECTCLIPRECT fix supplied by Marsh - but patch disabled by default
+  - huge UniScribe fixes supplied by Mehrdad Momeni (nosa) - THANKS A LOT!
 
 }
 
@@ -774,7 +776,8 @@ type
       Canvas: TPdfCanvas): TPdfWrite;
     /// write some Unicode text, encoded as Glyphs indexes, corresponding
     // to the current font
-    function AddGlyphs(Glyphs: PWord; GlyphsCount: integer; Canvas: TPdfCanvas): TPdfWrite;
+    function AddGlyphs(Glyphs: PWord; GlyphsCount: integer; Canvas: TPdfCanvas;
+      AVisAttrsPtr: Pointer=nil): TPdfWrite;
     /// add some WinAnsi text as PDF text
     // - used by TPdfText object
     // - will optionally encrypt the content
@@ -2948,6 +2951,25 @@ type
         fShapeReserved: Byte) {:8};
   end;
 
+  TScriptControlAttr_enum = (
+    fContextDigits,
+    fInvertPreBoundDir,
+    fInvertPostBoundDir,
+    fLinkStringBefore,
+    fLinkStringAfter,
+    fNeutralOverride,
+    fNumericOverride,
+    fLegacyBidiClass,
+    scr0, scr1, scr2, scr3, scr4, scr5, scr6, scr7);
+
+  TScriptControlAttr_set = set of TScriptControlAttr_enum;
+
+  TScriptControl = packed record
+    uDefaultLanguage: Word;
+    fFlags: TScriptControlAttr_set;
+  end;
+  PScriptControl = ^TScriptControl;
+
 {{ Uniscribe function to break a Unicode string into individually shapeable items
    - pwcInChars: Pointer to a Unicode string to itemize.
    - cInChars: Number of characters in pwcInChars to itemize.
@@ -3004,6 +3026,12 @@ function ScriptShape(hdc: HDC; var psc: pointer; const pwcChars: PWideChar;
     cChars: Integer; cMaxGlyphs: Integer; psa: PScriptAnalysis;
     pwOutGlyphs: PWord; pwLogClust: PWord; psva: PScriptVisAttr;
     var pcGlyphs: Integer): HRESULT; stdcall; external Usp10;
+
+{{ Uniscribe function to apply the specified digit substitution settings
+  to the specified script control and script state structures }
+function ScriptApplyDigitSubstitution(
+    const psds: Pointer; const psControl: pointer;
+    const psState: pointer): HRESULT; stdcall; external Usp10;
 
 {$endif USE_UNISCRIBE}
 
@@ -4590,16 +4618,16 @@ var L, i,j: integer;
     res: HRESULT;
     max, count, numSp: integer;
     Sp: PScriptPropertiesArray;
-    W: PWideChar;
     items: array of TScriptItem;
     level: array of byte;
     VisualToLogical: array of integer;
     psc: pointer; // opaque Uniscribe font metric cache
     complex,R2L: boolean;
-    complexs: array of byte;
     glyphs: array of TScriptVisAttr;
     glyphsCount: integer;
     OutGlyphs, LogClust: array of word;
+    AScriptControl: TScriptControl;
+    AScriptState: TScriptState;
 procedure Append(i: Integer);
 // local procedure used to add glyphs from items[i] to the PDF content stream
 var L: integer;
@@ -4616,11 +4644,6 @@ begin
   if L=0 then
     exit; // nothing to append
   W := PW+items[i].iCharPos;
-  if not GetBit(complexs[0],i) then begin
-    // not complex items are rendered as fast as possible
-    DefaultAppend;
-    exit;
-  end;
   res := ScriptShape(0,psc,W,L,max,@items[i].a,
     pointer(OutGlyphs),pointer(LogClust),pointer(glyphs),glyphsCount);
   case res of
@@ -4644,7 +4667,7 @@ begin
   end;
   // add glyphs to the PDF content
   // (NextLine has already been handled: not needed here)
-  AddGlyphs(pointer(OutGlyphs),glyphsCount,Canvas);
+  AddGlyphs(pointer(OutGlyphs),glyphsCount,Canvas,pointer(glyphs));
 end;
 begin
   result := false; // on UniScribe error, handle as Unicode
@@ -4653,34 +4676,25 @@ begin
   max := L+2; // should be big enough
   SetLength(items,max);
   count := 0;
-  if ScriptItemize(PW,L,max,nil,nil,pointer(items),count)<>0 then
+  FillChar(AScriptControl, SizeOf(TScriptControl), 0);
+  if ScriptApplyDigitSubstitution(nil,@AScriptControl,@AScriptState) <> 0 then
+    exit;
+  FillChar(AScriptState, SizeOf(TScriptState), 0);
+  if Canvas.RightToLeftText then
+    AScriptState.uBidiLevel := 1;
+  if ScriptItemize(PW,L,max,@AScriptControl,@AScriptState,pointer(items),count) <> 0 then
     exit; // error trying processing Glyph Shaping -> fast return
   // 2. guess if requiring glyph shaping or layout
-  SetLength(complexs,(count shr 3)+1);
   ScriptGetProperties(sP,numSp);
   complex := false;
   R2L := false;
   for i := 0 to Count-2 do // don't need Count-1 = Terminator
-    if fComplex in sP^[items[i].a.eScript and (1 shl 10-1)]^.fFlags then begin
-      complex := true;
-      SetBit(complexs[0],i);
-    end else
+    if fComplex in sP^[items[i].a.eScript and (1 shl 10-1)]^.fFlags then
+      complex := true else
       if fRTL in items[i].a.fFlags then
         R2L := true;
-  if not complex then begin
-    // no glyph shaping -> fast append as normal Unicode Text
-    if R2L then begin
-      // handle Right To Left but not Complex text
-      W := pointer(items); // there is enough temp space in items[]
-      W[L] := #0;
-      dec(L);
-      for i := 0 to L do
-        W[i] := PW[L-i];
-      AddUnicodeHexTextNoUniScribe(W,WinAnsiTTF,NextLine,Canvas);
-      result := true; // mark handled here
-    end;
-    exit;
-  end;
+  if not complex and not R2L then
+    exit; // avoid slower UniScribe if content does not require it 
   // 3. get Visual Order, i.e. how to render the content from left to right
   SetLength(level,count);
   for i := 0 to Count-1 do
@@ -4698,13 +4712,9 @@ begin
   SetLength(OutGlyphs,max);
   SetLength(LogClust,max);
   psc := nil; // cached for the same character style used
-  if Canvas.RightToLeftText then
-    // append from right to left visual order
-    for j := Count-2 downto 0 do // Count-2: ignore last ending item
-      Append(VisualToLogical[j]) else
-    // append from left to right visual order
-    for j := 0 to Count-2 do // Count-2: ignore last ending item
-      Append(VisualToLogical[j]);
+  // append following logical order
+  for j := 0 to Count-2 do // Count-2: ignore last ending item
+    Append(VisualToLogical[j]);
 end;
 {$endif}
 
@@ -4832,10 +4842,12 @@ begin
   result := self;
 end;
 
-function TPdfWrite.AddGlyphs(Glyphs: PWord; GlyphsCount: integer; Canvas: TPdfCanvas): TPdfWrite;
+function TPdfWrite.AddGlyphs(Glyphs: PWord; GlyphsCount: integer;
+  Canvas: TPdfCanvas; AVisAttrsPtr: Pointer): TPdfWrite;
 var TTF: TPdfFontTrueType;
     first: boolean;
     glyph: integer;
+    AVisAttrs: PScriptVisAttr;
 begin
   if (Glyphs<>nil) and (GlyphsCount>0) then begin
     with Canvas.FPage do
@@ -4847,21 +4859,26 @@ begin
         TTF.CreateAssociatedUnicodeFont;
       Canvas.SetPDFFont(TTF.UnicodeFont,Canvas.FPage.FontSize);
       first := true;
+      AVisAttrs := AVisAttrsPtr;
       while GlyphsCount>0 do begin
-        glyph := TTF.WinAnsiFont.GetAndMarkGlyphAsUsed(Glyphs^);
-        // this font shall by definition contain all needed glyphs
-        // -> no Font Fallback is to be implemented here
-        if first then begin
-          first := false;
-          Add('<');
+        if (AVisAttrs=nil) or
+           (AVisAttrs^.fFlags*[fDiacritic,fZeroWidth]=[]) then begin
+          glyph := TTF.WinAnsiFont.GetAndMarkGlyphAsUsed(Glyphs^);
+          // this font shall by definition contain all needed glyphs
+          // -> no Font Fallback is to be implemented here
+          if first then begin
+            first := false;
+            Add('<');
+          end;
+          AddHex4(glyph);
         end;
-        AddHex4(glyph);
         inc(Glyphs);
         dec(GlyphsCount);
+        if AVisAttrs<>nil then
+          inc(AVisAttrs);
       end;
-      if not first then
-        Add('>');
-      Add(' Tj'#10);
+      if not first then 
+        Add('> Tj'#10);
     end;
   end;
   result := self;
@@ -7234,9 +7251,9 @@ end;
 function TPdfCanvas.RectI(Rect: TRect; Normalize: boolean): TPdfRect;
 begin
   result.Left := I2X(Rect.Left);
-  result.Right := I2X(Rect.Right);
+  result.Right := I2X(Rect.Right-1);
   result.Top := I2Y(Rect.Top);
-  result.Bottom := I2Y(Rect.Bottom);
+  result.Bottom := I2Y(Rect.Bottom-1);
   if Normalize then
     NormalizeRect(result);
 end;
@@ -9140,7 +9157,7 @@ begin
       kind := OBJ_PEN;
       PenColor := elp.elpColor;
       PenWidth := elp.elpWidth;
-      PenStyle := elp.elpPenStyle and PS_STYLE_MASK;
+      PenStyle := elp.elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
     end;
   EMR_SETMITERLIMIT:
     if PEMRSetMiterLimit(R)^.eMiterLimit>0.1 then
@@ -9151,10 +9168,10 @@ begin
     E.ExtSelectClipRgn(@PEMRExtSelectClipRgn(R)^.RgnData[0],PEMRExtSelectClipRgn(R)^.iMode);
   EMR_INTERSECTCLIPRECT: begin
     ClipRgn := e.IntersectClipRect(e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true),ClipRgn);
-    e.Canvas.Clip;
+    {e.Canvas.Clip; // revert patch supplied by Marsh, which seems to break
     with e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true) do
       e.Canvas.Rectangle(Left,Top,Width,Height);
-    e.Canvas.EoClip;
+    e.Canvas.EoClip;}
   end;
   EMR_SETMAPMODE:
     MappingMode := PEMRSetMapMode(R)^.iMode;
@@ -9646,12 +9663,17 @@ begin
   if not pen.null then begin
     StrokeColor := pen.color;
     if pen.style<>fPenStyle then begin
-      case pen.style of
+      case pen.style and PS_STYLE_MASK of
         PS_DASH:       Canvas.SetDash([4,4]);
         PS_DOT:        Canvas.SetDash([1,1]);
         PS_DASHDOT:    Canvas.SetDash([4,1,1,1]);
         PS_DASHDOTDOT: Canvas.SetDash([4,1,1,1,1,1]);
         else           Canvas.SetDash([]);
+      end;
+      case Pen.style and PS_ENDCAP_MASK of
+        PS_ENDCAP_ROUND:  Canvas.SetLineCap(lcRound_End);
+        PS_ENDCAP_SQUARE: Canvas.SetLineCap(lcProjectingSquareEnd);
+        PS_ENDCAP_FLAT:   Canvas.SetLineCap(lcButt_End);
       end;
       fPenStyle := pen.style;
     end;
@@ -9887,15 +9909,20 @@ var nspace,i: integer;
     wW, measW, W,H,hscale: Single;
     DX: PIntegerArray; // not handled during drawing yet
     Posi: TPoint;
-    ASize, PosX, PosY: single;
+    AWidth, ASize, PosX, PosY: single;
+    APDFFont: TPDFFont;
     tmp: array of WideChar; // R.emrtext is not #0 terminated -> use tmp[]
     tmpChar: array[0..1] of WideChar;
     a, acos, asin, fscaleX, fscaleY: single;
-    WithClip, bOpaque: Boolean;
+    AUseDX, WithClip, bOpaque: Boolean;
     ClipRect: TPdfBox;
     ASignX, ASignY: Integer;
     backRect: TRect;
     Positioning: TPdfCanvasRenderMetaFileTextPositioning;
+    {$ifdef USE_UNISCRIBE}
+    ADC: HDC;
+    AnExtent: TSize;
+    {$endif}
 
 procedure DrawLine(var P: TPoint; aH: Single);
 var tmp: TPdfEnumStatePen;
@@ -9948,13 +9975,30 @@ begin
       ASize := Abs(font.LogFont.lfHeight)*fscaleY else
       ASize := Abs(font.spec.cell)*fscaleY;
     // ensure this font is selected (very fast if was already selected)
-    Canvas.SetFont(Canvas.FDoc.FDC, font.LogFont, ASize);
+    APDFFont := Canvas.SetFont(Canvas.FDoc.FDC, font.LogFont, ASize);
     // calculate coordinates
     Positioning := Canvas.fUseMetaFileTextPositioning;
     if (R.emrtext.fOptions and ETO_GLYPH_INDEX<>0) then
-      measW := 0 else
-      measW := Round(Canvas.UnicodeTextWidth(Pointer(tmp)) / fscaleX);
-    if R.emrtext.offDx>0 then begin
+      measW := 0 else begin
+      AWidth := 0;
+      {$ifdef USE_UNISCRIBE}
+      if Assigned(APDFFont) and Canvas.fDoc.UseUniScribe and
+         APDFFont.InheritsFrom(TPdfFontTrueType) then begin
+        ADC := Canvas.FDoc.GetDCWithFont(TPdfFontTrueType(APDFFont));
+        if GetTextExtentPoint32W(ADC,Pointer(tmp),R.emrtext.nChars,AnExtent) then
+          AWidth := (AnExtent.cX * Canvas.FPage.FFontSize) / 1000;
+      end;
+      {$endif}
+      if AWidth=0 then
+        AWidth := Canvas.UnicodeTextWidth(Pointer(tmp));
+      measW := Round(AWidth / fscaleX);
+    end;
+    AUseDX := R.emrtext.offDx > 0;
+    {$ifdef USE_UNISCRIBE}
+    if Canvas.fDoc.UseUniScribe then
+      AUseDX := AUseDX and (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0);
+    {$endif}
+    if AUseDX then begin
       DX := pointer(PtrUInt(@R)+R.emrtext.offDx);
       W := DXTextWidth(DX, R.emrText.nChars);
       if W<R.rclBounds.Right-R.rclBounds.Left then // offDX=0 or within box
