@@ -4677,9 +4677,9 @@ begin
   SetLength(items,max);
   count := 0;
   FillChar(AScriptControl, SizeOf(TScriptControl), 0);
+  FillChar(AScriptState, SizeOf(TScriptState), 0);
   if ScriptApplyDigitSubstitution(nil,@AScriptControl,@AScriptState) <> 0 then
     exit;
-  FillChar(AScriptState, SizeOf(TScriptState), 0);
   if Canvas.RightToLeftText then
     AScriptState.uBidiLevel := 1;
   if ScriptItemize(PW,L,max,@AScriptControl,@AScriptState,pointer(items),count) <> 0 then
@@ -4862,7 +4862,7 @@ begin
       AVisAttrs := AVisAttrsPtr;
       while GlyphsCount>0 do begin
         if (AVisAttrs=nil) or
-           (AVisAttrs^.fFlags*[fDiacritic,fZeroWidth]=[]) then begin
+           not(AVisAttrs^.fFlags*[fDiacritic,fZeroWidth]=[fZeroWidth]) then begin
           glyph := TTF.WinAnsiFont.GetAndMarkGlyphAsUsed(Glyphs^);
           // this font shall by definition contain all needed glyphs
           // -> no Font Fallback is to be implemented here
