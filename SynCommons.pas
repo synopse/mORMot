@@ -25009,7 +25009,7 @@ end;
 
 function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
   var MultiPart: TMultiPartDynArray): boolean;
-var boundary: RawUTF8;
+var boundary,endBoundary: RawUTF8;
     i,j: integer;
     P: PUTF8Char;
     part: TMultiPart;
@@ -25018,7 +25018,9 @@ begin
   i := PosEx('boundary=',MimeType);
   if i=0 then
     exit;
-  boundary := '--'+trim(copy(MimeType,i+9,200))+#13#10;
+  boundary := '--'+trim(copy(MimeType,i+9,200));
+  endBoundary := boundary+'--'+#13#10;
+  boundary := boundary+#13#10;
   i := PosEx(boundary,Body);
   if i<>0 then
   repeat
@@ -25039,8 +25041,11 @@ begin
     until PWord(P)^=13+10 shl 8;
     i := P-PUTF8Char(Pointer(Body))+3; // i = just after header
     j := PosEx(boundary,Body,i);
-    if j=0 then
+    if j=0 then begin
+     j := PosEx(endboundary,Body,i); // try last boundary
+     if j=0 then
       exit;
+    end;
     part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
     {$ifdef UNICODE}
     if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then
