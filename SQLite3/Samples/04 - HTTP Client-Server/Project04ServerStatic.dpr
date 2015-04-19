@@ -21,6 +21,7 @@
 program Project04ServerStatic;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   Unit2Static in 'Unit2Static.pas' {Form1},
   SampleData in '..\01 - In Memory ORM\SampleData.pas';

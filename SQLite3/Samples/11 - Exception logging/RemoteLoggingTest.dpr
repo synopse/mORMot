@@ -1,6 +1,7 @@
 program RemoteLoggingTest;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   RemoteLogMain in 'RemoteLogMain.pas' {MainForm};
 

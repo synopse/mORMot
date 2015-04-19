@@ -6,7 +6,7 @@ program HttpApiServer;
 {$I Synopse.inc}
 
 uses
-  //{$I SynDprUses.inc}
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
   SynCommons,
   SynZip,

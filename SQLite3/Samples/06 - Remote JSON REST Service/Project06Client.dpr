@@ -1,6 +1,7 @@
 program Project06Client;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   Project06ClientMain in 'Project06ClientMain.pas' {Form1};
 

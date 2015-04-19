@@ -1,6 +1,7 @@
 program TaskDialogTest;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
   SynTaskDialog,
   mORMot,

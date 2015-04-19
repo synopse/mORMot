@@ -33,6 +33,7 @@
 program Project03Client;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   SysUtils,
   mORMot,

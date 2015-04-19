@@ -4,6 +4,7 @@ program RESTclient;
 {$APPTYPE CONSOLE}
 
 uses
+  {$I SynDprUses.inc}  // use FastMM4 on older Delphi, or set FPC threads
   SynCommons,          // framework core
   mORMot,              // RESTful server & ORM
   mORMotHttpClient,    // HTTP client to a mORMot RESTful server

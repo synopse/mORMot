@@ -1,6 +1,7 @@
 program RESTClient;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   RestClientMain in 'RestClientMain.pas' {MainForm};
 

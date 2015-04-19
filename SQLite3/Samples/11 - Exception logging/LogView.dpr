@@ -11,9 +11,8 @@ program LogView;
     display remote logs, echoed from mORMot HTTP clients 
   
 }
-// first line of uses clause must be   {$I SynDprUses.inc}   to include FastMM4
 uses
-  {$I SynDprUses.inc}
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   LogViewMain in 'LogViewMain.pas' {MainLogView};
 

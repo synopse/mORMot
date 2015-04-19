@@ -7,6 +7,7 @@ program RESTserver_wrappers;
 {$APPTYPE CONSOLE}
 
 uses
+  {$I SynDprUses.inc}  // use FastMM4 on older Delphi, or set FPC threads
   SynCommons,          // framework core
   SynLog,              // logging features
   mORMot,              // RESTful server & ORM

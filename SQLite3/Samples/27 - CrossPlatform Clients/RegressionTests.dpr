@@ -15,11 +15,7 @@ program RegressionTests;
 {$endif}
 
 uses
-  {$ifndef FPC}
-  {$ifndef HASINLINE}
-  FastMM4,
-  {$endif}
-  {$endif}
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SynCrossPlatformJSON,
   SynCrossPlatformSpecific,
   SynCrossPlatformREST,

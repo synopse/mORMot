@@ -2,7 +2,7 @@
 program HttpServiceSetup;
 
 uses
-  {$I SynDprUses.inc}
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Windows,
   Classes,
   SysUtils,

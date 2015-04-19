@@ -43,6 +43,7 @@
 program Project04Server;
 
 uses
+  {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
   Unit2 in 'Unit2.pas' {Form1},
   SampleData in '..\01 - In Memory ORM\SampleData.pas';
