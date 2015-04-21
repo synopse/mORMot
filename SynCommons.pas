@@ -4499,6 +4499,9 @@ type
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
+    function GetStr(const aName: RawUTF8): RawUTF8; {$ifdef HASINLINE}inline;{$endif}
+    function GetInt(const aName: RawUTF8): Int64; {$ifdef HASINLINE}inline;{$endif}
+    function GetBool(const aName: RawUTF8): Boolean; {$ifdef HASINLINE}inline;{$endif}
   public
     /// the internal Name/Value storage
     List: TSynNameValueItemDynArray;
@@ -4519,8 +4522,13 @@ type
     function Find(const aName: RawUTF8): integer;
     /// search for a Name, and delete it in the List if it exists
     function Delete(const aName: RawUTF8): boolean;
-    /// search for a Name, return the associated Value
+    /// search for a Name, return the associated Value as a UTF-8 string
     function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
+    /// search for a Name, return the associated Value as integer
+    function ValueInt(const aName: RawUTF8; const aDefaultValue: Int64=0): Int64;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true only if the value is exactly '1'
+    function ValueBool(const aName: RawUTF8): Boolean;
     /// returns true if the Init() method has been called
     function Initialized: boolean;
     /// can be used to set all data from one BLOB memory buffer
@@ -4529,7 +4537,19 @@ type
     property BlobData: RawByteString read GetBlobData write SetBlobData;
     /// event triggerred after an item has just been added to the list
     property OnAfterAdd: TSynNameValueNotify read fOnAdd write fOnAdd;
+    /// search for a Name, return the associated Value as a UTF-8 string
+    // - returns '' if aName is not found in the stored keys
+    property Str[const aName: RawUTF8]: RawUTF8 read GetStr; default;
+    /// search for a Name, return the associated Value as integer
+    // - returns 0 if aName is not found, or not a valid Int64 in the stored keys
+    property Int[const aName: RawUTF8]: Int64 read GetInt;
+    /// search for a Name, return the associated Value as boolean
+    // - returns true if aName stores '1' as associated value
+    property Bool[const aName: RawUTF8]: Boolean read GetBool;
   end;
+
+  /// a reference pointer to a Name/Value RawUTF8 pairs storage
+  PSynNameValue = ^TSynNameValue;
 
 /// wrapper to add an item to a array of pointer dynamic array storage
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
@@ -6571,7 +6591,8 @@ type
     function AddObject(const aText: RawUTF8; aObject: TObject): PtrInt;
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
-    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt; virtual;
+    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
+      wasAdded: PBoolean=nil): PtrInt; virtual;
     /// append a specified list to the current content
     procedure AddRawUTF8List(List: TRawUTF8List);
     /// delete a stored RawUTF8 item, and its associated TObject
@@ -6668,7 +6689,8 @@ type
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
     // - this overridden method will update and use the internal hash table
-    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt; override;
+    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
+      wasAdded: PBoolean=nil): PtrInt; override;
   end;
 
   /// a TRawUTF8List with an internal hash, with locking methods
@@ -8870,6 +8892,21 @@ procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S: cardinal;
 // - you can custom the first char in from of the resulting text time
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
   FirstChar: AnsiChar = 'T'); overload;
+
+/// fast conversion of 2 digit characters into a 0..99 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
+
+/// fast conversion of 3 digit characters into a 0..9999 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
+
+/// fast conversion of 4 digit characters into a 0..9999 value
+// - returns FALSE on success, TRUE if P^ is not correct
+function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
+
+/// our own fast version of the corresponding low-level function
+function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -23451,6 +23488,67 @@ end;
 type
   unaligned = Double;
 {$endif}
+
+function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
+var B: cardinal;
+begin
+  B := ConvertHexToBin[ord(P[0])];
+  if B<=9 then begin
+    Value := B;
+    B := ConvertHexToBin[ord(P[1])];
+    if B<=9 then begin
+      Value := Value*10+B;
+      result := false;
+      exit;
+    end;
+  end;
+  result := true;
+end;
+
+function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
+var B: cardinal;
+begin
+  B := ConvertHexToBin[ord(P[0])];
+  if B<=9 then begin
+    Value := B;
+    B := ConvertHexToBin[ord(P[1])];
+    if B<=9 then begin
+      Value := Value*10+B;
+      B := ConvertHexToBin[ord(P[2])];
+      if B<=9 then begin
+        Value := Value*10+B;
+        result := false;
+        exit;
+      end;
+    end;
+  end;
+  result := true;
+end;
+
+
+function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
+var B: cardinal;
+begin
+  B := ConvertHexToBin[ord(P[0])];
+  if B<=9 then begin
+    Value := B;
+    B := ConvertHexToBin[ord(P[1])];
+    if B<=9 then begin
+      Value := Value*10+B;
+      B := ConvertHexToBin[ord(P[2])];
+      if B<=9 then begin
+        Value := Value*10+B;
+        B := ConvertHexToBin[ord(P[3])];
+        if B<=9 then begin
+          Value := Value*10+B;
+          result := false;
+          exit;
+        end;
+      end;
+    end;
+  end;
+  result := true;
+end;
 
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 var i: integer;
@@ -38921,11 +39019,17 @@ begin
     result := AddObject(aText,nil);
 end;
 
-function TRawUTF8List.AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject): PtrInt;
+function TRawUTF8List.AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
+  wasAdded: PBoolean=nil): PtrInt;
 begin
   result := IndexOf(aText);
-  if result<0 then
+  if result<0 then begin
     result := AddObject(aText,aObject);
+    if wasAdded<>nil then
+      wasAdded^ := true;
+  end else
+    if wasAdded<>nil then
+      wasAdded^ := false;
 end;
 
 function TRawUTF8List.AddObject(const aText: RawUTF8; aObject: TObject): PtrInt;
@@ -39587,7 +39691,7 @@ begin
 end;
 
 function TRawUTF8ListHashed.AddObjectIfNotExisting(
-  const aText: RawUTF8; aObject: TObject): PtrInt;
+  const aText: RawUTF8; aObject: TObject; wasAdded: PBoolean): PtrInt;
 var added: boolean;
 begin
   if fChanged then begin
@@ -39601,6 +39705,8 @@ begin
       SetLength(fObjects,length(fList));
     fObjects[result] := aObject;
   end;
+  if wasAdded<>nil then
+    wasAdded^ := added;
 end;
 
 
@@ -44189,13 +44295,30 @@ begin
     result := false;
 end;
 
-function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
+function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8): RawUTF8;
 var i: integer;
 begin
   i := fDynArray.FindHashed(aName);
   if i<0 then
     result := aDefaultValue else
     result := List[i].Value;
+end;
+
+function TSynNameValue.ValueInt(const aName: RawUTF8; const aDefaultValue: Int64): Int64;
+var i,err: integer;
+begin
+  i := fDynArray.FindHashed(aName);
+  if i<0 then
+    result := aDefaultValue else begin
+    result := GetInt64(pointer(List[i].Value),err);
+    if err<>0 then
+      result := aDefaultValue;
+  end;
+end;
+
+function TSynNameValue.ValueBool(const aName: RawUTF8): Boolean;
+begin
+  result := Value(aName)='1';
 end;
 
 function TSynNameValue.Initialized: boolean;
@@ -44217,6 +44340,21 @@ end;
 procedure TSynNameValue.SetBlobData(const aValue: RawByteString);
 begin
   SetBlobDataPtr(pointer(aValue));
+end;
+
+function TSynNameValue.GetStr(const aName: RawUTF8): RawUTF8;
+begin
+  result := Value(aName,'');
+end;
+
+function TSynNameValue.GetInt(const aName: RawUTF8): Int64;
+begin
+  result := ValueInt(aName,0);
+end;
+
+function TSynNameValue.GetBool(const aName: RawUTF8): Boolean;
+begin
+  result := Value(aName)='1';
 end;
 
 
