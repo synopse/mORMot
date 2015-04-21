@@ -459,6 +459,9 @@ type
     // - return false on any error, true on success
     // - bypass the SndBuf or SockOut^ buffers
     function TrySndLow(P: pointer; Len: integer): boolean;
+    /// returns the low-level error number
+    // - i.e. returns WSAGetLastError
+    function LastLowSocketError: Integer;
     /// direct send data through network
     // - raise a ECrtSocket exception on any error
     // - bypass the SndBuf or SockOut^ buffers
@@ -2964,7 +2967,12 @@ begin
     if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
       result := 0 else
     {$endif}
-      exit; // notify socket error 
+      exit; // notify socket error
+end;
+
+function TCrtSocket.LastLowSocketError: Integer;
+begin
+  result := WSAGetLastError; // retrieved directly from Sockets API
 end;
 
 procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
