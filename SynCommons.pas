@@ -4508,6 +4508,7 @@ type
     /// the number of Name/Value pairs
     Count: integer;
     /// initialize the storage
+    // - will also reset the internal List[] and the internal hash array
     procedure Init(aCaseSensitive: boolean);
     /// add an element to the array
     // - if aName already exists, its associated Value will be updated
@@ -4529,6 +4530,17 @@ type
     /// search for a Name, return the associated Value as boolean
     // - returns true only if the value is exactly '1'
     function ValueBool(const aName: RawUTF8): Boolean;
+    /// returns all values, as CSV or INI content
+    function AsCSV(const KeySeparator: RawUTF8='=';
+      const ValueSeparator: RawUTF8=#13#10): RawUTF8;
+    /// compute a TDocVariant document from the stored values
+    // - output variant will be reset and filled as a TDocVariant instance,
+    // ready to be serialized as a JSON object
+    procedure AsDocVariant(out DocVariant: variant);
+    /// merge the stored values into a TDocVariant document
+    // - existing properties would be updated, then new values will be added to
+    // the supplied TDocVariant instance, ready to be serialized as a JSON object
+    procedure MergeDocVariant(var DocVariant: variant);
     /// returns true if the Init() method has been called
     function Initialized: boolean;
     /// can be used to set all data from one BLOB memory buffer
@@ -10577,6 +10589,9 @@ procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 
+/// convert an UTF-8 encoded string into a variant RawUTF8 varString
+function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
+
 /// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
 // - this overloaded version expects a destination variant type (e.g. varString
 // varOleStr / varUString) - if the type is not handled, will raise an
@@ -11072,6 +11087,11 @@ type
     /// add a value in this document
     // - overloaded function accepting a UTF-8 encoded buffer for the name
     function AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer; overload;
+    /// add a value in this document, or update an existing entry
+    // - if instance's Kind is dvArray, it will raise an EDocVariant exception
+    // - returns the index of the corresponding value, which may be just added
+    function AddOrUpdateValue(const aName: RawUTF8; const aValue: variant;
+      wasAdded: PBoolean=nil): integer;
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -11433,6 +11453,13 @@ const
   JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoJSONParseDoNotTryCustomVariants];
+
+  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
+  // storage
+  JSON_OPTIONS_NAMEVALUE: TDocVariantOptions =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoNameCaseSensitive];
+
 
 {$endif NOVARIANTS}
 
@@ -29506,6 +29533,11 @@ begin
   end;
 end;
 
+function RawUTF8ToVariant(const Txt: RawUTF8): variant;
+begin
+  RawUTF8ToVariant(Txt,result);
+end;
+
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word);
 begin
@@ -31132,6 +31164,24 @@ begin
         SetVariantByValue(aValue,VValue[ndx]);
     end else
       SetValueOrRaiseException(VariantToIntegerDef(aNameOrIndex,-1),aValue);
+  end;
+end;
+
+function TDocVariantData.AddOrUpdateValue(const aName: RawUTF8;
+  const aValue: variant; wasAdded: PBoolean): integer;
+begin
+  if VKind=dvArray then
+    raise EDocVariant.CreateUTF8('AddOrUpdateValue("%") on an array',[aName]);
+  result := GetValueIndex(aName);
+  if result<0 then begin
+    result := VCount;
+    InternalAddValue(aName,aValue);
+    if wasAdded<>nil then
+      wasAdded^ := true;
+  end else begin
+    SetVariantByValue(aValue,VValue[result]);
+    if wasAdded<>nil then
+      wasAdded^ := false;
   end;
 end;
 
@@ -36057,29 +36107,29 @@ begin
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
   vtObject:       WriteObject(VObject,[woFullExpand]);
   vtClass:
-   if VClass<>nil then
-     AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
+    if VClass<>nil then
+      AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
   vtWideChar:
-   AddW(@VWideChar,1,Escape);
+    AddW(@VWideChar,1,Escape);
   vtPWideChar:
-   AddW(pointer(VPWideChar),StrLenW(VPWideChar),Escape);
+    AddW(pointer(VPWideChar),StrLenW(VPWideChar),Escape);
   vtAnsiString:
-   Add(VAnsiString,Escape); // expect RawUTF8
+    Add(VAnsiString,Escape); // expect RawUTF8
   vtCurrency:
-   AddCurr64(VInt64^);
+    AddCurr64(VInt64^);
   vtWideString:
-   if VWideString<>nil then
-     AddW(VWideString,length(WideString(VWideString)),Escape);
+    if VWideString<>nil then
+      AddW(VWideString,length(WideString(VWideString)),Escape);
   vtInt64:
-   Add(VInt64^);
+    Add(VInt64^);
   {$ifndef NOVARIANTS}
   vtVariant:
-   AddVariantJSON(VVariant^,Escape);
+    AddVariantJSON(VVariant^,Escape);
   {$endif}
   {$ifdef UNICODE}
   vtUnicodeString:
-   if VUnicodeString<>nil then // convert to UTF-8
-     AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
+    if VUnicodeString<>nil then // convert to UTF-8
+      AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
   {$endif} end;
 end;
 
@@ -44273,7 +44323,9 @@ end;
 
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
-  fillchar(self,sizeof(Self),0);
+  List := nil;
+  fDynArray.fHashs := nil;
+  fillchar(self,sizeof(self),0);
   fDynArray.Init(
     TypeInfo(TSynNameValueItemDynArray),List,nil,nil,nil,@Count,not aCaseSensitive);
 end;
@@ -44355,6 +44407,48 @@ end;
 function TSynNameValue.GetBool(const aName: RawUTF8): Boolean;
 begin
   result := Value(aName)='1';
+end;
+
+function TSynNameValue.AsCSV(const KeySeparator: RawUTF8='=';
+  const ValueSeparator: RawUTF8=#13#10): RawUTF8;
+var i: integer;
+begin
+  with TTextWriter.CreateOwnedStream do
+  try
+    for i := 0 to Count-1 do begin
+      AddNoJSONEscape(pointer(List[i].Name));
+      AddNoJSONEscape(pointer(KeySeparator));
+      AddNoJSONEscape(pointer(List[i].Value));
+      AddNoJSONEscape(pointer(ValueSeparator));
+    end;
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+procedure TSynNameValue.AsDocVariant(out DocVariant: variant);
+var i: integer;
+begin
+  if Count=0 then
+    exit;
+  if not DocVariantType.IsOfType(DocVariant) then
+    TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE);
+  for i := 0 to Count-1 do
+    TDocVariantData(DocVariant).AddValue(
+      List[i].Name,RawUTF8ToVariant(List[i].Value));
+end;
+
+procedure TSynNameValue.MergeDocVariant(var DocVariant: variant);
+var i: integer;
+begin
+  if Count=0 then
+    exit;
+  if not DocVariantType.IsOfType(DocVariant) then
+    TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE);
+  for i := 0 to Count-1 do
+    TDocVariantData(DocVariant).AddOrUpdateValue(
+      List[i].Name,RawUTF8ToVariant(List[i].Value));
 end;
 
 
