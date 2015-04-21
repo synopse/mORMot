@@ -3935,6 +3935,30 @@ type
     property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
   end;
 
+  /// could monitor a standard Server
+  // - including Input/Output statistics and connected Clients count 
+  TSynMonitorServer = class(TSynMonitorInputOutput)
+  protected
+    fCurrentRequestCount: integer;
+    fClientsCurrent: integer;
+    fClientsMax: integer;
+  public
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientConnect;
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientDisconnect;
+    /// update ClientsCurrent to 0
+    procedure ClientDisconnectAll;
+  published
+    /// current count of connected clients
+    property ClientsCurrent: integer read fClientsCurrent;
+    /// max count of connected clients
+    property ClientsMax: integer read fClientsMax;
+    /// how many concurrent requests are currently processed
+    // - e.g. in TSQLRestServer.URI()
+    property CurrentRequestCount: integer read fCurrentRequestCount;
+  end;
+
   /// a list of simple process statistics
   TSynMonitorObjArray = array of TSynMonitor;
 
@@ -5583,7 +5607,12 @@ type
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
-      DoNotAutoComputeFields: boolean=false): integer; virtual;
+      DoNotAutoComputeFields: boolean=false): integer; overload; virtual;
+    /// update a member in current BATCH sequence
+    // - work in BATCH mode: nothing is sent to the server until BatchSend call
+    // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
+    function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+      DoNotAutoComputeFields: boolean=false): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -11665,6 +11694,10 @@ type
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
     {$endif NOVARIANTS}
+    /// increments one integer field value
+    // - is just a wrapper around OneFieldValue + UpdateField methods
+    function UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64=1): boolean; virtual;
     /// override this method to guess if this record can be updated or deleted
     // - this default implementation returns always true
     // - e.g. you can add digital signature to a record to disallow record editing
@@ -13117,12 +13150,9 @@ type
     mlTables, mlMethods, mlInterfaces, mlSessions, mlSQLite3);
 
   /// used for high-level statistics in TSQLRestServer.URI()
-  TSQLRestServerMonitor = class(TSynMonitorInputOutput)
+  TSQLRestServerMonitor = class(TSynMonitorServer)
   protected
-    fCurrentRequestCount: integer;
     fCurrentThreadCount: integer;
-    fClientsCurrent: integer;
-    fClientsMax: integer;
     fSuccess: QWord;
     fOutcomingFiles: QWord;
     fServiceMethod: QWord;
@@ -13137,20 +13167,12 @@ type
     constructor Create(aServer: TSQLRestServer); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientConnect;
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientDisconnect;
     /// update the Created/Read/Updated/Deleted properties
     procedure NotifyORM(aMethod: TSQLURIMethod);
     /// update the per-table statistics
     procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
        const CounterDiff: Int64);
   published
-    /// current count of connected clients
-    property ClientsCurrent: integer read fClientsCurrent;
-    /// max count of connected clients
-    property ClientsMax: integer read fClientsMax;
     /// number of valid responses
     // - i.e. which returned status code 200/HTML_SUCCESS or 201/HTML_CREATED
     // - any invalid request will increase the TSynMonitor.Errors property
@@ -13166,8 +13188,6 @@ type
     /// number of current declared thread counts
     // - as registered by BeginCurrentThread/EndCurrentThread
     property CurrentThreadCount: integer read fCurrentThreadCount;
-    /// how many concurrent requests are processed in TSQLRestServer.URI()
-    property CurrentRequestCount: integer read fCurrentRequestCount;
     /// how many Create / Add ORM operations did take place
     property Created: QWord read fCreated;
     /// how many Read / Get ORM operations did take place
@@ -25529,7 +25549,6 @@ end;
 procedure TSQLRecord.GetJSONValues(W: TJSONSerializer);
 var i,n: integer;
     Props: TSQLPropInfoList;
-label txt,txt1;
 begin
   if self=nil then
     exit;
@@ -27948,6 +27967,15 @@ begin
     fOnWrite(self,soUpdate,PSQLRecordClass(Value)^,Value.IDValue,Value,FieldBits);
 end;
 
+function TSQLRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+  DoNotAutoComputeFields: boolean): integer;
+begin
+  if (Value=nil) or (fBatch=nil) then
+    result := -1 else
+    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields),
+      DoNotAutoComputeFields);
+end;
+
 
 { TSQLRest }
 
@@ -28869,6 +28897,15 @@ begin
   result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
 end;
 {$endif NOVARIANTS}
+
+function TSQLRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
+  const FieldName: RawUTF8; Increment: Int64): boolean;
+var Value: Int64;
+begin
+  if (ID<>0) and OneFieldValue(Table,FieldName,'ID=?',[],[ID],Value) then
+    result := UpdateField(Table,ID,FieldName,[Value+Increment]) else
+    result := false;
+end;
 
 function TSQLRest.Add(Value: TSQLRecord; SendData: boolean;
   ForceID,DoNotAutoComputeFields: boolean): TID;
@@ -35664,6 +35701,27 @@ end;
 {$endif MSWINDOWS}
 
 
+{ TSynMonitorServer }
+
+procedure TSynMonitorServer.ClientConnect;
+begin
+  inc(fClientsCurrent);
+  if fClientsCurrent>fClientsMax then
+    fClientsMax := fClientsCurrent;
+end;
+
+procedure TSynMonitorServer.ClientDisconnect;
+begin
+  if fClientsCurrent>0 then
+    dec(fClientsCurrent);
+end;
+
+procedure TSynMonitorServer.ClientDisconnectAll;
+begin
+  fClientsCurrent := 0;
+end;
+
+
 { TSQLRestServerMonitor }
 
 constructor TSQLRestServerMonitor.Create(aServer: TSQLRestServer);
@@ -35679,20 +35737,6 @@ begin
   ObjArrayClear(fPerTable[false]);
   ObjArrayClear(fPerTable[true]);
   inherited;
-end;
-
-procedure TSQLRestServerMonitor.ClientConnect;
-begin
-  inc(fClientsCurrent);
-  if fClientsCurrent>fClientsMax then
-    fClientsMax := fClientsCurrent;
-end;
-
-procedure TSQLRestServerMonitor.ClientDisconnect;
-begin
-  TSQLLog.Enter(self);
-  if fClientsCurrent>0 then
-    dec(fClientsCurrent);
 end;
 
 procedure TSQLRestServerMonitor.NotifyORM(aMethod: TSQLURIMethod);
@@ -43882,10 +43926,13 @@ end;
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
 
 {$ifdef CPU64}
-procedure x64FakeStub;
+procedure x64FakeStub; {$ifdef FPC} assembler; {$endif}
 var smetndx, sxmm3, sxmm2, sxmm1: pointer;
 asm // mov ax,{MethodIndex}; jmp x64FakeStub
+  {$ifdef FPC}
+  {$else}
   .params 2 // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
+  {$endif}
   and rax,$ffff
   movsd sxmm1,xmm1
   movsd sxmm2,xmm2
