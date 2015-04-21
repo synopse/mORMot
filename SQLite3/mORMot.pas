@@ -5184,7 +5184,7 @@ type
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
     // - by default, calling this method will mark process as successfull
-    procedure Success(Status: integer=HTML_SUCCESS);
+    procedure Success(Status: integer=HTML_SUCCESS); virtual;
     /// use this method to send back an error to the caller
     // - expects Status to not be HTML_SUCCESS neither HTML_CREATED,
     // and will send back a JSON error message to the caller, with the
@@ -5192,7 +5192,7 @@ type
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
     procedure Error(const ErrorMessage: RawUTF8='';
-      Status: integer=HTML_BADREQUEST); overload;
+      Status: integer=HTML_BADREQUEST); overload; virtual;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
     procedure Error(const Format: RawUTF8; const Args: array of const;
