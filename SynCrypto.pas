@@ -370,6 +370,9 @@ type
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
     constructor Create(const aKey; aKeySize: cardinal); virtual;
+    /// Initialize AES contexts for cypher
+    // - here the Key is supplied as a string, and will be hashed using SHA-256
+    constructor CreateFromSha256(const aKey: RawUTF8); virtual;
     /// compute a class instance similar to this one
     function Clone: TAESAbstract; virtual;
 
@@ -612,7 +615,7 @@ type
 
   PSHA256Digest = ^TSHA256Digest;
   /// 256 bits memory block for SHA256 hash digest storage
-  TSHA256Digest   = packed array[0..31] of byte;
+  TSHA256Digest = packed array[0..31] of byte;
 
   PSHA256 = ^TSHA256;
   /// handle SHA256 hashing
@@ -5334,6 +5337,13 @@ begin
   move(aKey,fKey,fKeySizeBytes);
 end;
 
+constructor TAESAbstract.CreateFromSha256(const aKey: RawUTF8);
+var Digest: TSHA256Digest;
+begin
+  SHA256Weak(aKey,Digest);
+  Create(Digest,256);
+end;
+
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
 var len,iv: integer;
@@ -5383,10 +5393,8 @@ end;
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
   Encrypt, IVAtBeginning: boolean): RawByteString;
 var instance: TAESAbstract;
-    digest: TSHA256Digest;
 begin
-  SHA256Weak(Key,digest);
-  instance := Create(digest,256);
+  instance := CreateFromSha256(Key);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input,IVAtBeginning) else
