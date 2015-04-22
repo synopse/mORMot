@@ -2227,9 +2227,8 @@ function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
-// ! url := UrlEncodeFull(['select','*','where','ID=12','offset',23,'object',aObject]);
+// ! url := UrlEncode(['select','*','where','ID=12','offset',23,'object',aObject]);
 // - parameters can be either textual, integer or extended, or any TObject
-// (standard UrlEncode() will only handle
 // - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
 // function
 function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
@@ -2319,6 +2318,10 @@ function UrlDecodeNextNameValue(U: PUTF8Char; var Name,Value: RawUTF8): PUTF8Cha
 // - returns a pointer just after the decoded value (may points e.g. to
 // #0 or '&') - it is up to the caller to continue the process or not
 function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+
+/// encode name/value pairs into CSV/INI raw format
+function CSVEncode(const NameValuePairs: array of const;
+  const KeySeparator: RawUTF8='='; const ValueSeparator: RawUTF8=#13#10): RawUTF8;
 
 
 /// returns TRUE if the given text buffer contains A..Z,0..9 characters
@@ -4533,6 +4536,9 @@ type
     /// returns all values, as CSV or INI content
     function AsCSV(const KeySeparator: RawUTF8='=';
       const ValueSeparator: RawUTF8=#13#10): RawUTF8;
+    /// fill the supplied two arrays of RawUTF8 with the stored values
+    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
+    {$ifndef NOVARIANTS}
     /// compute a TDocVariant document from the stored values
     // - output variant will be reset and filled as a TDocVariant instance,
     // ready to be serialized as a JSON object
@@ -4540,7 +4546,9 @@ type
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
-    procedure MergeDocVariant(var DocVariant: variant);
+    // - returns the resulting count of stored values in the TDocVariant 
+    function MergeDocVariant(var DocVariant: variant): integer;
+    {$endif}
     /// returns true if the Init() method has been called
     function Initialized: boolean;
     /// can be used to set all data from one BLOB memory buffer
@@ -5633,11 +5641,14 @@ type
   // included in woFullExpand or woHumanReadable)
   // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
   // before the ISO-8601 encoded TDateTime value
+  // - by default, TSQLRawBlob properties are serialized as null, unless
+  // woSQLRawBlobAsBase64 is defined 
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woEnumSetsAsText, woDateTimeWithMagic);
+    woEnumSetsAsText, woDateTimeWithMagic,
+    woSQLRawBlobAsBase64);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -8015,7 +8026,7 @@ var
 // - return false if any invalid (non hexa) char is found in Hex^
 // - using this function with Bin^ as an integer value will decode in big-endian
 // order (most-signignifican byte first)
-function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
+function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overload;
 
 /// fast conversion from binary data into hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -8023,6 +8034,9 @@ function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 // - using this function with BinBytes^ as an integer value will encode it
 // in low-endian order (less-signignifican byte first): don't use it for display
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+
+/// fast conversion from hexa chars into binary data
+function HexToBin(const Hex: RawUTF8): RawByteString; overload;
 
 /// fast conversion from binary data into hexa chars
 function BinToHex(const Bin: RawByteString): RawUTF8; overload;
@@ -15972,10 +15986,13 @@ begin
 end;
 var j: integer;
 begin
-  j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
-  if j=0 then
-    result := S else
-    Process(j);
+  if (S='') or (OldPattern=NewPattern) then
+    result := S else begin
+    j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
+    if j=0 then
+      result := S else
+      Process(j);
+  end;
 end;
 
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
@@ -16014,7 +16031,7 @@ begin
       if PAnsiChar(pointer(Source))[i]=OldChar then begin
         SetString(result,PAnsiChar(pointer(Source)),n);
         for j := i to n-1 do
-          if PAnsiChar(pointer(Source))[j]=OldChar then
+          if PAnsiChar(pointer(result))[j]=OldChar then
             PAnsiChar(pointer(result))[j] := NewChar;
         exit;
       end;
@@ -18757,6 +18774,18 @@ begin
   L := length(Bin);
   FastNewRawUTF8(result,L*2);
   SynCommons.BinToHex(pointer(Bin),pointer(Result),L);
+end;
+
+function HexToBin(const Hex: RawUTF8): RawByteString; overload;
+var L: integer;
+begin
+  L := length(Hex);
+  if L and 1<>0 then
+    L := 0 else // hexadecimal should be in char pairs
+    L := L shr 1;
+  SetLength(result,L);
+  if not SynCommons.HexToBin(pointer(Hex),pointer(result),L) then
+    result := '';
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
@@ -22488,7 +22517,7 @@ begin
   while i<len do begin
     case s[i+1] of
       #0: break; // reached end of s
-      '%': if not HexToBin(PAnsiChar(pointer(s))+i+1,PByte(P),1) then
+      '%': if not SynCommons.HexToBin(PAnsiChar(pointer(s))+i+1,PByte(P),1) then
         P^ := s[i+1] else
         inc(i,2); // browsers do not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
@@ -22520,7 +22549,7 @@ begin
   repeat
     case U^ of
       #0: break; // reached end of URI
-      '%': if not HexToBin(PAnsiChar(U+1),PByte(P),1) then
+      '%': if not SynCommons.HexToBin(PAnsiChar(U+1),PByte(P),1) then
         P^ := U^ else
         inc(U,2); // browsers do not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
@@ -22543,7 +22572,7 @@ begin
   Beg := U;
   len := 0;
   while not(U^ in [#0,'&']) do begin
-    if (U^='%') and HexToBin(PAnsiChar(U+1),nil,1) then
+    if (U^='%') and SynCommons.HexToBin(PAnsiChar(U+1),nil,1) then
       inc(U,3) else
       inc(U);
     inc(len);
@@ -22553,7 +22582,7 @@ begin
   V := pointer(Value);
   U := Beg;
   for i := 1 to len do
-    if (U^='%') and HexToBin(PAnsiChar(U+1),PByte(V),1) then begin
+    if (U^='%') and SynCommons.HexToBin(PAnsiChar(U+1),PByte(V),1) then begin
       inc(V);
       inc(U,3);
     end else begin
@@ -22758,6 +22787,26 @@ begin
       inc(CSVNames); // jump &
   until false;
   result := true; // all parameters found
+end;
+
+function CSVEncode(const NameValuePairs: array of const;
+  const KeySeparator, ValueSeparator: RawUTF8): RawUTF8;
+var i: integer;
+begin
+  if length(NameValuePairs)<2 then
+    result := '' else
+    with TTextWriter.CreateOwnedStream do
+    try
+      for i := 1 to length(NameValuePairs) shr 1 do begin
+        Add(NameValuePairs[i*2-2],twNone);
+        AddNoJSONEscape(pointer(KeySeparator));
+        Add(NameValuePairs[i*2-1],twNone);
+        AddNoJSONEscape(pointer(ValueSeparator));
+      end;
+      SetText(result);
+    finally
+      Free;
+    end;
 end;
 
 function IsZero(P: pointer; Length: integer): boolean;
@@ -26283,6 +26332,7 @@ var FieldTable: PFieldTable absolute TypeInfo;
     Field: ^TFieldInfo;
     Diff: cardinal;
     A, B: PAnsiChar;
+    DynA, DynB: TDynArray;
 begin
   A := @RecA;
   B := @RecB;
@@ -26333,10 +26383,22 @@ begin
           Diff := sizeof(variant) else
           exit;
       {$endif}
+      tkDynArray: begin
+        DynA.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},A^);
+        DynB.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},B^);
+        if DynA.Equals(DynB) then
+          Diff := sizeof(pointer) else
+          exit;
+      end;
+      tkInterface:
+        if PPointer(A)^=PPointer(B)^ then
+          Diff := sizeof(pointer) else
+          exit;
       {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
       else
         if Field^.TypeInfo^.Kind in tkManagedTypes then
-          raise ESynException.CreateUTF8('RecordEquals(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
+          raise ESynException.CreateUTF8('RecordEquals(kind=%)',
+            [ord(Field^.TypeInfo^.Kind)]) else begin
           if F=FieldTable^.ManagedCount then
             Diff := FieldTable.Size-Field^.Offset else
             Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
@@ -26344,7 +26406,8 @@ begin
             exit; // binary block not equal
         end;
       {$else}
-      else exit; // kind of field not handled
+      else raise ESynException.CreateUTF8('RecordEquals(kind=%)',
+        [ord(Field^.TypeInfo^.Kind)]);
       {$endif}
     end;
     inc(A,Diff);
@@ -28384,7 +28447,7 @@ begin
     end;
     ktFixedArray:
       if wasString and (StrLen(PropValue)=fFixedSize*2) and
-         HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+         SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
     end;
   end;
@@ -30691,6 +30754,10 @@ var tmp: pointer;
     L: integer;
 begin
   L := length(JSON);
+  if L=0 then begin // avoid GPF
+    result := false;
+    exit;
+  end;
   if L<sizeof(buf) then
     tmp := @buf else
     GetMem(tmp,L+1); // +1 to include ending #0
@@ -32997,6 +33064,8 @@ begin
     tkUString:
       result := UnicodeString(A)=UnicodeString(B);
     {$endif}
+    tkInterface:
+      result := pointer(A)=pointer(B);
     {$ifndef NOVARIANTS}
     tkVariant:
       result := Variant(A)=Variant(B);
@@ -33053,6 +33122,9 @@ begin
       if UnicodeString(A1^[i])<>UnicodeString(A2^[i]) then
         exit;
   {$endif}
+  tkInterface:
+    if not CompareMem(P1,P2,SizeOf(pointer)*cardinal(n)) then
+      exit;
   {$ifndef NOVARIANTS}
   tkVariant:
     for i := 0 to n-1 do
@@ -33136,6 +33208,9 @@ begin
       if RecordEquals(P^,Elem,ElemType) then
         exit else
         inc(PtrUInt(P),ElemSize);
+  tkInterface:
+    for result := 0 to max do
+      if PPtrIntArray(P)^[result]=PtrInt(Elem) then exit;
   end;
   result := -1;
 end;
@@ -33421,9 +33496,16 @@ begin
         RawByteString(Elem) := '';
       tkWString:
         WideString(Elem) := '';
-      {$ifdef UNICODE}tkUString: UnicodeString(Elem) := ''; {$endif}
+      tkInterface:
+        IUnknown(Elem) := nil;
+      {$ifdef UNICODE}
+      tkUString:
+        UnicodeString(Elem) := '';
+      {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}:
         RecordClear(Elem,ElemType);
+      tkDynArray:
+        _DynArrayClear(pointer(Elem),ElemType);
       {$ifndef NOVARIANTS}
       tkVariant:
         VarClear(Variant(Elem));
@@ -37018,7 +37100,7 @@ slash:inc(i);
         'f': P[j] := #$0c;
         'r': P[j] := #$0d;
         'u':
-        if HexToBin(pointer(P+i+1),@w,2) and (w<>0) then begin // '\u0123'
+        if SynCommons.HexToBin(pointer(P+i+1),@w,2) and (w<>0) then begin // '\u0123'
           w := swap(w);  // reverse byte order
           if w<=$7f then // speed up UTF-8 encoding for most used chars
             P[j] := ansichar(w) else
@@ -44427,29 +44509,45 @@ begin
   end;
 end;
 
+procedure TSynNameValue.AsNameValues(out Names,Values: TRawUTF8DynArray);
+var i: integer;
+begin
+  SetLength(Names,Count);
+  SetLength(Values,Count);
+  for i := 0 to Count-1 do begin
+    Names[i] := List[i].Name;
+    Values[i] := List[i].Value;
+  end;
+end;
+
+{$ifndef NOVARIANTS}
 procedure TSynNameValue.AsDocVariant(out DocVariant: variant);
 var i: integer;
 begin
-  if Count=0 then
-    exit;
-  if not DocVariantType.IsOfType(DocVariant) then
-    TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE);
-  for i := 0 to Count-1 do
-    TDocVariantData(DocVariant).AddValue(
-      List[i].Name,RawUTF8ToVariant(List[i].Value));
+  if Count>0 then
+  with TDocVariantData(DocVariant) do begin
+    Init(JSON_OPTIONS_NAMEVALUE,dvObject);
+    VCount := self.Count;
+    SetLength(VName,VCount);
+    SetLength(VValue,VCount);
+    for i := 0 to VCount-1 do begin
+      VName[i] := List[i].Name;
+      RawUTF8ToVariant(List[i].Value,VValue[i]);
+    end;
+  end;
 end;
 
-procedure TSynNameValue.MergeDocVariant(var DocVariant: variant);
+function TSynNameValue.MergeDocVariant(var DocVariant: variant): integer;
 var i: integer;
 begin
-  if Count=0 then
-    exit;
   if not DocVariantType.IsOfType(DocVariant) then
     TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE);
   for i := 0 to Count-1 do
     TDocVariantData(DocVariant).AddOrUpdateValue(
       List[i].Name,RawUTF8ToVariant(List[i].Value));
+  result := TDocVariantData(DocVariant).VCount;
 end;
+{$endif}
 
 
 { TSynAuthenticationAbstract }

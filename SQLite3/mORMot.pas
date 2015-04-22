@@ -4138,6 +4138,10 @@ type
   PClass = ^TClass;
   PSQLRecordClass = ^TSQLRecordClass;
 
+  /// a dynamic array storing TSQLRecord instances
+  // - not used direcly, but as specialized T*ObjArray types
+  TSQLRecordObjArray = array of TSQLRecord;
+
   /// a dynamic array used to store the TSQLRecord classes in a Database Model
   TSQLRecordClassDynArray = array of TSQLRecordClass;
 
@@ -5408,7 +5412,7 @@ type
   TSQLInitializeTableOptions = set of TSQLInitializeTableOption;
 
   /// a dynamic array of TSQLRecordMany instances
-  TSQLRecordManyDynArray = array of TSQLRecordMany;
+  TSQLRecordManyObjArray = array of TSQLRecordMany;
 
   /// internal data used by TSQLRecord.FillPrepare()/FillPrepareMany() methods
   // - using a dedicated class will reduce memory usage for each TSQLRecord
@@ -5423,7 +5427,7 @@ type
       - calculated in FillPrepare() or FillPrepareMany() methods }
     fTableMapCount: integer;
     /// set by TSQLRecord.FillPrepareMany() to release M.fDestID^ instances
-    fTableMapRecordManyInstances: TSQLRecordManyDynArray;
+    fTableMapRecordManyInstances: TSQLRecordManyObjArray;
     /// map the published fields index
     // - calculated in FillPrepare() or FillPrepareMany() methods
     fTableMap: array of record
@@ -10545,6 +10549,7 @@ type
   end;
 
   /// a list of callback interfaces to notify TSQLRecord modifications
+  // - you can use InterfaceArray*() wrapper functions to manage the list
   IServiceRecordVersionCallbackDynArray = array of IServiceRecordVersionCallback;
 
   /// service definition for master/slave replication notifications subscribe
@@ -16119,6 +16124,8 @@ const
   SERVERDEFAULTMONITORLEVELS: TSQLRestServerMonitorLevels =
     [mlTables,mlMethods,mlInterfaces,mlSQLite3];
 
+/// wrapper to search for a given TSQLRecord by ID in an array of TSQLRecord
+function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
 
 /// create a TRecordReference with the corresponding parameters
 function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID): TRecordReference; overload;
@@ -20362,7 +20369,7 @@ begin
     // preceded by a single "x" or "X" character. For example: X'53514C697465'
     LenHex := (Len-3) shr 1;
     SetLength(result,LenHex);
-    if HexToBin(@P[2],pointer(result),LenHex) then
+    if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
       exit; // valid hexa data
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
@@ -20388,7 +20395,7 @@ begin
     // preceded by a single "x" or "X" character. For example: X'53514C697465'
     LenHex := (Len-3) shr 1;
     SetLength(result,LenHex);
-    if HexToBin(@P[2],pointer(result),LenHex) then
+    if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
       exit; // valid hexa data
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
@@ -20416,7 +20423,7 @@ begin
     // BLOB literals format
     LenResult := (Len-3)shr 1;
     SetLength(Result,LenResult);
-    if HexToBin(@P[2],pointer(Result),LenResult) then
+    if SynCommons.HexToBin(@P[2],pointer(Result),LenResult) then
       exit; // valid hexa data
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
@@ -20472,7 +20479,7 @@ begin
   while P^ in [#1..' '] do inc(P);
   if (P[0] in ['x','X']) and (P[1]='''') then begin
     Len := (StrLen(P)-3) shr 1;
-    result := (P[Len-1]='''') and HexToBin(@P[2],nil,Len);
+    result := (P[Len-1]='''') and SynCommons.HexToBin(@P[2],nil,Len);
     exit;
   end else begin
     result := false;
@@ -40922,7 +40929,7 @@ var Added: boolean;
     Added := true;
   end;
 var P: PPropInfo;
-    i, j, V, c: integer;
+    i, j, V, c, codepage: integer;
     Obj: TObject;
     List: TList absolute Value;
 {$ifndef LVCL}
@@ -41103,10 +41110,14 @@ begin
         end;
         {$ifdef FPC}tkAString,{$endif} tkLString: begin
           HR(P);
-          Add('"');
-          P^.GetLongStrProp(Value,tmp);
-          AddAnyAnsiString(tmp,twJSONEscape,P^.PropType^.AnsiStringCodePage);
-          Add('"');
+          codepage := P^.PropType^.AnsiStringCodePage;
+          if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then
+            AddShort('null') else begin
+            Add('"');
+            P^.GetLongStrProp(Value,tmp);
+            AddAnyAnsiString(tmp,twJSONEscape,codepage);
+            Add('"');
+          end;
         end;
         tkFloat: begin
           HR(P);
@@ -47690,6 +47701,19 @@ begin
   SetWeakZero(self,aObjectInterfaceField,aValue);
 end;
 {$endif}
+
+function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
+var i: integer;
+    a: TSQLRecordObjArray absolute aSQLRecordObjArray;
+begin
+  for i := 0 to length(a)-1 do
+    if a[i].IDValue=aID then begin
+      result := a[i];
+      exit;
+    end;
+  result := nil;
+end;
+
 
 initialization
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;

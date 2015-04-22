@@ -3694,13 +3694,13 @@ end;
 function TBSONObjectID.FromText(const Text: RawUTF8): boolean;
 begin
   if length(Text)=SizeOf(self)*2 then
-    result := HexToBin(Pointer(Text),@self,SizeOf(self)) else
+    result := SynCommons.HexToBin(Pointer(Text),@self,SizeOf(self)) else
     result := false;
 end;
 
 function TBSONObjectID.FromText(Text: PUTF8Char): boolean;
 begin
-  result := HexToBin(Pointer(Text),@self,SizeOf(self));
+  result := SynCommons.HexToBin(Pointer(Text),@self,SizeOf(self));
 end;
 
 function TBSONObjectID.FromVariant(const value: variant): boolean;
