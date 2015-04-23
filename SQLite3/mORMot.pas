@@ -32368,9 +32368,9 @@ var aSession: TAuthSession;
 begin
   if Server.HandleAuthentication then begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
+    result := false;
     Server.fSessions.Lock;
     try
-      aSession := nil;
       if Server.fSessionAuthentication<>nil then
         for i := 0 to length(Server.fSessionAuthentication)-1 do begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
@@ -32381,23 +32381,25 @@ begin
             SetString(fSessionAccessRights,PAnsiChar(@aSession.fAccessRights),
               sizeof(TSQLAccessRights)); // override access rights
             Call^.RestAccessRights := pointer(fSessionAccessRights);
-            break;
+            Session := aSession.IDCardinal;
+            result := true;
+            exit;
           end;
         end;
     finally
       Server.fSessions.UnLock;
     end;
-    if aSession=nil then
-      if (Service=nil) or not Service.ByPassAuthentication then
-        // /auth + /timestamp are e.g. allowed services without signature
-        if (MethodIndex<0) or
-           not Server.fPublishedMethod[MethodIndex].ByPassAuthentication then begin
-          result := false; // authentication error -> caller can try another session
-          exit;
-        end;
-  end else // default unique session if authentication is not enabled
+    // if we reached here, no session was found
+    if Service<>nil then
+      // you can allow a service to be called directly
+      result := Service.ByPassAuthentication else
+    if MethodIndex>=0 then
+      // /auth + /timestamp are e.g. allowed services without signature
+      result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication;
+  end else begin // default unique session if authentication is not enabled
     Session := CONST_AUTHENTICATION_NOT_USED;
-  result := true;
+    result := true;
+  end;
 end;
 
 procedure TSQLRestServerURIContext.AuthenticationFailed;
@@ -41112,7 +41114,7 @@ begin
           HR(P);
           codepage := P^.PropType^.AnsiStringCodePage;
           if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then
-            AddShort('null') else begin
+            AddShort('""') else begin
             Add('"');
             P^.GetLongStrProp(Value,tmp);
             AddAnyAnsiString(tmp,twJSONEscape,codepage);

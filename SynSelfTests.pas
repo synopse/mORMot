@@ -5990,7 +5990,7 @@ begin
       Check(Disco.Releases._(i).id>0);
       V := Disco.Releases._(i);
       Check(V._count>0);
-      Check(V.year>0);
+      Check(V.title<>'');
     end;
 //    if aOptions=[] then
 //      FileFromString(TDocVariantData(Disco).ToJSON,'discoVariant.json');
@@ -7742,7 +7742,7 @@ const
   'jz/dDXej3ZClzk14r9LVXTW1kca7FgzLrfNaWG5KyG/40tuNtM7LvavpM665+Q+G+dsXdVoc3x5vK5fK'+
   'WP0ebanRbmgol+oYnDQrW+6mTLl3Hln9FZS7n5W7K+Gi8ZIw3vqLIZ2yZd44wufWeWzS1Ebaxn17Dfzy'+
   'CW6jv67RdXcuf1/o69I+T+fTdim0j3Ry8TccmqZuqswsX2i+d/n7Qnv9f1RSHw29k+n/Bw==';
-  Hash: array[boolean] of Cardinal = ($4D1810E,$2806E33);
+  Hash: array[boolean] of Cardinal = ($B7E3D52E,$9EB2B857); //($4D1810E,$2806E33);
 var S: RawByteString;
     MS: THeapMemoryStream;
     MF: TMetaFile;
@@ -7794,16 +7794,16 @@ begin
       if (GetACP<>1252) {$ifdef CPU64}or true{$endif} then
         Check(length(s)>6500) else begin
         i := PosEx('/FontBBox[',s);
-        if CheckFailed(i=5580) then exit;
+        if CheckFailed(i<>0) then exit;
         fillchar(s[i],32,32);
         j := PosEx('/FontBBox[',s);
-        if CheckFailed(j=5910) then exit;
+        if CheckFailed(j<>0) then exit;
         fillchar(s[j],32,32);
         i := PosEx('/FontBBox[',s);
-        if CheckFailed(i=6297)then exit;
+        if CheckFailed(i<>0)then exit;
         fillchar(s[i],32,32);
         H := Hash32(s);
-        Check(H=$CDF0EE9F);
+        Check(H=$4CFB10E6);
       end;
     finally
       Free;
