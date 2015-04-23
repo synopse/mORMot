@@ -2177,6 +2177,9 @@ type
     function SizeInStorageAsEnum: Integer;
     /// compute how many bytes this type would use to be stored as a set
     function SizeInStorageAsSet: Integer;
+    /// store an enumeration value from its ordinal representation
+    // - copy SizeInStorageAsEnum bytes from Ordinal to Value pointer
+    procedure SetEnumFromOrdinal(out Value; Ordinal: Integer);
   end;
 
 {$ifdef FPC}
@@ -4821,6 +4824,90 @@ type
   // are provided in this unit, to allow RESTful and JSON/RPC protocols
   TSQLRestServerURIContextClass = class of TSQLRestServerURIContext;
 
+  /// a set of potential actions to be executed from the server
+  // - reSQL will indicate the right to execute any POST SQL statement (not only
+  // SELECT statements)
+  // - reSQLSelectWithoutTable will allow executing a SELECT statement with
+  // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
+  // against TSQLAccessRights.GET[] per-table right
+  // - reService will indicate the right to execute the interface-based JSON-RPC
+  // service implementation
+  // - reUrlEncodedSQL will indicate the right to execute a SQL query encoded
+  // at the URI level, for a GET (to be used e.g. with XMLHTTPRequest, which
+  // forced SentData='' by definition), encoded as sql=.... inline parameter
+  // - reUrlEncodedDelete will indicate the right to delete items using a
+  // WHERE clause for DELETE verb at /root/TableName?WhereClause
+  // - reOneSessionPerUser will force that only one session may be created
+  // for one user, even if connection comes from the same IP: in this case,
+  // you may have to set the SessionTimeOut to a small value, in case the
+  // session is not closed gracefully
+  // - by default, read/write access to the TSQLAuthUser table is disallowed,
+  // for obvious security reasons: but you can define reUserCanChangeOwnPassword
+  // so that the current logged user would be able to change its own password
+  // - order of this set does matter, since it will be stored as a byte value
+  // e.g. by TSQLAccessRights.ToString: ensure that new items would always be
+  // appended to the list, not inserted within
+  TSQLAllowRemoteExecute = set of (
+    reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser,
+    reSQLSelectWithoutTable, reUserCanChangeOwnPassword);
+
+  /// set the User Access Rights, for each Table
+  // - one property for every and each URI method (GET/POST/PUT/DELETE)
+  // - one bit for every and each Table in Model.Tables[]
+  {$ifdef UNICODE}
+  TSQLAccessRights = record
+  {$else}
+  TSQLAccessRights = object
+  {$endif}
+    /// set of allowed actions on the server side
+    AllowRemoteExecute: TSQLAllowRemoteExecute;
+    /// GET method (retrieve record) table access bits
+    // - note that a GET request with a SQL statement without a table (i.e.
+    // on 'ModelRoot' URI with a SQL statement as SentData, as used in
+    // TSQLRestClientURI.UpdateFromServer) will be checked for simple cases
+    // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
+    // here are: since TSQLRestClientURI.UpdateFromServer() is called only
+    // for refreshing a direct statement, it will be OK; you can improve this
+    // by overriding the TSQLRestServer.URI() method
+    // - if the REST request is LOCK, the PUT access bits will be read instead
+    // of the GET bits value
+    GET: TSQLFieldTables;
+    /// POST method (create record) table access bits
+    POST: TSQLFieldTables;
+    /// PUT method (update record) table access bits
+    // - if the REST request is LOCK, the PUT access bits will be read instead
+    // of the GET bits value
+    PUT: TSQLFieldTables;
+    /// DELETE method (delete record) table access bits
+    DELETE: TSQLFieldTables;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - C=Create, R=Read, U=Update, D=Delete rights
+    procedure Edit(aTableIndex: integer; C, R, U, D: Boolean); overload;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - use TSQLOccasion set as parameter
+    procedure Edit(aTableIndex: integer; aRights: TSQLOccasions); overload;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - will raise an EModelException if the supplied table is incorrect
+    // - C=Create, R=Read, U=Update, D=Delete rights
+    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; C, R, U, D: Boolean); overload;
+    /// wrapper method which can be used to set the CRUD abilities over a table
+    // - will raise an EModelException if the supplied table is incorrect
+    // - use TSQLOccasion set as parameter
+    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; aRights: TSQLOccasions); overload;
+    /// serialize the content as TEXT
+    // - use the TSQLAuthGroup.AccessRights CSV format
+    function ToString: RawUTF8;
+    /// unserialize the content from TEXT
+    // - use the TSQLAuthGroup.AccessRights CSV format
+    procedure FromString(P: PUTF8Char);
+    /// validate mPost/mPut/mDelete action against those access rights
+    // - used by TSQLRestServerURIContext.ExecuteORMWrite and
+    // TSQLRestServer.EngineBatchSend methods for proper security checks
+    function CanExecuteORMWrite(Method: TSQLURIMethod;
+      Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
+      Context: TSQLRestServerURIContext): boolean;
+  end;
+
   /// abstract calling context for a TSQLRestServerCallBack event handler
   // - having a dedicated class avoid changing the implementation methods
   // signature if the framework add some parameters or behavior to it
@@ -4836,7 +4923,6 @@ type
   protected
     fInput: TRawUTF8DynArray; // even items are parameter names, odd are values
     fInputPostContentType: RawUTF8;
-    fSessionAccessRights: RawByteString; // session may be deleted meanwhile
     fInputCookiesRetrieved: boolean;
     fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
     fInputCookieLastName: RawUTF8;
@@ -4846,6 +4932,7 @@ type
     fServiceListInterfaceMethodIndex: integer;
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
+    fSessionAccessRights: TSQLAccessRights; // session may be deleted meanwhile
     procedure FillInput;
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
@@ -5073,7 +5160,19 @@ type
     // - returns TRUE and set Value if the parameter is found
     function InputUTF8OrError(const ParamName: RawUTF8; out Value: RawUTF8;
       const ErrorMessageForMissingParameter: string): boolean;
-   /// return TRUE if the input parameter is available at URI
+    /// retrieve one input parameter from its URI name as RawUTF8
+    // - returns supplied DefaultValue if the parameter is not found
+    function InputUTF8OrDefault(const ParamName, DefaultValue: RawUTF8): RawUTF8;
+    /// retrieve one input parameter from its URI name as an enumeration
+    // - will expect the value to be specified as integer, or as the textual
+    // representation of the enumerate, ignoring any optional lowercase prefix
+    // as featured by TEnumType.GetEnumNameValue()
+    // - returns TRUE and set ValueEnum if the parameter is found and correct
+    // - returns FALSE and set ValueEnum to first item (i.e. DefaultEnumOrd) if
+    // the parameter is not found, or not containing a correct value
+    function InputEnum(const ParamName: RawUTF8; EnumType: PTypeInfo;
+      out ValueEnum; DefaultEnumOrd: integer=0): boolean;
+    /// return TRUE if the input parameter is available at URI
     // - even if InputUTF8['param']='', there may be '..?param=&another=2'
     property InputExists[const ParamName: RawUTF8]: Boolean read GetInputExists;
     {$ifndef NOVARIANTS}
@@ -5105,6 +5204,11 @@ type
     /// decode any multipart/form-data POST request input
     // - returns TRUE and set MultiPart array as expected, on success
     function InputAsMultiPart(var MultiPart: TMultiPartDynArray): Boolean;
+    /// low-level access to the input parameters, stored as pairs of UTF-8 
+    // - even items are parameter names, odd are values
+    // - Input*[] properties should have been called previously to fill the
+    // internal array
+    property InputPairs: TRawUTF8DynArray read FInput;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
     // - you could call e.g. InHeader['remoteip'] to retrieve the caller IP
@@ -5126,7 +5230,8 @@ type
     // supplied Result content with no transformation
     // - if Status is an error code, it will call Error() method
     // - CustomHeader optional parameter can be set e.g. to
-    // TEXT_CONTENT_TYPE_HEADER if the default JSON_CONTENT_TYPE is not OK
+    // TEXT_CONTENT_TYPE_HEADER if the default JSON_CONTENT_TYPE is not OK,
+    // or calling GetMimeContentTypeHeader() on the returned binary buffer
     // - if Handle304NotModified is TRUE and Status is HTML_SUCCESS, the Result
     // content will be hashed (using crc32c) and in case of no modification
     // will return HTML_NOTMODIFIED to the browser, without the actual result
@@ -5144,6 +5249,12 @@ type
     // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTML_SUCCESS;
       Handle304NotModified: boolean=false); overload;
+    /// uses this method to send back directly any binary content to the caller
+    // - the exact MIME type will be retrieved using GetMimeContentTypeHeader()
+    // - by default, the HTML_NOTMODIFIED process will take place, to minimize
+    // bandwidth between the server and the client
+    procedure ReturnBlob(const Blob: RawByteString; Status: integer=HTML_SUCCESS;
+      Handle304NotModified: boolean=true);
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
@@ -6177,8 +6288,18 @@ type
     /// will append the record fields as an expanded JSON object
     // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
     // method will add the JSON object directly to any TJSONSerializer
-    procedure AppendAsJsonObject(W: TJSONSerializer;
-      const Fields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]);
+    // - by default, will append the simple fields, unless the Fields optional
+    // parameter is customized to a non void value
+    procedure AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBits=[]);
+    /// will append all the FillPrepare() records as an expanded JSON array
+    // - generates '[{rec1},{rec2},...]' using a loop similar to:
+    // ! while FillOne do .. AppendJsonObject() ..
+    // - if FieldName is set, the JSON array will be written as a JSON property,
+    // i.e. surrounded as '"FieldName":[....],' - note the ',' at the end
+    // - by default, will append the simple fields, unless the Fields optional
+    // parameter is customized to a non void value
+    procedure AppendFillAsJsonArray(const FieldName: RawUTF8;
+       W: TJSONSerializer; Fields: TSQLFieldBits=[]);
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TFileBufferWriter); overload;
@@ -12185,90 +12306,6 @@ type
   // and you can set Ctxt.Call^.OutStatus to a corresponding error code
   TNotifySQLSession = function(Sender: TSQLRestServer; Session: TAuthSession;
     Ctxt: TSQLRestServerURIContext): boolean of object;
-
-  /// a set of potential actions to be executed from the server
-  // - reSQL will indicate the right to execute any POST SQL statement (not only
-  // SELECT statements)
-  // - reSQLSelectWithoutTable will allow executing a SELECT statement with
-  // arbitrary content via GET/LOCK (simple SELECT .. FROM aTable will be checked
-  // against TSQLAccessRights.GET[] per-table right
-  // - reService will indicate the right to execute the interface-based JSON-RPC
-  // service implementation
-  // - reUrlEncodedSQL will indicate the right to execute a SQL query encoded
-  // at the URI level, for a GET (to be used e.g. with XMLHTTPRequest, which
-  // forced SentData='' by definition), encoded as sql=.... inline parameter
-  // - reUrlEncodedDelete will indicate the right to delete items using a
-  // WHERE clause for DELETE verb at /root/TableName?WhereClause
-  // - reOneSessionPerUser will force that only one session may be created
-  // for one user, even if connection comes from the same IP: in this case,
-  // you may have to set the SessionTimeOut to a small value, in case the
-  // session is not closed gracefully
-  // - by default, read/write access to the TSQLAuthUser table is disallowed,
-  // for obvious security reasons: but you can define reUserCanChangeOwnPassword
-  // so that the current logged user would be able to change its own password
-  // - order of this set does matter, since it will be stored as a byte value
-  // e.g. by TSQLAccessRights.ToString: ensure that new items would always be
-  // appended to the list, not inserted within
-  TSQLAllowRemoteExecute = set of (
-    reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser,
-    reSQLSelectWithoutTable, reUserCanChangeOwnPassword);
-
-  /// set the User Access Rights, for each Table
-  // - one property for every and each URI method (GET/POST/PUT/DELETE)
-  // - one bit for every and each Table in Model.Tables[]
-  {$ifdef UNICODE}
-  TSQLAccessRights = record
-  {$else}
-  TSQLAccessRights = object
-  {$endif}
-    /// set of allowed actions on the server side
-    AllowRemoteExecute: TSQLAllowRemoteExecute;
-    /// GET method (retrieve record) table access bits
-    // - note that a GET request with a SQL statement without a table (i.e.
-    // on 'ModelRoot' URI with a SQL statement as SentData, as used in
-    // TSQLRestClientURI.UpdateFromServer) will be checked for simple cases
-    // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
-    // here are: since TSQLRestClientURI.UpdateFromServer() is called only
-    // for refreshing a direct statement, it will be OK; you can improve this
-    // by overriding the TSQLRestServer.URI() method
-    // - if the REST request is LOCK, the PUT access bits will be read instead
-    // of the GET bits value
-    GET: TSQLFieldTables;
-    /// POST method (create record) table access bits
-    POST: TSQLFieldTables;
-    /// PUT method (update record) table access bits
-    // - if the REST request is LOCK, the PUT access bits will be read instead
-    // of the GET bits value
-    PUT: TSQLFieldTables;
-    /// DELETE method (delete record) table access bits
-    DELETE: TSQLFieldTables;
-    /// wrapper method which can be used to set the CRUD abilities over a table
-    // - C=Create, R=Read, U=Update, D=Delete rights
-    procedure Edit(aTableIndex: integer; C, R, U, D: Boolean); overload;
-    /// wrapper method which can be used to set the CRUD abilities over a table
-    // - use TSQLOccasion set as parameter
-    procedure Edit(aTableIndex: integer; aRights: TSQLOccasions); overload;
-    /// wrapper method which can be used to set the CRUD abilities over a table
-    // - will raise an EModelException if the supplied table is incorrect
-    // - C=Create, R=Read, U=Update, D=Delete rights
-    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; C, R, U, D: Boolean); overload;
-    /// wrapper method which can be used to set the CRUD abilities over a table
-    // - will raise an EModelException if the supplied table is incorrect
-    // - use TSQLOccasion set as parameter
-    procedure Edit(aModel: TSQLModel; aTable: TSQLRecordClass; aRights: TSQLOccasions); overload;
-    /// serialize the content as TEXT
-    // - use the TSQLAuthGroup.AccessRights CSV format
-    function ToString: RawUTF8;
-    /// unserialize the content from TEXT
-    // - use the TSQLAuthGroup.AccessRights CSV format
-    procedure FromString(P: PUTF8Char);
-    /// validate mPost/mPut/mDelete action against those access rights
-    // - used by TSQLRestServerURIContext.ExecuteORMWrite and
-    // TSQLRestServer.EngineBatchSend methods for proper security checks
-    function CanExecuteORMWrite(Method: TSQLURIMethod;
-      Table: TSQLRecordClass; TableIndex: integer; const TableID: TID;
-      Context: TSQLRestServerURIContext): boolean;
-  end;
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
@@ -24933,6 +24970,15 @@ begin
   end;
 end;
 
+procedure TEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
+begin
+  case MaxValue of
+  0..255:     byte(Value) := Ordinal;
+  256..65535: word(Value) := Ordinal;
+  else        integer(Value) := Ordinal;
+  end;
+end;
+
 function TEnumType.SizeInStorageAsSet: Integer;
 begin
   case MaxValue of
@@ -25587,7 +25633,7 @@ begin
     W.Add('}');
 end;
 
-procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; const Fields: TSQLFieldBits);
+procedure TSQLRecord.AppendAsJsonObject(W: TJSONSerializer; Fields: TSQLFieldBits);
 var i: integer;
     Props: TSQLPropInfoList;
 begin
@@ -25595,9 +25641,11 @@ begin
     W.AddShort('null');
     exit;
   end;
-  Props := RecordProps.Fields;
   W.AddShort('{"ID":');
   W.Add(fID);
+  if IsZero(Fields) then
+    Fields := RecordProps.SimpleFieldsBits[soSelect];
+  Props := RecordProps.Fields;
   for i := 0 to Props.Count-1 do
     if i in Fields then begin
       W.Add(',','"');
@@ -25606,6 +25654,22 @@ begin
       Props.List[i].GetJSONValues(Self,W);
     end;
   W.Add('}');
+end;
+
+procedure TSQLRecord.AppendFillAsJsonArray(const FieldName: RawUTF8;
+   W: TJSONSerializer; Fields: TSQLFieldBits=[]);
+begin
+  if FieldName<>'' then
+    W.AddFieldName(FieldName);
+  W.Add('[');
+  while FillOne do begin
+    AppendAsJsonObject(W,Fields);
+    W.Add(',');
+  end;
+  W.CancelLastComma;
+  W.Add(']');
+  if FieldName<>'' then
+    W.Add(',');
 end;
 
 procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
@@ -28466,7 +28530,8 @@ begin
   if (self=nil) or (Value=nil) then
     T := nil else
     T := ExecuteList([PSQLRecordClass(Value)^],
-      Model.Props[PSQLRecordClass(Value)^].SQLFromSelectWhere('*',trim(SQLWhere+' LIMIT 1')));
+      Model.Props[PSQLRecordClass(Value)^].SQLFromSelectWhere(
+        '*',trim(SQLWhere+' LIMIT 1')));
   if T=nil then
     result := false else
     try
@@ -32378,9 +32443,8 @@ begin
             {$ifdef WITHLOG}
             Log.Log(sllUserAuth,'%/%',[aSession.User.LogonName,aSession.ID],self);
             {$endif}
-            SetString(fSessionAccessRights,PAnsiChar(@aSession.fAccessRights),
-              sizeof(TSQLAccessRights)); // override access rights
-            Call^.RestAccessRights := pointer(fSessionAccessRights);
+            fSessionAccessRights := aSession.fAccessRights; // local copy
+            Call^.RestAccessRights := @fSessionAccessRights;
             Session := aSession.IDCardinal;
             result := true;
             exit;
@@ -32394,7 +32458,7 @@ begin
       // you can allow a service to be called directly
       result := Service.ByPassAuthentication else
     if MethodIndex>=0 then
-      // /auth + /timestamp are e.g. allowed services without signature
+      // /auth + /timestamp are e.g. allowed methods without signature
       result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication;
   end else begin // default unique session if authentication is not enabled
     Session := CONST_AUTHENTICATION_NOT_USED;
@@ -32744,8 +32808,7 @@ begin
             if Blob<>nil then begin
               if TableEngine.EngineRetrieveBlob(TableIndex,
                    TableID,Blob,TSQLRawBlob(Call.OutBody)) then begin
-                Call.OutHead := HEADER_CONTENT_TYPE+
-                  GetMimeContentType(pointer(Call.OutBody),Length(Call.OutBody));
+                Call.OutHead := GetMimeContentTypeHeader(Call.OutBody);
                 Call.OutStatus := HTML_SUCCESS; // 200 OK
               end else
                 Call.OutStatus := HTML_NOTFOUND;
@@ -33112,6 +33175,16 @@ begin
     result := fInput[i*2+1];
 end;
 
+function TSQLRestServerURIContext.InputUTF8OrDefault(
+  const ParamName, DefaultValue: RawUTF8): RawUTF8;
+var i: integer;
+begin
+  i := GetInputNameIndex(ParamName);
+  if i<0 then
+    result := DefaultValue else
+    result := fInput[i*2+1];
+end;
+
 function TSQLRestServerURIContext.InputUTF8OrError(const ParamName: RawUTF8;
   out Value: RawUTF8; const ErrorMessageForMissingParameter: string): boolean;
 var i: integer;
@@ -33126,6 +33199,29 @@ begin
     Value := fInput[i*2+1];
     result := true;
   end;
+end;
+
+function TSQLRestServerURIContext.InputEnum(const ParamName: RawUTF8;
+  EnumType: PTypeInfo; out ValueEnum; DefaultEnumOrd: integer): boolean;
+var value: RawUTF8;
+    int,err: Integer;
+begin
+  result := false;
+  if (EnumType=nil) or (EnumType^.Kind<>tkEnumeration) then
+    exit;
+  value := GetInputUTF8OrVoid(ParamName);
+  if value<>'' then begin
+    int := GetInteger(Pointer(value),err);
+    if err=0 then
+      result := true else begin
+      int := EnumType^.EnumBaseType^.GetEnumNameValue(pointer(value),length(value));
+      if int>=0 then
+        result := true else
+        int := DefaultEnumOrd;
+    end;
+  end else
+    int := DefaultEnumOrd;
+  EnumType^.EnumBaseType^.SetEnumFromOrdinal(ValueEnum,int);
 end;
 
 function TSQLRestServerURIContext.GetInputString(const ParamName: RawUTF8): string;
@@ -33311,9 +33407,15 @@ begin
     Error(Result,Status);
 end;
 
+procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
+  Status: integer; Handle304NotModified: boolean);
+begin
+  Returns(Blob,Status,GetMimeContentTypeHeader(Blob),Handle304NotModified);
+end;
+
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
-  Handle304NotModified: boolean;
-  const ContentType,AttachmentFileName,Error404Redirect: RawUTF8);
+  Handle304NotModified: boolean; const ContentType,AttachmentFileName,
+  Error404Redirect: RawUTF8);
 var FileTime: TDateTime;
     clientHash, serverHash: RawUTF8;
 begin
@@ -33324,7 +33426,7 @@ begin
       Error('',HTML_NOTFOUND) else begin
     if ContentType<>'' then
       Call.OutHead := HEADER_CONTENT_TYPE+ContentType else
-      Call.OutHead := HEADER_CONTENT_TYPE+GetMimeContentType(nil,0,FileName);
+      Call.OutHead := GetMimeContentTypeHeader('',FileName);
     Call.OutStatus := HTML_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
