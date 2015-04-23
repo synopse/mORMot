@@ -286,11 +286,18 @@ type
     // - an internal cache is maintained by this class function
     // - this implementation is thread-safe and re-entrant: i.e. the same
     // TSynMustache returned instance can be used by several threads at once
+    // - will raise an ESynMustache exception on error
     class function Parse(const aTemplate: RawUTF8): TSynMustache;
     /// remove the specified {{mustache}} template from the internal cache
     // - returns TRUE on success, and FALSE if the template was not cached
     // by a previous call to Parse() class function
     class function UnParse(const aTemplate: RawUTF8): boolean;
+    /// parse and render a {{mustache}} template over the supplied JSON
+    // - an internal templates cache is maintained by this class function
+    // - returns TRUE and set aContent the rendered content on success
+    // - returns FALSE if the template is not correct
+    class function TryRenderJson(const aTemplate,aJSON: RawUTF8;
+      out aContent: RawUTF8): boolean;
   public
     /// initialize and parse a pre-rendered {{mustache}} template
     // - you should better use the Parse() class function instead, which
@@ -676,6 +683,21 @@ end;
 class function TSynMustache.UnParse(const aTemplate: RawUTF8): boolean;
 begin
   result := SynMustacheCache.UnParse(aTemplate);
+end;
+
+class function TSynMustache.TryRenderJson(const aTemplate, aJSON: RawUTF8;
+  out aContent: RawUTF8): boolean;
+var mus: TSynMustache;
+begin
+  if aTemplate<>'' then
+  try
+    mus := Parse(aTemplate);
+    aContent := mus.RenderJSON(aJSON);
+    result := true;
+  except
+    result := false;
+  end else
+    result := false;
 end;
 
 constructor TSynMustache.Create(const aTemplate: RawUTF8);
