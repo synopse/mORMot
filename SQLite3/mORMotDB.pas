@@ -919,15 +919,15 @@ begin
               [self,FunctionName,SQL],sllDebug);
             exit;
           end;
+          if f>0 then
+            if JoinedOR then
+              W.AddShort(' or ') else
+              W.AddShort(' and ');
           if NotClause then
             W.AddShort('not ');
           W.AddString(extFieldName(Field-1));
           W.AddString(DB_SQLOPERATOR[Operator]);
           W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
-          if f<n then
-            if JoinedOR then
-              W.AddShort(' or ') else
-              W.AddShort(' and ');
         end;
       end;
       if Stmt.GroupByField<>nil then begin

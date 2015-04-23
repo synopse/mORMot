@@ -9057,6 +9057,16 @@ begin
         'select id,firstname from SampleRecord where id=2');
   Test2('select rowid,firstname from PeopleExt where rowid=?',
         'select id,firstname from SampleRecord where id=?');
+  Test2('select rowid,firstname from PeopleExt where rowid>=?',
+        'select id,firstname from SampleRecord where id>=?');
+  Test2('select rowid,firstname from PeopleExt where rowid<?',
+        'select id,firstname from SampleRecord where id<?');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
+        'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
+        'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
+        'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
   Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
         'select id,firstname from SampleRecord where id=2 and not lastname like ?');
   Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
