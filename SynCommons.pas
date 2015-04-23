@@ -415,7 +415,8 @@ unit SynCommons;
   - added ESynException.CreateUTF8() constructor, more powerful than the
     default Exception.CreateFmt(): this CreateUTF8 method is now used everywhere
   - added QuotedStrJSON() and NextNotSpaceCharIs() functions
-  - refactored GetMimeContentType() implementation - see also [fca72ba0ce]
+  - refactored GetMimeContentType() implementation - see also [fca72ba0ce] -
+    and introduced GetMimeContentTypeHeader() function
   - added MultiPartFormDataDecode() to decode multipart/form-data POST requests
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, unless the NOX64PATCHRTL conditional is defined
@@ -3271,16 +3272,20 @@ function CharSetToCodePage(CharSet: integer): cardinal;
 /// convert a code page to a char set
 function CodePageToCharSet(CodePage: Cardinal): Integer;
 
-/// retrieve the MIME content type from a supplied binary buffer
+/// retrieve the MIME content type from a supplied binary buffer or file name
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
 // 'application/extension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
-// - can be used as such:
-// !  Call.OutHead := HEADER_CONTENT_TYPE+
-// !   GetMimeContentType(pointer(Call.OutBody),Length(Call.OutBody),aFileName);
 function GetMimeContentType(Content: Pointer; Len: integer;
    const FileName: TFileName=''): RawUTF8;
+
+/// retrieve the HTTP header for MIME content type from a supplied binary buffer
+// - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
+// - can be used as such:
+// !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
+function GetMimeContentTypeHeader(const Content: RawByteString;
+  const FileName: TFileName=''): RawUTF8;
 
 /// retrieve if some content is compressed, from a supplied binary buffer
 // - returns TRUE, if the header in binary buffer "may" be compressed (this method
@@ -23778,8 +23783,10 @@ procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S: cardinal;
   FirstChar: AnsiChar = 'T'); overload;
 // we use Thhmmss format
 begin
-  P^ := FirstChar;
-  inc(P);
+  if FirstChar<>#0 then begin
+    P^ := FirstChar;
+    inc(P);
+  end;
   pWord(P)^ := TwoDigitLookupW[H];
   inc(P,2);
   if Expanded then begin
@@ -25138,6 +25145,13 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   end;
   if Result='' then
     Result := BINARY_CONTENT_TYPE;
+end;
+
+function GetMimeContentTypeHeader(const Content: RawByteString;
+  const FileName: TFileName): RawUTF8;
+begin
+  result := HEADER_CONTENT_TYPE+
+    GetMimeContentType(Pointer(Content),length(Content),FileName);
 end;
 
 function IsContentCompressed(Content: Pointer; Len: integer): boolean;
