@@ -19379,7 +19379,7 @@ begin
 end;
 
 function TSQLPropInfoList.IndexByName(aName: PUTF8Char): integer;
-var i,cmp,L,R: integer;
+var cmp,L,R: integer;
 begin
   if (self<>nil) and (aName<>nil) and (fCount>0) then
   if fCount<5 then begin
@@ -19389,8 +19389,7 @@ begin
   end else begin
     if fOrderedByName=nil then begin
       SetLength(fOrderedByName,fCount);
-      for i := 0 to fCount-1 do
-        fOrderedByName[i] := i;
+      FillIncreasing(pointer(fOrderedByName),0,fCount);
       QuickSortByName(0,fCount-1);
     end;
     L := 0;
