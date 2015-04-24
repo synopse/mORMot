@@ -844,6 +844,8 @@ unit mORMot;
     - introducing TSQLRecord.CreateJoined() and CreateAndFillPrepareJoined()
       constructors, to auto-initialize and load nested TSQLRecord properties
     - added TSQLRecord.GetAsDocVariant/GetSimpleFieldsAsDocVariant methods
+    - added TSQLRecord.AppendAsJsonObject/AppendFillAsJsonArray and
+      TSQLRest.AppendListAsJsonArray methods
     - TSQLRecord.InitializeTable() will now create DB indexes for aUnique
       fields (including ID/RowID)
     - TSQLRecord.CreateCopy will handle TStrings property via new CopyStrings()
@@ -6298,6 +6300,7 @@ type
     // i.e. surrounded as '"FieldName":[....],' - note the ',' at the end
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
+    // - see also TSQLRest.AppendListAsJsonArray for a high-level wrapper method 
     procedure AppendFillAsJsonArray(const FieldName: RawUTF8;
        W: TJSONSerializer; Fields: TSQLFieldBits=[]);
     /// write the field values into the binary buffer
@@ -11672,6 +11675,25 @@ type
     function RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): boolean;
+    /// get and append a list of members as an expanded JSON array
+    // - implements REST GET collection
+    // - generates '[{rec1},{rec2},...]' using a loop similar to:
+    // ! while FillOne do .. AppendJsonObject() ..
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - if OutputFieldName is set, the JSON array will be written as a JSON,
+    // property i.e. surrounded as '"OutputFieldName":[....],' - note ending ',' 
+    // - CustomFieldsCSV can be the CSV list of field names to be retrieved
+    // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - is just a wrapper around TSQLRecord.AppendFillAsJsonArray()
+    procedure AppendListAsJsonArray(Table: TSQLRecordClass;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const OutputFieldName: RawUTF8; W: TJSONSerializer;
+      const CustomFieldsCSV: RawUTF8='');
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -28595,6 +28617,21 @@ begin
     result := T.ToObjArray(result,Table);
   finally
     T.Free;
+  end;
+end;
+
+procedure TSQLRest.AppendListAsJsonArray(Table: TSQLRecordClass;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const OutputFieldName: RawUTF8; W: TJSONSerializer; const CustomFieldsCSV: RawUTF8);
+var Rec: TSQLRecord;
+begin
+  if (self=nil) or (Table=nil) or (W=nil) then
+    exit;
+  Rec := Table.CreateAndFillPrepare(Self,FormatSQLWhere,BoundsSQLWhere,CustomFieldsCSV);
+  try
+    Rec.AppendFillAsJsonArray(OutputFieldName,W,Rec.fFill.TableMapFields);
+  finally
+    Rec.Free;
   end;
 end;
 
