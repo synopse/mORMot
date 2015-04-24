@@ -1119,7 +1119,8 @@ unit mORMot;
     - fixed GPF issue in TServiceFactoryServer after instance time-out deletion
     - added TSQLPropInfo.PropertyIndex member
     - added TSQLRecordProperties.SimpleFieldsCount[] array
-    - added TSQLRecordProperties.FieldBits[] field index map for all kinds
+    - added TSQLRecordProperties.FieldBits[] field index map for all types
+    - added TSQLRecordProperties.SmallFieldsBits property
     - added TSQLRecordProperties.FieldBitsFromCSV()/FieldBitsFromRawUTF8()
       methods (with functions ready to be used e.g. in BatchAdd/BatchUpdate),
       and TSQLRecordProperties.FieldBitsFromBlobField() method
@@ -1481,7 +1482,7 @@ type
     {$endif}
     sftBlob, sftBlobDynArray, sftBlobCustom, sftUTF8Custom, sftMany,
     sftModTime, sftCreateTime, sftTID, sftRecordVersion);
-
+                      
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
 
@@ -4691,6 +4692,12 @@ type
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
     IsUniqueFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for the smallest simple fields
+    // - i.e. excluding non only sftBlob and sftMany, but also sftVariant,
+    // sftBlobDynArray, sftBlobCustom and sftUTF8Custom fields
+    // - may be used to minimize the transmitted content, e.g. when serializing
+    // to JSON for the most
+    SmallFieldsBits: TSQLFieldBits;
     /// contains the main field index (e.g. mostly 'Name')
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
     // - contains -1 if no field matches
@@ -40424,7 +40431,7 @@ var i,j, nProps: integer;
     nCopiableFields: integer;
     isTSQLRecordMany: boolean;
     F: TSQLPropInfo;
-label Simple;
+label Simple, Small;
 begin
   InitializeCriticalSection(fLock);
   assert(aTable<>nil); // should not be called directly, but via PropsCreate()
@@ -40498,7 +40505,7 @@ begin
             MainField[false] := i;
         if MainField[true]<0 then
           MainField[true] := i;
-        goto Simple;
+        goto Small;
       end;
       sftBlob: begin
         BlobFields[nBlob] := F as TSQLPropInfoRTTI;
@@ -40512,10 +40519,10 @@ begin
       sftID: // = TSQLRecord(aID)
         if isTSQLRecordMany and
            (IdemPropNameU(F.Name,'Source') or IdemPropNameU(F.Name,'Dest')) then
-          goto Simple else begin
+          goto Small else begin
           JoinedFields[nSQLRecord] := F as TSQLPropInfoRTTIID;
           inc(nSQLRecord);
-          goto Simple;
+          goto Small;
         end;
       sftMany: begin
         ManyFields[nMany] := F as TSQLPropInfoRTTIMany;
@@ -40541,7 +40548,7 @@ begin
       end;
       sftCreateTime, sftModTime: begin
         include(ModCreateTimeFieldsBits,i);
-        goto Simple;
+        goto Small;
       end;
       sftRecordVersion: begin
         if fRecordVersionField<>nil then
@@ -40552,7 +40559,10 @@ begin
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end; // TRecordVersion is a copiable but not a simple field!
+      sftVariant:
+        goto Simple;
       else begin
+Small:  include(SmallFieldsBits,i);
         // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
@@ -40595,6 +40605,8 @@ Simple: SimpleFields[nSimple] := F;
       exclude(SimpleFieldsBits[soUpdate],i);
       dec(SimpleFieldsCount[soUpdate]);
     end;
+  Assert(SmallFieldsBits=SimpleFieldsBits[soSelect]-FieldBits[sftVariant]-
+    FieldBits[sftBlobDynArray]-FieldBits[sftBlobCustom]-FieldBits[sftUTF8Custom]);
   if isTSQLRecordMany then begin
     fRecordManySourceProp := Fields.ByRawUTF8Name('Source') as TSQLPropInfoRTTIInstance;
     if fRecordManySourceProp=nil then
