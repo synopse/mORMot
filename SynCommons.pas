@@ -4547,7 +4547,9 @@ type
     /// compute a TDocVariant document from the stored values
     // - output variant will be reset and filled as a TDocVariant instance,
     // ready to be serialized as a JSON object
-    procedure AsDocVariant(out DocVariant: variant);
+    procedure AsDocVariant(out DocVariant: variant); overload;
+    /// compute a TDocVariant document from the stored values
+    function AsDocVariant: variant; overload; {$ifdef HASINLINE}inline;{$endif}
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
@@ -8045,6 +8047,9 @@ function HexToBin(const Hex: RawUTF8): RawByteString; overload;
 
 /// fast conversion from binary data into hexa chars
 function BinToHex(const Bin: RawByteString): RawUTF8; overload;
+
+/// fast conversion from binary data into hexa chars
+function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
 /// fast conversion from binary data into hexa chars, ready to be displayed
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -18779,6 +18784,12 @@ begin
   L := length(Bin);
   FastNewRawUTF8(result,L*2);
   SynCommons.BinToHex(pointer(Bin),pointer(Result),L);
+end;
+
+function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+begin
+  FastNewRawUTF8(result,BinBytes*2);
+  SynCommons.BinToHex(Bin,pointer(Result),BinBytes);
 end;
 
 function HexToBin(const Hex: RawUTF8): RawByteString; overload;
@@ -44549,6 +44560,11 @@ begin
       RawUTF8ToVariant(List[i].Value,VValue[i]);
     end;
   end;
+end;
+
+function TSynNameValue.AsDocVariant: variant;
+begin
+  AsDocVariant(result);
 end;
 
 function TSynNameValue.MergeDocVariant(var DocVariant: variant): integer;
