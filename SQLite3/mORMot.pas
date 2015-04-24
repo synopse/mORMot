@@ -1118,9 +1118,9 @@ unit mORMot;
     - added TSQLPropInfo.PropertyIndex member
     - added TSQLRecordProperties.SimpleFieldsCount[] array
     - added TSQLRecordProperties.FieldBits[] field index map for all kinds
-      and a new TSQLRecordProperties.FieldIndexsFromBlobField() method
-    - added TSQLRecordProperties.FieldIndexsFromCSV()/FieldIndexsFromRawUTF8()
-      methods (with functions ready to be used e.g. in BatchAdd/BatchUpdate)
+    - added TSQLRecordProperties.FieldBitsFromCSV()/FieldBitsFromRawUTF8()
+      methods (with functions ready to be used e.g. in BatchAdd/BatchUpdate),
+      and TSQLRecordProperties.FieldBitsFromBlobField() method
     - added TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty() and
       RegisterCustomRTTIRecordProperty() methods
     - added TSQLRecordProperties.SetCustomCollationForAllRawUTF8() +
@@ -1412,7 +1412,7 @@ type
   // and JSON objects or arrays will be handled as TDocVariant custom types
   // - sftBlob is a BLOB field (TSQLRawBlob Delphi property), and won't be
   // retrieved by default (not part of ORM "simple types"), to save bandwidth
-  /// - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
+  // - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
   // property will be retrieved by default, i.e. is recognized as a "simple
   // field", and will use Base64 encoding during JSON transmission, or a true
   // JSON array, depending on the database back-end (e.g. MongoDB)
@@ -4386,21 +4386,21 @@ type
     function IsFieldName(const PropName: RawUTF8): boolean;
     /// set all bits corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
-    function FieldIndexsFromRawUTF8(const aFields: array of RawUTF8;
+    function FieldBitsFromRawUTF8(const aFields: array of RawUTF8;
       var Bits: TSQLFieldBits): boolean; overload;
     /// set all bits corresponding to the supplied field names
     // - returns the matching fields set
-    function FieldIndexsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits; overload;
+    function FieldBitsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits; overload;
     /// set all bits corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
-    function FieldIndexsFromCSV(const aFieldsCSV: RawUTF8;
+    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
       var Bits: TSQLFieldBits): boolean; overload;
     /// set all bits corresponding to the supplied CSV field names
     // - returns the matching fields set
-    function FieldIndexsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits; overload;
+    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits; overload;
     /// set all bits corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
-    function FieldIndexsFromBlobField(aBlobField: PPropInfo;
+    function FieldBitsFromBlobField(aBlobField: PPropInfo;
       var Bits: TSQLFieldBits): boolean;
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
@@ -4489,13 +4489,13 @@ type
     function SQLAddField(FieldIndex: integer): RawUTF8;
 
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
-    // - you can use TSQLRecordProperties.FieldIndexsFromCSV() or
-    // TSQLRecordProperties.FieldIndexsFromRawUTF8() to compute aFields
+    // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
+    // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
       const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
-    // - you can use TSQLRecordProperties.FieldIndexsFromCSV() or
-    // TSQLRecordProperties.FieldIndexsFromRawUTF8() to compute aFields
+    // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
+    // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
       const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
@@ -5699,8 +5699,8 @@ type
     // - if CustomFields is left void, the simple fields will be used; otherwise,
     // you can specify your own set of fields to be transmitted when SendData=TRUE
     // (including BLOBs, even if they will be Base64-encoded within JSON content) -
-    // CustomFields could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8(), or by setting ALL_FIELDS
+    // CustomFields could be computed by TSQLRecordProperties.FieldBitsFromCSV()
+    // or TSQLRecordProperties.FieldBitsFromRawUTF8(), or by setting ALL_FIELDS
     // - this method will always compute and send TCreateTime/TModTime fields
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       const CustomFields: TSQLFieldBits=[]; DoNotAutoComputeFields: boolean=false): integer;
@@ -5717,15 +5717,15 @@ type
     // fields retrieved via a previous FillPrepare() call; otherwise, you can
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
-    // could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    // could be computed by TSQLRecordProperties.FieldBitsFromCSV()
+    // or TSQLRecordProperties.FieldBitsFromRawUTF8()
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
       DoNotAutoComputeFields: boolean=false): integer; overload; virtual;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
-    // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
+    // - is an overloaded method to Update(Value,FieldBitsFromCSV())
     function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean=false): integer; overload;
     /// delete a member in current BATCH sequence
@@ -11746,8 +11746,8 @@ type
     // fields retrieved via a previous FillPrepare() call; otherwise, you can
     // specify your own set of fields to be transmitted (including BLOBs, even
     // if they will be Base64-encoded within the JSON content) - CustomFields
-    // could be computed by TSQLRecordProperties.FieldIndexsFromCSV()
-    // or TSQLRecordProperties.FieldIndexsFromRawUTF8()
+    // could be computed by TSQLRecordProperties.FieldBitsFromCSV()
+    // or TSQLRecordProperties.FieldBitsFromRawUTF8()
     // - this method will always compute and send any TModTime fields
     // - this method will call EngineUpdate() to perform the request
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
@@ -11755,7 +11755,7 @@ type
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
-    // - is an overloaded method to Update(Value,FieldIndexsFromCSV())
+    // - is an overloaded method to Update(Value,FieldBitsFromCSV())
     function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
       DoNotAutoComputeFields: boolean=false): boolean; overload;
     /// update a member from a supplied list of simple field values
@@ -25969,7 +25969,7 @@ begin
   with RecordProps do begin
     if aFieldsCSV='*' then
       bits := SimpleFieldsBits[soInsert] else
-      if not FieldIndexsFromCSV(aFieldsCSV,bits) then
+      if not FieldBitsFromCSV(aFieldsCSV,bits) then
         exit;
     for f := 0 to Fields.Count-1 do
       if (f in bits) and (Fields.List[f].SQLFieldType in COPIABLE_FIELDS) then
@@ -26612,7 +26612,7 @@ end;
 function TSQLRecord.Filter(const aFields: array of RawUTF8): boolean;
 var F: TSQLFieldBits;
 begin
-  if RecordProps.FieldIndexsFromRawUTF8(aFields,F) then
+  if RecordProps.FieldBitsFromRawUTF8(aFields,F) then
     // must always call the virtual Filter() method
     result := Filter(F) else
     result := false;
@@ -26732,7 +26732,7 @@ function TSQLRecord.Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
   aInvalidFieldIndex: PInteger; aValidator: PSynValidate): string;
 var F: TSQLFieldBits;
 begin
-  if RecordProps.FieldIndexsFromRawUTF8(aFields,F) then
+  if RecordProps.FieldBitsFromRawUTF8(aFields,F) then
     // must always call the virtual Validate() method
     result := Validate(aRest,F,aInvalidFieldIndex,aValidator) else
     result := '';
@@ -28043,7 +28043,7 @@ function TSQLRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
 begin
   if (Value=nil) or (fBatch=nil) then
     result := -1 else
-    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields),
+    result := Update(Value,Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
       DoNotAutoComputeFields);
 end;
 
@@ -28645,7 +28645,7 @@ begin
     with Table.RecordProps do // optimized primary key direct access
     if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
        VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and
-       FieldIndexsFromCSV(CustomFieldsCSV,bits) then
+       FieldBitsFromCSV(CustomFieldsCSV,bits) then
       if IsZero(bits) then
         exit else
       if bits-SimpleFieldsBits[soSelect]=[] then
@@ -28907,7 +28907,7 @@ function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
 begin
   if (self=nil) or (Value=nil) then
     result := false else
-    result := Update(Value,Value.RecordProps.FieldIndexsFromCSV(CustomCSVFields),
+    result := Update(Value,Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
       DoNotAutoComputeFields);
 end;
 
@@ -31793,7 +31793,7 @@ begin
              ((DeletedVersion=0) or (UpdatedVersion<DeletedVersion)) then begin
             if (RecordVersion=0) or
                (OneFieldValue(Table,'ID',Rec.IDValue)='') then
-              result.Add(Rec,true,true,Rec.FillContext.TableMapFields,true) else
+              result.Add(Rec,true,true,Rec.fFill.TableMapFields,true) else
               result.Update(Rec,[],true);
             RecordVersion := UpdatedVersion;
             UpdatedVersion := 0;
@@ -36968,7 +36968,7 @@ begin
     // set blob value directly from RTTI property description
     BlobField.SetLongStrProp(fValue.List[i],BlobData);
     if Owner<>nil then begin
-      fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
+      fStoredClassRecordProps.FieldBitsFromBlobField(BlobField,AffectedField);
       Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',@AffectedField);
     end;
     result := true;
@@ -40165,7 +40165,7 @@ begin
     Fields := fStoredClassRecordProps.SimpleFieldsBits[soUpdate] else
   if FieldNames='*' then
     FillChar(Fields,sizeof(Fields),255) else
-    if not fStoredClassRecordProps.FieldIndexsFromCSV(FieldNames,Fields) then begin
+    if not fStoredClassRecordProps.FieldBitsFromCSV(FieldNames,Fields) then begin
       result := false; // invalid FieldNames content
       exit;
     end;
@@ -40801,7 +40801,7 @@ begin
   Fields.Free;
 end;
 
-function TSQLRecordProperties.FieldIndexsFromBlobField(aBlobField: PPropInfo;
+function TSQLRecordProperties.FieldBitsFromBlobField(aBlobField: PPropInfo;
   var Bits: TSQLFieldBits): boolean;
 var f: integer;
 begin
@@ -40816,7 +40816,7 @@ begin
   result := false;
 end;
 
-function TSQLRecordProperties.FieldIndexsFromCSV(const aFieldsCSV: RawUTF8;
+function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
   var Bits: TSQLFieldBits): boolean;
 var ndx: integer;
     P: PUTF8Char;
@@ -40838,13 +40838,13 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldIndexsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits;
+function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits;
 begin
-  if not FieldIndexsFromCSV(aFieldsCSV,Result) then
+  if not FieldBitsFromCSV(aFieldsCSV,Result) then
     fillchar(result,sizeof(result),0);
 end;
 
-function TSQLRecordProperties.FieldIndexsFromRawUTF8(const aFields: array of RawUTF8;
+function TSQLRecordProperties.FieldBitsFromRawUTF8(const aFields: array of RawUTF8;
   var Bits: TSQLFieldBits): boolean;
 var f,ndx: integer;
 begin
@@ -40861,9 +40861,9 @@ begin
   result := true;
 end;
 
-function TSQLRecordProperties.FieldIndexsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits;
+function TSQLRecordProperties.FieldBitsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits;
 begin
-  if not FieldIndexsFromRawUTF8(aFields,Result) then
+  if not FieldBitsFromRawUTF8(aFields,Result) then
     fillchar(result,sizeof(result),0);
 end;
 

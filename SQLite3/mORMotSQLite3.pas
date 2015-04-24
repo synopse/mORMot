@@ -1394,7 +1394,7 @@ begin
     finally
       DB.UnLock;
     end;
-    FieldIndexsFromBlobField(BlobField,AffectedField);
+    FieldBitsFromBlobField(BlobField,AffectedField);
     InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
   except
     on ESQLite3Exception do

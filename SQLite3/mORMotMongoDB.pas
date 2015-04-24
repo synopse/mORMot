@@ -639,7 +639,7 @@ begin
       update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
-        fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
+        fStoredClassRecordProps.FieldBitsFromBlobField(BlobField,AffectedField);
         Owner.InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
         Owner.FlushInternalDBCache;
       end;

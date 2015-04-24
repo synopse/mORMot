@@ -10781,7 +10781,7 @@ begin
                 if n and 3=0 then
                   // will update only V.YearOfBirth specifically
                   ClientDist.BatchUpdate(V,
-                    TSQLRecordPeople.RecordProps.FieldIndexsFromCSV('YearOfBirth')) else
+                    TSQLRecordPeople.RecordProps.FieldBitsFromCSV('YearOfBirth')) else
                   // will update only V.YearOfBirth as in previous FillPrepare
                   ClientDist.BatchUpdate(V);
                 inc(n);

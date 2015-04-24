@@ -1423,7 +1423,7 @@ begin
       Statement.Bind(2,aID);
       Statement.ExecutePrepared;
       if Owner<>nil then begin
-        fStoredClassRecordProps.FieldIndexsFromBlobField(BlobField,AffectedField);
+        fStoredClassRecordProps.FieldBitsFromBlobField(BlobField,AffectedField);
         Owner.InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
         Owner.FlushInternalDBCache;
       end;
