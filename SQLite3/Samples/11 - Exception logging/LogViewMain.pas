@@ -160,13 +160,13 @@ const
 //  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
      $DCDC80, $DC80DC, $DCDCDC,
 //  sllServiceCall, sllServiceReturn, sllUserAuth,
-     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD),
+     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD, clSilver),
 //  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo
     (clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack,
      clWhite,clWhite,clWhite,clBlack,clBlack,
      clWhite,clWhite,clBlack,clWhite,clBlack,clBlack,clBlack,clBlack,
      clBlack,clBlack,clBlack,
-     clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack));
+     clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack));
 
      
 { TMainLogView }
