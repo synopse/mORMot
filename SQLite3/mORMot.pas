@@ -5000,6 +5000,7 @@ type
     function Authenticate: boolean; virtual;
     /// method called in case of authentication failure
     // - this default implementation will just set OutStatus := HTML_FORBIDDEN
+    // and call Server.OnSessionFailed event
     procedure AuthenticationFailed; virtual;
     /// direct launch of a method-based service
     // - URI() will ensure that MethodIndex>=0 before calling it
@@ -13461,11 +13462,12 @@ type
     // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
     /// this event handler will be executed when a session failed to initialize
+    // (DenyOfService attack?) or the request is not valid (ManIntheMiddle attack?)
     // - e.g. if the URI signature is invalid, or OnSessionCreate event handler
     // aborted the session creation by returning TRUE (in this later case,
     // the Session parameter is not nil)
     // - you can access the current execution context from the Ctxt parameter,
-    // e.g. to retrieve the caller's IP:
+    // e.g. to retrieve the caller's IP and ban aggressive users:
     // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
     OnSessionFailed: TNotifySQLSession;
     /// a method can be specified to be notified when a session is closed
@@ -29114,7 +29116,7 @@ begin // use mostly the same fast comparison functions as for sorting
   if FieldType in [sftUnknown,sftBlob,sftBlobDynArray,sftBlobCustom,sftObject,
     sftUTF8Custom{$ifndef NOVARIANTS},sftVariant{$endif}] then
     FieldType := sftUTF8Text; // unknown or blob fields are compared as UTF-8
-  { TODO: handle sftBlobDynArray/sftBlobCustom/sftBlobRecord comparison }
+  { TODO: handle proper sftBlobDynArray/sftBlobCustom/sftBlobRecord comparison }
   case TSQLQueryOperator(Operator) of
     qoNone:
       result := true;
@@ -32514,6 +32516,9 @@ begin
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
   // which is not what we used, so here we won't send 401 error code but 403
   Call.OutStatus := HTML_FORBIDDEN;
+  // call the notification event
+  if Assigned(Server.OnSessionFailed) then
+    Server.OnSessionFailed(Server,nil,self);
 end;
 
 destructor TSQLRestAcquireExecution.Destroy;
@@ -33870,11 +33875,8 @@ begin
       // 2. handle security
       if (not Ctxt.Authenticate) or
          ((Ctxt.Service<>nil) and
-           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then begin
-        Ctxt.AuthenticationFailed;
-        if Assigned(OnSessionFailed) then
-          OnSessionFailed(self,nil,Ctxt);
-      end else
+           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
+        Ctxt.AuthenticationFailed else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -34156,9 +34158,7 @@ begin
   try
     for i := 0 to length(fSessionAuthentication)-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
-        exit;
-    if Assigned(OnSessionFailed) then
-      OnSessionFailed(self,nil,Ctxt);
+        break; // found an authentication, which may be successfull or not
   finally
     fSessions.UnLock;
   end;
@@ -42442,18 +42442,20 @@ begin
     if User<>nil then
     try
       // check if match TSQLRestClientURI.SetUser() algorithm
-      if not CheckPassword(Ctxt,User,aClientNonce,aPassWord) then
+      if CheckPassword(Ctxt,User,aClientNonce,aPassWord) then begin
+        // now client is authenticated -> create a session
+        SessionCreate(Ctxt,User);
         exit;
-      // now client is authenticated -> create a session
-      SessionCreate(Ctxt,User);
+      end;
     finally
       User.Free;
     end;
+    Ctxt.AuthenticationFailed;
   end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
       Ctxt.Results([Nonce(false)]) else
-      // parameters does not match any expected layout
+      // parameters does not match any expected layout -> try next authentication
       result := false;
 end;
 
@@ -42648,6 +42650,8 @@ begin
           exit; // success
         end;
       end;
+      Ctxt.AuthenticationFailed;
+      exit;
     finally
       U.Free;
     end;
@@ -42759,7 +42763,8 @@ begin
             'logonname',Session.User.LogonName,'data',BinToBase64(OutData)]);
     finally
       User.Free;
-    end;
+    end else
+      Ctxt.AuthenticationFailed;
   finally
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
