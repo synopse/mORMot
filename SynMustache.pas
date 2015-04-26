@@ -258,6 +258,7 @@ type
   // "My favorite things:\n{{#things}}{{-index}}. {{.}}\n{{/things}}"
   // over {things:["Peanut butter", "Pen spinning", "Handstands"]} renders as
   // "My favorite things:\n1. Peanut butter\n2. Pen spinning\n3. Handstands\n"
+  // - you could use {{-index0}} for 0-based index value
   // - handles -first  -last  and  -odd  pseudo-section keys, e.g.
   // "{{#things}}{{^-first}}, {{/-first}}{{.}}{{/things}}"
   // over {things:["one", "two", "three"]} renders as 'one, two, three'
@@ -280,6 +281,7 @@ type
     class procedure JSONQuote(const Value: variant; out result: variant);
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
+    class procedure EnumTrim(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -326,7 +328,7 @@ type
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
-    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON and WikiToHtml
+    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -896,9 +898,9 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64'],
+       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim'],
       [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64]);
+       ToJSON,WikiToHtml,BlobToBase64,EnumTrim]);
   result := HelpersStandardList;
 end;
 
@@ -987,6 +989,16 @@ begin
     result := Value;
 end;
 
+class procedure TSynMustache.EnumTrim(const Value: variant;
+  out result: variant);
+var tmp: RawUTF8;
+    wasString: boolean;
+    short: PUTF8Char;
+begin
+  VariantToUTF8(Value,tmp,wasString);
+  short := TrimLeftLowerCase(tmp);
+  RawUTF8ToVariant(short,StrLen(short),result);
+end;
 
 { TSynMustacheContext }
 
@@ -1091,7 +1103,9 @@ begin
         end else
         if IdemPChar(Name,'-INDEX') then begin
           Value.VType := varInteger;
-          Value.VInteger := ListCurrent+1;
+          if Name[6]='0' then
+            Value.VInteger := ListCurrent else
+            Value.VInteger := ListCurrent+1;
           exit;
         end else
         if (ListCurrent<ListCount) and (ListCurrentDocumentType<>nil) then begin
