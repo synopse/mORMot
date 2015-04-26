@@ -61,6 +61,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynLog,
   mORMot,
   mORMotDDD,
   SynDB, mORMotDB, // for TRestSettings on external SQL database
@@ -95,6 +96,9 @@ type
     /// save to file and finalize the settings
     // - any enumerated or set published property will be commented with their values
     destructor Destroy; override;
+    /// to be called when the application starts, to access settings
+    // - will change the system current directory to SettingsJsonFileName
+    procedure Initialize; virtual;
     /// compute a file name relative to the .settings file path
     function FileNameRelativeToSettingsFile(const aFileName: TFileName): TFileName;
     /// the .settings file name, including full path
@@ -102,48 +106,67 @@ type
       read fSettingsJsonFileName write fSettingsJsonFileName;
   end;
 
-  /// storage class for initializing an ORM REST class 
+  /// some options to be used for TRestSettings
+  TRestSettingsOption =
+    (optEraseDBFileAtStartup,optStoreDBFileRelativeToSettings);
+
+  /// define options to be used for TRestSettings
+  TRestSettingsOptions = set of TRestSettingsOption;
+
+  /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
   // pointing to a local or remote SQL/NoSQL database, with optional wrappers
   TRestSettings = class(TSynAutoCreateFields)
   protected
-    fDefinition: TSynConnectionDefinition;
+    fORM: TSynConnectionDefinition;
     fRoot: RawUTF8;
     fLogLevels: TSynLogInfos;
     fWrapperTemplateFolder: TFileName;
+    fOptions: TRestSettingsOptions;
   public
     /// is able to instantiate a REST instance according to the stored definition
     // - Definition.Kind will identify the TSQLRestServer or TSQLRestClient class
     // to be instantiated, or if equals 'MongoDB' use a full MongoDB store, or an
     // external SQL database if it matches a TSQLDBConnectionProperties classname
     // - will return nil if the supplied Definition is not correct
-    // - note that the supplied Model.Root should have been set to the Root
-    // property of this class, when created
+    // - note that the supplied Model.Root is expected to be the default root
+    // URI, which will be overriden with this TRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     // and publish the /wrapper HTML page if WrapperTemplateFolder is set
-    function NewRestInstance(aModel: TSQLModel; aHandleAuthentication: boolean;
+    function NewRestInstance(aRootSettings: TApplicationSettingsFile;
+      aModel: TSQLModel; aHandleAuthentication: boolean;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions;
       aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest; virtual;
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
     /// would let function NewRestInstance() create the expected TSQLRest
-    property Definition: TSynConnectionDefinition read fDefinition;
+    property ORM: TSynConnectionDefinition read fORM;
     /// the log levels to be defined
     property LogLevels: TSynLogInfos read fLogLevels write fLogLevels;
     /// if set to a valid folder, the generated TSQLRest will publish a
     // '/Root/wrapper' HTML page so that client code could be generated
     property WrapperTemplateFolder: TFileName
       read fWrapperTemplateFolder write fWrapperTemplateFolder;
+    /// how the REST instance is to be initialized
+    property Options: TRestSettingsOptions read fOptions write fOptions;
   end;
 
   /// parent class for storing REST-based application settings as a JSON file
   TApplicationSettingsRestFile = class(TApplicationSettingsFile)
   protected
     fRest: TRestSettings;
+    fServerPort: word;
+  public
+    /// to be called when the application starts, to access settings
+    // - will call inherited TApplicationSettingsFile.Initialize, and
+    // set ServerPort to a default 888/8888 value under Windows/Linnux
+    procedure Initialize; override;
   published
     /// allow to instantiate a REST instance from its JSON definition
     property Rest: TRestSettings read fRest;
+    /// the IP port to be used for the HTTP server associated with the application
+    property ServerPort: word read fServerPort write fServerPort;
   end;
 
 
@@ -179,6 +202,11 @@ begin
   inherited;
 end;
 
+procedure TApplicationSettingsFile.Initialize;
+begin
+  ChDir(ExtractFilePath(SettingsJsonFileName));
+end;
+
 function TApplicationSettingsFile.FileNameRelativeToSettingsFile(
   const aFileName: TFileName): TFileName;
 var path,settings: TFileName;
@@ -191,19 +219,50 @@ end;
 
 { TRestSettings }
 
-function TRestSettings.NewRestInstance(aModel: TSQLModel; aHandleAuthentication: boolean;
+function TRestSettings.NewRestInstance(aRootSettings: TApplicationSettingsFile;
+  aModel: TSQLModel; aHandleAuthentication: boolean;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
-  result := TSQLRestMongoDBCreate(aModel,Definition,aHandleAuthentication,aMongoDBOptions);
+  if fRoot='' then // supplied TSQLModel.Root is the default root URI
+    fRoot := aModel.Root else
+    aModel.Root := fRoot;
+  {$ifndef LINUX}
+  if (fWrapperTemplateFolder='') and
+     DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
+    fWrapperTemplateFolder := 'd:\dev\lib\CrossPlatform\Templates';
+  {$endif}
+  if fORM.Kind='' then begin
+    fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
+    fORM.ServerName := StringToUTF8(
+      ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
+    if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
+      fORM.ServerName := StringToUTF8(
+        aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
+  end;
+  if optEraseDBFileAtStartup in Options then
+    if (fORM.Kind='TSQLRestServerDB') or
+       (fORM.Kind='TSQLRestServerFullMemory') then
+      DeleteFile(UTF8ToString(fORM.ServerName));
+  result := TSQLRestMongoDBCreate(aModel,ORM,aHandleAuthentication,aMongoDBOptions);
   if result=nil then // failed to use MongoDB -> try external or internal DB
-    result := TSQLRestExternalDBCreate(aModel,Definition,aHandleAuthentication,aExternalDBOptions);
+    result := TSQLRestExternalDBCreate(aModel,ORM,aHandleAuthentication,aExternalDBOptions);
   if result=nil then
     exit; // no match or wrong parameters
   result.LogFamily.Level := LogLevels-[sllNone]; // '*' would include sllNone
   if result.InheritsFrom(TSQLRestServer) then
     if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolder) then
       AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolder]);
+end;
+
+
+{ TApplicationSettingsRestFile }
+
+procedure TApplicationSettingsRestFile.Initialize;
+begin
+  inherited Initialize;
+  if ServerPort=0 then
+    ServerPort := {$ifdef LINUX}8888{$else}888{$endif};
 end;
 
 end.
