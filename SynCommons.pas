@@ -10305,6 +10305,16 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 procedure SetVariantNull(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster 
+function VarIsEmptyOrNull(const V: Variant): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+type
+  TVarDataTypes = set of 0..255;
+
+/// allow to check for a specific set of TVarData.VType
+function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef NOVARIANTS}
 
@@ -29230,7 +29240,7 @@ begin
     result := TJSONCustomParserRTTI.CreateFromTypeName(
       aPropertyName,aCustomRecordTypeName);
     if result=nil then
-      raise ESynException.CreateUTF8('Unknown ptCustom for %.AddItem(%: %)',
+      raise ESynException.CreateUTF8('Unregistered ptCustom for %.AddItem(%: %)',
         [self,aPropertyName,aCustomRecordTypeName]);
   end else
     result := TJSONCustomParserRTTI.Create(aPropertyName,aPropertyType);
@@ -29580,6 +29590,38 @@ begin // slightly faster than Value := Null
       VarClear(Value);
       PPtrUInt(@VType)^ := varNull;
     end;
+end;
+
+function VarIsEmptyOrNull(const V: Variant): Boolean;
+var VD: PVarData;
+begin
+  VD := @V;
+  repeat
+    if VD^.VType<>varVariant or varByRef then
+      break;
+    VD := VD^.VPointer;
+    if VD=nil then begin
+      result := true;
+      exit;
+    end;
+  until false;
+  result := VD^.VType<=varNull;
+end;
+
+function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
+var VD: PVarData;
+begin
+  VD := @V;
+  repeat
+    if VD^.VType<>varVariant or varByRef then
+      break;
+    VD := VD^.VPointer;
+    if VD=nil then begin
+      result := true;
+      exit;
+    end;
+  until false;
+  result := VD^.VType in VTypes;
 end;
 
 {$ifndef NOVARIANTS}
