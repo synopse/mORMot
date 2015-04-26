@@ -9196,7 +9196,8 @@ type
   // implement this interface, then run its SetProperties() method on it
   IAutoCreateFieldsResolve = interface
     ['{396362E9-B60D-43D4-A0D4-802E4479F24E}']
-    /// this method will be called once on an instance has been created
+    /// this method will be called once on any TInjectableAutoCreateFields just
+    // created instance 
     procedure SetProperties(Instance: TObject);
   end;
 
@@ -9222,6 +9223,7 @@ type
   public
     /// this overriden constructor will instantiate all its nested
     // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    // - then resolve then call IAutoCreateFieldsResolve.SetProperties(self)  
     constructor Create; override;
     /// this overriden constructor will release all its nested persistent
     // classes and T*ObjArray published properties
@@ -42650,14 +42652,14 @@ begin
           exit; // success
         end;
       end;
-      Ctxt.AuthenticationFailed;
-      exit;
     finally
       U.Free;
     end;
+    Ctxt.AuthenticationFailed;
+  end else begin
+    Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';;
+    Ctxt.Error('',HTML_UNAUTHORIZED); // will popup for credentials in browser
   end;
-  Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';;
-  Ctxt.Error('',HTML_UNAUTHORIZED); // will popup for credentials in browser
 end;
 
 
@@ -42753,7 +42755,7 @@ begin
     try
       User.PasswordHashHexa := ''; // override with context
       fServer.SessionCreate(User,Ctxt,Session);
-      if Session<>nil then
+      if Session<>nil then begin
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
             'logonname',Session.User.LogonName]),HTML_SUCCESS,
@@ -42761,10 +42763,12 @@ begin
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonname',Session.User.LogonName,'data',BinToBase64(OutData)]);
+        exit;
+      end;
     finally
       User.Free;
-    end else
-      Ctxt.AuthenticationFailed;
+    end;
+    Ctxt.AuthenticationFailed;
   finally
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
