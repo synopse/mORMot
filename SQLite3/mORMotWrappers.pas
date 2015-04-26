@@ -829,7 +829,8 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     result := template else begin
     context.templateName := templateName;
     context.filename := unitName;
-    result := TSynMustache.Parse(template).Render(context,nil,nil,nil,true);
+    result := TSynMustache.Parse(template).Render(context,nil,
+      TSynMustache.HelpersGetStandardList,nil,true);
   end;
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;

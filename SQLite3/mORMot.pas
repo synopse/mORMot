@@ -2167,7 +2167,7 @@ type
     // ! PTypeInfo(TypeInfo(TMyEnum))^.EnumBaseType^.AddCaptionStrings(ComboBox.Items);
     procedure AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
     /// retrieve all trimed element names as CSV
-    procedure GetEnumNameTrimedAll(var result: RawUTF8);
+    procedure GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8='');
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
@@ -8160,7 +8160,7 @@ type
     property Locks: TSQLLocksDynArray read fLocks;
   published
     /// the Root URI path of this Database Model
-    property Root: RawUTF8 read fRoot;
+    property Root: RawUTF8 read fRoot write fRoot;
     /// the associated ORM information about all handled TSQLRecord class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].RecordProps values
@@ -24860,12 +24860,13 @@ begin
   GetCaptionFromPCharLen(pointer(GetEnumNameTrimed(Value)),result);
 end;
 
-procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8);
+procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8);
 var i: integer;
     V: PShortString;
 begin
   with TTextWriter.CreateOwnedStream(1024) do
   try
+    AddString(Prefix);
     V := @NameList;
     for i := MinValue to MaxValue do begin
       AddTrimLeftLowerCase(V);
@@ -41254,7 +41255,7 @@ begin
                 CancelLastComma;
                 Add(']');
                if woHumanReadableEnumSetAsComment in Options then
-                 GetEnumNameTrimedAll(CustomComment);
+                 GetEnumNameTrimedAll(CustomComment,'"*" or a set of ');
               end;
               else
                 Add(V);
@@ -45806,19 +45807,30 @@ begin
   for j := 0 to high(aInterfaces) do
     UID[j] := @PInterfaceTypeData(aInterfaces[j]^.ClassType)^.IntfGuid;
   // check that all interfaces are implemented by this class
-  C := aImplementationClass;
-  repeat
-    T := C.GetInterfaceTable;
-    if T<>nil then
-      for i := 0 to T^.EntryCount-1 do
-        with T^.Entries[i] do
-        for j := 0 to high(aInterfaces) do
-          if (UID[j]<>nil) and IsEqualGUID(UID[j]^,IID{$ifdef FPC}^{$endif}) then begin
-            UID[j] := nil; // mark TGUID found
-            break;
-          end;
-    C := C.ClassParent;
-  until C=nil;
+  if (aSharedImplementation<>nil) and
+     aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then begin
+    if IsEqualGUID(UID[0]^,TInterfacedObjectFake(aSharedImplementation).
+        fFactory.fInterfaceIID) then
+      UID[0] := nil; // mark TGUID implemented by this fake interface
+  end else begin
+    C := aImplementationClass;
+    repeat
+      T := C.GetInterfaceTable;
+      if T<>nil then
+        for i := 0 to T^.EntryCount-1 do
+          with T^.Entries[i] do
+          for j := 0 to high(aInterfaces) do
+            if (UID[j]<>nil) and IsEqualGUID(UID[j]^,IID{$ifdef FPC}^{$endif}) then begin
+              UID[j] := nil; // mark TGUID found
+              break;
+            end;
+      C := C.ClassParent;
+    until C=nil;
+    for j := 0 to high(aInterfaces) do
+      if UID[j]<>nil then
+        raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
+          [self,aInterfaces[j]^.Name,aImplementationClass]);
+  end;
   for j := 0 to high(aInterfaces) do
     if UID[j]<>nil then
       raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
