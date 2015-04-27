@@ -871,7 +871,7 @@ unit mORMot;
     - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
       as requested by feature request [842906425928]
     - added TSynAuthenticationRest e.g. for SynDBRemote to check REST users
-    - added TSQLRestServer.OnSessionCreate / OnSessionClosed / OnSessionFailed
+    - added TSQLRestServer.OnSessionCreate/OnSessionClosed/OnAuthenticationFailed
       callbacks, and TSQLRestServerURIContext.AuthenticationFailed virtual method
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
@@ -4792,6 +4792,14 @@ type
   TSQLRestServerURIContext = class;
   TAuthSession = class;
 
+  /// used to identify the authentication failure reason
+  // - as transmitted e.g. by TSQLRestServerURIContext.AuthenticationFailed or
+  // TSQLRestServer.OnAuthenticationFailed
+  TNotifyAuthenticationFailedReason = (
+   afInvalidSignature,afRemoteServiceExecutionNotAllowed,
+   afUnknownUser,afInvalidPassword,
+   afSessionAlreadyStartedForThisUser,afSessionCreationAborted);
+
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
   // - to access the current TSQLRestServer instance (and e.g. its ORM/CRUD
@@ -4999,9 +5007,10 @@ type
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
     /// method called in case of authentication failure
+    // - the failure origin is stated by the Reason parameter
     // - this default implementation will just set OutStatus := HTML_FORBIDDEN
-    // and call Server.OnSessionFailed event
-    procedure AuthenticationFailed; virtual;
+    // and call TSQLRestServer.OnAuthenticationFailed event (if any)
+    procedure AuthenticationFailed(Reason: TNotifyAuthenticationFailedReason); virtual;
     /// direct launch of a method-based service
     // - URI() will ensure that MethodIndex>=0 before calling it
     procedure ExecuteSOAByMethod; virtual;
@@ -12338,6 +12347,11 @@ type
   // and you can set Ctxt.Call^.OutStatus to a corresponding error code
   TNotifySQLSession = function(Sender: TSQLRestServer; Session: TAuthSession;
     Ctxt: TSQLRestServerURIContext): boolean of object;
+  /// callback raised in case of authentication failure
+  // - as used by TSQLRestServerURIContext.AuthenticationFailed event
+  TNotifyAuthenticationFailed = procedure(Sender: TSQLRestServer;
+    Reason: TNotifyAuthenticationFailedReason; Session: TAuthSession;
+    Ctxt: TSQLRestServerURIContext) of object;
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
@@ -12624,6 +12638,8 @@ type
     // - this default implementation will call fServer.SessionCreate() and
     // return a '{"result":"HEXASALT","logonname":"UserName"}' JSON content
     // and will always call User.Free
+    // - on failure, will call TSQLRestServerURIContext.AuthenticationFailed()
+    // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(Ctxt: TSQLRestServerURIContext; var User: TSQLAuthUser); virtual;
     /// abstract method which will be called by ClientSetUser() to process the
     // authentication step on the client side
@@ -13390,6 +13406,8 @@ type
     // - do not use this method directly: this callback is to be used by
     // TSQLRestServerAuthentication* classes
     // - will check that the logon name is valid
+    // - on failure, will call TSQLRestServerURIContext.AuthenticationFailed()
+    // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(var User: TSQLAuthUser; Ctxt: TSQLRestServerURIContext;
       out Session: TAuthSession); virtual;
     /// fill the supplied context from the supplied aContext.Session ID
@@ -13471,7 +13489,7 @@ type
     // - you can access the current execution context from the Ctxt parameter,
     // e.g. to retrieve the caller's IP and ban aggressive users:
     // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
-    OnSessionFailed: TNotifySQLSession;
+    OnAuthenticationFailed: TNotifyAuthenticationFailed;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
     // - Ctxt is nil if the session is closed due to a timeout
@@ -32514,14 +32532,15 @@ begin
   end;
 end;
 
-procedure TSQLRestServerURIContext.AuthenticationFailed;
+procedure TSQLRestServerURIContext.AuthenticationFailed(
+  Reason: TNotifyAuthenticationFailedReason);
 begin
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
   // which is not what we used, so here we won't send 401 error code but 403
   Call.OutStatus := HTML_FORBIDDEN;
   // call the notification event
-  if Assigned(Server.OnSessionFailed) then
-    Server.OnSessionFailed(Server,nil,self);
+  if Assigned(Server.OnAuthenticationFailed) then
+    Server.OnAuthenticationFailed(Server,Reason,nil,self);
 end;
 
 destructor TSQLRestAcquireExecution.Destroy;
@@ -33876,10 +33895,11 @@ begin
       if (Ctxt.MethodIndex<0) and (Ctxt.URI<>'') then
         Ctxt.URIDecodeSOAByInterface;
       // 2. handle security
-      if (not Ctxt.Authenticate) or
-         ((Ctxt.Service<>nil) and
-           not (reService in Call.RestAccessRights^.AllowRemoteExecute)) then
-        Ctxt.AuthenticationFailed else
+      if not Ctxt.Authenticate then
+        Ctxt.AuthenticationFailed(afInvalidSignature) else
+      if (Ctxt.Service<>nil) and
+          not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
+        Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -34127,24 +34147,21 @@ begin
           Ctxt.Log.Log(sllUserAuth,'User.LogonName=% already connected from "%/%"',
             [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
         {$endif}
-        Ctxt.Call^.OutStatus := HTML_NOTALLOWED;
-        if Assigned(OnSessionFailed) then
-          OnSessionFailed(self,nil,Ctxt);
-        exit; // user already connected -> error 404
+        Ctxt.AuthenticationFailed(afSessionAlreadyStartedForThisUser);
+        exit; // user already connected 
       end;
   Session := fSessionClass.Create(Ctxt,User);
   if Assigned(OnSessionCreate) then
-    if OnSessionCreate(self,Session,Ctxt) then begin
+    if OnSessionCreate(self,Session,Ctxt) then begin // TRUE aborts session creation
       {$ifdef WITHLOG}
       Ctxt.Log.Log(sllUserAuth,'Session aborted by OnSessionCreate() callback '+
          'for User.LogonName=% (connected from "%/%") - clients=%, sessions=%',
         [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
          fStats.ClientsCurrent,fSessions.Count],self);
       {$endif}
-      if Assigned(OnSessionFailed) then
-        OnSessionFailed(self,Session,Ctxt);
+      Ctxt.AuthenticationFailed(afSessionCreationAborted);
       User := nil;
-      FreeAndNil(Session); // returning TRUE aborts the session creation
+      FreeAndNil(Session);
       exit;
     end;
   User := nil; // will be freed by TAuthSession.Destroy
@@ -41940,7 +41957,7 @@ begin
   fUser := aUser;
   if (aCtxt<>nil) and (User<>nil) and (User.fID<>0) then begin
     GID := User.GroupRights; // save pseudo TSQLAuthGroup = ID
-    User.GroupRights := aCtxt.Server.fSQLAuthGroupClass.Create(aCtxt.Server,User.GroupRights);
+    User.GroupRights := aCtxt.Server.fSQLAuthGroupClass.Create(aCtxt.Server,GID);
     if User.GroupRights.fID<>0 then begin
       // compute the next Session ID
       with aCtxt.Server do begin
@@ -42305,9 +42322,8 @@ procedure TSQLRestServerAuthentication.SessionCreate(Ctxt: TSQLRestServerURICont
 var Session: TAuthSession;
 begin
   if User<>nil then
-  try
-    // now client is authenticated -> create a session
-    fServer.SessionCreate(User,Ctxt,Session);
+  try // now client is authenticated -> create a session
+    fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
     if Session<>nil then
       Ctxt.Returns(['result',Session.fPrivateSalt,'logonname',Session.User.LogonName]);
   finally
@@ -42445,15 +42461,13 @@ begin
     if User<>nil then
     try
       // check if match TSQLRestClientURI.SetUser() algorithm
-      if CheckPassword(Ctxt,User,aClientNonce,aPassWord) then begin
-        // now client is authenticated -> create a session
-        SessionCreate(Ctxt,User);
-        exit;
-      end;
+      if CheckPassword(Ctxt,User,aClientNonce,aPassWord) then
+        SessionCreate(Ctxt,User) else // will call Ctxt.AuthenticationFailed on error
+        Ctxt.AuthenticationFailed(afInvalidPassword);
     finally
       User.Free;
-    end;
-    Ctxt.AuthenticationFailed;
+    end else
+      Ctxt.AuthenticationFailed(afUnknownUser);
   end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
@@ -42497,14 +42511,16 @@ var aUserName: RawUTF8;
 begin
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
   if aUserName='' then begin
-    result := false;
+    result := false; // let's try another TSQLRestServerAuthentication class
     exit;
   end;
-  result := true;
+  result := true; // this kind of weak authentication avoid stronger ones 
   if AuthSessionRelease(Ctxt) then
     exit;
   U := GetUser(Ctxt,aUserName);
-  SessionCreate(Ctxt,U);
+  if U=nil then
+    Ctxt.AuthenticationFailed(afUnknownUser) else
+    SessionCreate(Ctxt,U); // call Ctxt.AuthenticationFailed on error
 end;
 
 class function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
@@ -42645,18 +42661,19 @@ begin
       expectedPass := U.PasswordHashHexa;
       U.PasswordPlain := pass; // override with SHA-256 hash from HTTP header
       if U.PasswordHashHexa=expectedPass then begin
-        fServer.SessionCreate(U,Ctxt,Session);
+        fServer.SessionCreate(U,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
           Ctxt.Returns(['result',Session.IDCardinal,'logonname',Session.User.LogonName]);
           exit; // success
         end;
-      end;
+      end else
+        Ctxt.AuthenticationFailed(afInvalidPassword);
     finally
       U.Free;
-    end;
-    Ctxt.AuthenticationFailed;
+    end else
+      Ctxt.AuthenticationFailed(afUnknownUser);
   end else begin
     Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';;
     Ctxt.Error('',HTML_UNAUTHORIZED); // will popup for credentials in browser
@@ -42755,8 +42772,8 @@ begin
     if User<>nil then
     try
       User.PasswordHashHexa := ''; // override with context
-      fServer.SessionCreate(User,Ctxt,Session);
-      if Session<>nil then begin
+      fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
+      if Session<>nil then
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
             'logonname',Session.User.LogonName]),HTML_SUCCESS,
@@ -42764,12 +42781,10 @@ begin
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonname',Session.User.LogonName,'data',BinToBase64(OutData)]);
-        exit;
-      end;
     finally
       User.Free;
-    end;
-    Ctxt.AuthenticationFailed;
+    end else
+      Ctxt.AuthenticationFailed(afUnknownUser);
   finally
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
