@@ -867,7 +867,8 @@ unit mORMot;
       TSQLAuthUser and/or TSQLAuthGroup classes to store the authorization
       information: TSQLRestServer will search for any table inheriting from
       TSQLAuthUser/TSQLAuthGroup in the TSQLModel - see also corresponding
-      TSQLRestServer.SQLAuthUserClass/SQLAuthGroupClass new properties
+      TSQLRestServer.SQLAuthUserClass/SQLAuthGroupClass new properties, and
+      the new generic TSQLRestServer.OnAuthenticationUserRetrieve optional event
     - introducing TSQLAuthUser.CanUserLog() to ensure authentication is allowed,
       as requested by feature request [842906425928]
     - added TSynAuthenticationRest e.g. for SynDBRemote to check REST users
@@ -875,7 +876,7 @@ unit mORMot;
       callbacks, and TSQLRestServerURIContext.AuthenticationFailed virtual method
     - added TSQLRestServer.SessionClass property to specify the class type
       to handle in-memory sessions, and override e.g. IsValidURI() method
-    - CreateMissingTables() method is not declared as virtual in TSQLRestServer
+    - CreateMissingTables() method is now declared as virtual in TSQLRestServer
     - TSQLRestServer.URI() and TSQLRestClientURI.InternalURI() methods now uses
       one TSQLRestURIParams parameter for all request input and output values
     - TSQLRestServer.URI() method will return "405 Method Not Allowed" error
@@ -12292,6 +12293,8 @@ type
   // - use a GlobalFree() function to release memory for Resp and Head responses
   TURIMapRequest = function(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): Int64Rec; cdecl;
 
+  TSQLRestServerAuthentication = class;
+
   /// structure used to specify custom request paging parameters for TSQLRestServer
   // - default values are the one used for YUI component paging (i.e.
   // PAGINGPARAMETERS_YAHOO constant, as set by TSQLRestServer.Create)
@@ -12347,6 +12350,14 @@ type
   // and you can set Ctxt.Call^.OutStatus to a corresponding error code
   TNotifySQLSession = function(Sender: TSQLRestServer; Session: TAuthSession;
     Ctxt: TSQLRestServerURIContext): boolean of object;
+  /// callback allowing to customize the retrieval of an authenticated user
+  // - as defined in TSQLRestServer.OnAuthenticationUserRetrieve
+  // - and executed by TSQLRestServerAuthentication.GetUser
+  // - on call, either aUserID would be <> 0, or aUserName is to be used
+  // - if the function returns nil, default Server.SQLAuthUserClass.Create()
+  // methods won't be called, and the user will be reported as not found
+  TOnAuthenticationUserRetrieve = function(Sender: TSQLRestServerAuthentication;
+    Ctxt: TSQLRestServerURIContext; aUserID: TID; const aUserName: RawUTF8): TSQLAuthUser;
   /// callback raised in case of authentication failure
   // - as used by TSQLRestServerURIContext.AuthenticationFailed event
   TNotifyAuthenticationFailed = procedure(Sender: TSQLRestServer;
@@ -12482,6 +12493,7 @@ type
 
   /// class-reference type (metaclass) of a table containing the Users
   // registered for authentication
+  // - see also TSQLRestServer.OnAuthenticationUserRetrieve custom event
   TSQLAuthUserClass = class of TSQLAuthUser;
 
   /// class used to maintain in-memory sessions
@@ -12577,8 +12589,6 @@ type
   // TAuthSession.SaveTo/CreateFrom methods in the inherited class
   TAuthSessionClass = class of TAuthSession;
 
-  TSQLRestServerAuthentication = class;
-
   /// class-reference type (metaclass) used to define an authentication scheme
   TSQLRestServerAuthenticationClass = class of TSQLRestServerAuthentication;
 
@@ -12632,6 +12642,9 @@ type
     // will be used to identify it for a later call and session owner
     // identification), and its GroupRights property must contain a REAL
     // TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
+    // - another possibility, orthogonal to all TSQLRestServerAuthentication
+    // classes, may be to define a TSQLRestServer.OnAuthenticationUserRetrieve
+    // custom event
     function GetUser(Ctxt: TSQLRestServerURIContext;
       const aUserName: RawUTF8): TSQLAuthUser; virtual;
     /// create a session on the server for a given user
@@ -13481,6 +13494,10 @@ type
     // and you can set Ctxt.Call^.OutStatus to a corresponding error code
     // - it could be used e.g. to limit the number of client sessions
     OnSessionCreate: TNotifySQLSession;
+    /// a custom method to retrieve the TSQLAuthUser instance for authentication
+    // - will be called by TSQLRestServerAuthentication.GetUser() instead of
+    // plain SQLAuthUserClass.Create()
+    OnAuthenticationUserRetrieve: TOnAuthenticationUserRetrieve;
     /// this event handler will be executed when a session failed to initialize
     // (DenyOfService attack?) or the request is not valid (ManIntheMiddle attack?)
     // - e.g. if the URI signature is invalid, or OnSessionCreate event handler
@@ -14100,6 +14117,7 @@ type
     /// the class inheriting from TSQLAuthUser, as defined in the model
     // - during authentication, this class will be used for every TSQLAuthUser
     // table access
+    // - see also the OnAuthenticationUserRetrieve optional event handler
     property SQLAuthUserClass: TSQLAuthUserClass read fSQLAuthUserClass;
     /// the class inheriting from TSQLAuthGroup, as defined in the model
     // - during authentication, this class will be used for every TSQLAuthGroup
@@ -42291,20 +42309,29 @@ var UserID: TID;
     err: integer;
 begin
   UserID := GetInt64(pointer(aUserName),err);
-  if (err=0) and (UserID>0) and (saoUserByLogonOrID in fOptions) then
-    // TSQLAuthUser.ID was transmitted -> may use the ORM cache
-    result := fServer.fSQLAuthUserClass.Create(fServer,UserID) else
-    result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
-  if (result.fID=0) and
-     (saoHandleUnknownLogonAsStar in fOptions) then
-    if fServer.Retrieve('LogonName=?',[],['*'],result) then begin
-      result.LogonName := aUserName;
-      result.DisplayName := aUserName;
-    end;
-  if result.fID=0 then begin
+  if (err<>0) or (UserID<=0) or not (saoUserByLogonOrID in fOptions) then
+    UserID := 0;
+  if Assigned(fServer.OnAuthenticationUserRetrieve) then
+    result := fServer.OnAuthenticationUserRetrieve(self,Ctxt,UserID,aUserName) else begin
+    if UserID<>0 then begin // try if TSQLAuthUser.ID was transmitted
+      result := fServer.fSQLAuthUserClass.Create(fServer,UserID); // may use ORM cache :)
+      if result.fID=0 then
+        FreeAndNil(result);
+    end else
+      result := nil;
+    if result=nil then
+      result := fServer.fSQLAuthUserClass.Create(fServer,'LogonName=?',[aUserName]);
+    if (result.fID=0) and
+       (saoHandleUnknownLogonAsStar in fOptions) then
+      if fServer.Retrieve('LogonName=?',[],['*'],result) then begin
+        result.LogonName := aUserName;
+        result.DisplayName := aUserName;
+      end;
+  end;
+  if (result=nil) or (result.fID=0) then begin
     {$ifdef WITHLOG}
     fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      '%.LogonName=% not found in table',[result.ClassType,aUserName],self);
+      '%.LogonName=% not found',[fServer.fSQLAuthUserClass,aUserName],self);
     {$endif}
     FreeAndNil(result);
   end else
