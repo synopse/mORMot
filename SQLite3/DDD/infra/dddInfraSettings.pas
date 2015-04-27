@@ -122,7 +122,10 @@ type
     fRoot: RawUTF8;
     fLogLevels: TSynLogInfos;
     fWrapperTemplateFolder: TFileName;
+    fWrapperSourceFolders: TFileName;
     fOptions: TRestSettingsOptions;
+    fWrapperTemplateFolderFixed: TFileName;
+    fWrapperSourceFolderFixed: TFileName;
   public
     /// is able to instantiate a REST instance according to the stored definition
     // - Definition.Kind will identify the TSQLRestServer or TSQLRestClient class
@@ -137,6 +140,12 @@ type
       aModel: TSQLModel; aHandleAuthentication: boolean;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions;
       aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest; virtual;
+    /// returns the WrapperTemplateFolder property, all / chars replaced by \
+    // - so that you would be able to store the paths with /, avoiding JSON escape
+    function WrapperTemplateFolderFixed: TFileName;
+    /// returns the WrapperSourceFolder property, all / chars replaced by \
+    // - so that you would be able to store the paths with /, avoiding JSON escape
+    function WrapperSourceFolderFixed: TFileName;
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
@@ -148,6 +157,11 @@ type
     // '/Root/wrapper' HTML page so that client code could be generated
     property WrapperTemplateFolder: TFileName
       read fWrapperTemplateFolder write fWrapperTemplateFolder;
+    /// where the source code may be searched, for comment extraction of types
+    // - several folders may be defined, separated by ; (just like in Delphi IDE)
+    // - only used if WrapperTemplateFolder is defined
+    property WrapperSourceFolders: TFileName
+      read fWrapperSourceFolders write fWrapperSourceFolders;
     /// how the REST instance is to be initialized
     property Options: TRestSettingsOptions read fOptions write fOptions;
   end;
@@ -230,7 +244,7 @@ begin
   {$ifndef LINUX}
   if (fWrapperTemplateFolder='') and
      DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
-    fWrapperTemplateFolder := 'd:\dev\lib\CrossPlatform\Templates';
+    fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
   {$endif}
   if fORM.Kind='' then begin
     fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
@@ -251,8 +265,29 @@ begin
     exit; // no match or wrong parameters
   result.LogFamily.Level := LogLevels-[sllNone]; // '*' would include sllNone
   if result.InheritsFrom(TSQLRestServer) then
-    if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolder) then
-      AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolder]);
+    if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
+      AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
+        WrapperSourceFolderFixed);
+end;
+
+function TRestSettings.WrapperSourceFolderFixed: TFileName;
+begin
+  if fWrapperSourceFolders='' then
+    result := '' else begin
+    if fWrapperSourceFolderFixed='' then
+      fWrapperSourceFolderFixed := StringReplace(fWrapperSourceFolders,'/','\',[rfReplaceAll]);
+    result := fWrapperSourceFolders;
+  end;
+end;
+
+function TRestSettings.WrapperTemplateFolderFixed: TFileName;
+begin
+  if fWrapperTemplateFolder='' then
+    result := '' else begin
+    if fWrapperTemplateFolderFixed='' then
+      fWrapperTemplateFolderFixed := StringReplace(fWrapperTemplateFolder,'/','\',[rfReplaceAll]);
+    result := fWrapperTemplateFolder;
+  end;
 end;
 
 

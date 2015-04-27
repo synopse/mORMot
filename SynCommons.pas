@@ -2611,7 +2611,7 @@ function GetNextLineW(source: PWideChar; out next: PWideChar): string;
 
 /// find the Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
-// - this special version expect UnicodeString pointer, and return an UnicodeString
+// - this special version expect UnicodeString pointer, and return a VCL string
 function FindIniNameValueW(P: PWideChar; UpperName: PUTF8Char): string;
 
 /// find a Name= Value in a [Section] of a INI Unicode Content
@@ -4557,6 +4557,9 @@ type
     /// fill the supplied two arrays of RawUTF8 with the stored values
     procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
     {$ifndef NOVARIANTS}
+    /// search for a Name, return the associated Value as variant
+    // - returns null if the name was not found
+    function ValueVariantOrNull(const aName: RawUTF8): variant;
     /// compute a TDocVariant document from the stored values
     // - output variant will be reset and filled as a TDocVariant instance,
     // ready to be serialized as a JSON object
@@ -11061,6 +11064,9 @@ type
     // - return the supplied default if aName is not found, or if the instance
     // is not a TDocVariant
     function GetValueOrDefault(const aName: RawUTF8; const aDefault: variant): variant;
+    /// find an item in this document, and returns its value
+    // - return null if aName is not found, or if the instance is not a TDocVariant
+    function GetValueOrNull(const aName: RawUTF8): variant;
     /// find an item in this document, and returns its value as TVarData
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -31143,6 +31149,18 @@ begin
   end;
 end;
 
+function TDocVariantData.GetValueOrNull(const aName: RawUTF8): variant;
+var ndx: integer;
+begin
+  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+     (Kind<>dvObject) then
+    SetVariantNull(result) else begin
+    ndx := GetValueIndex(aName);
+    if ndx>=0 then
+      result := VValue[ndx] else
+      SetVariantNull(result);
+  end;
+end;
 function TDocVariantData.GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
 var found: PVarData;
 begin
@@ -44618,6 +44636,15 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+function TSynNameValue.ValueVariantOrNull(const aName: RawUTF8): variant;
+var i: integer;
+begin
+  i := Find(aName);
+  if i<0 then
+    SetVariantNull(result) else
+    RawUTF8ToVariant(List[i].Value,result);
+end;
+
 procedure TSynNameValue.AsDocVariant(out DocVariant: variant);
 var i: integer;
 begin

@@ -69,7 +69,10 @@ uses
 /// compute the Model information, ready to be exported as JSON
 // - will publish the ORM and SOA properties
 // - to be used e.g. for client code generation via Mustache templates
-function ContextFromModel(aServer: TSQLRestServer): variant;
+// - optional aSourcePath parameter may be used to retrieve additional description
+// from the comments of the source code of the unit
+function ContextFromModel(aServer: TSQLRestServer;
+  const aSourcePath: TFileName=''): variant;
 
 /// compute the information of an interface method, ready to be exported as JSON
 // - to be used e.g. for the implementation of the MVC controller via interfaces
@@ -99,7 +102,10 @@ function WrapperFromModel(aServer: TSQLRestServer;
 // ! begin // search in the current path
 // !   WrapperMethod(Ctxt,['.']);
 // ! end;
-procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName);
+// - optional SourcePath parameter may be used to retrieve additional description
+// from the comments of the source code of the unit
+procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName;
+  const SourcePath: TFileName='');
 
 /// you can call this procedure to add a 'Wrapper' method-based service
 //  to a given server, to allow code-generation of an ORM and SOA client
@@ -111,7 +117,10 @@ procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFi
 // - for instance:
 // ! aServer := TSQLRestServerFullMemory.Create(aModel,'test.json',false,true);
 // ! AddToServerWrapperMethod(aServer,['..']);
-procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
+// - optional SourcePath parameter may be used to retrieve additional description
+// from the comments of the source code of the unit
+procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName;
+  const SourcePath: TFileName='');
 
 /// you can call this procedure to generate the mORMotServer.pas unit needed
 // to compile a given server source code using FPC
@@ -268,8 +277,9 @@ type
   TWrapperContext = class
   protected
     fServer: TSQLRestServer;
-    fORM, fRecords,fEnumerates,fSets,fArrays,fUnits: TDocVariantData;
+    fORM, fRecords,fEnumerates,fSets,fArrays,fUnits,fDescriptions: TDocVariantData;
     fSOA: variant;
+    fSourcePath: TFileNameDynArray;
     fHasAnyRecord: boolean;
     function ContextFromInfo(typ: TWrapperType; typName: RawUTF8='';
       typInfo: PTypeInfo=nil): variant;
@@ -278,9 +288,10 @@ type
     function ContextFromMethods(int: TInterfaceFactory): variant;
     function ContextFromMethod(const meth: TServiceMethod): variant;
     function ContextArgsFromMethod(const meth: TServiceMethod): variant;
+    procedure AddUnit(const aUnitName: ShortString; addAsProperty: PVariant);
   public
     constructor Create;
-    constructor CreateFromModel(aServer: TSQLRestServer);
+    constructor CreateFromModel(aServer: TSQLRestServer; const aSourcePath: TFileName);
     constructor CreateFromUsedInterfaces;
     function Context: variant;
   end;
@@ -289,11 +300,13 @@ type
 
 constructor TWrapperContext.Create;
 begin
-  TDocVariant.NewFast([@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,@fUnits]);
+  TDocVariant.NewFast([@fORM,@fRecords,@fEnumerates,@fSets,@fArrays,
+    @fUnits,@fDescriptions]);
 end;
 
-constructor TWrapperContext.CreateFromModel(aServer: TSQLRestServer);
-var t,f,s: integer;
+constructor TWrapperContext.CreateFromModel(aServer: TSQLRestServer;
+  const aSourcePath: TFileName);
+var t,f,s,n: integer;
     nfoList: TSQLPropInfoList;
     nfo: TSQLPropInfo;
     nfoSQLFieldRTTITypeName: RawUTF8;
@@ -303,8 +316,22 @@ var t,f,s: integer;
     field,rec: variant;
     srv: TServiceFactory;
     uri: RawUTF8;
+    source: TFileName;
+    src: PChar;
 begin
   Create;
+  if aSourcePath<>'' then begin
+    src := pointer(aSourcePath);
+    n := 0;
+    repeat
+      source := GetNextItemString(src,';');
+      if (source<>'') and DirectoryExists(source) then begin
+        SetLength(fSourcePath,n+1);
+        fSourcePath[n] := IncludeTrailingPathDelimiter(aSourcePath);
+        inc(n);
+      end;
+    until src=nil;
+  end;
   fServer := aServer;
   TDocVariant.NewFast([@fields,@services]);
   // compute ORM information
@@ -368,7 +395,8 @@ begin
           'instanceCreation',ord(InstanceCreation),
           'instanceCreationName',GetEnumNameTrimed(
             TypeInfo(TServiceInstanceImplementation),InstanceCreation),
-          'methods',ContextFromMethods(InterfaceFactory)]);
+          'methods',ContextFromMethods(InterfaceFactory),
+          'serviceDescription',fDescriptions.GetValueOrNull(InterfaceFactory.InterfaceName)]);
       if srv.InstanceCreation=sicClientDriven then
         rec.isClientDriven := true;
       services.AddItem(rec);
@@ -449,7 +477,8 @@ begin
     result := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
-      'argsOutputCount',ArgsOutputValuesCount]);
+      'argsOutputCount',ArgsOutputValuesCount,
+      'methodDescription',fDescriptions.GetValueOrNull(InterfaceDotMethodName)]);
     if ArgsInFirst>=0 then
       result.hasInParams := true;
     if ArgsOutFirst>=0 then
@@ -459,16 +488,81 @@ begin
   end;
 end;
 
+procedure TWrapperContext.AddUnit(const aUnitName: ShortString;
+  addAsProperty: PVariant);
+var unitName: variant;
+    desc,typeName,interfaceName: RawUTF8;
+    P,S: PUTF8Char;
+    i: Integer;
+begin
+  if (aUnitName='') or IdemPropName(aUnitName,'mORMot') then
+    exit;
+  RawUTF8ToVariant(@aUnitName[1],ord(aUnitName[0]),unitName);
+  if addAsProperty<>nil then
+    _ObjAddProps(['unitName',unitName],addAsProperty^);
+  if fUnits.SearchItemByValue(unitName)>=0 then
+    exit; // already registered
+  fUnits.AddItem(unitName);
+  if fSourcePath=nil then
+    exit;
+  for i := 0 to high(fSourcePath) do begin
+    S := pointer(StringFromFile(fSourcePath[i]+unitName+'.pas'));
+    if S=nil then
+      continue;
+    repeat // rough parsing of the .pas unit file to extract /// description
+      P := GetNextLineBegin(S,S);
+      P := GotoNextNotSpace(P);
+      if (P[0]='/') and (P[1]='/') and (P[2]='/') then begin
+        desc := GetNextLine(GotoNextNotSpace(P+3),P);
+        if desc='' then
+          break;
+        desc[1] := UpCase(desc[1]);
+        repeat
+          if P=nil then
+            exit;
+          P := GotoNextNotSpace(P);
+          if (P[0]='/') and (P[1]='/') then begin
+            if P[2]='/' then inc(P,3) else inc(P,2);
+            P := GotoNextNotSpace(P);
+            if P^='-' then begin
+              desc := desc+#13#10#13#10'- [*]'; // as expected by buggy AsciiDoc format
+              inc(P);
+            end else
+              desc := desc+' ';
+            desc := desc+GetNextLine(P,P);
+          end else
+            break;
+        until false;
+        typeName := GetNextItem(P,' ');
+        if P=nil then
+          exit;
+        if typeName<>'' then
+          if P^='=' then begin // simple type (record, array, enumeration, set)
+            if fDescriptions.GetValueIndex(typeName)<0 then begin
+              fDescriptions.AddValue(typeName,RawUTF8ToVariant(desc));
+              if typeName[1]='I' then
+                interfaceName := Copy(typeName,2,128) else
+                interfaceName := '';
+            end;
+          end else
+            if interfaceName<>'' then
+            if IdemPropNameU(typeName,'function') or
+               IdemPropNameU(typeName,'procedure') then
+              if GetNextFieldProp(P,typeName) then
+                fDescriptions.AddValue(interfaceName+'.'+typeName,RawUTF8ToVariant(desc));
+        S := P;
+      end;
+    until (S=nil) or (P=nil);
+    end;
+end;
+
 function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
 var m: integer;
-    unitName: RawUTF8;
 begin
+  AddUnit(int.InterfaceTypeInfo^.InterfaceUnitName^,nil);
   TDocVariant.NewFast(result);
   for m := 0 to int.MethodsCount-1 do
     TDocVariantData(result).AddItem(ContextFromMethod(int.Methods[m]));
-  unitName := ShortStringToAnsi7String(int.InterfaceTypeInfo^.InterfaceUnitName^);
-  if (unitName<>'') and (fUnits.SearchItemByValue(unitName)<0) then
-    fUnits.AddItem(unitName);
 end;
 
 function TWrapperContext.ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
@@ -548,7 +642,7 @@ begin
     parser := TTextWriter.RegisterCustomJSONSerializerFindParser(typInfo,true);
     if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
       info := _ObjFast(['name',typName,'fields',ContextNestedProperties(parser.Root)]);
-  end;
+  end;                                 
   wArray: begin
     item := typInfo^.DynArrayItemType(@itemSize);
     if item=nil then
@@ -561,7 +655,6 @@ begin
 end;
 var siz: integer;
     enum: PEnumType;
-    unitName: RawUTF8;
 begin
   if typ=wUnknown then begin
     if typInfo=nil then
@@ -598,14 +691,8 @@ begin
     exit; // no need to have full info if called e.g. from MVC
   if typInfo<>nil then
   case typInfo^.Kind of
-  tkClass: begin
-    unitName := ShortStringToAnsi7String(typInfo^.ClassType^.UnitName);
-    if not IdemPropNameU(unitName,'mORMot') then begin
-      _ObjAddProps(['unitName',unitName],result);
-      if fUnits.SearchItemByValue(unitName)<0 then
-        fUnits.AddItem(unitName);
-    end;
-  end;
+  tkClass:
+    AddUnit(typInfo^.ClassType^.UnitName,@result);
   end;
   case typ of
   wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
@@ -674,6 +761,17 @@ begin
 end;
 
 function TWrapperContext.Context: variant;
+procedure AddDescription(var list: TDocVariantData; const propName,descriptionName: RawUTF8);
+var i: integer;
+    propValue: RawUTF8;
+begin
+  if (list.Kind<>dvArray) or (fDescriptions.Count=0) then
+    exit;
+  for i := 0 to list.Count-1 do
+    with DocVariantDataSafe(list.Values[i])^ do
+    if GetAsRawUTF8(propName,propValue) then
+      AddValue(descriptionName,fDescriptions.GetValueOrNull(propValue));
+end;
 var s: integer;
     authClass: TClass;
 begin
@@ -687,16 +785,19 @@ begin
   if fHasAnyRecord then
     result.ORMWithRecords := true; 
   if fRecords.Count>0 then begin
+    AddDescription(fRecords,'name','recordDescription');
     result.records := variant(fRecords);
     result.withRecords := true;
     result.withHelpers := true;
   end;
   if fEnumerates.Count>0 then begin
+    AddDescription(fEnumerates,'name','enumDescription');
     result.enumerates := variant(fEnumerates);
     result.withEnumerates := true;
     result.withHelpers := true;
   end;
   if fSets.Count>0 then begin
+    AddDescription(fSets,'name','setDescription');
     result.sets := variant(fSets);
     result.withsets := true;
     result.withHelpers := true;
@@ -720,9 +821,9 @@ begin
     end;
 end;
 
-function ContextFromModel(aServer: TSQLRestServer): variant;
+function ContextFromModel(aServer: TSQLRestServer; const aSourcePath: TFileName): variant;
 begin
-  with TWrapperContext.CreateFromModel(aServer) do
+  with TWrapperContext.CreateFromModel(aServer,aSourcePath) do
   try
     result := Context;
   finally
@@ -741,7 +842,8 @@ begin
 end;
 
 
-procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName);
+procedure WrapperMethod(Ctxt: TSQLRestServerURIContext; const Path: array of TFileName;
+  const SourcePath: TFileName);
 var root, templateName, templateTitle, savedName, templateExt, unitName, template,
     result, host, uri, head: RawUTF8;
     context: variant;
@@ -761,7 +863,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
       [ExpandFileName(Path[0])]);
     exit;
   end;
-  context := ContextFromModel(Ctxt.Server);
+  context := ContextFromModel(Ctxt.Server,SourcePath);
   context.uri := Ctxt.URIWithoutSignature;
   if llfSSL in Ctxt.Call^.LowLevelFlags then begin
     context.protocol := 'https';
@@ -854,13 +956,14 @@ type
   TWrapperMethodHook = class(TPersistent)
   public
     SearchPath: TFileNameDynArray;
+    SourcePath: TFileName;
   published
     procedure Wrapper(Ctxt: TSQLRestServerURIContext);
   end;
 
 procedure TWrapperMethodHook.Wrapper(Ctxt: TSQLRestServerURIContext);
 begin
-  WrapperMethod(Ctxt,SearchPath);
+  WrapperMethod(Ctxt,SearchPath,SourcePath);
 end;
 
 procedure ComputeSearchPath(const Path: array of TFileName;
@@ -877,7 +980,8 @@ begin
   end;
 end;
 
-procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName);
+procedure AddToServerWrapperMethod(Server: TSQLRestServer; const Path: array of TFileName;
+  const SourcePath: TFileName);
 var hook: TWrapperMethodHook;
 begin
   if Server=nil then
@@ -885,6 +989,7 @@ begin
   hook := TWrapperMethodHook.Create;
   Server.PrivateGarbageCollector.Add(hook); // Server.Free will call hook.Free
   ComputeSearchPath(Path,hook.SearchPath);
+  hook.SourcePath := SourcePath;
   Server.ServiceMethodRegisterPublishedMethods('',hook);
   Server.ServiceMethodByPassAuthentication('wrapper');
 end;
@@ -941,6 +1046,7 @@ begin
   FileFromString(TSynMustache.Parse(StringFromFile(TemplateName)).
     Render(ctxt,nil,nil,nil,true),DestFileName);
 end;
+
 
 end.
 
