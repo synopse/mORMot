@@ -12872,8 +12872,17 @@ type
     class function ComputeAuthenticateHeader(
       const aUserName,aPasswordClear: RawUTF8): RawUTF8; override;
     /// decode "Authorization: Basic ...." header
+    // - you could implement you own password transmission pattern, by
+    // overriding both ComputeAuthenticateHeader and GetUserPassFromInHead methods
     class function GetUserPassFromInHead(Ctxt: TSQLRestServerURIContext;
-      out userPass,user,pass: RawUTF8): boolean;
+      out userPass,user,pass: RawUTF8): boolean; virtual;
+    /// check a supplied password content
+    // - this default implementation will use the SHA-256 hash value stored
+    // within User.PasswordHashHexa
+    // - you can override this method to provide your own password check
+    // mechanism, for the given TSQLAuthUser instance
+    function CheckPassword(Ctxt: TSQLRestServerURIContext;
+      User: TSQLAuthUser; const aPassWord: RawUTF8): boolean; virtual;
   public
     /// will check URI-level signature
     // - retrieve the session ID from 'session_signature=...' parameter
@@ -42671,8 +42680,17 @@ begin
   result := 'Authorization: Basic '+BinToBase64(aUsername+':'+aPasswordClear);
 end;
 
+function TSQLRestServerAuthenticationHttpBasic.CheckPassword(Ctxt: TSQLRestServerURIContext;
+  User: TSQLAuthUser; const aPassWord: RawUTF8): boolean;
+var expectedPass: RawUTF8;
+begin
+  expectedPass := User.PasswordHashHexa;
+  User.PasswordPlain := aPassWord; // override with SHA-256 hash from HTTP header
+  result := User.PasswordHashHexa=expectedPass;
+end;
+
 function TSQLRestServerAuthenticationHttpBasic.Auth(Ctxt: TSQLRestServerURIContext): boolean;
-var userPass,user,pass,expectedPass: RawUTF8;
+var userPass,user,pass: RawUTF8;
     U: TSQLAuthUser;
     Session: TAuthSession;
 begin
@@ -42685,9 +42703,7 @@ begin
     U := GetUser(Ctxt,user);
     if U<>nil then
     try
-      expectedPass := U.PasswordHashHexa;
-      U.PasswordPlain := pass; // override with SHA-256 hash from HTTP header
-      if U.PasswordHashHexa=expectedPass then begin
+      if CheckPassword(Ctxt,U,pass) then begin
         fServer.SessionCreate(U,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
