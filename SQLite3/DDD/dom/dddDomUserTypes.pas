@@ -4,7 +4,7 @@
 unit dddDomUserTypes;
 
 {
-    This file is part of Synopse mORmot framework.
+    This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
@@ -228,6 +228,36 @@ type
     property Phone1: TPhoneNumber read fPhone1 write fPhone1;
     property Phone2: TPhoneNumber read fPhone2 write fPhone2;
     property Email: TEmailAddress read fEmail write fEmail;
+  end;
+
+
+{ *********** Email Validation Modeling }
+
+type
+  /// the status of an email validation process
+  TDomUserEmailValidation = (evUnknown, evValidated, evFailed);
+
+  /// how a confirmation email is to be rendered, for email address validation
+  // - this information will be available as data context to the Mustache
+  // template used for rendering of the email body
+  TDomUserEmailTemplate = class(TSynPersistent)
+  private
+    fFileName: RawUTF8;
+    fSenderEmail: RawUTF8;
+    fSubject: RawUTF8;
+    fApplication: RawUTF8;
+    fInfo: variant;
+  published
+    /// the local file name of the Mustache template
+    property FileName: RawUTF8 read fFileName write fFileName;
+    /// the "sender" field of the validation email
+    property SenderEmail: RawUTF8 read fSenderEmail write fSenderEmail;
+    /// the "subject" field of the validation email
+    property Subject: RawUTF8 read fSubject write fSubject;
+    /// the name of the application, currently sending the confirmation
+    property Application: RawUTF8 read fApplication write fApplication;
+    /// any unstructured additional information, also supplied as data context
+    property Info: variant read fInfo write fInfo;
   end;
 
 

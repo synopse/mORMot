@@ -4,7 +4,7 @@
 unit dddInfraSettings;
 
 {
-    This file is part of Synopse mORmot framework.
+    This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
@@ -174,7 +174,7 @@ type
   public
     /// to be called when the application starts, to access settings
     // - will call inherited TApplicationSettingsFile.Initialize, and
-    // set ServerPort to a default 888/8888 value under Windows/Linnux
+    // set ServerPort to a default 888/8888 value under Windows/Linux
     procedure Initialize; override;
   published
     /// allow to instantiate a REST instance from its JSON definition

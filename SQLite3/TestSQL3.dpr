@@ -100,8 +100,8 @@ uses
   // widestring manager for Linux !!
   // could also be put in another unit ... but doc states: as early as possible
   cwstring,
-  {$endif}
-  {$endif}
+  {$endif Linux}
+  {$endif FPC}
   SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
@@ -121,7 +121,11 @@ uses
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
+  dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
   dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
+  dddInfraSettings in 'DDD\infra\dddInfraSettings.pas',
+  dddInfraEmail in 'DDD\infra\dddInfraEmail.pas',
+  dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
   {$endif NOVARIANTS}
   {$endif LVCL}
   {$ifdef MSWINDOWS}

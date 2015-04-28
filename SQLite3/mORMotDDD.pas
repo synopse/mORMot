@@ -4,7 +4,7 @@
 unit mORMotDDD;
 
 {
-    This file is part of Synopse mORmot framework.
+    This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
       Synopse Informatique - http://synopse.info

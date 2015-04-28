@@ -170,6 +170,10 @@ uses
   SynBidirSock,
   mORMotDDD,
   dddDomUserTypes,
+  dddDomUserInterfaces,
+  dddDomAuthInterfaces,
+  dddInfraEmail,
+  dddInfraEmailer,
   dddInfraAuthRest,
 {$endif DELPHI5OROLDER}
 {$ifdef TEST_REGEXP}
@@ -859,6 +863,8 @@ type
     procedure UserModel;
     /// test the Authentication modelization types, and implementation
     procedure AuthenticationModel;
+    /// test the Email validation process
+    procedure EmailValidationProcess;
   end;
 
 
@@ -13277,6 +13283,11 @@ procedure TTestDDDSharedUnits.AuthenticationModel;
 begin
   TDDDAuthenticationSHA256.RegressionTests(self);
   TDDDAuthenticationMD5.RegressionTests(self);
+end;
+
+procedure TTestDDDSharedUnits.EmailValidationProcess;
+begin
+  TestDddInfraEmailer(TSQLRestServerDB,self);
 end;
 
 procedure TTestDDDSharedUnits.UserModel;
