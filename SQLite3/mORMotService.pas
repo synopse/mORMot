@@ -29,6 +29,8 @@ unit mORMotService;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Eric Grange
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -246,7 +248,8 @@ type
   /// event triggered to implement the Service functionality
   TServiceEvent = procedure(Sender: TService) of object;
 
-  {{ TService is the class used to implement a service provided by an application }
+  {$M+}
+  /// TService is the class used to implement a service provided by an application
   TService = class
   protected
     fSName: String;
@@ -306,22 +309,10 @@ type
     {{ this is the main method, in which the Service should implement its run  }
     procedure Execute; virtual;
 
-    {{ Name of the service. Must be unique }
-    property ServiceName: String read fSName;
-    {{ Display name of the service }
-    property DisplayName: String read fDName write fDName;
-    {{ Type of service }
-    property ServiceType: DWORD read fServiceType write fServiceType;
-    {{ Type of start of service }
-    property StartType: DWORD read fStartType write fStartType;
     {{ Number of arguments passed to the service by the service controler }
     property ArgCount: Integer read GetArgCount;
     {{ List of arguments passed to the service by the service controler }
     property Args[Idx: Integer]: String read GetArgs;
-    {{ Current service status
-      - To report new status to the system, assign another
-       value to this record, or use ReportStatus method (better) }
-    property Status: TServiceStatus read fStatusRec write SetStatus;
     {{ Any data You wish to associate with the service object }
     property Data: DWORD read FData write FData;
     {{ Whether service is installed in DataBase
@@ -363,7 +354,21 @@ type
     property OnInterrogate: TServiceEvent read fOnInterrogate write fOnInterrogate;
     {{ custom event triggered when the service is shut down }
     property OnShutdown: TServiceEvent read fOnShutdown write fOnShutdown;
+  published
+    {{ Name of the service. Must be unique }
+    property ServiceName: String read fSName;
+    {{ Display name of the service }
+    property DisplayName: String read fDName write fDName;
+    {{ Type of service }
+    property ServiceType: DWORD read fServiceType write fServiceType;
+    {{ Type of start of service }
+    property StartType: DWORD read fStartType write fStartType;
+    {{ Current service status
+      - To report new status to the system, assign another
+       value to this record, or use ReportStatus method (preferred) }
+    property Status: TServiceStatus read fStatusRec write SetStatus;
   end;
+  {$M-}
 
   /// inherit from this service if your application has a single service
   // - note that TService jumper does not work well - so use this instead
@@ -749,6 +754,11 @@ var AfterCallAddr: Pointer;
     Offset: Integer;
 begin
   Result := fControlHandler;
+  {$ifndef NOMORMOTKERNEL}
+  SQLite3Log.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
+    'use TServiceSingle or set a custom ControlHandler',[self]);
+  {$endif}
+  exit;
   if not Assigned(Result) then
   begin
     raise Exception.Create('Automated jumper generation is not working: '+
@@ -934,9 +944,20 @@ end;
 
 function ServicesRun: boolean;
 var S: array of TServiceTableEntry;
+    service: TService;
     i: integer;
 begin
-  SetLength(S,Services.Count+1);
+  if (Services=nil) or (Services.Count=0) then begin
+    result := false;
+    exit;
+  end;
+  for i := 0 to Services.Count-1 do begin
+    service := Services.List[i];
+    if not assigned(service.fControlHandler) then
+      raise ESynException.CreateUTF8('%.ControlHandler=nil (ServiceName="%"): '+
+       'use TServiceSingle or set a custom ControlHandler',[service,service.ServiceName]);
+  end;
+  SetLength(S,Services.Count+1); // +1 so that the latest entry is nil
   for i := 0 to Services.Count-1 do begin
     S[i].lpServiceName := pointer(TService(Services.List[i]).ServiceName);
     S[i].lpServiceProc := @ServiceProc;
