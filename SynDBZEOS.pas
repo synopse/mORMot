@@ -28,7 +28,8 @@ unit SynDBZeos;
   Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
-  Contributor(s):
+  Contributor(s):  
+  - Daniel Kuettner
   - delphinium
   - EgonHugeist (Michael)
   - alexpirate
@@ -152,6 +153,9 @@ uses
   {$ENDIF}
   {$IFDEF ENABLE_POOLED}
   ZDbcPooled,
+  {$ENDIF}
+  {$IFDEF ENABLE_OLEDB}
+  ZDbcOleDB,
   {$ENDIF}
   // main ZDBC units
   ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
