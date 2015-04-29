@@ -74,6 +74,7 @@ unit mORMotService;
     - use SQLite3Log instead of TSQLLog - see [779d773e966]
     - ensure TServiceController.CreateNewService() won't allow to install
       the service on a network drive - see [f487d3de45]
+    - add an optional Description text when the service is installed 
 
 }
 
@@ -216,28 +217,33 @@ type
      - this version expect PChar pointers, either AnsiString (for FPC and old
       Delphi compiler), either UnicodeString (till Delphi 2009) }
     function Start(const Args: array of PChar): boolean;
-    {{ this method will check the command line parameters, and will let
-       control the service according to it
-      - MyServiceSetup.exe /install will install the service
-      - MyServiceSetup.exe /start   will start the service
-      - MyServiceSetup.exe /stop    will stop the service
-      - MyServiceSetup.exe /uninstall will uninstall the service
-      - so that you can write in the main block of your .dpr:
-      !begin
-      ! if ParamCount<>0 then
-      !   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-      !   try
-      !     CheckParameters('MyService.exe',HTTPSERVICEDISPLAYNAME);
-      !   finally
-      !     Free;
-      !   end else
-      !   ...
-      !end;
-    }
-    procedure CheckParameters(const ExeFileName,DisplayName: string); virtual;
+    /// try to define the description text of this service
+    procedure SetDescription(const Description: string);
+    /// this method will check the command line parameters, and will let
+    //  control the service according to it
+    // - MyServiceSetup.exe /install will install the service
+    // - MyServiceSetup.exe /start   will start the service
+    // - MyServiceSetup.exe /stop    will stop the service
+    // - MyServiceSetup.exe /uninstall will uninstall the service
+    // - so that you can write in the main block of your .dpr:
+    // !begin
+    // ! if ParamCount<>0 then
+    // !   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
+    // !   try
+    // !     CheckParameters('MyService.exe',HTTPSERVICEDISPLAYNAME);
+    // !   finally
+    // !     Free;
+    // !   end else
+    // !   ...
+    // !end;
+    // - an optional Description text for the service may be specified
+    procedure CheckParameters(const ExeFileName,DisplayName: string;
+      const Description: string=''); virtual;
   end;
 
+  {$M+}
   TService = class;
+  {$M-}
 
   /// callback procedure for Windows Service Controller
   TServiceControlHandler = procedure(CtrlCode: DWORD); stdcall;
@@ -248,7 +254,6 @@ type
   /// event triggered to implement the Service functionality
   TServiceEvent = procedure(Sender: TService) of object;
 
-  {$M+}
   /// TService is the class used to implement a service provided by an application
   TService = class
   protected
@@ -368,7 +373,6 @@ type
        value to this record, or use ReportStatus method (preferred) }
     property Status: TServiceStatus read fStatusRec write SetStatus;
   end;
-  {$M-}
 
   /// inherit from this service if your application has a single service
   // - note that TService jumper does not work well - so use this instead
@@ -414,9 +418,8 @@ implementation
 { TServiceController }
 
 constructor TServiceController.CreateNewService(const TargetComputer,
-  DatabaseName, Name, DisplayName, Path, OrderGroup, Dependances, Username,
-  Password: String; DesiredAccess, ServiceType, StartType,
-  ErrorControl: DWORD);
+  DatabaseName,Name,DisplayName,Path,OrderGroup,Dependances,Username,Password: String;
+  DesiredAccess,ServiceType,StartType,ErrorControl: DWORD);
 {$ifndef NOMORMOTKERNEL}
 var backupError: cardinal;
 {$endif}
@@ -555,6 +558,16 @@ begin
   Result := ControlService(FHandle, SERVICE_CONTROL_SHUTDOWN, FStatus);
 end;
 
+type
+   TServiceDescription = record
+      lpDescription : PWideChar;
+   end;
+const
+  SERVICE_CONFIG_DESCRIPTION = 1;
+
+function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
+  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
+
 function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
   lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
   name {$ifdef UNICODE}'StartServiceW';{$else}'StartServiceA';{$endif}
@@ -569,15 +582,30 @@ begin
   Result := ControlService(FHandle, SERVICE_CONTROL_STOP, FStatus);
 end;
 
-procedure TServiceController.CheckParameters(const ExeFileName,DisplayName: string);
-procedure ShowError(const Msg: RawUTF8);
+procedure TServiceController.SetDescription(const Description: string);
+var desc: TServiceDescription;
 begin
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllLastError,Msg,self);
-  {$endif}
+  if Description='' then
+    exit;
+  desc.lpDescription := pointer(StringToSynUnicode(Description));
+  ChangeServiceConfig2(FHandle, SERVICE_CONFIG_DESCRIPTION, @description);
 end;
+
+procedure TServiceController.CheckParameters(
+  const ExeFileName,DisplayName,Description: string);
 var param: string;
     i: integer;
+    ctrl: TServiceController;
+procedure ShowError(const Msg: RawUTF8);
+begin
+  {$I-} // ignore if no console has been allocated
+  writeln(FName,': Error "',Msg,'" for ',param);
+  ioresult;
+  {$I+}
+  {$ifndef NOMORMOTKERNEL}
+  SQLite3Log.Add.Log(sllLastError,'% for %',[Msg,param],self);
+  {$endif}
+end;
 begin
   if State=ssErrorRetrievingState then
     exit;
@@ -586,14 +614,21 @@ begin
     {$ifndef NOMORMOTKERNEL}
     SQLite3Log.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
     {$endif}
-    if param='/install' then
-      TServiceController.CreateNewService('','',UTF8ToString(FName),
+    if param='/install' then begin
+      ctrl := TServiceController.CreateNewService('','',UTF8ToString(FName),
           DisplayName,ExeFileName,'','','','',
           SERVICE_ALL_ACCESS,
           SERVICE_WIN32_OWN_PROCESS
             {$ifdef USEMESSAGES}or SERVICE_INTERACTIVE_PROCESS{$endif},
-          SERVICE_AUTO_START).  // auto start at every boot
-        Free else
+          SERVICE_AUTO_START);  // auto start at every boot
+      try
+        if ctrl.State=ssNotInstalled then
+          ShowError('Failed to install') else
+          ctrl.SetDescription(Description);
+      finally
+        ctrl.Free;
+      end;
+    end else
     if param='/uninstall' then begin
       if not Stop then
         ShowError('Stop');
@@ -610,6 +645,7 @@ begin
     end;
   end;
 end;
+
 
 { TService }
 
