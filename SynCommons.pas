@@ -36777,7 +36777,7 @@ procedure TTextWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
 begin
   if self<>nil then
     if MultiEventAdd(fEchos,TMethod(aEcho)) then
-      if fEchos=nil then
+      if fEchos<>nil then
         fEchoStart := B-fTempBuf+1; // ignore any previous buffer
 end;
 
