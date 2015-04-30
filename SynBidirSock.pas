@@ -510,6 +510,8 @@ type
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
+    // - expects the port to be specified as string, e.g. '1234'; you can
+    // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
     // - due to the way how WebSockets works, one thread will be created
     // for any incoming connection
     // - note that this constructor will not register any protocol, so is

@@ -147,6 +147,7 @@ unit mORMotHttpServer;
       - added TSQLHttpServer.RootRedirectToURI() method for root URI redirection
       - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
       - allow TSQLHttpServer.Create() without any associated TSQLRestServer
+      - allow to specify the binding server address for sockets ('1.2.3.4:1234')
 
 }
 
@@ -303,7 +304,9 @@ type
     // - specify one or more TSQLRestServer server class to be used: each
     // class must have an unique Model.Root value, to identify which TSQLRestServer
     // instance must handle a particular request from its URI
-    // - port is an AnsiString, as expected by the WinSock API
+    // - port is an AnsiString, as expected by the WinSock API - in case of
+    // useHttpSocket or useBidirSocket kind of server, you can specify the
+    // server address to bind to: e.g. '1.2.3.4:1234'
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call:
     // it could be either a fully qualified case-insensitive domain name
     // an IPv4 or IPv6 literal string, or a wildcard ('+' will bound

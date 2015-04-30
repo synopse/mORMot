@@ -169,6 +169,7 @@ unit SynCrtSock;
     when the maximum of 64 threads is reached in the pool, with an exception
     of kept-alife or huge body requets (avoiding DoS attacks by limiting the
     total number of created threads)
+  - allow WinSock-based THttpServer to set a server address ('1.2.3.4:1234')
   - let WinSock-based THttpServer.Process() handle HTTP_RESP_STATICFILE
   - force disable range checking and other compiler options for this unit
   - included more detailed information to HTTP client User-Agent header
@@ -375,7 +376,10 @@ type
     /// connect to aServer:aPort
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000);
-    /// bind to aPort
+    /// bind to a Port
+    // - expects the port to be specified as Ansi string, e.g. '1234'
+    // - you can optionally specify a server address to bind to, e.g.
+    // '1.2.3.4:1234'
     constructor Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error 
@@ -1296,6 +1300,8 @@ type
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
+    // - expects the port to be specified as string, e.g. '1234'; you can
+    // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
     // - you can specify a number of threads to be initialized to handle
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 64) - if you set 0, the thread pool will be disabled
@@ -2635,10 +2641,20 @@ end;
 { TCrtSocket }
 
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
+var s,p: SockString;
+    i: integer;
 begin
   // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
   Create({$ifdef LINUX}500{$else}5000{$endif});
-  OpenBind('0.0.0.0',aPort,true,-1,aLayer); // raise an ECrtSocket exception on error
+  i := pos(':',aPort);
+  if i=0 then begin
+    s := '0.0.0.0';
+    p := aPort;
+  end else begin
+    s := Copy(aPort,1,i-1);
+    p := Copy(aPort,i+1,10);
+  end;
+  OpenBind(s,p,true,-1,aLayer); // raise an ECrtSocket exception on error
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer;
