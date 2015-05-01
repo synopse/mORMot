@@ -30,6 +30,7 @@ unit mORMotService;
 
   Contributor(s):
   - Eric Grange
+  - Leander007
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -71,10 +72,10 @@ unit mORMotService;
     - added TServiceController.CheckParameters() generic method to control
       a service from the command line
     - check the executable file in TServiceController.CreateNewService()
-    - use SQLite3Log instead of TSQLLog - see [779d773e966]
+    - use private global ServiceLog instead of TSQLLog - see [779d773e966]
     - ensure TServiceController.CreateNewService() won't allow to install
       the service on a network drive - see [f487d3de45]
-    - add an optional Description text when the service is installed 
+    - add an optional Description text when the service is installed
 
 }
 
@@ -82,27 +83,20 @@ interface
 
 {$I Synopse.inc}
 
-{$ifdef LVCL}
-  {$define NOMORMOTKERNEL}
-  // define it if you don't need to include the mORMot.pas unit
-  // - could save some code size in the final executable
-{$endif}
-{$ifdef DELPHI5OROLDER}
-  {$define NOMORMOTKERNEL}
-{$endif}
-
 uses
   Windows, WinSVC, Messages, Classes, SysUtils,
   {$ifndef LVCL}Contnrs,{$endif}
   SynCommons,
-  SynLog
-  {$ifndef NOMORMOTKERNEL},
-  mORMot
-  {$endif} // translated caption needed only if with full UI
-  ;
+  SynLog;
 
 const
   CM_SERVICE_CONTROL_CODE = WM_USER+1000;
+
+var
+  /// you can set this global variable to TSynLog or TSQLLog to enable logging
+  // - default is nil, i.e. disabling logging, since it may interfere with the
+  // logging process of the service itself
+  ServiceLog: TSynLogClass;
 
 type
   {{ all possible states of the service }
@@ -176,6 +170,9 @@ type
       DesiredAccess: DWORD = SERVICE_ALL_ACCESS;
       ServiceType: DWORD = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
       StartType: DWORD = SERVICE_DEMAND_START; ErrorControl: DWORD = SERVICE_ERROR_NORMAL);
+    /// wrapper around CreateNewService() to install the current executable as service
+    class function Install(const Name,DisplayName,Description: string;
+      AutoStart: boolean; ExeName: TFileName=''): TServiceState;
     {{ Opens an existing service, in order  to control it or its configuration
       from your application. Parameters (strings are unicode-ready since Delphi 2009):
    - TargetComputer - set it to empty string if local computer is the target.
@@ -219,26 +216,18 @@ type
     function Start(const Args: array of PChar): boolean;
     /// try to define the description text of this service
     procedure SetDescription(const Description: string);
-    /// this method will check the command line parameters, and will let
+    /// this class method will check the command line parameters, and will let
     //  control the service according to it
     // - MyServiceSetup.exe /install will install the service
     // - MyServiceSetup.exe /start   will start the service
     // - MyServiceSetup.exe /stop    will stop the service
     // - MyServiceSetup.exe /uninstall will uninstall the service
     // - so that you can write in the main block of your .dpr:
-    // !begin
-    // ! if ParamCount<>0 then
-    // !   with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-    // !   try
-    // !     CheckParameters('MyService.exe',HTTPSERVICEDISPLAYNAME);
-    // !   finally
-    // !     Free;
-    // !   end else
-    // !   ...
-    // !end;
+    // !CheckParameters('MyService.exe',HTTPSERVICENAME,HTTPSERVICEDISPLAYNAME);
+    // - if ExeFileName='', it will install the current executable
     // - an optional Description text for the service may be specified
-    procedure CheckParameters(const ExeFileName,DisplayName: string;
-      const Description: string=''); virtual;
+    class procedure CheckParameters(const ExeFileName: TFileName;
+      const ServiceName,DisplayName,Description: string); virtual;
   end;
 
   {$M+}
@@ -420,80 +409,69 @@ implementation
 constructor TServiceController.CreateNewService(const TargetComputer,
   DatabaseName,Name,DisplayName,Path,OrderGroup,Dependances,Username,Password: String;
   DesiredAccess,ServiceType,StartType,ErrorControl: DWORD);
-{$ifndef NOMORMOTKERNEL}
-var backupError: cardinal;
-{$endif}
+var Exe: TFileName;
+   backupError: cardinal;
 begin
   inherited Create;
   if Path='' then begin
-    {$ifndef NOMORMOTKERNEL}
-    SQLite3Log.Add.Log(sllError,'CreateNewService("%","%") with Path=""',
+    ServiceLog.Add.Log(sllError,'CreateNewService("%","%") with Path=""',
       [Name,DisplayName]);
-    {$endif}
     Exit;
   end;
   if TargetComputer='' then
-  case GetDriveType(pointer(ExtractFileDrive(Path))) of
-  DRIVE_REMOTE: begin
-    {$ifndef NOMORMOTKERNEL}
-    SQLite3Log.Add.Log(sllError,'CreateNewService("%","%") on remote drive: Path="%"',
-      [Name,DisplayName,Path]);
-    {$endif}
-    Exit;
-  end;
-  end;
+  if GetDriveType(pointer(ExtractFileDrive(Path)))=DRIVE_REMOTE then begin
+    Exe := ExpandUNCFileName(Path);
+    if (copy(Exe,1,12)<>'\\localhost\') or (Exe[14]<>'$') then begin
+      ServiceLog.Add.Log(sllError,'CreateNewService("%","%") on remote drive: Path="%" is %',
+        [Name,DisplayName,Path,Exe]);
+      Exit;
+    end;
+    system.delete(Exe,1,12); // \\localhost\c$\... -> c:\...
+    Exe[2] := ':';
+  end else
+    Exe := Path;
   StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     SC_MANAGER_ALL_ACCESS);
   if FSCHandle=0 then begin
-    {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+    ServiceLog.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
       [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
-    {$endif}
     Exit;
   end;
   FHandle := CreateService(FSCHandle, pointer(Name), pointer(DisplayName),
-               DesiredAccess, ServiceType, StartType, ErrorControl, pointer(Path),
+               DesiredAccess, ServiceType, StartType, ErrorControl, pointer(Exe),
                pointer(OrderGroup), nil, pointer(Dependances),
                pointer(Username), pointer(Password));
-  {$ifndef NOMORMOTKERNEL}
   if FHandle=0 then begin
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'CreateService("%","%","%")',[Name,DisplayName,Path]);
+    ServiceLog.Add.Log(sllLastError,'CreateService("%","%","%")',[Name,DisplayName,Path]);
     SetLastError(backupError);
   end;
-  {$endif}
 end;
 
 constructor TServiceController.CreateOpenService(const TargetComputer,
   DataBaseName, Name: String; DesiredAccess: DWORD);
-{$ifndef NOMORMOTKERNEL}
 var backupError: cardinal;
-{$endif}
 begin
   inherited Create;
   StringToUTF8(Name,FName);
   FSCHandle := OpenSCManager(pointer(TargetComputer), pointer(DatabaseName),
     GENERIC_READ);
   if FSCHandle = 0 then begin
-    {$ifndef NOMORMOTKERNEL}
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
+    ServiceLog.Add.Log(sllLastError,'OpenSCManager("%","%") for "%"',
       [TargetComputer,DatabaseName,FName]);
     SetLastError(backupError);
-    {$endif}
     Exit;
   end;
   FHandle := OpenService(FSCHandle, pointer(Name), DesiredAccess);
-  {$ifndef NOMORMOTKERNEL}
   if FHandle=0 then begin
     backupError := GetLastError;
-    SQLite3Log.Add.Log(sllLastError,'OpenService("%")',[Name]);
+    ServiceLog.Add.Log(sllLastError,'OpenService("%")',[Name]);
     SetLastError(backupError);
   end;
-  {$endif}
 end;
 
 function TServiceController.Delete: boolean;
@@ -504,10 +482,7 @@ begin
       Result := CloseServiceHandle(FHandle);
       FHandle := 0;
     end
-    {$ifndef NOMORMOTKERNEL}
-    else
-      SQLite3Log.Add.Log(sllLastError,'DeleteService("%")',[FName]);
-    {$endif}
+    else ServiceLog.Add.Log(sllLastError,'DeleteService("%")',[FName]);
 end;
 
 destructor TServiceController.Destroy;
@@ -526,9 +501,7 @@ begin
   if FHandle=0 then
     result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result);
-  {$endif}
+  ServiceLog.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -560,7 +533,7 @@ end;
 
 type
    TServiceDescription = record
-      lpDescription : PWideChar;
+     lpDescription : SynUnicode;
    end;
 const
   SERVICE_CONFIG_DESCRIPTION = 1;
@@ -583,66 +556,77 @@ begin
 end;
 
 procedure TServiceController.SetDescription(const Description: string);
-var desc: TServiceDescription;
+var desc: SynUnicode;
 begin
   if Description='' then
     exit;
-  desc.lpDescription := pointer(StringToSynUnicode(Description));
-  ChangeServiceConfig2(FHandle, SERVICE_CONFIG_DESCRIPTION, @description);
+  desc := StringToSynUnicode(Description);
+  ChangeServiceConfig2(FHandle, SERVICE_CONFIG_DESCRIPTION, @desc);
 end;
 
-procedure TServiceController.CheckParameters(
-  const ExeFileName,DisplayName,Description: string);
+class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
+  const ServiceName,DisplayName,Description: string);
 var param: string;
     i: integer;
-    ctrl: TServiceController;
 procedure ShowError(const Msg: RawUTF8);
 begin
+  ServiceLog.Add.Log(sllLastError,'During % for %',[Msg,param]);
+  if not IsConsole then
+    exit;
   {$I-} // ignore if no console has been allocated
-  writeln(FName,': Error "',Msg,'" for ',param);
+  writeln(ServiceName,': Error "',Msg,'" for ',param);
   ioresult;
   {$I+}
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllLastError,'% for %',[Msg,param],self);
-  {$endif}
 end;
 begin
-  if State=ssErrorRetrievingState then
-    exit;
   for i := 1 to ParamCount do begin
     param := SysUtils.LowerCase(paramstr(i));
-    {$ifndef NOMORMOTKERNEL}
-    SQLite3Log.Add.Log(sllInfo,'Controling % with command "%"',[FName,param]);
-    {$endif}
-    if param='/install' then begin
-      ctrl := TServiceController.CreateNewService('','',UTF8ToString(FName),
-          DisplayName,ExeFileName,'','','','',
-          SERVICE_ALL_ACCESS,
-          SERVICE_WIN32_OWN_PROCESS
-            {$ifdef USEMESSAGES}or SERVICE_INTERACTIVE_PROCESS{$endif},
-          SERVICE_AUTO_START);  // auto start at every boot
-      try
-        if ctrl.State=ssNotInstalled then
-          ShowError('Failed to install') else
-          ctrl.SetDescription(Description);
-      finally
-        ctrl.Free;
+    ServiceLog.Add.Log(sllInfo,'Controling % with command "%"',[ServiceName,param]);
+    if param='/install' then
+     TServiceController.Install(
+       ServiceName,DisplayName,Description,true,ExeFileName) else
+    with TServiceController.CreateOpenService('','',ServiceName) do
+    try
+      if State=ssErrorRetrievingState then
+        ShowError('State') else
+      if param='/uninstall' then begin
+        if not Stop then
+          ShowError('Stop');
+        if not Delete then
+          ShowError('Delete');
+      end else
+      if param='/stop' then begin
+        if not Stop then
+          ShowError('Stop');
+      end else
+      if param='/start' then begin
+        if not Start([]) then
+          ShowError('Start');
       end;
-    end else
-    if param='/uninstall' then begin
-      if not Stop then
-        ShowError('Stop');
-      if not Delete then
-        ShowError('Delete');
-    end else
-    if param='/stop' then begin
-      if not Stop then
-        ShowError('Stop');
-    end else
-    if param='/start' then begin
-      if not Start([]) then
-        ShowError('Start');
+    finally
+      Free;
     end;
+  end;
+end;
+
+class function TServiceController.Install(const Name, DisplayName,
+  Description: string; AutoStart: boolean; ExeName: TFileName): TServiceState;
+var ctrl: TServiceController;
+    start: DWORD;
+begin
+  if AutoStart then
+    start := SERVICE_AUTO_START else
+    start := SERVICE_DEMAND_START;
+  if ExeName='' then
+    ExeName := ExeVersion.ProgramFileName;
+  ctrl := TServiceController.CreateNewService('','',Name,DisplayName,ExeName,
+    '','','','',SERVICE_ALL_ACCESS,SERVICE_WIN32_OWN_PROCESS,start);
+  try
+    result := ctrl.State;
+    if result<>ssNotInstalled then
+      ctrl.SetDescription(Description);
+  finally
+    ctrl.Free;
   end;
 end;
 
@@ -698,10 +682,8 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllInfo,'% (%) running as "%"',
+  ServiceLog.Add.Log(sllInfo,'% (%) running as "%"',
     [ServiceName,aDisplayName,ExeVersion.ProgramFullSpec],self);
-  {$endif}
 end;
 
 procedure TService.CtrlHandle(Code: DWORD);
@@ -726,51 +708,68 @@ end;
 
 procedure TService.DoCtrlHandle(Code: DWORD);
 begin
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Enter(self);
-  SQLite3Log.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
-  {$endif}
-   case Code of
-     SERVICE_CONTROL_STOP: begin
-       ReportStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
+  ServiceLog.Enter(self);
+  ServiceLog.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
+  try
+    case Code of
+    SERVICE_CONTROL_STOP: begin
+     ReportStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
+     try
        if Assigned(fOnStop) then
          fOnStop(Self);
        ReportStatus(SERVICE_STOPPED, NO_ERROR, 0);
+     except
+       ReportStatus(SERVICE_STOPPED, ERROR_CAN_NOT_COMPLETE, 0);
      end;
-     SERVICE_CONTROL_PAUSE: begin
-       ReportStatus(SERVICE_PAUSE_PENDING, NO_ERROR, 0);
+    end;
+    SERVICE_CONTROL_PAUSE: begin
+     ReportStatus(SERVICE_PAUSE_PENDING, NO_ERROR, 0);
+     try
        if Assigned(fOnPause) then
          fOnPause(Self);
        ReportStatus(SERVICE_PAUSED, NO_ERROR, 0)
+     except
+       ReportStatus(SERVICE_PAUSED, ERROR_CAN_NOT_COMPLETE, 0)
      end;
-     SERVICE_CONTROL_CONTINUE: begin
-       ReportStatus(SERVICE_CONTINUE_PENDING, NO_ERROR, 0);
+    end;
+    SERVICE_CONTROL_CONTINUE: begin
+     ReportStatus(SERVICE_CONTINUE_PENDING, NO_ERROR, 0);
+     try
        if Assigned(fOnResume) then
          fOnResume(Self);
        ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
+     except
+       ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
      end;
-     SERVICE_CONTROL_SHUTDOWN: begin
-       if Assigned(fOnShutdown) then
-         fOnShutdown(Self);
-       Code := 0;
-     end;
-     SERVICE_CONTROL_INTERROGATE: begin
-       SetServiceStatus(FStatusHandle, fStatusRec);
-        if Assigned(fOnInterrogate) then
-          fOnInterrogate(Self);
-     end;
-   end;
-   if Assigned(fOnControl) then
-     fOnControl(Self, Code);
+    end;
+    SERVICE_CONTROL_SHUTDOWN: begin
+     if Assigned(fOnShutdown) then
+       fOnShutdown(Self);
+     Code := 0;
+    end;
+    SERVICE_CONTROL_INTERROGATE: begin
+     SetServiceStatus(FStatusHandle, fStatusRec);
+     if Assigned(fOnInterrogate) then
+       fOnInterrogate(Self);
+    end;
+    end;
+    if Assigned(fOnControl) then
+      fOnControl(Self, Code);
+  except
+  end;
 end;
 
 procedure TService.Execute;
 begin
-  if Assigned(fOnStart) then
-    fOnStart(@Self);
-  ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
-  if Assigned(fOnExecute) then
-    fOnExecute(@Self);
+  try
+    if Assigned(fOnStart) then
+      fOnStart(@Self);
+    ReportStatus(SERVICE_RUNNING, NO_ERROR, 0);
+    if Assigned(fOnExecute) then
+      fOnExecute(@Self);
+  except
+    ReportStatus(SERVICE_RUNNING, ERROR_CAN_NOT_COMPLETE, 0);
+  end;
 end;
 
 function TService.GetArgCount: Integer;
@@ -790,10 +789,8 @@ var AfterCallAddr: Pointer;
     Offset: Integer;
 begin
   Result := fControlHandler;
-  {$ifndef NOMORMOTKERNEL}
-  SQLite3Log.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
+  ServiceLog.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
     'use TServiceSingle or set a custom ControlHandler',[self]);
-  {$endif}
   exit;
   if not Assigned(Result) then
   begin
@@ -861,15 +858,11 @@ begin
 end;
 
 function TService.ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
-{$ifndef NOMORMOTKERNEL}
 var status: string;
 begin
   status := ServiceStateText(CurrentStateToServiceState(dwState));
-  SQLite3Log.Add.Log(sllInfo,'% ReportStatus(%,%,%)',
+  ServiceLog.Add.Log(sllInfo,'% ReportStatus(%,%,%)',
     [ServiceName,status,dwExitCode,dwWait],self);
-{$else}
-begin
-{$endif}
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0 else
     fStatusRec.dwControlsAccepted := 31;
@@ -881,10 +874,8 @@ begin
     inc(fStatusRec.dwCheckPoint);
   result := SetServiceStatus(FStatusHandle, fStatusRec);
   if not result then
-    {$ifndef NOMORMOTKERNEL}
-    SQLite3Log.Add.Log(sllLastError,'% ReportStatus(%,%,%)',
+    ServiceLog.Add.Log(sllLastError,'% ReportStatus(%,%,%)',
       [ServiceName,status,dwExitCode,dwWait],self);
-    {$endif}
 end;
 
 procedure TService.SetControlHandler(const Value: TServiceControlHandler);
@@ -935,19 +926,12 @@ begin
   end;
 end;
 
-{$ifdef NOMORMOTKERNEL} // translated caption needed only if with full UI
 function ServiceStateText(State: TServiceState): string;
 var P: PShortString;
 begin
   P := GetEnumName(TypeInfo(TServiceState),ord(State));
   result := string(copy(P^,3,length(P^)-2));
 end;
-{$else}
-function ServiceStateText(State: TServiceState): string;
-begin
-  result := PTypeInfo(TypeInfo(TServiceState))^.EnumBaseType^.GetCaption(State);
-end;
-{$endif}
 
 {  function that a service process specifies as the entry point function
   of a particular service. The function can have any application-defined name
@@ -1013,7 +997,7 @@ end;
 constructor TServiceSingle.Create(const aServiceName,
   aDisplayName: String);
 begin
-  inherited;
+  inherited Create(aServiceName,aDisplayName);
   if ServiceSingle<>nil then
     raise Exception.Create('Only one TServiceSingle is allowed at a time');
   ServiceSingle := self;

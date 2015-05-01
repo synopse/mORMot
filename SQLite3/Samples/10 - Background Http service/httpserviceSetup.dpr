@@ -17,20 +17,17 @@ uses
 {$R VistaAdm.res}
 
 const
-  HTTPSERVICENAME = 'mORMotHttpServerService';
-  HTTPSERVICEDISPLAYNAME = 'mORMot Http Server Service';
+  HTTPSERVICE_NAME = 'mORMotHttpServerService';
+  HTTPSERVICE_DISPLAYNAME = 'mORMot Http Server Service';
+  HTTPSERVICE_DESCRIPTION = 'This is a sample mORMot HTTP Server running as Service';
 
 begin
-  TSQLLog.Family.Level := LOG_VERBOSE;
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
-  try
-    CheckParameters(ExeVersion.ProgramFilePath+'HttpService.exe',
-      HTTPSERVICEDISPLAYNAME);
-  finally
-    Free;
-  end;
+  ServiceLog := TSQLLog; // explicitely enable logging
+  ServiceLog.Family.Level := LOG_VERBOSE;
+  TServiceController.CheckParameters(ExeVersion.ProgramFilePath+'HttpService.exe',
+    HTTPSERVICE_NAME,HTTPSERVICE_DISPLAYNAME,HTTPSERVICE_DESCRIPTION);
   TSQLLog.Add.Log(sllTrace,'Quitting command line');
-  with TServiceController.CreateOpenService('','',HTTPSERVICENAME) do
+  with TServiceController.CreateOpenService('','',HTTPSERVICE_NAME) do
   try
     State; // just to log the service state after handling the /parameters
   finally
