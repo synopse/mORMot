@@ -5526,6 +5526,9 @@ type
 
   /// the possible options for TSQLRestServer.CreateMissingTables and
   // TSQLRecord.InitializeTable methods
+  // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
+  // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
+  // tables with default records
   // - itoNoIndex4ID won't create the index for the main ID field
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
@@ -5534,6 +5537,7 @@ type
   // - itoNoIndex4RecordVersion won't create indexes for TRecordVersion fields
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
+    itoNoAutoCreateGroups, itoNoAutoCreateUsers,
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
     itoNoIndex4TID, itoNoIndex4RecordVersion);
@@ -42195,6 +42199,7 @@ begin
       // create default Groups and Users (we are already in a Transaction)
       AuthGroupIndex := Server.Model.GetTableIndexExisting(Server.fSQLAuthUserClass);
       AuthUserIndex := Server.Model.GetTableIndexExisting(Server.fSQLAuthGroupClass);
+      if not (itoNoAutoCreateGroups in Options) then begin
       G := Server.fSQLAuthGroupClass.Create;
       try
         //            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
@@ -42232,26 +42237,29 @@ begin
       finally
         G.Free;
       end;
-      U := Server.fSQLAuthUserClass.Create;
-      try
-        U.LogonName := 'Admin';
-        U.PasswordPlain := 'synopse';
-        U.DisplayName := U.LogonName;
-        U.GroupRights := TSQLAuthGroup(AdminID);
-        Server.Add(U,true);
-        U.LogonName := 'Supervisor';
-        U.DisplayName := U.LogonName;
-        U.GroupRights := TSQLAuthGroup(SupervisorID);
-        Server.Add(U,true);
-        U.LogonName := 'User';
-        U.DisplayName := U.LogonName;
-        U.GroupRights := TSQLAuthGroup(UserID);
-        Server.Add(U,true);
-      finally
-        U.Free;
+        if (not (itoNoAutoCreateUsers in Options)) and 
+           (Server.TableRowCount(Server.fSQLAuthUserClass)=0) then begin
+          U := Server.fSQLAuthUserClass.Create;
+          try
+            U.LogonName := 'Admin';
+            U.PasswordPlain := 'synopse';
+            U.DisplayName := U.LogonName;
+            U.GroupRights := TSQLAuthGroup(AdminID);
+            Server.Add(U,true);
+            U.LogonName := 'Supervisor';
+            U.DisplayName := U.LogonName;
+            U.GroupRights := TSQLAuthGroup(SupervisorID);
+            Server.Add(U,true);
+            U.LogonName := 'User';
+            U.DisplayName := U.LogonName;
+            U.GroupRights := TSQLAuthGroup(UserID);
+            Server.Add(U,true);
+          finally
+            U.Free;
+          end;
+        end;
       end;
     end;
-end;
 
 procedure TSQLAuthGroup.SetSQLAccessRights(const Value: TSQLAccessRights);
 begin
@@ -42887,6 +42895,7 @@ end;
 
 
 {$endif SSPIAUTH}
+
 
 { TSynAuthenticationRest }
 
