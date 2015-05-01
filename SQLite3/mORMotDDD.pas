@@ -59,6 +59,7 @@ uses
   Classes,
   Contnrs,
   Variants,
+  SyncObjs,
   SynCommons,
   SynLog,
   SynCrypto,
@@ -180,6 +181,20 @@ type
     function Start: TCQRSResult;
     /// abort the service/daemon, returning statistics about the whole execution
     function Stop(out Information: variant): TCQRSResult;
+  end;
+
+  /// generic interface, to manage a service/daemon instance from an executable
+  // - in addition to Start/Stop methods, Halt would force the whole executable
+  // to abort its execution
+  // - those methods could be published as REST (e.g. over named pipe), so that
+  // a single administration daemon (installed e.g. as a Windows Service) would
+  // be able to launch and monitor child processes as individual executables
+  IAdministratedDaemon = interface(IMonitoredDaemon)
+    ['{BD02919E-56ED-4559-967A-EFBC0E85C031}']
+    /// will Stop the service/daemon process, then quit the executable
+    // - the returned Information and TCQRSResult are passed directly from
+    // the Stop() method
+    function Halt(out Information: variant): TCQRSResult;
   end;
 
 
@@ -709,6 +724,85 @@ type
     property ProcessIdleDelay: integer read fProcessIdleDelay write fProcessIdleDelay;
   end;
 
+  /// current status of an administrable service/daemon
+  TDDDAdministratedDaemonStatus = (
+    dsUnknown, dsCreated, dsStarted, dsStopped, dsHalted);
+
+  /// abstract class to implement an administrable service/daemon
+  // - a single administration daemon (running e.g. as a Windows Service) would
+  // be able to launch and administrate such process, via a remote REST link
+  // - inherited class should override the Internal* virtual abstract protected
+  // methods to supply the actual process (e.g. set a background thread)
+  TDDDAdministratedDaemon = class(TCQRSQueryObject,IAdministratedDaemon)
+  protected
+    fAdministrationServer: TSQLRestServer;
+    fAdministrationServerOwned: boolean;
+    fLogClass: TSynLogClass;
+    fStatus: TDDDAdministratedDaemonStatus;
+    fFinished: TEvent;
+    function InternalIsRunning: boolean; virtual; abstract;
+    procedure InternalStart; virtual; abstract;
+    function InternalRetrieveState(var Status: variant): boolean; virtual; abstract;
+    procedure InternalStop; virtual; abstract;
+  public
+    /// initialize the administrable service/daemon
+    // - aAdministrationServer.ServiceDefine(IAdministratedDaemon) will be
+    // called to publish the needed methods over it, to allow remote
+    // administration from a single administration daemon (installed e.g. as a
+    // Windows Service)
+    // - this constructor won't start the associated process, which would be
+    // idle until the Start method is called
+    constructor Create(aAdministrationServer: TSQLRestServer); reintroduce; overload; virtual;
+    /// initialize the administrable service/daemon with its own TSQLRestServer
+    // - will initialize and own its own TSQLRestServerFullMemory
+    // - if aUserName is specified, authentication will be enabled, and a
+    // single TSQLAuthUser will be created, with the supplied credentials
+    // (the password matching TSQLAuthUser.PasswordHashHexa expectations)
+    // - under Windows, you can export the administration server as named pipe,
+    // if the optional aServerNamedPipe parameter is set
+    constructor Create(const aUserName,aHashedPassword: RawUTF8;
+      const aRoot: RawUTF8='root'; const aServerNamedPipe: TFileName=''); reintroduce; overload;
+    /// finalize the service/daemon
+    // - will call Halt() if the associated process is still running
+    destructor Destroy; override;
+    /// monitor the Daemon/Service by returning some information as a TDocVariant
+    function RetrieveState(out Status: variant): TCQRSResult; virtual; 
+    /// launch the associated process
+    // - if the process was already running, returns cqrsAlreadyExists
+    function Start: TCQRSResult; virtual;
+    /// finalize the associated process
+    // - and returns updated statistics as a TDocVariant
+    function Stop(out Information: variant): TCQRSResult; virtual;
+    /// will Stop the associated process, then quit the executable
+    // - returning the same output information than Stop()
+    function Halt(out Information: variant): TCQRSResult; virtual;
+    /// run the daemon, until it is halted
+    // - if RemotelyAdministrated is FALSE, it will Start the process, then
+    // wait until the [Enter] key is pressed (to be used in pure console mode)
+    // - if RemotelyAdministrated is TRUE, it will follow remote activation
+    // from its administration server
+    // - both modes will log some minimal message on the console (if any)
+    procedure Execute(RemotelyAdministrated: boolean);
+    /// this method will wait until Halt() is executed
+    // - i.e. protected fFinished TEvent is notified
+    procedure WaitUntilHalted; virtual;
+  published
+    /// the current status of the service/daemon
+    property Status: TDDDAdministratedDaemonStatus read fStatus;
+    /// reference to the REST server publishing IAdministratedDaemon service
+    // - e.g. from named pipe local communication on Windows
+    property AdministrationServer: TSQLRestServer read fAdministrationServer;
+  end;
+
+  /// abstract class to implement an TThread-based administrable service/daemon
+  TDDDAdministratedThreadDaemon = class(TDDDAdministratedDaemon)
+  protected
+    fThread: TThread;
+    function InternalIsRunning: boolean; override;
+    procedure InternalStop; override;
+  end;
+
+
 
 { *********** Application Layer Implementation }
 
@@ -1010,15 +1104,15 @@ end;
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 { TODO:
   T*ObjArray published fields:
-    property Order.Line: TOrderLineObjArray;
+    property Order.Lines: TOrderLineObjArray;
   In all cases, T*ObjArray should be accessible directly, using ObjArray*()
   wrapper functions.
   Storage at TSQLRecord level would very likely use JSON format, since it is
   the single one natively usable by the framework (TDynArray.SaveTo raise an
   exception for IsObjArray):
-  -> TSQLOrder.Line as variant? (JSON)
-  -> TSQLOrder.Line as JSON dynarray? (new feature request)
-  -> TSQLOrder.Line as binary dynarray?
+  -> TSQLOrder.Lines as variant? (JSON) -> this is the current implementation
+  -> TSQLOrder.Lines as JSON dynarray? (new feature request)
+  -> TSQLOrder.Lines as binary dynarray?
 
 }
 procedure EnsureCompatible(agg,rec: TSQLPropInfo);
@@ -1815,5 +1909,180 @@ begin
 end;
 
 
+{ TDDDAdministratedDaemon }
 
+constructor TDDDAdministratedDaemon.Create(
+  aAdministrationServer: TSQLRestServer);
+begin
+  if aAdministrationServer=nil then
+    raise ECQRSException.CreateUTF8('%.Create(aAdministrationServer=nil)',[self]);
+  fAdministrationServer := aAdministrationServer;
+  {$ifdef WITHLOG}
+  fLogClass := fAdministrationServer.LogClass;
+  {$endif}
+  if fAdministrationServer.Services=nil then
+    inherited Create else
+    inherited CreateWithResolver(fAdministrationServer.Services);
+  fAdministrationServer.ServiceDefine(self,[IAdministratedDaemon]);
+  fFinished := TEvent.Create(nil,false,false,'');
+  fStatus := dsCreated;
+end;
+
+constructor TDDDAdministratedDaemon.Create(
+  const aUserName, aHashedPassword, aRoot: RawUTF8; const aServerNamedPipe: TFileName);
+var server: TSQLRestServer;
+begin
+  server := TSQLRestServerFullMemory.CreateWithOwnedAuthenticatedModel(
+    [],aUserName,aHashedPassword,aRoot);
+  Create(server);
+  if FRefCount=2 then
+    dec(FRefCount); // circumvent a Delphi compiler bug
+  fAdministrationServerOwned := true;
+  if aServerNamedPipe<>'' then
+    {$ifdef MSWINDOWS}
+    fAdministrationServer.ExportServerNamedPipe(aServerNamedPipe);
+    {$else}
+    fLogClass.Add.Log(sllTrace,'Ignored AuthNamedPipeName=% under Linux',
+      [aServerNamedPipe],self);
+    {$endif}
+end;
+
+destructor TDDDAdministratedDaemon.Destroy;
+var dummy: variant;
+begin
+  fLogClass.Enter(self);
+  if InternalIsRunning then
+    Halt(dummy);
+  try
+    inherited Destroy;
+    fFinished.Free;
+  finally
+    if fAdministrationServerOwned then
+      FreeAndNil(fAdministrationServer);
+  end;
+end;
+
+function TDDDAdministratedDaemon.Start: TCQRSResult;
+begin
+  fLogClass.Enter(self);
+  CqrsBeginMethod(qaNone,result);
+  if not (fStatus in [dsCreated,dsStopped]) then
+    CqrsSetResultError(cqrsBadRequest) else
+  if InternalIsRunning then
+    CqrsSetResult(cqrsAlreadyExists) else
+    try
+      fLogClass.Add.Log(sllDDDInfo,'Starting',self);
+      InternalStart;
+      fStatus := dsStarted;
+      CqrsSetResult(cqrsSuccess);
+    except
+      on E: Exception do
+        CqrsSetResult(E);
+    end;
+end;
+
+function TDDDAdministratedDaemon.RetrieveState(
+  out Status: variant): TCQRSResult;
+begin
+  CqrsBeginMethod(qaNone,result);
+  try
+    if not InternalIsRunning then
+      CqrsSetResult(cqrsBadRequest) else
+    if InternalRetrieveState(Status) then
+      CqrsSetResult(cqrsSuccess) else
+      CqrsSetResult(cqrsInternalError);
+  except
+    on E: Exception do
+      CqrsSetResult(E);
+  end;
+end;
+
+function TDDDAdministratedDaemon.Stop(
+  out Information: variant): TCQRSResult;
+begin
+  fLogClass.Enter(self);
+  CqrsBeginMethod(qaNone,result);
+  if fStatus<>dsStarted then
+    CqrsSetResultError(cqrsBadRequest) else begin
+    CqrsSetResult(RetrieveState(Information));
+    try
+      InternalStop; // always stop
+      fStatus := dsStopped;
+      fLogClass.Add.Log(sllDDDInfo,'Stopped: %',[Information],self);
+    except
+      on E: Exception do
+        CqrsSetResult(E);
+    end;
+  end;
+end;
+
+function TDDDAdministratedDaemon.Halt(
+  out Information: variant): TCQRSResult;
+begin
+  fLogClass.Enter(self);
+  CqrsBeginMethod(qaNone,result);
+  if InternalIsRunning then
+  try
+    fLogClass.Add.Log(sllDDDInfo,'Halting',self);
+    CqrsSetResult(Stop(Information));
+  except
+    on E: Exception do
+      CqrsSetResult(E);
+  end else
+    CqrsSetResult(cqrsSuccess);
+  fStatus := dsHalted;
+  fFinished.SetEvent;
+end;
+
+procedure TDDDAdministratedDaemon.WaitUntilHalted;
+begin
+  if fStatus in [dsUnknown] then
+    exit;
+  fLogClass.Enter(self);
+  FixedWaitForever(fFinished);
+end;
+
+procedure TDDDAdministratedDaemon.Execute(RemotelyAdministrated: boolean);
+var name: string;
+begin
+  fLogClass.Enter(self);
+  name := ClassName;
+  {$I-}
+  if RemotelyAdministrated then begin
+    writeln(name,' expecting commands');
+    WaitUntilHalted;
+  end else begin
+    try
+      if Start=cqrsSuccess then
+        writeln(name,' is running') else
+        writeln(name,' failed to Start');
+    except
+      on E: Exception do
+        ConsoleShowFatalException(E);
+    end;
+    writeln('Press [Enter] to quit');
+    readln;
+  end;
+  writeln('Shutting down server');
+  ioresult;
+  {$I+}
+end;
+
+
+{ TDDDAdministratedThreadDaemon }
+
+function TDDDAdministratedThreadDaemon.InternalIsRunning: boolean;
+begin
+  result := (self<>nil) and (fThread<>nil);
+end;
+
+procedure TDDDAdministratedThreadDaemon.InternalStop;
+begin
+  FreeAndNil(fThread); // should terminate and wait for the thread to finish
+end;
+
+
+initialization
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),TypeInfo(IAdministratedDaemon)]);
 end.
