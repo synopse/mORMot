@@ -13960,6 +13960,8 @@ type
     procedure AuthenticationUnregister(aMethod: TSQLRestServerAuthenticationClass); overload;
     /// call this method to remove several authentication methods to the server
     procedure AuthenticationUnregister(const aMethods: array of TSQLRestServerAuthenticationClass); overload;
+    /// call this method to remove all authentication methods to the server
+    procedure AuthenticationUnregisterAll;
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TSQLRestServerCallBack
@@ -32342,6 +32344,15 @@ begin
     AuthenticationUnregister(aMethods[i]);
 end;
 
+procedure TSQLRestServer.AuthenticationUnregisterAll;
+begin
+  if (self=nil) or (fSessionAuthentication=nil) then
+    exit;
+  fSessions.Lock;
+  ObjArrayClear(fSessionAuthentication);
+  fSessions.UnLock;
+end;
+
 procedure TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8);
 var i: Integer;
 begin
@@ -42268,43 +42279,43 @@ begin
       AuthGroupIndex := Server.Model.GetTableIndexExisting(Server.fSQLAuthUserClass);
       AuthUserIndex := Server.Model.GetTableIndexExisting(Server.fSQLAuthGroupClass);
       if not (itoNoAutoCreateGroups in Options) then begin
-      G := Server.fSQLAuthGroupClass.Create;
-      try
-        //            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
-        // Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
-        // Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
-        // User         No      No        Yes    No    No     Yes    Yes
-        // Guest        No      No        No     No    No     Yes    No
-        A := FULL_ACCESS_RIGHTS;
-        G.Ident := 'Admin';
-        G.SQLAccessRights := A;
-        G.SessionTimeout := 10;
-        AdminID := Server.Add(G,true);
-        G.Ident := 'Supervisor';
-        A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
-        A.Edit(AuthUserIndex,[soSelect]); // AuthUser  R/O
-        A.Edit(AuthGroupIndex,[soSelect]); // AuthGroup R/O
-        G.SQLAccessRights := A;
-        G.SessionTimeout := 60;
-        SupervisorID := Server.Add(G,true);
-        G.Ident := 'User';
-        Exclude(A.AllowRemoteExecute,reSQLSelectWithoutTable);
-        Exclude(A.GET,AuthUserIndex); // no Auth R
-        Exclude(A.GET,AuthGroupIndex);
-        G.SQLAccessRights := A;
-        G.SessionTimeout := 60;
-        UserID := Server.Add(G,true);
-        G.Ident := 'Guest';
-        A.AllowRemoteExecute := [];
-        fillchar(A.POST,sizeof(TSQLFieldTables),0); // R/O access
-        fillchar(A.PUT,sizeof(TSQLFieldTables),0);
-        fillchar(A.DELETE,sizeof(TSQLFieldTables),0);
-        G.SQLAccessRights := A;
-        G.SessionTimeout := 60;
-        Server.Add(G,true);
-      finally
-        G.Free;
-      end;
+        G := Server.fSQLAuthGroupClass.Create;
+        try
+          //            POSTSQL SELECTSQL Service AuthR AuthW TablesR TablesW
+          // Admin        Yes     Yes       Yes    Yes   Yes    Yes    Yes
+          // Supervisor   No      Yes       Yes    Yes   No     Yes    Yes
+          // User         No      No        Yes    No    No     Yes    Yes
+          // Guest        No      No        No     No    No     Yes    No
+          A := FULL_ACCESS_RIGHTS;
+          G.Ident := 'Admin';
+          G.SQLAccessRights := A;
+          G.SessionTimeout := 10;
+          AdminID := Server.Add(G,true);
+          G.Ident := 'Supervisor';
+          A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
+          A.Edit(AuthUserIndex,[soSelect]); // AuthUser  R/O
+          A.Edit(AuthGroupIndex,[soSelect]); // AuthGroup R/O
+          G.SQLAccessRights := A;
+          G.SessionTimeout := 60;
+          SupervisorID := Server.Add(G,true);
+          G.Ident := 'User';
+          Exclude(A.AllowRemoteExecute,reSQLSelectWithoutTable);
+          Exclude(A.GET,AuthUserIndex); // no Auth R
+          Exclude(A.GET,AuthGroupIndex);
+          G.SQLAccessRights := A;
+          G.SessionTimeout := 60;
+          UserID := Server.Add(G,true);
+          G.Ident := 'Guest';
+          A.AllowRemoteExecute := [];
+          fillchar(A.POST,sizeof(TSQLFieldTables),0); // R/O access
+          fillchar(A.PUT,sizeof(TSQLFieldTables),0);
+          fillchar(A.DELETE,sizeof(TSQLFieldTables),0);
+          G.SQLAccessRights := A;
+          G.SessionTimeout := 60;
+          Server.Add(G,true);
+        finally
+          G.Free;
+        end;
         if (not (itoNoAutoCreateUsers in Options)) and 
            (Server.TableRowCount(Server.fSQLAuthUserClass)=0) then begin
           U := Server.fSQLAuthUserClass.Create;
