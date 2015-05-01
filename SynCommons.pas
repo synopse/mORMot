@@ -437,6 +437,8 @@ unit SynCommons;
     TPersistent kind of objects (used e.g. with internal JSON serialization,
     for interface-based services, or for DDD objects)
   - introducing TInterfacedObjectLocked class
+  - new TSynPersistentWithPassword class, able to store the password with
+    a custom simple encryption when serialized as JSON
   - introducing TSynAuthentication class for simple generic authentication
   - introducing TSynConnectionDefinition class used e.g. for JSON-defined
     runtime instantiation of a TSQLDBConnectionProperties or TSQLRest instance
@@ -2395,9 +2397,9 @@ function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 /// returns the index of a matching beginning of p^ in upArray[]
 // - returns -1 if no item matched
 // - ignore case - up^ must be already Upper
-// - chars are compared as 7 bit Ansi only (no accentuated characters): but when
-// you only need to search for field names e.g. IdemPChar() is prefered, because
-// it'll be faster than IdemPCharU(), if UTF-8 decoding is not mandatory
+// - chars are compared as 7 bit Ansi only (no accentuated characters)
+// - this function expects upArray[] items to have at least 2 characters (it
+// will use a fast comparison of word values) 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 
 /// returns true if the beginning of p^ is the same as up^
@@ -6341,10 +6343,37 @@ type
     property StartDataPosition: integer read fStartDataPosition;
   end;
 
+  /// abstract TSynPersistent class allowing safe storage of a password
+  // - the associated Password, e.g. for storage or transmission encryption
+  // will be persisted encrypted with a private key (which can be customized)
+  // - a published property should be defined as such in inherited class:
+  // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
+  // - use the PassWordPlain property to access to its uncyphered value
+  TSynPersistentWithPassword = class(TSynPersistent)
+  protected
+    fPassWord: RawUTF8;
+    fKey: cardinal;
+    function GetKey: cardinal;
+    function GetPassWordPlain: RawUTF8;
+    procedure SetPassWordPlain(const Value: RawUTF8);
+  public
+    /// this class method could be used to compute the encrypted password,
+    // ready to be stored as JSON, according to a given private key
+    class function ComputePassword(const PlainPassword: RawUTF8;
+      CustomKey: cardinal=0): RawUTF8;
+    /// the private key used to cypher the password storage on serialization
+    // - application can override the default value at runtime, with its own
+    // genuine value 
+    property Key: cardinal read GetKey write fKey;
+    /// access to the associated unencrypted Password value
+    property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
+  end;
+
   /// handle safe storage of any connection properties
   // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
   // by mORMot.pas to serialize TSQLRest instances
-  // - the password will be stored as Base64, after a simple encryption
+  // - the password will be stored as Base64, after a simple encryption as
+  // defined by TSynPersistentWithPassword
   // - typical content could be:
   // $ {
   // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
@@ -6356,29 +6385,23 @@ type
   // - the "Kind" value will be used to let the corresponding TSQLRest or
   // TSQLDBConnectionProperties NewInstance*() class methods create the
   // actual instance, from its class name
-  TSynConnectionDefinition = class(TSynPersistent)
+  TSynConnectionDefinition = class(TSynPersistentWithPassword)
   protected
     fKind: string;
     fServerName: RawUTF8;
     fDatabaseName: RawUTF8;
     fUser: RawUTF8;
     fPassWord: RawUTF8;
-    fKey: cardinal;
-    function GetKey: cardinal;
-    function GetPassWordPlain: RawUTF8;
-    procedure SetPassWordPlain(const Value: RawUTF8);
   public
     /// unserialize the database definition from JSON
     // - as previously serialized with the SaveToJSON method
     // - you can specify a custom Key used for password encryption, if the
     // default value is not safe enough for you
+    // - this method won't use JSONToObject() so avoid any dependency to mORMot.pas
     constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0);
     /// serialize the database definition as JSON
+    // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
     function SaveToJSON: RawUTF8;
-    /// the private key used to cypher the password storage
-    property Key: cardinal read GetKey write fKey;
-    /// access to the associated unencrypted Password value
-    property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
   published
     /// the class name implementing the connection or TSQLRest instance
     // - will be used to instantiate the expected class type
@@ -37767,6 +37790,55 @@ begin
 end;
 
 
+{ TSynPersistentWithPassword }
+
+class function TSynPersistentWithPassword.ComputePassword(const PlainPassword: RawUTF8;
+  CustomKey: cardinal): RawUTF8;
+var instance: TSynPersistentWithPassword;
+begin
+  instance := TSynPersistentWithPassword.Create;
+  try
+    instance.Key := CustomKey;
+    instance.SetPassWordPlain(PlainPassword);
+    result := instance.GetPassWordPlain;
+  finally
+    instance.Free;
+  end;
+end;
+
+function TSynPersistentWithPassword.GetKey: cardinal;
+begin
+  if self=nil then
+    result := 0 else
+  if fKey=0 then
+    result := $A5abba5A else
+    result := fKey;
+end;
+
+function TSynPersistentWithPassword.GetPassWordPlain: RawUTF8;
+begin
+  if (self=nil) or (fPassWord='') then
+    result := '' else begin
+    result := Base64ToBin(fPassWord);
+    SymmetricEncrypt(GetKey,RawByteString(result));
+  end;
+end;
+
+procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: RawUTF8);
+var data: RawByteString;
+begin
+  if self=nil then
+    exit;
+  if Value='' then begin
+    fPassWord := '';
+    exit;
+  end;
+  data := Value;
+  SymmetricEncrypt(GetKey,data);
+  fPassWord := BinToBase64(data);
+end;
+
+
 { TSynConnectionDefinition }
 
 constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8;
@@ -37788,38 +37860,6 @@ function TSynConnectionDefinition.SaveToJSON: RawUTF8;
 begin
   result := JSONEncode(['Kind',fKind,'ServerName',fServerName,
     'DatabaseName',fDatabaseName,'User',fUser,'Password',fPassword]);
-end;
-
-function TSynConnectionDefinition.GetKey: cardinal;
-begin
-  if self=nil then
-    result := 0 else
-  if fKey=0 then
-    result := $A5abba5A else
-    result := fKey;
-end;
-
-function TSynConnectionDefinition.GetPassWordPlain: RawUTF8;
-begin
-  if (self=nil) or (fPassWord='') then
-    result := '' else begin
-    result := Base64ToBin(fPassWord);
-    SymmetricEncrypt(GetKey,RawByteString(result));
-  end;
-end;
-
-procedure TSynConnectionDefinition.SetPassWordPlain(const Value: RawUTF8);
-var data: RawByteString;
-begin
-  if self=nil then
-    exit;
-  if Value='' then begin
-    fPassWord := '';
-    exit;
-  end;
-  data := Value;
-  SymmetricEncrypt(GetKey,data);
-  fPassWord := BinToBase64(data);
 end;
 
 
@@ -38543,6 +38583,7 @@ end;
 {$I-}
 procedure ConsoleShowFatalException(E: Exception);
 begin
+  ioresult;
   TextColor(ccLightRed);
   write(#13#10'Fatal exception ');
   TextColor(ccWhite);
@@ -38556,6 +38597,7 @@ begin
   if ioresult=0 then
     Readln;
   {$endif}
+  ioresult;
 end;
 {$I+}
 
