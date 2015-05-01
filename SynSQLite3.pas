@@ -3998,7 +3998,7 @@ begin
     if fPassword='' then
       PageSize := 4096 else
       PageSize := 1024; // our encryption scheme expect a page size of 1024
-    CacheSize := 10000;
+    CacheSize := 10000; // ensure we use some generous amount of RAM (40 MB)
   end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values

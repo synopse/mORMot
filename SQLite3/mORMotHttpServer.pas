@@ -209,6 +209,9 @@ uses
   mORMot;
 
 type
+  /// exception raised in case of a HTTP Server error
+  EHttpServerException = class(ECommunicationException);
+
   /// available running options for TSQLHttpServer.Create() constructor
   // - useHttpApi to use kernel-mode HTTP.SYS server (THttpApiServer) with an
   // already registered URI (default way, similar to IIS/WCF security policy
@@ -299,7 +302,7 @@ type
       aConnectionID: Int64; aFakeCallID: integer;
       aResult, aErrorMsg: PRawUTF8): boolean;
   public
-    /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
+    /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed
     // - specify one or more TSQLRestServer server class to be used: each
     // class must have an unique Model.Root value, to identify which TSQLRestServer
@@ -335,10 +338,12 @@ type
       aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; ServerThreadPoolCount: Integer=32;
       aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
-    /// create a Server Thread, binded and listening on a TCP port to HTTP JSON requests
+    /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a EHttpServer exception if binding failed
     // - specify one TSQLRestServer server class to be used
-    // - port is an AnsiString, as expected by the WinSock API
+    // - port is an AnsiString, as expected by the WinSock API - in case of
+    // useHttpSocket or useBidirSocket kind of server, you can specify the
+    // server address to bind to: e.g. '1.2.3.4:1234'
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD
@@ -352,6 +357,15 @@ type
       aHttpServerKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; aRestAccessRights: PSQLAccessRights=nil;
       ServerThreadPoolCount: Integer=32; aHttpServerSecurity: TSQLHttpServerSecurity=secNone;
       const aAdditionalURL: AnsiString=''; const aQueueName: SynUnicode=''); reintroduce; overload;
+    /// create a Server instance, binded and listening on a TCP port to HTTP requests
+    // - raise a EHttpServer exception if binding failed
+    // - specify one TSQLRestServer instance to be published, and the associated
+    // transmission definition; other parameters would be the standard one
+    // - only the supplied aDefinition.Authentication will be defined
+    // - under Windows, will use http.sys with automatic URI registration, unless
+    // aDefinition.WebSocketPassword is set, and then binary WebSockets would
+    // be expected with the corresponding encryption
+    constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -607,7 +621,7 @@ begin
             ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
       end;
     if ErrMsg<>'' then
-       raise EModelException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
+       raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
     SetLength(fDBServers,length(aServers));
     for i := 0 to high(aServers) do
     with fDBServers[i] do begin
@@ -759,7 +773,7 @@ begin
       result := result+' (you need to register the URI )';
   fLog.Add.Log(sllLastError,result,self);
   if aRaiseExceptionOnError then
-    raise ECommunicationException.CreateUTF8('%: %',[self,result]);
+    raise EHttpServerException.CreateUTF8('%: %',[self,result]);
   {$endif}
 end;
 
@@ -942,6 +956,34 @@ begin
       if aErrorMsg<>nil then
         aErrorMsg^ := ObjectToJSONDebug(E);
   end;
+end;
+
+constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
+  aDefinition: TSQLHttpServerDefinition);
+const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticationClass = (
+  // adDefault, adHttpBasic, adWeak, adSSPI
+  TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
+  TSQLRestServerAuthenticationNone,
+  {$ifdef WINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
+var a: TSQLHttpServerRestAuthentication;
+    kind: TSQLHttpServerOptions;
+begin
+  if aDefinition=nil then
+    raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
+  if aDefinition.WebSocketPassword='' then
+    kind := HTTP_DEFAULT_MODE else
+    kind := useBidirSocket;
+  Create(aDefinition.BindPort,aServer,'+',kind,nil,32,
+    HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
+  a := aDefinition.Authentication;
+  if aServer.HandleAuthentication then
+    if AUTH[a]=nil then
+      fLog.Add.Log(sllWarning,'Ignored',TypeInfo(TSQLHttpServerRestAuthentication),a,self) else begin
+      aServer.AuthenticationUnregisterAll;
+      aServer.AuthenticationRegister(AUTH[a]);
+    end;
+  if aDefinition.WebSocketPassword<>'' then
+    WebSocketsEnable(aServer,aDefinition.PasswordPlain);
 end;
 
 
