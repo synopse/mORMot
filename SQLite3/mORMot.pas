@@ -3603,6 +3603,9 @@ function ClassFieldPropInstanceMatchingClass(aSearchedInstance: TObject;
 function ClassFieldCountWithParents(ClassType: TClass;
   onlyWithoutGetter: boolean=false): integer;
 
+/// returns TRUE if the class has some published fields, including its parents
+function ClassHasPublishedFields(ClassType: TClass): boolean;
+
 /// retrieve all class hierachy types which have some published properties
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 
@@ -16649,6 +16652,22 @@ begin
   end;
 end;
 
+function ClassHasPublishedFields(ClassType: TClass): boolean;
+var CP: PClassProp;
+begin
+  while ClassType<>nil do begin
+    CP := InternalClassProp(ClassType);
+    if CP=nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    if CP^.PropCount>0 then begin
+      result := true;
+      exit;
+    end;
+    ClassType := ClassType.ClassParent;
+  end;
+  result := false;
+end;
+
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 procedure InternalAdd(C: TClass; var list: TClassDynArray);
 var P: PClassProp;
@@ -24487,29 +24506,36 @@ end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
+    C,C2: TClass;
 begin
-  CT := AlignToPtr(@Name[ord(Name[0])+1]);
-  while true do // unrolled three InheritsFrom() calls
-    if CT^.ClassType<>TSQLRecordMany then
-    if CT^.ClassType<>TSQLRecord then
-    if (CT^.ClassType<>TPersistent) and (CT^.ClassType<>TRawUTF8List) and
-       (CT^.ClassType<>TObjectList) and (CT^.ClassType<>TSynPersistent) and
-       (CT^.ClassType<>TInterfacedObjectWithCustomCreate) then
-      if CT^.ParentInfo<>nil then
+  CT := AlignToPtr(@Name[ord(Name[0])+1]); // inlined ClassType
+  C := CT^.ClassType;
+  C2 := C;
+  while true do // unrolled several InheritsFrom() calls
+    if C<>TSQLRecordMany then
+    if C<>TSQLRecord then
+    if (C<>TRawUTF8List) and (C<>TStrings) and
+       (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
+      if CT^.ParentInfo<>nil then begin
         with CT^.ParentInfo^{$ifndef FPC}^{$endif} do
-          CT := AlignToPtr(@Name[ord(Name[0])+1]) // get parent ClassType
-      else break
+          CT := AlignToPtr(@Name[ord(Name[0])+1]); // get parent ClassType
+        C := CT^.ClassType;
+        if C=TObject then
+          break;
+      end else break
     else begin
-      result := sftObject; // published properties, TStrings TRawUTF8List TCollection
+      result := sftObject; // TStrings, TRawUTF8List or TCollection
       exit;
     end else begin
-      result := sftID; // TSQLRecord field value is pointer(RecordID), not any Instance
+      result := sftID; // TSQLRecord field is pointer(RecordID), not an Instance
       exit;
     end else begin
       result := sftMany; // no data is stored here, but in a pivot table
       exit;
     end;
-  result := sftUnknown;
+  if ClassHasPublishedFields(C2) then
+    result := sftObject else // identify any class with published properties
+    result := sftUnknown;
 end;
 
 function TTypeInfo.EnumBaseType: PEnumType;
@@ -39062,14 +39088,15 @@ type
 function JSONObject(aClassType: TClass; out aCustomIndex: integer;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
 const
-  MAX = {$ifdef LVCL}10{$else}11{$endif};
+  MAX = {$ifdef LVCL}11{$else}12{$endif};
   TYP: array[0..MAX] of TClass = (
-    TObject,TList,TObjectList,
-    TPersistent,TSynPersistentWithPassword,TSynPersistent,
+    TObject,TList,TObjectList,TPersistent,TSynPersistentWithPassword,
+    TSynPersistent,TInterfacedObjectWithCustomCreate,
     TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List
     {$ifndef LVCL},TCollection{$endif});
   OBJ: array[0..MAX] of TJSONObject = (
-    oNone,oList,oObjectList,oPersistent,oPersistentPassword,oPersistent,
+    oNone,oList,oObjectList,oPersistent,oPersistentPassword,
+    oPersistent,oPersistent,
     oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs
     {$ifndef LVCL},oCollection{$endif});
 var i: integer;
@@ -43825,7 +43852,7 @@ begin
     result := smvWideString;
   tkClass:
     with P^.ClassType^ do
-    if (ClassFieldCountWithParents(ClassType)>0) or
+    if ClassHasPublishedFields(ClassType) or
        (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
           oSQLRecord,oSQLMany,oPersistent,oPersistentPassword,
