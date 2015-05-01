@@ -4457,6 +4457,7 @@ type
     // inherited classes may safely override this default void implementation
     constructor Create; virtual;
   end;
+  {$M-}
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
@@ -4473,8 +4474,6 @@ type
     /// release the instance for exclusive access
     procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
   end;
-  
-  {$M-}
 
   /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
   // - could be used to create instances using its virtual constructor

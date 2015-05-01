@@ -64,6 +64,7 @@ unit mORMotService;
 	  
     Version 1.18
     - renamed SQLite3Service.pas to mORMotService.pas
+    - added FPC compatibility (including missing WinSvc.pas API unit)
     - changed ServicesRun to return an indicator of success - see [8666906039]
     - TServiceController.CreateOpenService() use lower rights - see [c3ebb6b5d6]
     - added TServiceSingle class and its global handler (to be used instead of
@@ -84,13 +85,99 @@ interface
 {$I Synopse.inc}
 
 uses
-  Windows, WinSVC, Messages, Classes, SysUtils,
+  Windows, Messages, Classes, SysUtils,
   {$ifndef LVCL}Contnrs,{$endif}
   SynCommons,
   SynLog;
 
+{ *** some minimal Windows API types and constants, missing for FPC }
+
 const
   CM_SERVICE_CONTROL_CODE = WM_USER+1000;
+
+  SERVICE_QUERY_CONFIG         = $0001;
+  SERVICE_CHANGE_CONFIG        = $0002;
+  SERVICE_QUERY_STATUS         = $0004;
+  SERVICE_ENUMERATE_DEPENDENTS = $0008;
+  SERVICE_START                = $0010;
+  SERVICE_STOP                 = $0020;
+  SERVICE_PAUSE_CONTINUE       = $0040;
+  SERVICE_INTERROGATE          = $0080;
+  SERVICE_USER_DEFINED_CONTROL = $0100;
+  SERVICE_ALL_ACCESS           = STANDARD_RIGHTS_REQUIRED or
+                                 SERVICE_QUERY_CONFIG or
+                                 SERVICE_CHANGE_CONFIG or
+                                 SERVICE_QUERY_STATUS or
+                                 SERVICE_ENUMERATE_DEPENDENTS or
+                                 SERVICE_START or
+                                 SERVICE_STOP or
+                                 SERVICE_PAUSE_CONTINUE or
+                                 SERVICE_INTERROGATE or
+                                 SERVICE_USER_DEFINED_CONTROL;
+
+  SC_MANAGER_CONNECT            = $0001;
+  SC_MANAGER_CREATE_SERVICE     = $0002;
+  SC_MANAGER_ENUMERATE_SERVICE  = $0004;
+  SC_MANAGER_LOCK               = $0008;
+  SC_MANAGER_QUERY_LOCK_STATUS  = $0010;
+  SC_MANAGER_MODIFY_BOOT_CONFIG = $0020;
+  SC_MANAGER_ALL_ACCESS         = STANDARD_RIGHTS_REQUIRED or
+                                  SC_MANAGER_CONNECT or
+                                  SC_MANAGER_CREATE_SERVICE or
+                                  SC_MANAGER_ENUMERATE_SERVICE or
+                                  SC_MANAGER_LOCK or
+                                  SC_MANAGER_QUERY_LOCK_STATUS or
+                                  SC_MANAGER_MODIFY_BOOT_CONFIG;
+
+  SERVICE_CONFIG_DESCRIPTION    = $0001;
+
+  SERVICE_WIN32_OWN_PROCESS     = $00000010;
+  SERVICE_WIN32_SHARE_PROCESS   = $00000020;
+  SERVICE_INTERACTIVE_PROCESS   = $00000100;
+
+  SERVICE_BOOT_START            = $00000000;
+  SERVICE_SYSTEM_START          = $00000001;
+  SERVICE_AUTO_START            = $00000002;
+  SERVICE_DEMAND_START          = $00000003;
+  SERVICE_DISABLED              = $00000004;
+  SERVICE_ERROR_IGNORE          = $00000000;
+  SERVICE_ERROR_NORMAL          = $00000001;
+  SERVICE_ERROR_SEVERE          = $00000002;
+  SERVICE_ERROR_CRITICAL        = $00000003;
+
+  SERVICE_CONTROL_STOP          = $00000001;
+  SERVICE_CONTROL_PAUSE         = $00000002;
+  SERVICE_CONTROL_CONTINUE      = $00000003;
+  SERVICE_CONTROL_INTERROGATE   = $00000004;
+  SERVICE_CONTROL_SHUTDOWN      = $00000005;
+  SERVICE_STOPPED               = $00000001;
+  SERVICE_START_PENDING         = $00000002;
+  SERVICE_STOP_PENDING          = $00000003;
+  SERVICE_RUNNING               = $00000004;
+  SERVICE_CONTINUE_PENDING      = $00000005;
+  SERVICE_PAUSE_PENDING         = $00000006;
+  SERVICE_PAUSED                = $00000007;
+
+type
+  PServiceStatus = ^TServiceStatus;
+  TServiceStatus = record
+    dwServiceType: DWORD;
+    dwCurrentState: DWORD;
+    dwControlsAccepted: DWORD;
+    dwWin32ExitCode: DWORD;
+    dwServiceSpecificExitCode: DWORD;
+    dwCheckPoint: DWORD;
+    dwWaitHint: DWORD;
+  end;
+  SC_HANDLE = THandle;
+  SERVICE_STATUS_HANDLE = DWORD;
+  TServiceTableEntry = record
+    lpServiceName: PChar;
+    lpServiceProc: TFarProc;
+  end;
+
+
+{ *** high level classes to define and manage Windows Services }
 
 var
   /// you can set this global variable to TSynLog or TSQLLog to enable logging
@@ -99,14 +186,14 @@ var
   ServiceLog: TSynLogClass;
 
 type
-  {{ all possible states of the service }
+  /// all possible states of the service
   TServiceState =
     (ssNotInstalled, ssStopped, ssStarting, ssStopping, ssRunning,
      ssResuming, ssPausing, ssPaused, ssErrorRetrievingState);
 
-  {{ TServiceControler class is intended to create a new service instance or
-    to maintain (that is start, stop, pause, resume...) an existing service
-   - to provide the service itself, use the TService class }
+  /// TServiceControler class is intended to create a new service instance or
+  // to maintain (that is start, stop, pause, resume...) an existing service
+  // - to provide the service itself, use the TService class 
   TServiceController = class
   protected
     FSCHandle: THandle;
@@ -117,52 +204,51 @@ type
     function GetStatus: TServiceStatus;
     function GetState: TServiceState;
   public
-  {{ Creates a new service and allows to control it and/or its configuration.
-   Expected Parameters (strings are unicode-ready since Delphi 2009):
-   - TargetComputer - set it to empty string if local computer is the target.
-   - DatabaseName - set it to empty string if the default database is supposed
-                ('ServicesActive').
-   - Name - name of a service.
-   - DisplayName - display name of a service.
-   - Path - a path to binary (executable) of the service created.
-   - OrderGroup - an order group name (unnecessary)
-   - Dependances - string containing a list with names of services, which must
-               start before (every name should be separated with #0, entire
-               list should be separated with #0#0. Or, an empty string can be
-               passed if there are no dependances).
-   - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
-            account name in the form of "DomainName\Username"; If the account
-            belongs to the built-in domain, ".\Username" can be specified;
-            Services of type SERVICE_WIN32_SHARE_PROCESS are not allowed to
-            specify an account other than LocalSystem. If '' is specified, the
-            service will be logged on as the 'LocalSystem' account, in which
-            case, the Password parameter must be empty too.
-   - Password - a password for login name. If the service type is
-            SERVICE_KERNEL_DRIVER or SERVICE_FILE_SYSTEM_DRIVER,
-            this parameter is ignored.
-   - DesiredAccess - a combination of following flags:
-     SERVICE_ALL_ACCESS (default value), SERVICE_CHANGE_CONFIG,
-     SERVICE_ENUMERATE_DEPENDENTS, SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE,
-     SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP,
-     SERVICE_USER_DEFINED_CONTROL
-    - ServiceType - a set of following flags:
-      SERVICE_WIN32_OWN_PROCESS (default value, which specifies a Win32 service
-      that runs in its own process), SERVICE_WIN32_SHARE_PROCESS,
-      SERVICE_KERNEL_DRIVER, SERVICE_FILE_SYSTEM_DRIVER,
-      SERVICE_INTERACTIVE_PROCESS (default value, which enables a Win32 service
-      process to interact with the desktop)
-    - StartType - one of following values:
-      SERVICE_BOOT_START, SERVICE_SYSTEM_START,
-      SERVICE_AUTO_START (which specifies a device driver or service started by
-      the service control manager automatically during system startup),
-      SERVICE_DEMAND_START (default value, which specifies a service started by
-      a service control manager when a process calls the StartService function,
-      that is the TServiceController.Start method), SERVICE_DISABLED
-    - ErrorControl - one of following:
-      SERVICE_ERROR_IGNORE, SERVICE_ERROR_NORMAL (default value, by which
-      the startup program logs the error and displays a message but continues
-      the startup operation), SERVICE_ERROR_SEVERE,
-      SERVICE_ERROR_CRITICAL }
+    /// Creates a new service and allows to control it and/or its configuration
+    // - TargetComputer - set it to empty string if local computer is the target.
+    // - DatabaseName - set it to empty string if the default database is supposed
+    // ('ServicesActive').
+    // - Name - name of a service.
+    // - DisplayName - display name of a service.
+    // - Path - a path to binary (executable) of the service created.
+    // - OrderGroup - an order group name (unnecessary)
+    // - Dependances - string containing a list with names of services, which must
+    // start before (every name should be separated with #0, entire
+    // list should be separated with #0#0. Or, an empty string can be
+    // passed if there are no dependances).
+    // - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
+    // account name in the form of "DomainName\Username"; If the account
+    // belongs to the built-in domain, ".\Username" can be specified;
+    // Services of type SERVICE_WIN32_SHARE_PROCESS are not allowed to
+    // specify an account other than LocalSystem. If '' is specified, the
+    // service will be logged on as the 'LocalSystem' account, in which
+    // case, the Password parameter must be empty too.
+    // - Password - a password for login name. If the service type is
+    // SERVICE_KERNEL_DRIVER or SERVICE_FILE_SYSTEM_DRIVER,
+    // this parameter is ignored.
+    // - DesiredAccess - a combination of following flags:
+    // SERVICE_ALL_ACCESS (default value), SERVICE_CHANGE_CONFIG,
+    // SERVICE_ENUMERATE_DEPENDENTS, SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE,
+    // SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP,
+    // SERVICE_USER_DEFINED_CONTROL
+    // - ServiceType - a set of following flags:
+    // SERVICE_WIN32_OWN_PROCESS (default value, which specifies a Win32 service
+    // that runs in its own process), SERVICE_WIN32_SHARE_PROCESS,
+    // SERVICE_KERNEL_DRIVER, SERVICE_FILE_SYSTEM_DRIVER,
+    // SERVICE_INTERACTIVE_PROCESS (default value, which enables a Win32 service
+    // process to interact with the desktop)
+    // - StartType - one of following values:
+    // SERVICE_BOOT_START, SERVICE_SYSTEM_START,
+    // SERVICE_AUTO_START (which specifies a device driver or service started by
+    // the service control manager automatically during system startup),
+    // SERVICE_DEMAND_START (default value, which specifies a service started by
+    // a service control manager when a process calls the StartService function,
+    // that is the TServiceController.Start method), SERVICE_DISABLED
+    // - ErrorControl - one of following:
+    // SERVICE_ERROR_IGNORE, SERVICE_ERROR_NORMAL (default value, by which
+    // the startup program logs the error and displays a message but continues
+    // the startup operation), SERVICE_ERROR_SEVERE,
+    // SERVICE_ERROR_CRITICAL
     constructor CreateNewService(const TargetComputer, DatabaseName,
       Name, DisplayName, Path: string;
       const OrderGroup: string = ''; const Dependances: string = '';
@@ -173,46 +259,46 @@ type
     /// wrapper around CreateNewService() to install the current executable as service
     class function Install(const Name,DisplayName,Description: string;
       AutoStart: boolean; ExeName: TFileName=''): TServiceState;
-    {{ Opens an existing service, in order  to control it or its configuration
-      from your application. Parameters (strings are unicode-ready since Delphi 2009):
-   - TargetComputer - set it to empty string if local computer is the target.
-   - DatabaseName - set it to empty string if the default database is supposed
-                ('ServicesActive').
-   - Name - name of a service.
-   - DesiredAccess - a combination of following flags:
-     SERVICE_ALL_ACCESS, SERVICE_CHANGE_CONFIG, SERVICE_ENUMERATE_DEPENDENTS,
-     SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
-     SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL }
+    /// Opens an existing service, in order  to control it or its configuration
+    // from your application. Parameters (strings are unicode-ready since Delphi 2009):
+    // - TargetComputer - set it to empty string if local computer is the target.
+    // - DatabaseName - set it to empty string if the default database is supposed
+    // ('ServicesActive').
+    // - Name - name of a service.
+    // - DesiredAccess - a combination of following flags:
+    // SERVICE_ALL_ACCESS, SERVICE_CHANGE_CONFIG, SERVICE_ENUMERATE_DEPENDENTS,
+    // SERVICE_INTERROGATE, SERVICE_PAUSE_CONTINUE, SERVICE_QUERY_CONFIG,
+    // SERVICE_QUERY_STATUS, SERVICE_START, SERVICE_STOP, SERVICE_USER_DEFINED_CONTROL
     constructor CreateOpenService(const TargetComputer, DataBaseName, Name: String;
       DesiredAccess: DWORD = SERVICE_ALL_ACCESS);
-    {{ release memory and handles }
+    /// release memory and handles 
     destructor Destroy; override;
-    {{ Handle of SC manager }
+    /// Handle of SC manager 
     property SCHandle: THandle read FSCHandle;
-    {{ Handle of service opened or created
-      - its value is 0 if something failed in any Create*() method }
+    /// Handle of service opened or created
+    // - its value is 0 if something failed in any Create*() method 
     property Handle: THandle read FHandle;
-    {{ Retrieve the Current status of the service }
+    /// Retrieve the Current status of the service 
     property Status: TServiceStatus read GetStatus;
-    {{ Retrive the Current state of the service }
+    /// Retrieve the Current state of the service 
     property State: TServiceState read GetState;
-    {{ Requests the service to stop }
+    /// Requests the service to stop 
     function Stop: boolean;
-    {{ Requests the service to pause }
+    /// Requests the service to pause 
     function Pause: boolean;
-    {{ Requests the paused service to resume }
+    /// Requests the paused service to resume 
     function Resume: boolean;
-    {{ Requests the service to update immediately its current status information
-      to the service control manager }
+    /// Requests the service to update immediately its current status information
+    // to the service control manager 
     function Refresh: boolean;
-    {{ Request the service to shutdown
-     - this function always return false }
+    /// Request the service to shutdown
+    // - this function always return false 
     function Shutdown: boolean;
-    {{ Removes service from the system, i.e. close the Service }
+    /// Removes service from the system, i.e. close the Service
     function Delete: boolean;
-    {{ starts the execution of a service with some specified arguments
-     - this version expect PChar pointers, either AnsiString (for FPC and old
-      Delphi compiler), either UnicodeString (till Delphi 2009) }
+    /// starts the execution of a service with some specified arguments
+    // - this version expect PChar pointers, either AnsiString (for FPC and old
+    //  Delphi compiler), either UnicodeString (till Delphi 2009)
     function Start(const Args: array of PChar): boolean;
     /// try to define the description text of this service
     procedure SetDescription(const Description: string);
@@ -227,7 +313,7 @@ type
     // - if ExeFileName='', it will install the current executable
     // - an optional Description text for the service may be specified
     class procedure CheckParameters(const ExeFileName: TFileName;
-      const ServiceName,DisplayName,Description: string); virtual;
+      const ServiceName,DisplayName,Description: string);
   end;
 
   {$M+}
@@ -284,83 +370,82 @@ type
     constructor Create(const aServiceName, aDisplayName: String); reintroduce; virtual;
     /// free memory and release handles
     destructor Destroy; override;
-    {{ Reports new status to the system }
+    /// Reports new status to the system
     function ReportStatus(dwState, dwExitCode, dwWait: DWORD): BOOL;
-    {{ Installs the service in the database
-      - return true on success
-      - create a local TServiceController with the current executable file,
-        with the supplied command line parameters}
+    /// Installs the service in the database
+    // - return true on success
+    // - create a local TServiceController with the current executable file,
+    // with the supplied command line parameters
     function Install(const Params: string=''): boolean;
-    {{ Removes the service from database
-      - uses a local TServiceController with the current Service Name }
+    /// Removes the service from database
+    //  - uses a local TServiceController with the current Service Name
     procedure Remove;
-    {{ Starts the service
-      - uses a local TServiceController with the current Service Name }
+    /// Starts the service
+    //  - uses a local TServiceController with the current Service Name 
     procedure Start;
-    {{ Stops the service
-      - uses a local TServiceController with the current Service Name }
+    /// Stops the service
+    // - uses a local TServiceController with the current Service Name 
     procedure Stop;
-    {{ this is the main method, in which the Service should implement its run  }
+    /// this is the main method, in which the Service should implement its run  
     procedure Execute; virtual;
 
-    {{ Number of arguments passed to the service by the service controler }
+    /// Number of arguments passed to the service by the service controler 
     property ArgCount: Integer read GetArgCount;
-    {{ List of arguments passed to the service by the service controler }
+    /// List of arguments passed to the service by the service controler 
     property Args[Idx: Integer]: String read GetArgs;
-    {{ Any data You wish to associate with the service object }
+    /// Any data You wish to associate with the service object
     property Data: DWORD read FData write FData;
-    {{ Whether service is installed in DataBase
-      - uses a local TServiceController to check if the current Service Name exists }
+    /// Whether service is installed in DataBase
+    // - uses a local TServiceController to check if the current Service Name exists 
     property Installed: boolean read GetInstalled;
-    {{ Callback handler for Windows Service Controller
-      - if handler is not set, then auto generated handler calls DoCtrlHandle
-      (note that this auto-generated stubb is... not working yet - so you should
-      either set your own procedure to this property, or use TServiceSingle)
-      - a typical control handler may be defined as such:
-      ! var MyGlobalService: TService;
-      !
-      ! procedure MyServiceControlHandler(Opcode: LongWord); stdcall;
-      ! begin
-      !   if MyGlobalService<>nil then
-      !     MyGlobalService.DoCtrlHandle(Opcode);
-      ! end;
-      !
-      ! ...
-      ! MyGlobalService := TService.Create(...
-      ! MyGlobalService.ControlHandler := MyServiceControlHandler;
-    }
+    /// Current service status
+    // - To report new status to the system, assign another
+    // value to this record, or use ReportStatus method (preferred)
+    property Status: TServiceStatus read fStatusRec write SetStatus;
+    /// Callback handler for Windows Service Controller
+    // - if handler is not set, then auto generated handler calls DoCtrlHandle
+    // (note that this auto-generated stubb is... not working yet - so you should
+    // either set your own procedure to this property, or use TServiceSingle)
+    // - a typical control handler may be defined as such:
+    // ! var MyGlobalService: TService;
+    // !
+    // ! procedure MyServiceControlHandler(Opcode: LongWord); stdcall;
+    // ! begin
+    // !   if MyGlobalService<>nil then
+    // !     MyGlobalService.DoCtrlHandle(Opcode);
+    // ! end;
+    // !
+    // ! ...
+    // ! MyGlobalService := TService.Create(...
+    // ! MyGlobalService.ControlHandler := MyServiceControlHandler;
     property ControlHandler: TServiceControlHandler
       read GetControlHandler write SetControlHandler;
-    {{ Start event is executed before the main service thread (i.e. in the Execute method) }
+    /// Start event is executed before the main service thread (i.e. in the Execute method)
     property OnStart: TServiceEvent read fOnStart write fOnStart;
-    {{ custom Execute event
-      - launched in the main service thread (i.e. in the Execute method) }
+    /// custom Execute event
+    // - launched in the main service thread (i.e. in the Execute method) 
     property OnExecute: TServiceEvent read fOnExecute write fOnExecute;
-    {{ custom event triggered when a Control Code is received from Windows }
+    /// custom event triggered when a Control Code is received from Windows 
     property OnControl: TServiceControlEvent read fOnControl write fOnControl;
-    {{ custom event triggered when the service is stopped }
+    /// custom event triggered when the service is stopped 
     property OnStop: TServiceEvent read fOnStop write fOnStop;
-    {{ custom event triggered when the service is paused }
+    /// custom event triggered when the service is paused 
     property OnPause: TServiceEvent read fOnPause write fOnPause;
-    {{ custom event triggered when the service is resumed }
+    /// custom event triggered when the service is resumed 
     property OnResume: TServiceEvent read fOnResume write fOnResume;
-    {{ custom event triggered when the service receive an Interrogate }
+    /// custom event triggered when the service receive an Interrogate 
     property OnInterrogate: TServiceEvent read fOnInterrogate write fOnInterrogate;
-    {{ custom event triggered when the service is shut down }
+    /// custom event triggered when the service is shut down 
     property OnShutdown: TServiceEvent read fOnShutdown write fOnShutdown;
   published
-    {{ Name of the service. Must be unique }
+    /// Name of the service. Must be unique 
     property ServiceName: String read fSName;
-    {{ Display name of the service }
+    /// Display name of the service 
     property DisplayName: String read fDName write fDName;
-    {{ Type of service }
+    /// Type of service 
     property ServiceType: DWORD read fServiceType write fServiceType;
-    {{ Type of start of service }
+    /// Type of start of service 
     property StartType: DWORD read fStartType write fStartType;
-    {{ Current service status
-      - To report new status to the system, assign another
-       value to this record, or use ReportStatus method (preferred) }
-    property Status: TServiceStatus read fStatusRec write SetStatus;
   end;
 
   /// inherit from this service if your application has a single service
@@ -386,15 +471,15 @@ var
   /// the main TService instance running 
   ServiceSingle: TServiceSingle = nil;
 
-{{ launch the registered Services execution
-  - the registered list of service provided by the aplication is sent
-   to the operating system
-  - returns TRUE on success
-  - returns FALSE on error (to get extended information, call GetLastError) }
+/// launch the registered Services execution
+// - the registered list of service provided by the aplication is sent
+// to the operating system
+// - returns TRUE on success
+// - returns FALSE on error (to get extended information, call GetLastError)
 function ServicesRun: boolean;
 
-{{ convert the Control Code retrieved from Windows into a service state
-  enumeration item }
+/// convert the Control Code retrieved from Windows into a service state
+// enumeration item 
 function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
@@ -402,6 +487,37 @@ function ServiceStateText(State: TServiceState): string;
 
 
 implementation
+
+function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenSCManager'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
+  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
+function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
+  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
+  name 'StartService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
+  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: DWORD;
+  lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
+  lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
+  name 'CreateService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
+function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
+function QueryServiceStatus(hService: SC_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function ControlService(hService: SC_HANDLE; dwControl: DWORD;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function RegisterServiceCtrlHandler(lpServiceName: PChar;
+  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
+  name 'RegisterServiceCtrlHandler'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function StartServiceCtrlDispatcher(
+  var lpServiceStartTable: TServiceTableEntry): BOOL; stdcall; external advapi32
+  name 'StartServiceCtrlDispatcher'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
 
 
 { TServiceController }
@@ -530,20 +646,6 @@ function TServiceController.Shutdown: boolean;
 begin
   Result := ControlService(FHandle, SERVICE_CONTROL_SHUTDOWN, FStatus);
 end;
-
-type
-   TServiceDescription = record
-     lpDescription : SynUnicode;
-   end;
-const
-  SERVICE_CONFIG_DESCRIPTION = 1;
-
-function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
-  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
-
-function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
-  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
-  name {$ifdef UNICODE}'StartServiceW';{$else}'StartServiceA';{$endif}
 
 function TServiceController.Start(const Args: array of PChar): boolean;
 begin
