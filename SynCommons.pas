@@ -5658,6 +5658,9 @@ type
   // TSynLog and ObjectToJSONFull()
   // - woStoreClassName will add a "ClassName":"TMyClass" field
   // - woStorePointer will add a "Address":"0431298a" field
+  // - woStoreStoredFalse will write the 'stored false' properties, even
+  // if they are marked as such (used e.g. to persist all settings on file,
+  // but disallow the sensitive - password - fields be logged)
   // - woHumanReadableFullSetsAsStar will store an human-readable set with
   // all its enumerates items set to be stored as ["*"]
   // - woHumanReadableEnumSetAsComment will add a comment at the end of the
@@ -5668,13 +5671,15 @@ type
   // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
   // before the ISO-8601 encoded TDateTime value
   // - by default, TSQLRawBlob properties are serialized as null, unless
-  // woSQLRawBlobAsBase64 is defined 
+  // woSQLRawBlobAsBase64 is defined
+  // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
+  // field will be serialized as "***" to prevent security issues (e.g. in log)
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
-    woStoreClassName, woStorePointer,
+    woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic,
-    woSQLRawBlobAsBase64);
+    woSQLRawBlobAsBase64, woHideSynPersistentPassword);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -6354,6 +6359,7 @@ type
     fPassWord: RawUTF8;
     fKey: cardinal;
     function GetKey: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetPassWordPlain: RawUTF8;
     procedure SetPassWordPlain(const Value: RawUTF8);
   public
@@ -6361,9 +6367,13 @@ type
     // ready to be stored as JSON, according to a given private key
     class function ComputePassword(const PlainPassword: RawUTF8;
       CustomKey: cardinal=0): RawUTF8;
+    /// low-level function used to identify if a given field is a Password
+    // - this method is used e.g. by TJSONSerializer.WriteObject to identify the
+    // password field, since its published name is set by the inherited classes
+    function GetPasswordFieldAddress: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the private key used to cypher the password storage on serialization
-    // - application can override the default value at runtime, with its own
-    // genuine value 
+    // - application can override the default 0 value at runtime
     property Key: cardinal read GetKey write fKey;
     /// access to the associated unencrypted Password value
     property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
@@ -20395,11 +20405,11 @@ asm
     call IntegerScan
     or eax,eax
     pop edx
-    jz @z
-    sub eax,edx
-    shr eax,2
+    jnz @e
+    dec eax // returns -1
     ret
-@z: mov eax,-1
+@e: sub eax,edx
+    shr eax,2
 end;
 {$endif}
 
@@ -20409,7 +20419,7 @@ var i: PtrInt; // optimized code for speed
 begin
   if P<>nil then begin
     result := 0;
-    for i := 1 to Count shr 2 do // 4 DWORD by loop - aligned read
+    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
       if P^[0]<>Value then
       if P^[1]<>Value then
       if P^[2]<>Value then
@@ -20427,7 +20437,7 @@ begin
         exit;
       end else
         exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
+    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
       if P^[i]=Value then
         exit else
         inc(result);
@@ -20440,11 +20450,11 @@ asm
     call IntegerScan
     or eax,eax
     pop edx
-    jz @z
-    sub eax,edx
-    shr eax,2
+    jnz @e
+    dec eax // returns -1
     ret
-@z: mov eax,-1
+@e: sub eax,edx
+    shr eax,2
 end;
 {$endif}
 
@@ -24443,7 +24453,7 @@ begin
       exit;
   end;
   AppendToTextFile(Msg,{$ifndef MSWINDOWS}ExtractFileName{$endif}
-    (ChangeFileExt(paramstr(0),'.log')));
+    (ChangeFileExt(ExeVersion.ProgramFileName,'.log')));
 end;
 
 {$ifndef FPC}
@@ -25721,6 +25731,7 @@ begin
       i := GarbageCollector.IndexOf(Version);
       if i>0 then
         GarbageCollector.Delete(i);
+      Version := nil; // will replace existing TFileVersion instance
     end;
   with ExeVersion do
   if Version=nil then begin
@@ -37806,13 +37817,16 @@ begin
   end;
 end;
 
+function TSynPersistentWithPassword.GetPasswordFieldAddress: pointer;
+begin
+  result := @fPassword;
+end;
+
 function TSynPersistentWithPassword.GetKey: cardinal;
 begin
   if self=nil then
     result := 0 else
-  if fKey=0 then
-    result := $A5abba5A else
-    result := fKey;
+    result := fKey xor $A5abba5A;
 end;
 
 function TSynPersistentWithPassword.GetPassWordPlain: RawUTF8;

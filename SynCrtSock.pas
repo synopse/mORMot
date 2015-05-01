@@ -2646,7 +2646,7 @@ var s,p: SockString;
 begin
   // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
   Create({$ifdef LINUX}500{$else}5000{$endif});
-  i := pos(':',aPort);
+  i := pos({$ifdef UNICODE}SockString{$endif}(':'),aPort);
   if i=0 then begin
     s := '0.0.0.0';
     p := aPort;

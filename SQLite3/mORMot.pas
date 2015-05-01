@@ -12975,8 +12975,8 @@ type
     property HttpSysQueueName: SynUnicode read FHttpSysQueueName write FHttpSysQueueName;
     /// if defined, this HTTP server will use WebSockets, and our secure
     // encrypted binary protocol
-    // - when stored, the password will be encrypted as defined by
-    // TSynPersistentWithPassword
+    // - when stored in the settings JSON file, the password will be safely
+    // encrypted as defined by TSynPersistentWithPassword
     property WebSocketPassword: RawUTF8 read fPassWord write fPassWord;
   end;
 
@@ -38642,7 +38642,7 @@ type
 
 function JSONCustomParsersIndex(aClass: TClass;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): integer;
-    {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if JSONCustomParsers<>nil then
     for result := 0 to length(JSONCustomParsers)-1 do
@@ -39056,58 +39056,46 @@ end;
 type
   TJSONObject =
     (oNone, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
-     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oSynMonitor, oCustom);
+     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
+     oSynMonitor, oCustom);
 
 function JSONObject(aClassType: TClass; out aCustomIndex: integer;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
+const
+  MAX = {$ifdef LVCL}10{$else}11{$endif};
+  TYP: array[0..MAX] of TClass = (
+    TObject,TList,TObjectList,
+    TPersistent,TSynPersistentWithPassword,TSynPersistent,
+    TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List
+    {$ifndef LVCL},TCollection{$endif});
+  OBJ: array[0..MAX] of TJSONObject = (
+    oNone,oList,oObjectList,oPersistent,oPersistentPassword,oPersistent,
+    oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs
+    {$ifndef LVCL},oCollection{$endif});
+var i: integer;
 begin
-  // guess class type (faster than multiple InheritsFrom calls)
+  if aClassType<>nil then begin
+    aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
+    if aCustomIndex>=0 then begin
+      result := oCustom; // found exact custom type (ignore inherited)
+      exit;
+    end;
+    repeat // guess class type (faster than multiple InheritsFrom calls)
+      i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
+      if i>=0 then begin
+        result := OBJ[i];
+        exit;
+      end;
+      {$ifdef FPC}
+      aClassType := aClassType.ClassParent;
+      {$else}
+      if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
+        aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
+        break;
+      {$endif}
+    until aClassType=nil;
+  end;
   result := oNone;
-  if aClassType<>nil then
-  repeat
-    if aClassType<>TList then
-    if aClassType<>TObjectList then
-    if aClassType<>TPersistent then
-    if aClassType<>TSynPersistent then
-    if aClassType<>TSynMonitor then
-    if aClassType<>TSQLRecordMany then
-    if aClassType<>TSQLRecord then
-    if aClassType<>TStrings then
-    if aClassType<>TRawUTF8List then
-{$ifndef LVCL}
-    if aClassType<>TCollection then
-{$endif} begin
-      aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
-      if aCustomIndex<0 then
-        {$ifdef FPC} begin
-        aClassType := aClassType.ClassParent;
-        {$else}
-        if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then begin
-          aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^;
-        {$endif}
-          if aClassType<>nil then
-            continue else
-            break;
-        end else
-        {$ifndef FPC}
-        break else
-        {$endif}
-      result := oCustom;
-    end else
-{$ifndef LVCL}
-      result := oCollection else
-{$endif}
-      result := oUtfs else
-      result := oStrings else
-      result := oSQLRecord else
-      result := oSQLMany else
-      result := oSynMonitor else
-      result := oPersistent else
-      result := oPersistent else
-      result := oObjectList else
-      result := oList;
-    break;
-  until false;
 end;
 
 function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
@@ -41241,9 +41229,9 @@ begin
   aClassType := Value.ClassType;
   IsObj := JSONObject(aClassType,IsObjCustomIndex,[cpWrite]);
   if woFullExpand in Options then
-    if IsObj=oSynMonitor then begin // nested values do not need extended information
+    if IsObj=oSynMonitor then begin // nested values do not need extended info
       exclude(Options,woFullExpand);
-      include(Options,woEnumSetsAsText);
+      include(Options,woEnumSetsAsText); // only needed info is textual enums 
      end else begin
       Add('{');
       AddInstanceName(Value,':');
@@ -41333,10 +41321,11 @@ begin
     for i := 1 to InternalClassPropInfo(aClassType,P) do begin
       if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
         if IsRowIDShort(P^.Name) then
-          goto next;
+          goto next; // should not happen
       end else
-        if not P^.IsStored(Value) then // regular "stored" attribute
-          goto next;
+        if (not (woStoreStoredFalse in Options)) and
+           (not P^.IsStored(Value)) then
+          goto next; // ignore regular "stored false" attribute
       Added := false;
       Kind := P^.PropType^.Kind;
       case Kind of
@@ -41397,7 +41386,15 @@ begin
             AddShort('""') else begin
             Add('"');
             P^.GetLongStrProp(Value,tmp);
-            AddAnyAnsiString(tmp,twJSONEscape,codepage);
+            if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
+               ((woHideSynPersistentPassword in Options) or
+                (woFullExpand in Options)) and
+               P^.GetterIsField and (P^.GetterAddr(Value)=
+                 TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
+              if tmp<>'' then
+                AddShort('***')
+            end else
+              AddAnyAnsiString(tmp,twJSONEscape,codepage);
             Add('"');
           end;
         end;
@@ -43831,7 +43828,8 @@ begin
     if (ClassFieldCountWithParents(ClassType)>0) or
        (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-          oSQLRecord,oSQLMany,oPersistent,oSynMonitor,oCustom]) then
+          oSQLRecord,oSQLMany,oPersistent,oPersistentPassword,
+          oSynMonitor,oCustom]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
   {$ifdef FPC}tkObject,{$endif} tkRecord:
     // Base64 encoding of our RecordLoad / RecordSave binary format
