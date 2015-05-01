@@ -58,15 +58,21 @@ unit dddInfraSettings;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
+  Windows,
+  mORMotService,
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,
   SynLog,
   mORMot,
   mORMotDDD,
-  SynDB, mORMotDB, // for TRestSettings on external SQL database
-  mORMotMongoDB,   // for TRestSettings on external NoSQL database
-  mORMotWrappers;  // for TRestSettings to publish wrapper methods
+  SynSQLite3, SynSQLite3Static, mORMotSQLite3, // for internal SQlite3 database
+  mORMotHttpServer, // for publishing a TSQLRestServer over HTTP
+  SynDB, mORMotDB,  // for TRestSettings on external SQL database
+  mORMotMongoDB,    // for TRestSettings on external NoSQL database
+  mORMotWrappers;   // for TRestSettings to publish wrapper methods
 
   
 { ----- Manage Service/Daemon settings }
@@ -84,31 +90,77 @@ type
     procedure SetProperties(Instance: TObject); virtual;
   end;
 
+  /// settings used to define how logging take place
+  // - will map the most used TSynLogFamily parameters
+  TLogSettings = class(TSynPersistent)
+  protected
+    fLevels: TSynLogInfos;
+    fPerThread: TSynLogPerThreadMode;
+    fDestinationPath: TFileName;
+    fRotateFileCount: cardinal;
+    fRotateFileSize: cardinal;
+    fRotateFileAtHour: integer;
+  public
+    /// initialize the settings to their (TSynLogFamily) default values
+    constructor Create; override;
+  published
+    /// the log levels to be defined
+    // - i.e. a combination of none or several logging event
+    // - if "*" is serialized, unneeded sllNone won't be part of the set
+    property Levels: TSynLogInfos read fLevels write fLevels;
+    /// the logged information about threads
+    // - the default value is ptIdentifiedInOnFile, since it sounds more
+    // reasonable to a multi-threaded server instance
+    property PerThread: TSynLogPerThreadMode read fPerThread write fPerThread;
+    /// allows to customize where the log files will be stored
+    property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
+    /// auto-rotation of logging files
+    // - set to 0 by default, meaning no rotation
+    property RotateFileCount: cardinal read fRotateFileCount write fRotateFileCount;
+    /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)
+    property RotateFileSizeKB: cardinal read fRotateFileSize write fRotateFileSize;
+    /// fixed hour of the day where logging files rotation should be performed
+   property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+  end;
+
   /// parent class for storing application settings as a JSON file
   TApplicationSettingsFile = class(TApplicationSettingsAbstract)
   protected
     fSettingsJsonFileName: TFileName;
+    fDescription: string;
+    fLog: TLogSettings;
   public
     /// initialize and read the settings from the supplied JSON file name
     // - if no file name is specified, will use the executable name with
     // '.settings' as extension
     constructor Create(const aSettingsJsonFileName: TFileName=''); reintroduce; virtual;
     /// save to file and finalize the settings
-    // - any enumerated or set published property will be commented with their values
     destructor Destroy; override;
+    /// save settings to file
+    // - any enumerated or set published property will be commented with their
+    // textual values, and 'stored false' properties would be included
+    procedure UpdateFile; virtual;
     /// to be called when the application starts, to access settings
-    // - will change the system current directory to SettingsJsonFileName
-    procedure Initialize; virtual;
+    // - will change the system current directory to SettingsJsonFileName, and
+    // set the log settings as expected
+    // - you can specify a default Description value
+    procedure Initialize(const aDescription: string); virtual;
     /// compute a file name relative to the .settings file path
     function FileNameRelativeToSettingsFile(const aFileName: TFileName): TFileName;
     /// the .settings file name, including full path
     property SettingsJsonFileName: TFileName
       read fSettingsJsonFileName write fSettingsJsonFileName;
+  published
+    /// some text which will be used to describe this application
+    property Description: string read FDescription write FDescription;
+    /// defines how logging will be done for this application
+    property Log: TLogSettings read fLog;
   end;
 
   /// some options to be used for TRestSettings
   TRestSettingsOption =
-    (optEraseDBFileAtStartup,optStoreDBFileRelativeToSettings);
+    (optEraseDBFileAtStartup,optStoreDBFileRelativeToSettings,
+     optSQlite3FileSafeSlowMode);
 
   /// define options to be used for TRestSettings
   TRestSettingsOptions = set of TRestSettingsOption;
@@ -120,7 +172,6 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fRoot: RawUTF8;
-    fLogLevels: TSynLogInfos;
     fWrapperTemplateFolder: TFileName;
     fWrapperSourceFolders: TFileName;
     fOptions: TRestSettingsOptions;
@@ -131,13 +182,15 @@ type
     // - Definition.Kind will identify the TSQLRestServer or TSQLRestClient class
     // to be instantiated, or if equals 'MongoDB' use a full MongoDB store, or an
     // external SQL database if it matches a TSQLDBConnectionProperties classname
+    // - if aDefaultLocalSQlite3 is TRUE, then if Definition.Kind is '',
+    // a local SQlite3 file database will be initiated
     // - will return nil if the supplied Definition is not correct
     // - note that the supplied Model.Root is expected to be the default root
     // URI, which will be overriden with this TRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     // and publish the /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TApplicationSettingsFile;
-      aModel: TSQLModel; aHandleAuthentication: boolean;
+      aModel: TSQLModel; aHandleAuthentication,aDefaultLocalSQlite3: boolean;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions;
       aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
@@ -151,8 +204,6 @@ type
     property Root: RawUTF8 read fRoot write fRoot;
     /// would let function NewRestInstance() create the expected TSQLRest
     property ORM: TSynConnectionDefinition read fORM;
-    /// the log levels to be defined
-    property LogLevels: TSynLogInfos read fLogLevels write fLogLevels;
     /// if set to a valid folder, the generated TSQLRest will publish a
     // '/Root/wrapper' HTML page so that client code could be generated
     property WrapperTemplateFolder: TFileName
@@ -175,13 +226,131 @@ type
     /// to be called when the application starts, to access settings
     // - will call inherited TApplicationSettingsFile.Initialize, and
     // set ServerPort to a default 888/8888 value under Windows/Linux
-    procedure Initialize; override;
+    procedure Initialize(const aDescription: string); override;
   published
     /// allow to instantiate a REST instance from its JSON definition
     property Rest: TRestSettings read fRest;
     /// the IP port to be used for the HTTP server associated with the application
     property ServerPort: word read fServerPort write fServerPort;
   end;
+
+  /// define how an administrated service/daemon is remotely accessed via REST
+  // - the IAdministratedDaemon service will be published to administrate
+  // this service/daemon instance
+  // - those values should match the ones used on administrative tool side
+  TAdministratedDaemonSettings = class(TSynAutoCreateFields)
+  protected
+    FAuthRootURI: RawUTF8;
+    FAuthHashedPassword: RawUTF8;
+    FAuthUserName: RawUTF8;
+    FAuthNamedPipeName: TFileName;
+    FAuthHttp: TSQLHttpServerDefinition;
+  published
+    /// the root URI used for the REST data model
+    property AuthRootURI: RawUTF8 read FAuthRootURI write FAuthRootURI;
+    /// if set, expect authentication with this single user name
+    // - that is, the TSQLRestServer will register a single TSQLAuthUser
+    // instance with the supplied AuthUserName/AuthHashedPassword credentials
+    property AuthUserName: RawUTF8 read FAuthUserName write FAuthUserName;
+    /// the SHA-256 hashed password to authenticate AuthUserName
+    // - follows the TSQLAuthUser.PasswordHashHexa expectations
+    // - marked as 'stored false' so that it won't appear e.g. in the logs
+    property AuthHashedPassword: RawUTF8 read FAuthHashedPassword write FAuthHashedPassword
+      stored false;
+    /// if defined, the following pipe name would be used for REST publishing
+    // - by definition, will work only on Windows
+    property AuthNamedPipeName: TFileName read FAuthNamedPipeName write FAuthNamedPipeName;
+    /// if defined, these parameters would be used for REST publishing over HTTP
+    property AuthHttp: TSQLHttpServerDefinition read FAuthHttp;
+  end;
+
+  /// parent class for storing a service/daemon settings as a JSON file
+  // - under Windows, some Service* properties will handle installaiton as a
+  // regular Windows Service, thanks to TAbstractDaemon
+  TAdministratedDaemonSettingsFile = class(TApplicationSettingsFile)
+  protected
+    FRemoteAdmin: TAdministratedDaemonSettings;
+    FServiceDisplayName: string;
+    FServiceName: string;
+    FServiceAutoStart: boolean;
+  public
+    /// to be called when the application starts, to access settings
+    // - you can specify default Description and Service identifiers
+    procedure Initialize(
+      const aDescription,aServiceName,aServiceDisplayName: string); reintroduce; virtual;
+  published
+    /// define how this administrated service/daemon is accessed via REST
+    property RemoteAdmin: TAdministratedDaemonSettings read FRemoteAdmin;
+    /// under Windows, will define the Service internal name
+    property ServiceName: string read FServiceName write FServiceName;
+    /// under Windows, will define the Service displayed name
+    property ServiceDisplayName: string read FServiceDisplayName write FServiceDisplayName;
+    /// under Windows, will define if the Service should auto-start at boot
+    // - FALSE means that it should be started on demand
+    property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
+  end;
+
+  /// abstract class to handle any kind of service/daemon executable
+  // - would implement either a Windows Service, a stand-alone remotely
+  // administrated daemon, or a console application, according to the command line
+  // - you should inherit from this class, then override the abstract NewDaemon
+  // protected method to launch and return a IAdministratedDaemon instance
+  TAbstractDaemon = class
+  protected
+    fSettings: TAdministratedDaemonSettingsFile;
+    /// the service/daemon will be stopped when this interface is set to nil
+    fDaemon: IAdministratedDaemon;
+    /// this abstract method should be overriden to return a new service/daemon
+    // instance, using the (inherited) fSettings as parameters
+    function NewDaemon: TDDDAdministratedDaemon; virtual; abstract;
+    {$ifdef MSWINDOWS} // to support Windows Services 
+    procedure DoStart(Sender: TService);
+    procedure DoStop(Sender: TService);
+    {$endif}
+  public
+    /// initialize the service/daemon application thanks to some information
+    // - actual settings would inherit from TAdministratedDaemonSettingsFile,
+    // to define much more parameters, according to the service/daemon process
+    // - the supplied settings will be owned by this TAbstractDaemon instance
+    constructor Create(aSettings: TAdministratedDaemonSettingsFile);
+    /// finalize the service/daemon application, and release its resources
+    destructor Destroy; override;
+    /// interprect the command line to run the application as expected
+    // - under Windows, /install /uninstall /start /stop would control the
+    // daemon as a Windows Service - you should run the program with
+    // administrator rights to be able to change the Services settings
+    // - /console or /c would run the program as a console application
+    // - /daemon or /d would run the program as a remotely administrated
+    // daemon, using a published IAdministratedDaemon service
+    // - no command line argument will run the program as a Service dispatcher
+    // under Windows (as a regular service)
+    // - any invalid switch, or no switch under Linux, will display the syntax
+    // - this method will output any error or information to the console
+    // - as a result, a project .dpr could look like the following:
+    //!begin
+    //!  with TMyApplicationDaemon.Create(TMyApplicationDaemonSettings.Create) do
+    //!  try
+    //!    ExecuteCommandLine;
+    //!  finally
+    //!    Free;
+    //!  end;
+    //!end.
+    procedure ExecuteCommandLine;
+  end;
+
+  /// abstract class to implement a IAdministratedDaemon service via a TThread
+  // - as hosted by TAbstractDaemon service/daemon application
+  TAbstractThreadDaemon = class(TDDDAdministratedThreadDaemon)
+  protected
+    fAdministrationHTTPServer: TSQLHttpServer;
+  public
+    /// initialize the thread with the supplied parameters
+    constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
+    /// reference to the HTTP server publishing IAdministratedDaemon service
+    // - may equal nil if TAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
+    property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
+  end;
+
 
 
 
@@ -193,6 +362,17 @@ implementation
 procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
 begin
   CopyObject(self,Instance);
+end;
+
+
+{ TLogSettings }
+
+constructor TLogSettings.Create;
+begin
+  inherited Create;
+  fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
+  fPerThread := ptIdentifiedInOnFile;
+  fRotateFileAtHour := -1;
 end;
 
 
@@ -209,15 +389,31 @@ begin
   JSONFileToObject(fSettingsJsonFileName,self);
 end;
 
-destructor TApplicationSettingsFile.Destroy;
+procedure TApplicationSettingsFile.UpdateFile;
 begin
-  ObjectToJSONFile(Self,fSettingsJsonFileName,[woHumanReadable,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment]);
-  inherited;
+  ObjectToJSONFile(Self,fSettingsJsonFileName,[woHumanReadable,woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
 end;
 
-procedure TApplicationSettingsFile.Initialize;
+destructor TApplicationSettingsFile.Destroy;
 begin
+  UpdateFile;
+  inherited Destroy;
+end;
+
+procedure TApplicationSettingsFile.Initialize(const aDescription: string);
+begin
+  with SQLite3Log.Family do begin
+    Level := Log.Levels-[sllNone]; // '*' would include sllNone
+    PerThreadLog := Log.PerThread;
+    if Log.DestinationPath<>'' then
+     DestinationPath := Log.DestinationPath;
+    RotateFileCount := Log.RotateFileCount;
+    RotateFileSizeKB := Log.RotateFileSizeKB;
+    RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
+  end;
+  if fDescription='' then
+    fDescription := aDescription;
   ChDir(ExtractFilePath(SettingsJsonFileName));
 end;
 
@@ -234,7 +430,7 @@ end;
 { TRestSettings }
 
 function TRestSettings.NewRestInstance(aRootSettings: TApplicationSettingsFile;
-  aModel: TSQLModel; aHandleAuthentication: boolean;
+  aModel: TSQLModel; aHandleAuthentication,aDefaultLocalSQlite3: boolean;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
@@ -246,13 +442,17 @@ begin
      DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
     fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
   {$endif}
-  if fORM.Kind='' then begin
+  if (fORM.Kind='') and aDefaultLocalSQlite3 then begin
     fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
     fORM.ServerName := StringToUTF8(
       ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
     if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
       fORM.ServerName := StringToUTF8(
         aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
+  end;
+  if fORM.Kind='' then begin
+    result := nil;
+    exit;
   end;
   if optEraseDBFileAtStartup in Options then
     if (fORM.Kind='TSQLRestServerDB') or
@@ -263,11 +463,18 @@ begin
     result := TSQLRestExternalDBCreate(aModel,ORM,aHandleAuthentication,aExternalDBOptions);
   if result=nil then
     exit; // no match or wrong parameters
-  result.LogFamily.Level := LogLevels-[sllNone]; // '*' would include sllNone
-  if result.InheritsFrom(TSQLRestServer) then
+  if result.InheritsFrom(TSQLRestServer) then begin
     if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
       AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
         WrapperSourceFolderFixed);
+    if result.InheritsFrom(TSQLRestServerDB) then
+      with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
+        LockingMode := lmExclusive;
+        if optSQlite3FileSafeSlowMode in Options then
+          Synchronous := smNormal else
+          Synchronous := smOff;
+      end;
+  end;
 end;
 
 function TRestSettings.WrapperSourceFolderFixed: TFileName;
@@ -293,11 +500,212 @@ end;
 
 { TApplicationSettingsRestFile }
 
-procedure TApplicationSettingsRestFile.Initialize;
+procedure TApplicationSettingsRestFile.Initialize(const aDescription: string);
 begin
-  inherited Initialize;
+  inherited Initialize(aDescription);
   if ServerPort=0 then
     ServerPort := {$ifdef LINUX}8888{$else}888{$endif};
+end;
+
+
+{ TAdministratedDaemonSettingsFile }
+
+procedure TAdministratedDaemonSettingsFile.Initialize(
+  const aDescription,aServiceName,aServiceDisplayName: string);
+begin
+  inherited Initialize(aDescription);
+  if FServiceName='' then
+    FServiceName := aServiceName;
+  if FServiceDisplayName='' then
+    FServiceDisplayName := aServiceDisplayName;
+end;
+
+
+{ TAbstractDaemon }
+
+constructor TAbstractDaemon.Create(
+  aSettings: TAdministratedDaemonSettingsFile);
+begin
+  inherited Create;
+  if aSettings=nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  fSettings := aSettings;
+end;
+
+destructor TAbstractDaemon.Destroy;
+begin
+  inherited;
+  fSettings.Free;
+end;
+
+{$ifdef MSWINDOWS} // to support Windows Services
+
+procedure TAbstractDaemon.DoStart(Sender: TService);
+begin
+  fDaemon := NewDaemon;
+  SQLite3Log.Enter(self);
+  fDaemon.Start;
+end;
+
+procedure TAbstractDaemon.DoStop(Sender: TService);
+begin
+  SQLite3Log.Enter(self);
+  fDaemon := nil; // will stop the daemon
+end;
+
+{$endif MSWINDOWS} // to support Windows Services
+
+type
+  TExecuteCommandLineCmd = (
+    cNone,cInstall,cUninstall,cStart,cStop,cState,cHelp,cVersion,cConsole,cDaemon);
+
+procedure TAbstractDaemon.ExecuteCommandLine;
+var param: RawUTF8;
+    cmd: TExecuteCommandLineCmd;
+    daemon: TDDDAdministratedDaemon;
+    {$ifdef MSWINDOWS}
+    service: TServiceSingle;
+    ctrl: TServiceController;
+    {$endif}
+{$I-} // no IO error for writeln() below  
+function cmdText: RawUTF8;
+begin
+  result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd),cmd);
+end;
+procedure Show(Success: Boolean);
+var msg: RawUTF8;
+begin
+  if Success then begin
+    msg := 'Executed';
+    TextColor(ccWhite);
+  end else begin
+    msg := FormatUTF8('Error % "%" occured with',
+      [GetLastError,SysErrorMessage(GetLastError)]);
+    TextColor(ccLightRed);
+  end;
+  msg := FormatUTF8('% "%" (%) on Service "%"',
+    [msg,param,cmdText,fSettings.ServiceName]);
+  AppendToTextFile(msg,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+  writeln(msg);
+end;
+procedure Syntax;
+begin
+  writeln('Try with one of the switches:');
+  writeln(ExeVersion.ProgramName,
+    ' /console -c /daemon -d /help -h'{$ifdef MSWINDOWS}+
+    ' /install /uninstall /start /stop /state'{$endif});
+end;
+begin
+  TextColor(ccLightGreen);
+  writeln(#10' ',fSettings.ServiceDisplayName);
+  writeln(StringOfChar('-',length(fSettings.ServiceDisplayName)+2));
+  TextColor(ccGreen);
+  writeln(fSettings.Description,#10);
+  TextColor(ccLightCyan);
+  param := trim(StringToUTF8(paramstr(1)));
+  if (param='') or not(param[1] in ['/','-']) then
+    cmd := cNone else
+    case param[2] of
+    'c','C': cmd := cConsole;
+    'd','D': cmd := cDaemon;
+    'h','H': cmd := cHelp;
+    'v','V': cmd := cVersion;
+    else byte(cmd) := 1+IdemPCharArray(@param[2],['INST','UNINST','START','STOP','STAT']);
+    end;
+  try
+    case cmd of
+    cHelp{$ifndef MSWINDOWS},cNone{$endif}:
+      Syntax;
+    cVersion: begin
+      if ExeVersion.Version.Version32<>0 then
+        writeln(ExeVersion.ProgramName,' Version ',ExeVersion.Version.Detailed);
+      TextColor(ccCyan);
+      writeln('Powered by Synopse mORMot '+SYNOPSE_FRAMEWORK_FULLVERSION);
+    end;
+    cConsole,cDaemon: begin
+      writeln('Launched in ',cmdText,' mode');
+      TextColor(ccLightGray);
+      SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
+      daemon := NewDaemon;
+      try
+        fDaemon := daemon;
+        daemon.Execute(cmd=cDaemon);
+      finally
+        fDaemon := nil; // will stop the daemon
+      end;
+    end;
+    else
+    {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
+    with fSettings do
+    if ServiceName='' then
+      Show(false) else
+    case cmd of
+    cNone:
+      if param='' then begin // executed as a background service
+        service := TServiceSingle.Create(ServiceName,ServiceDisplayName);
+        try
+          service.OnStart := DoStart;
+          service.OnStop := DoStop;
+          service.OnShutdown := DoStop; // sometimes, Shutdown is called without Stop
+          if ServicesRun then // blocking until service shutdown
+            Show(true) else
+            if GetLastError=1063 then
+              Syntax else
+              Show(false);
+        finally
+          service.Free;
+        end;
+      end else
+        Syntax;
+    cInstall:
+      Show(TServiceController.Install(ServiceName,ServiceDisplayName,
+        Description,ServiceAutoStart)<>ssNotInstalled);
+    else begin
+      ctrl := TServiceController.CreateOpenService('','',ServiceName);
+      try
+        case cmd of
+        cStart:
+          Show(ctrl.Start([]));
+        cStop:
+          Show(ctrl.Stop);
+        cUninstall: begin
+          ctrl.Stop;
+          Show(ctrl.Delete);
+        end;
+        cState:
+          writeln(ServiceName,' State=',ServiceStateText(ctrl.State));
+        else Show(false);
+        end;
+      finally
+        ctrl.Free;
+      end;
+    end;
+    end;
+    {$endif MSWINDOWS}
+    end;
+  except
+    on E: Exception do
+      ConsoleShowFatalException(E);
+  end;
+  TextColor(ccLightGray);
+  ioresult;
+end;
+{$I+}
+
+
+{ TAbstractThreadDaemon }
+
+constructor TAbstractThreadDaemon.Create(
+  aSettings: TAdministratedDaemonSettingsFile);
+begin
+  if aSettings=nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  with aSettings.RemoteAdmin do begin
+    inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
+    fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
+    if AuthHttp.BindPort<>'' then
+      fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
+  end;
 end;
 
 end.
