@@ -575,7 +575,7 @@ type
     // perform a manual stack walk if the API returned no address (or <3); but
     // within the IDE, it will use stOnlyAPI, to ensure no annoyning AV occurs
     property StackTraceUse: TSynLogStackTraceUse read fStackTraceUse write fStackTraceUse;
-    /// /// how file existing shall be handled during logging
+    /// how existing log file shall be handled
     property FileExistsAction: TSynLogExistsAction read fFileExistsAction write fFileExistsAction;
     /// define how the logger will emit its line feed
     // - by default (FALSE), a single CR (#13) char will be written, to save
@@ -2172,7 +2172,9 @@ end;
 
 procedure TSynLogFamily.SetDestinationPath(const value: TFileName);
 begin
-  fDestinationPath := IncludeTrailingPathDelimiter(value);
+  if value='' then
+    fDestinationPath := ExeVersion.ProgramFilePath else
+    fDestinationPath := IncludeTrailingPathDelimiter(value);
 end;
 
 procedure TSynLogFamily.SetLevel(aLevel: TSynLogInfos);
@@ -2227,9 +2229,7 @@ begin
   if SynLogFamily=nil then
     GarbageCollectorFreeAndNil(SynLogFamily,TList.Create);
   fIdent := SynLogFamily.Add(self);
-  {$ifdef MSWINDOWS}
-  fDestinationPath := ExtractFilePath(paramstr(0)); // use .exe path
-  {$endif}
+  fDestinationPath := ExeVersion.ProgramFilePath; // use .exe path
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
@@ -3263,8 +3263,7 @@ begin
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ');
-    fWriter.AddString(aName);
-    fWriter.Add('=');
+    fWriter.AddFieldName(aName);
     fWriter.AddTypedJSON(aTypeInfo,aValue);
   finally
     LogTrailerUnLock(Level);
@@ -3307,11 +3306,19 @@ end;
 procedure TSynLog.CreateLogWriter;
 var i,retry: integer;
     exists: boolean;
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    prevState: TSynLog;
+    {$endif}
 begin
   if fWriterStream=nil then begin
     ComputeFileName;
     if fFamily.NoFile then
       fWriterStream := TFakeWriterStream.Create else begin
+      {$ifndef NOEXCEPTIONINTERCEPT}
+      prevState := CurrentHandleExceptionSynLog; // ignore file exceptions 
+      CurrentHandleExceptionSynLog := nil;
+      try
+      {$endif}
       if FileExists(fFileName) then
         case fFamily.FileExistsAction of
         acOverwrite:
@@ -3340,6 +3347,11 @@ begin
           break;
         fFileName := ChangeFileExt(fFileName,'-'+fFamily.fDefaultExtension);
       end;
+      {$ifndef NOEXCEPTIONINTERCEPT}
+      finally
+        CurrentHandleExceptionSynLog := prevState;
+      end;
+      {$endif}
     end;
     if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
       fWriterStream := TFakeWriterStream.Create;
