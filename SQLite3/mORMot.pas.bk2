@@ -12944,6 +12944,42 @@ type
 
   {$endif SSPIAUTH}
 
+  /// supported REST authentication schemes
+  // - used by the overloaded TSQLHttpServer.Create(TSQLHttpServerDefinition)
+  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  // - asSSPI won't be defined under Linux, since it is a Windows-centric feature
+  TSQLHttpServerRestAuthentication = (
+    adDefault, adHttpBasic, adWeak, adSSPI);
+
+  /// parameters supplied to publish a TSQLRestServer via HTTP
+  // - used by the overloaded TSQLHttpServer.Create(TSQLHttpServerDefinition)
+  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  TSQLHttpServerDefinition = class(TSynPersistentWithPassword)
+  protected
+    FBindPort: AnsiString;
+    FAuthentication: TSQLHttpServerRestAuthentication;
+    FHttps: boolean;
+    FHttpSysQueueName: SynUnicode;
+  published
+    /// defines the port to be used for REST publishing
+    // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
+    property BindPort: AnsiString read FBindPort write FBindPort;
+    /// which authentication is expected to be published
+    property Authentication: TSQLHttpServerRestAuthentication
+      read FAuthentication write FAuthentication;
+    /// defines if https:// protocol should be used
+    // - implemented only by http.sys server under Windows, not by socket servers
+    property Https: boolean read FHttps write FHttps;
+    /// the displayed name in the http.sys queue
+    // - used only by http.sys server under Windows, not by socket-based servers
+    property HttpSysQueueName: SynUnicode read FHttpSysQueueName write FHttpSysQueueName;
+    /// if defined, this HTTP server will use WebSockets, and our secure
+    // encrypted binary protocol
+    // - when stored, the password will be encrypted as defined by
+    // TSynPersistentWithPassword
+    property WebSocketPassword: RawUTF8 read fPassWord write fPassWord;
+  end;
+
   /// TSynAuthentication* class using TSQLAuthUser/TSQLAuthGroup for credentials
   // - could be used e.g. for SynDBRemote access in conjunction with mORMot
   TSynAuthenticationRest = class(TSynAuthenticationAbstract)
@@ -42260,6 +42296,7 @@ begin
         end;
       end;
     end;
+end;
 
 procedure TSQLAuthGroup.SetSQLAccessRights(const Value: TSQLAccessRights);
 begin

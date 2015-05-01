@@ -13804,7 +13804,7 @@ type
     // with this constructor, an in-memory engine will be created, with
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const Tables: array of TSQLRecordClass;
-      aHandleUserAuthentication: boolean=false);
+      aHandleUserAuthentication: boolean=false; const aRoot: RawUTF8='root');
     /// create a new minimal TSQLRestServer instance, to be used with
     // external SQL or NoSQL storage
     // - will try to instantiate an in-memory TSQLRestServerDB, and if
@@ -14722,6 +14722,15 @@ type
     // - if aFileName is left void (''), data will not be persistent
     constructor Create(aModel: TSQLModel; const aFileName: TFileName;
       aBinaryFile: boolean=false; aHandleUserAuthentication: boolean=false); reintroduce; overload; virtual;
+    /// initialize an in-memory REST server with a temporary Database Model,
+    // and optional authentication by a single user
+    // - a Model will be created with supplied tables, and owned by the server
+    // - if aUserName is set, authentication will be enabled, and the supplied
+    // credentials will be used to authenticate a single user -
+    // aHashedPassword matching TSQLAuthUser.PasswordHashHexa expectations
+    constructor CreateWithOwnedAuthenticatedModel(
+      const Tables: array of TSQLRecordClass; const aUserName, aHashedPassword: RawUTF8;
+      aRoot: RawUTF8='root');
     /// finalize the REST server
     // - this overridden destructor will write any modification on file (if
     // needed), and release all used memory
@@ -31422,10 +31431,10 @@ begin
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
-  aHandleUserAuthentication: boolean);
+  aHandleUserAuthentication: boolean; const aRoot: RawUTF8);
 var Model: TSQLModel;
 begin
-  Model := TSQLModel.Create(Tables);
+  Model := TSQLModel.Create(Tables,aRoot);
   Create(Model,aHandleUserAuthentication);
   Model.Owner := self;
 end;
@@ -37578,6 +37587,29 @@ begin
   Create(aModel,aHandleUserAuthentication);
   LoadFromFile;
   CreateMissingTables(0,[]);
+end;
+
+constructor TSQLRestServerFullMemory.CreateWithOwnedAuthenticatedModel(
+  const Tables: array of TSQLRecordClass; const aUserName,aHashedPassword: RawUTF8;
+  aRoot: RawUTF8);
+var User: TSQLAuthUser;
+begin
+  if aRoot='' then
+    aRoot := 'root';
+  if aUserName='' then
+    CreateWithOwnModel(Tables,false,aRoot) else begin
+    CreateWithOwnModel(Tables,true,aRoot);
+    CreateMissingTables(0,[itoNoAutoCreateUsers]);
+    User := TSQLAuthUser.Create;
+    try
+      User.LogonName := aUserName;
+      User.PasswordHashHexa := aHashedPassword;
+      User.GroupRights := TSQLAuthGroup(1);
+      Add(User,true);
+    finally
+      User.Free;
+    end;
+  end;
 end;
 
 constructor TSQLRestServerFullMemory.RegisteredClassCreateFrom(aModel: TSQLModel;
