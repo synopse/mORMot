@@ -13744,7 +13744,13 @@ type
      - write all pending TSQLVirtualTableJSON data to the disk }
     procedure Commit(SessionID: cardinal; RaiseException: boolean); override;
 
-{$ifdef MSWINDOWS}
+    /// grant access to this database content from a dll using the global
+    // URIRequest() function
+    // - returns true if the URIRequest() function is set to this TSQLRestServer
+    // - returns false if a TSQLRestServer was already exported
+    // - client must release all memory acquired by URIRequest() with GlobalFree()
+    function ExportServer: boolean; overload;
+    {$ifdef MSWINDOWS}
     /// declare the server on the local machine as a Named Pipe: allows
     // TSQLRestClientURINamedPipe local or remote client connection
     // - ServerApplicationName ('DBSERVER' e.g.) will be used to create a named
@@ -13759,14 +13765,6 @@ type
     function ExportServerNamedPipe(const ServerApplicationName: TFileName): boolean;
     /// end any currently initialized named pipe server
     function CloseServerNamedPipe: boolean;
-    {$endif}
-    /// grant access to this database content from a dll using the global
-    // URIRequest() function
-    // - returns true if the URIRequest() function is set to this TSQLRestServer
-    // - returns false if a TSQLRestServer was already exported
-    // - client must release all memory acquired by URIRequest() with GlobalFree()
-    function ExportServer: boolean; overload;
-    {$ifdef MSWINDOWS}
     /// declare the server on the local machine to be accessible for local
     // client connection, by using Windows messages
     // - the data is sent and received by using the standard and fast WM_COPYDATA message
@@ -13794,7 +13792,10 @@ type
     procedure AnswerToMessage(var Msg: TWMCopyData); message WM_COPYDATA;
     /// end any currently initialized message-oriented server
     function CloseServerMessage: boolean;
-{$endif}
+    /// returns TRUE if remote connection is possible via named pipes or Windows
+    // messages
+    function ExportedAsMessageOrNamedPipe: Boolean;
+    {$endif}
     /// Server initialization with a specified Database Model
     // - if HandleUserAuthentication is false, will set URI access rights to
     // 'Supervisor' (i.e. all R/W access) by default
@@ -24520,7 +24521,8 @@ begin
         with CT^.ParentInfo^{$ifndef FPC}^{$endif} do
           CT := AlignToPtr(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
-        if C=TObject then
+        if C<>TObject then
+          continue else
           break;
       end else break
     else begin
@@ -31282,6 +31284,12 @@ end;
 function TSQLRestServer.CloseServerMessage: boolean;
 begin
   result := ReleaseInternalWindow(fServerWindowName,fServerWindow);
+end;
+
+function TSQLRestServer.ExportedAsMessageOrNamedPipe: Boolean;
+begin
+  result := (self<>nil) or (fExportServerNamedPipeThread<>nil) or
+            (fServerWindow<>0);
 end;
 
 {$endif MSWINDOWS}
