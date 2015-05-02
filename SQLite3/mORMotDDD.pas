@@ -786,6 +786,8 @@ type
     /// this method will wait until Halt() is executed
     // - i.e. protected fFinished TEvent is notified
     procedure WaitUntilHalted; virtual;
+    /// access to the associated loging class
+    property LogClass: TSynLogClass read fLogClass;
   published
     /// the current status of the service/daemon
     property Status: TDDDAdministratedDaemonStatus read fStatus;
@@ -795,6 +797,8 @@ type
   end;
 
   /// abstract class to implement an TThread-based administrable service/daemon
+  // - inherited class should override InternalStart and InternalRetrieveState
+  // abstract methods, and set the protected fThread with the processing thread 
   TDDDAdministratedThreadDaemon = class(TDDDAdministratedDaemon)
   protected
     fThread: TThread;
@@ -1932,8 +1936,8 @@ constructor TDDDAdministratedDaemon.Create(
   const aUserName, aHashedPassword, aRoot: RawUTF8; const aServerNamedPipe: TFileName);
 var server: TSQLRestServer;
 begin
-  server := TSQLRestServerFullMemory.CreateWithOwnedAuthenticatedModel(
-    [],aUserName,aHashedPassword,aRoot);
+  server := TSQLRestServerFullMemory.CreateWithOwnedAuthenticatedModel([],
+    aUserName,aHashedPassword,aRoot);
   Create(server);
   if FRefCount=2 then
     dec(FRefCount); // circumvent a Delphi compiler bug
@@ -2052,14 +2056,9 @@ begin
     writeln(name,' expecting commands');
     WaitUntilHalted;
   end else begin
-    try
-      if Start=cqrsSuccess then
-        writeln(name,' is running') else
-        writeln(name,' failed to Start');
-    except
-      on E: Exception do
-        ConsoleShowFatalException(E);
-    end;
+    if Start=cqrsSuccess then
+      writeln(name,' is running') else
+      writeln(name,' failed to Start');
     writeln('Press [Enter] to quit');
     readln;
   end;

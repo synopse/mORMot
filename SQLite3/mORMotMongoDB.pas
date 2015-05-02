@@ -203,8 +203,15 @@ type
 // - it will return the corresponding TSQLRestStorageMongoDB instance -
 // you can access later to it and its associated collection e.g. via:
 // ! (aServer.StaticDataServer[TSQLMyTable] as TSQLRestStorageMongoDB)
+// - you can set aMapAutoFieldsIntoSmallerLength to compute a field name
+// mapping with minimal length, so that the stored BSON would be smaller:
+// by definition, ID/RowID will be mapped as 'id', but other fields will
+// use their first letter, and another other letter if needed (after a '_',
+// or in uppercase, or the next one) e.g. FirstName -> 'f', LastName -> 'l',
+// LockedAccount: 'la'...
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestStorageMongoDB;
+  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8='';
+  aMapAutoFieldsIntoSmallerLength: boolean=false): TSQLRestStorageMongoDB;
 
 type
   /// all possible options for StaticMongoDBRegisterAll/TSQLRestMongoDBCreate functions
@@ -246,7 +253,8 @@ function TSQLRestMongoDBCreate(aModel: TSQLModel;
 implementation
 
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8=''): TSQLRestStorageMongoDB;
+  aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8;
+  aMapAutoFieldsIntoSmallerLength: boolean): TSQLRestStorageMongoDB;
 var Props: TSQLModelRecordProperties;
 begin
   result := nil;
