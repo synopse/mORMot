@@ -165,6 +165,13 @@ type
   /// define options to be used for TRestSettings
   TRestSettingsOptions = set of TRestSettingsOption;
 
+  /// how TRestSettings.NewRestInstance would create its instances
+  TNewRestInstanceOptions = set of (
+    riOwnModel,
+    riHandleAuthentication,
+    riDefaultLocalSQlite3IfNone,
+    riCreateMissingTables);
+
   /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
   // pointing to a local or remote SQL/NoSQL database, with optional wrappers
@@ -190,9 +197,9 @@ type
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     // and publish the /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TApplicationSettingsFile;
-      aModel: TSQLModel; aHandleAuthentication,aDefaultLocalSQlite3: boolean;
-      aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest; virtual;
+      aModel: TSQLModel; aOptions: TNewRestInstanceOptions;
+      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
+      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperTemplateFolderFixed: TFileName;
@@ -303,7 +310,7 @@ type
     /// this abstract method should be overriden to return a new service/daemon
     // instance, using the (inherited) fSettings as parameters
     function NewDaemon: TDDDAdministratedDaemon; virtual; abstract;
-    {$ifdef MSWINDOWS} // to support Windows Services 
+    {$ifdef MSWINDOWS} // to support Windows Services
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
     {$endif}
@@ -346,6 +353,9 @@ type
   public
     /// initialize the thread with the supplied parameters
     constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
+    /// finalize the service/daemon thread
+    // - will call Halt() if the associated process is still running
+    destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
@@ -430,10 +440,12 @@ end;
 { TRestSettings }
 
 function TRestSettings.NewRestInstance(aRootSettings: TApplicationSettingsFile;
-  aModel: TSQLModel; aHandleAuthentication,aDefaultLocalSQlite3: boolean;
+  aModel: TSQLModel; aOptions: TNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
+  if aModel=nil then
+     raise EDDDInfraException.CreateUTF8('%.NewRestInstance(aModel=nil)',[self]);
   if fRoot='' then // supplied TSQLModel.Root is the default root URI
     fRoot := aModel.Root else
     aModel.Root := fRoot;
@@ -442,38 +454,49 @@ begin
      DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
     fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
   {$endif}
-  if (fORM.Kind='') and aDefaultLocalSQlite3 then begin
+  if (fORM.Kind='') and (riDefaultLocalSQlite3IfNone in aOptions) then begin
     fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
-    fORM.ServerName := StringToUTF8(
-      ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
+    if fORM.ServerName='' then 
+      fORM.ServerName := StringToUTF8(
+        ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
     if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
       fORM.ServerName := StringToUTF8(
         aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
   end;
-  if fORM.Kind='' then begin
-    result := nil;
-    exit;
-  end;
-  if optEraseDBFileAtStartup in Options then
-    if (fORM.Kind='TSQLRestServerDB') or
-       (fORM.Kind='TSQLRestServerFullMemory') then
-      DeleteFile(UTF8ToString(fORM.ServerName));
-  result := TSQLRestMongoDBCreate(aModel,ORM,aHandleAuthentication,aMongoDBOptions);
-  if result=nil then // failed to use MongoDB -> try external or internal DB
-    result := TSQLRestExternalDBCreate(aModel,ORM,aHandleAuthentication,aExternalDBOptions);
-  if result=nil then
-    exit; // no match or wrong parameters
-  if result.InheritsFrom(TSQLRestServer) then begin
-    if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
-      AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
-        WrapperSourceFolderFixed);
-    if result.InheritsFrom(TSQLRestServerDB) then
-      with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
-        LockingMode := lmExclusive;
-        if optSQlite3FileSafeSlowMode in Options then
-          Synchronous := smNormal else
-          Synchronous := smOff;
-      end;
+  result := nil;
+  try
+    if fORM.Kind='' then 
+      exit;
+    if optEraseDBFileAtStartup in Options then
+      if (fORM.Kind='TSQLRestServerDB') or
+         (fORM.Kind='TSQLRestServerFullMemory') then
+        DeleteFile(UTF8ToString(fORM.ServerName));
+    result := TSQLRestMongoDBCreate(aModel,ORM,
+      riHandleAuthentication in aOptions,aMongoDBOptions);
+    if result=nil then // failed to use MongoDB -> try external or internal DB
+      result := TSQLRestExternalDBCreate(aModel,ORM,
+        riHandleAuthentication in aOptions,aExternalDBOptions);
+    if result=nil then
+      exit; // no match or wrong parameters
+    if result.InheritsFrom(TSQLRestServer) then begin
+      if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
+        AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
+          WrapperSourceFolderFixed);
+      if result.InheritsFrom(TSQLRestServerDB) then 
+        with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
+          LockingMode := lmExclusive;
+          if optSQlite3FileSafeSlowMode in Options then
+            Synchronous := smNormal else
+            Synchronous := smOff;
+        end;
+      if riCreateMissingTables in aOptions then
+        TSQLRestServer(result).CreateMissingTables;
+    end;
+  finally
+    if riOwnModel in aOptions then
+      if result=nil then // avoid memory leak
+        aModel.Free else
+        aModel.Owner := result;
   end;
 end;
 
@@ -523,8 +546,7 @@ end;
 
 { TAbstractDaemon }
 
-constructor TAbstractDaemon.Create(
-  aSettings: TAdministratedDaemonSettingsFile);
+constructor TAbstractDaemon.Create(aSettings: TAdministratedDaemonSettingsFile);
 begin
   inherited Create;
   if aSettings=nil then
@@ -620,15 +642,23 @@ begin
       if ExeVersion.Version.Version32<>0 then
         writeln(ExeVersion.ProgramName,' Version ',ExeVersion.Version.Detailed);
       TextColor(ccCyan);
-      writeln('Powered by Synopse mORMot '+SYNOPSE_FRAMEWORK_FULLVERSION);
+      writeln('Powered by Synopse mORMot '+SYNOPSE_FRAMEWORK_VERSION);
     end;
     cConsole,cDaemon: begin
-      writeln('Launched in ',cmdText,' mode');
+      writeln('Launched in ',cmdText,' mode'#10);
       TextColor(ccLightGray);
       SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
       daemon := NewDaemon;
       try
         fDaemon := daemon;
+        if cmd=cDaemon then
+          if (daemon.AdministrationServer=nil) or
+             not ({$ifdef MSWINDOWS}
+                   daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or{$endif}
+                  (daemon.InheritsFrom(TAbstractThreadDaemon) and
+                   (TAbstractThreadDaemon(daemon).fAdministrationHTTPServer<>nil))) then
+            daemon.LogClass.Add.Log(sllWarning,'ExecuteCommandLine as Daemon '+
+              'without external admnistrator acccess',self);
         daemon.Execute(cmd=cDaemon);
       finally
         fDaemon := nil; // will stop the daemon
@@ -646,7 +676,7 @@ begin
         try
           service.OnStart := DoStart;
           service.OnStop := DoStop;
-          service.OnShutdown := DoStop; // sometimes, Shutdown is called without Stop
+          service.OnShutdown := DoStop; // sometimes, is called without Stop
           if ServicesRun then // blocking until service shutdown
             Show(true) else
             if GetLastError=1063 then
@@ -706,6 +736,12 @@ begin
     if AuthHttp.BindPort<>'' then
       fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
   end;
+end;
+
+destructor TAbstractThreadDaemon.Destroy;
+begin
+  FreeAndNil(fAdministrationHTTPServer);
+  inherited;
 end;
 
 end.
