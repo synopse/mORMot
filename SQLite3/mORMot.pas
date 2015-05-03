@@ -31288,8 +31288,8 @@ end;
 
 function TSQLRestServer.ExportedAsMessageOrNamedPipe: Boolean;
 begin
-  result := (self<>nil) or (fExportServerNamedPipeThread<>nil) or
-            (fServerWindow<>0);
+  result := (self<>nil) and
+    ((fExportServerNamedPipeThread<>nil) or (fServerWindow<>0));
 end;
 
 {$endif MSWINDOWS}
@@ -45580,12 +45580,12 @@ begin
   EnterCriticalSection(GlobalInterfaceResolutionLock);
   for i := 0 to length(GlobalInterfaceResolution)-1 do
     if GlobalInterfaceResolution[i].TypeInfo=aInterface then begin
-      LeaveCriticalSection(GlobalInterfaceResolutionLock);
+      LeaveCriticalSection(GlobalInterfaceResolutionLock); // release lock now
       raise EInterfaceResolverException.CreateUTF8(
         '%.RegisterGlobal(%): % already registered',
         [self,aImplementationClass,aInterface^.Name]);
     end;
-end;
+end; // caller should explicitly call finally LeaveCriticalSection(...) end; 
 
 class procedure TInterfaceResolverInjected.RegisterGlobal(
   aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectWithCustomCreateClass);
@@ -45593,7 +45593,7 @@ var aInterfaceEntry: PInterfaceEntry;
     n: integer;
 begin
   aInterfaceEntry := RegisterGlobalCheck(aInterface,aImplementationClass);
-  try
+  try // here we are protected within a EnterCriticalSection() call
     n := length(GlobalInterfaceResolution);
     SetLength(GlobalInterfaceResolution,n+1);
     with GlobalInterfaceResolution[n] do begin
@@ -45612,7 +45612,7 @@ var aInterfaceEntry: PInterfaceEntry;
     n: integer;
 begin
   aInterfaceEntry := RegisterGlobalCheck(aInterface,aImplementation.ClassType);
-  try
+  try // here we are protected within a EnterCriticalSection() call
     n := length(GlobalInterfaceResolution);
     SetLength(GlobalInterfaceResolution,n+1);
     with GlobalInterfaceResolution[n] do begin
