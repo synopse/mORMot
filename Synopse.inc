@@ -170,10 +170,11 @@
       integer is NOT CPU-dependent (thanks to objpas), i.e. always 32 bits
       cardinal is NOT CPU-dependent (thanks to objpas), i.e. always 32 bits
       PtrUInt is an unsigned integer type of same size as a pointer / register
-        -> to be used in loops
-        -> to be used for pointer arithmetic
+        -> must be used for pointer arithmetic
+        -> may be used in loops
       PtrInt is a signed integer type of same size as a pointer / register
-        -> to be used in loops
+        -> must be used for pointer arithmetic
+        -> may be used in loops
       all 32 bits x86 asm code can be replaced by a pascal only version, with
       if the conditional define PUREPASCAL is set (defined below e.g. for CPUX64)
 }
@@ -192,12 +193,19 @@
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define NOX64PATCHRTL} // official FPC's RTL already includes this x64 asm
 
+  {.$define FPCSQLITE3STATIC}
+  // allow static linking of the SQlite3 engine (including crypto) to the project
+  // -> disabled by default, for direct compilation of mORMot, e.g. from fpcup
+  // -> enable it to support static-linked SQLite3 engine, after retrieval of
+  // the needed .o files from http://synopse.info/files/sqlite3fpc.7z
+  // -> only available for Win32 and Linux32 platforms by now
+
   {$ifdef ANDROID}
     {$define LINUX}
   {$endif}
   {$ifdef DARWIN}
     {$define LINUX}
-    {$define PUREPASCAL} // e.g. low-level stack layout differs  
+    {$define PUREPASCAL} // e.g. low-level stack layout differs
   {$endif}
 
   {$ifdef CPU64}
@@ -404,7 +412,12 @@
   {.$define SQLITE3_FASTCALL}
 {$endif}
 
-// Only Win32+Linux32 do support our SQLite3 static linked library yet  
+{$ifdef FPC}
+  {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional 
+    {$define NOSQLITE3STATIC}
+  {$endif}
+{$endif}
+// Only Win32+Linux32 do support our SQLite3 static linked library yet
 {$ifdef CPU64}
   {$define NOSQLITE3STATIC}
 {$endif}
