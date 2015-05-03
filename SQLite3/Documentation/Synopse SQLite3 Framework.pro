@@ -633,7 +633,7 @@ The {\i mORMot} framework provides an Open Source {\i self-sufficient set of uni
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
 - {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
-- {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses test-driven approach and features @*stub@bing and @*mock@ing).
+- {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses @*test-driven@ approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line {\i mORMot} is not another ORM on which a transmission layer has been added, like almost everything existing in Delphi, C# or Java: this is a full Client-Server ORM/SOA from the ground up. This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in {\i Delphi} or any other mean, including AJAX).
@@ -718,7 +718,7 @@ Benefits of {\i mORMot} are therefore:
 - @*KISS@ {\i convention over configuration} design: you have all needed features at hand, but with only one way of doing it - less configuration and less confusion for the developer and its customers;
 - Pascal oriented: implementation is not following existing Java or C# patterns (with generics (ab)use, variable syntaxes and black-box approach), but try to unleash the object pascal genius;
 - Integrated: all crosscutting scenarios are coupled, so you benefit of consisting APIs and documentation, a lot of code-reuse, JSON/RESTful orientation from the ground up;
-- Tested: most of the framework is test-driven, and all regression tests are provided, including system-wide integration tests;
+- Tested: most of the framework is @*test-driven@, and all regression tests are provided, including system-wide integration tests;
 - Do-not-reinvent-the-wheel, since we did it for you: it is now time to focus on your business;
 - Open Source, documented and maintained: project is developed since years, with some active members - {\i mORMot} won't leave you soon!
 \page
@@ -2084,7 +2084,7 @@ But {\f1\fs20 @*TSQLRawBlob@} properties will be transmitted as @*REST@ful separ
 You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
-: Working with Objects
+:164 Working with Objects
 To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@, and using the {\f1\fs20 ID} @*primary key@ as resource identifier:
 !!procedure Test(Client: TSQLRest);  // we will use CRUD operations on a REST instance
 !var Baby: TSQLBaby;   // store a record
@@ -2937,7 +2937,7 @@ For instance, here is the corresponding function as defined in the first samples
 !  result := TSQLModel.Create([TSQLSampleRecord]);
 !end;
 For a more complex model including link to User Interface, see @64@.
-:  Several Models
+:163  Several Models
 In practice, a same {\f1\fs20 TSQLRecord} can be used in several models: this is typically the case for {\f1\fs20 TSQLAuthUser} tables, or if client and server instances are running in the same process. So, for accessing the model properties, you have two structures available:
 |%37%68
 |\b Class|Description\b0
@@ -7839,7 +7839,7 @@ In practice, {\i stored procedures} have some huge drawbacks:
 - You will probably have limitations in the virtual environment running in your database engine: deprecated VM or libraries, restricted access to files or network due to security requirements, missing libraries;
 - Inefficiency of parameters passing, especially when compared with class OOP programming - you are back to the procedural mode of the 80s;
 - Parameters passing would probably result in sub-optimal SQL statements, handling all passed values even if not used;
-- Flat design of stored procedures interfaces, far away from the interface segregation principle - see @47@;
+- Flat design of stored procedures interfaces, far away from the interface segregation principle - see @160@;
 - Let several versions of your business logic coexist on the same server is a nightmare to maintain;
 - Unit testing is made difficult, since you won't be able to mock or stub - see @62@ - your {\i stored procedures} or your data;
 - No popular SQL engine does allow {\i stored procedures} to be written in Delphi, so you won't be able to share code with your other projects;
@@ -8312,87 +8312,319 @@ More on this later on... first we'll take a look at good principles of playing w
 :47 SOLID design principles
 The acronym @**SOLID@ is derived from the following @*OOP@ principles (quoted from the corresponding {\i Wikipedia} article):
 - {\i Single responsibility principle}: the notion that an object should have only a single responsibility;
-- {\i Open/closed principle}: the notion that “software entities ... should be open for extension, but closed for modification”;
-- {\i @Liskov substitution principle@}: the notion that “objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program” - also named as "{\i design by contract}";
-- {\i @*Interface@ segregation principle}: the notion that “many client specific interfaces are better than one general purpose interface.”;
-- {\i Dependency inversion principle}: the notion that one should “Depend upon Abstractions. Do not depend upon concretions.”. {\i Dependency injection} is one method of following this principle.
+- {\i Open/closed principle}: the notion that "software entities ... should be open for extension, but closed for modification";
+- {\i @Liskov substitution principle@}: the notion that "objects in a program should be replaceable with instances of their subtypes without altering the correctness of that program” - also named as "{\i design by contract}";
+- {\i @*Interface@ segregation principle}: the notion that "many client specific interfaces are better than one general purpose interface.";
+- {\i @*Dependency inversion@ principle}: the notion that one should "Depend upon Abstractions. Do not depend upon concretions.". {\i @*Dependency injection@} is one method of following this principle, which is also called {\i @*Inversion Of Control@} (aka @*IoC@).
 If you have some programming skills, those principles are general statements you may already found out by yourself. If you start doing serious object-oriented coding, those principles are best-practice guidelines you would gain following.
 They certainly help to fight the three main code weaknesses:
-- {\i Rigidity} – Hard to change something because every change affects too many other parts of the system;
-- {\i Fragility} – When you make a change, unexpected parts of the system break;
-- {\i Immobility} – Hard to reuse in another application because it cannot be disentangled from the current application.
-:  Single responsibility principle
+- {\i Rigidity}: Hard to change something because every change affects too many other parts of the system;
+- {\i Fragility}: When you make a change, unexpected parts of the system break;
+- {\i Immobility}: Hard to reuse in another application because it cannot be disentangled from the current application.
+:  Single Responsibility Principle
 When you define a class, it shall be designed to implement only one feature. The so-called feature can be seen as an "{\i axis of change}" or a "{\i a reason for change}".
 Therefore:
 - One class shall have only one reason that justifies changing its implementation;
 - Classes shall have few dependencies on other classes;
 - Classes shall be abstract from the particular layer they are running - see @7@.
 For instance, a {\f1\fs20 TRectangle} object should not have both {\f1\fs20 ComputeArea} and {\f1\fs20 Draw} methods defined at once - they would define two responsibilities or axis of change: the first responsibility is to provide a mathematical model of a rectangle, and the second is to render it on GUI.
-When you define an @*ORM@ object, do not put GUI methods within. In fact, the fact that our {\f1\fs20 @*TSQLRecord@} class definitions are common to both Client and Server sides makes this principle mandatory. You won't have any GUI related method on the Server side, and the Client side could use the objects instances with several GUI implementations ({\i Delphi} Client, AJAX Client...).
-Therefore, if you want to change the GUI, you won't have to recompile the {\f1\fs20 TSQLRecord} class and the associated database model.
+:   Splitting classes
+To take an example from real coding, imagine you define a communication component. You want to communicate, say, with a bar-code scanner peripheral. You may define a single class, e.g. {\f1\fs20 TBarcodeScanner}, supporting such device connected over a serial port. Later on, the manufacturer deprecates the serial port support, since no computer still have it, and offer only USB models in its catalog. You may inherit from {\f1\fs20 TBarcodeScanner}, and add USB support.
+\graph SOLIDSRP1 SOLID Principles - Single Responsibility: Single-to-rule-them-all class
+\TBarcodeScanner\TUsbBarCodeScanner
+\
+But in practice, this new {\f1\fs20 TUsbBarCodeScanner} class is difficult to maintain, since it will inherit from serial-related communication.\line So you start splitting the class hierarchy, using an {\i abstract} parent class:
+\graph SOLIDSRP2 SOLID Principles - Single Responsibility: Abstract parent class
+\TAbstractBarcodeScanner\TSerialBarCodeScanner
+\TAbstractBarcodeScanner\TUsbBarCodeScanner
+\
+We may define some {\f1\fs20 virtual abstract} methods, which would be overridden in inherited classes:
+!type
+!  TAbstractBarcodeScanner = class(TComponent)
+!  protected
+!    function ReadChar: byte; virtual; abstract;
+!    function ReadFrame: TProtocolFrame; virtual; abstract;
+!    procedure WriteChar(aChar: byte); virtual; abstract;
+!    procedure WriteFrame(const aFrame: TProtocolFrame); virtual; abstract;
+!    ...
+Then, {\f1\fs20 TSerialBarCodeScanner} and {\f1\fs20 TUsbBarCodeScanner} classes would override those classes, according to the final implementation.
+In fact, this approach is cleaner. But it is not perfect either, since it may be hard to maintain and extend. Imagine the manufacturer is using a standard protocol for communication, whatever USB or Serial connection is used. You would put this communication protocol (e.g. its state machine, its stream computation, its delaying settings) in the {\f1\fs20 TAbstractBarcodeScanner} class. But perhaps they would be diverse flavors, in {\f1\fs20 TSerialBarCodeScanner} or {\f1\fs20 TUsbBarCodeScanner}, or even due to diverse models and features (e.g. if it supports 2D or 3D bar-codes).
+It appears that putting everything in a single class is not a good idea. Splitting protocol and communication appears to be preferred. Each "{\i axis of change}" - i.e. every aspect which may need modifications - requires its own class. Then the {\f1\fs20 T*BarcodeScanner} classes would {\i compose} protocols and communication classes within a single component.
+Imagine we have two identified protocols (named {\f1\fs20 BCP1} and {\f1\fs20 BCP2}), and two means of communication (serial and USB). So we would define the following classes:
+\graph SOLIDSRP3 SOLID Principles - Single Responsibility: Spliting protocol and communication
+\TAbstractBarcodeProtocol\TBCP1BarcodeProtocol
+\TAbstractBarcodeProtocol\TBCP2BarcodeProtocol
+\TAbstractBarcodeConnection\TSerialBarcodeConnection
+\TAbstractBarcodeConnection\TUsbBarcodeConnection
+\
+Then, we may define our final classes and components as such:
+!type
+!  TAbstractBarcodeConnection = class
+!  protected
+!    function ReadChar: byte; override;
+!    procedure WriteChar(aChar: byte); override;
+!    ...
+!  TAbstractBarcodeProtocol = class
+!  protected
+!    fConnection: TAbstractBarcodeConnection;
+!    function ReadFrame: TProtocolFrame; override;
+!    procedure WriteFrame(const aFrame: TProtocolFrame); override;
+!    ...
+!  TAbstractBarcodeScanner = class(TComponent)
+!  protected
+!    fProtocol: TAbstractBarcodeProtocol;
+!    fConnection: AbstractBarcodeConnection;
+!  ...
+And each actual inherited {\f1\fs20 class} would initialize the protocol and connection according to the expected model:
+!constructor TSerialBarCodeScanner.Create(const aComPort: string; aBitRate: integer);
+!begin
+!  fConnection := TSerialBarcodeConnection(aComPort,aBitRate);
+!  fProtocol := TBCP1BarcodeProtocol.Create(fConnection);
+!end;
+Here, we inject the connection instance to the protocol, since the later may need to read or write some bytes on the wire, when needed.
 Another example is how our database classes are defined in {\f1\fs20 @*SynDB@.pas} - see @27@:
 - The {\i connection properties} feature is handled by {\f1\fs20 TSQLDBConnectionProperties} classes;
 - The actual {\i living connection} feature is handled by {\f1\fs20 TSQLDBConnection} classes;
 - And {\i database requests} feature is handled by {\f1\fs20 TSQLDBStatement} instances using dedicated {\f1\fs20 NewConnection} / {\f1\fs20 ThreadSafeConnection} / {\f1\fs20 NewStatement} methods.
 Therefore, you may change how a database connection is defined (e.g. add a property to a {\f1\fs20 TSQLDBConnectionProperties} child), and you won't have to change the statement implementation itself.
-Following this {\i Single responsibility principle} may sound simple and easy, but in fact, it is one of the hardest principles to get right. Naturally, we tend to join responsibilities in our class definitions. Our ORM architecture will enforce you, by its @*Client-Server@ nature, to follow this principle, but it is always up to the end coder to design properly his/her interfaces.
-:  Open/closed principle
+:   Do not mix UI and logic
+Another practical "{\i Single Responsibility Principle}" smell may appear in your uses clause.
+If your data-only or peripheral-only unit starts like this:
+!unit MyDataModel;
+!
+!uses
+!!  Winapi.Windows,
+!  mORMot,
+!  ...
+It would induce a dependency about the {\i Windows} Operating System, whereas your data would certainly benefit from being OS-agnostic. Our todays compiler (Delphi or FPC) targets several OS, so coupling our data to the actual {\i Windows} unit does show a bad design.
+Similarly, you may add a dependency to the VCL, via a reference to the {\f1\fs20 Forms} unit.\line If your data-only or peripheral-only unit starts like the following, beware!
+!unit MyDataModel;
+!
+!uses
+!!  Winapi.Messages,
+!!  Vcl.Forms,
+!  mORMot,
+!  ...
+If you later want to use {\f1\fs20 @*FMX@}, or {\f1\fs20 LCL} (from @*Lazarus@) in your application, or want to use your {\f1\fs20 MyDataModel} unit on a pure server application without any GUI, you are stuck. The new {\i Windows @*Nano Server@} architecture, which targets the cloud and won't offer any GUI to the server applications, would even be very sensitive to the dependency chain of the executable.
+Note that if you are used to developed in RAD mode, the units generated by the IDE wizards come with some default references in the {\f1\fs20 uses} clause of the generated {\f1\fs20 .pas} file. So take care of not introducing any coupling to your own business code!
+As a general rule, our ORM/SOA framework source code tries to avoid such dependencies. All OS-specificities are centralized in our {\f1\fs20 SynCommons.pas} unit, and there is no dependency to the VCL when it is not mandatory, e.g. in {\f1\fs20 mORMot.pas}.
+Following the RAD approach, you may start from your UI, i.e. defining the needed classes in the unit where you visual form (may be VCL or FMX) is defined. Don't follow this tempting, but dangerous path!
+Code like the following may be accepted for a small example (e.g. the one supplied in the {\f1\fs20 SQlite3\\Samples} sub-folder of our repository source code tree), but is to be absolutely avoided for any production ready {\i mORMot}-based application:
+!interface
+!
+!uses
+!  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+!  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, mORMot, mORMotSQLite3;
+!
+!type
+!  TForm1 = class(TForm)
+!    procedure FormCreate(Sender: TObject);
+!  private
+!!    fModel: TSQLModel;
+!!    fDatabase: TSQLRestServerDB;
+!  public
+!  end;
+!
+! implementation
+!
+!procedure TForm1.FormCreate(Sender: TObject);
+!begin
+!!  fModel := TSQLModel.Create([TSQLMyOwnRecord],'root');
+!!  fDatabase := TSQLRestServerDB.Create(fModel,ChangeFileExt(paramstr(0),'.db'));
+!end;
+In your actual project units, when you define an @*ORM@ or @*SOA@ {\f1\fs20 class}, never include GUI methods within. In fact, the fact that our {\f1\fs20 @*TSQLRecord@} class definitions are common to both Client and Server sides makes this principle mandatory. You should not have any GUI related method on the Server side, and the Client side could use the objects instances with several GUI implementations ({\i Delphi} Client, AJAX Client...).
+Therefore, if you want to change the GUI, you won't have to recompile the {\f1\fs20 TSQLRecord} class and the associated database model. If you want to deploy your server on a {\i @*Linux@} box (using e.g. {\i @*CrossKylix@} or @*FPC@ as compiler), you could reuse your very same code, since you do not have reference to the VCL in your business code.
+This {\i Single responsibility principle} may sound simple and easy to follow (even obvious), but in fact, it is one of the hardest principles to get right. Naturally, we tend to join responsibilities in our class definitions. Our framework architecture will enforce you, by its @*Client-Server@ nature and all its high-level methods involving {\f1\fs20 interface}, to follow this principle, but it is always up to the end coder to design properly his/her types.
+:158  Open/Closed Principle
 When you define a class or a unit, at the same time:
 - They shall be {\i open for extension};
 - But {\i closed for modification}.
-When designing our ORM, we tried to follow this principle. In fact, you should not have to modify its implementation. You should define your own units and classes, without the need to {\i hack} the framework source code.
+It means that you may be able to extend your existing code, without breaking its initial behavior.\line Some other guidelines may be added, but you got the main idea.
+Conformance to this open/closed principle is what yields the greatest benefit of @*OOP@, i.e.:
+- Code re-usability;
+- Code maintainability;
+- Code extendibility.
+Following this principle will make your code far away from a regular RAD style. But benefits will be huge.
+:   Applied to our framework units
+When designing our ORM/SOA set of units, we tried to follow this principle. In fact, you should not have to modify its implementation. You should define your own units and classes, without the need to {\i hack} the framework source code.
 Even if {\i Open Source} paradigm allows you to modify the supplied code, this shall not be done unless you are either fixing a bug or adding a new common feature. This is in fact the purpose of our @http://synopse.info web site, and most of the framework enhancements have come from user requests.
 The framework Open Source @*license@ - see @34@ - may encourage user contributions in order to fulfill the Open/closed design principle:
 - Your application code extends the {\i Synopse mORMot Framework} by defining your own classes or event handlers - this is how it is {\i open for extension};
 - The main framework units shall remain inviolate, and common to all users - this illustrates the {\i closed for modification} design.
-Furthermore, this principle will ensure your code to be ready to follow the main framework updates (which are quite regular). When a new version is available, you would be able to retrieve it for free from our web site, replace your files locally, then build a new enhanced version of your application. Even the source code repository is available - at @http://synopse.info/fossil - and allows you to follow the current step of evolvment of the framework.
-In short, abstraction is the key. All your code shall not depend on a particular implementation.
+As a beneficial side effect, this principle will ensure that your code would be ready to follow the framework updates (which are quite regular). When a new version of {\i mORMot} is available, you should be able to retrieve it for free from our web site, replace your files locally, then build a new enhanced version of your application, with the benefit of all included fixes and optimizations. Even the source code repository is available - at @http://synopse.info/fossil or from @https://github.com/synopse/mORMot - and allows you to follow the current step of evolvment of the framework.
+In short, abstraction is the key to peace of mind. All your code shall not depend on a particular implementation.
+:   Open/Closed in practice
 In order to implement this principle, several conventions could be envisaged:
 - You shall better define some abstract classes, then use specific overridden classes for each and every implementation: this is for instance how @*Client-Server@ classes were implemented - see @35@;
 - All object members shall be declared {\f1\fs20 private} or {\f1\fs20 protected} - this is a good idea to use @17@ for defining server-side process, and/or make the {\f1\fs20 @*TSQLRecord@} published properties read-only and using some client-side {\f1\fs20 constructor} with parameters;
 - No singleton nor global variable - {\i ever};
 - RTTI is dangerous - that is, let our framework use RTTI functions for its own cooking, but do not use it in your code.
-Some other guidelines may be added, but you got the main idea. Conformance to this open/closed principle is what yields the greatest benefit of @*OOP@, i.e.:
-- Code re-usability;
-- Code maintainability;
-- Code extendibility.
-Following this principle will make your code far away from a regular RAD style. But benefits will be huge.
-:  Liskov substitution principle
-Even if her name is barely unmemorable, {\i Barbara Liskov} is a great computer scientist, we should better learn from.
+In our previous bar-code scanner class hierarchy, we would therefore define the
+!type
+!  TAbstractBarcodeScanner = class(TComponent)
+!  protected
+!    fProtocol: TAbstractBarcodeProtocol;
+!    fConnection: AbstractBarcodeConnection;
+!  ...
+!  public
+!!    property Protocol: TAbstractBarcodeProtocol read fProtocol;
+!!    property Connection: AbstractBarcodeConnection read fConnection;
+!  ...
+In this code, the actual variables are stored as {\f1\fs20 protected} fields, with only getters (i.e. {\b {\f1\fs20 read}}) in the {\f1\fs20 public} section. There is no setter (i.e. {\b {\f1\fs20 write}}) attribute, which may allow to change the {\f1\fs20 fProtocol/fConnection} instances in user code. You can still access those fields (it is mandatory in your inherited constructors), but user code should not use it.
+As stated above - see @%%SOLIDSRP3@ - having dedicated classes for defining protocol and connection will also help implementing the {\i open/closed} principle. You would be able to define a new class, combining its own protocol and connection class instances, so it will be {\i Open for extension}. But you would not change the behavior of a class, by inheriting it: since protocol and connection are uncoupled, and used via {\i composition} in a dedicated class, it will be {\i Closed for modification}.
+Using the newest {\f1\fs20 sealed} directive for a class may ensure that your {\f1\fs20 class} definition would follow this principle. If the class method or property is {\f1\fs20 sealed}, you would not be able to change its behavior in its inherited types, even if you are tempted to.
+:   No Singleton nor global variables
+About the @**singleton@ pattern, you should better always avoid it in your code. In fact, a singleton was a C++ (and Java) hack invented to implement some kind of global variables, hidden behind a static class definition. They were historically introduced to support mixed mode of application-wide initialization (mainly allocate the {\f1\fs20 stdio} objects needed to manage the console), and were abused in business logic.
+Once you use a singleton, or a global variable, you would miss most of the benefit of OOP. A typical use of singleton is to register some class instances globally for the application. You may see some framework - or some part of the RTL - which would allow such global registration. But it would eventually void most benefits of proper dependency injection - see @157@ - since you would not be able to have diverse resolution of the same class.
+For instance, if your database properties, or your application configuration are stored within a singleton, or a global variable, you would certainly not be able to use several database at once, or convert your single-user application with its GUI into a modern multi-user AJAX application:
+!var
+!  DBServer: string = 'localhost';
+!  DBPort: integer = 1426;
+!
+!  UITextColor: TColor = clNavy;
+!  UITextSize: integer = 12;
+Such global variables are a smell of a broken {\i Open/Closed Principle}, since your project would definitively won't be open for extension. Using a {\f1\fs20 static class} variable (as allowed in newer version of Delphi), is just another way of defining a global variable, just adding the named scope of the {\f1\fs20 class} type.
+Even if you do not define some global variable in your code, you may couple your code from an existing global variable. For instance, defining some variables with your {\f1\fs20 TMainForm = class(TForm)} class defined in the IDE, then using its global {\f1\fs20 MainForm: TMainForm} variable, or the {\f1\fs20 Application.MainForm} property, in your code. You will start to feel not right, when the unit where your {\f1\fs20 TMainForm} is defined would start to appear in your business code {\f1\fs20 uses} clause... just another global variable in disguise!
+In our framework, we tried to never use global registration, but for the cases where it has been found safe to be implemented, e.g. when RTTI is cached, or JSON serialization is customized for a given type. All those informations would be orthogonal to the proper classes using them, so you may find some global variables in the framework units, only when it is worth it. For instance, we split {\f1\fs20 TSQLRecord}'s information into a {\f1\fs20 TSQLRecordProperties} for the shared intangible RTTI values, and {\f1\fs20 TSQLModelRecordProperties} instances, one per {\f1\fs20 TSQLModel}, for all the {\f1\fs20 TSQLModel/TSQLRest} specific settings - see @163@.
+:159  Liskov Substitution Principle
+Even if her name is barely unmemorable, {\i Barbara Liskov} is a great computer scientist, we should better learn from. It is worth taking a look at her presentation at @https://www.youtube.com/watch?v=GDVAHA0oyJU
 The "{\i @**Liskov substitution principle@}" states that, if {\f1\fs20 TChild} is a subtype of {\f1\fs20 TParent}, then objects of type {\f1\fs20 TParent} may be replaced with objects of type {\f1\fs20 TChild} (i.e., objects of type {\f1\fs20 TChild} may be substitutes for objects of type {\f1\fs20 TParent}) without altering any of the desirable properties of that program (correctness, task performed, etc.).
-For our framework, it would signify that {\f1\fs20 TSQLRestServer} or {\f1\fs20 TSQLRestClient} instances can be substituted to a {\f1\fs20 TSQLRest} object. Most @*ORM@ methods expect a {\f1\fs20 TSQLRest} parameter to be supplied.
-Your code shall refer to abstractions, not to implementations. By using only methods and properties available at classes parent level, your code won't need to change because of a specific implementation.
-The main advantages of this coding pattern are the following:
-- Thanks to this principle, you will be for instance able to {\i @*stub@} or {\i @*mock@} an @*interface@ or a class - see @62@ - this principle is therefore mandatory for implementing unitary @*test@ing to your project;
-- Furthermore, testing would be available not only at isolation level (testing each child class), but also at abstracted level, i.e. from the client point of view - you can have implementation which behave correctly when tested individually, but which failed when tested at higher level if the Liskov principle was broken;
-- If this principle is violated, the open/close principle will be - the parent class would need to be modified whenever a new derivative of the base class is defined;
-- Code re-usability is enhanced by method re-usability: a method defined at a parent level does not require to be implemented for each child.
-Some patterns which shall not appear in your code:
-- Statements like {\f1\fs20 if aObject is TAClass then begin .... end else if aObject is TAnotherClass then ...} in a parent method;
-- Use an @*enumerated@ item and a {\f1\fs20 case ... of } or nested {\f1\fs20 if ... then} to change a method behavior (this will also probably break the single responsibility principle: each enumeration shall be defined as a class);
-- Define a method which will stay {\f1\fs20 abstract} for some children;
-- Need to explicitly add all child classes units to the parent class unit {\f1\fs20 uses} clause.
+The example given by {\i Barbara Liskov} was about stacks and queues: even if both do share {\f1\fs20 Push} and {\f1\fs20 Pop} methods, they should not inherit from a single parent type, since the storage behavior of a stack is quite the contrary of a queue. In your program, if you start to replace a stack by a queue, you will meet strange behaviors, for sure. According to proper {\i top-bottom} design flow, both types should be uncoupled. You may implement a {\f1\fs20 TFastStack} class using an in-memory list for storage, or another {\f1\fs20 TPersistedStack} class using a remote SQL engine, but both would have to behave like a {\f1\fs20 TStack}, i.e. according to the last-in first-out (LIFO) principle. On the other hand, any class implementing a {\i queue}  type should follow the the first-in first-out (FIFO) order, whatever kind of storage is used.
+In practical {\i Delphi} code, relying on abstractions may be implemented by two means:
+- Using only {\f1\fs20 abstract} parent {\f1\fs20 class} variables when consuming objects;
+- Using {\f1\fs20 interface} variable instead of {\f1\fs20 class} implementations.
+Here, we do not use inheritance for sharing implementation code, but for defining an expected behavior. Sometimes, you may break the {\i Liskov Substitution} principle in implementation methods which would be coded just to gather some reusable pieces of code (the {\i inheritance for implementation} pattern), preparing some behavior which may be used only by some of the subtypes. Such "internal" virtual methods of a subtype may change the behavior of its inherited method, for the sake of efficiency and maintainability. But with this kind of implementation inheritance, which is closer to plumbing than designing, methods should be declared as {\f1\fs20 protected}, and not published as part of the type definition.\line By the way, this is exactly what {\f1\fs20 interface} type definitions have to offer. You can inherit from another interface, and this kind of polymorphism should strictly follow the {\i Liskov Substitution} principle. Whereas the {\f1\fs20 class} types, implementing the interfaces, may use some protected methods which may break the principle, for the sake of code efficiency.
 In order to fulfill this principle, you should:
+- Properly name (and comment) your {\f1\fs20 class} or {\f1\fs20 interface} definition: having {\f1\fs20 Push} and {\f1\fs20 Pop} methods may be not enough to define a contract, so in this case type inheritance would define the expected expectation - as a consequence, you should better stay away from "duck typing" patterns, and dynamic languages, but rely on strong typing;
 - Use the "behavior" design pattern, when defining your objects hierarchy - for instance, if a square may be a rectangle, a {\f1\fs20 TSquare} object is definitively {\i not} a {\f1\fs20 TRectangle} object, since the behavior of a {\f1\fs20 TSquare} object is not consistent with the behavior of a {\f1\fs20 TRectangle} object (square width always equals its height, whereas it is not the case for most rectangles);
 - Write your tests using abstract local variables (and this will allow test code reuse for all children classes);
 - Follow the concept of {\i Design by Contract}, i.e. the Meyer's rule defined as "{\i when redefining a routine [in a derivative], you may only replace its precondition by a weaker one, and its postcondition by a stronger one}" - use of preconditions and postconditions also enforce testing model;
-- Separate your classes hierarchy: typically, you may consider using separated object types for implementing persistence and object creation (this is the common separation between {\i @*Factory@} and {\i @*Repository@}).
-The @*SOA@ and @*ORM@ concepts as used by our framework are compatible with the Liskov substitution principle.
-Furthermore, a more direct {\i Design by Contract} implementation pattern is also available (involving a more wide usage of {\f1\fs20 @*interface@s}).
-:  Interface segregation principle
+- Separate your classes hierarchy: typically, you may consider using separated object types for implementing persistence and object creation (this is the common separation between {\i @*Factory@} and {\i @*Repository@} patterns).
+:   Use parent classes
+Within our framework, it would signify that {\f1\fs20 TSQLRestServer} or {\f1\fs20 TSQLRestClient} instances can be substituted to a {\f1\fs20 TSQLRest} object. Most @*ORM@ methods, especially at {\f1\fs20 TSQLRecord} level, expect an abstract {\f1\fs20 TSQLRest} parameter to be supplied - see @164@.
+For instance, you may write:
+!var anyRest: TSQLRest;
+!    ID: TID;
+!    rec1,rec2: TSQLMyRecord;
+!...
+!  ID := anyRest.Add(rec1,true);
+!  rec2 := TSQLMyRecord.Create(anyRest,ID);
+!...
+And you may set any kind of actual class instance to {\f1\fs20 anyRest}, either a local stored database engine, or a HTTP remote access:
+!  anyRest := TSQLRestServerDB.Create(aModel,'mydatabase.db');
+!  anyRest := TSQLHttpClient.Create('1.2.3.4','8888',aModel,false);
+You may even found in the {\f1\fs20 dddInfraSettings.pas} unit a powerful {\f1\fs20 TRestSettings.NewRestInstance()} method which is able to instantiate the needed {\f1\fs20 TSQLRest} inherited class from a set of JSON settings, i.e. either a {\f1\fs20 TSQLHttpClient}, or a local {\f1\fs20 TSQLRestServerFullMemory}, or a {\f1\fs20 TSQLRestServerDB} - the later either with a local {\i @*SQlite3@} database, an external @*SQL@ engine, or an external @*NoSQL@/@*MongoDB@ database.
+Your code shall refer to abstractions, not to implementations. By using only methods and properties available at classes parent level, your code won't need to change because of a specific implementation.
+:   I'm your father, Luke
+You should note that, in the {\i Liskov substitution principle} definition, "parent" and "child" are no absolute. Which actual {\f1\fs20 class} is considered as "parent" may depend on the context use.
+Most of the time, the parent may be the highest class in the hierarchy. For instance, in the context of a GUI application, you may use the most abstract class to access the application data, may it be stored locally, or remotely accessed over HTTP.
+But when you initialize the {\f1\fs20 class} instance of a local stored server, you may need to setup the actual data storage, e.g. the file name or the remote SQL/NoSQL settings. In this context, you would need to access the "child" properties, regardless of the "parent" abstract use which would take care later on in the GUI part of the application.
+Furthermore, in the context of data replication, server side or client side would have diverse behavior. In fact, they may be used as master or slave database, so in this case, you may explicitly define server or client {\f1\fs20 class} in your code. This is what our ORM does for its master/slave replication - see @147@.
+If we come back to our bar-code scanner sample, most of your GUI code may rely on {\f1\fs20 TAbstractBarcodeScanner} components. But in the context of the application options, you may define the internal properties of each "child" class - e.g. the serial or USB port name, so in this case, your new "parent" class may be either {\f1\fs20 TSerialBarCodeScanner} or {\f1\fs20 TUsbCodeScanner}, or even better the {\f1\fs20 TSerialBarcodeConnection} or {\f1\fs20 TUsbBarcodeConnection} properties, to fulfill {\i Single Responsibility principle}.
+:   Don't check the type at runtime
+Some patterns shall never appear in your code. Otherwise, code refactoring should be done as soon as possible, to let your project be maintainable in the future.
+Statements like the following are to be avoided, in either the parents' or the childs' methods:
+!procedure TAbstractBarcodeScanner.SomeMethod;
+!begin
+!  if self is TSerialBarcodeScanner then
+!  begin
+!  ....
+!  end
+!  else
+!  if self is TUsbBarcodeScanner then
+!...
+Or, in its disguised variation, using an @*enumerated@ item:
+!case fProtocol.MeanOfCommunication of
+!meanSerial: begin
+!  ...
+!end;
+!meantUsb:
+!  ...
+This later piece of code does not check {\f1\fs20 self}, but the {\f1\fs20 fProtocol} protected field. So even if you try to implement the {\i Single Responsibility principle}, you may still be able to break {\i Liskov Substitution}!
+Note that both patterns will eventually break the {\i Single Responsibility principle}: each behavior shall be defined in its own child {\f1\fs20 class} methods. As the {\i Open/Closed principle} would also be broken, since the class won't be open for extension, without touching the parent class, and modify the nested {\f1\fs20 if self is T* then ...} or {\f1\fs20 case fProtocol.* of ...} expressions.
+:   Partially abstract classes
+Another code smell may appear when you define a method which will stay {\f1\fs20 abstract} for some children, instantiated in the project. It would imply that some of the parent {\f1\fs20 class} behavior is not implemented at this particular hierarchy level. So you would not be able to use all the parent's methods, as would be expected by the {\i Liskov Substitution principle}.\line Note that the compiler will complain for it, hinting that you are creating a class with abstract methods. Never ignore such hints - which may benefit for being handled as errors at compilation time, IMHO. The (in)famous "{\f1\fs20 Abstract Error}" error dialog, which may appear at runtime, would reflect this bad code implementation. When it occurs on a server application without GUI... you got a picture of the terror, I guess...
+A more subtle violation of {\i Liskov} may appear if you break the expectation of the parent class. The following code, which emulates a bar-code reader peripheral by sending the frame by email for debugging purpose (why not?), clearly fails the {\i Design by Contract} approach:
+!  TEMailEmulatedBarcodeProtocol = class(TAbstractBarcodeProtocol)
+!  protected
+!    function ReadFrame: TProtocolFrame; override;
+!    procedure WriteFrame(const aFrame: TProtocolFrame); override;
+!    ...
+!function TEMailEmulatedBarcodeProtocol.ReadFrame: TProtocolFrame;
+!begin
+!  raise EBarcodeException.CreateUTF8('%.ReadFrame is not implemented!',[self]);
+!end;
+!
+!procedure TEMailEmulatedBarcodeProtocol.WriteFrame(const aFrame: TProtocolFrame);
+!begin
+!  SendEmail(fEmailNotificationAddress,aFrame.AsString);
+!end;
+We expected this class to fully implement the {\f1\fs20 TAbstractBarcodeProtocol} contract, whereas calling {\f1\fs20 TEMailEmulatedBarcodeProtocol.ReadFrame} would not be able to read any data frame, but would raise an exception. So we can not use this {\f1\fs20 TEMailEmulatedBarcodeProtocol class} as replacement to any other {\f1\fs20 TAbstractBarcodeProtocol} class, otherwise it would fail at runtime.\line A correct implementation may perhaps to define a {\f1\fs20 TFakeBarcodeProtocol} class, implementing all the parent methods via a set of events or some text-based scenario, so that it would behave just like a correct {\f1\fs20 TAbstractBarcodeProtocol} class, in the full extend of its expectations.
+:   Messing units dependencies
+Last but not least, if you need to explicitly add child classes units to the parent class unit {\f1\fs20 uses} clause, it looks like if you just broke the {\i Liskov Substitution principle}.
+!unit AbstractBarcodeScanner;
+!
+!uses
+!  SysUtils,
+!  Classes,
+!!  SerialBarcodeScanner; // Barbara complains: "it smells"!
+!!  UsbBarcodeScanner;    // Barbara complains: "it smells"!
+! ...
+If your code is like this, you would have to remove the reference to the inherited classes, for sure.
+Even a dependency to one of the low-level implementation detail is to be avoided:
+!unit AbstractBarcodeScanner;
+!
+!uses
+!!  Windows,
+!  SysUtils,
+!  Classes,
+!!  ComPort;
+! ...
+Your abstract parent {\f1\fs20 class} should {\b not} be coupled to a particular {\i Operating System}, or a mean of communication, which may not be needed. Why would you add a dependency to raw {\i RS-232} communication protocol, which is very likely to be deprecated?
+One way of getting rid of this dependency is to define some abstract types (e.g. enumerations or simple structures like {\f1\fs20 record}), which would then be translated into the final types as expected by the {\f1\fs20 ComPort.pas} or {\f1\fs20 Windows.pas} units. Consider putting all the child classes dependencies at {\f1\fs20 constructor} level, and/or use {\f1\fs20 class} composition via the {\i Single Responsibility principle} so that the parent {\f1\fs20 class} definition would not be polluted by implementation details of its children.
+You my also use a {\i registration list}, maintained by the parent unit, which may be able to register the classes implementing a particular behavior at runtime. Thanks to {\i Liskov}, you would be able to {\i substitute} any parent class by any of its inherited implementation, so defining the types at runtime only should not be an issue.
+:   Practical advantages
+The main advantages of this coding pattern are the following:
+- Thanks to this principle, you will be able to {\i @*stub@} or {\i @*mock@} an @*interface@ or a {\f1\fs20 class} - see @62@ - e.g. uncouple your object persistence to the actual database it runs on: this principle is therefore mandatory for implementing unitary @*test@ing to your project;
+- Furthermore, testing would be available not only at isolation level (testing each child class), but also at abstracted level, i.e. from the client point of view - you can have implementation which behave correctly when tested individually, but which failed when tested at higher level if the {\i Liskov} principle was broken;
+- As we have seen, if this principle is violated, the other principles are very likely to be also broken - e.g. the parent class would need to be modified whenever a new derivative of the base class is defined (violation of the {\i Open/Closed} principle), or your {\f1\fs20 class} types may implement more than one behavior at a time (violation of the {\i Single Responsibility} principle);
+- Code re-usability is enhanced by method re-usability: a method defined at a parent level does not require to be implemented for each child.
+The @*SOA@ and @*ORM@ concepts, as implemented by our framework, try to be compliant with the {\i Liskov substitution principle}. It is true at {\f1\fs20 class} level for the ORM, but a more direct {\i Design by Contract} implementation pattern is also available, since the whole SOA stack involves a wider usage of {\f1\fs20 @*interface@s} in your projects.
+:160  Interface Segregation Principle
 This principle states that once an @*interface@ has become too 'fat' it shall be split into smaller and more specific interfaces so that any clients of the interface will only know about the methods that pertain to them. In a nutshell, no client should be forced to depend on methods it does not use.
 As a result, it will help a system stay decoupled  and thus easier to re-factor, change, and redeploy.
-Beginning with revision 1.16, our framework allows direct use of {\f1\fs20 interfaces} to implement services. This great @*Client-Server@ @*SOA@ implementation pattern - see @11@ - helps decoupling all services to individual small methods. In this case also, the @*stateless@ used design will also reduce the use of 'fat' session-related processes: an object life time can be safely driven by the {\f1\fs20 interface} scope.
+:   Consequence of the other principles
+{\i Interface segregation} should first appear at {\f1\fs20 class} level. Following the {\i Single Responsibility} principle, you are very likely to define several smaller classes, with a small extent of methods. Then use dedicated types of class, relying on composition to expose its own higher level set of methods.
+The bar-code class hierarchy illustrates this concept. Each {\f1\fs20 T*BarcodeProtocol} and {\f1\fs20 T*BarcodeConnection} class will have its own set of methods, dedicated either to protocol handling, or data transmission. Then the {\f1\fs20 T*BarCodeScanner} classes will {\i compose} those smaller classes into a new class, with a single event handler:
+!type
+!  TOnBarcodeScanned = procedure(Sender: TAbstractBarcodeScanner; const Barcode: string) of object;
+!
+!  TAbstractBarcodeScanner = class(TComponent)
+!  ...
+!!  property OnBarcodeScanned: TOnBarcodeScanned read fOnBarcodeScanned write fOnBarcodeScanned;
+!  ...
+This single {\f1\fs20 OnBarcodeScanned} event will be the published property of the component. Both protocol and connection details would be hidden within the internal classes. The final application would use this event, and react as expected, without actually knowing anything about the implementation details.
+:   Using interfaces
+The @*SOA@ part of the framework allows direct use of {\f1\fs20 interface} types to implement services. This great @*Client-Server@ @*SOA@ implementation pattern - see @11@ - helps decoupling all services to individual small methods. In this case also, the @*stateless@ used design will also reduce the use of 'fat' session-related processes: an object life time can be safely driven by the {\f1\fs20 interface} scope.
 By defining {\i Delphi} {\f1\fs20 interface} instead of plain {\f1\fs20 class}, it helps creating small and business-specific contracts, which can be executed on both client and server side, with the same exact code.
-:  Dependency Inversion Principle
+Since the framework makes interface consumption and publication very easy, you won't be afraid of exposing your implementation classes as small pertinent interface.\line For instance, if you want to publish a third-party API, you may consider publishing dedicated interfaces, each depending on every API consumer expectations. So your main implementation logic won't be polluted by how the API is consumed, and, as correlative, the published API may be closer to each particular client needs, without been polluted by the other client needs. @*DDD@ would definitively benefit for {\i Interface Segregation}, since this principle is the golden path to avoid {\i domain leaking} - see @156@.
+:157  Dependency Inversion Principle
 Another form of decoupling is to invert the dependency between high and low level of a software design:
 - High-level modules should not depend on low-level modules. Both should depend on abstractions;
 - Abstractions should not depend upon details. Details should depend upon abstractions.
+The goal of the {\i @**dependency inversion@ principle} is to decouple high-level components from low-level components such that reuse with different low-level component implementations becomes possible. A simple implementation pattern could be to use only @*interface@s owned by, and existing only with the high-level component package.
+This principle results in {\i @**Inversion Of Control@} (aka @**IoC@): since you rely on the abstractions, and try not to depend upon concretions (i.e. on implementation details), you should first concern by defining your interfaces.
+:   Upside Down Development
 In conventional application architecture, lower-level components are designed to be consumed by higher-level components which enable increasingly complex systems to be built. This design limits the reuse opportunities of the higher-level components, and certainly breaks the {\i @Liskov substitution principle@}.
-The goal of the {\i dependency inversion principle} is to decouple high-level components from low-level components such that reuse with different low-level component implementations becomes possible. A simple implementation pattern could be to use only @*interface@s owned by, and existing only with the high-level component package.
-In other languages (like Java or .Net), various patterns such as {\i Plug-in, Service Locator}, or {\i Dependency Injection} are then employed to facilitate the run-time provisioning of the chosen low-level component implementation to the high-level component.
-Our @*Client-Server@ architecture facilitated this decoupling pattern, and allows the use of native {\i Delphi} {\f1\fs20 interface} to call services from an abstract @*factory@.
-\page
+For our bar-code reader sample, we may be tempted to start from the final {\f1\fs20 TSerialBarcodeScanner} we need in our application. We were asked by our project leader to allow bar-code scanning in our flagship application, and the extend of the development has been reduced to support a single model of device, in RS-232 mode - this may be the device already owned by our end customer.
+This particular customer may have found some RS-232 bar-code relics from the 90s in its closets, but, as an experience programmer, you know that the next step would be to support USB, in a very close future. All this bar-code reading stuff will be marketized by your company, so it is very likely that another customer would very soon ask for using its own brand new bar-code scanners... which would support only USB.
+So you would modelize your classes as with @%%SOLIDSRP2@ and @%%SOLIDSRP3@. Even if the {\f1\fs20 TUsbBarCodeScanner} - and its correlative {\f1\fs20 TUsbBarcodeConnection class} - is not written, nor tested (you do not even have an actual USB bar-code scanner to do proper testing yet!), you are prepared for it.
+When you would eventually add USB support, the UI part of the application won't have to be touched. Just implementing your new inherited class, leveraging all previous coding. Following {\i Dependency Inversion} from the beginning would definitively save your time. Even in an {\i Agile} kind of process - where "{\i Responding to change}" is most valuable - the small amount of work on implementing first from the abstraction with the initial implementation would be very beneficial.
+In fact, this {\i Dependency Inversion} principle is a prerequisite for proper {\i @**Test-Driven@} Design. Following this @**TDD@ pattern, you first write your test, then fail your test, then write the implementation. In order to write the test, you need the abstracted interface of the feature to be available. So you would start from the abstraction, then write the concretion.
+:   Injection patterns
+In other languages (like Java or .Net), various patterns such as {\i Plug-in, Service Locator}, or {\i @*Dependency Injection@} are then employed to facilitate the run-time provisioning of the chosen low-level component implementation to the high-level component.
+Our @*Client-Server@ architecture facilitates this decoupling pattern for its @*ORM@ part, and allows the use of native {\i Delphi} {\f1\fs20 interface} to call services from an abstract @*factory@, for its @*SOA@ part.
+A set of dedicated classes, defined in {\f1\fs20 mORMot.pas}, allows to leverage {\f1\fs20 @*IoC@}: see e.g. {\f1\fs20 TInjectableObject}, {\f1\fs20 TInterfaceResolver}, {\f1\fs20 TInterfaceResolverForSingleInterface} and {\f1\fs20 TInterfaceResolverInjected}, which may be used in conjunction with {\f1\fs20 TInterfaceStub} or {\f1\fs20 TServiceContainer} high-level mocking and SOA features of the framework - see @62@ and @63@.
 : Circular reference and (zeroing) weak pointers
 :  Weak pointers
 The memory allocation model of the {\i Delphi} {\f1\fs20 interface} type uses some kind of {\i Automatic Reference Counting} (@*ARC@). In order to avoid memory and resource leaks and potential random errors in the applications (aka the terrible {\f1\fs20 EAccessViolation} exception on customer side) when using @46@, a @*SOA@ framework like {\i mORMot} has to offer so-called {\i @**Weak pointers@} and {\i @**Zeroing Weak pointers@} features.
@@ -8497,14 +8729,14 @@ See the {\f1\fs20 TSetWeakZeroClass} and {\f1\fs20 TSetWeakZeroInstance} impleme
 \page
 :62 Interfaces in practice: dependency injection, stubs and mocks
 In order to fulfill the @47@, two features are to be available when handling interfaces:
-- Dependency injection;
-- Stubbing and mocking of interfaces for proper testing.
+- {\i @*Dependency injection@} or {\i @*Inversion of Control@} (aka @**IoC@) - see @157@;
+- {\i @*Stub@bing} and {\i mocking} of interfaces for proper testing.
 We will show now how {\i mORMot} provides all needed features for such patterns, testing a simple "forgot my password" scenario: a password shall be computed for a given user name, then transmitted via SMS, and its record shall be updated in the database.
-:  Dependency injection
+:162  Dependency Injection at constructors
 A direct implementation of dependency injection at a {\f1\fs20 class} level can be implemented in {\i Delphi} as such:
 - All external dependencies shall be defined as abstract {\f1\fs20 interface};
 - An external @*factory@ could be used to retrieve an {\f1\fs20 interface} instance, {\b or} class {\f1\fs20 constructor} shall receive the dependencies as parameters.
-Using an external factory can be made within {\i mORMot} via {\f1\fs20 @**TServiceFactory@} - see @63@. In the future, we may implement automated dependency injection.
+Using an external factory can be made within {\i mORMot} via {\f1\fs20 @**TServiceFactory@} - see @63@. Automated dependency injection is also available via a set of classes, uncoupled from the @*SOA@ features of the framework, mainly {\f1\fs20 TInjectableObject} and {\f1\fs20 TInterfaceResolver} types, and their inherited classes - see @161@.
 Here, we will use the more direct {\f1\fs20 constructor}-based pattern for a simple "forgot my password" scenario.
 This is the class we want to test:
 !  TLoginController = class(TInterfacedObject,ILoginController)
@@ -8540,7 +8772,7 @@ Note also that all those code will use a plain {\f1\fs20 record} as {\i @**Data 
 !    MobilePhoneNumber: RawUTF8;
 !    ID: TID;
 !  end;
-Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistency layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in {\i Delphi} ensure it won't be part of a complex business logic, but will remain used as value objects.
+Here, we won't use {\f1\fs20 TSQLRecord} nor any other {\f1\fs20 class}es, just plain {\f1\fs20 record}s, which will be used as neutral means of transmission. The difference between {\i Data Transfer Objects} and {\i business objects} or {\i @**Data Access Objects@} (@**DAO@) like our {\f1\fs20 TSQLRecord} is that a DTO does not have any behavior except for storage and retrieval of its own data. It can also be independent to the persistence layer, as implemented underneath our business domain. Using a {\f1\fs20 record} in {\i Delphi} ensure it won't be part of a complex business logic, but will remain used as value objects.
 Now, let's come back to our {\f1\fs20 TLoginController} class.\line Here is the method we want to test:
 !procedure TLoginController.ForgotMyPassword(const UserName: RawUTF8);
 !var U: TUser;
@@ -8556,13 +8788,13 @@ Using the real implementation of {\f1\fs20 IUserRepository} would expect a true 
 For our testing purpose, we only want to ensure that when the "forgot my password" scenario is executed, the user record modification is persisted to the database.
 One possibility could be to define two new dedicated {\f1\fs20 class}es, implementing both {\f1\fs20 IUserRepository} and {\f1\fs20 ISmsSender} interfaces. But it will be obviously time consuming and error-prone. This may be typical case when writing the test could be more complex than writing the method to be tested.
 In order to maximize your ROI, and allow you to focus on your business logic, the {\i mORMot} framework proposes a simple and efficient way of creating "fake" implementations of any {\f1\fs20 interface}, just by defining the minimum behavior needed to run the test.
-:  Stubs and mocks
+:   Stubs and mocks
 In the book "{\i The Art of Unit Testing}" (Osherove, Roy - 2009), a distinction is drawn between {\i @**stub@} and {\i @**mock@} objects:
 - {\i Stubs} are the simpler of the two families of fake objects, simply implementing the same interface as the object that they represent and returning pre-arranged responses. Thus a fake object merely provides a set of method stubs. Therefore the name. In {\i mORMot}, it is created via the {\f1\fs20 TInterfaceStub} generator;
 - {\i Mocks} are described as a fake object that helps decide if a test failed or passed, by verifying if an interaction on an object occurred or not. Everything else is defined as a stub. In {\i mORMot}, it is created via the {\f1\fs20 TInterfaceMock} generator, which will link the fake object to an existing {\f1\fs20 TSynTestCase} instance - see @12@.
 In practice, there should be only {\b one} mock per test, with as many stubs as necessary to let the test pass. Using a mocking/stubbing framework allows quick on-the-fly generation of {\f1\fs20 interface} with unique behavior dedicated to a particular test. In short, you define the stubs needed to let your test pass, and define one mock which will pass or fail the test depending on the feature you want to test.
 Our {\i mORmot} framework follows this distinction, by defining two dedicated classes, named {\f1\fs20 TInterfaceStub} and {\f1\fs20 TInterfaceMock}, able to define easily the behavior of such classes.
-:  Defining stubs
+:   Defining stubs
 Let's implement our "forgot my password" scenario test.
 The {\f1\fs20 TSynTestCase} child method could start as such:
 !procedure TMyTest.ForgetThePassword;
@@ -8578,13 +8810,13 @@ What is nice with this subbing / mocking implementation is that:
 - The "fluent" style of coding makes it easy to write and read the class behavior, without any actual coding in {\i Delphi}, nor class definition;
 - Even if {\f1\fs20 ISmsSender} has a lot of methods, only {\f1\fs20 Send} matters for us: {\f1\fs20 TInterfaceStub} will create all those methods, and let them return default values, with additional line of code needed;
 - Memory allocation will be handled by the framework: when {\f1\fs20 SmsSender} instance will be released, the associated {\f1\fs20 TInterfaceStub} data will also be freed (and in case a mock, any expectations will be verified).
-:  Defining a mock
+:   Defining a mock
 Now we will define another fake class, which may fail the test, so it is called a "@*mock@", and the {\i mORMot} generator class will be {\f1\fs20 TInterfaceMock}:
 !  TInterfaceMock.Create(TypeInfo(IUserRepository),UserRepository,self).
 !    ExpectsCount('Save',qoEqualTo,1);
 We provide the {\f1\fs20 TMyTest} instance as {\f1\fs20 self} to the {\f1\fs20 TInterfaceMock constructor}, to associate the mocking aspects with this test case. That is, any registered {\f1\fs20 Expects*()} rule will let {\f1\fs20 TMyTest.Check()} be called with a {\f1\fs20 boolean} condition reflecting the test validation status of every rule.
 The {\f1\fs20 ExpectsCount()} method is indeed where mocking is defined. When the {\f1\fs20 UserRepository} generated instance is released, {\f1\fs20 TInterfaceMock} will check all the {\f1\fs20 Expects*()} rules, and, in this case, check that the {\f1\fs20 Save} method has been called exactly one time ({\f1\fs20 qoEqualTo,1}).
-:  Running the test
+:   Running the test
 Since we have all the expected stub and mock at hand, let's run the test itself:
 !  with TLoginController.Create(UserRepository,SmsSender) do
 !  try
@@ -8624,7 +8856,7 @@ Then creating a stub or a mock could be done directly from the interface name, w
 !  TInterfaceStub.Create(ISmsSender,SmsSender);
 !  TInterfaceMock.Create(IUserRepository,UserRepository,self);
 In the code below, we will assume that the {\f1\fs20 interface} type information has been registered, so that we may be able to use directly {\f1\fs20 I*} without the {\f1\fs20 TypeInfo(I*)} syntax
-:  Sample with manual dependency injection
+:  Manual dependency injection
 As usual, the best way to explain what a library does is to look at the code using it.
 Here is an example (similar to the one shipped with {\i RhinoMocks}) of verifying that when we execute the "forgot my password" scenario as implemented by the {\f1\fs20 TLoginController} class, we actually called the {\f1\fs20 Save()} method:
 !procedure TMyTest.ForgotMyPassword;
@@ -8830,6 +9062,54 @@ The overloaded {\f1\fs20 ExpectsTrace()} methods are able to add some checks not
 Note that internally, those methods will compute a {\f1\fs20 Hash32()} hash value of the expected trace, which is a good way of minimizing data in memory or re-use a value retrieved at execution time for further regression testing. Some {\i overloaded} signatures are indeed available to directly specify the expected {\f1\fs20 Hash32()} value, in case of huge regression scenarios: run the test once, debugging all expected behavior by hand, then store the hash value to ensure that no expected step would be broken in the future.
 You have even a full access to the internal execution trace, via the two {\f1\fs20 TInterfaceStub.Log} and {\f1\fs20 LogCount} properties. This will allow any validation of mocked {\f1\fs20 interface} calls logic, beyond {\f1\fs20 ExpectsTrace()} possibilities.
 You can take a look at {\f1\fs20 TTestServiceOrientedArchitecture.MocksAndStubs} regression tests, for a whole coverage of all the internal features.
+\page
+:161 Dependency Injection and Interface Resolution
+In our example, we {\i injected} the dependencies explicitly as parameters to the class {\f1\fs20 constructor} - see @162@. We will present @63@, in a dedicated chapter, how the framework @*SOA@ features do resolve services as interfaces.
+But real-world application may be much complex, and a generic way of resolving dependencies, and {\i @*Inversion Of Control@} (aka @*IoC@) has been implemented.
+First of all, if you inherit from {\f1\fs20 TInjectableObject}, you would be able to resolve dependencies in two ways:
+- Explicitly via its {\f1\fs20 Resolve()} overloaded methods, for lazy initialization of any registered {\f1\fs20 interface};
+- Automatically at instance creation, for all its {\f1\fs20 published} properties declared with an {\f1\fs20 interface} type.
+A dedicated set of overloaded constructors is also available at {\f1\fs20 TInjectableObject class} level, so that you may be able to easily stub/mock or inject any instance, e.g. for testing purposes:
+!procedure TMyTestCase.OneTestCaseMethod;
+! var Test: IServiceToBeTested;
+! begin
+!!   Test := TServiceToBeTested.CreateInjected(
+!     [ICalculator],
+!     [TInterfaceMock.Create(IPersistence,self).
+!       ExpectsCount('SaveItem',qoEqualTo,1),
+!      RestInstance.Services],
+!     [AnyInterfacedObject]);
+!   ...
+In this code, we have @141@. So we could write directly {\f1\fs20 ICalculator} or {\f1\fs20 IPersistence} to refer to an explicit {\f1\fs20 interface} type.
+This test case ({\f1\fs20 TMyTestCase} inherits from {\f1\fs20 TSynTestCase}) will create a {\f1\fs20 TServiceToBeTested} instance, create a {\f1\fs20 TInterfaceStub} for its {\f1\fs20 ICalculator} dependency, then a {\f1\fs20 TInterfaceMock} expecting the {\f1\fs20 IPersistence.SaveItem} method to be called exactly one time, allowing resolution from a {\f1\fs20 TSQLRest.Services} SOA resolver, and injecting a pre-existing {\f1\fs20 AnyInterfacedObject TInterfacedObject} instance.
+Then, dependency resolution may take place as {\f1\fs20 published} properties:
+!type
+!  TServiceToBeTested = class(TInjectableObject)
+!  protected
+!    fCalculator: ICalculator;
+!  ...
+!!  published
+!!    property Calculator: ICalculator read fCalculator;
+!    ...
+!  end;
+!
+! ...
+!
+!function TServiceToBeTested.DoCalculation(a,b: integer): integer;
+!begin
+!  result := Calculator.Add(a,b);
+!end;
+This {\f1\fs20 fCalculator} instance will be resolved and instantiated by {\f1\fs20 TInjectableObject.Create}, then released as any regular {\f1\fs20 interface} field in the {\f1\fs20 class} {\f1\fs20 destructor}. You do not have to overload the {\f1\fs20 TServiceToBeTested constructor}, nor manage this {\f1\fs20 fCalculator} life time. Its auto-created instance will be shared by the whole {\f1\fs20 TServiceToBeTested} context, so it should be either stateless (like adding two numbers), or expected to evolve at each use.
+Sometimes, there may be an over-cost to initialize such properties each time a {\f1\fs20 TServiceToBeTested class} instance is created. Or maybe the {\f1\fs20 interface} implementation is not stateless, and a new instance should be retrieved before each use. As an alternative, any {\f1\fs20 interface} may be resolved on need, in a {\i lazy} way:
+!procedure TServiceToBeTested.DoSomething;
+!var persist: IPersistence;
+!begin
+!!  Resolve(IPersistence,persist);
+!  persist.SaveItem('John','Doe');
+!end;
+The {\f1\fs20 TInjectableObject.Resolve()} overloaded methods will retrieve one instance of the asked {\f1\fs20 interface}. The above code would raise an exception if the supplied {\f1\fs20 IPersistence} was not previously registered to the {\f1\fs20 TInjectableObject class}.
+When such an {\f1\fs20 TInjectableObject} instance is created within {\i mORMot}'s SOA methods (i.e. {\f1\fs20 TSQLRest.Services} property), the injection will transparently involve all registered classes. Also take a look at the {\f1\fs20 TInterfaceResolverInjected.RegisterGlobal()} overloaded methods, which are able to register some {\f1\fs20 class} types or instances globally for the whole executable context. Just make sure that you won't break the @158@, by defining such a global registration, which should occur only for specific needs, truly orthogonal to the whole application, or specific to a test case.
+\page
 :63Client-Server services via interfaces
 %cartoon06.png
 In real world, especially when your application relies heavily on services, the @49@ implementation pattern has some drawbacks:
@@ -11304,7 +11584,7 @@ Part of our {\i mORMot} framework, we implemented an optimized {\i Mustache} tem
 - It is natively @*UTF-8@, from the ground up, with optimized conversion of any string data;
 - Performance has been tuned and grounded in {\f1\fs20 SynCommons.pas}'s optimized code;
 - Each parsed template is thread-safe and re-entrant;
-- It follows the {\i Open/Close principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
+- It follows the {\i Open/Closed principle} - see @47@ - so that any aspect of the process can be customized and extended (e.g. for any kind of data context);
 - It is perfectly integrated with the other bricks of our {\i mORMot} framework, ready to implement dynamic web sites with true @10@ design, and full separation of concerns in the views written in {\i Mustache}, the controllers being e.g. interface-based services - see @63@, and the models being our @13@ classes;
 - API is flexible and easy to use.
 :    Variables
@@ -11746,7 +12026,7 @@ $      ...
 ... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
 I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
 :  Using Services in the Controller
-Any controller method could retrieve and execute any dependency from its {\f1\fs20 interface}, following the {\i IoC} pattern - see @62@.\line You have two ways of performing the dependency resolution:
+Any controller method could retrieve and execute any dependency from its {\f1\fs20 interface}, following the {\i @*IoC@} pattern - see @157@.\line You have two ways of performing the dependency resolution:
 - From the associated {\f1\fs20 TSQLRest.Services} container;
 - From its own protected {\f1\fs20 Resolve()} method, since {\f1\fs20 TMVCApplication} inherits from {\f1\fs20 TInjectableObject}.
 In fact, you can set up your {\f1\fs20 TMVCApplication} instance to use any external dependencies, including stubs and mocks, or high-level DDD services (e.g. respository or modelization process), using its {\f1\fs20 CreateInjected()} constructor instead of plain {\f1\fs20 Create}.
@@ -12730,7 +13010,7 @@ In order to refine your model, you have two main tools at hand to express the mo
 - {\i Partitioning}: the more your elements have a {\i separated concern}, the better;
 - {\i Grouping}: to express {\i constraints}, elements may be grouped - but usually, you should not put more than 6 or 8 elements in the same diagram, or your model may need to be refined.
 In DDD, a lot of small objects have to be defined, in order to properly {\i partition} the logic. When we start with Object Oriented Programming, we are tempted to create huge classes with a lot of methods and parameters. This is a symptom of a weak model. We should always favor composition of small simple objects, just like the {\i Unix} tools philosophy or the {\i Single Responsibility Principle} - see @47@.
-Some DDD experts also do not favor inheritance. In fact, inheriting may be also a symptom of some coupled context. Having two diverse realities sharing properties may be a bad design smell: if two or more classes inherit from one parent class, the state and behavior of the parent class may limit any future evolution of any of its children. In practice, trying to follow the {\i Open/Close principle} - see @47@ - at {\f1\fs20 class} level may induce unexpected complexity, therefore reducing code maintainability.
+Some DDD experts also do not favor inheritance. In fact, inheriting may be also a symptom of some coupled context. Having two diverse realities sharing properties may be a bad design smell: if two or more classes inherit from one parent class, the state and behavior of the parent class may limit any future evolution of any of its children. In practice, trying to follow the {\i Open/Closed principle} - see @158@ - at {\f1\fs20 class} level may induce unexpected complexity, therefore reducing code maintainability.
 In DDD, the {\i @*Aggregate Root@} is how you {\i group} your objects, in order to let constraints (e.g. business rules) to be modeled. {\i @*Aggregates@} are the main entry point to the domain, since they should contain, by design, the whole execution context of a given process. Their extent may vary during development, e.g. when a business rule evolves - remember that the same reality can appear several times in the same domain, but once per @*Bounded Context@. In other words, {\i Aggregates} could be seen as the smallest and biggest extent needed to express a given model context.
 \page
 : DDD model
@@ -12758,10 +13038,10 @@ In practice, {\i Aggregates} may be the only kind of objects which will be persi
 DDD services may just permit remote access to {\i Aggregates} methods, where the domain logic will be defined and isolated.
 :  Factory and Repository patterns
 DDD then favors some patterns to use those objects efficiently.
-The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).\line In fact, Delphi is ahead of Java or C#, since it allows {\f1\fs20 virtual} constructors to be defined. Those {\f1\fs20 virtual} constructors are in fact a clean and efficient way of implementing a {\i Factory}, and also fulfill @*SOLID@ principles, especially the {\i @Liskov substitution principle@}: the parent class define an {\i abstract} constructor on which you rely, but the implementation will take place in the {\i overridden} constructor.
+The {\i @**Factory@ pattern} is used to create object instances. In strongly-typed OOP (like in {\i Delphi}, Java or C#), this pattern is in fact its {\i constructor} method and associated {\f1\fs20 class} type definition, which will define a fixed set of properties and methods at compilation time (this is not the case e.g. in JavaScript or weak-typed script languages, in which you can add methods and properties at runtime).\line In fact, Delphi is ahead of Java or C#, since it allows {\f1\fs20 virtual} constructors to be defined. Those {\f1\fs20 virtual} constructors are in fact a clean and efficient way of implementing a {\i Factory}, and also fulfill @*SOLID@ principles, especially the @159@: the parent class define an {\i abstract} constructor on which you rely, but the implementation will take place in the {\i overridden} constructor.
 The {\i Factory pattern} can also be used to create {\f1\fs20 interface} instances - see @46@. Main benefit is that alternative implementations may be easily interchanged. Such abstraction helps testing - see @62@ - but also introduces interface-based services - see @63@.
 {\i @**Repository@ pattern} is used to save and dispense each {\i Aggregate Root}.\line It matches the "@*Layer Supertype@" pattern (see above), e.g. via our {\i mORMot} {\f1\fs20 TSQLRecord} and {\f1\fs20 TSQLRest} classes and their Client-Server @*ORM@ features, or via dedicated repository classes - saving data is indeed a concern orthogonal to the model itself. DDD architects claim that persistence is infrastructure, not domain. You may benefit in defining your own repository interface, if the standard ORM / CRUD operations are not enough.
-:  DTO and Events to avoid domain leaking
+:156  DTO and Events to avoid domain leaking
 The main DDD architecture principle - and benefit - is to isolate the domain code. As will be defined by the {\i @*Hexagonal architecture@} - see @155@, everything is made to ensure that the domain won't "leak" outside its core. The domain objects and services are the most precious part of any DDD project, especially in the long term, so proper isolation and uncoupling sound mandatory.
 The {\i Aggregates} should always be isolated and stay at the {\i Application layer}, given access to its methods and nested objects via proper high-level remote {\i Services} - see @102@ - which should not be published directly to the outer world either.
 In practice, if your domain is properly defined, most of your {\i Value Objects} {\i may} be sent to the outer world, without explicit translation. Even {\i Entities} may be transmitted directly, since their methods should not refer to nothing but their internal properties, so may be of some usefulness outside the domain itself.
@@ -12778,7 +13058,7 @@ Using such dedicated types would eventually help {\i uncoupling} the domain, for
 In {\i mORMot}, we try to let the framework do all the plumbing, letting those types be implemented via {\f1\fs20 interface}s over simple dedicated types like {\f1\fs20 record}s or {\i dynamic arrays} - see @154@ and @149@. So defining DTOs, {\i Commands} and {\i Events} in dedicated {\i Anti-Corruption layers} would be pretty much quick, easy and safe.
 :102  Services
 {\i @*Aggregate root@s} (and sometimes {\i Entities}), with all their methods, often end up as {\i state machines}, and the behavior matches accordingly.\line In the domain, since {\i Aggregate roots} are the only kind of entities to which your software may hold a reference, they tend to be the main access point of any process. It could be handy to publish their methods as stateless @*Service@s, isolated at {\i Application layer} level.
-{\i Domain services pattern} is used to model primary operations.\line Domain Services give you a tool for modeling processes that do not have an identity or life-cycle in your domain, that is, that are not linked to one aggregate root, perhaps none, or several. In this terminology, services are not tied to a particular person, place, or thing in my application, but tend to embody processes. They tend to be named after verbs or business activities that domain experts introduce into the so-called {\i Ubiquitous Language}. If you follow the interface segregation principle - see @47@, your domain services should be exposed as dedicated client-oriented methods. Do not leak your domain! In DDD, you develop your {\i Application layer} services directly from the needs of your client applications, letting the {\i Domain layer} focus on the business logic.
+{\i Domain services pattern} is used to model primary operations.\line Domain Services give you a tool for modeling processes that do not have an identity or life-cycle in your domain, that is, that are not linked to one aggregate root, perhaps none, or several. In this terminology, services are not tied to a particular person, place, or thing in my application, but tend to embody processes. They tend to be named after verbs or business activities that domain experts introduce into the so-called {\i Ubiquitous Language}. If you follow the interface segregation principle - see @160@, your domain services should be exposed as dedicated client-oriented methods. Do not leak your domain! In DDD, you develop your {\i Application layer} services directly from the needs of your client applications, letting the {\i Domain layer} focus on the business logic.
 {\i @**Unit Of Work@} can be used to maintain a list of objects affected by a business transaction and coordinates the writing out of changes and the resolution of concurrency problems.\line In short, it implements transactional process at Domain level, and may be implemented either at service or ORM level. It features so-called @**Persistence Ignorance@, meaning that your domain code may not be tied to a particular persistence implementation, but "hydrate" {\i Aggregate roots} class instances as abstractly as possible.\line A {\i @**dual-phase@ commit} approach - with some methods preparing and validation the data, then applying it by a dedicated {\f1\fs20 Commit} command in a second step - may be defined. In this pattern, the repository is just some simple storage, and data consistency would take place at domain level: for instance, you would not define any @*SQL@ constraints, but validate your data {\i before} storing the information. Your business rules should be written in high level domain code, and you may forget about the {\f1\fs20 FOREIGN KEY}, or {\f1\fs20 CHECK} SQL syntax flavors. As a result, you may safely change from a SQL database to a @*NoSQL@ engine, or even a {\f1\fs20 TObjectList}. You would be able to define and maintain any complex business rules, using the {\i Ubiquitous Language} of your domain. And a change of business logic would not impact the database metadata, which may be painful to modify.
 The DDD Services may therefore be stateless for most of the time, but allowing some flavor of transactional process, when needed. The uppermost/peripheral architecture layers - i.e. {\i Application} or {\i Presentation Layers} - would ensure that those services would be propertly orchestrated. The application {\i workflows} would not be defined in the domain core itself, but in those outer layers, resulting in a cleaner, uncoupled architecture.
 :155  Clean Uncoupled Architecture
