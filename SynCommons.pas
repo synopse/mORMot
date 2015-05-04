@@ -8426,7 +8426,15 @@ function IsZero(const Fields: TSQLFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison of two TSQLFieldBits values
+// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
+// - will work also with any other value
 function IsEqual(const A,B: TSQLFieldBits): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast initialize a TSQLFieldBits with 0
+// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
+// - will work also with any other value
+procedure FillZero(var Fields: TSQLFieldBits); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TSQLFieldBits set of bits into an array of integers
@@ -22923,7 +22931,7 @@ begin
   result := true;
 end;
 
-{$WARNINGS OFF} // yes, we know there will be dead code below ;)
+{$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
 function IsZero(const Fields: TSQLFieldBits): boolean; overload;
 begin
   if MAX_SQLFIELDS=64 then
@@ -22936,7 +22944,7 @@ begin
   if MAX_SQLFields=256 then
     result := (PInt64Array(@Fields)^[0]=0) and (PInt64Array(@Fields)^[1]=0) and
       (PInt64Array(@Fields)^[2]=0) and (PInt64Array(@Fields)^[3]=0) else
-    result := IsZero(@Fields,sizeof(TSQLFieldBits))
+    result := IsZero(@Fields,sizeof(Fields))
 end;
 
 function IsEqual(const A,B: TSQLFieldBits): boolean;
@@ -22957,6 +22965,29 @@ begin
               (PInt64Array(@A)^[3]=PInt64Array(@B)^[3]) else
     result := CompareMem(@A,@B,sizeof(TSQLFieldBits))
 end;
+
+procedure FillZero(var Fields: TSQLFieldBits);
+begin
+  if MAX_SQLFIELDS=64 then
+    PInt64(@Fields)^ := 0 else
+  if MAX_SQLFields=128 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+  end else
+  if MAX_SQLFields=192 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+    PInt64Array(@Fields)^[2] := 0;
+  end else
+  if MAX_SQLFields=256 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+    PInt64Array(@Fields)^[2] := 0;
+    PInt64Array(@Fields)^[3] := 0;
+  end else
+    FillChar(Fields,sizeof(Fields),0);
+end;
+
 {$WARNINGS ON}
 
 procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;

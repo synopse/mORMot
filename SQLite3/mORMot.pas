@@ -25193,7 +25193,7 @@ end;
 function TSQLRecordFill.TableMapFields: TSQLFieldBits;
 begin
   if self=nil then
-    fillchar(result,sizeof(result),0) else
+    FillZero(result) else
     result := fTableMapFields;
 end;
 
@@ -25343,7 +25343,7 @@ begin
     fSourceID^ := 0;
   end;
   fTableMapRecordManyInstances := nil;
-  FillChar(fTableMapFields,sizeof(fTableMapFields),0);
+  FillZero(fTableMapFields);
   // free any previous fTable if necessary
   if Table<>nil then
   try
@@ -25538,7 +25538,7 @@ var F: array[0..MAX_SQLFIELDS-1] of PUTF8Char; // store field/property names
     Prop, Value: PUTF8Char;
 begin
   if FieldBits<>nil then
-    fillchar(FieldBits^,sizeof(FieldBits^),0);
+    FillZero(FieldBits^);
   // go to start of object
   if P=nil then
     exit;
@@ -40453,7 +40453,7 @@ begin
     end;
     item.ID := ID;
     item.Value := nil;  // Value=nil indicates deleted record
-    FillChar(item.ValueFields,sizeof(item.ValueFields),0);
+    FillZero(item.ValueFields);
     InternalAddItem(item);
   finally
     Release;
@@ -40485,7 +40485,7 @@ begin
           fStoredClassRecordProps.Fields.List[f].CopyValue(Value,existing^.Value);
     end else begin
       item.Value := Value.CreateCopy;
-      FillChar(item.ValueFields,sizeof(item.ValueFields),0);
+      FillZero(item.ValueFields);
       InternalAddItem(item);
     end;
     result := true;
@@ -40543,7 +40543,6 @@ begin
     result := true;
     exit;
   end;
-  FillChar(fields,SizeOf(fields),0);
   Value := fStoredClass.Create;
   try
     Value.FillFrom(JSON,@fields);
@@ -41023,7 +41022,7 @@ function TSQLRecordProperties.FieldBitsFromBlobField(aBlobField: PPropInfo;
   var Bits: TSQLFieldBits): boolean;
 var f: integer;
 begin
-  fillchar(Bits,sizeof(TSQLFieldBits),0);
+  FillZero(Bits);
   if self<>nil then
   for f := 0 to high(BlobFields) do
     if BlobFields[f].fPropInfo=aBlobField then begin
@@ -41040,7 +41039,7 @@ var ndx: integer;
     P: PUTF8Char;
     FieldName: ShortString;
 begin
-  fillchar(Bits,sizeof(TSQLFieldBits),0);
+  FillZero(Bits);
   result := false;
   if self=nil then
     exit;
@@ -41059,14 +41058,14 @@ end;
 function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits;
 begin
   if not FieldBitsFromCSV(aFieldsCSV,Result) then
-    fillchar(result,sizeof(result),0);
+    FillZero(result);
 end;
 
 function TSQLRecordProperties.FieldBitsFromRawUTF8(const aFields: array of RawUTF8;
   var Bits: TSQLFieldBits): boolean;
 var f,ndx: integer;
 begin
-  fillchar(Bits,sizeof(TSQLFieldBits),0);
+  FillZero(Bits);
   result := false;
   if self=nil then
     exit;
@@ -41082,7 +41081,7 @@ end;
 function TSQLRecordProperties.FieldBitsFromRawUTF8(const aFields: array of RawUTF8): TSQLFieldBits;
 begin
   if not FieldBitsFromRawUTF8(aFields,Result) then
-    fillchar(result,sizeof(result),0);
+    FillZero(result);
 end;
 
 function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
