@@ -2947,11 +2947,13 @@ end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; Length: integer): boolean;
 var Size: PtrInt;
+    endtime: cardinal;
 begin
   result := false;
   if self=nil then
     exit;
-  if (Buffer<>nil) and (Length>0) then
+  if (Buffer<>nil) and (Length>0) then begin
+    endtime := GetTickCount+TimeOut;
     repeat
       Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
@@ -2960,7 +2962,12 @@ begin
       inc(fBytesIn, Size);
       dec(Length,Size);
       inc(PByte(Buffer),Size);
-    until Length=0;
+      if Length=0 then
+        break;
+      if GetTickCount>endtime then
+        exit; // identify read time out as error
+    until false;
+  end;
   result := true;
 end;
 
