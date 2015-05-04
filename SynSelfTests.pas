@@ -8258,11 +8258,11 @@ begin
         // asynchronous synchronization via websockets
         Test.Check(Master.RecordVersionSynchronizeMasterStart(true));
         Test.Check(Slave2.RecordVersionSynchronizeSlaveStart(
-            TSQLRecordPeopleVersioned,MasterAccess));
+            TSQLRecordPeopleVersioned,MasterAccess,nil));
       end else begin
         // direct synchronization within the same process
         Slave2Callback := TServiceRecordVersionCallback.Create(
-          Slave2,MasterAccess,TSQLRecordPeopleVersioned);
+          Slave2,MasterAccess,TSQLRecordPeopleVersioned,nil);
         Master.RecordVersionSynchronizeSubscribeMaster(TSQLRecordPeopleVersioned,
           Slave2.RecordVersionCurrent,Slave2Callback);
       end;

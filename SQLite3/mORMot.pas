@@ -5647,6 +5647,7 @@ type
   TSQLRestBatch = class;
 
   /// event signature triggered by TSQLRestBatch.OnWrite
+  // - also used by TSQLRestServer.RecordVersionSynchronizeSlave*() methods
   TOnBatchWrite = procedure(Sender: TSQLRestBatch; Event: TSQLOccasion;
     Table: TSQLRecordClass; const ID: TID; Value: TSQLRecord;
     const ValueFields: TSQLFieldBits) of object;
@@ -10886,14 +10887,17 @@ type
     fRecordVersionField: TSQLPropInfoRTTIRecordVersion;
     fBatch: TSQLRestBatch;
     fSlave: TSQLRestServer; // fRest is master remote access
+    fOnNotify: TOnBatchWrite;
     // local TSQLRecordTableDeleted.ID follows current Model -> pre-compute offset
     fTableDeletedIDOffset: Int64;
     procedure SetCurrentRevision(const Revision: TRecordVersion);
   public
     /// initialize the instance able to apply callbacks for a given table on
     // a local slave REST server from a remote master REST server
+    // - the optional aOnNotify callback will be triggerred for each incoming
+    // notification, so could be used to track the object changes in real-time
     constructor Create(aSlave: TSQLRestServer; aMaster: TSQLRestClientURI;
-       aTable: TSQLRecordClass); reintroduce;
+      aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
@@ -10906,6 +10910,8 @@ type
     // so that TSQLHttpClientWebsockets.CallbackRequest will call it
     // - it will create a temporary TSQLRestBatch for the whole "jumbo frame"
     procedure CurrentFrame(isLast: boolean); virtual;
+    /// this event handler will be triggerred by Added/Updated/Deleted methods 
+    property OnNotify: TOnBatchWrite read fOnNotify write fOnNotify;
   end;
 
   /// for TSQLRestCache, stores a table values
@@ -13693,8 +13699,10 @@ type
     // a TSQLHttpClientWebsockets
     // - the modifications will be pushed by the master, then applied to the
     // slave storage, until RecordVersionSynchronizeSlaveStop method is called
+    // - an optional OnNotify event may be defined, which will be triggered
+    // for all incoming change, supllying the updated TSQLRecord instance
     function RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
-      MasterRemoteAccess: TSQLRestClientURI): boolean;
+      MasterRemoteAccess: TSQLRestClientURI; OnNotify: TOnBatchWrite=nil): boolean;
     /// finalize asynchronous master/slave replication on a slave TSQLRest
     // - stop synchronization of a TSQLRecord table, using its TRecordVersion
     // field, for real-time master/slave replication on the slave side
@@ -25529,6 +25537,8 @@ var F: array[0..MAX_SQLFIELDS-1] of PUTF8Char; // store field/property names
     i, n: integer;
     Prop, Value: PUTF8Char;
 begin
+  if FieldBits<>nil then
+    fillchar(FieldBits^,sizeof(FieldBits^),0);
   // go to start of object
   if P=nil then
     exit;
@@ -32039,13 +32049,14 @@ begin
 end;
 
 function TSQLRestServer.RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
-  MasterRemoteAccess: TSQLRestClientURI): boolean;
+  MasterRemoteAccess: TSQLRestClientURI; OnNotify: TOnBatchWrite): boolean;
 var res,previous: TRecordVersion;
     tableIndex: integer;
     tableName: RawUTF8;
     service: IServiceRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
+    nfo: PTypeInfo;
 begin
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
@@ -32057,24 +32068,25 @@ begin
     exit;
   end;
   tableName := Model.TableProps[tableIndex].Props.SQLTableName;
-  if not MasterRemoteAccess.Services.Resolve(TypeInfo(IServiceRecordVersion),service) then
-    if not MasterRemoteAccess.ServiceRegister([TypeInfo(IServiceRecordVersion)],sicShared) then
+  nfo := TypeInfo(IServiceRecordVersion);
+  if not MasterRemoteAccess.Services.Resolve(nfo,service) then
+    if not MasterRemoteAccess.ServiceRegister([nfo],sicShared) then
       exit else
-    if not MasterRemoteAccess.Services.Resolve(TypeInfo(IServiceRecordVersion),service) then
+    if not MasterRemoteAccess.Services.Resolve(nfo,service) then
       exit;
   res := 0;
   retry := 0;
   repeat
     repeat // retrieve all pending versions (may retry up to 5 times)
       previous := res;
-      res := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000);
+      res := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
       if res=0 then begin
         InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',[self,Table],sllError);
         exit;
       end;
     until res=previous;
     if callback=nil then
-      callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table);
+      callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table,OnNotify);
     if service.Subscribe(tableName,res,callback) then begin // push notifications
       if fRecordVersionSlaveCallbacks=nil then
         SetLength(fRecordVersionSlaveCallbacks,Model.TablesMax+1);
@@ -47540,7 +47552,7 @@ end;
 { TServiceRecordVersionCallback }
 
 constructor TServiceRecordVersionCallback.Create(aSlave: TSQLRestServer;
-  aMaster: TSQLRestClientURI; aTable: TSQLRecordClass);
+  aMaster: TSQLRestClientURI; aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite);
 begin
   if aSlave=nil then
     raise EServiceException.CreateUTF8('%.Create(%): Slave=nil',[self,aTable]);
@@ -47553,6 +47565,7 @@ begin
     shl SQLRECORDVERSION_DELETEID_SHIFT;
   inherited Create(aMaster,IServiceRecordVersionCallback);
   fTable := aTable;
+  fOnNotify := aOnNotify;
 end;
 
 procedure TServiceRecordVersionCallback.SetCurrentRevision(
@@ -47575,6 +47588,8 @@ begin
       fSlave.Add(rec,true,true,true) else
       fBatch.Add(rec,true,true,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+    if Assigned(fOnNotify) then
+      fOnNotify(fBatch,soInsert,fTable,rec.IDValue,rec,fields);
   finally
     rec.Free;
   end;
@@ -47592,6 +47607,8 @@ begin
       fSlave.Update(rec,fields,true) else
       fBatch.Update(rec,fields,true);
     SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+    if Assigned(fOnNotify) then
+      fOnNotify(fBatch,soUpdate,fTable,rec.IDValue,rec,fields);
   finally
     rec.Free;
   end;
@@ -47619,6 +47636,8 @@ begin
       fBatch.Delete(fTable,ID);
     end;
     SetCurrentRevision(Revision);
+    if Assigned(fOnNotify) then
+      fOnNotify(fBatch,soDelete,fTable,ID,nil,[]);
   finally
     del.Free;
   end;
