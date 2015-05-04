@@ -44,11 +44,14 @@ mkdir tempbuild\dcu
 del tempbuild\dcu\*.dcu
 
 cd \dev\lib\sqlite3
+copy TestSQL3.cfg TestSQL3.cfg.bak /Y
 del TestSQL3.cfg
 
 echo - TestSQL3*
 %DCC% TestSQL3.dpr %Switches%
 @if errorlevel 1 pause
+
+copy TestSQL3.cfg.bak TestSQL3.cfg /Y
 
 if "%DelphiVersion%"=="Delphi 5" goto SKIPSYNPROJECT
 
