@@ -10769,6 +10769,11 @@ type
       Occasion: TSQLOccasion; const DeletedID: TID;
       const DeletedRevision: TRecordVersion; const AddUpdateJson: RawUTF8);
   public
+    /// class method able to check if a given server-side callback event fake
+    // instance has been released on the client side
+    // - may be used to automatically purge a list of subscribed callbacks,
+    // e.g. before trigerring the interface instance, and avoid an exception
+    class function CallbackReleasedOnClientSide(const callback: IInterface): boolean;
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
     // instance (for sicShared mode)
@@ -46158,36 +46163,40 @@ begin
   result := true;
 end;
 
+class function TServiceContainerServer.CallbackReleasedOnClientSide(
+  const callback: IInterface): boolean;
+var instance: TObject;
+begin
+  instance := ObjectFromInterface(callback);
+  result := (instance<>nil) and
+            (instance.ClassType=TInterfacedObjectFakeServer) and
+            TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
+end;
+
 procedure TServiceContainerServer.RecordVersionCallbackNotify(TableIndex: integer;
   Occasion: TSQLOccasion; const DeletedID: TID; const DeletedRevision: TRecordVersion;
   const AddUpdateJson: RawUTF8);
 var i: integer;
-    instance: TObject;
+    arr: ^IServiceRecordVersionCallbackDynArray;
 begin
   try
     fRest.fAcquireExecution[execORMWrite].Enter;
     try
-      for i := length(fRecordVersionCallback[TableIndex])-1 downto 0 do begin
+      arr := @fRecordVersionCallback[TableIndex];
+      for i := length(arr^)-1 downto 0 do
         // downto for InterfaceArrayDelete() below
-        instance := ObjectFromInterface(fRecordVersionCallback[TableIndex][i]);
-        if (instance<>nil) and
-           (instance.ClassType=TInterfacedObjectFakeServer) and
-           TInterfacedObjectFakeServer(instance).fReleasedOnClientSide then
+        if CallbackReleasedOnClientSide(arr^[i]) then
           // automatic removal of any released callback
-          InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i) else
-        try
-          case Occasion of
-          soInsert: fRecordVersionCallback[TableIndex][i].
-            Added(AddUpdateJson);
-          soUpdate: fRecordVersionCallback[TableIndex][i].
-            Updated(AddUpdateJson);
-          soDelete: fRecordVersionCallback[TableIndex][i].
-            Deleted(DeletedID,DeletedRevision);
+          InterfaceArrayDelete(arr^,i) else
+          try
+            case Occasion of
+            soInsert: arr^[i].Added(AddUpdateJson);
+            soUpdate: arr^[i].Updated(AddUpdateJson);
+            soDelete: arr^[i].Deleted(DeletedID,DeletedRevision);
+            end;
+          except // on notification error -> delete this entry
+            InterfaceArrayDelete(arr^,i);
           end;
-        except // on notification error -> delete this entry
-          InterfaceArrayDelete(fRecordVersionCallback[TableIndex],i);
-        end;
-      end;
     finally
       fRest.fAcquireExecution[execORMWrite].Leave;
     end;
