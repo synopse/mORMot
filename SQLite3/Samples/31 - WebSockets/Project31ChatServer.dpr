@@ -21,7 +21,7 @@ type
   public
     procedure Join(const pseudo: string; const callback: IChatCallback);
     procedure BlaBla(const pseudo,msg: string);
-    procedure CallbackReleased(const callback: IInvokable);
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
 procedure TChatService.Join(const pseudo: string;
@@ -37,8 +37,9 @@ begin
     fConnected[i].BlaBla(pseudo,msg);
 end;
 
-procedure TChatService.CallbackReleased(const callback: IInvokable);
+procedure TChatService.CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 begin
+  assert(interfaceName='IChatCallback');
   InterfaceArrayDelete(fConnected,callback);
 end;
 

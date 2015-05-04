@@ -14071,7 +14071,7 @@ begin
     vtWideString:
       RawUnicodeToUtf8(VWideString,length(WideString(VWideString)),result);
     vtPChar:
-      result := VPChar;
+      SetRawUTF8(result,VPChar,StrLen(VPChar));
     vtChar:
       SetRawUTF8(result,PAnsiChar(@VChar),1);
     vtPWideChar:

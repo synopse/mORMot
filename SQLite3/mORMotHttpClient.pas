@@ -637,7 +637,7 @@ begin
   ws := WebSockets;
   if ws=nil then
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
-  Int32ToUtf8(FakeCallbackID,body);
+  body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp)=HTML_SUCCESS;
 end;
 

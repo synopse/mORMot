@@ -9349,7 +9349,7 @@ type
     property MethodsCount: cardinal read fMethodsCount;
     /// identifies a CallbackReleased() method in this interface
     // - i.e. the index in Methods[] of the following signature:
-    // ! procedure CallbackReleased(const callback: IInvokable);
+    // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
     // - this method will be called e.g. by TInterfacedCallback.Destroy, when
     // a callback is released on the client side so that you may be able e.g. to
     // unsubscribe the callback from an interface list (via InterfaceArrayDelete)
@@ -10726,11 +10726,13 @@ type
     // signature, so that it would be called with the interface instance by
     // TServiceContainerServer.FakeCallbackRelease
     // - you may use it as such - see sample Project31ChatServer.dpr:
-    // ! procedure TChatService.CallbackReleased(const callback: IInvokable);
+    // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
+    // !   const interfaceName: RawUTF8);
     // ! begin  // unsubscribe from fConnected: array of IChatCallback
-    // !   InterfaceArrayDelete(fConnected,callback);
+    // !   if interfaceName='IChatCallback' then
+    // !     InterfaceArrayDelete(fConnected,callback);
     // ! end;
-    procedure CallbackReleased(const callback: IInvokable);
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
   /// event signature triggerred when a callback instance is released
@@ -10822,7 +10824,7 @@ type
     // registration service interface type, which would be called when a
     // callback registered via this service is released (e.g. to unsubscribe
     // the callback from an interface list, via InterfaceArrayDelete):
-    // ! procedure CallbackReleased(const callback: IInvokable);
+    // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
     property OnCallbackReleasedOnClientSide: TOnCallbackReleased
       read fOnCallbackReleasedOnClientSide;
     /// this event will be launched when a callback interface is relased on
@@ -44117,15 +44119,16 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         ArgsManagedLast := a;
       end;
     end;
-    if (ArgsOutputValuesCount=0) and (ArgsInputValuesCount=1) then
-      case Args[1].ValueType of
-      smvBoolean:
-        if IdemPropNameU(URI,'CurrentFrame') then
-          fMethodIndexCurrentFrameCallback := m;
-      smvInterface:
-        if (Args[1].ArgTypeInfo=TypeInfo(IInvokable)) and
-           IdemPropNameU(URI,'CallbackReleased') then
-          fMethodIndexCallbackReleased := m;
+    if ArgsOutputValuesCount=0 then // plain procedure with no out param
+      case ArgsInputValuesCount of
+      1: if Args[1].ValueType=smvBoolean then
+           if IdemPropNameU(URI,'CurrentFrame') then
+            fMethodIndexCurrentFrameCallback := m;
+      2: if (Args[1].ValueType=smvInterface) and
+            (Args[1].ArgTypeInfo=TypeInfo(IInvokable)) and
+            (Args[2].ValueType=smvRawUTF8) and
+             IdemPropNameU(URI,'CallbackReleased') then
+            fMethodIndexCallbackReleased := m;
       end;
   end;
   // compute asm low-level layout of the parameters for each method
@@ -46111,15 +46114,20 @@ procedure TServiceContainerServer.FakeCallbackRelease(Ctxt: TSQLRestServerURICon
 var i: integer;
     fake: TInterfacedObjectFakeServer;
     connectionID: Int64;
-    fakeID: cardinal;
+    fakeID: PtrUInt;
+    Values: TNameValuePUTF8CharDynArray;
 begin
   if (self=nil) or (fFakeCallbacks=nil) or (Ctxt=nil) then
     exit;
   connectionID := Ctxt.Call^.LowLevelConnectionID;
-  fakeID := GetCardinal(pointer(Ctxt.Call^.InBody));
-  if (fakeID=0) or (connectionID=0) then
+  JSONDecode(pointer(Ctxt.Call^.InBody),Values);
+  if length(Values)<>1 then
     exit;
-  fRest.InternalLog('%.FakeCallbackRelease(%) remote call',[ClassType,fakeID],sllDebug);
+  fakeID := GetCardinal(Values[0].Value);
+  if (fakeID=0) or (connectionID=0) or (Values[0].Name=nil) then
+    exit;
+  fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
+    [ClassType,fakeID,Values[0].Name],sllDebug);
   try
     fFakeCallbacks.Lock;
     for i := 0 to fFakeCallbacks.Count-1 do begin
@@ -46130,12 +46138,12 @@ begin
         if Assigned(OnCallbackReleasedOnClientSide) then
           OnCallbackReleasedOnClientSide(self,fake,fake.fFakeInterface);
         if fake.fService.fInterface.MethodIndexCallbackReleased>=0 then begin
-          // emulate a call to CallbackReleased(callback: IInvokable)
+          // emulate a call to CallbackReleased(callback,'ICallbackName')
           Ctxt.ServiceMethodIndex := fake.fService.fInterface.MethodIndexCallbackReleased;
           Ctxt.Service := fake.fService;
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
-          Ctxt.ServiceParameters :=
-            pointer(FormatUTF8('[%]',[PtrInt(fake.fFakeInterface)]));
+          Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
+              [PtrInt(fake.fFakeInterface),Values[0].Name]));
           fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
             Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
           fake.fService.ExecuteMethod(Ctxt); 
