@@ -8550,6 +8550,7 @@ A more subtle violation of {\i Liskov} may appear if you break the expectation o
 !    function ReadFrame: TProtocolFrame; override;
 !    procedure WriteFrame(const aFrame: TProtocolFrame); override;
 !    ...
+!
 !function TEMailEmulatedBarcodeProtocol.ReadFrame: TProtocolFrame;
 !begin
 !  raise EBarcodeException.CreateUTF8('%.ReadFrame is not implemented!',[self]);
@@ -8666,7 +8667,7 @@ In order to easily create a weak pointer, the following function was added to {\
 !begin
 !  PPointer(aInterfaceField)^ := Pointer(aValue);
 !end;
-It will assign the `interface` to a field by assigning the `pointer` of this instance to the internal field. It will by-pass the reference counting, so memory won't be leaked any more.
+It will assign the {\f1\fs20 interface} reference to a field by assigning the {\f1\fs20 pointer} of this instance to the internal field. It will by-pass the reference counting, so memory won't be leaked any more.
 Therefore, it could be used as such:
 !procedure TParent.SetChild(const Value: IChild);
 !begin

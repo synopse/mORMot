@@ -1,4 +1,4 @@
-/// shared DDD Infrastructure: Application/Daemon Settings implementation
+/// shared DDD Infrastructure: Application/Daemon common classes
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit dddInfraSettings;
