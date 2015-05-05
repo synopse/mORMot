@@ -10747,8 +10747,9 @@ type
 
   /// how TServiceContainerServer would handle SOA callbacks
   // - by default, a callback released on the client side will log a warning
-  // and continue the execution but coRaiseExceptionIfReleasedByClient can be
-  // set to raise an Exception in this case
+  // and continue the execution (relying e.g. on a CallbackReleased() method to
+  // unsubscribe the event), but coRaiseExceptionIfReleasedByClient can be
+  // defined to raise an EInterfaceFactoryException in this case
   TServiceCallbackOptions = set of (
     coRaiseExceptionIfReleasedByClient);
 
@@ -13893,7 +13894,7 @@ type
     // database engine, and won't be static
     // - the specified TSQLRecord will have all its CRUD / ORM methods be
     // redirected to aRemoteRest, which may be a TSQLRestClient or another
-    // TSQLRestServer instance
+    // TSQLRestServer instance (e.g. a fast SQLITE_MEMORY_DATABASE_NAME)
     // - if aRemoteRest is a TSQLRestClient, it should have been authenticated
     // to the remote TSQLRestServer, so that CRUD / ORM operations would pass
     // - this would enable easy creation of proxies, or local servers, with they

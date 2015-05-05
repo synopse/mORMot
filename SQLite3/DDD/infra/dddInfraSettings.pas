@@ -167,6 +167,11 @@ type
   TRestSettingsOptions = set of TRestSettingsOption;
 
   /// how TRestSettings.NewRestInstance would create its instances
+  // - riOwnModel will set ModelInstance.Owner := RestInstance
+  // - riHandleAuthentication will set the corresponding parameter to true
+  // - riDefaultLocalSQlite3IfNone will create a SQLite3 engine with a local
+  // file, if TRestSettings.Kind is not set
+  // - riCreateMissingTables will call RestInstance.CreateMissingTables
   TNewRestInstanceOptions = set of (
     riOwnModel,
     riHandleAuthentication,
