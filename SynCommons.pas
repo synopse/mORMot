@@ -1905,9 +1905,6 @@ procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 function VarRecAsChar(const V: TVarRec): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast concatenation of several AnsiStrings
-function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
-
 type
   /// function prototype used internally for UTF-8 buffer comparaison
   // - used in mORMot.pas unit during TSQLTable rows sort and by TSQLQuery
@@ -1920,6 +1917,16 @@ function bswap32(a: cardinal): cardinal;
 type
   TBytes = array of byte;
 {$endif}
+
+/// fast concatenation of several AnsiStrings
+function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
+
+/// creates a TBytes from a RawByteString memory buffer
+procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
+
+/// creates a RawByteString memory buffer from a TBytes content
+procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
@@ -16954,6 +16961,21 @@ begin
     move(pointer(Values[i])^,P^,L);
     inc(P,L);
   end;
+end;
+
+procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
+var L: Integer;
+begin
+  L := Length(buf);
+  if L<>0 then begin
+    SetLength(bytes,L);
+    move(pointer(buf)^,pointer(bytes)^,L);
+  end;
+end;
+
+procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
+begin
+  SetString(buf,PAnsiChar(pointer(bytes)),Length(bytes));
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;

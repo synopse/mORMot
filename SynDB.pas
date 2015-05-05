@@ -3320,13 +3320,10 @@ end;
 
 function TQueryValue.GetAsBytes: TBytes;
 var tmp: TBlobData;
-    L: integer;
 begin
   CheckValue;
   VariantToRawByteString(fValue,tmp);
-  L := length(tmp);
-  Setlength(result,L);
-  move(pointer(tmp)^,pointer(result)^,L);
+  RawByteStringToBytes(tmp,result);
 end;
 
 function TQueryValue.GetAsWideString: SynUnicode;
@@ -6314,11 +6311,8 @@ begin
 end;
 
 function TSQLDBStatement.ColumnBlobBytes(Col: integer): TBytes;
-var Res: RawByteString;
 begin
-  Res := ColumnBlob(Col);
-  SetLength(result,length(Res));
-  move(pointer(Res)^,pointer(result)^,length(Res));
+  RawByteStringToBytes(ColumnBlob(Col),result);
 end;
 
 {$ifndef LVCL}
