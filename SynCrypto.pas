@@ -288,7 +288,7 @@ const
 
 type
   /// class of Exceptions raised by this unit
-  ESynCrypto = class(Exception);
+  ESynCrypto = class(ESynException);
 
   PAESBlock = ^TAESBlock;
 
@@ -365,6 +365,7 @@ type
     fKeySizeBytes: cardinal;
     fKey: TAESKey;
     fIV: TAESBlock;
+    procedure DecryptLen(var InputLen,iv: integer; Input: pointer; IVAtBeginning: boolean);
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
@@ -4738,12 +4739,12 @@ end;
 
 function TAESWriteStream.Read(var Buffer; Count: Integer): Longint;
 begin
-  raise ESynCrypto.Create(ClassName);
+  raise ESynCrypto.CreateUTF8('Unexpected %.Read',[self]);
 end;
 
 function TAESWriteStream.Seek(Offset: Integer; Origin: Word): Longint;
 begin
-  raise ESynCrypto.Create(ClassName);
+  raise ESynCrypto.CreateUTF8('Unexpected %.Seek',[self]);
 end;
 
 function TAESWriteStream.Write(const Buffer; Count: Integer): Longint;
@@ -5357,9 +5358,8 @@ end;
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
-    raise ESynCrypto.CreateFmt(
-      '%s.Create key size = %d; should be either 128, 192 or 256',
-      [ClassName,aKeySize]);
+    raise ESynCrypto.CreateUTF8(
+      '%.Create key size = %; should be either 128, 192 or 256',[self,aKeySize]);
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
   move(aKey,fKey,fKeySizeBytes);
@@ -5372,58 +5372,12 @@ begin
   Create(Digest,256);
 end;
 
-function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
-  IVAtBeginning: boolean): RawByteString;
-var len,iv: integer;
-begin
-  // validate input
-  len := length(Input);
-  if (len<AESBlockSize) or (len and (AESBlockSize-1)<>0) then
-    raise ESynCrypto.Create('Invalid content');
-  // decrypt
-  if IVAtBeginning then begin
-    fIV := PAESBlock(Input)^;
-    dec(len,AESBlockSize);
-    iv := AESBlockSize;
-  end else
-    iv := 0;
-  SetString(result,nil,len);
-  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
-  // delete right padding
-  if ord(result[len])>AESBlockSize then
-    raise ESynCrypto.Create('Invalid content');
-  SetLength(result,len-ord(result[len]));
-end;
-
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
 begin
   SetString(result,nil,EncryptPKCS7Length(length(Input),IVAtBeginning));
   EncryptPKCS7Buffer(Pointer(Input),pointer(result),
     length(Input),length(result),IVAtBeginning);
-end;
-
-function TAESAbstract.DecryptPKCS7(const Input: TBytes;
-  IVAtBeginning: boolean): TBytes;
-var len,iv: integer;
-begin
-  // validate input
-  len := length(Input);
-  if (len<AESBlockSize) or (len and (AESBlockSize-1)<>0) then
-    raise ESynCrypto.Create('Invalid content');
-  // decrypt
-  if IVAtBeginning then begin
-    fIV := PAESBlock(Input)^;
-    dec(len,AESBlockSize);
-    iv := AESBlockSize;
-  end else
-    iv := 0;
-  SetLength(result,len);
-  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
-  // delete right padding
-  if ord(result[len])>AESBlockSize then
-    raise ESynCrypto.Create('Invalid content');
-  SetLength(result,len-result[len]);
 end;
 
 function TAESAbstract.EncryptPKCS7(const Input: TBytes;
@@ -5463,6 +5417,47 @@ begin
   Inc(PByte(Output),iv);
   Encrypt(Output,Output,InputLen+padding);
   result := true;
+end;
+
+procedure TAESAbstract.DecryptLen(var InputLen,iv: Integer;
+  Input: pointer; IVAtBeginning: boolean);
+begin
+  if (InputLen<AESBlockSize) or (InputLen and (AESBlockSize-1)<>0) then
+    raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]);
+  if IVAtBeginning then begin
+    fIV := PAESBlock(Input)^;
+    dec(InputLen,AESBlockSize);
+    iv := AESBlockSize;
+  end else
+    iv := 0;
+end;
+
+function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
+  IVAtBeginning: boolean): RawByteString;
+var len,iv,padding: integer;
+begin
+  len := length(Input);
+  DecryptLen(len,iv,pointer(Input),IVAtBeginning);
+  SetString(result,nil,len);
+  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
+  padding := ord(result[len]); // result[1..len]
+  if padding>AESBlockSize then
+    raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid content',[self]);
+  SetLength(result,len-padding);
+end;
+
+function TAESAbstract.DecryptPKCS7(const Input: TBytes;
+  IVAtBeginning: boolean): TBytes;
+var len,iv,padding: integer;
+begin
+  len := length(Input);
+  DecryptLen(len,iv,pointer(Input),IVAtBeginning);
+  SetLength(result,len);
+  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
+  padding := result[len-1]; // result[0..len-1]
+  if padding>AESBlockSize then
+    raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid content',[self]);
+  SetLength(result,len-padding);
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
