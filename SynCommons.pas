@@ -6410,7 +6410,6 @@ type
     fServerName: RawUTF8;
     fDatabaseName: RawUTF8;
     fUser: RawUTF8;
-    fPassWord: RawUTF8;
   public
     /// unserialize the database definition from JSON
     // - as previously serialized with the SaveToJSON method
@@ -37887,7 +37886,7 @@ begin
     fPassWord := '';
     exit;
   end;
-  data := Value;
+  SetString(data,PAnsiChar(Value),Length(Value)); // private copy
   SymmetricEncrypt(GetKey,data);
   fPassWord := BinToBase64(data);
 end;
