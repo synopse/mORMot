@@ -1135,7 +1135,7 @@ begin
         UnEscape := not UnEscape;
       VariantToUTF8(Value,ValueText,wasString);
       if UnEscape then
-        fWriter.AddNoJSONEscape(pointer(ValueText)) else
+        fWriter.AddNoJSONEscape(pointer(ValueText),length(ValueText)) else
         fWriter.AddHtmlEscape(pointer(ValueText));
     end;
 end;

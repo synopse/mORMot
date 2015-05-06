@@ -5949,9 +5949,12 @@ type
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: Integer=-1);
     /// append some chars to the buffer
-    // - if Len is 0, Len is calculated from zero-ended char
+    // - input length is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJSONEscape(P: Pointer; Len: integer=0); overload;
+    procedure AddNoJSONEscape(P: Pointer); overload;
+    /// append some chars to the buffer
+    // - don't escapes chars according to the JSON RFC
+    procedure AddNoJSONEscape(P: Pointer; Len: integer); overload;
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
     // - this function implements what is specified in the official SQLite3
@@ -22923,9 +22926,9 @@ begin
     try
       for i := 1 to length(NameValuePairs) shr 1 do begin
         Add(NameValuePairs[i*2-2],twNone);
-        AddNoJSONEscape(pointer(KeySeparator));
+        AddNoJSONEscape(pointer(KeySeparator),length(KeySeparator));
         Add(NameValuePairs[i*2-1],twNone);
-        AddNoJSONEscape(pointer(ValueSeparator));
+        AddNoJSONEscape(pointer(ValueSeparator),length(ValueSeparator));
       end;
       SetText(result);
     finally
@@ -35439,7 +35442,7 @@ begin
       if Name=nil then
         exit;
       if (Format=jsonUnquotedPropName) and PropNameValid(Name) then
-        AddNoJSONEscape(Name) else begin
+        AddNoJSONEscape(Name,StrLen(Name)) else begin
         Add('"');
         AddJSONEscape(Name);
         Add('"');
@@ -36046,48 +36049,33 @@ begin
             (result and $3f)shl 12;
 end;
 
+procedure TTextWriter.AddNoJSONEscape(P: Pointer);
+begin
+  AddNoJSONEscape(P,StrLen(PUTF8Char(P)));
+end;
+
 procedure TTextWriter.AddNoJSONEscape(P: Pointer; Len: integer);
 var i: integer;
 begin
-  if P=nil then exit;
-  if Len=0 then
-    Len := StrLen(PUTF8Char(P));
-  if Len>0 then begin // no JSONify:
-    if B+8>=BEnd then
-      FlushToStream;
+  if (P<>nil) and (Len>0) then begin
     inc(B); // allow CancelLastChar
-    case Len of
-      1: B^ := PAnsiChar(P)^;
-      2: begin PWord(B)^ := PWord(P)^; Inc(B); end;
-      3: begin PWord(B)^ := PWord(P)^; B[2] := PAnsiChar(P)[2]; Inc(B,2); end;
-      4: begin PCardinal(B)^ := PCardinal(P)^; Inc(B,3); end;
-      5: begin PCardinal(B)^ := PCardinal(P)^; B[4] := PAnsiChar(P)[4]; Inc(B,4); end;
-      6: begin PCardinal(B)^ := PCardinal(P)^; PWordArray(B)[2] := PWordArray(P)[2];
-          Inc(B,5); end;
-      7: begin PCardinal(B)^ := PCardinal(P)^; PWordArray(B)[2] := PWordArray(P)[2];
-          B[6] := PAnsiChar(P)[6]; Inc(B,6); end;
-      8: begin PInt64(B)^ := PInt64(P)^; inc(B,7); end;
-      else begin
-        repeat
-          // guess biggest size to be added into buf^ at once
-          i := BEnd-B;
-          if Len<i then
-            i := Len;
-          // add UTF-8 bytes
-          move(P^,B^,i);
-          inc(PtrInt(P),i);
-          inc(B,i);
-          dec(Len,i);
-          if Len=0 then
-            break;
-          // FlushInc writes B-buf+1 -> special one below:
-          inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf));
-          B := fTempBuf;
-        until false;
-        dec(B); // allow CancelLastChar
-      end;
-    end;
-  end;
+    repeat
+      i := BEnd-B+1; // guess biggest size to be added into buf^ at once
+      if Len<i then
+        i := Len;
+      // add UTF-8 bytes
+      move(P^,B^,i);
+      inc(B,i);
+      if i=Len then
+        break;
+      inc(PtrInt(P),i);
+      dec(Len,i);
+      // FlushInc writes B-buf+1 -> special one below:
+      inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf));
+      B := fTempBuf;
+    until false;
+    dec(B); // allow CancelLastChar
+  end; 
 end;
 
 procedure TTextWriter.AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
@@ -36136,7 +36124,7 @@ procedure TTextWriter.Add(P: PUTF8Char; Escape: TTextWriterKind);
 begin
   if P<>nil then
   case Escape of
-    twNone:       AddNoJSONEscape(P);
+    twNone:       AddNoJSONEscape(P,StrLen(P));
     twJSONEscape: AddJSONEscape(P);
     twOnSameLine: AddOnSameLine(P);
   end;
@@ -36177,7 +36165,7 @@ begin
   if L=0 then
     exit;
   if PInteger(s)^ and $ffffff=JSON_BASE64_MAGIC then begin
-    WrBase64(pointer(s),L,false); // identified as a BLOB content
+    AddNoJSONEscape(pointer(s),L); // identified as a BLOB content
     exit;
   end;
   if CodePage<0 then
@@ -36192,7 +36180,7 @@ begin
   CP_UTF16:
     AddW(pointer(s),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
-    AddNoJSONEscape(@JSON_BASE64_MAGIC_QUOTE_VAR,4);
+    AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1],3);
     WrBase64(pointer(s),L,false);
   end;
   else begin

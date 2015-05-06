@@ -2843,7 +2843,7 @@ begin
         break;
       if InputSock(PTextRec(SockIn)^)<0 then 
         raise ECrtSocket.Create('SockInRead InputSock');
-    until false;
+    until Timeout=0;
   // direct receiving of the remaining bytes from socket
   if Length>0 then begin
     SockRecv(Content,Length);

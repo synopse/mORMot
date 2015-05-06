@@ -4457,11 +4457,12 @@ const // convention may be to use __ before the type name
   discogsFileName = 'discogs.json';
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
-var J,U: RawUTF8;
+var J,U,U2: RawUTF8;
     binary,zendframeworkJson,discogsJson: RawByteString;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
+    peop: TSQLRecordPeople;
     Parser: TJSONRecordTextDefinition;
     JR,JR2: TTestCustomJSONRecord;
     JA,JA2: TTestCustomJSONArray;
@@ -5034,6 +5035,28 @@ begin
   // for virtual function TryJSONToVariant
   Check(J=JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']));
 {$endif}
+  peop := TSQLRecordPeople.Create;
+  try
+    peop.IDValue := 1234;
+    peop.FirstName := 'FN';
+    peop.LastName := 'LN';
+    peop.YearOfBirth := 1000;
+    peop.Data := #1#2#3#4;
+    J := ObjectToJSON(peop,[woSQLRawBlobAsBase64]);
+    check(J[53]=#$EF);
+    check(J[54]=#$BF);
+    check(J[55]=#$B0);
+    J[53] := '1';
+    J[54] := '2';
+    J[55] := '3';
+    Check(J='{"ID":1234,"FirstName":"FN","LastName":"LN",'+
+      '"Data":"123AQIDBA==","YearOfBirth":1000,"YearOfDeath":0}');
+    J := ObjectToJSON(peop);
+    Check(J='{"ID":1234,"FirstName":"FN","LastName":"LN",'+
+      '"Data":"","YearOfBirth":1000,"YearOfDeath":0}');
+  finally
+    peop.Free;
+  end;
   for i := 1 to 100 do begin
     a := Random(maxInt);
     r := Random;
@@ -5273,7 +5296,8 @@ begin
      U := ObjectToJSON(Coll);
      Check(Hash32(U)=$85926050);
      J := ObjectToJSON(Coll,[woHumanReadable]);
-     Check(JSONReformat(J,jsonCompact)=U);
+     U2 := JSONReformat(J,jsonCompact);
+     Check(U2=U);
      C2.Str := TStringList.Create;
      Check(JSONToObject(C2,pointer(U),Valid)=nil);
      Check(Valid);

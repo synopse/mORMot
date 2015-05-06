@@ -943,7 +943,7 @@ begin
       WR.Add('"','"') else
     if (ContentType='') or
        IdemPropNameU(ContentType,JSON_CONTENT_TYPE) then
-      WR.AddNoJSONEscape(pointer(Content)) else
+      WR.AddNoJSONEscape(pointer(Content),length(Content)) else
     if IdemPChar(pointer(ContentType),'TEXT/') then
       WR.AddCSVUTF8([Content]) else
       WR.WrBase64(pointer(Content),length(Content),true);

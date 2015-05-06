@@ -47006,7 +47006,7 @@ begin
   smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
-  smvRawJSON:    WR.AddNoJSONEscape(PPointer(V)^);
+  smvRawJSON:    WR.AddNoJSONEscape(PPointer(V)^,length(PRawUTF8(V)^));
   smvString:     {$ifdef UNICODE}
                  WR.AddJSONEscapeW(pointer(PString(V)^));
                  {$else}
