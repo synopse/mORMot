@@ -31,8 +31,9 @@ unit SynCrypto;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - Wolfgang Ehrhardt under zlib license for AES "pure pascal" versions
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
+  - Wolfgang Ehrhardt under zlib license for AES "pure pascal" versions
+  - souchaud
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or

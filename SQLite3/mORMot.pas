@@ -40590,11 +40590,8 @@ begin
   end;
 end;
 
-const
-  SQLITE3_KEYWORDS =
-  ' abort after and attach before cluster conflict copy delete delimiters detach'+
-  ' each explain fail from glob ignore insert instead isnull limit not notnull'+
-  ' offset or pragma raise replace row select statement temp trigger vacuum where ';
+const // the most ambigous keywords - others may be used as column names
+  SQLITE3_KEYWORDS = ' from where group in as ';
 
 constructor TSQLRecordProperties.Create(aTable: TSQLRecordClass);
 var i,j, nProps: integer;
@@ -40655,8 +40652,7 @@ begin
       raise EORMException.CreateUTF8('ID is already defined in TSQLRecord: '+
         '%.% field name is not allowed as published property',[Table,F.Name]);
     if PosEx(' '+LowerCase(F.Name)+' ',SQLITE3_KEYWORDS)>0 then
-      raise EORMException.CreateUTF8('%.% field name conflicts with a SQL keyword',
-        [Table,F.Name]);
+      raise EORMException.CreateUTF8('%.% field name conflicts with a SQL keyword',[Table,F.Name]);
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then begin
       include(IsUniqueFieldsBits,i);
