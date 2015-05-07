@@ -5927,7 +5927,7 @@ end;
 class function TSQLDBConnectionProperties.CreateFromFile(const aJSONFile: TFileName;
   aKey: cardinal): TSQLDBConnectionProperties;
 begin
-  result := CreateFromJSON(StringFromFile(aJSONFile),aKey);
+  result := CreateFromJSON(AnyTextFileToRawUTF8(aJSONFile,true),aKey);
 end;
 
 

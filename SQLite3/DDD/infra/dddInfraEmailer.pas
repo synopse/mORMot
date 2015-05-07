@@ -595,7 +595,7 @@ begin
       fCache := TSynCache.Create(MemoryCacheSize);
     aTemplate := fCache.Find(aTemplateName,@ageInCache);
     if (aTemplate='') or (ageInCache<>age) then begin
-      aTemplate := StringFromFile(filename);
+      aTemplate := AnyTextFileToRawUTF8(filename,true);
       if (aTemplate<>'') or (ageInCache<>0) then begin
         fCache.Add(aTemplate,age);
         result := true;

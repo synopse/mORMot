@@ -922,7 +922,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   end else // download as file
     head := HEADER_CONTENT_TYPE+'application/'+LowerCase(templateExt);
   templateName := templateName+'.'+templateExt+'.mustache';
-  template := StringFromFile(Path[templateFound]+UTF8ToString('\'+templateName));
+  template := AnyTextFileToRawUTF8(Path[templateFound]+UTF8ToString('\'+templateName),true);
   if template='' then begin
     Ctxt.Error(templateName,HTML_NOTFOUND);
     exit;
@@ -1019,7 +1019,7 @@ begin
     DestFileName := 'mORMotServer.pas' else
     if DestFileName[1]='\' then
       DestFileName := ExtractFilePath(TemplateName)+DestFileName;
-  FileFromString(WrapperFromModel(Server,StringFromFile(TemplateName),
+  FileFromString(WrapperFromModel(Server,AnyTextFileToRawUTF8(TemplateName,true),
     StringToUTF8(ExtractFileName(DestFileName)),0),DestFileName);
 end;
 
@@ -1043,7 +1043,7 @@ begin
     Free;
   end;
   ctxt.fileName := GetFileNameWithoutExt(ExtractFileName(DestFileName));
-  FileFromString(TSynMustache.Parse(StringFromFile(TemplateName)).
+  FileFromString(TSynMustache.Parse(AnyTextFileToRawUTF8(TemplateName,true)).
     Render(ctxt,nil,nil,nil,true),DestFileName);
 end;
 
