@@ -335,6 +335,9 @@ type
   // - either TCP/IP, UDP/IP or Unix sockets
   TCrtSocketLayer = (cslTCP, cslUDP, cslUNIX);
 
+  /// identify the incoming data availability in TCrtSocket.SockReceivePending
+  TCrtSocketPending = (cspSocketError, cspNoData, cspDataAvailable);
+
   PTextFile = ^TextFile;
   
   /// Fast low-level Socket implementation
@@ -432,9 +435,8 @@ type
     // - bypass the SockIn^ buffers
     // - raise ECrtSocket exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
-    /// returns how many bytes are pending in the sockets API buffer
-    // - a negative value is returned in case of socket error
-    function SockReceivePending(TimeOut: cardinal): integer;
+    /// check if there are some pending bytes in the input sockets API buffer
+    function SockReceivePending(TimeOut: cardinal): TCrtSocketPending;
     /// returns the socket input stream as a string
     function SockReceiveString: SockString;
     /// fill the Buffer with Length bytes
@@ -2817,7 +2819,7 @@ end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
   UseOnlySockIn: boolean): integer;
-var len: integer;
+var len,res: integer;
 // read Length bytes from SockIn^ buffer + Sock if necessary
 begin
   // get data from SockIn buffer, if any (faster than ReadChar)
@@ -2841,8 +2843,9 @@ begin
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
-      if InputSock(PTextRec(SockIn)^)<0 then 
-        raise ECrtSocket.Create('SockInRead InputSock');
+      res := InputSock(PTextRec(SockIn)^);
+      if res<0 then
+        raise ECrtSocket.CreateFmt('SockInRead InputSock=%d',[res]);
     until Timeout=0;
   // direct receiving of the remaining bytes from socket
   if Length>0 then begin
@@ -2858,11 +2861,11 @@ begin
     raise ECrtSocket.Create('SockInPending without SockIn');
   with PTextRec(SockIn)^ do begin
     result := BufEnd-BufPos;
-    if (result=0) and (SockReceivePending(aTimeOut)>0) then begin
+    if (result=0) and (SockReceivePending(aTimeOut)=cspDataAvailable) then begin
       // non data in SockIn^.Buffer, but some at socket level -> retrieve now
       backup := TimeOut;
       fTimeOut := 0;
-      if InputSock(PTextRec(SockIn)^)=NO_ERROR then 
+      if InputSock(PTextRec(SockIn)^)=NO_ERROR then
         result := BufEnd-BufPos;
       fTimeOut := backup;
     end;
@@ -2971,9 +2974,10 @@ begin
   result := true;
 end;
 
-function TCrtSocket.SockReceivePending(TimeOut: cardinal): integer;
+function TCrtSocket.SockReceivePending(TimeOut: cardinal): TCrtSocketPending;
 var tv: TTimeVal;
     fdset: TFDSet;
+    res: integer;
 begin
   {$ifdef MSWINDOWS}
   fdset.fd_array[0] := Sock;
@@ -2983,14 +2987,17 @@ begin
   FD_SET(sock,fdset);
   {$endif}
   tv.tv_usec := TimeOut*1000;
-  tv.tv_sec := 0; 
-  result := Select(Sock+1,@fdset,nil,nil,@tv);
-  if result<0 then
+  tv.tv_sec := 0;
+  res := Select(Sock+1,@fdset,nil,nil,@tv);
+  if res=0 then
+    result := cspNoData else
+  if res<0 then
+    result := cspSocketError else
     {$ifdef LINUX}
     if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
-      result := 0 else
-    {$endif}
-      exit; // notify socket error
+      result := cspNoData else
+    {$endif} 
+      result := cspDataAvailable;
 end;
 
 function TCrtSocket.LastLowSocketError: Integer;
@@ -3764,7 +3771,7 @@ end;
 procedure THttpServerResp.Execute;
 procedure HandleRequestsProcess;
 var StartTick, StopTick, Tick: cardinal;
-    Size: integer;
+    pending: TCrtSocketPending;
 begin
   {$ifdef USETHREADPOOL}
   if fThreadPool<>nil then
@@ -3778,17 +3785,20 @@ begin
       repeat // within this loop, break=wait for next command, exit=quit
         if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
           exit; // server is down -> close connection
-        Size := fServerSock.SockReceivePending(50); // 50 ms timeout
-        if (fServer=nil) or fServer.Terminated or (Size<0) then
-          exit; // server is down or socket error -> disconnect the client
-        if Size=0 then begin
-          // no data available -> wait for keep alive timeout
-          Tick := GetTickCount;
+        pending := fServerSock.SockReceivePending(50); // 50 ms timeout
+        if (fServer=nil) or fServer.Terminated then
+          exit; // server is down -> disconnect the client
+        case pending of
+        cspSocketError:
+          exit; // socket error -> disconnect the client
+        cspNoData: begin
+          Tick := GetTickCount;  // wait for keep alive timeout
           if Tick<StartTick then // time wrap after continuous run for 49.7 days
             break; // reset Ticks count + retry
           if Tick>=StopTick then
             exit; // reached time out -> close connection
-        end else begin
+        end;
+        cspDataAvailable: begin
           // get request and headers
           if not fServerSock.GetRequest(True) then
             // fServerSock connection was down or headers are not correct
@@ -3800,9 +3810,8 @@ begin
             break else
             exit;
         end;
-        //write('.');
+        end;
        until false;
-       //write('!');
     until false;
   finally
     {$ifdef USETHREADPOOL}
