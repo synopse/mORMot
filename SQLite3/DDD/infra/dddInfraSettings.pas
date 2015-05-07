@@ -109,6 +109,7 @@ type
   TLogSettings = class(TSynPersistent)
   protected
     fLevels: TSynLogInfos;
+    fConsoleLevels: TSynLogInfos;
     fPerThread: TSynLogPerThreadMode;
     fDestinationPath: TFileName;
     fRotateFileCount: cardinal;
@@ -118,10 +119,17 @@ type
     /// initialize the settings to their (TSynLogFamily) default values
     constructor Create; override;
   published
-    /// the log levels to be defined
+    /// the log levels to be used for the log file
     // - i.e. a combination of none or several logging event
     // - if "*" is serialized, unneeded sllNone won't be part of the set
     property Levels: TSynLogInfos read fLevels write fLevels;
+    /// the optional log levels to be used for the console
+    // - by default, only errors would be logged to the console
+    // - you can specify here another set of levels, e.g. '*' for a verbose
+    // console output - note that console is very slow to write, so usually
+    // you should better not set a verbose definition here, unless you are
+    // in debugging mode
+    property ConsoleLevels: TSynLogInfos read fConsoleLevels write fConsoleLevels;
     /// the logged information about threads
     // - the default value is ptIdentifiedInOnFile, since it sounds more
     // reasonable to a multi-threaded server instance
@@ -455,6 +463,8 @@ procedure TApplicationSettingsFile.Initialize(const aDescription: string);
 begin
   with SQLite3Log.Family do begin
     Level := Log.Levels-[sllNone]; // '*' would include sllNone
+    if Log.ConsoleLevels<>[] then
+      EchoToConsole := Log.ConsoleLevels-[sllNone];
     PerThreadLog := Log.PerThread;
     if Log.DestinationPath<>'' then
      DestinationPath := Log.DestinationPath;
@@ -638,7 +648,7 @@ procedure Show(Success: Boolean);
 var msg: RawUTF8;
 begin
   if Success then begin
-    msg := 'Executed';
+    msg := 'Run';
     TextColor(ccWhite);
   end else begin
     msg := FormatUTF8('Error % "%" occured with',
@@ -668,6 +678,7 @@ begin
     TextColor(ccGreen);
     writeln(fSettings.Description);
   end;
+  writeln;
   TextColor(ccLightCyan);
   param := trim(StringToUTF8(paramstr(1)));
   if (param='') or not(param[1] in ['/','-']) then
