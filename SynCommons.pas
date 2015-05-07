@@ -5948,13 +5948,17 @@ type
     // - if CodePage is defined to a >= 0 value, the encoding will take place
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: Integer=-1);
-    /// append some chars to the buffer
+    /// append some UTF-8 chars to the buffer
     // - input length is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJSONEscape(P: Pointer); overload;
-    /// append some chars to the buffer
+    /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJSONEscape(P: Pointer; Len: integer); overload;
+    /// append some UTF-8 chars to the buffer
+    // - don't escapes chars according to the JSON RFC
+    procedure AddNoJSONEscapeUTF8(const text: RawByteString); 
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
     // - this function implements what is specified in the official SQLite3
@@ -36076,6 +36080,11 @@ begin
   end; 
 end;
 
+procedure TTextWriter.AddNoJSONEscapeUTF8(const text: RawByteString);
+begin
+  AddNoJSONEscape(pointer(text),length(text));
+end;
+
 procedure TTextWriter.AddNoJSONEscapeW(WideChar: PWord; WideCharCount: integer);
 var PEnd: PtrUInt;
     BMax: PUTF8Char;
@@ -44707,10 +44716,10 @@ begin
   with TTextWriter.CreateOwnedStream do
   try
     for i := 0 to Count-1 do begin
-      AddNoJSONEscape(pointer(List[i].Name));
-      AddNoJSONEscape(pointer(KeySeparator));
-      AddNoJSONEscape(pointer(List[i].Value));
-      AddNoJSONEscape(pointer(ValueSeparator));
+      AddNoJSONEscapeUTF8(List[i].Name);
+      AddNoJSONEscapeUTF8(KeySeparator);
+      AddNoJSONEscapeUTF8(List[i].Value);
+      AddNoJSONEscapeUTF8(ValueSeparator);
     end;
     SetText(result);
   finally
