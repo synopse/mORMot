@@ -88,7 +88,20 @@ type
     IAutoCreateFieldsResolve)
   protected
     fAllProps: PPropInfoDynArray;
+    fInitialJsonContent: RawUTF8;
     procedure SetProperties(Instance: TObject); virtual;
+    // inherited constructors should use this method to initialize the content
+    procedure SetJsonContent(JsonContent: PUTF8Char); virtual;
+  public
+    /// returns TRUE if the content did change according to its initial state
+    // - will be used e.g. to update the file content on disk only if worth it
+    function WasModified: Boolean;
+    /// the JSON content, as specified when creating the instance
+    // - will allow SettingsDidChange to check if has changed
+    // - here the JSON content is stored with default ObjectToJSON() options,
+    // so will be the normalized representation of the content, which may not
+    // match the JSON supplied to SetJsonContent() protected method
+    property InitialJsonContent: RawUTF8 read fInitialJsonContent;
   end;
 
   /// settings used to define how logging take place
@@ -375,9 +388,26 @@ implementation
 
 { TApplicationSettingsAbstract }
 
+procedure TApplicationSettingsAbstract.SetJsonContent(
+  JsonContent: PUTF8Char);
+var valid: boolean;
+begin
+  if JsonContent=nil then
+    exit;
+  RemoveCommentsFromJSON(JsonContent);
+  JSONToObject(self,JsonContent,valid);
+  if valid then
+    fInitialJsonContent := ObjectToJSON(self,[]);
+end;
+
 procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
 begin
   CopyObject(self,Instance);
+end;
+
+function TApplicationSettingsAbstract.WasModified: Boolean;
+begin
+  result := ObjectToJSON(self,[])<>fInitialJsonContent;
 end;
 
 
@@ -402,13 +432,17 @@ begin
     fSettingsJsonFileName := aSettingsJsonFileName else
     fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
   fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
-  JSONFileToObject(fSettingsJsonFileName,self);
+  SetJsonContent(Pointer(AnyTextFileToRawUTF8(fSettingsJsonFileName,true)));
 end;
 
 procedure TApplicationSettingsFile.UpdateFile;
+var new: RawUTF8;
 begin
-  ObjectToJSONFile(Self,fSettingsJsonFileName,[woHumanReadable,woStoreStoredFalse,
+  if not WasModified then
+    exit;
+  new := ObjectToJSON(Self,[woHumanReadable,woStoreStoredFalse,
     woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
+  FileFromString(new,fSettingsJsonFileName);
 end;
 
 destructor TApplicationSettingsFile.Destroy;
@@ -588,14 +622,14 @@ type
     cNone,cInstall,cUninstall,cStart,cStop,cState,cHelp,cVersion,cConsole,cDaemon);
 
 procedure TAbstractDaemon.ExecuteCommandLine;
-var param: RawUTF8;
+var name,param: RawUTF8;
     cmd: TExecuteCommandLineCmd;
     daemon: TDDDAdministratedDaemon;
     {$ifdef MSWINDOWS}
     service: TServiceSingle;
     ctrl: TServiceController;
     {$endif}
-{$I-} // no IO error for writeln() below  
+{$I-} // no IO error for writeln() below
 function cmdText: RawUTF8;
 begin
   result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd),cmd);
@@ -625,10 +659,15 @@ begin
 end;
 begin
   TextColor(ccLightGreen);
-  writeln(#10' ',fSettings.ServiceDisplayName);
-  writeln(StringOfChar('-',length(fSettings.ServiceDisplayName)+2));
-  TextColor(ccGreen);
-  writeln(fSettings.Description,#10);
+  name := StringToUTF8(fSettings.ServiceDisplayName);
+  if name='' then // perhaps the settings file is void
+    name := ExeVersion.ProgramName;
+  writeln(#10' ',name);
+  writeln(StringOfChar('-',length(name)+2));
+  if fSettings.Description<>'' then begin
+    TextColor(ccGreen);
+    writeln(fSettings.Description);
+  end;
   TextColor(ccLightCyan);
   param := trim(StringToUTF8(paramstr(1)));
   if (param='') or not(param[1] in ['/','-']) then
@@ -674,7 +713,7 @@ begin
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
     with fSettings do
     if ServiceName='' then
-      Show(false) else
+      Syntax else
     case cmd of
     cNone:
       if param='' then begin // executed as a background service

@@ -19683,8 +19683,7 @@ begin
   try
     if ForceUTF8 then
 {$ifdef UNICODE}
-      UTF8DecodeToString(PUTF8Char(Map.Buffer),Map.Size,result)
-{$else}
+      UTF8DecodeToString(PUTF8Char(Map.Buffer),Map.Size,result) {$else}
       result := CurrentAnsiConvert.UTF8BufferToAnsi(PUTF8Char(Map.Buffer),Map.Size)
 {$endif} else
     case TextFileKind(Map) of

@@ -28356,7 +28356,7 @@ end;
 class function TSQLRest.CreateFromFile(aModel: TSQLModel;
   const aJSONFile: TFileName; aKey: cardinal): TSQLRest;
 begin
-  result := CreateFromJSON(aModel,StringFromFile(aJSONFile),aKey);
+  result := CreateFromJSON(aModel,AnyTextFileToRawUTF8(aJSONFile,true),aKey);
 end;
 
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
@@ -37340,7 +37340,7 @@ begin
         Stream.Free;
       end;
     end else begin
-      JSON := StringFromFile(fFileName);
+      JSON := AnyTextFileToRawUTF8(fFileName,true);
       LoadFromJSON(JSON);
     end;
   end;
@@ -37752,7 +37752,7 @@ begin
       S.Free;
     end;
   end else begin // [{"AuthUser":[{....},{...}]},{"AuthGroup":[{...},{...}]}]
-    JSON := StringFromFile(fFileName);
+    JSON := AnyTextFileToRawUTF8(fFileName,true);
     if JSON='' then
       exit;
     P := pointer(JSON);
