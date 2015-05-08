@@ -629,7 +629,8 @@ end;
 
 type
   TExecuteCommandLineCmd = (
-    cNone,cInstall,cUninstall,cStart,cStop,cState,cHelp,cVersion,cConsole,cDaemon);
+    cNone,cInstall,cUninstall,cStart,cStop,cState,cVersion,cVerbose,
+    cHelp,cConsole,cDaemon);
 
 procedure TAbstractDaemon.ExecuteCommandLine;
 var name,param: RawUTF8;
@@ -663,9 +664,10 @@ end;
 procedure Syntax;
 begin
   writeln('Try with one of the switches:');
-  writeln(ExeVersion.ProgramName,
-    ' /console -c /daemon -d /help -h'{$ifdef MSWINDOWS}+
-    ' /install /uninstall /start /stop /state'{$endif});
+  writeln(ExeVersion.ProgramName,' /console -c /verbose /daemon -d /help -h /version');
+  {$ifdef MSWINDOWS}
+  writeln(ExeVersion.ProgramName,' /install /uninstall /start /stop /state');
+  {$endif}
 end;
 begin
   TextColor(ccLightGreen);
@@ -687,8 +689,8 @@ begin
     'c','C': cmd := cConsole;
     'd','D': cmd := cDaemon;
     'h','H': cmd := cHelp;
-    'v','V': cmd := cVersion;
-    else byte(cmd) := 1+IdemPCharArray(@param[2],['INST','UNINST','START','STOP','STAT']);
+    else byte(cmd) := 1+IdemPCharArray(@param[2],[
+      'INST','UNINST','START','STOP','STAT','VERS','VERB']);
     end;
   try
     case cmd of
@@ -700,10 +702,12 @@ begin
       TextColor(ccCyan);
       writeln('Powered by Synopse mORMot '+SYNOPSE_FRAMEWORK_VERSION);
     end;
-    cConsole,cDaemon: begin
+    cConsole,cDaemon,cVerbose: begin
       writeln('Launched in ',cmdText,' mode'#10);
       TextColor(ccLightGray);
-      SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
+      if cmd=cVerbose then
+        SQLite3Log.Family.EchoToConsole := LOG_VERBOSE else
+        SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
       daemon := NewDaemon;
       try
         fDaemon := daemon;

@@ -13322,6 +13322,7 @@ type
   /// used for high-level statistics in TSQLRestServer.URI()
   TSQLRestServerMonitor = class(TSynMonitorServer)
   protected
+    fServer: TSQLRestServer;
     fCurrentThreadCount: integer;
     fSuccess: QWord;
     fOutcomingFiles: QWord;
@@ -36043,13 +36044,13 @@ end;
 constructor TSQLRestServerMonitor.Create(aServer: TSQLRestServer);
 begin
   inherited Create;
+  fServer := aServer;
   SetLength(fPerTable[false],length(aServer.Model.Tables));
   SetLength(fPerTable[true],length(aServer.Model.Tables));
 end;
 
 destructor TSQLRestServerMonitor.Destroy;
 begin
-  TSQLLog.Enter(self);
   ObjArrayClear(fPerTable[false]);
   ObjArrayClear(fPerTable[true]);
   inherited;
