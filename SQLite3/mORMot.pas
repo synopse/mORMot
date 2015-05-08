@@ -8762,6 +8762,7 @@ type
     smvCurrency,
     smvRawUTF8,
     smvString,
+    smvRawByteString,
     smvWideString,
     smvRecord,
     {$ifndef NOVARIANTS}
@@ -8813,9 +8814,9 @@ type
     /// how the variable may be stored
     ValueVar: TServiceMethodValueVar;
     /// how the variable is to be passed at asm level
-    // - vIsString is included for smvRawUTF8, smvString and smvWideString
-    // kind of parameter (smvRecord has it to false, even if they are Base-64
-    // encoded within the JSON content, and also smvVariant/smvRawJSON)
+    // - vIsString is included for smvRawUTF8, smvString, smvRawByteString and
+    // smvWideString kind of parameter (smvRecord has it to false, even if they
+    // are Base-64 encoded within the JSON content, and also smvVariant/smvRawJSON)
     // - vPassedByReference is included if the parameter is passed as reference
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
@@ -43309,25 +43310,26 @@ const
   CONST_ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
-    smvvRawUTF8, smvvString, smvvWideString, smvvRecord,
+    smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvvRecord,
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
   {$ifdef CPU64}
   CONST_STOREDINXMM: TServiceMethodValueTypes = [smvDouble, smvDateTime];
   {$else}
-  // always 8 or x64
+  // always aligned to 8 bytes boundaries for x64
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
-     8,       PTRSIZ,  PTRSIZ, PTRSIZ,     PTRSIZ, {$ifndef NOVARIANTS}PTRSIZ,{$endif}
- // Currency, RawUTF8, String, WideString, Record,  Variant,
+     8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     PTRSIZ,
+ // Currency, RawUTF8, String, RawByteString, WideString, Record,
+    {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
     PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
  // Object, RawJSON, DynArray, Interface
    {$endif}
 
   CONST_ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
-    smvRawUTF8, smvRawJSON, smvString, smvWideString, smvRecord,
+    smvRawUTF8, smvRawJSON, smvString, smvRawByteString, smvWideString, smvRecord,
     {$ifndef NOVARIANTS}smvVariant,{$endif} smvDynArray];
 
   CONST_PSEUDO_RESULT_NAME: string[6] = 'Result';
@@ -43622,6 +43624,7 @@ begin
           smvCurrency:   PInt64(V)^   := StrToCurr64(Val);
           smvRawUTF8:    SetString(PRawUTF8(V)^,PAnsiChar(Val),StrLen(Val));
           smvString:     UTF8DecodeToString(Val,StrLen(Val),PString(V)^);
+          smvRawByteString: Base64ToBin(PAnsiChar(Val),StrLen(Val),PRawByteString(V)^);
           smvWideString: UTF8ToWideString(Val,StrLen(Val),PWideString(V)^);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
@@ -43862,6 +43865,8 @@ begin
   {$ifdef FPC}tkAString,{$endif} tkLString:
     if P=TypeInfo(RawJSON) then
       result := smvRawJSON else
+    if P=TypeInfo(RawByteString) then
+      result := smvRawByteString else
   {$ifndef UNICODE}
     if P=TypeInfo(AnsiString) then
       result := smvString else
@@ -46974,7 +46979,7 @@ const
   // AnsiString (Delphi <2009) may loose data depending on the client
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
-    'double','datetime','currency','utf8','utf8','utf8','',
+    'double','datetime','currency','utf8','utf8','utf8','utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','','');
 begin
   WR.AddShort('{"argument":"');
@@ -47012,6 +47017,7 @@ begin
                  {$else}
                  WR.AddJSONEscapeAnsiString(PString(V)^);
                  {$endif}
+  smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[]);
   smvInterface:  ; // already written by TInterfacedObjectFake.InterfaceWrite
@@ -47392,6 +47398,8 @@ begin
             SetString(RawUTF8s[IndexVar],Val,StrLen(Val));
           smvString:
             UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
+          smvRawByteString:
+            Base64ToBin(PAnsiChar(Val),StrLen(Val),RawByteString(RawUTF8s[IndexVar]));
           smvWideString:
             UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
           else exit; // should not happen

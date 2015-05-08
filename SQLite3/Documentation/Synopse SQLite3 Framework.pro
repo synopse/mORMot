@@ -9194,6 +9194,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
 |{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
+|{\f1\fs20 @*RawByteString@}|Transmitted as @*Base64@ encoded JSON text - use @49@ to transmit raw binary, without the Base64 encoding overhead
 |{\f1\fs20 @*TPersistent@}|Published properties will be transmitted as JSON object
 |{\f1\fs20 @*TSQLRecord@}|All published fields (including ID) will be transmitted as JSON object
 |{\f1\fs20 @*TCollection@}|Not allowed direcly: inherit from {\f1\fs20 @*TInterfacedCollection@} or call {\f1\fs20 TJSONSerializer. RegisterCollectionForJSON()}
@@ -9201,7 +9202,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*TObjectList@}|Transmitted as a JSON array of JSON objects, with a {\f1\fs20 "ClassName": "TMyClass"} field to identify the type - see @71@
 |any {\f1\fs20 @*TObject@}|See @52@
 |dynamic arrays|Transmitted as JSON arrays - see @48@
-|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular {\i Delphi} {\f1\fs20 interface} expectations - transmitted as binary with Base-64 encoding before {\i Delphi} 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
+|{\f1\fs20 @*record@}|Need to have RTTI (so a string or dynamic array field within), just like with regular {\i Delphi} {\f1\fs20 interface} expectations - transmitted as binary with @*Base64@ encoding before {\i Delphi} 2010, or as JSON object thanks to the @*enhanced RTTI@ available since, or via an custom JSON serialization - see @51@
 |{\f1\fs20 variant}|Transmitted as JSON, with support of @80@ for objects and arrays; OLE {\f1\fs20 variant} arrays are not handled: use {\f1\fs20 _Arr([]) _ArrFast([])} instead
 |{\f1\fs20 @*TServiceCustomAnswer@}|If used as a {\f1\fs20 function} result (not as parameter), the supplied content will be transmitted directly to the client (with no JSON @*serialization@); in this case, no {\f1\fs20 var} nor {\f1\fs20 out} parameters are allowed in the method - it will be compatible with both our {\f1\fs20 TServiceFactoryClient} implementation, and any other service consumers (e.g. @*AJAX@)
 |{\f1\fs20 interface}|A callback instance could be specified, to allow asynchronous notification, using e.g. {\i WebSockets} - see @149@
@@ -9262,7 +9263,7 @@ Then your client code can use it as such:
 !  end;
 In this example, we use both {\i @*Factory@} and {\i @*Repository@} patterns, as proposed by @68@.
 :  Record parameters
-By default, any {\f1\fs20 @*record@} parameter or function result will be serialized with a proprietary binary (and optimized) layout, then transmitted as a JSON string, after Base-64 encoding.
+By default, any {\f1\fs20 @*record@} parameter or function result will be serialized with a proprietary binary (and optimized) layout, then transmitted as a JSON string, after @*Base64@ encoding.
 Even if older versions of {\i Delphi} are not able to generate the needed RTTI information for such serialization, allowing us only to use an efficient but proprietary binary layout, the {\i mORMot} framework offers a common way of implementing any custom serialization of records. See @51@.
 Note that the callback signature used for {\i records} matches the one used for {\i dynamic arrays} serializations - see @53@ - as it will be shared between the two of them.
 When records are used as {\i Data Transfer Objects} within services (which is a good idea in common SOA implementation patterns), such a custom serialization format can be handy, and makes more natural service consumption with AJAX clients.
@@ -10396,7 +10397,8 @@ And its implementation:
 !  dec(Rec2.TimeStamp);
 !  Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
 !end;
-Note that {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray} and {\f1\fs20 TWideStringDynArray} values were marshaled as JSON arrays, whereas complex records (like {\f1\fs20 TSQLRestCacheEntryValue}) have been Base-64 encoded.
+Note that {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray} and {\f1\fs20 TWideStringDynArray} values were marshaled as JSON arrays, whereas complex records (like {\f1\fs20 TSQLRestCacheEntryValue}) have been @*Base64@ encoded.
+If you want to transmit some binary blob content, consider using a {\f1\fs20 @*RawByteString@} kind of parameter, which will transmit a Base64-encoded JSON text on the wire.
 The framework is able to handle class instances as parameters, for instance with the following interface, using a {\f1\fs20 TPersistent} child class with published properties (it would be the same for {\f1\fs20 @*TSQLRecord@} @*ORM@ instances):
 !type
 !  TComplexNumber = class(TPersistent)
@@ -15171,7 +15173,7 @@ And the sub-function {\f1\fs20 GetValue} makes use of {\f1\fs20 GetJSONField} al
 !  end;
 !  Inc(Len,length(result));
 !end;
-This code will create a string for each key/value in {\f1\fs20 Fields2[]} and {\f1\fs20 Values[]} arrays, but only once, with the definitive value (even single quote escape and BLOB un-serialize from Base-64 encoding are performed directly from the JSON buffer).
+This code will create a string for each key/value in {\f1\fs20 Fields2[]} and {\f1\fs20 Values[]} arrays, but only once, with the definitive value (even single quote escape and BLOB un-serialize from @*Base64@ encoding are performed directly from the JSON buffer).
 
 [SDD-DI-2.1.3]
 ; SRS-DI-2.1.3 - The framework must use an innovative ORM (Object-relational mapping) approach, based on classes RTTI (Runtime Type Information)
