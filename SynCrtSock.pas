@@ -720,6 +720,10 @@ type
     fOnTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
     {$endif}
+  public
+    {$ifndef HASTTHREADSTART}
+    procedure Start;
+    {$endif}
   end;
 
 {$ifdef USETHREADPOOL}
@@ -3736,7 +3740,14 @@ begin
     fStartNotified := nil;
   end;
   inherited DoTerminate;
-end;  
+end;
+{$endif}
+
+{$ifndef HASTTHREADSTART}
+procedure TNotifiedThread.Start;
+begin
+  Resume;
+end;
 {$endif}
 
 

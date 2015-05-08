@@ -112,8 +112,7 @@ type
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
-  //
-  exit;
+  // exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
 {$ifdef MSWINDOWS}

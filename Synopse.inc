@@ -192,6 +192,7 @@
   {$define HASINLINE}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define NOX64PATCHRTL} // official FPC's RTL already includes this x64 asm
+  {$define HASTTHREADSTART}
 
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -302,6 +303,7 @@
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
       {$define ISDELPHI2010}
+      {$define HASTTHREADSTART}
       {$ifdef NEWRTTINOTUSED}
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
