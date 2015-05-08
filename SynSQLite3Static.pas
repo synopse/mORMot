@@ -47,8 +47,8 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.8.9 engine
-   ****************************************
+    Statically linked SQLite3 3.8.10 engine
+   *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
@@ -74,7 +74,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.8.9
+  - updated SQLite3 engine to latest version 3.8.10
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
