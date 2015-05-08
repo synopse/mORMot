@@ -61,6 +61,10 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   mORMotService,
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  {$endif}
   {$endif}
   SysUtils,
   Classes,
@@ -804,4 +808,4 @@ begin
   inherited;
 end;
 
-end.
+end.

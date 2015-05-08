@@ -93,15 +93,6 @@ uses
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
   {$endif}
-  {$ifdef FPC}
-  {$ifdef Linux}
-  //cmem, // told to be faster in multi-thread, but triggers GPF! :(
-  cthreads, // we need it to use TThread
-  // widestring manager for Linux !!
-  // could also be put in another unit ... but doc states: as early as possible
-  cwstring,
-  {$endif Linux}
-  {$endif FPC}
   SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
@@ -189,4 +180,4 @@ begin
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
-end.
+end.
