@@ -3578,7 +3578,7 @@ As stated below, you can use any other database access layer, if you wish:
 :  SQLite3 as core
 This framework uses a compiled version of the official {\i SQLite3} library source code, and includes it natively into {\i Delphi} code. This framework therefore adds some very useful capabilities to the Standard {\i SQLite3} database engine, but keeping all its advantages, as listed in the previous paragraph of this document:
 - Can be either statically linked to the executable, or load external {\f1\fs20 sqlite3.dll};
-- Faster database access, through unified memory model, and usage of the {\f1\fs20 FastMM4} memory manager (which is almost 10 times faster than the default Windows memory manager for memory allocation);
+- Faster database access, through unified memory model, and usage of the {\f1\fs20 @*FastMM4@} memory manager (which is almost 10 times faster than the default Windows memory manager for memory allocation);
 - Optional direct encryption of the data on the disk (up to @*AES@-256 level, that is Top-Secret @*security@);
 - Use via {\i mORMot}'s @*ORM@ let database layout be declared once in the {\i Delphi} source code (as @*published properties@ of classes), avoiding most SQL writing, hence common field or table names mismatch;
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
@@ -3873,7 +3873,7 @@ First of all, our version included with {\f1\fs20 SynSQLite3Static.pas} unit, is
 |{\b SQLite3 (ext off)}|131130|255806|513505
 |{\b SQLite3 (ext mem)}|135784|248780|502664
 |%
-Good old {\i Borland C++ builder} produces some efficient code here. Those numbers are very good, when compared to the other two options. Probably, using {\i FastMM4} as memory manager and tuned compilation options does make sense.
+Good old {\i Borland C++ builder} produces some efficient code here. Those numbers are very good, when compared to the other two options. Probably, using {\i @*FastMM4@} as memory manager and tuned compilation options does make sense.
 :   Official MinGW-compiled sqlite3.dll
 Here we used the official {\f1\fs20 sqlite3.dll} library, as published in the @http://sqlite.org web site, and compiled with the MinGW/GCC compiler.
 \line {\i Writing speed}
@@ -10681,7 +10681,7 @@ We developed our own cross-platform @*JSON@ process unit in {\f1\fs20 SynCrossPl
 $ 2.2. Table content:
 $- Synopse crossplatform: 41,135 assertions passed  20.56ms  400,048/s  1.9 MB
 $- DBXJSON: 41,136 assertions passed  240.84ms  34,159/s  9.9 MB
-Our {\f1\fs20 TSQLTableJSON} class is more than 10 times faster than standard {\f1\fs20 DBXJSON} unit, when processing a list of results as returned by a {\i mORMot} server.\line The latest value on each line above is the memory consumption. It should be of high interest on mobile platforms, where memory allocation tends to be much slower and sensitive than on Windows (where {\i FastMM4} memory manager does wonders). Our unit consumes 5 times less memory than the RTL's version.
+Our {\f1\fs20 TSQLTableJSON} class is more than 10 times faster than standard {\f1\fs20 DBXJSON} unit, when processing a list of results as returned by a {\i mORMot} server.\line The latest value on each line above is the memory consumption. It should be of high interest on mobile platforms, where memory allocation tends to be much slower and sensitive than on Windows (where the {\i @*FastMM4@} memory manager does wonders). Our unit consumes 5 times less memory than the RTL's version.
 We did not include {\i XSuperObject} here, which is cross-platform, but performs even worse than {\f1\fs20 DBXJSON} in terms of speed. Other libraries - as {\i SuperObject} or {\i dwsJSON} - are not cross-platform.\line See @http://blog.synopse.info/post/json-benchmark-delphi-mormot-superobject-dwsjson-dbxjson for details about this comparison.
 A special mention is due to {\i dwsJSON}, which performs very well, but only on Windows, and is slower than {\i mORMot}'s implementation:
 $- Synopse ORM loop: 41,135 assertions passed  6.18ms  1,330,153/s  1.1 MB
@@ -10772,7 +10772,7 @@ Another issue with the 2.7.1 / 3.1.1 revisions is how the new {\f1\fs20 string} 
 !  ...
 It sounds like if {\f1\fs20 '"'} will force the code page of {\f1\fs20 result} to be not an UTF-8 content.\line With {\i Delphi}, this kind of statements work as expected, even for {\f1\fs20 AnsiString} values, and {\f1\fs20 '"'} constant is handled as {\f1\fs20 RawByteString}. We were not able to find an easy and safe workaround for FPC yet. Input is welcome in this area, from any expert!
 You have to take care of this limitation, if you target the {\i Windows} operating system with FPC (and {\i @*Lazarus@}). Under other systems, the default code page is likely to be UTF-8, so in this case our {\f1\fs20 SynCrossPlatform*} units will work as expected.
-We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with {\i Delphi}. The memory manager is less optimized than {\i FastMM4} for rough simple threaded tests, but is cross-platform and much more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
+We found out the {\i FreePascal} compiler to work very well, and result in small and fast executables. For most common work, timing is comparable with {\i Delphi}. The memory manager is less optimized than {\i @*FastMM4@} for rough simple threaded tests, but is cross-platform and designed to be more efficient in multi-thread mode: in fact, it has no giant lock, as {\i FastMM4} suffers.
 :105   Local or remote logging
 You can use the {\f1\fs20 TSQLRest.Log()} overloaded methods to log any content into a file or a remote server.
 All ORM and SOA functions of the {\f1\fs20 TSQLRest} instance will create the expected log, just with the main {\i mORMot} units running on Win32/Win64 - see @104@.\line For instance, here are some log entries created during the {\f1\fs20 RegressionTest.dpr} process:
@@ -13775,7 +13775,7 @@ In fact, you will get:
 |{\f1\fs20 CrossPlatform}|Contains code for cross-platform clients
 |{\f1\fs20 HtmlView/}|A fork of the freeware {\f1\fs20 THtmlView} component, used as a demo of the {\f1\fs20 SynPdf} unit - not finished, and not truly Unicode ready
 |{\f1\fs20 LVCL/}|{\i Light VCL} replacement files for standard VCL (for {\i Delphi} 6-7 only)
-|{\f1\fs20 RTL7/}|Enhanced RTL .dcu for {\i Delphi} 7 (not mandatory at all), and {\i FastMM4} memory manager to be used before {\i Delphi} 2006
+|{\f1\fs20 RTL7/}|Enhanced RTL .dcu for {\i Delphi} 7 (not mandatory at all), and {\i @*FastMM4@} memory manager to be used before {\i Delphi} 2006
 |{\f1\fs20 SQLite3/}|Contains all @*ORM@ / @*SOA@ related files of the framework (i.e. {\i mORMot} itself) and its documentation
 |{\f1\fs20 SynDBDataset/}|{\f1\fs20 DB.pas}-based external database providers
 |{\f1\fs20 SynProject/}|Source code of the {\i @*SynProject@} tool, used to edit and generate this documentation
@@ -13895,7 +13895,7 @@ In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environm
 - {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
 - {\i Search path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
 For any cross-platform client, do not forget to include the {\f1\fs20 D:\\Dev\\Lib\\CrossPlatform} to the {\i Delphi} or {\i FreePascal} IDE paths of the corresponding targets.\line For {\i @*Smart Mobile Studio@}, execute {\f1\fs20 CopySynCrossPlatformUnits.bat} to set the needed units in the IDE repository.
-Note that before {\i Delphi} 2006, you would need to download and install {\i FastMM4} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with {\i Delphi} 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
+Note that before {\i Delphi} 2006, you would need to download and install {\i @*FastMM4@} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with {\i Delphi} 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
 Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder. You should be able to compile it and run all regression @*test@s on your computer.\line If you want to run the tests with the fast @*http.sys@ kernel-based HTTP server, you'll need to compile and run (as administrator) {\f1\fs20 TestSQL3Register.dpr} once before launching {\f1\fs20 TestSQL3.dpr}.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
@@ -13957,13 +13957,19 @@ Then in your {\f1\fs20 .dpr} file, you should write:
 !  cwstring, // optional
 !  {$endif}
 !  {$endif}
+In fact, these above lines have been added to {\f1\fs20 @*SynDprUses.inc@}, so you may just write the following:
+!uses
+!  {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006, and enable FPC on linux
+As a side benefit, you would be able to share the same {\f1\fs20 .dpr} with Delphi, and it will enable {\i @*FastMM4@} for older versions which do not include it as default heap manager.
 For instance a minimal FPC project to run the regression tests may be:
 !program LinuxSynTestFPCLinuxi386;
 !
 !{$I Synopse.inc}
 !{$APPTYPE CONSOLE}
 !
-!uses {$ifdef Linux} cthreads, cwstring, {$endif} mORMotSelfTests;
+!uses
+!  {$I SynDprUses.inc}
+!  mORMotSelfTests;
 !
 !begin
 !  SQLite3ConsoleTests;
