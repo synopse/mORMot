@@ -1022,6 +1022,8 @@ unit mORMot;
     - introducing new TSQLTable[JSON].CreateFromTables/CreateWithColumnTypes()
       constructors, able to specify the column type information to be used
     - added TSQLTable.SetFieldType() method to specify a column type and size
+    - introduced TSQLTable.FieldTypeIntegerDetectionOnAllRows property to force
+      the detection of number types for all data rows, if needed
     - added TSQLTable.SortFields() overloaded method, able to sort a TSQLTable
       row content by multiple fields - implements feature request [d277153f03]
     - added optional CustomFormat: string parameter to TSQLTable.ExpandAsString()
@@ -1764,6 +1766,12 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
 // sftBoolean or sftModTime / sftCreateTime / sftTimeLog type
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
+
+/// guess the number type of an UTF-8 encoded field value, as used in TSQLTable.Get()
+// - if P if nil or 'null', return sftUnknown
+// - will return sftInteger or sftFloat if the supplied text is a number
+// - will return sftUTF8Text for any non numerical content
+function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
 
 
 /// read an object properties, as saved by TINIWriter.WriteObject() method
@@ -6738,12 +6746,11 @@ type
       // the corresponding index in fQueryTables[]
       TableIndex: integer;
     end;
+    fFieldTypeAllRows: boolean;
     /// used by FieldIndex() for fast binary search
     fFieldNameOrder: TCardinalDynArray;
     /// contain the fResults[] pointers, after a IDColumnHide() call
     fIDColumn, fNotIDColumn: array of PUTF8Char;
-    /// bit set at parsing to mark was a string value (e.g. "..." in JSON)
-    fFieldParsedAsString: set of 0..255;
     /// index of a 'ID' field, -1 if none (e.g. after IDColumnHide method call)
     fFieldIndexID: integer;
     /// the internal state counter of the database when the data was retrieved
@@ -6756,6 +6763,9 @@ type
     fOwnerMustFree: Boolean;
     /// current cursor row (1..RowCount), as set by the Step() method
     fStepRow: integer;
+    /// column bit set at parsing to mark a string value (e.g. "..." in JSON)
+    fFieldParsedAsString: set of 0..255;
+    /// avoid GPF when TSQLTable is nil
     function GetRowCount: integer; {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
@@ -6853,8 +6863,8 @@ type
     // encoded as a TTimeLog Int64 value - as sftInteger may have been
     // identified by TSQLTable.InitFieldTypes
     // - for sftTimeLog, sftModTime, sftCreateTime fields, you may have to force
-    // the column type, since it may be identified as sftCurrency by default
-    // from its JSON number content, e.g. via:
+    // the column type, since it may be identified as sftInteger or sftCurrency
+    // by default from its JSON number content, e.g. via:
     // ! aTable.SetFieldType('FieldName',sftModTime);
     // - sftCurrency,sftFloat will return the corresponding double value
     // - any other types will try to convert ISO-8601 text }
@@ -7108,6 +7118,7 @@ type
     procedure SetFieldLengthMean(const Lengths: array of cardinal);
     /// set the exact type of a given field
     // - by default, column types and sizes will be retrieved from JSON content
+    // from first row, or all rows if FieldTypeIntegerDetectionOnAllRows is set
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
@@ -7118,6 +7129,7 @@ type
        FieldTypeInfo: pointer=nil; FieldSize: integer=-1); overload;
     /// set the exact type of a given field
     // - by default, column types and sizes will be retrieved from JSON content
+    // from first row, or all rows if FieldTypeIntegerDetectionOnAllRows is set
     // - you can define a specific type for a given column, and optionally
     // a maximum column size
     // - FieldTypeInfo can be specified for sets or enumerations, as such:
@@ -7321,6 +7333,14 @@ type
     property InternalState: cardinal read fInternalState write fInternalState;
     /// if the TSQLRecord is the owner of this table, i.e. if it must free it
     property OwnerMustFree: Boolean read fOwnerMustFree write fOwnerMustFree;
+    /// by default, if field types are not set, only the content of the first
+    // row will be checked, to make a difference between a sftInteger and sftFloat
+    // - you can set this property to TRUE so that all non string rows will
+    // be checked for the exact number precision
+    // - note that the safest is to provide the column type, either by supplying
+    // the TSQLRecord class, or by calling SetFieldType() overloaded methods
+    property FieldTypeIntegerDetectionOnAllRows: boolean
+      read fFieldTypeAllRows write fFieldTypeAllRows;
   end;
 
 {$ifndef NOVARIANTS}
@@ -20365,6 +20385,7 @@ var f,i: integer;
     FieldType: TSQLFieldType;
     FieldTypeInfo: pointer;
     TableInd: integer;
+    U: PPUTF8Char;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
     raise ESQLTableException.CreateUTF8('%.CreateWithColumnTypes() called with % '+
@@ -20384,16 +20405,20 @@ begin
       // not found from fQueryTables/fQueryColumnTypes[]: get from content
       if IsRowID(fResults[f]) then
         FieldType := sftInteger else
-      for i := 1 to fRowCount do begin
-        FieldType := UTF8ContentType(fResults[i*FieldCount+f]);
-        if FieldType<>sftUnknown then begin
-          if (FieldType in [sftInteger,sftFloat]) and
-             (f in fFieldParsedAsString) then
-            FieldType := sftUTF8Text else // force string value not to be a number
-          if FieldType=sftInteger then
-            // we only checked the first field -> best guess...
-            FieldType := sftCurrency;
-          break; // get first non null field content
+      if f in fFieldParsedAsString then // the parser identified as string value
+        FieldType := sftUTF8Text else begin
+        U := @fResults[FieldCount+f];
+        for i := 1 to fRowCount do begin
+          FieldType := UTF8ContentNumberType(U^);
+          inc(U,FieldCount);
+          if FieldType=sftUnknown then
+            continue else // null -> search for a non void column 
+          if FieldType=sftInteger then // may be a floating point with no decimal
+            if FieldTypeIntegerDetectionOnAllRows then
+              continue else
+              // we only checked the first field -> best guess...
+              FieldType := sftCurrency;
+          break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
         end;
       end;
     with fFieldType[f] do begin
@@ -23020,13 +23045,13 @@ begin
       // get a field
       fJSONResults[i] := GetJSONFieldOrObjectOrArray(P,@wasString,nil,true);
       if (P=nil) and (i<>max) then
-        exit; // failure (GetRowCountNotExpanded should have detect it)
-      if (f>=0) and (i>=FieldCount) then begin
+        exit; // failure (GetRowCountNotExpanded should have detected it)
+      if i>=FieldCount then begin
         if wasString then
           Include(fFieldParsedAsString,f); // mark column was "string"
         inc(f);
         if f=FieldCount then
-          f := -1; // only check first row (should be consistent)
+          f := 0; // check all rows
       end;
     end;
   end else begin
@@ -23050,7 +23075,8 @@ begin
     resmax := nfield*2;
     SetLength(fJSONResults,resmax); // space for field names + 1 data row
     nrow := 0;
-    repeat // unescape+zeroify JSONData + fill U[] with pointer to values
+    repeat // let fJSONResults[] point to unescaped+zeroified JSON values
+      f := 0;
       for i := 0 to nfield-1 do begin
         if nrow=0 then // get field name from 1st Row
           fJSONResults[i] := GetJSONPropName(P) else
@@ -23060,14 +23086,18 @@ begin
           SetLength(fJSONResults,resmax); // enough space for 256 more rows
         end;
         if P=nil then break; // normal end: no more field name
-        fJSONResults[max] := GetJSONFieldOrObjectOrArray(P,@wasString,@EndOfObject,true);
+        fJSONResults[max] := GetJSONFieldOrObjectOrArray(
+          P,@wasString,@EndOfObject,true);
         if P=nil then begin
           nfield := 0;
           break; // unexpected end
         end;
-        if (nrow=1) and wasString then // mark column was "string"
-          Include(fFieldParsedAsString,max-nfield);
+        if wasString then // mark column was "string"
+          Include(fFieldParsedAsString,f);
+        inc(f);
         inc(max);
+        if f=nField then
+          f := 0; // check all rows
       end;
       if P=nil then
         break; // unexpected end
@@ -23238,15 +23268,14 @@ begin
   end;
 end;
 
-function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
 var V: PUTF8Char;
-    c: integer;
 begin
   if P=nil then begin
     result := sftUnknown;
     exit;
   end;
-  P := GotoNextNotSpace(P);
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   V := P;
   if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
      result := sftUnknown else
@@ -23278,7 +23307,54 @@ begin
       if P^='-' then inc(P);
       while P^ in ['0'..'9'] do inc(P);
     end;
-    P := GotoNextNotSpace(P);
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    if P^<>#0 then // invalid numerical value
+      result := sftUTF8Text;
+  end else
+    result := sftUTF8Text;
+end;
+
+function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
+var V: PUTF8Char;
+    c: integer;
+begin
+  if P=nil then begin
+    result := sftUnknown;
+    exit;
+  end;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  V := P;
+  if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
+     result := sftUnknown else
+  // don't check for 'false' or 'true' here, since their UTF-8 value is '0' or '1'
+  if (P[0] in ['1'..'9']) or // is first char numeric?
+     ((P[0]='0') and not (P[1] in ['0'..'9'])) or // '012' excluded by JSON
+     ((P[0]='-') and (P[1] in ['0'..'9'])) then begin
+    // check if P^ is a true numerical value
+    result := sftInteger;
+    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
+    if P^='.' then begin
+      inc(P);
+      if P^ in ['0'..'9'] then begin
+        result := sftFloat;
+        repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
+      end else begin
+        result := sftUTF8Text; // invalid '23023.' value
+        exit;
+      end;
+    end else
+      if P-V>18 then begin
+        Result := sftUTF8Text; // outside Int64 digits range
+        exit; // even sftFloat precision won't be able to handle it
+      end;
+    if byte(P^) and $DF=ord('E') then begin
+      result := sftFloat;
+      inc(P);
+      if P^='+' then inc(P) else
+      if P^='-' then inc(P);
+      while P^ in ['0'..'9'] do inc(P);
+    end;
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
     if P^<>#0 then // invalid numerical value -> test if not TDateTime
       if Iso8601ToTimeLogPUTF8Char(V,0)<>0 then
         result := sftDateTime else
