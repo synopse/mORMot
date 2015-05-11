@@ -436,7 +436,7 @@ unit SynCommons;
     TSynPersistent abstract classes, allowing to define virtual constructors for
     TPersistent kind of objects (used e.g. with internal JSON serialization,
     for interface-based services, or for DDD objects)
-  - introducing TInterfacedObjectLocked class
+  - introducing TSynPersistentLocked and TInterfacedObjectLocked classes
   - new TSynPersistentWithPassword class, able to store the password with
     a custom simple encryption when serialized as JSON
   - introducing TSynAuthentication class for simple generic authentication
@@ -4465,6 +4465,22 @@ type
     constructor Create; virtual;
   end;
   {$M-}
+
+  /// adding locking methods to a TSynPersistent with virtual constructor
+  TSynPersistentLocked = class(TSynPersistent)
+  protected
+    fLock: TRTLCriticalSection;
+    PaddingForLock: array[0..11] of Int64; // just like TSynCriticalSection
+  public
+    /// initialize the object instance, and its associated lock
+    constructor Create; override;
+    /// release the instance (including the locking resource)
+    destructor Destroy; override;
+    /// lock the instance for exclusive access
+    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
+    /// release the instance for exclusive access
+    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+  end;
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
@@ -34734,10 +34750,36 @@ constructor TPersistentWithCustomCreate.Create;
 begin // nothing to do by default - overridden constructor may add custom code
 end;
 
+
 { TSynPersistent }
 
 constructor TSynPersistent.Create;
 begin // nothing to do by default - overridden constructor may add custom code
+end;
+
+
+{ TSynPersistentLocked }
+
+constructor TSynPersistentLocked.Create;
+begin
+  inherited Create;
+  InitializeCriticalSection(fLock);
+end;
+
+destructor TSynPersistentLocked.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fLock);
+end;
+
+procedure TSynPersistentLocked.Lock;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TSynPersistentLocked.UnLock;
+begin
+  LeaveCriticalSection(fLock);
 end;
 
 
