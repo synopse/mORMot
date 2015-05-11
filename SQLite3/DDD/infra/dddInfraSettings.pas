@@ -256,10 +256,12 @@ type
   end;
 
   /// parent class for storing REST-based application settings as a JSON file
+  // - this class could be used for an application with a single REST server
+  // running on a given HTTP port
   TApplicationSettingsRestFile = class(TApplicationSettingsFile)
   protected
     fRest: TRestSettings;
-    fServerPort: word;
+    fServerPort: RawUTF8;
   public
     /// to be called when the application starts, to access settings
     // - will call inherited TApplicationSettingsFile.Initialize, and
@@ -269,7 +271,7 @@ type
     /// allow to instantiate a REST instance from its JSON definition
     property Rest: TRestSettings read fRest;
     /// the IP port to be used for the HTTP server associated with the application
-    property ServerPort: word read fServerPort write fServerPort;
+    property ServerPort: RawUTF8 read fServerPort write fServerPort;
   end;
 
   /// define how an administrated service/daemon is remotely accessed via REST
@@ -580,8 +582,8 @@ end;
 procedure TApplicationSettingsRestFile.Initialize(const aDescription: string);
 begin
   inherited Initialize(aDescription);
-  if ServerPort=0 then
-    ServerPort := {$ifdef LINUX}8888{$else}888{$endif};
+  if ServerPort='' then
+    ServerPort := {$ifdef LINUX}'8888'{$else}'888'{$endif};
 end;
 
 
