@@ -185,16 +185,25 @@ type
 
   /// generic interface, to manage a service/daemon instance from an executable
   // - in addition to Start/Stop methods, Halt would force the whole executable
-  // to abort its execution
+  // to abort its execution, and SubscribeLog allows log monitoring
   // - those methods could be published as REST (e.g. over named pipe), so that
   // a single administration daemon (installed e.g. as a Windows Service) would
   // be able to launch and monitor child processes as individual executables
+  // - since SubscribeLog() uses a callback, this REST server should be
+  // published via supported transmission protocol, e.g. WebSockets
   IAdministratedDaemon = interface(IMonitoredDaemon)
     ['{BD02919E-56ED-4559-967A-EFBC0E85C031}']
     /// will Stop the service/daemon process, then quit the executable
     // - the returned Information and TCQRSResult are passed directly from
     // the Stop() method
     function Halt(out Information: variant): TCQRSResult;
+    /// used to subscribe for real-time remote log monitoring
+    // - allows to track the specified log events, with a callback
+    procedure SubscribeLog(const Level: TSynLogInfos; const Callback: ISynLogCallback);
+    /// will be called when a callback is released on the client side
+    // - this method matches IServiceWithCallbackReleased signature
+    // - will be used to unsubscribe any previous ISynLogCallback notification 
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
 
@@ -740,6 +749,7 @@ type
     fLogClass: TSynLogClass;
     fStatus: TDDDAdministratedDaemonStatus;
     fFinished: TEvent;
+    fRemoteLog: TSynLogCallbacks;
     function InternalIsRunning: boolean; virtual; abstract;
     procedure InternalStart; virtual; abstract;
     function InternalRetrieveState(var Status: variant): boolean; virtual; abstract;
@@ -761,21 +771,27 @@ type
     // - under Windows, you can export the administration server as named pipe,
     // if the optional aServerNamedPipe parameter is set
     constructor Create(const aUserName,aHashedPassword: RawUTF8;
-      const aRoot: RawUTF8='root'; const aServerNamedPipe: TFileName=''); reintroduce; overload;
+      const aRoot: RawUTF8='admin'; const aServerNamedPipe: TFileName=''); reintroduce; overload;
     /// finalize the service/daemon
     // - will call Halt() if the associated process is still running
     destructor Destroy; override;
     /// monitor the Daemon/Service by returning some information as a TDocVariant
-    function RetrieveState(out Status: variant): TCQRSResult; virtual; 
-    /// launch the associated process
+    function RetrieveState(out Status: variant): TCQRSResult; virtual;
+    /// IAdministratedDaemon command to launch the associated process
     // - if the process was already running, returns cqrsAlreadyExists
     function Start: TCQRSResult; virtual;
-    /// finalize the associated process
+    /// IAdministratedDaemon command to finalize the associated process
     // - and returns updated statistics as a TDocVariant
     function Stop(out Information: variant): TCQRSResult; virtual;
-    /// will Stop the associated process, then quit the executable
+    /// IAdministratedDaemon command to  Stop the associated process, then
+    // quit the executable
     // - returning the same output information than Stop()
     function Halt(out Information: variant): TCQRSResult; virtual;
+    /// IAdministratedDaemon command to subscribe to a set of events for
+    // real-time remote monitoring of the specified log events
+    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback);
+    /// IAdministratedDaemon command called when a callback is released on the client side
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
     /// run the daemon, until it is halted
     // - if RemotelyAdministrated is FALSE, it will Start the process, then
     // wait until the [Enter] key is pressed (to be used in pure console mode)
@@ -1960,6 +1976,7 @@ begin
   try
     inherited Destroy;
     fFinished.Free;
+    FreeAndNil(fRemoteLog);
   finally
     if fAdministrationServerOwned then
       FreeAndNil(fAdministrationServer);
@@ -2065,6 +2082,21 @@ begin
   writeln('Shutting down server');
   ioresult;
   {$I+}
+end;
+
+procedure TDDDAdministratedDaemon.CallbackReleased(
+  const callback: IInvokable; const interfaceName: RawUTF8);
+begin
+  if (interfaceName='ISynLogCallback') and (fRemoteLog<>nil) then
+    fRemoteLog.Unsubscribe(ISynLogCallback(callback));
+end;
+
+procedure TDDDAdministratedDaemon.SubscribeLog(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback);
+begin
+  if fRemoteLog=nil then
+    fRemoteLog := TSynLogCallbacks.Create(fLogClass.Family);
+  fRemoteLog.Subscribe(Levels,Callback);
 end;
 
 

@@ -30,7 +30,7 @@ unit dddInfraSettings;
 
   Contributor(s):
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -79,7 +79,7 @@ uses
   mORMotMongoDB,    // for TRestSettings on external NoSQL database
   mORMotWrappers;   // for TRestSettings to publish wrapper methods
 
-  
+
 { ----- Manage Service/Daemon settings }
 
 type
@@ -285,8 +285,13 @@ type
     FAuthUserName: RawUTF8;
     FAuthNamedPipeName: TFileName;
     FAuthHttp: TSQLHttpServerDefinition;
+  public
+    /// set default settings
+    // - i.e. AuthRootURI='admin' and plain AuthHttp.WebSocketPassword=ClassName
+    constructor Create; override;
   published
     /// the root URI used for the REST data model
+    // - default URI is 'admin'
     property AuthRootURI: RawUTF8 read FAuthRootURI write FAuthRootURI;
     /// if set, expect authentication with this single user name
     // - that is, the TSQLRestServer will register a single TSQLAuthUser
@@ -360,10 +365,12 @@ type
     // daemon as a Windows Service - you should run the program with
     // administrator rights to be able to change the Services settings
     // - /console or /c would run the program as a console application
+    // - /verbose would run the program as a console application, in verbose mode
     // - /daemon or /d would run the program as a remotely administrated
     // daemon, using a published IAdministratedDaemon service
+    // - /version would show the current revision information of the application
     // - no command line argument will run the program as a Service dispatcher
-    // under Windows (as a regular service)
+    // under Windows (as a regular service), or display the syntax
     // - any invalid switch, or no switch under Linux, will display the syntax
     // - this method will output any error or information to the console
     // - as a result, a project .dpr could look like the following:
@@ -512,7 +519,7 @@ begin
   {$endif}
   if (fORM.Kind='') and (riDefaultLocalSQlite3IfNone in aOptions) then begin
     fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
-    if fORM.ServerName='' then 
+    if fORM.ServerName='' then
       fORM.ServerName := StringToUTF8(
         ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
     if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
@@ -521,7 +528,7 @@ begin
   end;
   result := nil;
   try
-    if fORM.Kind='' then 
+    if fORM.Kind='' then
       exit;
     if optEraseDBFileAtStartup in Options then
       if (fORM.Kind='TSQLRestServerDB') or
@@ -538,7 +545,7 @@ begin
       if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
-      if result.InheritsFrom(TSQLRestServerDB) then 
+      if result.InheritsFrom(TSQLRestServerDB) then
         with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
           LockingMode := lmExclusive;
           if optSQlite3FileSafeSlowMode in Options then
@@ -584,6 +591,16 @@ begin
   inherited Initialize(aDescription);
   if ServerPort='' then
     ServerPort := {$ifdef LINUX}'8888'{$else}'888'{$endif};
+end;
+
+
+{ TAdministratedDaemonSettings }
+
+constructor TAdministratedDaemonSettings.Create;
+begin
+  inherited Create;
+  AuthRootURI := 'admin';
+  AuthHttp.PasswordPlain := RawUTF8(ClassName); // default WebSocketPassword
 end;
 
 
@@ -810,4 +827,5 @@ begin
   inherited;
 end;
 
-end.
+
+end.
