@@ -967,13 +967,17 @@ const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticat
   {$ifdef WINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
 var a: TSQLHttpServerRestAuthentication;
     kind: TSQLHttpServerOptions;
+    thrdCnt: integer;
 begin
   if aDefinition=nil then
     raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
   if aDefinition.WebSocketPassword='' then
-    kind := HTTP_DEFAULT_MODE else
+    kind := {$ifdef MSWINDOWS}useHttpApiRegisteringURI{$else}useHttpSocket{$endif} else
     kind := useBidirSocket;
-  Create(aDefinition.BindPort,aServer,'+',kind,nil,32,
+  if aDefinition.ThreadCount=0 then
+    thrdCnt := 32 else
+    thrdCnt := aDefinition.ThreadCount;
+  Create(aDefinition.BindPort,aServer,'+',kind,nil,thrdCnt,
     HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then

@@ -12998,6 +12998,7 @@ type
   protected
     FBindPort: AnsiString;
     FAuthentication: TSQLHttpServerRestAuthentication;
+    FThreadCount: byte;
     FHttps: boolean;
     FHttpSysQueueName: SynUnicode;
   published
@@ -13007,6 +13008,12 @@ type
     /// which authentication is expected to be published
     property Authentication: TSQLHttpServerRestAuthentication
       read FAuthentication write FAuthentication;
+    /// how many threads the thread pool associated with this HTTP server
+    // should create
+    // - if set to 0, will use default value 32
+    // - this parameter may be ignored depending on the actual HTTP
+    // server used, which may not have any thread pool
+    property ThreadCount: byte read fThreadCount write fThreadCount;
     /// defines if https:// protocol should be used
     // - implemented only by http.sys server under Windows, not by socket servers
     property Https: boolean read FHttps write FHttps;
@@ -13017,6 +13024,7 @@ type
     // encrypted binary protocol
     // - when stored in the settings JSON file, the password will be safely
     // encrypted as defined by TSynPersistentWithPassword
+    // - use the inherited PlainPassword property to set or read its value
     property WebSocketPassword: RawUTF8 read fPassWord write fPassWord;
   end;
 
