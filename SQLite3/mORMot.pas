@@ -1581,8 +1581,10 @@ type
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
   // InternalBatchStop methods
   TJSONObjectDecoder = {$ifdef UNICODE}record{$else}object{$endif}
-    /// contains the decoded field names or values
-    FieldNames, FieldValues: array[0..MAX_SQLFIELDS-1] of RawUTF8;
+    /// contains the decoded field names
+    FieldNames: array[0..MAX_SQLFIELDS-1] of RawUTF8;
+    /// contains the decoded field values
+    FieldValues: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// Decode() will set each field type approximation
     // - will recognize also JSON_BASE64_MAGIC/JSON_SQLDATE_MAGIC prefix
     FieldTypeApproximation: array[0..MAX_SQLFIELDS-1] of
@@ -22700,7 +22702,8 @@ begin
   W := TTextWriter.CreateOwnedStream(2048);
   try
     if Update then begin
-      for F := 0 to FieldCount-1 do begin // append 'COL1=...,COL2=...'
+      for F := 0 to FieldCount-1 do // append 'COL1=...,COL2=...'
+      if not IsRowID(pointer(DecodedFieldNames^[F])) then begin
         W.AddString(DecodedFieldNames^[F]);
         W.Add('=');
         AddValue;
@@ -23277,8 +23280,6 @@ begin
   end;
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   V := P;
-  if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
-     result := sftUnknown else
   // don't check for 'false' or 'true' here, since their UTF-8 value is '0' or '1'
   if (P[0] in ['1'..'9']) or // is first char numeric?
      ((P[0]='0') and not (P[1] in ['0'..'9'])) or // '012' excluded by JSON
@@ -23311,6 +23312,8 @@ begin
     if P^<>#0 then // invalid numerical value
       result := sftUTF8Text;
   end else
+  if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
+    result := sftUnknown else
     result := sftUTF8Text;
 end;
 
@@ -29522,14 +29525,18 @@ end;
 
 function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args: array of const): boolean;
+var SQL: RawUTF8;
 begin
-  result := EngineExecute(FormatUTF8(SQLFormat,Args));
+  SQL := FormatUTF8(SQLFormat,Args);
+  result := EngineExecute(SQL);
 end;
 
 function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args, Bounds: array of const): boolean;
+var SQL: RawUTF8;
 begin
-  result := EngineExecute(FormatUTF8(SQLFormat,Args,Bounds));
+  SQL := FormatUTF8(SQLFormat,Args,Bounds);
+  result := EngineExecute(SQL);
 end;
 
 function TSQLRest.MainFieldValue(Table: TSQLRecordClass; ID: TID;
