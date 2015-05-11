@@ -5282,6 +5282,14 @@ type
     // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTML_SUCCESS;
       Handle304NotModified: boolean=false); overload;
+    /// use this method to send back any object as JSON document to the caller
+    // - this method will call ObjectToJson() to compute the returned content
+    procedure Returns(Value: TObject; Status: integer=HTML_SUCCESS;
+      Handle304NotModified: boolean=false); overload;
+    /// use this method to send back any variant as JSON to the caller
+    // - this method will call VariantSaveJSON() to compute the returned content
+    procedure ReturnsJson(const Value: variant; Status: integer=HTML_SUCCESS;
+      Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape);
     /// uses this method to send back directly any binary content to the caller
     // - the exact MIME type will be retrieved using GetMimeContentTypeHeader()
     // - by default, the HTML_NOTMODIFIED process will take place, to minimize
@@ -33713,6 +33721,24 @@ begin
     end;
   end else
     Error(Result,Status);
+end;
+
+procedure TSQLRestServerURIContext.Returns(Value: TObject; Status: integer;
+  Handle304NotModified: boolean);
+var json: RawUTF8;
+begin
+  if Value.InheritsFrom(TSQLRecord) then
+    json := TSQLRecord(Value).GetJSONValues(true,true,soSelect) else
+    json := ObjectToJSON(Value);
+  Returns(json,Status,'',Handle304NotModified);
+end;
+
+procedure TSQLRestServerURIContext.ReturnsJson(const Value: Variant; Status: integer;
+  Handle304NotModified: boolean; Escape: TTextWriterKind);
+var json: RawUTF8;
+begin
+  VariantSaveJSON(Value,Escape,json);
+  Returns(json,Status,'',Handle304NotModified);
 end;
 
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
