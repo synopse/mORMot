@@ -25026,26 +25026,27 @@ var PS: PShortString;
     P: PUTF8Char;
     PLen: integer;
 begin
-  PS := @NameList;
   if (Value<>nil) and (ValueLen>0) then begin
-    if Value^ in ['a'..'z'] then
+    if Value^ in ['a'..'z'] then begin
       // e.g. 'sllWarning'
+      PS := @NameList;
       for result := 0 to MaxValue do
         if IdemPropName(PS^,Value,ValueLen) then
           exit else
-          inc(PtrUInt(PS),ord(PS^[0])+1) else begin
-      // e.g. 'Warning'
-      for result := 0 to MaxValue do begin
-        PLen := Length(PS^);
-        P := @PS^[1];
-        while (PLen>0) and (P^ in ['a'..'z']) do begin
-          inc(P);
-          dec(PLen);
-        end;
-        if (PLen>0) and IdemPropName(Value,P,ValueLen,PLen) then
-          exit else
           inc(PtrUInt(PS),ord(PS^[0])+1);
+    end;
+    // e.g. 'Warning'
+    PS := @NameList;
+    for result := 0 to MaxValue do begin
+      PLen := Length(PS^);
+      P := @PS^[1];
+      while (PLen>0) and (P^ in ['a'..'z']) do begin
+        inc(P);
+        dec(PLen);
       end;
+      if (PLen>0) and IdemPropName(Value,P,ValueLen,PLen) then
+        exit else
+        inc(PtrUInt(PS),ord(PS^[0])+1);
     end;
   end;
   result := -1;
