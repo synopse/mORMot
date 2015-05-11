@@ -10745,7 +10745,7 @@ type
   IServiceWithCallbackReleased = interface(IInvokable)
     ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
     /// will be called when a callback is released on the client side 
-    // - this method match the TInterfaceFactory.MethodIndexCallbackReleased
+    // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
     // signature, so that it would be called with the interface instance by
     // TServiceContainerServer.FakeCallbackRelease
     // - you may use it as such - see sample Project31ChatServer.dpr:

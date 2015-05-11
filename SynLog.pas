@@ -89,6 +89,8 @@ unit SynLog;
   - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
   - introduced clear distinction between absolute and relative memory address
     values, and TSynMapFile.AbsoluteToOffset(), as reported by [0aeaa1353149]
+  - introduced ISynLogCallback and TSynLogCallbacks types for easy integration
+    with mORMot's interface-based services real-time notification
 
 *)
 
@@ -292,6 +294,53 @@ type
       aInstance: TObject=nil; const IgnoreWhenStartWith: PAnsiChar=nil);
     /// retrieve the associated logging instance
     function Instance: TSynLog;
+  end;
+
+  /// a mORMot-compatible calback definition
+  // - used to notify a remote mORMot server via interface-based serivces
+  // for any incoming event
+  ISynLogCallback = interface(IInvokable)
+    ['{9BC218CD-A7CD-47EC-9893-97B7392C37CF}']
+    /// each line of the TTextWriter internal instance will trigger this method
+    // - the format is similar to TOnTextWriterEcho, as defined in SynCommons
+    procedure Log(Level: TSynLogInfo; const Text: RawUTF8);
+  end;
+
+  /// store a subscribe to ISynLogCallback
+  TSynLogCallback = record
+    Levels: TSynLogInfos;
+    Callback: ISynLogCallback;
+  end;
+  /// store the all subscribed ISynLogCallback
+  TSynLogCallbackDynArray = array of TSynLogCallback;
+
+  /// can manage a list of ISynLogCallback registrations
+  TSynLogCallbacks = class(TSynPersistentLocked)
+  protected
+    fCount: integer;
+  public
+    /// direct access to the registration storage
+    Registration: TSynLogCallbackDynArray;
+    /// high-level access to the registration storage
+    Registrations: TDynArray;
+    /// the TSynLog family actually associated with those callbacks
+    TrackedLog: TSynLogFamily;
+    /// initialize the registration storage for a given TSynLogFamily instance
+    constructor Create(aTrackedLog: TSynLogFamily); reintroduce;
+    /// finalize the registration storage for a given TSynLogFamily instance
+    destructor Destroy; override;
+    /// register a callback for a given set of log levels
+    procedure Subscribe(const Levels: TSynLogInfos;
+      const Callback: ISynLogCallback); virtual;
+    /// unregister a callback previously registered by Subscribe()
+    procedure Unsubscribe(const Callback: ISynLogCallback); virtual;
+    /// notify a given log event
+    // - matches the TOnTextWriterEcho signature
+    function OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean;
+  published
+    /// how many registrations are currently defined
+    property Count: integer read fCount;
   end;
 
   /// this event can be set for a TSynLogFamily to archive any deprecated log
@@ -4085,6 +4134,74 @@ begin // aDestinationPath = 'ArchivePath\log\YYYYMM\'
   except
     on Exception do
       result := false;
+  end;
+end;
+
+
+{ TSynLogCallbacks }
+
+constructor TSynLogCallbacks.Create(aTrackedLog: TSynLogFamily);
+begin
+  inherited Create;
+  Registrations.Init(TypeInfo(TSynLogCallbackDynArray),Registration,@fCount);
+  TrackedLog := aTrackedLog;
+  aTrackedLog.EchoRemoteStart(self,OnEcho,false);
+end;
+
+destructor TSynLogCallbacks.Destroy;
+begin
+  if TrackedLog<>nil then
+    if TrackedLog.fEchoRemoteClient=self then
+      TrackedLog.EchoRemoteStop; // unregister OnEcho() event
+  inherited Destroy;
+end;
+
+function TSynLogCallbacks.OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
+var i: integer;
+begin
+  result := false;
+  if Count=0 then
+    exit;
+  Lock;
+  try
+    for i := Count-1 downto 0 do
+      if Level in Registration[i].Levels then
+      try
+        Registration[i].Callback.Log(Level,Text);
+        result := true;
+      except
+        Registrations.Delete(i); // safer to unsubscribe ASAP
+      end;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback);
+var Reg: TSynLogCallback;
+begin
+  Reg.Levels := Levels;
+  Reg.Callback := Callback;
+  Lock;
+  try
+    Registrations.Add(Reg);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TSynLogCallbacks.Unsubscribe(const Callback: ISynLogCallback);
+var i: integer;
+begin
+  Lock;
+  try
+    for i := Count-1 downto 0 do
+      if Registration[i].Callback=Callback then
+        Registrations.Delete(i);
+  finally
+    UnLock;
   end;
 end;
 
