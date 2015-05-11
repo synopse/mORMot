@@ -35540,7 +35540,7 @@ function TTextWriter.AddJSONToXML(JSON: PUTF8Char; ArrayName: PUTF8Char=nil;
   EndOfObject: PUTF8Char=nil): PUTF8Char;
 var objEnd: AnsiChar;
     Name,Value: PUTF8Char;
-    n: integer;
+    n,c: integer;
 begin
   result := nil;
   if JSON=nil then
@@ -35594,8 +35594,12 @@ begin
   else begin
     Value := GetJSONField(JSON,result,nil,EndOfObject); // let wasString=nil
     if Value=nil then
-      AddShort('null') else
+      AddShort('null') else begin
+      c := PInteger(Value)^ and $ffffff;
+      if (c=JSON_BASE64_MAGIC) or (c=JSON_SQLDATE_MAGIC) then
+        inc(Value,3); // just ignore the Magic codepoint encoded as UTF-8
       AddXmlEscape(Value);
+    end;
     exit;
   end;
   end;
