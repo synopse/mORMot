@@ -28755,8 +28755,11 @@ begin
   n := length(FieldName);
   if (self<>nil) and (Table<>nil) and (n=length(FieldValue)) then
   with Table.RecordProps do begin
-    if (n=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then
-      SQL := 'SELECT COUNT(*) FROM '+SQLTableName+' WHERE '+WhereClause else
+    if (n=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then begin
+      SQL := 'SELECT COUNT(*) FROM '+SQLTableName;
+      if WhereClause<>'' then
+        SQL := SQL+' WHERE '+WhereClause;
+    end else
     if (n=1) and IdemPChar(pointer(FieldName[0]),'MAX(') then begin
       L := length(FieldName[0]);
       if (FieldName[0][L]<>')') or not IsFieldName(copy(FieldName[0],5,L-5)) then
