@@ -4988,7 +4988,7 @@ type
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
-    procedure InternalSetTableFromTableName(const TableName: RawUTF8); virtual;
+    procedure InternalSetTableFromTableName(TableName: PUTF8Char); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
     /// event raised by ExecuteMethod() for interface parameters
     // - match TServiceMethodInternalExecuteCallback signature
@@ -6331,6 +6331,10 @@ type
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; withID: boolean;
       const Fields: TSQLFieldBits): RawUTF8; overload;
+    /// same as overloaded GetJSONValues(), but allowing to set the fields to
+    // be retrieved, and returning result into a RawUTF8
+    function GetJSONValues(Expand: boolean; withID: boolean;
+      const FieldsCSV: RawUTF8): RawUTF8; overload;
     /// will append the record fields as an expanded JSON object
     // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
     // method will add the JSON object directly to any TJSONSerializer
@@ -25982,6 +25986,15 @@ begin
 end;
 
 function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
+  const FieldsCSV: RawUTF8): RawUTF8;
+var bits: TSQLFieldBits;
+begin
+  if RecordProps.FieldBitsFromCSV(FieldsCSV,bits) then
+    result := GetJSONValues(Expand,withID,bits) else
+    result := '';
+end;
+
+function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
   Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream=nil): RawUTF8;
 var J: TRawByteStringStream;
 begin
@@ -27754,8 +27767,8 @@ function TSQLModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
 begin
   if (self<>nil) and (SQLTableName<>'') then begin
     // fast binary search
-    result := FastFindPUTF8CharSorted(pointer(fSortedTablesName),fTablesMax,
-      pointer(SQLTableName),@StrIComp);
+    result := FastFindPUTF8CharSorted(
+      pointer(fSortedTablesName),fTablesMax,pointer(SQLTableName),@StrIComp);
     if result>=0 then
       result := fSortedTablesNameIndex[result];
   end else
@@ -27766,7 +27779,8 @@ function TSQLModel.GetTableIndex(SQLTableName: PUTF8Char): integer;
 begin
   if (self<>nil) and (SQLTableName<>nil) then begin
     // fast binary search
-    result := FastFindPUTF8CharSorted(pointer(fSortedTablesName),fTablesMax,SQLTableName,@StrIComp);
+    result := FastFindPUTF8CharSorted(
+      pointer(fSortedTablesName),fTablesMax,SQLTableName,@StrIComp);
     if result>=0 then
       result := fSortedTablesNameIndex[result];
   end else
@@ -32651,7 +32665,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TSQLRestServerURIContext.InternalSetTableFromTableName(const TableName: RawUTF8);
+procedure TSQLRestServerURIContext.InternalSetTableFromTableName(TableName: PUTF8Char);
 begin
   TableEngine := Server;
   TableIndex := Server.Model.GetTableIndex(TableName);
@@ -32691,8 +32705,11 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   // compute Table, TableID and URIBlobFieldName
   i := PosEx(RawUTF8('/'),URI,1);
   if i>0 then begin
+    URI[i] := #0;
+    InternalSetTableFromTableName(pointer(URI));
     Par := @URI[i+1];
-    if Par^ in ['0'..'9'] then // "ModelRoot/TableName/TableID/URIBlobFieldName"
+    if (Table<>nil) and (Par^ in ['0'..'9']) then
+      // "ModelRoot/TableName/TableID/URIBlobFieldName"
       TableID := GetNextItemInt64(Par,'/') else
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     if (Par<>nil) and (Par^<>#0) then begin
@@ -32700,10 +32717,12 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       if P=nil then
         URIBlobFieldName := Par else begin
         SetString(URIBlobFieldName,PAnsiChar(Par),P-Par);
-        j := PosEx('/',URIBlobFieldName);
-        if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
-          TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
-          SetLength(URIBlobFieldName,j-1);
+        if Table<>nil then begin
+          j := PosEx('/',URIBlobFieldName);
+          if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
+            TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
+            SetLength(URIBlobFieldName,j-1);
+          end;
         end;
       end;
     end;
@@ -32716,9 +32735,9 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
         dec(i);
       SetLength(URI,i); // trim Ctxt.URI to exclude any parameter
     end;
+    InternalSetTableFromTableName(pointer(URI));
   end;
-  InternalSetTableFromTableName(URI);
-  // compute URISessionSignature
+  // compute URISessionSignaturePos and URIWithoutSignature
   if (Parameters<>nil) and IdemPChar(Parameters,'SESSION_SIGNATURE=') then
     URISessionSignaturePos := ParametersPos else
     URISessionSignaturePos := PosEx('&session_signature=',Call^.url,ParametersPos+1);
@@ -33909,6 +33928,7 @@ end;
 
 procedure TSQLRestRoutingREST.URIDecodeSOAByInterface;
 var i: integer;
+    method,clientdrivenid: RawUTF8;
 begin
   if (Table=nil) and (MethodIndex<0) and (URI<>'') and (Server.Services<>nil) then begin
     // check URI as '/Model/Interface.Method[/ClientDrivenID]'
@@ -33918,17 +33938,20 @@ begin
         Service := TServiceFactoryServer(InterfaceService);
         ServiceMethodIndex := InterfaceMethodIndex;
         fServiceListInterfaceMethodIndex := i;
+        ServiceInstanceID := GetInteger(pointer(URIBlobFieldName));
       end else
       if URIBlobFieldName<>'' then begin
         // check URI as '/Model/Interface/Method[/ClientDrivenID]''
         i := Server.Services.fList.IndexOf(URI);
         if i>=0 then begin // identified as a valid JSON-RPC service
           Service := TServiceFactoryServer(Server.Services.fList.Objects[i]);
-          ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(URIBlobFieldName);
+          Split(URIBlobFieldName,'/',method,clientdrivenid);
+          ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
           if ServiceMethodIndex<0 then
             Service := nil else begin
             inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
             fServiceListInterfaceMethodIndex := -1;
+            ServiceInstanceID := GetInteger(pointer(clientdrivenid));
           end;
         end;
       end;
@@ -33993,9 +34016,6 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     end;
     ServiceParameters := pointer(JSON);
   end;
-  if TableID<0 then
-    ServiceInstanceID := 0 else
-    ServiceInstanceID := TableID;
   // now Service, ServiceParameters, ServiceMethodIndex are set
   InternalExecuteSOAByInterface;
 end;

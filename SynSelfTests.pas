@@ -6983,7 +6983,7 @@ begin
     s := T.GetJSONValues(true,true,soSelect);
     Check(T2.GetJSONValues(true,true,soSelect)=s);
     s := GetJSONObjectAsSQL(s,true,false,0,true);
-    Check(s='ID=10,'+StringReplaceAll(s2,', ',',')+',ValVariant=''{"name":"John","int":1234}''');
+    Check(s=StringReplaceAll(s2,', ',',')+',ValVariant=''{"name":"John","int":1234}''');
     s := ObjectToJSON(T);
     delete(s1,3,3); // "RowID":10 -> "ID":10
     Check(s=s1+',"Data":"","ValVariant":{"name":"John","int":1234}}');
@@ -11879,6 +11879,8 @@ procedure TTestServiceOrientedArchitecture.ServiceInitialization;
         Check(data=resp,'alternative URI-encoded-inlined parameters use');
         Check(fClient.URI('root/Calculator.'+Method+'?'+ParamsURI,'GET',@data).Lo=ExpectedResult);
         Check(data=resp,'alternative "param1=value1&param2=value2" URI-encoded scheme');
+        Check(fClient.URI('root/Calculator.'+Method+'/1234?'+ParamsURI,'GET',@data).Lo=ExpectedResult);
+        Check(data=resp,'alternative URI-encoded scheme with ClientDrivenID');
         SetString(data,PAnsiChar(pointer(Params)),length(Params)); // =UniqueString
         Check(fClient.URI('root/calculator/'+Method,'POST',@data,nil,@data).Lo=ExpectedResult);
         Check(data=resp,'interface/method routing');
