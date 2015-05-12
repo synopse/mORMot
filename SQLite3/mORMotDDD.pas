@@ -750,9 +750,13 @@ type
     fStatus: TDDDAdministratedDaemonStatus;
     fFinished: TEvent;
     fRemoteLog: TSynLogCallbacks;
+    // return TRUE e.g. if TDDDAdministratedThreadDaemon.fThread<>nil
     function InternalIsRunning: boolean; virtual; abstract;
+    // should start the daemon: e.g. set TDDDAdministratedThreadDaemon.fThread
     procedure InternalStart; virtual; abstract;
+    // return TRUE and set Status (e.g. from monitoring info) on success
     function InternalRetrieveState(var Status: variant): boolean; virtual; abstract;
+    // should end the daemon: e.g. TDDDAdministratedThreadDaemon.fThread := nil
     procedure InternalStop; virtual; abstract;
   public
     /// initialize the administrable service/daemon
@@ -818,13 +822,15 @@ type
   TDDDAdministratedThreadDaemon = class(TDDDAdministratedDaemon)
   protected
     fThread: TThread;
+    // return TRUE if fThread<>nil (i.e. has been set by InternalStart)
     function InternalIsRunning: boolean; override;
+    // end the daemon, i.e fThread := nil
     procedure InternalStop; override;
   end;
 
   /// abstract class to monitor an administrable service/daemon
   // - including Input/Output statistics and connected Clients count
-  // - including Memory and resource information
+  // - including OS Memory information
   TDDDAdministratedDaemonMonitor = class(TSynMonitorServer)
   protected
     FMemory: TSynMonitorMemory;

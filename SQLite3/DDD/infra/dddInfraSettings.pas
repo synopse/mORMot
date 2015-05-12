@@ -61,7 +61,7 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
-  mORMotService,
+  mORMotService, // for running the daemon as a regular Windows Service
   {$else}
   {$ifdef FPC}
   SynFPCLinux,
