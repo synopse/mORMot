@@ -5230,8 +5230,16 @@ type
     // but you should convert its value to AnsiString using UTF8ToString()
     function InputOrError(const ParamName: RawUTF8; out Value: variant;
       const ErrorMessageForMissingParameter: string): boolean;
-    /// retrieve all input paramters from URI as a variant JSON object
+    /// retrieve all input parameters from URI as a variant JSON object
     // - returns Unassigned if no parameter was defined
+    // - returns a JSON object with input parameters encoded as
+    // ! {"name1":value1,"name2":value2...}
+    // - if the parameters were encoded as multipart, the JSON object
+    // will be encoded with its textual values, or with nested objects, if
+    // the data was supplied as binary:
+    // ! {"name1":{"data":..,"filename":...,"contenttype":...},"name2":...}
+    // since name1.data would be Base64 encoded, so you should better
+    // use the InputAsMultiPart() method instead when working with binary 
     property InputAsTDocVariant: variant read GetInputAsTDocVariant;
     {$endif}
     /// decode any multipart/form-data POST request input
@@ -33496,8 +33504,7 @@ var i: integer;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
-    raise EParsingException.CreateUTF8('%.GetInputUTF8(%): parameter not found',
-      [self,ParamName]);
+    raise EParsingException.CreateUTF8('%: missing ''%'' parameter',[self,ParamName]);
   result := fInput[i*2+1];
 end;
 
@@ -33527,8 +33534,8 @@ begin
   i := GetInputNameIndex(ParamName);
   if i<0 then begin
     if ErrorMessageForMissingParameter='' then
-      Error(FormatUTF8('Missing "%" parameter',[ParamName])) else
-      Error(StringToUTF8(ErrorMessageForMissingParameter));
+      Error('%: missing ''%'' parameter',[self,ParamName]) else
+      Error('%',[ErrorMessageForMissingParameter]);
     result := false;
   end else begin
     Value := fInput[i*2+1];
@@ -33564,8 +33571,7 @@ var i: integer;
 begin
   i := GetInputNameIndex(ParamName);
   if i<0 then
-    raise EParsingException.CreateUTF8('%.GetInputString(%): parameter not found',
-      [self,ParamName]);
+    raise EParsingException.CreateUTF8('%: missing ''%'' parameter',[self,ParamName]);
   result := UTF8ToString(fInput[i*2+1]);
 end;
 
@@ -33624,12 +33630,13 @@ begin
     with TDocVariantData(result) do begin
       Init(JSON_OPTIONS[true]);
       for i := 0 to high(MultiPart) do
-        with MultiPart[i] do begin
-          RawUTF8ToVariant(Content,v);
-          AddValue(Name,v);
-          RawUTF8ToVariant(FileName,v);
-          AddValue(Name+'-filename',v);
-        end;
+        with MultiPart[i] do
+          if ContentType=TEXT_CONTENT_TYPE then begin
+            RawUTF8ToVariant(Content,v);
+            AddValue(Name,v); // append as regular "Name":"TextValue" field
+          end else // append binary file as an object, with Base64-encoded data
+            AddValue(Name,_ObjFast(['data',BinToBase64(Content),
+              'filename',FileName,'contenttype',ContentType]));
     end;
 end;
 

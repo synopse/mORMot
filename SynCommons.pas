@@ -25444,10 +25444,12 @@ begin
       exit;
     end;
     part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
-    {$ifdef UNICODE}
-    if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then
-      SetCodePage(part.Content,CP_UTF8,false) else // ensure raw field value is UTF-8
-    {$endif}
+    if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then begin
+      part.ContentType := TEXT_CONTENT_TYPE;
+      {$ifdef UNICODE}
+      SetCodePage(part.Content,CP_UTF8,false); // ensure raw field value is UTF-8
+      {$endif}
+    end else
     if IdemPropNameU(part.Encoding,'base64') then
       part.Content := Base64ToBin(part.Content);
     // note: "quoted-printable" not yet handled here
