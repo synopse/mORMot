@@ -6436,10 +6436,10 @@ type
     // - you can specify a custom Key used for password encryption, if the
     // default value is not safe enough for you
     // - this method won't use JSONToObject() so avoid any dependency to mORMot.pas
-    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0);
+    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0); virtual;
     /// serialize the database definition as JSON
     // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
-    function SaveToJSON: RawUTF8;
+    function SaveToJSON: RawUTF8; virtual;
   published
     /// the class name implementing the connection or TSQLRest instance
     // - will be used to instantiate the expected class type
@@ -23746,7 +23746,7 @@ begin
       exit;
     end;
   end;
-  result := true;
+  result := true; // error
 end;
 
 function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
@@ -23766,9 +23766,8 @@ begin
       end;
     end;
   end;
-  result := true;
+  result := true; // error
 end;
-
 
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 var B: cardinal;
@@ -23791,7 +23790,7 @@ begin
       end;
     end;
   end;
-  result := true;
+  result := true; // error
 end;
 
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
@@ -23867,7 +23866,7 @@ end;
 
 function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer; var H,M,S: cardinal): boolean;
 begin
-  result := false;
+  result := false; // error
   if P=nil then
     exit;
   if L=0 then

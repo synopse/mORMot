@@ -1172,24 +1172,24 @@ type
     // - you can use TSQLDBConnectionPropertiesDescription.CreateFrom()
     // later on to instantiate the proper TSQLDBConnectionProperties class
     // - current Definition.Key value will be used for the password encryption
-    procedure DefinitionTo(Definition: TSynConnectionDefinition);
+    procedure DefinitionTo(Definition: TSynConnectionDefinition); virtual;
     /// save the properties into a JSON file
     // - you could use TSQLDBConnectionPropertiesDescription.CreateFromJSON()
     // later on to instantiate the proper TSQLDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
-    function DefinitionToJSON(Key: cardinal=0): RawUTF8;
+    function DefinitionToJSON(Key: cardinal=0): RawUTF8; virtual;
     /// save the properties into a JSON file
     // - you could use TSQLDBConnectionPropertiesDescription.CreateFromFile()
     // later on to instantiate the proper TSQLDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
     procedure DefinitionToFile(const aJSONFile: TFileName; Key: cardinal=0);
     /// create a new TSQLDBConnectionProperties instance from the stored values
-    class function CreateFrom(aDefinition: TSynConnectionDefinition): TSQLDBConnectionProperties;
+    class function CreateFrom(aDefinition: TSynConnectionDefinition): TSQLDBConnectionProperties; virtual;
     /// create a new TSQLDBConnectionProperties instance from a JSON content
     // - as previously serialized with TSQLDBConnectionProperties.DefinitionToJSON
     // - you can specify a custom Key, if the default is not safe enough for you
     class function CreateFromJSON(const aJSONDefinition: RawUTF8;
-      aKey: cardinal=0): TSQLDBConnectionProperties;
+      aKey: cardinal=0): TSQLDBConnectionProperties; virtual; 
     /// create a new TSQLDBConnectionProperties instance from a JSON file
     // - as previously serialized with TSQLDBConnectionProperties.DefinitionToFile
     // - you can specify a custom Key, if the default is not safe enough for you
