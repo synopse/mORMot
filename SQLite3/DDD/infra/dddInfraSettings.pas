@@ -50,6 +50,7 @@ unit dddInfraSettings;
 
   TODO:
    - store settings in database
+   - allow to handle authentication via a centralized service or REST server 
 
 }
 

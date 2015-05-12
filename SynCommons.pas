@@ -11758,6 +11758,7 @@ type
   end;
 
   {$M+}
+  
   /// able to serialize any timing as raw micro-seconds number or text
   TSynMonitorTime = class
   protected
@@ -11797,6 +11798,52 @@ type
     /// number of bytes per second, as '... B-KB-MB-GB/s' text
     property Text: RawUTF8 read GetAsText;
   end;
+
+  /// value object able to gather information about the current system memory
+  TSynMonitorMemory = class(TSynPersistent)
+  protected
+    FMemoryLoadPercent: integer;
+    FPhysicalMemoryFree: TSynMonitorSize;
+    FVirtualMemoryFree: TSynMonitorSize;
+    FPagingFileTotal: TSynMonitorSize;
+    FPhysicalMemoryTotal: TSynMonitorSize;
+    FVirtualMemoryTotal: TSynMonitorSize;
+    FPagingFileFree: TSynMonitorSize;
+    fLastMemoryInfoRetrievedTix: cardinal;
+    procedure RetrieveMemoryInfo; virtual;
+    function GetMemoryLoadPercent: integer;
+    function GetPagingFileFree: TSynMonitorSize;
+    function GetPagingFileTotal: TSynMonitorSize;
+    function GetPhysicalMemoryFree: TSynMonitorSize;
+    function GetPhysicalMemoryTotal: TSynMonitorSize;
+    function GetVirtualMemoryFree: TSynMonitorSize;
+    function GetVirtualMemoryTotal: TSynMonitorSize;
+  public
+    /// initialize the class, and its nested TSynMonitorSize instances
+    constructor Create; override;
+    /// finalize the class, and its nested TSynMonitorSize instances
+    destructor Destroy; override;
+  published
+    /// Percent of memory in use
+    property MemoryLoadPercent: integer read GetMemoryLoadPercent;
+    /// Total of physical memory
+    property PhysicalMemoryTotal: TSynMonitorSize read GetPhysicalMemoryTotal;
+    /// Free of physical memory
+    property PhysicalMemoryFree: TSynMonitorSize read GetPhysicalMemoryFree;
+    /// Total of paging file
+    property PagingFileTotal: TSynMonitorSize read GetPagingFileTotal;
+    /// Free of paging file
+    property PagingFileFree: TSynMonitorSize read GetPagingFileFree;
+    {$ifdef MSWINDOWS}
+    /// Total of virtual memory
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryTotal: TSynMonitorSize read GetVirtualMemoryTotal;
+    /// Free of virtual memory
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryFree: TSynMonitorSize read GetVirtualMemoryFree;
+    {$endif}
+  end;
+
   {$M-}
 
 
@@ -12244,7 +12291,7 @@ implementation
 {$ifdef FPC}
 uses
   {$ifdef Linux}
-  SynFPCLinux, BaseUnix, Unix, dynlibs,
+  SynFPCLinux, BaseUnix, Unix, dynlibs, Linux,
   {$ifndef Darwin}
   SysCall,
   {$endif}
@@ -36224,7 +36271,7 @@ begin
     {$ifdef UNICODE}
     CodePage := StringCodePage(s);
     {$else}
-    CodePage := 0;
+    CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif}
   case CodePage of
   CP_UTF8, CP_RAWBYTESTRING:
@@ -38968,6 +39015,139 @@ end;
 function TSynMonitorThroughput.GetAsText: RawUTF8;
 begin
   result := KB(fBytesPerSec)+'/s';
+end;
+
+
+{ TSynMonitorMemory }
+
+constructor TSynMonitorMemory.Create;
+begin
+  FPhysicalMemoryFree := TSynMonitorSize.Create;
+  FVirtualMemoryFree := TSynMonitorSize.Create;
+  FPagingFileTotal := TSynMonitorSize.Create;
+  FPhysicalMemoryTotal := TSynMonitorSize.Create;
+  FVirtualMemoryTotal := TSynMonitorSize.Create;
+  FPagingFileFree := TSynMonitorSize.Create;
+end;
+
+destructor TSynMonitorMemory.Destroy;
+begin
+  FPhysicalMemoryFree.Free;
+  FVirtualMemoryFree.Free;
+  FPagingFileTotal.Free;
+  FPhysicalMemoryTotal.Free;
+  FVirtualMemoryTotal.Free;
+  FPagingFileFree.Free;
+  inherited Destroy;
+end;
+
+function TSynMonitorMemory.GetMemoryLoadPercent: integer;
+begin
+  RetrieveMemoryInfo;
+  result := FMemoryLoadPercent;
+end;
+
+function TSynMonitorMemory.GetPagingFileFree: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileFree;
+end;
+
+function TSynMonitorMemory.GetPagingFileTotal: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileTotal;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryFree: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryFree;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryTotal: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryTotal;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryFree: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryFree;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryTotal: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryTotal;
+end;
+
+{$ifdef MSWINDOWS}
+{$ifndef UNICODE} // missing API for oldest Delphi
+type
+  DWORDLONG = Int64;
+  TMemoryStatusEx = record
+    dwLength: DWORD;
+    dwMemoryLoad: DWORD;
+    ullTotalPhys: DWORDLONG;
+    ullAvailPhys: DWORDLONG;
+    ullTotalPageFile: DWORDLONG;
+    ullAvailPageFile: DWORDLONG;
+    ullTotalVirtual: DWORDLONG;
+    ullAvailVirtual: DWORDLONG;
+    ullAvailExtendedVirtual: DWORDLONG;
+  end;
+
+// information about the system's current usage of both physical and virtual memory
+function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
+  stdcall; external kernel32;
+{$endif}
+{$endif}
+
+procedure TSynMonitorMemory.RetrieveMemoryInfo;
+procedure RetrieveInfo;
+{$ifdef MSWINDOWS}
+var MemoryStatus: TMemoryStatusEx;
+begin
+  FillChar(MemoryStatus,SizeOf(MemoryStatus),0);
+  MemoryStatus.dwLength := SizeOf(MemoryStatus);
+  GlobalMemoryStatusEx(MemoryStatus);
+  FMemoryLoadPercent := MemoryStatus.dwMemoryLoad;
+  FPhysicalMemoryTotal.fBytes := MemoryStatus.ullTotalPhys;
+  FPhysicalMemoryFree.fBytes := MemoryStatus.ullAvailPhys;
+  FPagingFileTotal.fBytes := MemoryStatus.ullTotalPageFile;
+  FPagingFileFree.fBytes := MemoryStatus.ullAvailPageFile;
+  FVirtualMemoryTotal.fBytes := MemoryStatus.ullTotalVirtual;
+  FVirtualMemoryFree.fBytes := MemoryStatus.ullAvailVirtual;
+{$else}
+{$ifdef LINUX}
+var si: TSysInfo;
+begin
+  {$ifdef FPC}
+  SysInfo(@si);
+  {$else}
+  SysInfo(si);
+  {$endif}
+  if si.totalram<>0 then // avoid div per 0 exception
+    FMemoryLoadPercent := ((si.totalram-si.freeram)*100)div si.totalram;
+  FPhysicalMemoryTotal.fBytes := si.totalram;
+  FPhysicalMemoryFree.fBytes := si.freeram;
+  FPagingFileTotal.fBytes := si.totalswap;
+  FPagingFileFree.fBytes := si.freeswap;
+  // virtual memory information is not available under Linux
+{$else}
+begin // e.g. Darwin
+{$endif LINUX}
+{$endif MSWINDOWS}
+end;
+var tix: cardinal;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastMemoryInfoRetrievedTix<>tix then begin
+    fLastMemoryInfoRetrievedTix := tix;
+    RetrieveInfo;
+  end;
 end;
 
 
@@ -45536,4 +45716,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

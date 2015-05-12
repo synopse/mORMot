@@ -814,7 +814,7 @@ type
 
   /// abstract class to implement an TThread-based administrable service/daemon
   // - inherited class should override InternalStart and InternalRetrieveState
-  // abstract methods, and set the protected fThread with the processing thread 
+  // abstract methods, and set the protected fThread with the processing thread
   TDDDAdministratedThreadDaemon = class(TDDDAdministratedDaemon)
   protected
     fThread: TThread;
@@ -822,6 +822,16 @@ type
     procedure InternalStop; override;
   end;
 
+  /// abstract class to monitor an administrable service/daemon
+  // - including Input/Output statistics and connected Clients count
+  // - including Memory and resource information
+  TDDDAdministratedDaemonMonitor = class(TSynMonitorServer)
+  protected
+    FMemory: TSynMonitorMemory;
+  published
+    /// information about the main System memory, as returned by the OS
+    property SystemMemory: TSynMonitorMemory read FMemory;
+  end;
 
 
 { *********** Application Layer Implementation }
