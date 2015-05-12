@@ -716,6 +716,9 @@ type
   TNotifiedThread = class(TThread)
   protected
     fStartNotified: TObject;
+    // we re-defined an fOnTerminate event which would be run in the terminated
+    // thread context (whereas TThread.OnTerminate is called in the main thread)
+    // -> see THttpServerGeneric.OnHttpThreadTerminate event property
     {$ifndef LVCL}
     fOnTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
@@ -983,6 +986,7 @@ type
     // ! begin // TSQLDBConnectionPropertiesThreadSafe
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
+    // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
   published
     /// returns the API version used by the inherited implementation

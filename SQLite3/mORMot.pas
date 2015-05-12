@@ -20871,9 +20871,9 @@ begin
             // IsStringJSON() is fast and safe: no need to guess exact value type
             directWrite := IsStringJSON(U^);
           if directWrite then
-            W.AddNoJSONEscape(U^,0) else begin
+            W.AddNoJSONEscape(U^,StrLen(U^)) else begin
             W.Add('"');
-            W.AddJSONEscape(U^,0);
+            W.AddJSONEscape(U^,StrLen(U^));
             W.Add('"');
           end;
         end;
@@ -20923,9 +20923,9 @@ begin
     for R := 0 to fRowCount do
       for F := 0 to FMax do begin
         if Tab or (not IsStringJSON(U^)) then
-          W.AddNoJSONEscape(U^) else begin
+          W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
-          W.AddNoJSONEscape(U^);
+          W.AddNoJSONEscape(U^,StrLen(U^));
           W.Add('"');
         end;
         if F=FMax then
@@ -20997,9 +20997,9 @@ begin
             ftUnknown:
               if IsStringJSON(U^) then // no need to guess exact value type here
                 W.AddXmlEscape(U^) else
-                W.AddNoJSONEscape(U^,0);
+                W.AddNoJSONEscape(U^,StrLen(U^));
             ftInt64, ftDouble, ftCurrency:
-              W.AddNoJSONEscape(U^,0);
+              W.AddNoJSONEscape(U^,StrLen(U^));
             ftDate, ftUTF8, ftBlob:
               W.AddXmlEscape(U^);
             end;
@@ -25926,7 +25926,7 @@ begin
   for i := 0 to Props.Count-1 do
     if i in Fields then begin
       W.Add(',','"');
-      W.AddNoJSONEscape(pointer(Props.List[i].Name));
+      W.AddNoJSONEscape(pointer(Props.List[i].Name),length(Props.List[i].Name));
       W.Add('"',':');
       Props.List[i].GetJSONValues(Self,W);
     end;
@@ -29679,11 +29679,11 @@ begin
 end;
 
 procedure TSQLRest.BeginCurrentThread(Sender: TThread);
-begin // nothing do to at this level -> see TSQLRestServer
+begin // nothing do to at this level -> see TSQLRestServer.BeginCurrentThread
 end;
 
 procedure TSQLRest.EndCurrentThread(Sender: TThread);
-begin // nothing do to at this level -> see TSQLRestServer
+begin // nothing do to at this level -> see TSQLRestServer.EndCurrentThread
 end;
 
 function TSQLRest.GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
@@ -33907,7 +33907,7 @@ begin
     Add(call.OutStatus);
     if (ErrorMsg<>'') and (ErrorMsg[1]='{') and (ErrorMsg[length(ErrorMsg)]='}') then begin
       AddShort(','#13#10'"error":'#13#10);
-      AddNoJSONEscape(pointer(ErrorMsg));
+      AddNoJSONEscape(pointer(ErrorMsg),length(ErrorMsg));
       AddShort(#13#10'}');
     end else begin
       AddShort(','#13#10'"errorText":"');
