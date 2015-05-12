@@ -201,7 +201,7 @@ type
   TNewRestInstanceOptions = set of (
     riOwnModel,
     riHandleAuthentication,
-    riDefaultLocalSQlite3IfNone,
+    riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
     riCreateMissingTables);
 
   /// storage class for initializing an ORM REST class
@@ -536,15 +536,20 @@ begin
      DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
     fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
   {$endif}
-  if (fORM.Kind='') and (riDefaultLocalSQlite3IfNone in aOptions) then begin
-    fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
-    if fORM.ServerName='' then
-      fORM.ServerName := StringToUTF8(
-        ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
-    if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
-      fORM.ServerName := StringToUTF8(
-        aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
-  end;
+  if fORM.Kind='' then
+    if riDefaultLocalSQlite3IfNone in aOptions then begin
+      fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
+      if fORM.ServerName='' then
+        fORM.ServerName := StringToUTF8(
+          ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
+      if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
+        fORM.ServerName := StringToUTF8(
+          aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
+    end else
+    if riDefaultInMemorySQLite3IfNone in aOptions then begin
+      fORM.Kind := 'TSQLRestServerDB'; 
+      fORM.ServerName := SQLITE_MEMORY_DATABASE_NAME;
+    end;
   result := nil;
   try
     if fORM.Kind='' then
