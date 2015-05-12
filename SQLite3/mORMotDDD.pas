@@ -828,6 +828,18 @@ type
     procedure InternalStop; override;
   end;
 
+  /// abstract class to implement a TSQLRest-based administrable service/daemon
+  // - inherited class should override InternalStart and InternalRetrieveState
+  // abstract methods, and set the protected fRest with the processing TSQLRest
+  TDDDAdministratedRestDaemon = class(TDDDAdministratedDaemon)
+  protected
+    fRest: TSQLRestServer;
+    // return TRUE if fRest<>nil (i.e. has been set by InternalStart)
+    function InternalIsRunning: boolean; override;
+    // end the daemon, i.e. FreeAndNil(fRest)
+    procedure InternalStop; override;
+  end;
+
   /// abstract class to monitor an administrable service/daemon
   // - including Input/Output statistics and connected Clients count
   // - including OS Memory information
@@ -2128,6 +2140,18 @@ begin
   FreeAndNil(fThread); // should terminate and wait for the thread to finish
 end;
 
+
+{ TDDDAdministratedRestDaemon }
+
+function TDDDAdministratedRestDaemon.InternalIsRunning: boolean;
+begin
+  result := fRest<>nil;
+end;
+
+procedure TDDDAdministratedRestDaemon.InternalStop;
+begin
+  FreeAndNil(fRest);
+end;
 
 initialization
   TInterfaceFactory.RegisterInterfaces([

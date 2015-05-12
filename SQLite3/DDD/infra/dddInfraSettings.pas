@@ -358,7 +358,7 @@ type
     // - actual settings would inherit from TAdministratedDaemonSettingsFile,
     // to define much more parameters, according to the service/daemon process
     // - the supplied settings will be owned by this TAbstractDaemon instance
-    constructor Create(aSettings: TAdministratedDaemonSettingsFile);
+    constructor Create(aSettings: TAdministratedDaemonSettingsFile); virtual;
     /// finalize the service/daemon application, and release its resources
     destructor Destroy; override;
     /// interprect the command line to run the application as expected
@@ -391,6 +391,24 @@ type
   TAbstractThreadDaemon = class(TDDDAdministratedThreadDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
+  public
+    /// initialize the thread with the supplied parameters
+    constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
+    /// finalize the service/daemon thread
+    // - will call Halt() if the associated process is still running
+    destructor Destroy; override;
+    /// reference to the HTTP server publishing IAdministratedDaemon service
+    // - may equal nil if TAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
+    property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
+  end;
+
+  /// abstract class to implement a IAdministratedDaemon service via a TSQLRestServer
+  // - as hosted by TAbstractDaemon service/daemon application
+  TAbstractRestDaemon = class(TDDDAdministratedRestDaemon)
+  protected
+    fAdministrationHTTPServer: TSQLHttpServer;
+    // returns the current state from fRest.Stat() + T
+    function InternalRetrieveState(var Status: variant): boolean; override;
   public
     /// initialize the thread with the supplied parameters
     constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
@@ -756,7 +774,11 @@ begin
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
       with fSettings do
       if ServiceName='' then
-        Syntax else
+        if cmd=cNone then
+          Syntax else begin
+          TextColor(ccLightRed);
+          writeln('No ServiceName specified - please fix the code');
+        end else
       case cmd of
       cNone:
         if param='' then begin // executed as a background service
@@ -820,12 +842,12 @@ constructor TAbstractThreadDaemon.Create(
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
-  with aSettings.RemoteAdmin do begin
+  with aSettings.RemoteAdmin do
     inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
-    fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
+  fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
+  with aSettings.RemoteAdmin do
     if AuthHttp.BindPort<>'' then
       fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
-  end;
 end;
 
 destructor TAbstractThreadDaemon.Destroy;
@@ -834,6 +856,44 @@ begin
   inherited;
 end;
 
+
+{ TAbstractRestDaemon }
+
+constructor TAbstractRestDaemon.Create(
+  aSettings: TAdministratedDaemonSettingsFile);
+begin
+  if aSettings=nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  with aSettings.RemoteAdmin do
+    inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
+  fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
+  with aSettings.RemoteAdmin do
+    if AuthHttp.BindPort<>'' then
+      fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
+end;
+
+destructor TAbstractRestDaemon.Destroy;
+begin
+  FreeAndNil(fAdministrationHTTPServer);
+  inherited Destroy;
+end;
+
+function TAbstractRestDaemon.InternalRetrieveState(
+  var Status: variant): boolean;
+var mem: TSynMonitorMemory;
+begin                                     
+  if fRest<>nil then begin
+    mem := TSynMonitorMemory.Create;
+    try
+      Status := _ObjFast([
+        'Rest',fRest.FullStatsAsDocVariant,'SystemMemory',ObjectToVariant(mem)]);
+    finally
+      mem.Free;
+    end;
+    result := true;
+  end else
+    result := false;
+end;
 
 initialization
   {$ifdef EnableMemoryLeakReporting}
