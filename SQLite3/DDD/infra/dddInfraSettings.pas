@@ -693,31 +693,35 @@ begin
   {$endif}
 end;
 begin
-  TextColor(ccLightGreen);
-  name := StringToUTF8(fSettings.ServiceDisplayName);
-  if name='' then // perhaps the settings file is void
-    name := ExeVersion.ProgramName;
-  writeln(#10' ',name);
-  writeln(StringOfChar('-',length(name)+2));
-  if fSettings.Description<>'' then begin
-    TextColor(ccGreen);
-    writeln(fSettings.Description);
-  end;
-  writeln;
-  TextColor(ccLightCyan);
-  param := trim(StringToUTF8(paramstr(1)));
-  if (param='') or not(param[1] in ['/','-']) then
-    cmd := cNone else
-    case param[2] of
-    'c','C': cmd := cConsole;
-    'd','D': cmd := cDaemon;
-    'h','H': cmd := cHelp;
-    else byte(cmd) := 1+IdemPCharArray(@param[2],[
-      'INST','UNINST','START','STOP','STAT','VERS','VERB']);
-    end;
   try
+    if fSettings.ServiceDisplayName='' then begin
+      fDaemon := NewDaemon; // should initialize the default .settings
+      fDaemon := nil;
+    end;
+    TextColor(ccLightGreen);
+    name := StringToUTF8(fSettings.ServiceDisplayName);
+    if name='' then // perhaps the settings file is still void
+      name := ExeVersion.ProgramName;
+    writeln(#10' ',name);
+    writeln(StringOfChar('-',length(name)+2));
+    if fSettings.Description<>'' then begin
+      TextColor(ccGreen);
+      writeln(fSettings.Description);
+    end;
+    writeln;
+    TextColor(ccLightCyan);
+    param := trim(StringToUTF8(paramstr(1)));
+    if (param='') or not(param[1] in ['/','-']) then
+      cmd := cNone else
+      case param[2] of
+      'c','C': cmd := cConsole;
+      'd','D': cmd := cDaemon;
+      'h','H': cmd := cHelp;
+      else byte(cmd) := 1+IdemPCharArray(@param[2],[
+        'INST','UNINST','START','STOP','STAT','VERS','VERB']);
+      end;
     case cmd of
-    cHelp{$ifndef MSWINDOWS},cNone{$endif}:
+    cHelp:
       Syntax;
     cVersion: begin
       if ExeVersion.Version.Version32<>0 then
@@ -749,53 +753,55 @@ begin
     end;
     else
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
-    with fSettings do
-    if ServiceName='' then
-      Syntax else
-    case cmd of
-    cNone:
-      if param='' then begin // executed as a background service
-        service := TServiceSingle.Create(ServiceName,ServiceDisplayName);
+      with fSettings do
+      if ServiceName='' then
+        Syntax else
+      case cmd of
+      cNone:
+        if param='' then begin // executed as a background service
+          service := TServiceSingle.Create(ServiceName,ServiceDisplayName);
+          try
+            service.OnStart := DoStart;
+            service.OnStop := DoStop;
+            service.OnShutdown := DoStop; // sometimes, is called without Stop
+            if ServicesRun then // blocking until service shutdown
+              Show(true) else
+              if GetLastError=1063 then
+                Syntax else
+                Show(false);
+          finally
+            service.Free;
+          end;
+        end else
+          Syntax;
+      cInstall:
+        Show(TServiceController.Install(ServiceName,ServiceDisplayName,
+          Description,ServiceAutoStart)<>ssNotInstalled);
+      else begin
+        ctrl := TServiceController.CreateOpenService('','',ServiceName);
         try
-          service.OnStart := DoStart;
-          service.OnStop := DoStop;
-          service.OnShutdown := DoStop; // sometimes, is called without Stop
-          if ServicesRun then // blocking until service shutdown
-            Show(true) else
-            if GetLastError=1063 then
-              Syntax else
-              Show(false);
+          case cmd of
+          cStart:
+            Show(ctrl.Start([]));
+          cStop:
+            Show(ctrl.Stop);
+          cUninstall: begin
+            ctrl.Stop;
+            Show(ctrl.Delete);
+          end;
+          cState:
+            writeln(ServiceName,' State=',ServiceStateText(ctrl.State));
+          else Show(false);
+          end;
         finally
-          service.Free;
+          ctrl.Free;
         end;
-      end else
-        Syntax;
-    cInstall:
-      Show(TServiceController.Install(ServiceName,ServiceDisplayName,
-        Description,ServiceAutoStart)<>ssNotInstalled);
-    else begin
-      ctrl := TServiceController.CreateOpenService('','',ServiceName);
-      try
-        case cmd of
-        cStart:
-          Show(ctrl.Start([]));
-        cStop:
-          Show(ctrl.Stop);
-        cUninstall: begin
-          ctrl.Stop;
-          Show(ctrl.Delete);
-        end;
-        cState:
-          writeln(ServiceName,' State=',ServiceStateText(ctrl.State));
-        else Show(false);
-        end;
-      finally
-        ctrl.Free;
       end;
-    end;
-    end;
+      end;
+    {$else}
+      Syntax;
     {$endif MSWINDOWS}
-    end;
+    end;       
   except
     on E: Exception do
       ConsoleShowFatalException(E);
