@@ -834,4 +834,10 @@ begin
 end;
 
 
+initialization
+  {$ifdef EnableMemoryLeakReporting}
+  {$ifdef HASFASTMM4} // FastMM4 integrated in Delphi 2006 (and up)
+  ReportMemoryLeaksOnShutdown := True;
+  {$endif}
+  {$endif}
 end.
