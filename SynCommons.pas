@@ -6408,6 +6408,19 @@ type
     property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
   end;
 
+  /// could be used to store a credential pair, as user name and password
+  // - password will be stored with TSynPersistentWithPassword encryption
+  TSynUserPassword = class(TSynPersistentWithPassword)
+  protected
+    fUserName: RawUTF8;
+  published
+    /// the associated user name
+    property UserName: RawUTF8 read FUserName write FUserName;
+    /// the associated encrypted password
+    // - use the PasswordPlain public property to access to the uncrypted password
+    property Password: RawUTF8 read FPassword write FPassword;
+  end;
+
   /// handle safe storage of any connection properties
   // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
   // by mORMot.pas to serialize TSQLRest instances
