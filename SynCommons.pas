@@ -1910,7 +1910,7 @@ type
   // - used in mORMot.pas unit during TSQLTable rows sort and by TSQLQuery
   TUTF8Compare = function(P1,P2: PUTF8Char): PtrInt;
 
-/// convert the endianness of a given unsigned 32 bit integer
+/// convert the endianness of a given unsigned 32 bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
 
 {$ifndef ISDELPHI2007ANDUP}
@@ -7106,6 +7106,8 @@ type
     procedure Write1(Data: Byte); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer); {$ifdef HASINLINE}inline;{$endif}
+    /// append 4 bytes of data, encoded as BigEndian, at the current position
+    procedure Write4BigEndian(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of data at the current position
     procedure Write8(const Data8Bytes); {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded text at the current position
@@ -40658,6 +40660,11 @@ begin
   inc(fTotalWritten,sizeof(integer));
 end;
 
+procedure TFileBufferWriter.Write4BigEndian(Data: integer);
+begin
+  Write4(bswap32(Data));
+end;
+
 procedure TFileBufferWriter.Write8(const Data8Bytes);
 begin
   if fPos+sizeof(Int64)>fBufLen then begin
@@ -45740,4 +45747,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.
