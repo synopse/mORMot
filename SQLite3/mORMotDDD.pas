@@ -2026,7 +2026,11 @@ begin
       CqrsSetResult(cqrsSuccess);
     except
       on E: Exception do
+      try
         CqrsSetResult(E);
+        InternalStop; // automatically release resources on starting error
+      except
+      end;
     end;
 end;
 

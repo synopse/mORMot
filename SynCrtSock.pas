@@ -711,16 +711,21 @@ type
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
   {$endif}
 
-  /// a simple TThread with a OnTerminate event run in the thread context
-  // - used e.g. by THttpServerGeneric.NotifyThreadStart()
+  /// a simple TThread with a "Terminate" event run in the thread context
+  // - the TThread.OnTerminate event is run within Synchronize() so did not
+  // match our expectations to be able to release the resources in the thread
+  // context which created them (e.g. for COM objects, or some DB drivers)
+  // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
+  // not have to use the protected fOnTerminate event handler
+  // - also define a Start method for compatibility with older versions of Delphi
   TSynThread = class(TThread)
   protected
     // ensure fOnTerminate is called only if NotifyThreadStart has been done
     fStartNotified: TObject;
+    {$ifndef LVCL} // already available in LVCL
     // we re-defined an fOnTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
     // -> see THttpServerGeneric.OnHttpThreadTerminate event property
-    {$ifndef LVCL}
     fOnTerminate: TNotifyThreadEvent;
     procedure DoTerminate; override;
     {$endif}
