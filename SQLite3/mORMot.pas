@@ -13018,6 +13018,7 @@ type
   protected
     FBindPort: AnsiString;
     FAuthentication: TSQLHttpServerRestAuthentication;
+    FEnableCORS: boolean;
     FThreadCount: byte;
     FHttps: boolean;
     FHttpSysQueueName: SynUnicode;
@@ -13028,6 +13029,12 @@ type
     /// which authentication is expected to be published
     property Authentication: TSQLHttpServerRestAuthentication
       read FAuthentication write FAuthentication;
+    /// allow Cross-origin resource sharing (CORS) access
+    // - set this property to TRUE if you want to be able to access the
+    // REST methods from an HTML5 application hosted in another location
+    // - i.e. will set the following HTTP header:
+    // ! Access-Control-Allow-Origin: *
+    property EnableCORS: boolean read FEnableCORS write FEnableCORS;
     /// how many threads the thread pool associated with this HTTP server
     // should create
     // - if set to 0, will use default value 32

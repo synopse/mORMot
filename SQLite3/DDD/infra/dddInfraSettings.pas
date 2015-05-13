@@ -771,9 +771,12 @@ begin
     cConsole,cDaemon,cVerbose: begin
       writeln('Launched in ',cmdText,' mode'#10);
       TextColor(ccLightGray);
-      if cmd=cVerbose then
-        SQLite3Log.Family.EchoToConsole := LOG_VERBOSE else
+      case cmd of
+      cConsole:
         SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
+      cVerbose:
+        SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
+      end;
       daemon := NewDaemon;
       try
         fDaemon := daemon;

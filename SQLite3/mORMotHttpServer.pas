@@ -979,6 +979,8 @@ begin
     thrdCnt := aDefinition.ThreadCount;
   Create(aDefinition.BindPort,aServer,'+',kind,nil,thrdCnt,
     HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
+  if aDefinition.EnableCORS then
+    AccessControlAllowOrigin := '*';
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
     if AUTH[a]=nil then
