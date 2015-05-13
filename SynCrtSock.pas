@@ -136,7 +136,7 @@ unit SynCrtSock;
     Windows Vista / Server 2008), or fall back to HTTP API 1.0 (for Windows XP
     or Server 2003) - thanks pavel for the feedback and initial patch!
   - deep code refactoring of thread process, especially for TSynThreadPool as
-    used by THttpServer: introducing TNotifiedThread and TSynThreadPoolSubThread;
+    used by THttpServer: introducing TSynThread and TSynThreadPoolSubThread;
     as a result, it fixes OnHttpThreadStart and OnHttpThreadTerminate to be
     triggered from every thread, and propagated from THttpApiServer's clones
   - added TCrtSocket.TCPNoDelay/SendTimeout/ReceiveTimeout/KeepAlive properties
@@ -711,10 +711,11 @@ type
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
   {$endif}
 
-  /// a simple TThread with a notification flag
+  /// a simple TThread with a OnTerminate event run in the thread context
   // - used e.g. by THttpServerGeneric.NotifyThreadStart()
-  TNotifiedThread = class(TThread)
+  TSynThread = class(TThread)
   protected
+    // ensure fOnTerminate is called only if NotifyThreadStart has been done
     fStartNotified: TObject;
     // we re-defined an fOnTerminate event which would be run in the terminated
     // thread context (whereas TThread.OnTerminate is called in the main thread)
@@ -725,6 +726,10 @@ type
     {$endif}
   public
     {$ifndef HASTTHREADSTART}
+    /// method to be called when the thread was created as suspended
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature
+    // - we define here this method for older versions of Delphi
     procedure Start;
     {$endif}
   end;
@@ -738,7 +743,7 @@ type
   // - you don't have to overload the protected THttpServerResp Execute method:
   // override THttpServer.Request() function or, if you need a lower-level access
   // (change the protocol, e.g.) THttpServer.Process() method itself
-  THttpServerResp = class(TNotifiedThread)
+  THttpServerResp = class(TSynThread)
   protected
     fServer: THttpServer;
     fServerSock: THttpServerSocket;
@@ -773,7 +778,7 @@ type
   TSynThreadPool = class;
 
   /// defines the sub-threads used by TSynThreadPool
-  TSynThreadPoolSubThread = class(TNotifiedThread)
+  TSynThreadPoolSubThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
   public
@@ -845,14 +850,14 @@ type
     fOutContent, fOutContentType, fOutCustomHeaders: SockString;
     fServer: THttpServerGeneric;
     fConnectionID: Int64;
-    fConnectionThread: TNotifiedThread;
+    fConnectionThread: TSynThread;
     fUseSSL: boolean;
     fAuthenticationStatus: THttpServerRequestAuthentication;
     fAuthenticatedUser: SockString;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric; aConnectionID: Int64;
-      aConnectionThread: TNotifiedThread); virtual;
+      aConnectionThread: TSynThread); virtual;
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
@@ -895,7 +900,7 @@ type
     property ConnectionID: Int64 read fConnectionID;
     /// the thread which owns the connection of this execution context
     // - depending on the HTTP server used, may not follow ConnectionID
-    property ConnectionThread: TNotifiedThread read fConnectionThread;
+    property ConnectionThread: TSynThread read fConnectionThread;
     /// is TRUE if the caller is connected via HTTPS
     // - only set for THttpApiServer class yet
     property UseSSL: boolean read fUseSSL;
@@ -925,7 +930,7 @@ type
 {$M+} { to have existing RTTI for published properties }
   /// abstract class to implement a HTTP server
   // - do not use this class, but rather the THttpServer or THttpApiServer
-  THttpServerGeneric = class(TNotifiedThread)
+  THttpServerGeneric = class(TSynThread)
   protected
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
@@ -938,7 +943,7 @@ type
     fCurrentConnectionID: integer;
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
-    procedure NotifyThreadStart(Sender: TNotifiedThread);
+    procedure NotifyThreadStart(Sender: TSynThread);
     procedure SetServerName(const aName: SockString); virtual;
     function NextConnectionID: integer;
   public
@@ -1306,7 +1311,7 @@ type
     /// override this function in order to low-level process the request;
     // default process is to get headers, and call public function Request
     procedure Process(ClientSock: THttpServerSocket;
-      ConnectionID: integer; ConnectionThread: TNotifiedThread); virtual;
+      ConnectionID: integer; ConnectionThread: TSynThread); virtual;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -3409,7 +3414,7 @@ end;
 { THttpServerRequest }
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
-  aConnectionID: Int64; aConnectionThread: TNotifiedThread);
+  aConnectionID: Int64; aConnectionThread: TSynThread);
 begin
   inherited Create;
   fServer := aServer;
@@ -3464,7 +3469,7 @@ begin
     result := STATUS_NOTFOUND;
 end;
 
-procedure THttpServerGeneric.NotifyThreadStart(Sender: TNotifiedThread);
+procedure THttpServerGeneric.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender=nil then
     raise ECrtSocket.Create('NotifyThreadStart(nil)');
@@ -3628,7 +3633,7 @@ begin
 end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
-  ConnectionID: integer; ConnectionThread: TNotifiedThread);
+  ConnectionID: integer; ConnectionThread: TSynThread);
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
@@ -3734,10 +3739,10 @@ begin
 end;
 
 
-{ TNotifiedThread }
+{ TSynThread }
 
 {$ifndef LVCL}
-procedure TNotifiedThread.DoTerminate;
+procedure TSynThread.DoTerminate;
 begin
   if Assigned(fStartNotified) and Assigned(fOnTerminate) then begin
     fOnTerminate(self);
@@ -3748,7 +3753,7 @@ end;
 {$endif}
 
 {$ifndef HASTTHREADSTART}
-procedure TNotifiedThread.Start;
+procedure TSynThread.Start;
 begin
   Resume;
 end;

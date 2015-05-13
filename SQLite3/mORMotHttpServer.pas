@@ -930,7 +930,7 @@ var ctxt: THttpServerRequest;
 begin    
   result := false;
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
-  try // aConnection.InheritsFrom(TNotifiedThread) may raise an exception
+  try // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
     ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
     try                                    

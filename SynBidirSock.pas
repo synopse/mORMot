@@ -402,7 +402,7 @@ type
     fSocket: TCrtSocket;
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
-    fOwnerThread: TNotifiedThread;
+    fOwnerThread: TSynThread;
     fOwnerConnection: Int64;
     fState: (wpsCreate,wpsRun,wpsClose,wpsDestroy);
     fProtocol: TWebSocketProtocol;
@@ -430,7 +430,7 @@ type
     // - the supplied TWebSocketProtocol will be owned by this instance
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
-      aOwnerConnection: Int64; aOwnerThread: TNotifiedThread;
+      aOwnerConnection: Int64; aOwnerThread: TSynThread;
       const aSettings: TWebSocketProcessSettings); virtual;
     /// finalize the context
     // - will release the TWebSocketProtocol associated instance
@@ -503,10 +503,10 @@ type
     // - here aCallingThread is a THttpServerResp, and ClientSock.Headers
     // and ConnectionUpgrade properties should be checked for the handshake
     procedure Process(ClientSock: THttpServerSocket;
-      ConnectionID: integer; ConnectionThread: TNotifiedThread); override;
+      ConnectionID: integer; ConnectionThread: TSynThread); override;
     /// identifies an incoming THttpServerResp as a valid TWebSocketServerResp
     function IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp; overload;
-    function IsActiveWebSocket(ConnectionThread: TNotifiedThread): TWebSocketServerResp; overload;
+    function IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp; overload;
   public
     /// create a Server Thread, binded and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -602,7 +602,7 @@ type
 
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback
-  TWebSocketProcessClientThread = class(TNotifiedThread)
+  TWebSocketProcessClientThread = class(TSynThread)
   protected
     fThreadState: (sCreate, sRun, sFinished, sClosed);
     fProcess: TWebSocketProcessClient;
@@ -1277,7 +1277,7 @@ end;
 
 constructor TWebSocketProcess.Create(aSocket: TCrtSocket;
   aProtocol: TWebSocketProtocol;
-  aOwnerConnection: Int64; aOwnerThread: TNotifiedThread;
+  aOwnerConnection: Int64; aOwnerThread: TSynThread;
   const aSettings: TWebSocketProcessSettings);
 begin
   inherited Create;
@@ -1708,7 +1708,7 @@ begin
 end;
 
 procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
-  ConnectionID: integer; ConnectionThread: TNotifiedThread);
+  ConnectionID: integer; ConnectionThread: TSynThread);
 begin
   if ClientSock.ConnectionUpgrade and
      ClientSock.KeepAliveClient and
@@ -1730,7 +1730,7 @@ begin
   result := @fSettings;
 end;
 
-function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TNotifiedThread): TWebSocketServerResp;
+function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
 var connectionIndex: Integer;
 begin
   result := nil;
