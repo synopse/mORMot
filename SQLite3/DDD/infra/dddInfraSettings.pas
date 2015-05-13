@@ -115,6 +115,7 @@ type
   protected
     fLevels: TSynLogInfos;
     fConsoleLevels: TSynLogInfos;
+    fAutoFlush: integer;
     fPerThread: TSynLogPerThreadMode;
     fDestinationPath: TFileName;
     fRotateFileCount: cardinal;
@@ -135,6 +136,16 @@ type
     // you should better not set a verbose definition here, unless you are
     // in debugging mode
     property ConsoleLevels: TSynLogInfos read fConsoleLevels write fConsoleLevels;
+    /// the time (in seconds) after which the log content must be written on
+    // disk, whatever the current content size is
+    // - by default, the log file will be written for every 4 KB of log (see
+    // TSynLogFamily.BufferSize property) - this will ensure that the main
+    // application won't be slow down by logging
+    // - in order not to loose any log, a background thread can be created
+    // and will be responsible of flushing all pending log content every
+    // period of time (e.g. every 10 seconds)
+    // - this parameter is effective only under Linux by now
+    property AutoFlushTimeOut: integer read fAutoFlush write fAutoFlush;
     /// the logged information about threads
     // - the default value is ptIdentifiedInOnFile, since it sounds more
     // reasonable to a multi-threaded server instance
@@ -459,6 +470,7 @@ begin
   fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
   fPerThread := ptIdentifiedInOnFile;
   fRotateFileAtHour := -1;
+  fAutoFlush := 5;
 end;
 
 
@@ -503,6 +515,9 @@ begin
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
+    {$ifdef MSWINDOWS}
+    AutoFlushTimeOut := Log.AutoFlushTimeOut;
+    {$endif}
   end;
   if fDescription='' then
     fDescription := aDescription;

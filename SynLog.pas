@@ -574,8 +574,9 @@ type
     {$ifdef MSWINDOWS}
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
-    // - by default, the log file will be written for every 4 KB of log - this
-    // will ensure that the main application won't be slow down by logging
+    // - by default, the log file will be written for every 4 KB of log (see
+    // BufferSize property) - this will ensure that the main application won't
+    // be slow down by logging
     // - in order not to loose any log, a background thread can be created
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
@@ -2328,8 +2329,10 @@ begin
   repeat
     for i := 1 to 10 do begin // check every second for pending data
       SleepHiRes(100);
-      if AutoFlushThread=0 then
+      if AutoFlushThread=0 then begin // check if terminated
+        ExitThread(0);
         exit; // avoid GPF
+      end;
     end;
     if SynLogFileList=nil then
       continue; // nothing to flush
