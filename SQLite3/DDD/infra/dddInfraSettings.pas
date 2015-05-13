@@ -116,6 +116,7 @@ type
     fLevels: TSynLogInfos;
     fConsoleLevels: TSynLogInfos;
     fAutoFlush: integer;
+    fStackTraceViaAPI: boolean;
     fPerThread: TSynLogPerThreadMode;
     fDestinationPath: TFileName;
     fRotateFileCount: cardinal;
@@ -150,6 +151,10 @@ type
     // - the default value is ptIdentifiedInOnFile, since it sounds more
     // reasonable to a multi-threaded server instance
     property PerThread: TSynLogPerThreadMode read fPerThread write fPerThread;
+    /// by default (false), logging will use manual stack trace browsing
+    // - if you experiment unexpected EAccessViolation, try to set this setting
+    // to TRUE so that the RtlCaptureStackBackTrace() API would be used instead 
+    property StackTraceViaAPI: boolean read FStackTraceViaAPI write FStackTraceViaAPI;
     /// allows to customize where the log files will be stored
     property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
     /// auto-rotation of logging files
@@ -515,6 +520,8 @@ begin
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
+    if Log.StackTraceViaAPI then
+      StackTraceUse := stOnlyAPI;
     {$ifdef MSWINDOWS}
     AutoFlushTimeOut := Log.AutoFlushTimeOut;
     {$endif}

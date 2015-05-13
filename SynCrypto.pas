@@ -5031,7 +5031,7 @@ begin
   t := 64 - (t and $3f);  // Space available in in_ (at least 1)
   if t>len then begin
     Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, len);
-    Exit;
+    exit;
   end;
   // First chunk is an odd size
   Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, t);
