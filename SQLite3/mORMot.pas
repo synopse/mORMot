@@ -13426,6 +13426,28 @@ type
     property Deleted: QWord read fDeleted;
   end;
 
+  /// used to access a TSQLRestServer from its URI
+  // - URI format is 'address:port/root'
+  {$ifdef UNICODE}
+  TSQLRestServerURI = record
+  {$else}
+  TSQLRestServerURI = object
+  {$endif}
+  private
+    function GetURI: RawUTF8;
+    procedure SetURI(const Value: RawUTF8);
+  public
+    /// the TSQLRestServer IP Address or DNS name
+    Address: RawUTF8;
+    /// the TSQLRestServer IP port
+    Port: RawUTF8;
+    /// the TSQLRestServer model Root
+    Root: RawUTF8;
+    /// property which allows to set the Address/Port/Root fields
+    // - URI format is 'address:port/root', but port or root are optional
+    property URI: RawUTF8 read GetURI write SetURI;
+  end;
+
   /// class-reference type (metaclass) of a REST server
   TSQLRestServerClass = class of TSQLRestServer;
 
@@ -36261,6 +36283,26 @@ begin
     FromExternalQueryPerformanceCounters(CounterDiff);
     AddSize(DataSize);
   end;
+end;
+
+
+{ TSQLRestServerURI }
+
+function TSQLRestServerURI.GetURI: RawUTF8;
+begin
+  result := Address;
+  if Port<>'' then
+    result := result+':'+Port;
+  if Root<>'' then
+    result := result+'/'+Root;
+end;
+
+procedure TSQLRestServerURI.SetURI(const Value: RawUTF8);
+begin
+  Split(Value,':',Address,Port);
+  if Port<>'' then
+    Split(Port,'/',Port,Root) else
+    Split(Address,'/',Address,Root);
 end;
 
 

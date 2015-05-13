@@ -6528,6 +6528,7 @@ end;
 
 procedure TTestBasicClasses._TSQLModel;
 var M: TSQLModel;
+    U: TSQLRestServerURI;
 begin
   M := TSQLModel.Create([TSQLRecordTest]);
   try
@@ -6537,6 +6538,23 @@ begin
   finally
     M.Free;
   end;
+  Check(U.URI='');
+  U.URI := 'addr:port/root';
+  Check(U.Address='addr');
+  Check(U.Port='port');
+  Check(U.Root='root');
+  U.URI := 'addr:port';
+  Check(U.Address='addr');
+  Check(U.Port='port');
+  Check(U.Root='');
+  U.URI := 'addr/root';
+  Check(U.Address='addr');
+  Check(U.Port='');
+  Check(U.Root='root');
+  U.URI := 'addr';
+  Check(U.Address='addr');
+  Check(U.Port='');
+  Check(U.Root='');
 end;
 
 procedure TTestBasicClasses._TSQLRestServerFullMemory;
