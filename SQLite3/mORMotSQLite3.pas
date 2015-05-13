@@ -1191,7 +1191,7 @@ var i: integer;
 begin
   inherited InternalStat(Ctxt,W);
   if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then begin
-    W.CancelLastChar; // last '}'
+    W.CancelLastChar('}');
     W.AddShort(',"sqlite3":[');
     stat := TSynMonitorTime.Create;
     last := TSynMonitorTime.Create;

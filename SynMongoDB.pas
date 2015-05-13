@@ -4438,8 +4438,7 @@ end;
 procedure TMongoRequestUpdate.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 begin
   inherited;
-  if W.LastChar='}' then
-    W.CancelLastChar;
+  W.CancelLastChar('}');
   W.AddShort(',selector:');
   AddMongoJSON(variant(fSelector),W,modMongoShell);
   W.AddShort(',update:');
@@ -4493,8 +4492,7 @@ end;
 procedure TMongoRequestDelete.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 begin
   inherited;
-  if W.LastChar='}' then
-    W.CancelLastChar;
+  W.CancelLastChar('}');
   W.AddShort(',query:');
   AddMongoJSON(variant(fQuery),W,modMongoShell);
   W.Add('}');
@@ -4522,8 +4520,7 @@ end;
 procedure TMongoRequestQuery.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 begin
   inherited;
-  if W.LastChar='}' then
-    W.CancelLastChar;
+  W.CancelLastChar('}');
   W.AddShort(',query:');
   AddMongoJSON(variant(fQuery),W,modMongoShell);
   if fReturnFieldsSelector.VType<>varNull then begin
@@ -4574,8 +4571,7 @@ procedure TMongoRequestKillCursor.ToJSON(W: TTextWriter; Mode: TMongoJSONMode);
 var i: integer;
 begin
   inherited;
-  if W.LastChar='}' then
-    W.CancelLastChar;
+  W.CancelLastChar('}');
   W.AddShort(',cursorID:[');
   for i := 0 to high(fCursors) do begin
     W.Add(fCursors[i]);

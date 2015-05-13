@@ -675,7 +675,7 @@ begin
         dec(WordCount);
         last := space;
       end;
-      WR.CancelLastChar;
+      WR.CancelLastChar(' ');
       case random(100) of
       0..2: begin
         if RandomInclude<>'' then begin

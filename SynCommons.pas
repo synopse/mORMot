@@ -6282,7 +6282,10 @@ type
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: cardinal read fTotalFileSize;
     /// the last char appended is canceled
-    procedure CancelLastChar;
+    procedure CancelLastChar; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the last char appended is canceled, if match the supplied one
+    procedure CancelLastChar(aCharToCancel: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
     procedure CancelLastComma;
@@ -36779,6 +36782,12 @@ begin
   result := B^;
 end;
 
+procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
+begin
+  if B^=aCharToCancel then
+    dec(B);
+end;
+
 function TTextWriter.PendingBytes: PtrUInt;
 begin
   result := B-fTempBuf;
@@ -37043,7 +37052,7 @@ begin
       AddString(ColNames[i]);
       AddNoJSONEscape(PAnsiChar('","'),3);
     end;
-    CancelLastChar; // cancel last '"'
+    CancelLastChar('"'); 
     fStartDataPosition := fStream.Position+(B-fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
@@ -45731,4 +45740,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

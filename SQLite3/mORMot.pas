@@ -34314,7 +34314,7 @@ var s,i: integer;
     withall,rw: boolean;
 begin
   Stats.ComputeDetailsTo(W);
-  W.CancelLastChar; // last '}'
+  W.CancelLastChar('}');
   withall := Ctxt.InputExists['withall'];
   if withall or Ctxt.InputExists['withtables'] then begin
     W.AddShort(',"tables":[');
@@ -34369,7 +34369,7 @@ begin
     try
       for s := 0 to fSessions.Count-1 do begin
         W.WriteObject(fSessions.List[s]);
-        W.CancelLastChar; // trailing '}'
+        W.CancelLastChar('}');
         with TAuthSession(fSessions.List[s]) do begin
           W.AddShort(',"methods":[');
           for i := 0 to high(fMethods) do

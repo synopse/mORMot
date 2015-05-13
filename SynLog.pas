@@ -3106,7 +3106,7 @@ begin
       inc(P,L+1);
     end;
     FreeEnvironmentStringsA(Env);
-    CancelLastChar; // trim last #9
+    CancelLastChar(#9);
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
