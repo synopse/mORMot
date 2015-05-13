@@ -7110,6 +7110,8 @@ type
     procedure Write4BigEndian(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 8 bytes of data at the current position
     procedure Write8(const Data8Bytes); {$ifdef HASINLINE}inline;{$endif}
+    /// append the same byte a given number of occurences at the current position
+    procedure WriteN(Data: Byte; Count: integer);
     /// append some UTF-8 encoded text at the current position
     // - will write the string length, then the string content, as expected
     // by the FromVarString() function
@@ -14140,6 +14142,9 @@ begin
   case V.VType of
     vtInteger: value := V.VInteger;
     vtInt64:   value := V.VInt64^;
+    vtBoolean: if V.VBoolean then
+                 value := 1 else
+                 value := 0;
     else begin
       result := false;
       exit;
@@ -40636,6 +40641,24 @@ begin
   move(Data^,PByteArray(fBuf)^[fPos],DataLen);
   inc(fPos,DataLen);
   inc(fTotalWritten,PtrUInt(DataLen));
+end;
+
+procedure TFileBufferWriter.WriteN(Data: Byte; Count: integer);
+var len: integer;
+begin
+  while Count>0 do begin
+    if Count>fBufLen then
+      len := fBufLen else
+      len := Count;
+    if fPos+len>fBufLen then begin
+      fStream.Write(pointer(fBuf)^,fPos);
+      fPos := 0;
+    end;
+    FillChar(PByteArray(fBuf)^[fPos],len,Data);
+    inc(fPos,len);
+    inc(fTotalWritten,len);
+    dec(Count,len);
+  end;
 end;
 
 procedure TFileBufferWriter.Write1(Data: byte);
