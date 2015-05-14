@@ -2551,7 +2551,7 @@ begin
   fThreadIndex := fThreadContextCount;
 storendx:
   fThreadID := ID;
-  fThreadContext := @fThreadContexts[fThreadIndex];
+  fThreadContext := @fThreadContexts[fThreadIndex-1];
 end;
 
 procedure TSynLog.LockAndGetThreadContext;
@@ -4214,4 +4214,4 @@ initialization
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
   
-end.
+end.
