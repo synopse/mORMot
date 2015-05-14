@@ -8726,7 +8726,12 @@ function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 // ! begin
 // !   MultiEventRemove(fEchos,TMethod(aEcho));
 // ! end;
-procedure MultiEventRemove(var EventList; const Event: TMethod);
+procedure MultiEventRemove(var EventList; const Event: TMethod); overload;
+
+/// low-level wrapper to remove a callback from a dynamic list of events
+// - same as the same overloaded procedure, but accepting an EventList[] index
+// to identify the Event to be suppressed
+procedure MultiEventRemove(var EventList; Index: Integer); overload;
 
 /// low-level wrapper to check if a callback is in a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -35074,8 +35079,12 @@ begin
   end;
   if fEchos<>nil then begin
     fEchoStart := EchoFlush;
-    for i := 0 to length(fEchos)-1 do
+    for i := length(fEchos)-1 downto 0 do // for MultiEventRemove() below
+    try
       fEchos[i](self,aLevel,fEchoBuf);
+    except // remove callback in case of exception during echoing in user code
+      MultiEventRemove(fEchos,i);
+    end;
     fEchoBuf := '';
   end;
 end;
@@ -45552,7 +45561,7 @@ end;
 function MultiEventFind(var EventList; const Event: TMethod): integer;
 var Events: TMethodDynArray absolute EventList;
 begin
-  if Event.Code<>nil then
+  if Event.Code<>nil then // callback assigned
     for result := 0 to length(Events)-1 do
       if (Events[result].Code=Event.Code) and
          (Events[result].Data=Event.Data) then
@@ -45565,8 +45574,6 @@ var Events: TMethodDynArray absolute EventList;
     n: integer;
 begin
   result := false;
-  if Event.Code=nil then
-    exit; // callback not assigned
   n := MultiEventFind(EventList,Event);
   if n>=0 then
     exit; // already registered
@@ -45577,17 +45584,19 @@ begin
 end;
 
 procedure MultiEventRemove(var EventList; const Event: TMethod);
-var Events: TMethodDynArray absolute EventList;
-    max,i: integer;
 begin
-  if Event.Code=nil then
-    exit; // callback not assigned
-  i := MultiEventFind(EventList,Event);
-  if i>=0 then begin
-    max := length(Events)-1;
-    move(Events[i+1],Events[i],(max-i)*sizeof(Events[i]));
+  MultiEventRemove(EventList,MultiEventFind(EventList,Event));
+end;
+
+procedure MultiEventRemove(var EventList; Index: Integer);
+var Events: TMethodDynArray absolute EventList;
+    max: integer;
+begin
+  max := length(Events);
+  if cardinal(index)<cardinal(max) then begin
+    dec(max);
+    move(Events[index+1],Events[index],(max-index)*sizeof(Events[index]));
     SetLength(Events,max);
-    exit;
   end;
 end;
 
