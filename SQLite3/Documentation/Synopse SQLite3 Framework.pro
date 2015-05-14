@@ -13695,11 +13695,12 @@ By default, redirection to the main {\f1\fs20 TSQLLog} class is done if you use 
 - {\f1\fs20 mORMotDB.pas} unit initialization will set {\f1\fs20 SynDBLog := TSQLLog};
 - {\f1\fs20 moRMotSQLite3.pas} unit initialization will set {\f1\fs20 SynSQLite3Log := TSQLLog}.
 You can set your own class type to {\f1\fs20 SynDBLog / SynSQLite3Log} if you expect separated logging.
-As a result, if you execute the following statement at the beginning of {\f1\fs20 TestSQL3.dpr}, most regression @*test@s will produce some logging, and will create about 390 MB of log file content, if executed:
+As a result, if you execute the following statement at the beginning of {\f1\fs20 TestSQL3.dpr}, regression @*test@s will produce some logging, and resulting into more than 740 MB of log file content, if executed:
+!  TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
 !  with TSQLLog.Family do begin
 !    Level := LOG_VERBOSE;
 !    HighResolutionTimeStamp := true;
-!    TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
+!    PerThreadLog := ptIdentifiedInOnFile;
 !  end;
 Creating so much log content won't increase the processing time much. On a recent laptop, whole regression tests process will spent only 2 seconds to write the additional logging, which is the bottleneck of the hard disk writing.
 If logging is turned off, there is no speed penalty noticeable.

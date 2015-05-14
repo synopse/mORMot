@@ -692,6 +692,7 @@ type
     fWriterStream: TStream;
     fThreadContext: PSynLogThreadContext;
     fThreadID: TThreadID;
+    fThreadLastHash: integer;
     fThreadIndex: integer;
     {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
     fThreadHandleExceptionBackup: TSynLog; 
@@ -703,6 +704,8 @@ type
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
     fThreadHash: TWordDynArray; // 64 KB buffer
+    fThreadIndexReleased: TWordDynArray;
+    fThreadIndexReleasedCount: integer;
     fThreadContexts: array of TSynLogThreadContext;
     fThreadContextCount: integer;
     fCurrentLevel: TSynLogInfo;
@@ -738,7 +741,7 @@ type
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
-    procedure GetThreadContextInternal(ID: TThreadID);
+    procedure GetThreadContextInternal;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; virtual;
@@ -774,6 +777,11 @@ type
     // !   TThreadLogger.SynLog.Release;
     // ! end;
     procedure Release;
+    /// you may call this method when a thread is ended
+    // - should be called in the thread context
+    // - it will release all thread-specific resource used by this TSynLog
+    // - is called e.g. by TSQLRest.EndCurrentThread
+    procedure NotifyThreadEnded;
     {/ handle generic method enter / auto-leave tracing
      - this is the main method to be called within a procedure/function to trace:
      ! procedure TMyDB.SQLExecute(const SQL: RawUTF8);
@@ -2523,7 +2531,7 @@ end;
 { TSynLog }
 
 const
-  MAXLOGTHREADBITS = 15;
+  MAXLOGTHREADBITS = 14;
   // maximum of thread IDs which can exist for a process
   // - shall be a power of 2 (used for internal TSynLog.fThreadHash)
   // - with the default 1MB stack size, max is around 2000 threads for Win32
@@ -2531,42 +2539,35 @@ const
   // pool (like we do for all our mORMot servers, including http.sys based)
   MAXLOGTHREAD = 1 shl MAXLOGTHREADBITS;
 
-procedure TSynLog.GetThreadContextInternal(ID: TThreadID);
-var hash: integer;
-    Pass2: boolean;
-label storendx;
+procedure TSynLog.GetThreadContextInternal;
 begin
-  hash := PtrUInt(ID xor (ID shr MAXLOGTHREADBITS)) and (MAXLOGTHREAD-1);
-  Pass2 := false;
-  fThreadIndex := fThreadHash[hash];
+  fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
+    xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
+  fThreadIndex := fThreadHash[fThreadLastHash];
   if fThreadIndex<>0 then
     repeat
-      if fThreadContexts[fThreadIndex-1].ID=ID then
-        goto storendx; // found the ID
+      fThreadContext := @fThreadContexts[fThreadIndex-1];
+      if fThreadContext^.ID=fThreadID then // match found
+        exit;
       // hash collision -> try next item in fThreadHash[] if possible
-      if hash>=MAXLOGTHREAD then
-        if Pass2 then begin
-          fThreadIndex := 0;
-          goto storendx;
-        end else begin
-          hash := 0;
-          Pass2 := true;
-        end else
-        inc(hash);
-      fThreadIndex := fThreadHash[hash];
+      if fThreadLastHash=MAXLOGTHREAD-1 then
+        fThreadLastHash := 0 else
+        inc(fThreadLastHash);
+      fThreadIndex := fThreadHash[fThreadLastHash];
     until fThreadIndex=0;
-  // here we know that fThreadIndex=fThreadHash[hash]=0
-  if fThreadContextCount<MAXLOGTHREAD then begin
+  // here we know that fThreadIndex=fThreadHash[hash]=0 -> register the thread
+  if fThreadIndexReleasedCount>0 then begin // reuse NotifyThreadEnded() index
+    dec(fThreadIndexReleasedCount);
+    fThreadIndex := fThreadIndexReleased[fThreadIndexReleasedCount];
+  end else begin // store a new entry
     if fThreadContextCount>=length(fThreadContexts) then
-      SetLength(fThreadContexts,fThreadContextCount+256);
-    fThreadContexts[fThreadContextCount].ID := ID;
+      SetLength(fThreadContexts,fThreadContextCount+128);
     inc(fThreadContextCount);
-    fThreadHash[hash] := fThreadContextCount;
+    fThreadIndex := fThreadContextCount;
   end;
-  fThreadIndex := fThreadContextCount;
-storendx:
-  fThreadID := ID;
+  fThreadHash[fThreadLastHash] := fThreadIndex;
   fThreadContext := @fThreadContexts[fThreadIndex-1];
+  fThreadContext^.ID := fThreadID;
 end;
 
 procedure TSynLog.LockAndGetThreadContext;
@@ -2574,12 +2575,33 @@ var ID: TThreadID;
 begin
   EnterCriticalSection(GlobalThreadLock);
   ID := GetCurrentThreadId;
-  if ID<>fThreadID then
-    GetThreadContextInternal(ID);
+  if ID<>fThreadID then begin
+    fThreadID := ID;
+    GetThreadContextInternal;
+  end;
   {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
   fThreadHandleExceptionBackup := GlobalCurrentHandleExceptionSynLog;
   GlobalCurrentHandleExceptionSynLog := nil;
   {$endif}
+end;
+
+procedure TSynLog.NotifyThreadEnded;
+begin
+  LockAndGetThreadContext;
+  try
+    fThreadHash[fThreadLastHash] := 0; // so that slot would be re-used
+    Finalize(fThreadContext^);
+    fillchar(fThreadContext^,SizeOf(fThreadContext^),0);
+    if fThreadIndexReleasedCount>=length(fThreadIndexReleased) then
+      SetLength(fThreadIndexReleased,fThreadIndexReleasedCount+128);
+    fThreadIndexReleased[fThreadIndexReleasedCount] := fThreadIndex;
+    inc(fThreadIndexReleasedCount);
+  finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+    {$endif}
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 function TSynLog._AddRef: Integer;
@@ -2692,7 +2714,7 @@ begin
   {$endif}
   {$endif}
   SetLength(fThreadHash,MAXLOGTHREAD); // 64 KB buffer
-  SetLength(fThreadContexts,256);
+  SetLength(fThreadContexts,128);
 end;
 
 destructor TSynLog.Destroy;

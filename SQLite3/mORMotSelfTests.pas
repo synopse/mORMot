@@ -158,15 +158,14 @@ begin
   {$ifndef DELPHI5OROLDER}
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
   {$endif}
-  TSQLLog.Family.Level := LOG_STACKTRACE; // log errors by default
-  if false then // "if not false then" will create around 770 MB of log file
+  WebSocketLog := TSQLLog; // enable low-level WebSockets frames logging
+  if false then // "if not false then" will create around 740 MB of log file
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
     //DestinationPath := ExeVersion.ProgramFilePath+'logs'; folder should exist
     PerThreadLog := ptIdentifiedInOnFile;
     //HighResolutionTimeStamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
-    WebSocketLog := TSQLLog;
   end
   else
     TSQLLog.Family.Level := []; // NO log by default (ignore expected ERROR 400)

@@ -12171,7 +12171,8 @@ type
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
-    // - this abstract method won't do anything, but TSQLRestServer's will
+    // - this abstract method will call fLogClass.Add.NotifyThreadEnded
+    // but TSQLRestServer.EndCurrentThread would do the main process
     procedure EndCurrentThread(Sender: TThread); virtual;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
@@ -29727,7 +29728,8 @@ begin // nothing do to at this level -> see TSQLRestServer.BeginCurrentThread
 end;
 
 procedure TSQLRest.EndCurrentThread(Sender: TThread);
-begin // nothing do to at this level -> see TSQLRestServer.EndCurrentThread
+begin // most would be done e.g. in TSQLRestServer.EndCurrentThread
+  fLogClass.Add.NotifyThreadEnded;
 end;
 
 function TSQLRest.GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
@@ -34755,6 +34757,7 @@ begin
           '%.EndCurrentThread(%) should match RunningThread=%',
           [self,Sender,RunningThread]) else
         RunningThread := nil;
+  inherited EndCurrentThread(Sender); // should be done eventually
 end;
 
 
