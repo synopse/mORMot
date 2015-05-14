@@ -48,8 +48,11 @@ unit SynLog;
   - first public release, extracted from SynCommons.pas unit
   - BREAKING CHANGE: PWinAnsiChar type for constant text format parameters has
     been changed into a RawUTF8, to please all supported platforms and compilers  
+  - WARNING: any user of the framework in heavy-loaded multi-threaded application
+    should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
   - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Windows target platform only)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
+  - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix
   - added TSynLogFile.Freq read-only property
   - added DefaultSynLogExceptionToStr() function and TSynLogExceptionToStrCustom
@@ -636,6 +639,25 @@ type
     property EndOfLineCRLF: boolean read fEndOfLineCRLF write fEndOfLineCRLF;
   end;
 
+  /// TSynLogThreadContext will define a dynamic array of such information
+  // - used by TSynLog.Enter methods to handle recursivity calls tracing
+  TSynLogThreadRecursion = record
+    /// associated class instance to be displayed
+    Instance: TObject;
+    /// associated class type to be displayed
+    ClassType: TClass;
+    /// method name (or message) to be displayed
+    MethodName: PUTF8Char;
+    /// internal reference count used at this recursion level by TSynLog._AddRef
+    RefCount: integer;
+    /// the caller address, ready to display stack trace dump if needed
+    Caller: PtrUInt;
+    /// the time stamp at enter time
+    EnterTimeStamp: Int64;
+    /// if the method name is local, i.e. shall not be displayed at Leave()
+    MethodNameLocal: (mnAlways, mnEnter, mnLeave);
+  end;
+
   /// thread-specific internal context used during logging
   // - this structure is a hashed-per-thread variable
   TSynLogThreadContext = record
@@ -647,22 +669,7 @@ type
     // - faster than length(Recursion)
     RecursionCapacity: integer;
     /// used by TSynLog.Enter methods to handle recursivity calls tracing
-    Recursion: array of record
-      /// associated class instance to be displayed
-      Instance: TObject;
-      /// associated class type to be displayed
-      ClassType: TClass;
-      /// method name (or message) to be displayed
-      MethodName: PUTF8Char;
-      /// internal reference count used at this recursion level by TSynLog._AddRef
-      RefCount: integer;
-      /// the caller address, ready to display stack trace dump if needed
-      Caller: PtrUInt;
-      /// the time stamp at enter time
-      EnterTimeStamp: Int64;
-      /// if the method name is local, i.e. shall not be displayed at Leave()
-      MethodNameLocal: (mnAlways, mnEnter, mnLeave);
-    end;
+    Recursion: array of TSynLogThreadRecursion;
   end;
   // pointer to thread-specific context information
   PSynLogThreadContext = ^TSynLogThreadContext;
@@ -683,10 +690,12 @@ type
     fWriter: TTextWriter;
     fWriterClass: TTextWriterClass;
     fWriterStream: TStream;
-    fThreadLock: TRTLCriticalSection;
     fThreadContext: PSynLogThreadContext;
     fThreadID: TThreadID;
     fThreadIndex: integer;
+    {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
+    fThreadHandleExceptionBackup: TSynLog; 
+    {$endif}
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
     fFrequencyTimeStamp: Int64;
@@ -708,7 +717,6 @@ type
     function _Release: Integer; stdcall;
     {$endif}
     class function FamilyCreate: TSynLogFamily;
-    procedure DoEnterLeave(aLevel: TSynLogInfo);
     procedure CreateLogWriter; virtual;
     procedure LogInternal(Level: TSynLogInfo; const TextFmt: RawUTF8;
       const TextArgs: array of const; Instance: TObject); overload;
@@ -716,8 +724,8 @@ type
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
      aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload; 
-    // any call to this method MUST call UnLock
-    function LogHeaderLock(Level: TSynLogInfo): boolean;
+    // any call to this method MUST call LogTrailerUnLock
+    function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINE}inline;{$endif}
     procedure LogCurrentTime;
     procedure LogFileHeader; virtual;
@@ -730,7 +738,7 @@ type
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
-    procedure LockAndGetThreadContextInternal(ID: TThreadID);
+    procedure GetThreadContextInternal(ID: TThreadID);
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; virtual;
@@ -1115,6 +1123,15 @@ var
   /// the kind of .log file generated by TSynTestsLogged
   TSynLogTestLog: TSynLogClass = TSynLog;
 
+var
+  /// low-level variable used internaly by this unit
+  // - do not access this variable in your code: defined here to allow inlining
+  GlobalThreadLock: TRTLCriticalSection;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  /// low-level variable used internaly by this unit
+  // - do not access this variable in your code: defined here to allow inlining
+  GlobalCurrentHandleExceptionSynLog: TSynLog;
+  {$endif}
 
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
@@ -1760,10 +1777,6 @@ threadvar
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
-var
-  /// used internaly by function GetHandleExceptionSynLog
-  CurrentHandleExceptionSynLog: TSynLog;
-
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   function GetHandleExceptionSynLog: TSynLog;
@@ -1806,14 +1819,14 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   end;
 var SynLog: TSynLog;
 begin
-  SynLog := CurrentHandleExceptionSynLog;
+  SynLog := GlobalCurrentHandleExceptionSynLog;
   if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then 
     SynLog := GetHandleExceptionSynLog;
   if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
     exit;
   if SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0 then
     exit;
-  if SynLog.LogHeaderLock(Ctxt.ELevel) then
+  if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
     repeat
       if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) and
@@ -1837,7 +1850,8 @@ begin
     SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
     SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
   finally
-    LeaveCriticalSection(SynLog.fThreadLock);
+    GlobalCurrentHandleExceptionSynLog := SynLog.fThreadHandleExceptionBackup;
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -1980,7 +1994,7 @@ function HookedRaiseException(Exc: Pointer): LongBool; cdecl;
 var ExcRec: PInternalRaisedException;
     Ctxt: TSynLogExceptionContext;
 begin
-  if CurrentHandleExceptionSynLog<>nil then
+  if GlobalCurrentHandleExceptionSynLog<>nil then
     if Exc<>nil then begin
       Ctxt.ECode := PInternalUnwindException(Exc)^.exception_class;
       case Ctxt.ECode of
@@ -2187,7 +2201,7 @@ var
 function SynLogVectoredHandler(ExceptionInfo : PExceptionInfo): PtrInt; stdcall;
 const EXCEPTION_CONTINUE_SEARCH = 0;
 begin
-  if CurrentHandleExceptionSynLog<>nil then
+  if GlobalCurrentHandleExceptionSynLog<>nil then
     LogExcept(nil,ExceptionInfo^.ExceptionRecord^);
   result := EXCEPTION_CONTINUE_SEARCH;
 end;
@@ -2200,7 +2214,7 @@ procedure SynRtlUnwind(TargetFrame, TargetIp: pointer;
   ExceptionRecord: PExceptionRecord; ReturnValue: Pointer); stdcall;
 asm
   pushad
-  cmp  dword ptr CurrentHandleExceptionSynLog,0
+  cmp  dword ptr GlobalCurrentHandleExceptionSynLog,0
   jz   @oldproc
   mov  eax,TargetFrame
   mov  edx,ExceptionRecord
@@ -2238,8 +2252,8 @@ begin
 {$ifndef NOEXCEPTIONINTERCEPT}
   // intercept exceptions, if necessary
   fHandleExceptions := (sllExceptionOS in aLevel) or (sllException in aLevel);
-  if fHandleExceptions and (CurrentHandleExceptionSynLog=nil) then begin
-    SynLog; // force CurrentHandleExceptionSynLog definition
+  if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog=nil) then begin
+    SynLog; // force GlobalCurrentHandleExceptionSynLog definition
     {$ifdef WITH_MAPPED_EXCEPTIONS}
     GetUnwinder(oldUnwinder);
     newUnwinder := oldUnwinder;
@@ -2449,10 +2463,10 @@ begin
       if fGlobalLog<>nil then
         result := fGlobalLog else
         result := CreateSynLog;
-{$ifndef NOEXCEPTIONINTERCEPT}
-    if fHandleExceptions and (CurrentHandleExceptionSynLog<>result) then
-      CurrentHandleExceptionSynLog := result;
-{$endif}
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog<>result) then
+      GlobalCurrentHandleExceptionSynLog := result;
+    {$endif}
   end;
 end;
 
@@ -2509,19 +2523,20 @@ end;
 { TSynLog }
 
 const
+  MAXLOGTHREADBITS = 15;
   // maximum of thread IDs which can exist for a process
   // - shall be a power of 2 (used for internal TSynLog.fThreadHash)
   // - with the default 1MB stack size, max is around 2000 threads for Win32
   // - thread IDs are recycled when released, and you always should use a thread
   // pool (like we do for all our mORMot servers, including http.sys based)
-  MAXLOGTHREAD = 1 shl 15;
+  MAXLOGTHREAD = 1 shl MAXLOGTHREADBITS;
 
-procedure TSynLog.LockAndGetThreadContextInternal(ID: TThreadID);
+procedure TSynLog.GetThreadContextInternal(ID: TThreadID);
 var hash: integer;
     Pass2: boolean;
 label storendx;
 begin
-  hash := PtrUInt(ID) and (MAXLOGTHREAD-1);
+  hash := PtrUInt(ID xor (ID shr MAXLOGTHREADBITS)) and (MAXLOGTHREAD-1);
   Pass2 := false;
   fThreadIndex := fThreadHash[hash];
   if fThreadIndex<>0 then
@@ -2531,8 +2546,8 @@ begin
       // hash collision -> try next item in fThreadHash[] if possible
       if hash>=MAXLOGTHREAD then
         if Pass2 then begin
-         fThreadIndex := 0;
-         goto storendx;
+          fThreadIndex := 0;
+          goto storendx;
         end else begin
           hash := 0;
           Pass2 := true;
@@ -2557,26 +2572,37 @@ end;
 procedure TSynLog.LockAndGetThreadContext;
 var ID: TThreadID;
 begin
-  EnterCriticalSection(fThreadLock);
+  EnterCriticalSection(GlobalThreadLock);
   ID := GetCurrentThreadId;
   if ID<>fThreadID then
-    LockAndGetThreadContextInternal(ID);
+    GetThreadContextInternal(ID);
+  {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
+  fThreadHandleExceptionBackup := GlobalCurrentHandleExceptionSynLog;
+  GlobalCurrentHandleExceptionSynLog := nil;
+  {$endif}
 end;
 
 function TSynLog._AddRef: Integer;
 begin
-  if fFamily.Level*[sllEnter,sllLeave]<>[] then begin
+  if fFamily.Level*[sllEnter,sllLeave]<>[] then
+  try
     LockAndGetThreadContext;
     with fThreadContext^ do
     if RecursionCount>0 then
       with Recursion[RecursionCount-1] do begin
-        if (RefCount=0) and (sllEnter in fFamily.Level) then
-          DoEnterLeave(sllEnter);
+        if (RefCount=0) and (sllEnter in fFamily.Level) then begin
+          LogHeaderLock(sllEnter,true);
+          AddRecursion(RecursionCount-1,sllEnter);
+        end;
         inc(RefCount);
         result := RefCount;
       end else
       result := 1; // should never be 0 (mark release of TSynLog instance)
-    LeaveCriticalSection(fThreadLock);
+  finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+    {$endif}
+    LeaveCriticalSection(GlobalThreadLock);
   end else
     result := 1;
 end;
@@ -2596,7 +2622,8 @@ var aStackFrame: PtrInt;
 {$endif}
 {$endif}
 begin
-  if fFamily.Level*[sllEnter,sllLeave]<>[] then begin
+  if fFamily.Level*[sllEnter,sllLeave]<>[] then
+  try
     LockAndGetThreadContext;
     with fThreadContext^ do
     if RecursionCount>0 then begin
@@ -2625,7 +2652,8 @@ begin
               {$endif}
               {$endif}
             end;
-            DoEnterLeave(sllLeave);
+            LogHeaderLock(sllLeave,true);
+            AddRecursion(RecursionCount-1,sllLeave);
           end;
           dec(RecursionCount);
         end;
@@ -2633,7 +2661,11 @@ begin
       end;
     end else
       result := 1; // should never be 0 (mark release of TSynLog)
-    LeaveCriticalSection(fThreadLock);
+  finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+    {$endif}
+    LeaveCriticalSection(GlobalThreadLock);
   end else
     result := 1;
 end;
@@ -2644,7 +2676,6 @@ begin
   if aFamily=nil then
     aFamily := Family;
   fFamily := aFamily;
-  InitializeCriticalSection(fThreadLock);
   {$ifdef MSWINDOWS}
   if RtlCaptureStackBackTraceRetrieved=btUntested then begin
     if OSVersion<wXP then
@@ -2667,13 +2698,12 @@ end;
 destructor TSynLog.Destroy;
 begin
 {$ifndef NOEXCEPTIONINTERCEPT}
-  if fFamily.fHandleExceptions and (CurrentHandleExceptionSynLog=self) then
-    CurrentHandleExceptionSynLog := nil;
+  if fFamily.fHandleExceptions and (GlobalCurrentHandleExceptionSynLog=self) then
+    GlobalCurrentHandleExceptionSynLog := nil;
 {$endif}
   Flush(true);
   fWriterStream.Free;
   fWriter.Free;
-  DeleteCriticalSection(fThreadLock);
   inherited;
 end;
 
@@ -2681,13 +2711,13 @@ procedure TSynLog.CloseLogFile;
 begin
   if fWriter=nil then
     exit;
-  EnterCriticalSection(fThreadLock);
+  EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushFinal;
     FreeAndNil(fWriterStream);
     FreeAndNil(fWriter);
   finally
-    LeaveCriticalSection(fThreadLock);
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -2709,7 +2739,7 @@ procedure TSynLog.Flush(ForceDiskWrite: boolean);
 begin
   if fWriter=nil then
     exit;
-  EnterCriticalSection(fThreadLock);
+  EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushToStream;
     {$ifdef MSWINDOWS}
@@ -2717,7 +2747,7 @@ begin
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
     {$endif}
   finally
-    LeaveCriticalSection(fThreadLock);
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -2758,9 +2788,10 @@ begin
   with aSynLog do
   if sllEnter in fFamily.fLevel then begin
     LockAndGetThreadContext;
-    with fThreadContext^ do begin
+    with fThreadContext^ do
+    try
       if RecursionCount=RecursionCapacity then begin
-        inc(RecursionCapacity,32);
+        inc(RecursionCapacity,4+RecursionCapacity shr 3);
         SetLength(Recursion,RecursionCapacity);
       end;
       {$ifdef CPU64}
@@ -2795,7 +2826,11 @@ begin
         RefCount := 0;
       end;
       inc(RecursionCount);
-      LeaveCriticalSection(fThreadLock);
+    finally
+      {$ifndef NOEXCEPTIONINTERCEPT}
+      GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+      {$endif}
+      LeaveCriticalSection(GlobalThreadLock);
     end;
   end;
   // copy to ISynLog interface -> will call TSynLog._AddRef
@@ -2971,7 +3006,7 @@ begin
     LastError := GetLastError else
     LastError := 0;
   if (self<>nil) and (Level in fFamily.fLevel) then
-  if LogHeaderLock(Level) then
+  if LogHeaderLock(Level,false) then
   try
     if LastError<>0 then
       AddErrorMessage(LastError);
@@ -3168,10 +3203,11 @@ begin
     fWriter.AddCurrentLogTime;
 end;
 
-function TSynLog.LogHeaderLock(Level: TSynLogInfo): boolean;
+function TSynLog.LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
 var i: integer;
 begin
-  LockAndGetThreadContext;
+  if not AlreadyLocked then
+    LockAndGetThreadContext;
   try
     if fWriter=nil then
       CreateLogWriter; // file creation should be thread-safe
@@ -3188,11 +3224,11 @@ begin
     fCurrentLevel := Level;
     fWriter.AddShort(LOG_LEVEL_TEXT[Level]);
     fWriter.AddChars(#9,fThreadContext^.RecursionCount-byte(Level in [sllEnter,sllLeave]));
-  {$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     case Level of // handle additional text for some special error levels
       sllMemory: AddMemoryStats;
     end;
-  {$endif}
+    {$endif}
     result := true;
   except
     on Exception do
@@ -3243,7 +3279,10 @@ begin
     if (fFileRotationSize>0) and (fWriter.WrittenBytes>fFileRotationSize) then
       PerformRotation;
   finally
-    LeaveCriticalSection(fThreadLock);
+    {$ifndef NOEXCEPTIONINTERCEPT}
+    GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+    {$endif}
+    LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
 
@@ -3254,7 +3293,7 @@ begin
   if Level=sllLastError then
     LastError := GetLastError else
     LastError := 0;
-  if LogHeaderLock(Level) then
+  if LogHeaderLock(Level,false) then
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ');
@@ -3275,7 +3314,7 @@ begin
   if Level=sllLastError then
     LastError := GetLastError else
     LastError := 0;
-  if LogHeaderLock(Level) then
+  if LogHeaderLock(Level,false) then
   try
     if Text='' then begin
       if Instance<>nil then
@@ -3311,7 +3350,7 @@ end;
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
    aTypeInfo: pointer; var aValue; Instance: TObject=nil);
 begin
-  if LogHeaderLock(Level) then
+  if LogHeaderLock(Level,false) then
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ');
@@ -3358,19 +3397,11 @@ end;
 procedure TSynLog.CreateLogWriter;
 var i,retry: integer;
     exists: boolean;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    prevState: TSynLog;
-    {$endif}
 begin
   if fWriterStream=nil then begin
     ComputeFileName;
     if fFamily.NoFile then
       fWriterStream := TFakeWriterStream.Create else begin
-      {$ifndef NOEXCEPTIONINTERCEPT}
-      prevState := CurrentHandleExceptionSynLog; // ignore file exceptions 
-      CurrentHandleExceptionSynLog := nil;
-      try
-      {$endif}
       if FileExists(fFileName) then
         case fFamily.FileExistsAction of
         acOverwrite:
@@ -3399,11 +3430,6 @@ begin
           break;
         fFileName := ChangeFileExt(fFileName,'-'+fFamily.fDefaultExtension);
       end;
-      {$ifndef NOEXCEPTIONINTERCEPT}
-      finally
-        CurrentHandleExceptionSynLog := prevState;
-      end;
-      {$endif}
     end;
     if fWriterStream=nil then // go on if file creation fails (e.g. RO folder)
       fWriterStream := TFakeWriterStream.Create;
@@ -3500,16 +3526,6 @@ DoEnt:case aLevel of
   fWriter.AddEndOfLine(aLevel);
 end;
 
-procedure TSynLog.DoEnterLeave(aLevel: TSynLogInfo);
-begin
-  if LogHeaderLock(aLevel) then
-  try
-    AddRecursion(fThreadContext^.RecursionCount-1,aLevel);
-  finally
-    LeaveCriticalSection(fThreadLock);
-  end;
-end;
-
 const
   MINIMUM_EXPECTED_STACKTRACE_DEPTH = 2;
 
@@ -3527,9 +3543,6 @@ procedure AddStackManual(Stack: PPtrUInt);
     result := false;
   end;
 var st, max_stack, min_stack, depth: PtrUInt;
-{$ifndef NOEXCEPTIONINTERCEPT}
-    prevState: TSynLog;
-{$endif}
 begin
   depth := fFamily.StackTraceLevel;
   if depth=0 then
@@ -3553,32 +3566,22 @@ begin
   end;
   {$endif}
   fWriter.AddShort(' stack trace ');
-  {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
-  prevState := CurrentHandleExceptionSynLog;
-  CurrentHandleExceptionSynLog := nil;
+  if PtrUInt(stack)>=min_stack then
   try
-  {$endif}
-    if PtrUInt(stack)>=min_stack then
-    try
-      while (PtrUInt(stack)<max_stack) do begin
-        st := stack^;
-        if ((st>max_stack) or (st<min_stack)) and
-           not IsBadReadPtr(pointer(st-8),12) and
-           ((pByte(st-5)^=$E8) or check2(st)) then begin
-          TSynMapFile.Log(fWriter,st,false); // ignore any TSynLog.* methods
-          dec(depth);
-          if depth=0 then break;
-        end;
-        inc(stack);
+    while (PtrUInt(stack)<max_stack) do begin
+      st := stack^;
+      if ((st>max_stack) or (st<min_stack)) and
+         not IsBadReadPtr(pointer(st-8),12) and
+         ((pByte(st-5)^=$E8) or check2(st)) then begin
+        TSynMapFile.Log(fWriter,st,false); // ignore any TSynLog.* methods
+        dec(depth);
+        if depth=0 then break;
       end;
-    except
-      // just ignore any access violation here
+      inc(stack);
     end;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  finally
-    CurrentHandleExceptionSynLog := prevState;
+  except
+    // just ignore any access violation here
   end;
-  {$endif}
 end;
 {$endif}
 {$endif}
@@ -3589,9 +3592,6 @@ end;
 {$else}
 var n, i: integer;
     BackTrace: array[byte] of PtrUInt;
-{$ifndef NOEXCEPTIONINTERCEPT}
-    prevState: TSynLog;
-{$endif}
 begin
   if fFamily.StackTraceLevel<=0 then
     exit;
@@ -3604,33 +3604,23 @@ begin
     {$endif}
     {$endif}
   end else begin
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    prevState := CurrentHandleExceptionSynLog;
-    CurrentHandleExceptionSynLog := nil; // for IsBadCodePtr
     try
-    {$endif}
-      try
-        n := RtlCaptureStackBackTrace(2,fFamily.StackTraceLevel,@BackTrace,nil);
-        if (n<MINIMUM_EXPECTED_STACKTRACE_DEPTH) and
-           (fFamily.StackTraceUse<>stOnlyAPI) then begin
-          {$ifndef FPC}
-          {$ifndef CPU64}
-          AddStackManual(Stack);
-          {$endif}
-          {$endif}
-        end else begin
-          fWriter.AddShort(' stack trace API ');
-          for i := 0 to n-1 do
-            TSynMapFile.Log(fWriter,BackTrace[i],false); // ignore any TSynLog.* 
-        end;
-      except
-        // just ignore any access violation here
+      n := RtlCaptureStackBackTrace(2,fFamily.StackTraceLevel,@BackTrace,nil);
+      if (n<MINIMUM_EXPECTED_STACKTRACE_DEPTH) and
+         (fFamily.StackTraceUse<>stOnlyAPI) then begin
+        {$ifndef FPC}
+        {$ifndef CPU64}
+        AddStackManual(Stack);
+        {$endif}
+        {$endif}
+      end else begin
+        fWriter.AddShort(' stack trace API ');
+        for i := 0 to n-1 do
+          TSynMapFile.Log(fWriter,BackTrace[i],false); // ignore any TSynLog.*
       end;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    finally
-      CurrentHandleExceptionSynLog := prevState;
+    except
+      // just ignore any access violation here
     end;
-    {$endif}
   end;
   {$endif MSWINDOWS}
 end;
@@ -4210,8 +4200,9 @@ end;
 
 
 initialization
+  InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
-  
+
 end.
