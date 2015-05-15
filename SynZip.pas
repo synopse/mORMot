@@ -574,7 +574,7 @@ type
     constructor Create(outStream: TStream; CompressionLevel: Integer;
       Format: TSynZipCompressorFormat = szcfRaw);
     /// release memory
-    destructor Destroy; override;
+    destructor Destroy; override;            
     /// this method will raise an error: it's a compression-only stream
     function Read(var Buffer; Count: Longint): Longint; override;
     /// add some data to be compressed
@@ -775,8 +775,10 @@ uses
 {$endif Linux}
 
 const
-  FIRSTHEADER_SIGNATURE = $04034b50;  // PK#3#4
-  LASTHEADER_SIGNATURE  = $06054b50;  // PK#5#6;
+  // those constants have +1 to avoid finding it in the exe
+  FIRSTHEADER_SIGNATURE_INC = $04034b50+1;  // PK#3#4
+  LASTHEADER_SIGNATURE_INC  = $06054b50+1;  // PK#5#6
+  ENTRY_SIGNATURE_INC = $02014b50+1; // PK#1#2
 
 
 { TZipWrite }
@@ -823,15 +825,15 @@ end;
 
 constructor TZipWriteAbstract.Create;
 begin
-  fMagic := (FIRSTHEADER_SIGNATURE+1); // +1 to avoid finding it in the exe generated code
+  fMagic := FIRSTHEADER_SIGNATURE_INC; // +1 to avoid finding it in the exe generated code
   dec(fMagic);
 end;
 
 function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
 begin
   with Entry[Count] do begin
-    fHr.signature := $02014b51;
-    dec(fHr.signature); // +1 to avoid finding it in the exe
+    fHr.signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
+    dec(fHr.signature);
     fHr.madeBy := $14;
     fHr.fileInfo.neededVersion := $14;
     result := InternalWritePosition;
@@ -916,7 +918,7 @@ var lhr: TLastHeader;
     i: integer;
 begin
   fillchar(lhr,sizeof(lhr),0);
-  lhr.signature := LASTHEADER_SIGNATURE+1;
+  lhr.signature := LASTHEADER_SIGNATURE_INC;
   dec(lhr.signature); // +1 to avoid finding it in the exe
   lhr.thisFiles := Count;
   lhr.totalFiles := Count;
@@ -1125,13 +1127,13 @@ var lhr: PLastHeader;
 begin
   for i := 0 to 127 do begin // resources size may be rounded up to alignment
     lhr := @BufZip[Size-sizeof(TLastHeader)];
-    if lhr^.signature+1=(LASTHEADER_SIGNATURE+1) then
+    if lhr^.signature+1=LASTHEADER_SIGNATURE_INC then
       break;
     dec(Size);
     if Size<=sizeof(lhr^) then
       break;
   end;
-  if lhr^.signature+1<>(LASTHEADER_SIGNATURE+1) then begin
+  if lhr^.signature+1<>LASTHEADER_SIGNATURE_INC then begin
     UnMap;
     raise ESynZipException.Create('ZIP format');
   end;
@@ -1140,7 +1142,7 @@ begin
   FirstFileHeader := @BufZip[lhr^.headerOffset];
   H := FirstFileHeader;
   for i := 1 to lhr^.totalFiles do begin
-    if H^.signature+1<>$02014b51 then begin
+    if H^.signature+1<>ENTRY_SIGNATURE_INC then begin // +1 to avoid match in exe
       UnMap;
       raise ESynZipException.Create('ZIP format');
     end;
@@ -1217,14 +1219,14 @@ begin
   Buf := MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
   ExeOffset := -1;
   for i := ZipStartOffset to Size-5 do // search for first local header
-    if PCardinal(@buf[i])^+1=(FIRSTHEADER_SIGNATURE+1) then begin
+    if PCardinal(@buf[i])^+1=FIRSTHEADER_SIGNATURE_INC then begin
       // +1 above to avoid finding it in the exe part
       ExeOffset := i;
       break;
     end;
   if ExeOffset<0 then // try if adding files to an empty archive
     for i := ZipStartOffset to Size-5 do
-      if PCardinal(@buf[i])^+1=(LASTHEADER_SIGNATURE+1) then begin
+      if PCardinal(@buf[i])^+1=LASTHEADER_SIGNATURE_INC then begin
         // +1 avoids false positive
         ExeOffset := i;
         break;
@@ -4997,9 +4999,9 @@ end;
 procedure TFileHeader.Init;
 begin
   fillchar(self,sizeof(TFileHeader),0);
-  signature   := $02014b51;
-  dec(signature); // avoid finding the signature in the generated code
-  madeBy      := $14;
+  signature := ENTRY_SIGNATURE_INC; // +1 to avoid finding it in the exe
+  dec(signature);
+  madeBy := $14;
   extFileAttr := $A0; // archive, normal
   fileInfo.neededVersion := $14;
 end;
