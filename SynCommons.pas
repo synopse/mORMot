@@ -33,6 +33,7 @@ unit SynCommons;
    - Alfred Glaenzer (alf)
    - BigStar
    - itSDS
+   - mazinsw
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -17548,17 +17549,25 @@ end;
 {$endif MSWINDOWS}
 
 
-{$ifndef FPC}
+{$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
 {$ifdef PUREPASCAL}
 
 function InterlockedIncrement(var I: Integer): Integer;
 begin
+  {$ifdef MSWINDOWS} // AtomicIncrement() may not be available e.g. on Deplhi XE2
+  result := Windows.InterlockedIncrement(I);
+  {$else}
   result := AtomicIncrement(I);
+  {$endif}
 end;
 
 function InterlockedDecrement(var I: Integer): Integer;
 begin
+  {$ifdef MSWINDOWS} // AtomicDecrement() may not be available e.g. on Deplhi XE2
+  result := Windows.InterlockedDecrement(I);
+  {$else}
   result := AtomicDecrement(I);
+  {$endif}
 end;
 
 {$else}
