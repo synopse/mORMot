@@ -32,7 +32,7 @@ unit mORMotWrappers;
   - Sabbiolina
   - Stefan Diestelmann
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -47,7 +47,7 @@ unit mORMotWrappers;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Version 1.18
   - first public release, corresponding to Synopse mORMot Framework 1.18
 
@@ -221,7 +221,7 @@ const
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
     'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'));
-                       
+
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
      wString,         // sftAnsiText
@@ -643,7 +643,7 @@ begin
     parser := TTextWriter.RegisterCustomJSONSerializerFindParser(typInfo,true);
     if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
       info := _ObjFast(['name',typName,'fields',ContextNestedProperties(parser.Root)]);
-  end;                                 
+  end;
   wArray: begin
     item := typInfo^.DynArrayItemType(@itemSize);
     if item=nil then
@@ -784,7 +784,7 @@ begin
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
   if fHasAnyRecord then
-    result.ORMWithRecords := true; 
+    result.ORMWithRecords := true;
   if fRecords.Count>0 then begin
     AddDescription(fRecords,'name','recordDescription');
     result.records := variant(fRecords);
@@ -947,7 +947,7 @@ begin
     aPort := 80;
   context.port := aPort;
   context.filename := aFileName;
-  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,nil,true); 
+  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,nil,true);
 end;
 
 

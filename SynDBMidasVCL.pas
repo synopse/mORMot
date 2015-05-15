@@ -90,7 +90,7 @@ type
   /// FPC's pure pascal in-memory buffer is used instead of TClientDataSet
   TClientDataSet = TBufDataset;
 
-  /// wrapper functions will use FPC's pure pascal in-memory buffer 
+  /// wrapper functions will use FPC's pure pascal in-memory buffer
   TSynDBDataSet = TBufDataset;
 
 {$else FPC}
@@ -231,7 +231,7 @@ type
 /// fetch a SynDB TQuery result into an existing VCL TClientDataSet
 // - if aMaxRowCount>0, will return up to the specified number of rows
 // - current implementation will fill an existing TClientDataSet instance, from
-// the supplied TQuery content 
+// the supplied TQuery content
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 function ToClientDataSet(aDataSet: TClientDataSet; aStatement: SynDB.TQuery;

@@ -30,7 +30,7 @@ unit mORMotDDD;
 
   Contributor(s):
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -202,7 +202,7 @@ type
     procedure SubscribeLog(const Level: TSynLogInfos; const Callback: ISynLogCallback);
     /// will be called when a callback is released on the client side
     // - this method matches IServiceWithCallbackReleased signature
-    // - will be used to unsubscribe any previous ISynLogCallback notification 
+    // - will be used to unsubscribe any previous ISynLogCallback notification
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
@@ -479,7 +479,7 @@ type
     property Repository: TInterfaceFactory read fInterface;
     /// the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
-    /// the class name which will implement each repository instance 
+    /// the class name which will implement each repository instance
     property ImplementationClass: string read GetImplementationName;
     /// the DDD's Entity class name handled by this factory
     property AggregateClass: string read GetAggregateName;
@@ -489,7 +489,7 @@ type
 
   /// abstract repository class to implement I*Query interface using RESTful ORM
   // - actual repository implementation will just call the ORM*() protected
-  // method from the published Aggregate-oriented CQRS service interface 
+  // method from the published Aggregate-oriented CQRS service interface
   TDDDRepositoryRestQuery = class(TCQRSQueryObject)
   protected
     fFactory: TDDDRepositoryRestFactory;
@@ -534,7 +534,7 @@ type
 
   /// abstract class to implement I*Command interface using ORM's TSQLRecord
   // - it will use an internal TSQLRestBatch for dual-phase commit, therefore
-  // implementing a generic Unit Of Work / Transaction pattern 
+  // implementing a generic Unit Of Work / Transaction pattern
   TDDDRepositoryRestCommand = class(TDDDRepositoryRestQuery)
   protected
     fBatch: TSQLRestBatch;
@@ -571,7 +571,7 @@ type
     function DeleteAll: TCQRSResult; virtual;
     /// write all pending changes prepared by Add/UpdatePassword/Delete methods
     // - this is the only mandatory method, to be declared in your I*Command
-    // - in practice, will send the current internal BATCH to the REST instance 
+    // - in practice, will send the current internal BATCH to the REST instance
     function Commit: TCQRSResult; virtual;
     /// flush any pending changes prepared by Add/UpdatePassword/Delete methods
     // - if you do not need this method, just do not publish it in I*Command
@@ -597,7 +597,7 @@ type
     /// reintroduced constructor, allowing to specify the associated REST instance
     constructor Create(aRest: TSQLRest); reintroduce; virtual;
     /// reintroduced constructor, associating a REST instance with the supplied
-    // IoC resolvers  
+    // IoC resolvers
     constructor CreateWithResolver(aRest: TSQLRest; aResolver: TInterfaceResolver;
       aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
     /// reintroduced constructor, associating a REST instance with the supplied
@@ -654,7 +654,7 @@ type
     // ORM TSQLRestBatch instance)
     procedure ExecuteIdle; virtual; abstract;
     /// will be called on any exception in Execute
-    // - this default implementation will call fMonitoring.ProcessError() 
+    // - this default implementation will call fMonitoring.ProcessError()
     procedure ExecuteOnException(E: Exception); virtual;
   public
     /// initialize the process thread for a given Service/Daemon instance
@@ -859,7 +859,7 @@ type
   // - is defined as an TInjectableAutoCreateFields, so that any published
   // properties defined as interfaces would be resolved at creation, and
   // published properties defined as TPersistent/TSynPersistent will be
-  // managed by this instance, i.e. created and released with it  
+  // managed by this instance, i.e. created and released with it
   TDDDApplication = class(TInjectableAutoCreateFields)
   protected
   public
@@ -1869,7 +1869,7 @@ begin
     if fProcessMonitoringClass=nil then
       stats := TSynMonitorWithSize.Create else
       stats := fProcessMonitoringClass.Create else
-    stats := fMonitoringClass.Create; 
+    stats := fMonitoringClass.Create;
   try
     pool.InitArray([],JSON_OPTIONS[true]);
     for i := 0 to High(fProcess) do

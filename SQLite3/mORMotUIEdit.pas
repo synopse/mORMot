@@ -361,7 +361,7 @@ begin
               CNE.Kind := sleInt64 else
               CNE.Kind := sleInteger;
             CNE.Value := GetInt64(pointer(aValue));
-            CNE.RaiseExceptionOnError := true; // force show errors on screen 
+            CNE.RaiseExceptionOnError := true; // force show errors on screen
           end;
           sftCurrency: begin
             CNE := TSynLabeledEdit.Create(Scroll);
@@ -651,7 +651,7 @@ begin
           TimeLog.From(D);
           P.SetValue(Rec,pointer(Int64ToUtf8(TimeLog.Value)),false);
         end;
-      end; 
+      end;
     end;
   end;
   // perform all registered filtering

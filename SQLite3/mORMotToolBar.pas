@@ -107,7 +107,7 @@ interface
 uses
   Windows, Consts, Dialogs, ShellAPI,
   SysUtils, Forms, Classes, Messages, Graphics,
-  ImgList, Controls, Grids, ExtCtrls, Menus, 
+  ImgList, Controls, Grids, ExtCtrls, Menus,
 {$ifdef USETMSPACK}
   AdvOfficePager, AdvToolBar, AdvGlowButton, AdvMenus, AdvShapeButton, AdvPreviewMenu,
   AdvToolBarStylers, AdvPreviewMenuStylers, AdvOfficePagerStylers,
@@ -182,7 +182,7 @@ type
     /// call this event when all toolbars have been created
     // - it will create the captions under the toolbars
     // - can be call multiple times, when a toolbar has been added and filled
-    // will all its buttons 
+    // will all its buttons
     procedure ToolBarCreated;
     /// number of TSynToolBar in the page list
     property ToolBarCount: integer read GetToolBarCount;
@@ -225,9 +225,9 @@ type
     property HelpButton: TSynToolButton read GetHelpButton;
     /// the label on TopMostPanel, i.e. the TSynForm(Owner).NoCaption
     property Caption: TLabel read GetCaption;
-    /// the panel added above the pager, containing groups, caption and buttons 
+    /// the panel added above the pager, containing groups, caption and buttons
     property TopMostPanel: TPanel read fTopMostPanel;
-    /// the panel containing this TSynPager 
+    /// the panel containing this TSynPager
     property TopPanel: TPanel read fTopPanel;
   published
     /// publish this property, e.g. to close a tab by a double click
@@ -240,7 +240,7 @@ type
   /// body page used to display the list and the report on the client screen
   TSynBodyPage = TSynPage;
 
-  
+
 const
   bsCheck = tbsCheck;
 
@@ -479,7 +479,7 @@ type
     Toolbars: array of TSynToolBar;
     ImageListFirstIndex: integer;
     /// call this method first to initialize the ribbon
-    // - if aToolbarOrPage is a TCustomForm, this form will became a  
+    // - if aToolbarOrPage is a TCustomForm, this form will became a
     // - if aToolbarOrPage is a TSynPager descendant, a new page is created
     // and added to this TSynPager, and used for toolbars adding
     // - if aToolbarOrPage is a TSynPage descendant, the toolbar is added to
@@ -592,8 +592,8 @@ type
     procedure AddReportPopupMenuOptions(Menu: TPopupMenu; OnClick: TNotifyEvent);
     /// triggered when a report popup menu item is clicked
     procedure ReportClick(Sender: TObject);
-    {/// retrieve the Hint value for a particular action
-    function ActionHint(const Action): string;}
+    { /// retrieve the Hint value for a particular action
+    function ActionHint(const Action): string; }
     /// pointers to every popup meu items data
     property ReportPopupValues: TPBooleanDynArray read FReportPopupValues;
     /// pointer to the set of available popup menu parameters for this report
@@ -929,7 +929,7 @@ begin
       if Sender.InheritsFrom(TSynToolButton) then
         Btn.DoDropDown else
       if Sender.InheritsFrom(TMenuItem) then
-        // actMarkAllEntries..actMarkBeforeOneYear are regrouped in 
+        // actMarkAllEntries..actMarkBeforeOneYear are regrouped in
         // the only one aAction=actMark button
         TableToGrid.SetMark(TSQLAction(TMenuItem(Sender).Tag));
     else begin
@@ -982,7 +982,7 @@ begin
 end;
 
 constructor TSQLLister.Create(aOwner: TComponent; aClient: TSQLRestClientURI;
-  aClass: TSQLRecordClass; aGrid: TDrawGrid; aIDColumnHide: boolean; 
+  aClass: TSQLRecordClass; aGrid: TDrawGrid; aIDColumnHide: boolean;
   aPager: TSynPager; aImageList32, aImageList16: TImageList;
   aOnButtonClick: TSQLListerEvent; aOnValueText: TValueTextEvent;
   aTable: TSQLTable; aHideDisabledButtons, aHeaderCheckboxSelectsInsteadOfSort: boolean);
@@ -1729,9 +1729,9 @@ begin
       inc(PByte(TypeName),ord(TypeName^[0])+1); // next enumerate value name
 {$ifndef USETMSPACK}
     end; // TToolBar adds at 1st position -> downto
-    for iAction := ActionsEnum^.MaxValue downto 0 do begin 
+    for iAction := ActionsEnum^.MaxValue downto 0 do begin
 {$endif}
-      if (ActionsBits=nil) or GetBit(ActionsBits^,iAction) then 
+      if (ActionsBits=nil) or GetBit(ActionsBits^,iAction) then
         Buttons[iAction] := result.CreateToolButton(ButtonClick,iAction,
          ImageListFirstIndex,ActionNames[iAction],ActionHints,ShortCutUsed,
          ButtonWidth,ImageList);

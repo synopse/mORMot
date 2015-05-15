@@ -130,7 +130,7 @@ unit SynZip;
      log files as for EventArchiveZip)
 
    Version 1.18
-   - defined ZipString dedicated type, to store data in a Unicode-neutral manner 
+   - defined ZipString dedicated type, to store data in a Unicode-neutral manner
    - introducing new TZipWriteToStream class, able to create a zip without file
    - added TFileHeader.IsFolder and TLocalFileHeader.LocalData methods
    - added TZipRead.UnZip() overloaded methods using a file name parameter
@@ -204,7 +204,7 @@ type
 
 {$ifdef DELPHI5OROLDER}
 type // Delphi 5 doesn't have those base types defined :(
-  PInteger = ^Integer;            
+  PInteger = ^Integer;
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;
 const
@@ -549,8 +549,8 @@ function get_crc_table: pointer;
 {$endif Linux}
 
 
-{/ uncompress a .gz file content
- - return '' if the .gz content is invalid (e.g. bad crc) }
+/// uncompress a .gz file content
+// - return '' if the .gz content is invalid (e.g. bad crc)
 function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 
 type
@@ -569,8 +569,8 @@ type
     fBufferOut: array[word] of byte; // a 64 KB buffer
     function FlushBufferOut: integer;
   public
-    {/ create a compression stream, writting the compressed data into
-      the specified stream (e.g. a file stream) }
+    /// create a compression stream, writting the compressed data into
+    // the specified stream (e.g. a file stream)
     constructor Create(outStream: TStream; CompressionLevel: Integer;
       Format: TSynZipCompressorFormat = szcfRaw);
     /// release memory
@@ -601,7 +601,7 @@ type
     // you should use TZipRead.RetrieveFileInfo() instead of this structure
     infoLocal: PFileInfo;
     /// the information of this file, as stored at the end of the .zip archive
-    // - may differ from infoLocal^ content, depending of the zipper tool used 
+    // - may differ from infoLocal^ content, depending of the zipper tool used
     infoDirectory: PFileHeader;
     /// points to the compressed data in the .zip archive, mapped in memory
     data: PAnsiChar;
@@ -692,7 +692,7 @@ type
     end;
     /// initialize the .zip archive
     // - a new .zip file content is prepared
-    constructor Create; 
+    constructor Create;
     /// compress (using the deflate method) a memory buffer, and add it to the zip file
     // - by default, the 1st of January, 2010 is used if not date is supplied
     procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: integer;
@@ -750,7 +750,7 @@ type
   public
     /// initialize the .zip archive
     // - a new .zip file content is prepared
-    constructor Create(aDest: TStream); 
+    constructor Create(aDest: TStream);
   end;
 
 /// a TSynLogArchiveEvent handler which will compress older .log files
@@ -1081,7 +1081,7 @@ begin
   result := fDest.Seek(0,soCurrent);
 end;
 
-procedure TZipWriteToStream.InternalWrite(const buf; len: cardinal); 
+procedure TZipWriteToStream.InternalWrite(const buf; len: cardinal);
 begin
   fDest.Write(buf,len);
 end;
@@ -4676,7 +4676,7 @@ begin
 end;
 
 {$endif LINUX}
- 
+
 function compressBound(sourceLen: cardinal): cardinal;
 begin
   result := sourceLen + (sourceLen shr 12) + (sourceLen shr 14) + 11;
@@ -4946,7 +4946,7 @@ begin
     strm.next_out := pointer(tmp);
     strm.avail_out := len;
     if inflateInit2_(strm, bits, ZLIB_VERSION, sizeof(strm))>=0 then
-    try                
+    try
       repeat
         code := Check(inflate(strm, Z_FINISH),[Z_OK,Z_STREAM_END,Z_BUF_ERROR]);
         if strm.avail_out=0 then begin
@@ -5025,7 +5025,7 @@ procedure TFileInfo.SetAlgoID(Algorithm: integer);
 begin
   zzipMethod := Z_STORED; // file is stored, accorging to .ZIP standard
   // in PKware appnote, bits 7..10 of general purpose bit flag are not used
-  flags := (flags and $F87F) or 
+  flags := (flags and $F87F) or
     (Algorithm and 15) shl 7; // proprietary flag for SynZipFiles.pas
 end;
 

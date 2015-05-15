@@ -32,7 +32,7 @@ unit SynFPCSock;
 
   Contributor(s):
   - Alfred Glaenzer
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -530,7 +530,7 @@ end;
 
 function WSAGetLastError: Integer;
 begin
-  result := {$ifdef KYLIX3}errno{$else}fpGetErrno{$endif}; 
+  result := {$ifdef KYLIX3}errno{$else}fpGetErrno{$endif};
 end;
 
 {$ifdef FPC}
@@ -809,7 +809,7 @@ begin
     result := ntohs(Sin.sin_port);
 end;
 
-{$ifdef KYLIX3} // those functions only use the new API 
+{$ifdef KYLIX3} // those functions only use the new API
 
 function SetVarSin(var Sin: TVarSin; const IP,Port: string;
   Family,SockProtocol,SockType: integer; PreferIP4: Boolean): integer;
@@ -1103,4 +1103,4 @@ initialization
   SET_IN6_IF_ADDR_ANY(@in6addr_any);
   SET_LOOPBACK_ADDR6(@in6addr_loopback);
 
-end.
+end.

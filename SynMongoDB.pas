@@ -83,7 +83,7 @@ uses
   SynLog;
 
 
-  
+
 { ************ BSON (Binary JSON) process }
 
 type
@@ -153,7 +153,7 @@ type
     function ToVariant: variant;
     /// returns the timestamp portion of the ObjectId() object as a Delphi date
     // - time is expressed in Coordinated Universal Time (UTC), not local time
-    // so you can compare it to NowUTC returned time 
+    // so you can compare it to NowUTC returned time
     function CreateDateTime: TDateTime;
     /// compare two Object IDs
     function Equal(const Another: TBSONObjectID): boolean;
@@ -245,7 +245,7 @@ type
     procedure FromBinary(const Bin: RawByteString; BinType: TBSONElementBinaryType;
       var result: variant);
     /// convert a JSON content into a TBSONVariant of kind betDoc or betArray
-    // - warning: the supplied JSON buffer will be modified in-place 
+    // - warning: the supplied JSON buffer will be modified in-place
     procedure FromJSON(json: PUTF8Char; var result: variant);
     /// returns TRUE if the supplied variant stores the supplied BSON kind of value
     function IsOfKind(const V: variant; Kind: TBSONElementType): boolean;
@@ -415,7 +415,7 @@ type
     // "int32 e_list #0" BSON document
     // - returns false if the item was not found (with case-insensitive search)
     // - otherwise returns TRUE and the matching element content has been
-    // decoded within this TBSONElement structure 
+    // decoded within this TBSONElement structure
     function FromSearch(BSON: PByte; const aName: RawUTF8): boolean;
     /// convert a BSON element, as retrieved by TBSONElement.FromNext(),
     // into a variant
@@ -523,7 +523,7 @@ type
     /// write a string (UTF-8) value from a memory buffer
     procedure BSONWrite(const name: RawUTF8; value: PUTF8Char); overload;
     /// write a string (UTF-8) value from a memory buffer
-    procedure BSONWriteString(const name: RawUTF8; value: PUTF8Char; valueLen: integer); 
+    procedure BSONWriteString(const name: RawUTF8; value: PUTF8Char; valueLen: integer);
     /// write a binary (BLOB) value
     procedure BSONWrite(const name: RawUTF8; Data: pointer; DataLen: integer); overload;
     /// write an ObjectID value
@@ -572,14 +572,14 @@ type
     /// write a projection specified as fieldname:1 pairs as a BSON document
     procedure BSONWriteProjection(const FieldNamesCSV: RawUTF8);
     /// write an object as query parameter
-    // - will handle all SQL operators, including IN (), IS NULL or LIKE 
+    // - will handle all SQL operators, including IN (), IS NULL or LIKE
     // - see @http://docs.mongodb.org/manual/reference/operator/query
-    // - inverted should be TRUE e.g. for a NOT ... expression 
+    // - inverted should be TRUE e.g. for a NOT ... expression
     // - returns TRUE on success, FALSE if the operator is not implemented yet
     function BSONWriteQueryOperator(name: RawUTF8; inverted: boolean;
       operator: TSynTableStatementOperator; const Value: variant): boolean;
     /// write one array item, i.e. the ASCII index name as text
-    // - only one level of array should be used per TBSONWriter class 
+    // - only one level of array should be used per TBSONWriter class
     procedure BSONWriteArray(const kind: TBSONElementType); overload;
     /// write an array specified as a list of items as a BSON document
     // - data must be supplied as a list of values e.g.
@@ -616,7 +616,7 @@ type
     // type, i.e. either betDoc or betArray
     procedure BSONDocumentBegin(const name: RawUTF8; kind: TBSONElementType=betDoc); overload;
     /// to be called before a BSON document will be written in an array
-    // - only one level of array should be used per TBSONWriter class 
+    // - only one level of array should be used per TBSONWriter class
     procedure BSONDocumentBeginInArray(const name: RawUTF8; kind: TBSONElementType=betDoc);
     /// to be called when a BSON document has been written
     // - it will store the current stream position into an internal array,
@@ -706,8 +706,8 @@ function ObjectID: variant; overload;
 function ObjectID(const Hexa: RaWUTF8): variant; overload;
 
 /// convert a TBSONVariant Object ID custom variant into a TBSONObjectID
-// - raise an exception if the supplied variant is not a TBSONVariant Object ID 
-function BSONObjectID(const aObjectID: variant): TBSONObjectID; 
+// - raise an exception if the supplied variant is not a TBSONVariant Object ID
+function BSONObjectID(const aObjectID: variant): TBSONObjectID;
 
 /// create a TBSONVariant JavaScript custom variant type from a supplied code
 // - will set a BSON element of betJS kind
@@ -1267,18 +1267,18 @@ type
   // TMongoRequestQuery / TMongoRequestGetMore client message
   TMongoReply = RawByteString;
 
-  /// define an opReply message execution content 
+  /// define an opReply message execution content
   // - mrfCursorNotFound will be set when getMore is called but the cursor id
   // is not valid at the server; returned with zero results
   // - mrfQueryFailure is set when the query failed - results consist of one
-  // document containing an "$err" field describing the failure 
+  // document containing an "$err" field describing the failure
   // - mrfShardConfigStale should not be used by client, just by Mongos
   // - mrfAwaitCapable is set when the server supports the AwaitData Query
   // option (always set since Mongod version 1.6)
   TMongoReplyCursorFlag = (
     mrfCursorNotFound, mrfQueryFailure, mrfShardConfigStale,
     mrfAwaitCapable);
-    
+
   /// define a TMongoReplyCursor message execution content
   TMongoReplyCursorFlags = set of TMongoReplyCursorFlag;
 
@@ -1305,7 +1305,7 @@ type
 
   /// points to an low-level binary structure mapping the TMongoReply header
   // - so that you can write e.g.
-  // ! PMongoReplyHeader(aMongoReply)^.RequestID 
+  // ! PMongoReplyHeader(aMongoReply)^.RequestID
   PMongoReplyHeader = ^TMongoReplyHeader;
 
 
@@ -1357,11 +1357,11 @@ type
     function Next(out doc: variant; option: TBSONDocArrayConversion=asDocVariantPerReference): boolean; overload;
     /// retrieve the next document in the list, as BSON content
     // - return TRUE if the supplied document has been retrieved - then doc
-    // points to a "int32 e_list #0" BSON document 
+    // points to a "int32 e_list #0" BSON document
     // - return FALSE if there is no more document to get - you can use the
     // Rewind method to restart from the first document
     // - this method is almost immediate, since the BSON raw binary is returned
-    // directly without any conversion  
+    // directly without any conversion
     // - could be used e.g. as:
     // ! var Reply: TMongoReply;
     // !     doc: PByte;
@@ -1399,10 +1399,10 @@ type
     function Next(out JSON: RawUTF8; Mode: TMongoJSONMode=modMongoStrict): boolean; overload;
     /// let Next() overloaded methods point to the first document of this message
     procedure Rewind;
-    
+
     /// retrieve a given document as a TDocVariant instance
     // - this method won't use any cache (like Document[..] property), since
-    // it should be used with a local variant on stack as cache:  
+    // it should be used with a local variant on stack as cache:
     // ! var Reply: TMongoReply;
     // !     doc: variant;
     // !     i: integer;
@@ -1435,7 +1435,7 @@ type
     function AppendAllToDocVariant(var Dest: TDocVariantData): integer;
     /// append all documents content to a BSON binary stream
     // - Dest.Tag will be used to count the current item number in the resulting
-    // BSON array 
+    // BSON array
     procedure AppendAllToBSON(Dest: TBSONWriter);
 
     /// retrieve the context execution of this message
@@ -1533,7 +1533,7 @@ type
     // - then will return the reply message as sent back by the database,
     // ready to be accessed using a TMongoReplyCursor wrapper
     procedure GetReply(Request: TMongoRequest; out result: TMongoReply);
-    /// low-level method to send a request to the server, and return a cursor 
+    /// low-level method to send a request to the server, and return a cursor
     // - if Request is not either TMongoRequestQuery or TMongoRequestGetMore,
     // will raise an EMongoException
     // - then will parse and return a cursor to the reply message as sent back
@@ -1842,7 +1842,7 @@ type
     constructor Create(aClient: TMongoClient; const aDatabaseName: RawUTF8);
     /// release all associated TMongoCollection instances
     destructor Destroy; override;
-    
+
     /// run a database command, supplied as a TDocVariant, TBSONVariant or a
     // string, and return a TDocVariant instance
     // - this is the preferred method to issue database commands, as it provides
@@ -1958,7 +1958,7 @@ type
       Flags: TMongoQueryFlags=[]); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
-    // - you can e.g. fill a res: TVariantDynArray with the following query: 
+    // - you can e.g. fill a res: TVariantDynArray with the following query:
     // ! FindDocs('{name:?,age:{$gt:?}}',['John',21],res,null);
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
@@ -1970,7 +1970,7 @@ type
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
     // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
-    // as defined in SynVirtualDataSet.pas: 
+    // as defined in SynVirtualDataSet.pas:
     // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
     // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBSONVariant with
@@ -2078,7 +2078,7 @@ type
     // set NoAcknowledge = TRUE to avoid calling the getLastError command and
     // increase the execution speed, at the expense of a unsafe process
     procedure InsertJSON(const JSONDocuments: array of PUTF8Char;
-      Flags: TMongoInsertFlags=[]; NoAcknowledge: boolean=false); 
+      Flags: TMongoInsertFlags=[]; NoAcknowledge: boolean=false);
 
     /// updates an existing document or inserts a new document, depending on
     // its document parameter
@@ -2154,7 +2154,7 @@ type
     // _JsonFastFmt()) or TBSONVariant (created via BSONVariant())
     // - Query is the selection criteria for the deletion; use the same query
     // selectors as used in the Find() method
-    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove] 
+    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove]
     // - to delete all documents matching the deletion criteria, leave it to []
     procedure Remove(const Query: variant; Flags: TMongoDeleteFlags=[]); overload;
     /// delete an existing document in a collection, by its _id field
@@ -2167,10 +2167,10 @@ type
     // - Query parameter can be specified as JSON objects with parameters
     // - Query is the selection criteria for the deletion; use the same query
     // selectors as used in the Find() method
-    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove] 
+    // - to limit the deletion to just one document, set Flags to [mdfSingleRemove]
     // - to delete all documents matching the deletion criteria, leave it to []
     procedure RemoveFmt(Query: PUTF8Char; const QueryParams: array of const;
-       Flags: TMongoDeleteFlags=[]); 
+       Flags: TMongoDeleteFlags=[]);
 
     /// creates an index on the specified field(s) if the index does
     // not already exist
@@ -2541,7 +2541,7 @@ end;
 function TBSONElement.DocItemToRawUTF8(const aName: RawUTF8): RawUTF8;
 var item: TBSONElement;
 begin
-  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then 
+  if (Kind in [betDoc,betArray]) and item.FromSearch(Data.DocList,aName) then
     result := item.ToRawUTF8 else
     result := '';
 end;
@@ -2681,7 +2681,7 @@ begin
     end;
     ElementBytes := BSON_ELEMENTSIZE[Kind];
   end;
-  varString: 
+  varString:
     if (aVarData.VAny<>nil) and
        (PInteger(aVarData.VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
        Iso8601CheckAndDecode(PUTF8Char(aVarData.VAny)+3,Length(RawUTF8(aVarData.VAny))-3,
@@ -2808,7 +2808,7 @@ begin
   if BSON=nil then begin
     result := false;
     exit;
-  end;                           
+  end;
   Kind := TBSONElementType(BSON^);
   case ord(Kind) of
   ord(betEOF):
@@ -2893,7 +2893,7 @@ begin
         dec(index);
   result := false;
 end;
-  
+
 procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
   Option: TBSONDocArrayConversion);
 begin
@@ -2908,7 +2908,7 @@ end;
 function BSONDocumentToDoc(const BSON: TBSONDocument; Option: TBSONDocArrayConversion): variant;
 begin
   BSONToDoc(pointer(BSON),result,length(BSON));
-end;  
+end;
 
 procedure BSONListToJSON(BSONList: PByte; Kind: TBSONElementType;
   W: TTextWriter; Mode: TMongoJSONMode);
@@ -2948,10 +2948,10 @@ function BSONDocumentToJSON(const BSON: TBSONDocument;
   Mode: TMongoJSONMode=modMongoStrict): RawUTF8;
 begin
   result := BSONToJSON(pointer(BSON),betDoc,length(BSON),Mode);
-end;  
+end;
 
 function BSONToJSON(BSON: PByte; Kind: TBSONElementType; ExpectedBSONLen: integer;
-  Mode: TMongoJSONMode): RawUTF8; 
+  Mode: TMongoJSONMode): RawUTF8;
 var W: TTextWriter;
 begin
   BSONParseLength(BSON,ExpectedBSONLen);
@@ -3259,7 +3259,7 @@ begin
     varCurrency: BSONWrite(Name,VCurrency);
     varString:
       if (VAny<>nil) and (PInteger(VAny)^ and $ffffff=JSON_SQLDATE_MAGIC) and
-         Iso8601CheckAndDecode(PUTF8Char(VAny)+3,Length(RawUTF8(VAny))-3,dt) then 
+         Iso8601CheckAndDecode(PUTF8Char(VAny)+3,Length(RawUTF8(VAny))-3,dt) then
         // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
         BSONWriteDateTime(Name,dt) else
         BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
@@ -3563,7 +3563,7 @@ begin
           exit; // invalid content
       until EndOfObject='}';
   end;
-  'n','N': 
+  'n','N':
     if IdemPChar(JSON+1,'ULL') then begin
       Kind := betNull;
       BSONDocumentBegin;
@@ -3775,7 +3775,7 @@ begin // "\x05" e_name int32 subtype (byte*)
     if not(VType in VTYPE_STATIC) then
       VarClear(result);
     if Bin='' then begin
-      VType := varNull; // stores a NULL 
+      VType := varNull; // stores a NULL
       exit;
     end;
     VType := VarType;
@@ -3830,7 +3830,7 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
     betObjectID, betRegEx: begin // should handle it in TBSONWriter.BSONWrite()
       TVarData(Value).VType := VarType;
       TBSONVariantData(Value).VKind := kind;
-    end; 
+    end;
     betDateTime:
       TVarData(Value).VType := varDate;
     end;
@@ -3892,7 +3892,7 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
     inc(P,RegLen);
     if P^<>'/' then exit else inc(P);
     OptLen := 0; while ord(P[OptLen]) in IsWord do inc(OptLen);
-    if P[OptLen]=#0 then exit; 
+    if P[OptLen]=#0 then exit;
     Opt := P;
     ReturnRegEx(Opt+OptLen-1,#0);
   end;
@@ -4205,7 +4205,7 @@ begin
   end;
 end;
 
-function BSONFieldSelector(const FieldNamesCSV: RawUTF8): TBSONDocument; 
+function BSONFieldSelector(const FieldNamesCSV: RawUTF8): TBSONDocument;
 var FieldNames: TRawUTF8DynArray;
 begin
   CSVToRawUTF8DynArray(pointer(FieldNamesCSV),FieldNames);
@@ -4687,7 +4687,7 @@ begin
     result := true;
   end else
     result := false;
-end;  
+end;
 
 procedure TMongoReplyCursor.Rewind;
 begin
@@ -5211,7 +5211,7 @@ begin
       SetVariantNull(fErrorDoc);
   end;
   result := fErrorDoc;
-end;  
+end;
 
 
 { EMongoRequestOSException }
@@ -5789,7 +5789,7 @@ begin // return TRUE if _id has been computed (i.e. save=insert)
     oid := ObjectID;
     doc.Values[ndx] := oid;
     result := true;
-  end else begin 
+  end else begin
     oid := doc.Values[ndx];
     result := false;
   end;

@@ -1485,7 +1485,7 @@ type
     {$endif}
     sftBlob, sftBlobDynArray, sftBlobCustom, sftUTF8Custom, sftMany,
     sftModTime, sftCreateTime, sftTID, sftRecordVersion);
-                      
+
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
 
@@ -2297,38 +2297,38 @@ type
 {$A-}
 {$endif}
   { Delphi and FPC compiler use packed storage for this internal type }
-  {/ a wrapper containing a property definition, with GetValue() and SetValue()
-    functions for direct Delphi / UTF-8 SQL type mapping/conversion:
-    - handle byte, word, integer, cardinal, Int64 properties as INTEGER
-    - handle boolean properties as INTEGER (0 is false, anything else is true)
-    - handle enumeration properties as INTEGER, storing the ordinal value of the
-      enumeration (i.e. starting at 0 for the first element)
-    - handle enumerations set properties as INTEGER, each bit corresponding to
-      an enumeration (therefore a set of up to 64 elements can be stored in such
-      a field)
-    - handle RawUTF8 properties as TEXT (UTF-8 encoded) - this is the preferred
-      field type for storing some textual content in the ORM
-    - handle WinAnsiString properties as TEXT (UTF-8 decoded in WinAnsi char set)
-    - handle RawUnicode properties as TEXT (UTF-8 decoded as UTF-16 Win32 unicode)
-    - handle Single, Double and Extended properties as FLOAT
-    - handle TDateTime properties as ISO-8061 encoded TEXT
-    - handle TTimeLog properties as properietary fast INTEGER date time
-    - handle Currency property as FLOAT (safely converted to/from currency)
-    - handle TSQLRecord descendant properties as INTEGER ROWID index to another record
-     (warning: the value contains pointer(ROWID), not a valid object memory - you
-     have to manually retrieve the record, using a integer(IDField) typecast)
-    - handle TSQLRecordMany descendant properties as an "has many" instance (this
-     is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
-    - handle TRecordReference properties as INTEGER RecordRef-like value
-      (use TSQLRest.Retrieve(Reference) to get a record content)
-    - handle TSQLRawBlob properties as BLOB
-    - handle dynamic arrays as BLOB, in the TDynArray.SaveTo binary format (is able
-      to handle dynamic arrays of records, with records or strings within records)
-    - handle records as BLOB, in the RecordSave binary format (our code is ready
-      for that, but Delphi doesn't create the RTTI for records so it won't work)
-    - WideString, shortstring, UnicodeString (i.e. Delphi 2009+ generic string),
-      indexed properties are not handled yet (use faster RawUnicodeString instead
-      of WideString and UnicodeString) - in fact, the generic string type is handled  }
+  /// a wrapper containing a property definition, with GetValue() and SetValue()
+  // functions for direct Delphi / UTF-8 SQL type mapping/conversion
+  // - handle byte, word, integer, cardinal, Int64 properties as INTEGER
+  // - handle boolean properties as INTEGER (0 is false, anything else is true)
+  // - handle enumeration properties as INTEGER, storing the ordinal value of the
+  // enumeration (i.e. starting at 0 for the first element)
+  // - handle enumerations set properties as INTEGER, each bit corresponding to
+  // an enumeration (therefore a set of up to 64 elements can be stored in such
+  // a field)
+  // - handle RawUTF8 properties as TEXT (UTF-8 encoded) - this is the preferred
+  //  field type for storing some textual content in the ORM
+  // - handle WinAnsiString properties as TEXT (UTF-8 decoded in WinAnsi char set)
+  // - handle RawUnicode properties as TEXT (UTF-8 decoded as UTF-16 Win32 unicode)
+  // - handle Single, Double and Extended properties as FLOAT
+  // - handle TDateTime properties as ISO-8061 encoded TEXT
+  // - handle TTimeLog properties as properietary fast INTEGER date time
+  // - handle Currency property as FLOAT (safely converted to/from currency)
+  // - handle TSQLRecord descendant properties as INTEGER ROWID index to another record
+  // (warning: the value contains pointer(ROWID), not a valid object memory - you
+  // have to manually retrieve the record, using a integer(IDField) typecast)
+  // - handle TSQLRecordMany descendant properties as an "has many" instance (this
+  // is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
+  // - handle TRecordReference properties as INTEGER RecordRef-like value
+  //  (use TSQLRest.Retrieve(Reference) to get a record content)
+  // - handle TSQLRawBlob properties as BLOB
+  // - handle dynamic arrays as BLOB, in the TDynArray.SaveTo binary format (is able
+  //  to handle dynamic arrays of records, with records or strings within records)
+  // - handle records as BLOB, in the RecordSave binary format (our code is ready
+  //  for that, but Delphi doesn't create the RTTI for records so it won't work)
+  // - WideString, shortstring, UnicodeString (i.e. Delphi 2009+ generic string),
+  // indexed properties are not handled yet (use faster RawUnicodeString instead
+  // of WideString and UnicodeString) - in fact, the generic string type is handled
   {$ifndef ISDELPHI2010}
   TPropInfo = object
   protected
@@ -2576,7 +2576,7 @@ type
   PParamInfo  = ^TParamInfo;
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
-  {/ a wrapper around method returned result definition }
+  /// a wrapper around method returned result definition
   {$ifndef ISDELPHI2010}
   TReturnInfo = object
   {$else}
@@ -2623,7 +2623,7 @@ type
   end;
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
-  {/ a wrapper around a method definition }
+  /// a wrapper around a method definition
   {$ifndef ISDELPHI2010}
   TMethodInfo = object
   {$else}
@@ -3956,7 +3956,7 @@ type
   end;
 
   /// could monitor a standard Server
-  // - including Input/Output statistics and connected Clients count 
+  // - including Input/Output statistics and connected Clients count
   TSynMonitorServer = class(TSynMonitorInputOutput)
   protected
     fCurrentRequestCount: integer;
@@ -4437,11 +4437,11 @@ type
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldIndexDynArrayFromBlobField(aBlobField: PPropInfo;
       var Indexes: TSQLFieldIndexDynArray): boolean;
-    {/ retrieve a Field property RTTI information from a Property Name
-      - this version returns nil if the property is not a BLOB field }
+    /// retrieve a Field property RTTI information from a Property Name
+    // - this version returns nil if the property is not a BLOB field
     function BlobFieldPropFromRawUTF8(const PropName: RawUTF8): PPropInfo;
-    {/ retrieve a Field property RTTI information from a Property Name
-      - this version returns nil if the property is not a BLOB field }
+    /// retrieve a Field property RTTI information from a Property Name
+    // - this version returns nil if the property is not a BLOB field
     function BlobFieldPropFromUTF8(PropName: PUTF8Char; PropNameLen: integer): PPropInfo;
 
     /// append a field name to a RawUTF8 Text buffer
@@ -4450,12 +4450,12 @@ type
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the field name to Text
     function AppendFieldName(FieldIndex: Integer; var Text: RawUTF8; ForceNoRowID: boolean): boolean;
-    {/ return the first unique property of kind RawUTF8
-      - this property is mainly the "Name" property, i.e. the one with
-        "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
-      - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
-        the first RawUTF8 property is returned anyway
-      - returns '' if no matching field was found }
+    /// return the first unique property of kind RawUTF8
+    // - this property is mainly the "Name" property, i.e. the one with
+    // "stored AS_UNIQUE" (i.e. "stored false") definition on most TSQLRecord
+    // - if ReturnFirstIfNoUnique is TRUE and no unique property is found,
+    // the first RawUTF8 property is returned anyway
+    // - returns '' if no matching field was found
     function MainFieldName(ReturnFirstIfNoUnique: boolean=false): RawUTF8;
     /// return the SQLite3 field datatype for each specified field
     // - set to '' for fields with no column created in the database (e.g. sftMany)
@@ -5239,13 +5239,13 @@ type
     // the data was supplied as binary:
     // ! {"name1":{"data":..,"filename":...,"contenttype":...},"name2":...}
     // since name1.data would be Base64 encoded, so you should better
-    // use the InputAsMultiPart() method instead when working with binary 
+    // use the InputAsMultiPart() method instead when working with binary
     property InputAsTDocVariant: variant read GetInputAsTDocVariant;
     {$endif}
     /// decode any multipart/form-data POST request input
     // - returns TRUE and set MultiPart array as expected, on success
     function InputAsMultiPart(var MultiPart: TMultiPartDynArray): Boolean;
-    /// low-level access to the input parameters, stored as pairs of UTF-8 
+    /// low-level access to the input parameters, stored as pairs of UTF-8
     // - even items are parameter names, odd are values
     // - Input*[] properties should have been called previously to fill the
     // internal array
@@ -5587,8 +5587,8 @@ type
     fTable: TSQLTable;
     /// current retrieved row
     fFillCurrentRow: integer;
-    {/ number of used items in TableMap[] array
-      - calculated in FillPrepare() or FillPrepareMany() methods }
+    /// number of used items in TableMap[] array
+    // - calculated in FillPrepare() or FillPrepareMany() methods
     fTableMapCount: integer;
     /// set by TSQLRecord.FillPrepareMany() to release M.fDestID^ instances
     fTableMapRecordManyInstances: TSQLRecordManyObjArray;
@@ -5872,10 +5872,10 @@ type
     // including 64 bit target)
     class function RecordProps: TSQLRecordProperties;
       {$ifdef FPC_OR_PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    {/ the Table name in the database, associated with this TSQLRecord class
-     - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
-     - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
-     - is just a wrapper around RecordProps.SQLTableName }
+    /// the Table name in the database, associated with this TSQLRecord class
+    // - 'TSQL' or 'TSQLRecord' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSQL' or 'TSQLRecord' at first
+    // - is just a wrapper around RecordProps.SQLTableName
     class function SQLTableName: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a custom filter or Validate to the class for a specified field
@@ -5931,65 +5931,64 @@ type
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree; overload;
 
-    {/ get the captions to be used for this class
-     - if Action is nil, return the caption of the table name
-     - if Action is not nil, return the caption of this Action (lowercase left-trimed)
-     - return "string" type, i.e. UnicodeString for Delphi 2009+
-     - internally call UnCamelCase() then System.LoadResStringTranslate() if available
-     - ForHint is set to TRUE when the record caption name is to be displayed inside
-       the popup hint of a button (i.e. the name must be fully qualified, not
-       the default short version)
-     - is not part of TSQLRecordProperties because has been declared as virtual }
+    /// get the captions to be used for this class
+    // - if Action is nil, return the caption of the table name
+    // - if Action is not nil, return the caption of this Action (lowercase left-trimed)
+    // - return "string" type, i.e. UnicodeString for Delphi 2009+
+    // - internally call UnCamelCase() then System.LoadResStringTranslate() if available
+    // - ForHint is set to TRUE when the record caption name is to be displayed inside
+    // the popup hint of a button (i.e. the name must be fully qualified, not
+    // the default short version)
+    // - is not part of TSQLRecordProperties because has been declared as virtual
     class function CaptionName(Action: PRawUTF8=nil; ForHint: boolean=false): string; virtual;
-    {/ get the captions to be used for this class
-     - just a wrapper calling CaptionName() virtual method, from a ShortString pointer }
+    /// get the captions to be used for this class
+    // - just a wrapper calling CaptionName() virtual method, from a ShortString pointer
     class function CaptionNameFromRTTI(Action: PShortString): string;
-    {/ virtual method called when the associated table is created in the database
-      - if FieldName is '', initialization regarding all fields must be made;
-        if FieldName is specified, initialization regarding this field must be processed
-      - override this method in order to initialize indexs or create default records
-      - by default, create indexes for all TRecordReference properties, and
-        for all TSQLRecord inherited properties (i.e. of sftID type, that is
-        an INTEGER field containing the ID of the pointing record)
-      - the options specified at CreateMissingTables() are passed to this method
-      - is not part of TSQLRecordProperties because has been declared as virtual }
+    /// virtual method called when the associated table is created in the database
+    // - if FieldName is '', initialization regarding all fields must be made;
+    // if FieldName is specified, initialization regarding this field must be processed
+    // - override this method in order to initialize indexs or create default records
+    // - by default, create indexes for all TRecordReference properties, and
+    // for all TSQLRecord inherited properties (i.e. of sftID type, that is
+    // an INTEGER field containing the ID of the pointing record)
+    // - the options specified at CreateMissingTables() are passed to this method
+    // - is not part of TSQLRecordProperties because has been declared as virtual
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); virtual;
 
-    {/ filter the specified fields values of the current TSQLRecord instance
-    - by default, this will perform all TSynFilter as registered by
-      [RecordProps.]AddFilterOrValidate()
-    - inherited classes may add some custom filtering here, if it's not needed
-      nor mandatory to create a new TSynFilter class type: in this case, the
-      function has to return TRUE if the filtering took place, and FALSE if
-      any default registered TSynFilter must be processed
-    - the default aFields parameter will process all fields }
+    /// filter the specified fields values of the current TSQLRecord instance
+    // - by default, this will perform all TSynFilter as registered by
+    // [RecordProps.]AddFilterOrValidate()
+    // - inherited classes may add some custom filtering here, if it's not needed
+    // nor mandatory to create a new TSynFilter class type: in this case, the
+    // function has to return TRUE if the filtering took place, and FALSE if
+    // any default registered TSynFilter must be processed
+    // - the default aFields parameter will process all fields
     function Filter(const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload; virtual;
-    {/  filter the specified fields values of the current TSQLRecord instance
-    - this version will call the overloaded Filter() method above
-    - return TRUE if all field names were correct and processed, FALSE otherwise }
+    ///  filter the specified fields values of the current TSQLRecord instance
+    // - this version will call the overloaded Filter() method above
+    // - return TRUE if all field names were correct and processed, FALSE otherwise
     function Filter(const aFields: array of RawUTF8): boolean; overload;
-    {/ validate the specified fields values of the current TSQLRecord instance
-    - by default, this will perform all TSynValidate as registered by
-      [RecordProps.]AddFilterOrValidate()
-    - it will also check if any UNIQUE field value won't be duplicated
-    - inherited classes may add some custom validation here, if it's not needed
-      nor mandatory to create a new TSynValidate class type: in this case, the
-      function has to return an explicit error message (as a generic VCL string)
-      if the custom validation failed, or '' if the validation was successful:
-      in this later case, all default registered TSynValidate are processed
-    - the default aFields parameter will process all fields
-    - if aInvalidFieldIndex is set, it will contain the first invalid field
-      index found
-     - caller SHOULD always call the Filter() method before calling Validate() }
+    /// validate the specified fields values of the current TSQLRecord instance
+    // - by default, this will perform all TSynValidate as registered by
+    //  [RecordProps.]AddFilterOrValidate()
+    // - it will also check if any UNIQUE field value won't be duplicated
+    // - inherited classes may add some custom validation here, if it's not needed
+    //  nor mandatory to create a new TSynValidate class type: in this case, the
+    //  function has to return an explicit error message (as a generic VCL string)
+    //  if the custom validation failed, or '' if the validation was successful:
+    //  in this later case, all default registered TSynValidate are processed
+    // - the default aFields parameter will process all fields
+    // - if aInvalidFieldIndex is set, it will contain the first invalid field
+    //  index found
+    // - caller SHOULD always call the Filter() method before calling Validate()
     function Validate(aRest: TSQLRest; const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): string; overload; virtual;
-    {/  validate the specified fields values of the current TSQLRecord instance
-    - this version will call the overloaded Validate() method above
-    - returns '' if all field names were correct and processed, or an
-      explicit error message (translated in the current language) on error
-    - if aInvalidFieldIndex is set, it will contain the first invalid field
-      index }
+    ///  validate the specified fields values of the current TSQLRecord instance
+    // - this version will call the overloaded Validate() method above
+    // - returns '' if all field names were correct and processed, or an
+    // explicit error message (translated in the current language) on error
+    // - if aInvalidFieldIndex is set, it will contain the first invalid field index
     function Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
       aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): string; overload;
     /// filter then validate the specified fields values of the current TSQLRecord
@@ -6031,22 +6030,22 @@ type
     // there are "simple fields" in the published properties
     // - will raise an EORMException in case of wrong supplied values
     constructor Create(const aSimpleFields: array of const; aID: TID); overload;
-    {/ this constructor initializes the object as above, and fills its content
-      from a client or server connection
-     - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
-      the corresponding record, then retrieve its content; caller has to call
-      UnLock() method after Value usage, to release the record }
+    /// this constructor initializes the object as above, and fills its content
+    // from a client or server connection
+    // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
+    // the corresponding record, then retrieve its content; caller has to call
+    // UnLock() method after Value usage, to release the record
     constructor Create(aClient: TSQLRest; aID: TID;
       ForUpdate: boolean=false); overload;
-    {/ this constructor initializes the object and fills its content from a client
-      or server connection, from a TSQLRecord published property content
-     - is just a wrapper around Create(aClient,PtrInt(aPublishedRecord))
-       or Create(aClient,aPublishedRecord.ID)
-     - a published TSQLRecord property is not a class instance, but a typecast to
-       TObject(RecordID) - you can also use its ID property
-     - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
-      the corresponding record, then retrieve its content; caller has to call
-      UnLock() method after Value usage, to release the record }
+    /// this constructor initializes the object and fills its content from a client
+    // or server connection, from a TSQLRecord published property content
+    // - is just a wrapper around Create(aClient,PtrInt(aPublishedRecord))
+    // or Create(aClient,aPublishedRecord.ID)
+    // - a published TSQLRecord property is not a class instance, but a typecast to
+    // TObject(RecordID) - you can also use its ID property
+    // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
+    // the corresponding record, then retrieve its content; caller has to call
+    // UnLock() method after Value usage, to release the record
     constructor Create(aClient: TSQLRest; aPublishedRecord: TSQLRecord;
       ForUpdate: boolean=false); overload;
     /// this constructor initializes the object as above, and fills its content
@@ -6056,130 +6055,130 @@ type
     //  ! aRec := TSQLMyRec.Create(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
     //  or call the overloaded contructor with BoundsSQLWhere array of parameters
     constructor Create(aClient: TSQLRest; const aSQLWhere: RawUTF8); overload;
-    {/ this constructor initializes the object as above, and fills its content
-      from a client or server connection, using a specified WHERE clause
-      with parameters
-    - for better server speed, the WHERE clause should use bound parameters
-      identified as '?' in the FormatSQLWhere statement, which is expected to
-      follow the order of values supplied in BoundsSQLWhere open array - use
-      DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
-      currency / RawUTF8 values to be bound to the request as parameters
-    - note that this method prototype changed with revision 1.17 of the
-      framework: array of const used to be ParamsSQLWhere and '%' in the
-      FormatSQLWhere statement, whereas it now expects bound parameters as '?' }
+    /// this constructor initializes the object as above, and fills its content
+    // from a client or server connection, using a specified WHERE clause
+    // with parameters
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
+    // currency / RawUTF8 values to be bound to the request as parameters
+    // - note that this method prototype changed with revision 1.17 of the
+    // framework: array of const used to be ParamsSQLWhere and '%' in the
+    // FormatSQLWhere statement, whereas it now expects bound parameters as '?'
     constructor Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const); overload;
-    {/ this constructor initializes the object as above, and fills its content
-      from a client or server connection, using a specified WHERE clause
-      with parameters
-      - the FormatSQLWhere clause will replace all '%' chars with the supplied
-      ParamsSQLWhere[] values, and all '?' chars with BoundsSQLWhere[] values,
-      as :(...): inlined parameters - you should either call:
-      ! Rec := TSQLMyRecord.Create(aClient,'Count=:(%):'[aCount],[]);
-      or (letting the inlined parameters being computed by FormatUTF8)
-      !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[],[aCount]);
-      or even better, using the other Create overloaded constructor:
-      !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[aCount]);
-      - using '?' and BoundsSQLWhere[] is perhaps more readable in your code, and
-      will in all case create a request with :(..): inline parameters, with
-      automatic RawUTF8 quoting if necessary }
+    /// this constructor initializes the object as above, and fills its content
+    // from a client or server connection, using a specified WHERE clause
+    // with parameters
+    // - the FormatSQLWhere clause will replace all '%' chars with the supplied
+    // ParamsSQLWhere[] values, and all '?' chars with BoundsSQLWhere[] values,
+    // as :(...): inlined parameters - you should either call:
+    // ! Rec := TSQLMyRecord.Create(aClient,'Count=:(%):'[aCount],[]);
+    // or (letting the inlined parameters being computed by FormatUTF8)
+    // !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[],[aCount]);
+    // or even better, using the other Create overloaded constructor:
+    // !  Rec := TSQLMyRecord.Create(aClient,'Count=?',[aCount]);
+    // - using '?' and BoundsSQLWhere[] is perhaps more readable in your code, and
+    // will in all case create a request with :(..): inline parameters, with
+    // automatic RawUTF8 quoting if necessary
     constructor Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const); overload;
 
-    {/ this constructor initializes the object as above, and prepares itself to
-      loop through a statement using a specified WHERE clause
-      - this method creates a TSQLTableJSON, retrieves all records corresponding
-        to the WHERE clause, then call FillPrepare - previous Create(aClient)
-        methods retrieve only one record, this one more multiple rows
-      - you should then loop for all rows using 'while Rec.FillOne do ...'
-      - the TSQLTableJSON will be freed by TSQLRecord.Destroy
-      - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
-        for better server speed - note that you can use FormatUTF8() as such:
-        ! aRec := TSQLMyRec.CreateAndFillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
-        or call the overloaded CreateAndFillPrepare() contructor directly with
-        BoundsSQLWhere array of parameters
-      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-      - default aCustomFieldsCSV='' will retrieve all simple table fields
-      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-      - aCustomFieldsCSV can also be set to a CSV field list to retrieve only
-        the needed fields, and save remote bandwidth - note that any later
-        Update() will update all simple fields, so potentially with wrong
-        values; but BatchUpdate() can be safely used since it will  }
+    /// this constructor initializes the object as above, and prepares itself to
+    // loop through a statement using a specified WHERE clause
+    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // to the WHERE clause, then call FillPrepare - previous Create(aClient)
+    // methods retrieve only one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
+    // for better server speed - note that you can use FormatUTF8() as such:
+    // ! aRec := TSQLMyRec.CreateAndFillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // or call the overloaded CreateAndFillPrepare() contructor directly with
+    // BoundsSQLWhere array of parameters
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - aCustomFieldsCSV can also be set to a CSV field list to retrieve only
+    // the needed fields, and save remote bandwidth - note that any later
+    // Update() will update all simple fields, so potentially with wrong
+    // values; but BatchUpdate() can be safely used since it will
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aSQLWhere: RawUTF8;
       const aCustomFieldsCSV: RawUTF8=''); overload;
-    {/ this constructor initializes the object as above, and prepares itself to
-      loop through a statement using a specified WHERE clause
-      - this method creates a TSQLTableJSON, retrieves all records corresponding
-        to the WHERE clause, then call FillPrepare - previous Create(aClient)
-        methods retrieve only one record, this one more multiple rows
-      - you should then loop for all rows using 'while Rec.FillOne do ...'
-      - the TSQLTableJSON will be freed by TSQLRecord.Destroy
-      - for better server speed, the WHERE clause should use bound parameters
-        identified as '?' in the FormatSQLWhere statement, which is expected to
-        follow the order of values supplied in BoundsSQLWhere open array - use
-        DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
-        currency / RawUTF8 values to be bound to the request as parameters
-      - note that this method prototype changed with revision 1.17 of the
-        framework: array of const used to be ParamsSQLWhere and '%' in the
-        FormatSQLWhere statement, whereas it now expects bound parameters as '?'
-      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-        you may need  to access only one or several fields, and will save remote
-        bandwidth by specifying the needed fields
-      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-      - note that you should not use this aCustomFieldsCSV optional parameter if
-        you want to Update the retrieved record content later, since any
-        missing fields will be left with previous values - but BatchUpdate() can be
-        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// this constructor initializes the object as above, and prepares itself to
+    // loop through a statement using a specified WHERE clause
+    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // to the WHERE clause, then call FillPrepare - previous Create(aClient)
+    // methods retrieve only one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
+    // currency / RawUTF8 values to be bound to the request as parameters
+    // - note that this method prototype changed with revision 1.17 of the
+    // framework: array of const used to be ParamsSQLWhere and '%' in the
+    // FormatSQLWhere statement, whereas it now expects bound parameters as '?'
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''); overload;
-    {/ this constructor initializes the object as above, and prepares itself to
-      loop through a statement using a specified WHERE clause
-      - this method creates a TSQLTableJSON, retrieves all records corresponding
-        to the WHERE clause, then call FillPrepare - previous Create(aClient)
-        methods retrieve only one record, this one more multiple rows
-      - you should then loop for all rows using 'while Rec.FillOne do ...'
-      - the TSQLTableJSON will be freed by TSQLRecord.Destroy
-      - the FormatSQLWhere clause will replace all '%' chars with the supplied
-        ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
-        with BoundsSQLWhere[] values
-      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-        you may need  to access only one or several fields, and will save remote
-        bandwidth by specifying the needed fields
-      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-      - note that you should not use this aCustomFieldsCSV optional parameter if
-        you want to Update the retrieved record content later, since any
-        missing fields will be left with previous values - but BatchUpdate() can be
-        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// this constructor initializes the object as above, and prepares itself to
+    // loop through a statement using a specified WHERE clause
+    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // to the WHERE clause, then call FillPrepare - previous Create(aClient)
+    // methods retrieve only one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - the FormatSQLWhere clause will replace all '%' chars with the supplied
+    // ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
+    // with BoundsSQLWhere[] values
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''); overload;
-    {/ this constructor initializes the object as above, and prepares itself to
-      loop through a given list of IDs
-      - this method creates a TSQLTableJSON, retrieves all records corresponding
-        to the specified IDs, then call FillPrepare - previous Create(aClient)
-        methods retrieve only one record, this one more multiple rows
-      - you should then loop for all rows using 'while Rec.FillOne do ...'
-      - the TSQLTableJSON will be freed by TSQLRecord.Destroy
-      - aCustomFieldsCSV can be used to specify which fields must be retrieved
-      - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-        you may need  to access only one or several fields, and will save remote
-        bandwidth by specifying the needed fields
-      - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-      - note that you should not use this aCustomFieldsCSV optional parameter if
-        you want to Update the retrieved record content later, since any
-        missing fields will be left with previous values - but BatchUpdate() can be
-        safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// this constructor initializes the object as above, and prepares itself to
+    // loop through a given list of IDs
+    // - this method creates a TSQLTableJSON, retrieves all records corresponding
+    // to the specified IDs, then call FillPrepare - previous Create(aClient)
+    // methods retrieve only one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8=''); overload;
-    {/ this constructor initializes the object, and prepares itself to loop
-       through a specified JSON table
-      - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
-        then call FillPrepare - previous Create(aClient) methods retrieve only
-        one record, this one more multiple rows
-      - you should then loop for all rows using 'while Rec.FillOne do ...'
-      - the TSQLTableJSON will be freed by TSQLRecord.Destroy }
+    /// this constructor initializes the object, and prepares itself to loop
+    // through a specified JSON table
+    // - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
+    // then call FillPrepare - previous Create(aClient) methods retrieve only
+    // one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
     constructor CreateAndFillPrepare(const aJSON: RawUTF8); overload;
     /// this constructor initializes the object from its ID, including all
     // nested TSQLRecord properties, through a JOINed statement
@@ -6208,42 +6207,42 @@ type
     // updated, not the nested TSQLRecord properties
     constructor CreateAndFillPrepareJoined(aClient: TSQLRest;
       const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
-    {/ this constructor initializes the object including all TSQLRecordMany properties,
-      and prepares itself to loop through a JOINed statement
-      - the created instance will have all its TSQLRecordMany Dest property allocated
-        with proper instance (and not only pointer(DestID) e.g.), ready to be
-        consumed during a while FillOne do... loop (those instances will be
-        freed by TSQLRecord.FillClose or Destroy) - and the Source property
-        won't contain pointer(SourceID) but the main TSQLRecord instance
-      - the aFormatSQLJoin clause will define a WHERE clause for an automated
-        JOINed statement, including TSQLRecordMany published properties (and
-        their nested properties)
-      - a typical use could be the following:
-        ! aProd := TSQLProduct.CreateAndFillPrepareMany(Database,
-        !   'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
-        !   ['mark','for boy','small','medium']);
-        ! if aProd<>nil then
-        ! try
-        !   while aProd.FillOne do
-        !     // here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
-        !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
-        !   // you may also use aProd.FillTable to fill a grid, e.g.
-        !   // (do not forget to set aProd.FillTable.OwnerMustFree := false)
-        ! finally
-        !   aProd.Free; // will also free aProd.Categories/Sizes instances
-        ! end;
-        this will execute a JOINed SELECT statement similar to the following:
-        $ select p.*, c.*, s.*
-        $ from Product p, Category c, Categories cc, Size s, Sizes ss
-        $ where c.id=cc.dest and cc.source=p.id and
-        $  s.id=ss.dest and ss.source=p.id and
-        $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
-      - you SHALL call explicitely the FillClose method before using any
-        methods of nested TSQLRecordMany instances which may override the Dest
-        instance content (e.g. ManySelect) to avoid any GPF
-      - the aFormatSQLJoin clause will replace all '%' chars with the supplied
-        aParamsSQLJoin[] supplied values, and bind all '?' chars as bound
-        parameters with aBoundsSQLJoin[] values }
+    /// this constructor initializes the object including all TSQLRecordMany properties,
+    // and prepares itself to loop through a JOINed statement
+    // - the created instance will have all its TSQLRecordMany Dest property allocated
+    // with proper instance (and not only pointer(DestID) e.g.), ready to be
+    // consumed during a while FillOne do... loop (those instances will be
+    // freed by TSQLRecord.FillClose or Destroy) - and the Source property
+    // won't contain pointer(SourceID) but the main TSQLRecord instance
+    // - the aFormatSQLJoin clause will define a WHERE clause for an automated
+    // JOINed statement, including TSQLRecordMany published properties (and
+    // their nested properties)
+    // - a typical use could be the following:
+    // ! aProd := TSQLProduct.CreateAndFillPrepareMany(Database,
+    // !   'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
+    // !   ['mark','for boy','small','medium']);
+    // ! if aProd<>nil then
+    // ! try
+    // !   while aProd.FillOne do
+    // !     //  here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
+    // !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
+    // !   //  you may also use aProd.FillTable to fill a grid, e.g.
+    // !   //  (do not forget to set aProd.FillTable.OwnerMustFree := false)
+    // ! finally
+    // !   aProd.Free; //  will also free aProd.Categories/Sizes instances
+    // ! end;
+    // this will execute a JOINed SELECT statement similar to the following:
+    // $ select p.*, c.*, s.*
+    // $ from Product p, Category c, Categories cc, Size s, Sizes ss
+    // $ where c.id=cc.dest and cc.source=p.id and
+    // $  s.id=ss.dest and ss.source=p.id and
+    // $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
+    // - you SHALL call explicitely the FillClose method before using any
+    // methods of nested TSQLRecordMany instances which may override the Dest
+    // instance content (e.g. ManySelect) to avoid any GPF
+    // - the aFormatSQLJoin clause will replace all '%' chars with the supplied
+    // aParamsSQLJoin[] supplied values, and bind all '?' chars as bound
+    // parameters with aBoundsSQLJoin[] values
     constructor CreateAndFillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 
@@ -6252,61 +6251,62 @@ type
     // those fields don't contain any data, but a TSQLRecordMany instance
     // which allow to access to the pivot table data)
     // - you can override this method to allow custom copy of the object,
-    // including (or not) published properties copy }
+    // including (or not) published properties copy
     function CreateCopy: TSQLRecord; virtual;
     /// release the associated memory
     // - in particular, release all TSQLRecordMany instance created by the
     // constructor of this TSQLRecord
     destructor Destroy; override;
 
-    {/ return the UTF-8 encoded SQL source to create the table containing the
-      published fields of a TSQLRecord child
-     - a 'ID INTEGER PRIMARY KEY' field is always created first (mapping
-       SQLite3 RowID)
-     - AnsiString are created as TEXT COLLATE NOCASE (fast SQLite3 7bits compare)
-     - RawUnicode and RawUTF8 are created as TEXT COLLATE SYSTEMNOCASE
-       (i.e. use our fast UTF8IComp() for comparaison)
-     - TDateTime are created as TEXT COLLATE ISO8601
-      (which calls our very fast ISO TEXT to Int64 conversion routine)
-     - an individual bit set in UniqueField forces the corresponding field to
-      be marked as UNIQUE (an unique index is automaticaly created on the specified
-      column); use TSQLModel fIsUnique[] array, which set the bits values
-      to 1 if a property field was published with "stored AS_UNIQUE"
-      (i.e. "stored false")
-     - this method will handle TSQLRecordFTS* classes like FTS* virtual tables,
-       TSQLRecordRTree as RTREE virtual table, and TSQLRecordVirtualTable*ID
-       classes as corresponding Delphi designed virtual tables
-     - is not part of TSQLRecordProperties because has been declared as virtual
-       so that you could specify a custom SQL statement, per TSQLRecord type
-     - anyway, don't call this method directly, but use TSQLModel.GetSQLCreate()
-     - the aModel parameter is used to retrieve the Virtual Table module name,
-       and can be ignored for regular (not virtual) tables }
+    /// return the UTF-8 encoded SQL source to create the table containing the
+    // published fields of a TSQLRecord child
+    // - a 'ID INTEGER PRIMARY KEY' field is always created first (mapping
+    // SQLite3 RowID)
+    // - AnsiString are created as TEXT COLLATE NOCASE (fast SQLite3 7bits compare)
+    // - RawUnicode and RawUTF8 are created as TEXT COLLATE SYSTEMNOCASE
+    // (i.e. use our fast UTF8IComp() for comparaison)
+    // - TDateTime are created as TEXT COLLATE ISO8601
+    // (which calls our very fast ISO TEXT to Int64 conversion routine)
+    // - an individual bit set in UniqueField forces the corresponding field to
+    // be marked as UNIQUE (an unique index is automaticaly created on the specified
+    // column); use TSQLModel fIsUnique[] array, which set the bits values
+    // to 1 if a property field was published with "stored AS_UNIQUE"
+    // (i.e. "stored false")
+    // - this method will handle TSQLRecordFTS* classes like FTS* virtual tables,
+    // TSQLRecordRTree as RTREE virtual table, and TSQLRecordVirtualTable*ID
+    // classes as corresponding Delphi designed virtual tables
+    // - is not part of TSQLRecordProperties because has been declared as virtual
+    // so that you could specify a custom SQL statement, per TSQLRecord type
+    // - anyway, don't call this method directly, but use TSQLModel.GetSQLCreate()
+    // - the aModel parameter is used to retrieve the Virtual Table module name,
+    // and can be ignored for regular (not virtual) tables
     class function GetSQLCreate(aModel: TSQLModel): RawUTF8; virtual;
-    {/ return the Class Type of the current TSQLRecord }
+    /// return the Class Type of the current TSQLRecord
     function RecordClass: TSQLRecordClass;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-    {/ return the RTTI property information for this record }
+    /// return the RTTI property information for this record
     function ClassProp: PClassProp;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-    {/ return the TRecordReference Int64 value pointing to this record }
+    /// return the TRecordReference Int64 value pointing to this record
     function RecordReference(Model: TSQLModel): TRecordReference;
 
-    {/ return the UTF-8 encoded SQL source to INSERT the values contained
-      in the current published fields of a TSQLRecord child
-      - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are updated:
-        BLOB fields are ignored (use direct update via dedicated methods instead)
-      - format is '(COL1, COL2) VALUES ('VAL1', 'VAL2')' if some column was ignored (BLOB e.g.)
-      - format is 'VALUES ('VAL1', 'VAL2')' if all columns values are available
-      - is not used by the ORM (do not use prepared statements) - only here
-        for conveniency }
+    /// return the UTF-8 encoded SQL source to INSERT the values contained
+    // in the current published fields of a TSQLRecord child
+    // - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are updated:
+    // BLOB fields are ignored (use direct update via dedicated methods instead)
+    // - format is '(COL1, COL2) VALUES ('VAL1', 'VAL2')' if some column was ignored
+    // (BLOB e.g.)
+    // - format is 'VALUES ('VAL1', 'VAL2')' if all columns values are available
+    // - is not used by the ORM (do not use prepared statements) - only here
+    // for conveniency
     function GetSQLValues: RawUTF8;
-    {/ return the UTF-8 encoded SQL source to UPDATE the values contained
-      in the current published fields of a TSQLRecord child
-      - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
-        BLOB fields are ignored (use direct access via dedicated methods instead)
-      - format is 'COL1='VAL1', COL2='VAL2''
-      - is not used by the ORM (do not use prepared statements) - only here
-        for conveniency }
+    /// return the UTF-8 encoded SQL source to UPDATE the values contained
+    // in the current published fields of a TSQLRecord child
+    // - only simple fields name (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
+    // BLOB fields are ignored (use direct access via dedicated methods instead)
+    // - format is 'COL1='VAL1', COL2='VAL2''
+    // - is not used by the ORM (do not use prepared statements) - only here
+    // for conveniency
     function GetSQLSet: RawUTF8;
     /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
     // - layout and fields should have been set at TJSONSerializer construction:
@@ -6356,7 +6356,7 @@ type
     // i.e. surrounded as '"FieldName":[....],' - note the ',' at the end
     // - by default, will append the simple fields, unless the Fields optional
     // parameter is customized to a non void value
-    // - see also TSQLRest.AppendListAsJsonArray for a high-level wrapper method 
+    // - see also TSQLRest.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUTF8;
        W: TJSONSerializer; Fields: TSQLFieldBits=[]);
     /// write the field values into the binary buffer
@@ -6387,20 +6387,20 @@ type
     // - Values[] array must match the RecordProps.Field[] order: will return
     // false if the Values[].VType does not match RecordProps.FieldType[]
     function SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
-    {/ retrieve a field value from a given property name, as encoded UTF-8 text
-      - you should use strong typing and direct property access, following
-        the ORM approach of the framework; but in some cases (a custom Grid
-        display, for instance), it could be useful to have this method available
-      - will return '' in case of wrong property name
-      - BLOB and dynamic array fields are returned as '\uFFF0base64encodedbinary'  }
+    /// retrieve a field value from a given property name, as encoded UTF-8 text
+    // - you should use strong typing and direct property access, following
+    // the ORM approach of the framework; but in some cases (a custom Grid
+    // display, for instance), it could be useful to have this method available
+    // - will return '' in case of wrong property name
+    // - BLOB and dynamic array fields are returned as '\uFFF0base64encodedbinary'
     function GetFieldValue(const PropName: RawUTF8): RawUTF8;
-    {/ set a field value of a given property name, from some encoded UTF-8 text
-      - you should use strong typing and direct property access, following
-        the ORM approach of the framework; but in some cases (a custom Grid
-        display, for instance), it could be useful to have this method available
-       - won't do anything in case of wrong property name
-       - expect BLOB and dynamic array fields encoded as SQlite3 BLOB literals
-        ("x'01234'" e.g.) or '\uFFF0base64encodedbinary' }
+    /// set a field value of a given property name, from some encoded UTF-8 text
+    // - you should use strong typing and direct property access, following
+    // the ORM approach of the framework; but in some cases (a custom Grid
+    // display, for instance), it could be useful to have this method available
+    // - won't do anything in case of wrong property name
+    // - expect BLOB and dynamic array fields encoded as SQlite3 BLOB literals
+    // ("x'01234'" e.g.) or '\uFFF0base64encodedbinary'
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
@@ -6422,138 +6422,138 @@ type
     procedure SetFieldVariant(const PropName: string; const Source: Variant);
     {$endif}
 
-    {/ prepare to get values from a TSQLTable result
-     - then call FillRow(1..Table.RowCount) to get any row value
-     - or you can also loop through all rows with
-     ! while Rec.FillOne do
-     !   dosomethingwith(Rec);
-     - the specified TSQLTable is stored in an internal fTable protected field
-     - set aCheckTableName if you want e.g. the Field Names from the Table
-       any pending 'TableName.' trimmed before matching to the current record }
+    // prepare to get values from a TSQLTable result
+    // - then call FillRow(1..Table.RowCount) to get any row value
+    // - or you can also loop through all rows with
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // - the specified TSQLTable is stored in an internal fTable protected field
+    // - set aCheckTableName if you want e.g. the Field Names from the Table
+    // any pending 'TableName.' trimmed before matching to the current record
     procedure FillPrepare(Table: TSQLTable; aCheckTableName: TSQLCheckTableName=ctnNoCheck); overload;
-    {/ prepare to get values from a SQL where statement
-     - returns true in case of success, false in case of an error during SQL request
-     - then call FillRow(1..Table.RowCount) to get any row value
-     - or you can also loop through all rows with
-     ! while Rec.FillOne do
-     !   dosomethingwith(Rec);
-     - a temporary TSQLTable is created then stored in an internal fTable protected field
-     - if aSQLWhere is left to '', all rows are retrieved as fast as possible
-       (e.g. by-passing SQLite3 virtual table modules for external databases)
-     - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
-       for better server speed - note that you can use FormatUTF8() as such:
-       ! aRec.FillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
-       or call the overloaded FillPrepare() method directly with  BoundsSQLWhere
-       array of parameters
-     - aCustomFieldsCSV can be used to specify which fields must be retrieved
-     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-       you may need  to access only one or several fields, and will save remote
-       bandwidth by specifying the needed fields
-     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-     - note that you should not use this aCustomFieldsCSV optional parameter if
-       you want to Update the retrieved record content later, since any
-       missing fields will be left with previous values - but BatchUpdate() can be
-       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// prepare to get values from a SQL where statement
+    // - returns true in case of success, false in case of an error during SQL request
+    // - then call FillRow(1..Table.RowCount) to get any row value
+    // - or you can also loop through all rows with
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - if aSQLWhere is left to '', all rows are retrieved as fast as possible
+    // (e.g. by-passing SQLite3 virtual table modules for external databases)
+    // - the WHERE clause should use inlined parameters (like 'Name=:('Arnaud'):')
+    // for better server speed - note that you can use FormatUTF8() as such:
+    // ! aRec.FillPrepare(Client,FormatUTF8('Salary>? AND Salary<?',[],[1000,2000]));
+    // or call the overloaded FillPrepare() method directly with  BoundsSQLWhere
+    // array of parameters
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(aClient: TSQLRest; const aSQLWhere: RawUTF8='';
       const aCustomFieldsCSV: RawUTF8=''; aCheckTableName: TSQLCheckTableName=ctnNoCheck): boolean; overload;
-    {/ prepare to get values using a specified WHERE clause with '%' parameters
-     - returns true in case of success, false in case of an error during SQL request
-     - then call FillRow(1..Table.RowCount) to get any row value
-     - or you can also loop through all rows with
-     ! while Rec.FillOne do
-     !   dosomethingwith(Rec);
-     - a temporary TSQLTable is created then stored in an internal fTable protected field
-     - for better server speed, the WHERE clause should use bound parameters
-       identified as '?' in the FormatSQLWhere statement, which is expected to
-       follow the order of values supplied in BoundsSQLWhere open array - use
-       DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
-       currency / RawUTF8 values to be bound to the request as parameters
-     - note that this method prototype changed with revision 1.17 of the
-       framework: array of const used to be ParamsSQLWhere and '%' in the
-       FormatSQLWhere statement, whereas it now expects bound parameters as '?'
-     - aCustomFieldsCSV can be used to specify which fields must be retrieved
-     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-       you may need  to access only one or several fields, and will save remote
-       bandwidth by specifying the needed fields
-     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-     - note that you should not use this aCustomFieldsCSV optional parameter if
-       you want to Update the retrieved record content later, since any
-       missing fields will be left with previous values - but BatchUpdate() can be
-       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// prepare to get values using a specified WHERE clause with '%' parameters
+    // - returns true in case of success, false in case of an error during SQL request
+    // - then call FillRow(1..Table.RowCount) to get any row value
+    // - or you can also loop through all rows with
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL/DateTimeToSQL for TDateTime, or directly any integer / double /
+    // currency / RawUTF8 values to be bound to the request as parameters
+    // - note that this method prototype changed with revision 1.17 of the
+    // framework: array of const used to be ParamsSQLWhere and '%' in the
+    // FormatSQLWhere statement, whereas it now expects bound parameters as '?'
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
-    {/ prepare to get values using a specified WHERE clause with '%' and '?' parameters
-     - returns true in case of success, false in case of an error during SQL request
-     - then call FillRow(1..Table.RowCount) to get any row value
-     - or you can also loop through all rows with
-     ! while Rec.FillOne do
-     !   dosomethingwith(Rec);
-     - a temporary TSQLTable is created then stored in an internal fTable
-       protected field
-     - the FormatSQLWhere clause will replace all '%' chars with the supplied
-       ParamsSQLWhere[] supplied values, and bind all '?' chars as bound
-       parameters with BoundsSQLWhere[] values
-     - aCustomFieldsCSV can be used to specify which fields must be retrieved
-     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-       you may need  to access only one or several fields, and will save remote
-       bandwidth by specifying the needed fields
-     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-     - note that you should not use this aCustomFieldsCSV optional parameter if
-       you want to Update the retrieved record content later, since any
-       missing fields will be left with previous values - but BatchUpdate() can be
-       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    // / prepare to get values using a specified WHERE clause with '%' and '?' parameters
+    // - returns true in case of success, false in case of an error during SQL request
+    // - then call FillRow(1..Table.RowCount) to get any row value
+    // - or you can also loop through all rows with
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // - a temporary TSQLTable is created then stored in an internal fTable
+    // protected field
+    // - the FormatSQLWhere clause will replace all '%' chars with the supplied
+    // ParamsSQLWhere[] supplied values, and bind all '?' chars as bound
+    // parameters with BoundsSQLWhere[] values
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
-    {/ prepare to get values from a list of IDs
-     - returns true in case of success, false in case of an error during SQL request
-     - then call FillRow(1..Table.RowCount) to get any row value
-     - or you can also loop through all rows with
-     ! while Rec.FillOne do
-     !   dosomethingwith(Rec);
-     - a temporary TSQLTable is created then stored in an internal fTable protected field
-     - aCustomFieldsCSV can be used to specify which fields must be retrieved
-     - default aCustomFieldsCSV='' will retrieve all simple table fields, but
-       you may need  to access only one or several fields, and will save remote
-       bandwidth by specifying the needed fields
-     - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
-     - note that you should not use this aCustomFieldsCSV optional parameter if
-       you want to Update the retrieved record content later, since any
-       missing fields will be left with previous values - but BatchUpdate() can be
-       safely used after FillPrepare (will set only ID, TModTime and mapped fields) }
+    /// prepare to get values from a list of IDs
+    // - returns true in case of success, false in case of an error during SQL request
+    // - then call FillRow(1..Table.RowCount) to get any row value
+    // - or you can also loop through all rows with
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // - a temporary TSQLTable is created then stored in an internal fTable protected field
+    // - aCustomFieldsCSV can be used to specify which fields must be retrieved
+    // - default aCustomFieldsCSV='' will retrieve all simple table fields, but
+    // you may need  to access only one or several fields, and will save remote
+    // bandwidth by specifying the needed fields
+    // - if aCustomFieldsCSV='*', it will retrieve all fields, including BLOBs
+    // - note that you should not use this aCustomFieldsCSV optional parameter if
+    // you want to Update the retrieved record content later, since any
+    // missing fields will be left with previous values - but BatchUpdate() can be
+    // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
-    {/ prepare to loop through a JOINed statement including TSQLRecordMany fields
-     - all TSQLRecordMany.Dest published fields will now contain a true TSQLRecord
-       instance, ready to be filled with the JOINed statement results (these
-       instances will be released at FillClose) - the same for Source which will
-       point to the self instance
-     - the aFormatSQLJoin clause will define a WHERE clause for an automated
-       JOINed statement, including TSQLRecordMany published properties (and
-       their nested properties)
-     - returns true in case of success, false in case of an error during SQL request
-     - a typical use could be the following:
-       ! if aProd.FillPrepareMany(Database,
-       !    'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
-       !    ['mark','for boy','small','medium']) then
-       !   while aProd.FillOne do
-       !     // here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
-       !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
-       !   // you may also use aProd.FillTable to fill a grid, e.g.
-       !   // (do not forget to set aProd.FillTable.OwnerMustFree := false)
-       this will execute a JOINed SELECT statement similar to the following:
-       $ select p.*, c.*, s.*
-       $ from Product p, Category c, Categories cc, Size s, Sizes ss
-       $ where c.id=cc.dest and cc.source=p.id and
-       $  s.id=ss.dest and ss.source=p.id and
-       $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
-     - the FormatSQLWhere clause will replace all '%' chars with the supplied
-       ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
-       with BoundsSQLWhere[] values
-     - you SHALL call explicitely the FillClose method before using any
-       methods of nested TSQLRecordMany instances which may override the Dest
-       instance content (e.g. ManySelect) to avoid any GPF
-     - is used by TSQLRecord.CreateAndFillPrepareMany constructor }
+    // / prepare to loop through a JOINed statement including TSQLRecordMany fields
+    // - all TSQLRecordMany.Dest published fields will now contain a true TSQLRecord
+    // instance, ready to be filled with the JOINed statement results (these
+    // instances will be released at FillClose) - the same for Source which will
+    // point to the self instance
+    // - the aFormatSQLJoin clause will define a WHERE clause for an automated
+    // JOINed statement, including TSQLRecordMany published properties (and
+    // their nested properties)
+    // - returns true in case of success, false in case of an error during SQL request
+    // - a typical use could be the following:
+    // ! if aProd.FillPrepareMany(Database,
+    // !    'Owner=? and Categories.Dest.Name=? and (Sizes.Dest.Name=? or Sizes.Dest.Name=?)',[],
+    // !    ['mark','for boy','small','medium']) then
+    // !   while aProd.FillOne do
+    // !     //  here e.g. aProd.Categories.Dest are instantied (and Categories.Source=aProd)
+    // !     writeln(aProd.Name,' ',aProd.Owner,' ',aProd.Categories.Dest.Name,' ',aProd.Sizes.Dest.Name);
+    // !   //  you may also use aProd.FillTable to fill a grid, e.g.
+    // !   //  (do not forget to set aProd.FillTable.OwnerMustFree := false)
+    // this will execute a JOINed SELECT statement similar to the following:
+    // $ select p.*, c.*, s.*
+    // $ from Product p, Category c, Categories cc, Size s, Sizes ss
+    // $ where c.id=cc.dest and cc.source=p.id and
+    // $  s.id=ss.dest and ss.source=p.id and
+    // $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
+    // - the FormatSQLWhere clause will replace all '%' chars with the supplied
+    // ParamsSQLWhere[] supplied values, and bind all '?' chars as parameters
+    // with BoundsSQLWhere[] values
+    // - you SHALL call explicitely the FillClose method before using any
+    // methods of nested TSQLRecordMany instances which may override the Dest
+    // instance content (e.g. ManySelect) to avoid any GPF
+    // - is used by TSQLRecord.CreateAndFillPrepareMany constructor
     function FillPrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
     /// compute a JOINed statement including TSQLRecordMany fields
@@ -6563,50 +6563,49 @@ type
     function EnginePrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const;
       out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
-    {/ fill all published properties of an object from a TSQLTable prepared row
-      - FillPrepare() must have been called before
-      - if Dest is nil, this object values are filled
-      - if Dest is not nil, this object values will be filled, but it won't
-        work with TSQLRecordMany properties (i.e. after FillPrepareMany call)
-      - ID field is updated if first Field Name is 'ID'
-      - Row number is from 1 to Table.RowCount
-      - setter method (write Set*) is called if available
-      - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
-      - this method has been made virtual e.g. so that a calculated value can be
-        used in a custom field }
+    /// fill all published properties of an object from a TSQLTable prepared row
+    // - FillPrepare() must have been called before
+    // - if Dest is nil, this object values are filled
+    // - if Dest is not nil, this object values will be filled, but it won't
+    // work with TSQLRecordMany properties (i.e. after FillPrepareMany call)
+    // - ID field is updated if first Field Name is 'ID'
+    // - Row number is from 1 to Table.RowCount
+    // - setter method (write Set*) is called if available
+    // - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
+    // - this method has been made virtual e.g. so that a calculated value can be
+    // used in a custom field
     procedure FillRow(aRow: integer; aDest: TSQLRecord=nil); virtual;
-    {/ fill all published properties of this object from the next available
-      TSQLTable prepared row
-      - FillPrepare() must have been called before
-      - the Row number is taken from property FillCurrentRow
-      - return true on success, false if no more Row data is available
-      - internally call FillRow() to update published properties values }
+    /// fill all published properties of this object from the next available
+    // TSQLTable prepared row
+    // - FillPrepare() must have been called before
+    // - the Row number is taken from property FillCurrentRow
+    // - return true on success, false if no more Row data is available
+    // - internally call FillRow() to update published properties values
     function FillOne: boolean;
-    {/ go to the first prepared row, ready to loop through all rows with FillOne()
-      - the Row number (property FillCurrentRow) is reset to 1
-      - return true on success, false if no Row data is available
-      - you can use it e.g. as:
-      ! while Rec.FillOne do
-      !   dosomethingwith(Rec);
-      ! if Rec.FillRewind then
-      !   while Rec.FillOne do
-      !     dosomeotherthingwith(Rec);
-    }
+    /// go to the first prepared row, ready to loop through all rows with FillOne()
+    // - the Row number (property FillCurrentRow) is reset to 1
+    // - return true on success, false if no Row data is available
+    // - you can use it e.g. as:
+    // ! while Rec.FillOne do
+    // !   dosomethingwith(Rec);
+    // ! if Rec.FillRewind then
+    // !   while Rec.FillOne do
+    // !     dosomeotherthingwith(Rec);
     function FillRewind: boolean;
-    {/ close any previous FillPrepare..FillOne loop
-     - is called implicitely by FillPrepare() call to release any previous loop
-     - release the internal hidden TSQLTable instance if necessary
-     - is not mandatory if the TSQLRecord is released just after, since
-       TSQLRecord.Destroy will call it
-     - used e.g. by FillFrom methods below to avoid any GPF/memory confusion }
+    /// close any previous FillPrepare..FillOne loop
+    // - is called implicitely by FillPrepare() call to release any previous loop
+    // - release the internal hidden TSQLTable instance if necessary
+    // - is not mandatory if the TSQLRecord is released just after, since
+    // TSQLRecord.Destroy will call it
+    // - used e.g. by FillFrom methods below to avoid any GPF/memory confusion
     procedure FillClose;
 
-    {/ fill all published properties of this object from a TSQLTable result row
-      - call FillPrepare() then FillRow(Row) }
+    /// fill all published properties of this object from a TSQLTable result row
+    // - call FillPrepare() then FillRow(Row)
     procedure FillFrom(Table: TSQLTable; Row: integer); overload;
-    {/ fill all published properties of this object from a JSON result row
-     - create a TSQLTable from the JSON data
-     - call FillPrepare() then FillRow(Row) }
+    /// fill all published properties of this object from a JSON result row
+    // - create a TSQLTable from the JSON data
+    // - call FillPrepare() then FillRow(Row)
     procedure FillFrom(const JSONTable: RawUTF8; Row: integer); overload;
     /// fill all published properties of this object from a JSON object result
     // - use JSON data, as exported by GetJSONValues()
@@ -6623,11 +6622,11 @@ type
     // - JSON data may be expanded or not
     // - if FieldBits is defined, it will store the identified field index
     procedure FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits=nil); overload;
-    {/ fill all published properties of this object from another object
-      - source object must be a parent or of the same class as the current record
-      - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
-        those fields don't contain any data, but a TSQLRecordMany instance
-        which allow to access to the pivot table data) }
+    /// fill all published properties of this object from another object
+    // - source object must be a parent or of the same class as the current record
+    // - copy all COPIABLE_FIELDS, i.e. all fields excluding tftMany (because
+    // those fields don't contain any data, but a TSQLRecordMany instance
+    // which allow to access to the pivot table data)
     procedure FillFrom(aRecord: TSQLRecord); overload;
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
@@ -6638,19 +6637,19 @@ type
     procedure FillValue(PropName, Value: PUTF8Char; wasString: boolean;
       FieldBits: PSQLFieldBits=nil);
 
-    {/ return true if all published properties values in Other are identical to
-     the published properties of this object
-      - work with different classes: Reference properties name must just be
-      present in the calling object
-      - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
-      - compare the text representation of the values: fields may be of different
-      type, encoding or precision, but still have same values }
+    /// return true if all published properties values in Other are identical to
+    // the published properties of this object
+    // - work with different classes: Reference properties name must just be
+    // present in the calling object
+    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - compare the text representation of the values: fields may be of different
+    // type, encoding or precision, but still have same values
     function SameValues(Reference: TSQLRecord): boolean;
-    {/ return true if all published properties values in Other are identical to
-      the published properties of this object
-      - instances must be of the same class type
-      - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
-      - comparaison is much faster than SameValues() above }
+    /// return true if all published properties values in Other are identical to
+    // the published properties of this object
+    // - instances must be of the same class type
+    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - comparaison is much faster than SameValues() above
     function SameRecord(Reference: TSQLRecord): boolean;
     /// clear the values of all published properties, and also the ID property
     procedure ClearProperties; overload;
@@ -6712,25 +6711,25 @@ type
     // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
     property AsTSQLRecord: pointer read GetIDAsPointer;
-    {/ this property is set to true, if any published property is a BLOB (TSQLRawBlob) }
+    /// this property is set to true, if any published property is a BLOB (TSQLRawBlob)
     property HasBlob: boolean read GetHasBlob;
-    {/ this property returns the published property count with any valid
-      database field except TSQLRawBlob/TSQLRecordMany
-    - by default, the TSQLRawBlob (BLOB) fields are not included into this set:
-      they must be read specificaly (in order to spare bandwidth)
-    - TSQLRecordMany fields are not accessible directly, but as instances
-      created by TSQLRecord.Create }
+    /// this property returns the published property count with any valid
+    // database field except TSQLRawBlob/TSQLRecordMany
+    // - by default, the TSQLRawBlob (BLOB) fields are not included into this set:
+    // they must be read specificaly (in order to spare bandwidth)
+    // - TSQLRecordMany fields are not accessible directly, but as instances
+    // created by TSQLRecord.Create
     property SimpleFieldCount: integer read GetSimpleFieldCount;
-    {/ this property contains the TSQLTable after a call to FillPrepare() }
+    /// this property contains the TSQLTable after a call to FillPrepare()
     property FillTable: TSQLTable read GetTable;
-    {/ this property contains the current row number (beginning with 1),
-      initialized to 1 by FillPrepare(), which will be read by FillOne }
+    /// this property contains the current row number (beginning with 1),
+    // initialized to 1 by FillPrepare(), which will be read by FillOne
     property FillCurrentRow: integer read GetFillCurrentRow;
     /// used internally by FillPrepare() and corresponding Fill*() methods
     property FillContext: TSQLRecordFill read fFill;
-    {/ this property contains the internal state counter of the server database
-      when the data was retrieved from it
-      - can be used to check if retrieved data may be out of date }
+    /// this property contains the internal state counter of the server database
+    // when the data was retrieved from it
+    // - can be used to check if retrieved data may be out of date
     property InternalState: cardinal read fInternalState;
   published
     { published properties in inherited classes will be interpreted as SQL fields }
@@ -6820,46 +6819,46 @@ type
     function Get(Row: integer; const FieldName: RawUTF8): PUTF8Char; overload;
     /// read-only access to a particular field value, as RawUTF8 text
     function GetU(Row: integer; const FieldName: RawUTF8): RawUTF8; overload;
-    {/ read-only access to a particular field value, as Win Ansi text }
+    /// read-only access to a particular field value, as Win Ansi text
     function GetA(Row,Field: integer): WinAnsiString;
-    {/ read-only access to a particular field value, as Win Ansi text shortstring}
+    /// read-only access to a particular field value, as Win Ansi text shortstring
     function GetS(Row,Field: integer): shortstring;
     {$ifndef NOVARIANTS}
-    {/ read-only access to a particular field value, as a Variant
-     - text will be stored as RawUTF8 (as varString type)
-     - will try to use the most approriate Variant type for conversion (will
-       use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
-       in a sftVariant column) - so you should better set the exact field types
-       (e.g. from ORM) before calling this method }
+    /// read-only access to a particular field value, as a Variant
+    // - text will be stored as RawUTF8 (as varString type)
+    // - will try to use the most approriate Variant type for conversion (will
+    // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
+    // in a sftVariant column) - so you should better set the exact field types
+    // (e.g. from ORM) before calling this method
     function GetVariant(Row,Field: integer; Client: TObject): variant; overload;
-    {/ read-only access to a particular field value, as a Variant
-     - text will be stored as RawUTF8 (as varString type)
-     - will try to use the most approriate Variant type for conversion (will
-       use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
-       in a sftVariant column) - so you should better set the exact field types
-       (e.g. from ORM) before calling this method }
+    /// read-only access to a particular field value, as a Variant
+    // - text will be stored as RawUTF8 (as varString type)
+    // - will try to use the most approriate Variant type for conversion (will
+    // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
+    // in a sftVariant column) - so you should better set the exact field types
+    // (e.g. from ORM) before calling this method
     procedure GetVariant(Row,Field: integer; Client: TObject; var result: variant); overload;
     /// read-only access to a particular field, via a lookup field name
     // - will call GetVariant() on the corresponding field
     // - returns null if the lookup did not have any match
     function GetValue(const aLookupFieldName,aLookupValue,aValueFieldName: RawUTF8): variant;
     {$endif}
-    {/ read-only access to a particular field value, as VCL string text
-     - the global UTF8ToString() function will be used for the conversion:
-     for proper i18n handling before Delphi 2009, you should use the
-     overloaded method with aUTF8ToString=Language.UTF8ToString }
+    /// read-only access to a particular field value, as VCL string text
+    // - the global UTF8ToString() function will be used for the conversion:
+    // for proper i18n handling before Delphi 2009, you should use the
+    // overloaded method with aUTF8ToString=Language.UTF8ToString
     function GetString(Row,Field: integer): string;
     /// read-only access to a particular field value, as fast Unicode string text
     // - SynUnicode is either WideString, either UnicodeString, depending on the
     // Delphi compiler revision, to ensure fastest native Unicode process available
     function GetSynUnicode(Row,Field: integer): SynUnicode;
-    {/ fill a unicode buffer with a particular field value
-      - return number of wide characters written in Dest^ }
+    /// fill a unicode buffer with a particular field value
+    // - return number of wide characters written in Dest^
     function GetWP(Row,Field: integer; Dest: PWideChar; MaxDestChars: cardinal): integer;
-    {/ read-only access to a particular field value, as UTF-16 Unicode text
-      - Raw Unicode is WideChar(zero) terminated
-      - its content is allocated to contain all WideChars (not trimed to 255,
-        like GetWP() above }
+    /// read-only access to a particular field value, as UTF-16 Unicode text
+    // - Raw Unicode is WideChar(zero) terminated
+    // - its content is allocated to contain all WideChars (not trimed to 255,
+    // like GetWP() above
     function GetW(Row,Field: integer): RawUnicode;
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row,Field: integer): integer; overload;
@@ -6899,98 +6898,99 @@ type
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row: integer; const FieldName: RawUTF8): currency; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {/ read-only access to a particular field value, ready to be displayed
-      - mostly used with Row=0, i.e. to get a display value from a field name
-      - use "string" type, i.e. UnicodeString for Delphi 2009+
-      - value is first un-camel-cased: 'OnLine' value will return 'On line' e.g.
-      - then System.LoadResStringTranslate() is called if available }
+    /// read-only access to a particular field value, ready to be displayed
+    // - mostly used with Row=0, i.e. to get a display value from a field name
+    // - use "string" type, i.e. UnicodeString for Delphi 2009+
+    // - value is first un-camel-cased: 'OnLine' value will return 'On line' e.g.
+    // - then System.LoadResStringTranslate() is called if available
     function GetCaption(Row,Field: integer): string;
-    {/ read-only access to a particular Blob value
-     - a new TSQLRawBlob is created
-     - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-       or Base-64 encoded content ('\uFFF0base64encodedbinary')
-     - prefered manner is to directly use REST protocol to retrieve a blob field }
+    /// read-only access to a particular Blob value
+    // - a new TSQLRawBlob is created
+    // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
+    // or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetBlob(Row,Field: integer): TSQLRawBlob;
-    {/ read-only access to a particular Blob value
-     - a new TBytes is created
-     - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-       or Base-64 encoded content ('\uFFF0base64encodedbinary')
-     - prefered manner is to directly use REST protocol to retrieve a blob field }
+    /// read-only access to a particular Blob value
+    // - a new TBytes is created
+    // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
+    //   or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetBytes(Row,Field: integer): TBytes;
-    {/ read-only access to a particular Blob value
-     - a new TCustomMemoryStream is created - caller shall free its instance
-     - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
-       or Base-64 encoded content ('\uFFF0base64encodedbinary')
-     - prefered manner is to directly use REST protocol to retrieve a blob field }
+    /// read-only access to a particular Blob value
+    // - a new TCustomMemoryStream is created - caller shall free its instance
+    // - Blob data is converted from SQLite3 BLOB literals (X'53514C697465' e.g.)
+    //   or Base-64 encoded content ('\uFFF0base64encodedbinary')
+    // - prefered manner is to directly use REST protocol to retrieve a blob field
     function GetStream(Row,Field: integer): TStream;
-    {/ read-only access to a particular field value, as VCL text
-     - Client is one TSQLClient instance (used to display TRecordReference via
-       the associated TSQLModel)
-     - returns the Field Type
-     - return generic string Text, i.e. UnicodeString for Delphi 2009+,
-       ready to be displayed to the VCL, for sftEnumerate, sftTimeLog
-       and sftRecord/sftRecordVersion/sftID/sftTID
-     - returns '' as string Text, if text can by displayed directly
-       with Get*() methods above
-     - returns '' for other properties kind, if UTF8ToString is nil,
-       or the ready to be displayed value if UTF8ToString event is set
-       (to be used mostly with Language.UTF8ToString)
-      - CustomFormat can optionaly set a custom format string, e.g. '%f' or '%n'
-        or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for sftFloat
-        and sftCurrency columns (instead of plain JSON float value), or
-        date/time format as expected by FormatDateTime() for all date time kind
-        of fields (as sftDateTime, sftTimeLog, sftModTime, sftCreateTime) }
+    /// read-only access to a particular field value, as VCL text
+    // - Client is one TSQLClient instance (used to display TRecordReference via
+    // the associated TSQLModel)
+    // - returns the Field Type
+    // - return generic string Text, i.e. UnicodeString for Delphi 2009+,
+    // ready to be displayed to the VCL, for sftEnumerate, sftTimeLog
+    // and sftRecord/sftRecordVersion/sftID/sftTID
+    // - returns '' as string Text, if text can by displayed directly
+    // with Get*() methods above
+    // - returns '' for other properties kind, if UTF8ToString is nil,
+    // or the ready to be displayed value if UTF8ToString event is set
+    // (to be used mostly with Language.UTF8ToString)
+    // - CustomFormat can optionaly set a custom format string, e.g. '%f' or '%n'
+    // or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for sftFloat
+    // and sftCurrency columns (instead of plain JSON float value), or
+    // date/time format as expected by FormatDateTime() for all date time kind
+    // of fields (as sftDateTime, sftTimeLog, sftModTime, sftCreateTime)
     function ExpandAsString(Row,Field: integer; Client: TObject; out Text: string;
       const CustomFormat: string=''): TSQLFieldType;
-    {/ read-only access to a particular field value, as VCL text
-     - this method is just a wrapper around ExpandAsString method, returning
-       the content as a SynUnicode string type (i.e. UnicodeString since Delphi
-       2009, and WideString for non Unicode versions of Delphi)
-     - it is used by the reporting layers of the framework (e.g. TSQLRibbon.AddToReport) }
+    /// read-only access to a particular field value, as VCL text
+    // - this method is just a wrapper around ExpandAsString method, returning
+    // the content as a SynUnicode string type (i.e. UnicodeString since Delphi
+    // 2009, and WideString for non Unicode versions of Delphi)
+    // - it is used by the reporting layers of the framework (e.g. TSQLRibbon.AddToReport)
     function ExpandAsSynUnicode(Row,Field: integer; Client: TObject; out Text: SynUnicode): TSQLFieldType;
-    {/ read-only access to a particular DateTime field value
-     - expect SQLite3 TEXT field in ISO 8601 'YYYYMMDD hhmmss' or
-      'YYYY-MM-DD hh:mm:ss' format }
+    /// read-only access to a particular DateTime field value
+    // - expect SQLite3 TEXT field in ISO 8601 'YYYYMMDD hhmmss' or
+    // 'YYYY-MM-DD hh:mm:ss' format
     function GetDateTime(Row,Field: integer): TDateTime;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-    {/ read-only access to a particular TTimeLog field value
-      - return the result as TTimeLogBits.Text() Iso-8601 encoded text }
+    /// read-only access to a particular TTimeLog field value
+    // - return the result as TTimeLogBits.Text() Iso-8601 encoded text
     function GetTimeLog(Row,Field: integer; Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
-    {/ widechar length (UTF-8 decoded) of a particular field value }
+    /// widechar length (UTF-8 decoded as UTF-16) of a particular field value
+    // - could be used with VCL's UnicodeString, or for Windows API
     function LengthW(Row,Field: integer): integer;
-    {/ get all values for a specified field into a dynamic RawUTF8 array
-     - don't perform any conversion, but just create an array of raw PUTF8Char data }
+    /// get all values for a specified field into a dynamic RawUTF8 array
+    // - don't perform any conversion, but just create an array of raw PUTF8Char data
     procedure GetRowValues(Field: integer; out Values: TRawUTF8DynArray); overload;
-    {/ get all values for a specified field into a dynamic Integer array }
+    /// get all values for a specified field into a dynamic Integer array
     procedure GetRowValues(Field: integer; out Values: TInt64DynArray); overload;
-    {/ get all values for a specified field as CSV
-     - don't perform any conversion, but create a CSV from raw PUTF8Char data }
+    /// get all values for a specified field as CSV
+    // - don't perform any conversion, but create a CSV from raw PUTF8Char data
     function GetRowValues(Field: integer; Sep: AnsiChar=','): RawUTF8; overload;
     {$ifndef NOVARIANTS}
-    {/ retrieve a row value as a variant, ready to be accessed via late-binding
-    - Row parameter numbering starts from 1 to RowCount
-    - this method will return a TDocVariant containing a copy of all
-      field values of this row, uncoupled to the TSQLTable instance life time }
+    /// retrieve a row value as a variant, ready to be accessed via late-binding
+    // - Row parameter numbering starts from 1 to RowCount
+    // - this method will return a TDocVariant containing a copy of all
+    // field values of this row, uncoupled to the TSQLTable instance life time
     procedure ToDocVariant(Row: integer; out doc: variant); overload;
-    {/ retrieve all row values as a dynamic array of variants, ready to be
-      accessed via late-binding
-    - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
-      will point directly to the TSQLTable, which should remain allocated
-    - if readonly is FALSE, will contain an array of TDocVariant, containing
-      a copy of all field values of this row, uncoupled to the TSQLTable instance
-    - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
-      may be slightly slower to access than readonly=FALSE, if all values are
-      likely be accessed later in the process }
+    /// retrieve all row values as a dynamic array of variants, ready to be
+    // accessed via late-binding
+    // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
+    // will point directly to the TSQLTable, which should remain allocated
+    // - if readonly is FALSE, will contain an array of TDocVariant, containing
+    // a copy of all field values of this row, uncoupled to the TSQLTable instance
+    // - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
+    // may be slightly slower to access than readonly=FALSE, if all values are
+    // likely be accessed later in the process
     procedure ToDocVariant(out docs: TVariantDynArray; readonly: boolean); overload;
-    {/ retrieve all row values as a TDocVariant of kind dvArray, ready to be
-      accessed via late-binding
-    - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
-      will point directly to the TSQLTable, which should remain allocated
-    - if readonly is FALSE, will contain an array of TDocVariant, containing
-      a copy of all field values of this row, uncoupled to the TSQLTable instance
-    - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
-      may be slightly slower to access than readonly=FALSE, if all values are
-      likely be accessed later in the process }
+    /// retrieve all row values as a TDocVariant of kind dvArray, ready to be
+    // accessed via late-binding
+    // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
+    // will point directly to the TSQLTable, which should remain allocated
+    // - if readonly is FALSE, will contain an array of TDocVariant, containing
+    // a copy of all field values of this row, uncoupled to the TSQLTable instance
+    // - readonly=TRUE is faster to allocate (around 4 times for 10,000 rows), but
+    // may be slightly slower to access than readonly=FALSE, if all values are
+    // likely be accessed later in the process
     procedure ToDocVariant(out docarray: variant; readonly: boolean); overload;
       // {$ifdef HASINLINE}inline;{$endif} won't reset docarray as required
     {$endif NOVARIANTS}
@@ -7092,27 +7092,27 @@ type
     // - set any Fields[]=-1 to identify the ID column (even if is hidden)
     procedure SortFields(const Fields: array of integer;
       const Asc: array of boolean); overload;
-    {/ sort result Rows, according to the Bits set to 1 first }
+    /// sort result Rows, according to the Bits set to 1 first
     procedure SortBitsFirst(var Bits);
-    {/ guess the field type from first non null data row
-     - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
-       retrieved from the Delphi RTTI; otherwise, get from the cells content
-     - return sftUnknown is all data fields are null
-     - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
-       (X'53514C697465' e.g.)
-     - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only }
+    /// guess the field type from first non null data row
+    // - if QueryTables[] are set, exact field type and enumerate TypeInfo() is
+    // retrieved from the Delphi RTTI; otherwise, get from the cells content
+    // - return sftUnknown is all data fields are null
+    // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+    // (X'53514C697465' e.g.)
+    // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
     function FieldType(Field: integer): TSQLFieldType; overload;
-    {/ guess the field type from first non null data row
-     - if QueryTables[] are set, exact field type and (enumerate) TypeInfo() is
-       retrieved from the Delphi RTTI; otherwise, get from the cells content
-     - return sftUnknown is all data fields are null
-     - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
-       (X'53514C697465' e.g.)
-     - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only }
+    /// guess the field type from first non null data row
+    // - if QueryTables[] are set, exact field type and (enumerate) TypeInfo() is
+    // retrieved from the Delphi RTTI; otherwise, get from the cells content
+    // - return sftUnknown is all data fields are null
+    // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
+    // (X'53514C697465' e.g.)
+    // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
     function FieldType(Field: integer; OutFieldTypeInfo: PPointer): TSQLFieldType; overload;
-    {/ get the appropriate Sort comparaison function for a field,
-      nil if not available (bad field index or field is blob)
-      - field type is guessed from first data row }
+    /// get the appropriate Sort comparaison function for a field,
+    // nil if not available (bad field index or field is blob)
+    // - field type is guessed from first data row
     function SortCompare(Field: integer): TUTF8Compare;
     /// get the mean of characters length of all fields
     // - the character length is for the first line of text only (stop counting
@@ -7164,9 +7164,9 @@ type
     // checkbox for Marked[] fields)
     procedure FieldLengthMeanIncrease(aField, aIncrease: integer);
 
-    {/ copy the parameters of a TSQLTable into this instance
-     - the fResults remain in the source TSQLTable: source TSQLTable has not to
-      be destroyed before this TSQLTable }
+    /// copy the parameters of a TSQLTable into this instance
+    // - the fResults remain in the source TSQLTable: source TSQLTable has not to
+    // be destroyed before this TSQLTable
     procedure Assign(source: TSQLTable);
 
     /// search a text value inside the table data in a specified field
@@ -7273,24 +7273,23 @@ type
     // - returns TRUE on success, false on error
     function ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): boolean;
 
-    {/ After a TSQLTable has been initialized, this method can be called
-      one or more times to iterate through all data rows
-     - you shall call this method before calling FieldBuffer()/Field() methods
-     - return TRUE on success, with data ready to be retrieved by Field*()
-     - return FALSE if no more row is available (i.e. exceeded RowCount)
-     - if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - you can specify a variant instance (e.g. allocated on the stack) in
-       optional RowVariant parameter, to access field values using late binding
-     - typical use may be:
-       ! while TableCustomers.Step do
-       !   writeln(Field('name'));
-     - or, when using a variant and late-binding:
-       ! var customer: variant;
-       ! ...
-       !   while TableCustomers.Step(false,@customer) do
-       !     writeln(customer.Name);
-     }
+    /// After a TSQLTable has been initialized, this method can be called
+    // one or more times to iterate through all data rows
+    // - you shall call this method before calling FieldBuffer()/Field() methods
+    // - return TRUE on success, with data ready to be retrieved by Field*()
+    // - return FALSE if no more row is available (i.e. exceeded RowCount)
+    // - if SeekFirst is TRUE, will put the cursor on the first row of results,
+    // otherwise, it will fetch one row of data, to be called within a loop
+    // - you can specify a variant instance (e.g. allocated on the stack) in
+    // optional RowVariant parameter, to access field values using late binding
+    // - typical use may be:
+    // ! while TableCustomers.Step do
+    // !   writeln(Field('name'));
+    // - or, when using a variant and late-binding:
+    // ! var customer: variant;
+    // ! ...
+    // !   while TableCustomers.Step(false,@customer) do
+    // !     writeln(customer.Name);
     function Step(SeekFirst: boolean=false; RowVariant: PVariant=nil): boolean;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an ESQLTableException if called outside valid Step() sequence
@@ -7349,9 +7348,9 @@ type
     // - contains 0 if accessed outside valid Step() sequence call
     // - contains 1..RowCount after a valid Step() iteration
     property StepRow: integer read fStepRow;
-    {/ this property contains the internal state counter of the server database
-      when the data was retrieved from it
-      - can be used to check if retrieved data may be out of date }
+    /// this property contains the internal state counter of the server database
+    // when the data was retrieved from it
+    // - can be used to check if retrieved data may be out of date
     property InternalState: cardinal read fInternalState write fInternalState;
     /// if the TSQLRecord is the owner of this table, i.e. if it must free it
     property OwnerMustFree: Boolean read fOwnerMustFree write fOwnerMustFree;
@@ -8013,7 +8012,7 @@ type
     // false") published properties of every TSQLRecordClass
     constructor Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8='root'); reintroduce; overload;
     /// you should not use this constructor, but one of the overloaded versions,
-    // specifying the associated TSQLRecordClass  
+    // specifying the associated TSQLRecordClass
     constructor Create; reintroduce; overload;
     /// clone an existing Database Model
     // - all supplied classes won't be redefined as non-virtual:
@@ -8276,29 +8275,29 @@ type
   TSQLRecordTreeCoords = array[0..RTREE_MAX_DIMENSION-1] of packed record
     min, max: double; end;
 
-  {/ a base record, corresponding to an R-Tree table
-    - an R-Tree is a special index that is designed for doing range queries.
-      R-Trees are most commonly used in geospatial systems where each entry is a
-      rectangle with minimum and maximum X and Y coordinates. Given a query
-      rectangle, an R-Tree is able to quickly find all entries that are contained
-      within the query rectangle or which overlap the query rectangle. This idea
-      is easily extended to three dimensions for use in CAD systems. R-Trees also
-      find use in time-domain range look-ups. For example, suppose a database
-      records the starting and ending times for a large number of events. A R-Tree
-      is able to quickly find all events, for example, that were active at any
-      time during a given time interval, or all events that started during a
-      particular time interval, or all events that both started and ended within
-      a given time interval. And so forth. See http://www.sqlite.org/rtree.html
-    - any record which inherits from this class must have only sftFloat
-      (double) fields, grouped by pairs, each as minimum- and maximum-value,
-      up to 5 dimensions (i.e. 11 columns, including the ID property)
-    - the ID: TID property must be set before adding a TSQLRecordRTree to
-      the database, e.g. to link a R-Tree representation to a regular
-      TSQLRecord table
-    - queries against the ID or the coordinate ranges are almost immediate: so
-      you can e.g. extract some coordinates box from the regular TSQLRecord
-      table, then use a TSQLRecordRTree joined query to make the process faster;
-      this is exactly what the TSQLRestClient.RTreeMatch method offers }
+  /// a base record, corresponding to an R-Tree table
+  // - an R-Tree is a special index that is designed for doing range queries.
+  // R-Trees are most commonly used in geospatial systems where each entry is a
+  // rectangle with minimum and maximum X and Y coordinates. Given a query
+  // rectangle, an R-Tree is able to quickly find all entries that are contained
+  // within the query rectangle or which overlap the query rectangle. This idea
+  // is easily extended to three dimensions for use in CAD systems. R-Trees also
+  // find use in time-domain range look-ups. For example, suppose a database
+  // records the starting and ending times for a large number of events. A R-Tree
+  // is able to quickly find all events, for example, that were active at any
+  // time during a given time interval, or all events that started during a
+  // particular time interval, or all events that both started and ended within
+  // a given time interval. And so forth. See http:// www.sqlite.org/rtree.html
+  // - any record which inherits from this class must have only sftFloat
+  // (double) fields, grouped by pairs, each as minimum- and maximum-value,
+  // up to 5 dimensions (i.e. 11 columns, including the ID property)
+  // - the ID: TID property must be set before adding a TSQLRecordRTree to
+  // the database, e.g. to link a R-Tree representation to a regular
+  // TSQLRecord table
+  // - queries against the ID or the coordinate ranges are almost immediate: so
+  // you can e.g. extract some coordinates box from the regular TSQLRecord
+  // table, then use a TSQLRecordRTree joined query to make the process faster;
+  // this is exactly what the TSQLRestClient.RTreeMatch method offers
   TSQLRecordRTree = class(TSQLRecordVirtual)
   public
     { override this class function to implement a custom box coordinates
@@ -8332,50 +8331,50 @@ type
     class function RTreeSQLFunctionName: RawUTF8;
   end;
 
-  {/ a base record, corresponding to a FTS3 table, i.e. implementing full-text
-    - FTS3/FTS4 table are SQLite virtual tables which allow users to perform
-      full-text searches on a set of documents. The most common (and effective)
-      way to describe full-text searches is "what Google, Yahoo and Altavista do
-      with documents placed on the World Wide Web". Users input a term, or
-      series of terms, perhaps connected by a binary operator or grouped together
-      into a phrase, and the full-text query system finds the set of documents
-      that best matches those terms considering the operators and groupings the
-      user has specified. See http://sqlite.org/fts3.html
-    - any record which inherits from this class must have only sftUTF8Text
-      (RawUTF8) fields - with Delphi 2009+, you can have string fields
-    - this record has its fID: TID property which may be published
-      as DocID, to be consistent with SQLite3 praxis, and reflect that it
-      points to an ID of another associated TSQLRecord
-    - a good approach is to store your data in a regular TSQLRecord table, then
-      store your text content in a separated FTS3 table, associated to this
-      TSQLRecordFTS3 table via its ID/DocID
-    - the ID/DocID property can be set when the record is added, to retrieve any
-      associated TSQLRecord (note that for a TSQLRecord record,
-      the ID property can't be set at adding, but is calculated by the engine)
-    - static tables don't handle TSQLRecordFTS3 classes
-    - by default, the FTS3 engine ignore all characters >= #80, but handle
-      low-level case insentivity (i.e. 'A'..'Z') so you must keep your
-      request with the same range for upper case
-    - by default, the "simple" tokenizer is used, but you can inherits from
-      TSQLRecordFTS3Porter class if you want a better English matching, using
-      the Porter Stemming algorithm - see http://sqlite.org/fts3.html#tokenizer
-    - you can select either the FTS3 engine, or the more efficient (and new)
-      FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4 type
-    - in order to make FTS3/FTS4 queries, use the dedicated TSQLRest.FTSMatch
-      method, with the MATCH operator (you can use regular queries, but you must
-      specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
-      table specificity):
-       ! var IDs: TIDDynArray;
-       ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
-       !  // you've all matching IDs in IDs[]  }
+  /// a base record, corresponding to a FTS3 table, i.e. implementing full-text
+  // - FTS3/FTS4 table are SQLite virtual tables which allow users to perform
+  // full-text searches on a set of documents. The most common (and effective)
+  // way to describe full-text searches is "what Google, Yahoo and Altavista do
+  // with documents placed on the World Wide Web". Users input a term, or
+  // series of terms, perhaps connected by a binary operator or grouped together
+  // into a phrase, and the full-text query system finds the set of documents
+  // that best matches those terms considering the operators and groupings the
+  // user has specified. See http:// sqlite.org/fts3.html
+  // - any record which inherits from this class must have only sftUTF8Text
+  // (RawUTF8) fields - with Delphi 2009+, you can have string fields
+  // - this record has its fID: TID property which may be published
+  // as DocID, to be consistent with SQLite3 praxis, and reflect that it
+  // points to an ID of another associated TSQLRecord
+  // - a good approach is to store your data in a regular TSQLRecord table, then
+  // store your text content in a separated FTS3 table, associated to this
+  // TSQLRecordFTS3 table via its ID/DocID
+  // - the ID/DocID property can be set when the record is added, to retrieve any
+  // associated TSQLRecord (note that for a TSQLRecord record,
+  // the ID property can't be set at adding, but is calculated by the engine)
+  // - static tables don't handle TSQLRecordFTS3 classes
+  // - by default, the FTS3 engine ignore all characters >= #80, but handle
+  // low-level case insentivity (i.e. 'A'..'Z') so you must keep your
+  // request with the same range for upper case
+  // - by default, the "simple" tokenizer is used, but you can inherits from
+  // TSQLRecordFTS3Porter class if you want a better English matching, using
+  // the Porter Stemming algorithm - see http:// sqlite.org/fts3.html#tokenizer
+  // - you can select either the FTS3 engine, or the more efficient (and new)
+  // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4 type
+  // - in order to make FTS3/FTS4 queries, use the dedicated TSQLRest.FTSMatch
+  // method, with the MATCH operator (you can use regular queries, but you must
+  // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
+  // table specificity):
+  // ! var IDs: TIDDynArray;
+  // ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
+  // !  //  you have all matching IDs in IDs[]
   TSQLRecordFTS3 = class(TSQLRecordVirtual)
   public
-     {/ optimize the FTS3 virtual table
-     - this causes FTS3 to merge all existing index b-trees into a single large
-       b-tree containing the entire index. This can be an expensive operation,
-       but may speed up future queries. See http://sqlite.org/fts3.html#section_1_2
-     - this method must be called server-side
-     - returns TRUE on success }
+     /// optimize the FTS3 virtual table
+     // - this causes FTS3 to merge all existing index b-trees into a single large
+     // b-tree containing the entire index. This can be an expensive operation,
+     // but may speed up future queries. See http://sqlite.org/fts3.html#section_1_2
+     // - this method must be called server-side
+     // - returns TRUE on success
      class function OptimizeFTS3Index(Server: TSQLRestServer): boolean;
      /// this DocID property map the internal Row_ID property
      // - but you can set a value to this property before calling the Add()
@@ -8396,17 +8395,17 @@ type
   /// class-reference type (metaclass) of a RTREE virtual table
   TSQLRecordRTreeClass = class of TSQLRecordRTree;
 
-  {/ a base record, corresdonding to a FTS4 table, which is an enhancement to FTS3
-  - FTS3 and FTS4 are nearly identical. They share most of their code in common,
-   and their interfaces are the same. The only difference is that FTS4 stores
-   some additional information about the document collection in two of new FTS
-   shadow tables. This additional information allows FTS4 to use certain
-   query performance optimizations that FTS3 cannot use. And the added information
-   permits some additional useful output options in the matchinfo() function.
-  - For newer applications, TSQLRecordFTS4 is recommended; though if minimal disk
-   usage or compatibility with older versions of SQLite are important, then
-   TSQLRecordFTS3 will usually serve just as well.
-  - see http://sqlite.org/fts3.html#section_1_1 }
+  /// a base record, corresdonding to a FTS4 table, which is an enhancement to FTS3
+  // - FTS3 and FTS4 are nearly identical. They share most of their code in common,
+  // and their interfaces are the same. The only difference is that FTS4 stores
+  // some additional information about the document collection in two of new FTS
+  // shadow tables. This additional information allows FTS4 to use certain
+  // query performance optimizations that FTS3 cannot use. And the added information
+  // permits some additional useful output options in the matchinfo() function.
+  // - For newer applications, TSQLRecordFTS4 is recommended; though if minimal disk
+  // usage or compatibility with older versions of SQLite are important, then
+  // TSQLRecordFTS3 will usually serve just as well.
+  // - see http:// sqlite.org/fts3.html#section_1_1
   TSQLRecordFTS4 = class(TSQLRecordFTS3)
   public
     /// this overriden method will create TRIGGERs for FTSWithoutContent()
@@ -8436,47 +8435,47 @@ type
   TSQLRecordManyJoinKind = (
     jkDestID, jkPivotID, jkDestFields, jkPivotFields, jkPivotAndDestFields);
 
-  {/ handle "has many" and "has many through" relationships
-   - many-to-many relationship is tracked using a table specifically for that
-     relationship, turning the relationship into two one-to-many relationships
-     pointing in opposite directions
-   - by default, only two TSQLRecord (i.e. INTEGER) fields must be created,
-     named "Source" and "Dest", the first pointing to the source record (the one
-     with a TSQLRecordMany published property) and the second to the destination record
-   - you should first create a type inheriting from TSQLRecordMany, which
-     will define the pivot table, providing optional "through" parameters if needed
-     ! TSQLDest = class(TSQLRecord);
-     ! TSQLSource = class;
-     ! TSQLDestPivot = class(TSQLRecordMany)
-     ! private
-     !  fSource: TSQLSource;
-     !  fDest: TSQLDest;
-     !  fTime: TDateTime;
-     ! published
-     !   property Source: TSQLSource read fSource; // map Source column
-     !   property Dest: TSQLDest read fDest; // map Dest column
-     !   property AssociationTime: TDateTime read fTime write fTime;
-     ! end;
-     ! TSQLSource = class(TSQLRecord)
-     ! private
-     !   fDestList: TSQLDestPivot;
-     ! published
-     !   DestList: TSQLDestPivot read fDestList;
-     ! end;
-   - in all cases, at leat two 'Source' and 'Dest' published properties must
-     be declared as TSQLRecord children in any TSQLRecordMany descendant
-     because they will always be needed for the 'many to many' relationship
-   - when a TSQLRecordMany published property exists in a TSQLRecord, it is
-     initialized automaticaly by TSQLRecord.Create
-   - to add some associations to the pivot table, use the ManyAdd() method
-   - to retrieve an association, use the ManySelect() method
-   - to delete an association, use the ManyDelete() method
-   - to read all Dest records IDs, use the DestGet() method
-   - to read the Dest records and the associated "through" fields content, use
-     FillMany then FillRow, FillOne and FillRewind methods to loop through records
-   - to read all Source records and the associaed "through" fields content,
-     FillManyFromDest then FillRow, FillOne and FillRewind methods
-   - to read all Dest IDs after a join to the pivot table, use DestGetJoined }
+  /// handle "has many" and "has many through" relationships
+  // - many-to-many relationship is tracked using a table specifically for that
+  // relationship, turning the relationship into two one-to-many relationships
+  // pointing in opposite directions
+  // - by default, only two TSQLRecord (i.e. INTEGER) fields must be created,
+  // named "Source" and "Dest", the first pointing to the source record (the one
+  // with a TSQLRecordMany published property) and the second to the destination record
+  // - you should first create a type inheriting from TSQLRecordMany, which
+  // will define the pivot table, providing optional "through" parameters if needed
+  // ! TSQLDest = class(TSQLRecord);
+  // ! TSQLSource = class;
+  // ! TSQLDestPivot = class(TSQLRecordMany)
+  // ! private
+  // !  fSource: TSQLSource;
+  // !  fDest: TSQLDest;
+  // !  fTime: TDateTime;
+  // ! published
+  // !   property Source: TSQLSource read fSource; // map Source column
+  // !   property Dest: TSQLDest read fDest; // map Dest column
+  // !   property AssociationTime: TDateTime read fTime write fTime;
+  // ! end;
+  // ! TSQLSource = class(TSQLRecord)
+  // ! private
+  // !   fDestList: TSQLDestPivot;
+  // ! published
+  // !   DestList: TSQLDestPivot read fDestList;
+  // ! end;
+  // - in all cases, at leat two 'Source' and 'Dest' published properties must
+  // be declared as TSQLRecord children in any TSQLRecordMany descendant
+  // because they will always be needed for the 'many to many' relationship
+  // - when a TSQLRecordMany published property exists in a TSQLRecord, it is
+  // initialized automaticaly by TSQLRecord.Create
+  // - to add some associations to the pivot table, use the ManyAdd() method
+  // - to retrieve an association, use the ManySelect() method
+  // - to delete an association, use the ManyDelete() method
+  // - to read all Dest records IDs, use the DestGet() method
+  // - to read the Dest records and the associated "through" fields content, use
+  // FillMany then FillRow, FillOne and FillRewind methods to loop through records
+  // - to read all Source records and the associaed "through" fields content,
+  // FillManyFromDest then FillRow, FillOne and FillRewind methods
+  // - to read all Dest IDs after a join to the pivot table, use DestGetJoined
   TSQLRecordMany = class(TSQLRecord)
   protected
     // internal fields initialized during TSQLRecord.Create
@@ -9258,7 +9257,7 @@ type
   IAutoCreateFieldsResolve = interface
     ['{396362E9-B60D-43D4-A0D4-802E4479F24E}']
     /// this method will be called once on any TInjectableAutoCreateFields just
-    // created instance 
+    // created instance
     procedure SetProperties(Instance: TObject);
   end;
 
@@ -9284,7 +9283,7 @@ type
   public
     /// this overriden constructor will instantiate all its nested
     // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
-    // - then resolve then call IAutoCreateFieldsResolve.SetProperties(self)  
+    // - then resolve then call IAutoCreateFieldsResolve.SetProperties(self)
     constructor Create; override;
     /// this overriden constructor will release all its nested persistent
     // classes and T*ObjArray published properties
@@ -10764,7 +10763,7 @@ type
   // interface callbacks, e.g. over WebSockets
   IServiceWithCallbackReleased = interface(IInvokable)
     ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
-    /// will be called when a callback is released on the client side 
+    /// will be called when a callback is released on the client side
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
     // signature, so that it would be called with the interface instance by
     // TServiceContainerServer.FakeCallbackRelease
@@ -10956,7 +10955,7 @@ type
     // so that TSQLHttpClientWebsockets.CallbackRequest will call it
     // - it will create a temporary TSQLRestBatch for the whole "jumbo frame"
     procedure CurrentFrame(isLast: boolean); virtual;
-    /// this event handler will be triggerred by Added/Updated/Deleted methods 
+    /// this event handler will be triggerred by Added/Updated/Deleted methods
     property OnNotify: TOnBatchWrite read fOnNotify write fOnNotify;
   end;
 
@@ -11769,7 +11768,7 @@ type
     // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
     // double, currency, RawUTF8 values to be bound to the request as parameters
     // - if OutputFieldName is set, the JSON array will be written as a JSON,
-    // property i.e. surrounded as '"OutputFieldName":[....],' - note ending ',' 
+    // property i.e. surrounded as '"OutputFieldName":[....],' - note ending ','
     // - CustomFieldsCSV can be the CSV list of field names to be retrieved
     // - if CustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if CustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
@@ -12441,13 +12440,13 @@ type
   // - may be TSQLRestStorageInMemory or TSQLRestStorageInMemoryExternal
   TSQLRestStorageInMemoryClass = class of TSQLRestStorageInMemory;
 
-  {/ table containing the available user access rights for authentication
-    - this class should be added to the TSQLModel, together with TSQLAuthUser,
-      to allow authentication support
-    - you can inherit from it to add your custom properties to each user info:
-      TSQLModel will search for any class inheriting from TSQLAuthGroup to
-      manage per-group authorization data
-    - by default, it won't be accessible remotely by anyone }
+  /// table containing the available user access rights for authentication
+  // - this class should be added to the TSQLModel, together with TSQLAuthUser,
+  // to allow authentication support
+  // - you can inherit from it to add your custom properties to each user info:
+  // TSQLModel will search for any class inheriting from TSQLAuthGroup to
+  // manage per-group authorization data
+  // - by default, it won't be accessible remotely by anyone
   TSQLAuthGroup = class(TSQLRecord)
   private
     fIdent: RawUTF8;
@@ -12506,14 +12505,14 @@ type
   // user access rights for authentication, defined as a group
   TSQLAuthGroupClass = class of TSQLAuthGroup;
 
-  {/ table containing the Users registered for authentication
-    - this class should be added to the TSQLModel, together with TSQLAuthGroup,
-      to allow authentication support
-    - you can inherit from it to add your custom properties to each user info:
-      TSQLModel will search for any class inheriting from TSQLAuthUser to manage
-      per-user authorization data
-    - by default, it won't be accessible remotely by anyone; to enhance security,
-      you could use the TSynValidatePassWord filter to this table  }
+  /// table containing the Users registered for authentication
+  // - this class should be added to the TSQLModel, together with TSQLAuthGroup,
+  // to allow authentication support
+  // - you can inherit from it to add your custom properties to each user info:
+  // TSQLModel will search for any class inheriting from TSQLAuthUser to manage
+  // per-user authorization data
+  // - by default, it won't be accessible remotely by anyone; to enhance security,
+  // you could use the TSynValidatePassWord filter to this table
   TSQLAuthUser = class(TSQLRecord)
   protected
     fLogonName: RawUTF8;
@@ -13731,9 +13730,9 @@ type
     function RecordVersionCompute: TRecordVersion;
     /// read only access to the current monotonic value for a TRecordVersion field
     function RecordVersionCurrent: TRecordVersion;
-    /// synchronous master/slave replication from a slave TSQLRest 
+    /// synchronous master/slave replication from a slave TSQLRest
     // - apply all the updates from another (distant) master TSQLRest for a given
-    // TSQLRecord table, using its TRecordVersion field, to the calling slave 
+    // TSQLRecord table, using its TRecordVersion field, to the calling slave
     // - both remote Master and local slave TSQLRestServer should have the supplied
     // Table class in their data model (maybe in diverse order)
     // - by default, all pending updates are retrieved, but you can define a value
@@ -13747,7 +13746,7 @@ type
     // to access the updates before applying to the current slave storage
     function RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
       Master: TSQLRest; ChunkRowLimit: integer=0; OnWrite: TOnBatchWrite=nil): TRecordVersion;
-    /// synchronous master/slave replication from a slave TSQLRest into a Batch 
+    /// synchronous master/slave replication from a slave TSQLRest into a Batch
     // - will retrieve all the updates from a (distant) master TSQLRest for a
     // given TSQLRecord table, using its TRecordVersion field, and a supplied
     // TRecordVersion monotonic value, into a TSQLRestBatch instance
@@ -13837,9 +13836,9 @@ type
     // - locking is handled by TSQLServer.Model
     // - returns true on success
     function UnLock(Table: TSQLRecordClass; aID: TID): boolean; override;
-    {/ end a transaction
-     - implements REST END collection
-     - write all pending TSQLVirtualTableJSON data to the disk }
+    /// end a transaction
+    // - implements REST END collection
+    // - write all pending TSQLVirtualTableJSON data to the disk
     procedure Commit(SessionID: cardinal; RaiseException: boolean); override;
 
     /// grant access to this database content from a dll using the global
@@ -14181,11 +14180,11 @@ type
       const aContractExpected: RawUTF8=''): boolean; overload;
 
     /// compute the full statistics about this server, as JSON
-    // - is a wrapper around the Stats() method-based service 
+    // - is a wrapper around the Stats() method-based service
     function FullStatsAsJson: RawUTF8; virtual;
     /// compute the full statistics about this server, as a TDocVariant document
     // - is a wrapper around the Stats() method-based service
-    function FullStatsAsDocVariant: variant; 
+    function FullStatsAsDocVariant: variant;
 
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
@@ -15366,45 +15365,45 @@ type
     // - do nothing if aClientOwnedByFamily was TRUE for ServerRemoteLogStart
     procedure ServerRemoteLogStop;
 
-    {/ begin a transaction
-     - implements REST BEGIN collection
-     - in aClient-Server environment with multiple Clients connected at the
-      same time, you should better use BATCH process, specifying a positive
-      AutomaticTransactionPerRow parameter to BatchStart()
-     - may be used to speed up some SQL statements as Add/Update/Delete methods
-     - must be ended with Commit on success
-     - in the current implementation, the aTable parameter is not used yet
-     - must be aborted with Rollback if any SQL statement failed
-     - return true if no transaction is active, false otherwise
-      !if Client.TransactionBegin(TSQLRecordPeopleObject) then
-      !try
-      !  //.... modify the database content, raise exceptions on error
-      !  Client.Commit;
-      !except
-      !  Client.RollBack; // in case of error
-      !end;
-     - you may use the dedicated TransactionBeginRetry() method in case of
-       potiental Client concurent access }
+    /// begin a transaction
+    // - implements REST BEGIN collection
+    // - in aClient-Server environment with multiple Clients connected at the
+    // same time, you should better use BATCH process, specifying a positive
+    // AutomaticTransactionPerRow parameter to BatchStart()
+    // - may be used to speed up some SQL statements as Add/Update/Delete methods
+    // - must be ended with Commit on success
+    // - in the current implementation, the aTable parameter is not used yet
+    // - must be aborted with Rollback if any SQL statement failed
+    // - return true if no transaction is active, false otherwise
+    // !if Client.TransactionBegin(TSQLRecordPeopleObject) then
+    // !try
+    // !  // .... modify the database content, raise exceptions on error
+    // !  Client.Commit;
+    // !except
+    // !  Client.RollBack; //  in case of error
+    // !end;
+    // - you may use the dedicated TransactionBeginRetry() method in case of
+    // potential Client concurrent access
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
-    {/ begin a transaction
-     - implements REST BEGIN collection
-     - in aClient-Server environment with multiple Clients connected at the
-      same time, you should better use BATCH process, specifying a positive
-      AutomaticTransactionPerRow parameter to BatchStart()
-     - this version retries a TranslationBegin() to be successfull within
-      a supplied number of times
-     - will retry every 100 ms for "Retries" times (excluding the connection
-      time in this 100 ms time period
-     - default is to retry 10 times, i.e. within 2 second timeout
-     - in the current implementation, the aTable parameter is not used yet
-     - typical usage should be for instance:
-      !if Client.TransactionBeginRetry(TSQLRecordPeopleObject,20) then
-      !try
-      !  //.... modify the database content, raise exceptions on error
-      !  Client.Commit;
-      !except
-      !  Client.RollBack; // in case of error
-      !end; }
+    /// begin a transaction
+    // - implements REST BEGIN collection
+    // - in aClient-Server environment with multiple Clients connected at the
+    // same time, you should better use BATCH process, specifying a positive
+    // AutomaticTransactionPerRow parameter to BatchStart()
+    // - this version retries a TranslationBegin() to be successfull within
+    // a supplied number of times
+    // - will retry every 100 ms for "Retries" times (excluding the connection
+    // time in this 100 ms time period
+    // - default is to retry 10 times, i.e. within 2 second timeout
+    // - in the current implementation, the aTable parameter is not used yet
+    // - typical usage should be for instance:
+    // !if Client.TransactionBeginRetry(TSQLRecordPeopleObject,20) then
+    // !try
+    // !  // .... modify the database content, raise exceptions on error
+    // !  Client.Commit;
+    // !except
+    // !  Client.RollBack; //  in case of error
+    // !end;
     function TransactionBeginRetry(aTable: TSQLRecordClass; Retries: integer=10): boolean;
     /// end a transaction
     // - implements REST END collection
@@ -15908,15 +15907,15 @@ type
     FileExtension: TFileName;
   end;
 
-  {/ parent class able to define a Virtual Table module
-   - in order to implement a new Virtual Table type, you'll have to define a so
-     called "Module" to handle the fields and data access and an associated
-     TSQLVirtualTableCursorClass for handling the SELECT statements
-   - for our framework, the SQLite3 unit will inherit from this class to define
-     a TSQLVirtualTableModuleSQLite3 class, which will register the associated
-     virtual table definition into a SQLite3 connection, on the server side
-   - children should override abstract methods in order to implement the
-     association with the database engine itself }
+  /// parent class able to define a Virtual Table module
+  // - in order to implement a new Virtual Table type, you'll have to define a so
+  // called "Module" to handle the fields and data access and an associated
+  // TSQLVirtualTableCursorClass for handling the SELECT statements
+  // - for our framework, the SQLite3 unit will inherit from this class to define
+  // a TSQLVirtualTableModuleSQLite3 class, which will register the associated
+  // virtual table definition into a SQLite3 connection, on the server side
+  // - children should override abstract methods in order to implement the
+  // association with the database engine itself
   TSQLVirtualTableModule = class
   protected
     fModuleName: RawUTF8;
@@ -15968,13 +15967,13 @@ type
     vttBegin, vttSync, vttCommit, vttRollBack,
     vttSavePoint, vttRelease, vttRollBackTo);
 
-  {/ abstract class able to access a Virtual Table content
-   - override the Prepare/Structure abstract virtual methods for reading
-     access to the virtual table content
-   - you can optionaly override Drop/Delete/Insert/Update/Rename/Transaction
-     virtual methods to allow content writing to the virtual table
-   - the same virtual table mechanism can be used with several database module,
-     with diverse database engines }
+  /// abstract class able to access a Virtual Table content
+  // - override the Prepare/Structure abstract virtual methods for reading
+  // access to the virtual table content
+  // - you can optionaly override Drop/Delete/Insert/Update/Rename/Transaction
+  // virtual methods to allow content writing to the virtual table
+  // - the same virtual table mechanism can be used with several database module,
+  // with diverse database engines
   TSQLVirtualTable = class
   protected
     fModule: TSQLVirtualTableModule;
@@ -16073,9 +16072,9 @@ type
     property StaticTableIndex: integer read fStaticTableIndex;
   end;
 
-  {/ abstract class able to define a Virtual Table cursor
-    - override the Search/HasData/Column/Next abstract virtual methods to
-    implement the search process }
+  /// abstract class able to define a Virtual Table cursor
+  // - override the Search/HasData/Column/Next abstract virtual methods to
+  // implement the search process
   TSQLVirtualTableCursor = class
   protected
     fTable: TSQLVirtualTable;
@@ -16122,7 +16121,7 @@ type
     function Next: boolean; virtual; abstract;
   end;
 
-  {/ A generic Virtual Table cursor associated to Current/Max index properties }
+  /// A generic Virtual Table cursor associated to Current/Max index properties
   TSQLVirtualTableCursorIndex = class(TSQLVirtualTableCursor)
   protected
     fCurrent: integer;
@@ -16142,8 +16141,8 @@ type
     function Search(const Prepared: TSQLVirtualTablePrepared): boolean; override;
   end;
 
-  {/ A Virtual Table cursor for reading a TSQLRestStorageInMemory content
-    - this is the cursor class associated to TSQLVirtualTableJSON }
+  /// A Virtual Table cursor for reading a TSQLRestStorageInMemory content
+  // - this is the cursor class associated to TSQLVirtualTableJSON
   TSQLVirtualTableCursorJSON = class(TSQLVirtualTableCursorIndex)
   public
     /// called to begin a search in the virtual table
@@ -16164,13 +16163,13 @@ type
     function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
   end;
 
-  {/ A TSQLRestStorageInMemory-based virtual table using JSON storage
-   - for ORM access, you should use TSQLModel.VirtualTableRegister method to
-     associated this virtual table module to a TSQLRecordVirtualTableAutoID class
-   - transactions are not handled by this module
-   - by default, no data is written on disk: you will need to call explicitly
-     aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
-   - file extension is set to '.json' }
+  /// A TSQLRestStorageInMemory-based virtual table using JSON storage
+  // - for ORM access, you should use TSQLModel.VirtualTableRegister method to
+  // associated this virtual table module to a TSQLRecordVirtualTableAutoID class
+  // - transactions are not handled by this module
+  // - by default, no data is written on disk: you will need to call explicitly
+  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // - file extension is set to '.json'
   TSQLVirtualTableJSON = class(TSQLVirtualTable)
   protected
     fStaticInMemory: TSQLRestStorageInMemory;
@@ -16219,24 +16218,23 @@ type
     function Update(oldRowID, newRowID: Int64; var Values: TSQLVarDynArray): boolean; override;
   end;
 
-  {/ A TSQLRestStorageInMemory-based virtual table using Binary storage
-   - for ORM access, you should use TSQLModel.VirtualTableRegister method to
-     associated this virtual table module to a TSQLRecordVirtualTableAutoID class
-   - transactions are not handled by this module
-   - by default, no data is written on disk: you will need to call explicitly
-     aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
-   - binary format is more efficient in term of speed and disk usage than
-     the JSON format implemented by TSQLVirtualTableJSON
-   - binary format will be set by TSQLVirtualTableJSON.CreateTableInstance
-   - file extension is set to '.data' }
+  /// A TSQLRestStorageInMemory-based virtual table using Binary storage
+  // - for ORM access, you should use TSQLModel.VirtualTableRegister method to
+  // associated this virtual table module to a TSQLRecordVirtualTableAutoID class
+  // - transactions are not handled by this module
+  // - by default, no data is written on disk: you will need to call explicitly
+  // aServer.StaticVirtualTable[aClass].UpdateToFile for file creation or refresh
+  // - binary format is more efficient in term of speed and disk usage than
+  // the JSON format implemented by TSQLVirtualTableJSON
+  // - binary format will be set by TSQLVirtualTableJSON.CreateTableInstance
+  // - file extension is set to '.data'
   TSQLVirtualTableBinary = class(TSQLVirtualTableJSON);
 
-  {/ Implements a read/only virtual table able to access a .log file, as created
-     by TSynLog
-   - to be used e.g. by a TSQLRecordLog_Log ('Log_' will identify this 'Log' module)
-    - the .log file name will be specified by the Table Name, to which a '.log'
-      file extension will be appended before loading it from the current
-      directory }
+  /// Implements a read/only virtual table able to access a .log file, as created
+  // by TSynLog
+  // - to be used e.g. by a TSQLRecordLog_Log ('Log_' will identify this 'Log' module)
+  // - the .log file name will be specified by the Table Name, to which a '.log'
+  // file extension will be appended before loading it from the current directory
   TSQLVirtualTableLog = class(TSQLVirtualTable)
   protected
     fLogFile: TSynLogFile;
@@ -16256,8 +16254,8 @@ type
     destructor Destroy; override;
   end;
 
-  {/ A Virtual Table cursor for reading a TSynLogFile content
-    - this is the cursor class associated to TSQLVirtualTableLog }
+  /// A Virtual Table cursor for reading a TSynLogFile content
+  // - this is the cursor class associated to TSQLVirtualTableLog
   TSQLVirtualTableCursorLog = class(TSQLVirtualTableCursorIndex)
   public
     /// called to begin a search in the virtual table
@@ -16266,24 +16264,24 @@ type
     function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
   end;
 
-  {/ Record associated to a Virtual Table implemented in Delphi, with ID
-    forced at INSERT
-  - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
-    classes for a generic Virtual table mechanism on the Server side
-  - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
-    Server side (not needed for Client) to associate such a record with a
-    particular Virtual Table module, otherwise an exception will be raised:
-    ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON); }
+  /// Record associated to a Virtual Table implemented in Delphi, with ID
+  // forced at INSERT
+  // - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
+  // classes for a generic Virtual table mechanism on the Server side
+  // - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
+  // Server side (not needed for Client) to associate such a record with a
+  // particular Virtual Table module, otherwise an exception will be raised:
+  // ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
   TSQLRecordVirtualTableForcedID = class(TSQLRecordVirtual);
 
-  {/ Record associated to Virtual Table implemented in Delphi, with ID
-    generated automatically at INSERT
-  - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
-    classes for a generic Virtual table mechanism
-  - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
-    Server side (not needed for Client) to associate such a record with a
-    particular Virtual Table module, otherwise an exception will be raised:
-    ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON); }
+  /// Record associated to Virtual Table implemented in Delphi, with ID
+  // generated automatically at INSERT
+  // - will use TSQLVirtualTableModule / TSQLVirtualTable / TSQLVirtualTableCursor
+  // classes for a generic Virtual table mechanism
+  // - call Model.VirtualTableRegister() before TSQLRestServer.Create on the
+  // Server side (not needed for Client) to associate such a record with a
+  // particular Virtual Table module, otherwise an exception will be raised:
+  // ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
   TSQLRecordVirtualTableAutoID = class(TSQLRecordVirtual);
 
 /// special comparaison function for sorting ftRecord (TRecordReference/RecordRef)
@@ -20479,7 +20477,7 @@ begin
           FieldType := UTF8ContentNumberType(U^);
           inc(U,FieldCount);
           if FieldType=sftUnknown then
-            continue else // null -> search for a non void column 
+            continue else // null -> search for a non void column
           if FieldType=sftInteger then // may be a floating point with no decimal
             if FieldTypeIntegerDetectionOnAllRows then
               continue else
@@ -34496,7 +34494,7 @@ begin
             [User.LogonName,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
         {$endif}
         Ctxt.AuthenticationFailed(afSessionAlreadyStartedForThisUser);
-        exit; // user already connected 
+        exit; // user already connected
       end;
   Session := fSessionClass.Create(Ctxt,User);
   if Assigned(OnSessionCreate) then
@@ -41509,7 +41507,7 @@ begin
   if woFullExpand in Options then
     if IsObj=oSynMonitor then begin // nested values do not need extended info
       exclude(Options,woFullExpand);
-      include(Options,woEnumSetsAsText); // only needed info is textual enums 
+      include(Options,woEnumSetsAsText); // only needed info is textual enums
      end else begin
       Add('{');
       AddInstanceName(Value,':');
@@ -42238,11 +42236,11 @@ end;
 { TSQLVirtualTableLog }
 
 type
-  {/ Record associated to Virtual Table implemented in Delphi, for Read/Only
-    access to a .log file, as created by TSynLog
-   - not used as real instances, but only used by the TSQLVirtualTableLog module
-     to provide the field layout needed to create the column layout for the
-     CREATE TABLE statement }
+  /// Record associated to Virtual Table implemented in Delphi, for Read/Only
+  // access to a .log file, as created by TSynLog
+  // - not used as real instances, but only used by the TSQLVirtualTableLog module
+  // to provide the field layout needed to create the column layout for the
+  // CREATE TABLE statement
   TSQLRecordLogFile = class(TSQLRecordVirtualTableAutoID)
   protected
     fContent: RawUTF8;
@@ -42591,7 +42589,7 @@ begin
         finally
           G.Free;
         end;
-        if (not (itoNoAutoCreateUsers in Options)) and 
+        if (not (itoNoAutoCreateUsers in Options)) and
            (Server.TableRowCount(Server.fSQLAuthUserClass)=0) then begin
           U := Server.fSQLAuthUserClass.Create;
           try
@@ -42913,7 +42911,7 @@ begin
     result := false; // let's try another TSQLRestServerAuthentication class
     exit;
   end;
-  result := true; // this kind of weak authentication avoid stronger ones 
+  result := true; // this kind of weak authentication avoid stronger ones
   if AuthSessionRelease(Ctxt) then
     exit;
   U := GetUser(Ctxt,aUserName);
@@ -44008,7 +44006,7 @@ begin
   if Par=nil then
     Par := @NULL_SHORTSTRING; // allow e.g. '[12345]'
   if ParamInterfaceInfo=TypeInfo(IInvokable) then begin // IInvokable=pointer
-    pointer(Obj) := pointer(FakeID); 
+    pointer(Obj) := pointer(FakeID);
     exit;
   end;
   if Par=nil then
@@ -45833,7 +45831,7 @@ begin
         '%.RegisterGlobal(%): % already registered',
         [self,aImplementationClass,aInterface^.Name]);
     end;
-end; // caller should explicitly call finally LeaveCriticalSection(...) end; 
+end; // caller should explicitly call finally LeaveCriticalSection(...) end;
 
 class procedure TInterfaceResolverInjected.RegisterGlobal(
   aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectWithCustomCreateClass);
@@ -46375,7 +46373,7 @@ begin
               [PtrInt(fake.fFakeInterface),Values[0].Name]));
           fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
             Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
-          fake.fService.ExecuteMethod(Ctxt); 
+          fake.fService.ExecuteMethod(Ctxt);
         end else
           Ctxt.Success;
         exit;
@@ -47915,7 +47913,7 @@ begin
     if fBatch<>nil then begin
       timeOut := GetTickCount64+2000;
       repeat
-        sleep(1); // allow 2 seconds to process all pending frames 
+        sleep(1); // allow 2 seconds to process all pending frames
         if fBatch=nil then
           exit;
       until GetTickCount64>timeOut;

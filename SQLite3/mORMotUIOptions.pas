@@ -61,7 +61,7 @@ unit mORMotUIOptions;
 
     Version 1.15
     - Get rid of TMS components dependency
-	
+
 	Version 1.18
 	- renamed SQLite3UIOptions.pas to mORMotUIOptions.pas
 
@@ -71,7 +71,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms,
-  SynCommons, 
+  SynCommons,
   mORMot, mORMotUILogin, mORMotUI, mORMotUIEdit, mORMotToolBar, mORMoti18n,
 {$ifdef USETMSPACK}
   TaskDialog,
@@ -261,7 +261,7 @@ begin
     if P^.Name[1]<>'_' then begin // ignore properties which name starts by _
       aCaption := CaptionName(OnCaptionName,@P^.Name);
       if not Assigned(OnComponentCreate) then
-        C := nil else 
+        C := nil else
         C := OnComponentCreate(Obj,P,Scroll);
       if C=nil then // default creation if not handled by OnComponentCreate()
       case P^.PropType^^.Kind of
@@ -336,7 +336,7 @@ begin
     end;
     aClassType := aClassType.ClassParent; // also add parents properties
   end;
-  with TBevel.Create(Scroll) do begin // draw a line at the bottom 
+  with TBevel.Create(Scroll) do begin // draw a line at the bottom
     Parent := Scroll;
     SetBounds(8,Scroll.Tag+8,CW-32,16);
     Shape := bsTopLine;

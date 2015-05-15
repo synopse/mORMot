@@ -81,7 +81,7 @@ type
   // - use TSQLDBFirebirdEmbeddedConnectionProperties or
   // TSQLDBFirebirdConnectionClientProperties to force either of the two modes
   // - we focus on Firebird 2.5.0 and up (released on October 2010), since it
-  // was the first multi-thread-capable and thread-safe client implementation 
+  // was the first multi-thread-capable and thread-safe client implementation
   TSQLDBFirebirdConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
     fDefaultPageSize: Integer;
@@ -128,7 +128,7 @@ type
    end;
 
   TSQLDBFirebirdStatus = array[0..19] of PtrInt;
-  
+
   /// implements a direct connection to the Firebird library
   TSQLDBFirebirdConnection = class(TSQLDBConnectionThreadSafe)
   protected
@@ -216,7 +216,7 @@ type
      - raise an EFirebirdException or ESQLDBException on any error }
     procedure ExecutePrepared; override;
     {/ Reset the previous prepared statement
-     - this overridden implementation will reset all bindings and the cursor state 
+     - this overridden implementation will reset all bindings and the cursor state
      - raise an EFirebirdException on any error }
     procedure Reset; override;
 
@@ -379,7 +379,7 @@ type
     sqlvar: array[0..0] of XSQLVar;
   end;
 
-  // used by isc_start_multiple() 
+  // used by isc_start_multiple()
   PISCTEB = ^TISCTEB;
   TISCTEB = record
     Handle: pointer;
@@ -389,7 +389,7 @@ type
 
   // Database parameter block stuff
   TFirebirdDatabaseParameterBlock = (dpb_cdd_pathname=1,
-    dpb_allocation, dpb_journal, dpb_page_size, dpb_num_buffers, 
+    dpb_allocation, dpb_journal, dpb_page_size, dpb_num_buffers,
     dpb_buffer_length, dpb_debug, dpb_garbage_collect, dpb_verify, dpb_sweep,
     dpb_enable_journal, dpb_disable_journal, dpb_dbkey_scope, dpb_number_of_users,
     dpb_trace, dpb_no_garbage_collect, dpb_damaged, dpb_license, dpb_sys_user_name,
@@ -530,7 +530,7 @@ begin
     BufAddStr(ord(dpb_password),fProperties.PassWord);
     Check(isc_attach_database(fStatus,length(ServerName),pointer(ServerName),
       fDatabase,fBufLen,fBuf),fStatus);
-    inherited Connect; // notify any re-connection 
+    inherited Connect; // notify any re-connection
   end;
 end;
 
@@ -823,7 +823,7 @@ begin
       // we are in auto-commit mode
       fCurrent := @fAutoCommit;
     // 3. bind parameters
-    
+
     // 4. execute the statement
     if fExpectResults then
       // (re)open result cursor for queries
@@ -835,7 +835,7 @@ begin
     // 5. prepare results
     if fOutput=nil then begin // allocate fOutput buffer (reuse the same)
       Check(isc_dsql_describe(fStatus,fCurrent.Statement,SQL_DIALECT,XSQLDAAllocate(fOutput,32)),fStatus);
-      with PXSQLDA(fOutput)^ do 
+      with PXSQLDA(fOutput)^ do
       if sqld>sqln then
         Check(isc_dsql_describe(fStatus,fCurrent.Statement,SQL_DIALECT,XSQLDAAllocate(fOutput,sqld)),fStatus);
       with PXSQLDA(fOutput)^ do begin

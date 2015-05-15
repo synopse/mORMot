@@ -91,9 +91,9 @@ uses
   - Synopse has registered several TSynCompressionAlgo IDs:
      1=SynLZ-chunked 2=SynLZ-whole
      3=LzoAsm-chunked 4=LzoAsm-whole
-     5=Bz2-chunked 
+     5=Bz2-chunked
      6=AES-chunked 7=AES+Zip-chunked 8=AES+SynLz-chunked
-    so you can use 9..15 for your own purpose 
+    so you can use 9..15 for your own purpose
   - most of this unit functions are TSynCompressionAlgo aware
 }
 
@@ -183,7 +183,7 @@ type
     procedure Finish;
     function FlushBufferOut: integer;
     function InFlateDeflate: boolean; // return true if error
-  public             
+  public
     constructor Create(outStream: TStream; CompressionLevel: Integer;
       Algorithm: integer=0);
     constructor CreateAsBlobData(outStream: TStream; CompressionLevel: Integer;
@@ -375,7 +375,7 @@ var
 
 
 procedure CompressAsBlobData(const data; size: integer; aStream: TStream;
-  CompressionLevel: integer=6; Algorithm: integer=0); 
+  CompressionLevel: integer=6; Algorithm: integer=0);
 // create a TBlobData in aStream - can use encryption with algo
 // 7=AES+Zip-chunked and 8=AES+SynLz-chunked
 
@@ -464,7 +464,7 @@ begin
   with H^ do begin
     if signature<>$02014b50 then begin
       Error('missing local signature');
-      break; 
+      break;
     end;
     if (fileInfo.flags and (1 shl 3)<>0) or // crc+sizes in "data descriptor"
        (fileInfo.zzipSize=0) or (fileInfo.zfullSize=0) then begin
@@ -687,7 +687,7 @@ begin
   // 1. write global params
   L := length(aName);
   aStream.Write(L,1);
-  aStream.Write(aName[1],L); // UTF-8 encoded file name 
+  aStream.Write(aName[1],L); // UTF-8 encoded file name
   aStream.Write(fCount,4);
   // 2. write Entry[].ZipName
   for i := 0 to Count-1 do
@@ -1192,7 +1192,7 @@ var Map: TMemoryMap;
 begin
   if not Map.DoMap(aFileName) then begin
     if StoreLen then
-      aStream.Write(Map.Buf,4); // no file -> store len=0 
+      aStream.Write(Map.Buf,4); // no file -> store len=0
   end else
     try
       if PCardinal(Map.buf)^<>$88B1F then begin
@@ -1214,7 +1214,7 @@ end;
 { TZipWriter }
 
 constructor TZipWriter.Create(AppendTo: TZipReader; ReCreate: boolean=false);
-  procedure InitTmp;     
+  procedure InitTmp;
   begin
     fDestFileName := AppendTo.fFileName;
     fFileName := ChangeFileExt(fDestFileName,'.tmp');
@@ -1834,7 +1834,7 @@ end;
 function TZipEntry.LocalHeader(ZipStart: PByteArray): PLocalFileHeader;
 begin
   result := @ZipStart[Header.localHeadOff];
-end;                          
+end;
 
 function TZipEntry.LocalDataPosition(ZipStart: PByteArray): PtrUInt;
 begin

@@ -31,7 +31,7 @@ unit SynWinSock;
   All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -124,7 +124,7 @@ const
   c6AnyHost = '::0';
   c6Broadcast = 'ffff::1';
   cAnyPort = '0';
-  
+
 
 const
   FD_SETSIZE     =   64;
@@ -559,7 +559,7 @@ const
   WSASYS_STATUS_LEN      =   128;
 
   SHUT_WR = 1;
-  
+
 type
   PWSAData = ^TWSAData;
   TWSAData = packed record
@@ -759,7 +759,7 @@ function IsNewApi(Family: integer): Boolean;
  {$ifdef UNICODE}inline;{$endif}
 function SetVarSin(var Sin: TVarSin; const IP, Port: AnsiString; Family, SockProtocol, SockType: integer; PreferIP4: Boolean): integer;
 function GetSinIP(const Sin: TVarSin): AnsiString;
-procedure GetSinIPShort(const Sin: TVarSin; var result: shortstring); 
+procedure GetSinIPShort(const Sin: TVarSin; var result: shortstring);
 function GetSinPort(const Sin: TVarSin): Integer;
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer; IPList: TStrings);
 function ResolveIPToName(const IP: AnsiString; Family, SockProtocol, SockType: integer): AnsiString;

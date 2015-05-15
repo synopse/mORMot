@@ -31,7 +31,7 @@ unit mORMotHttpServer;
   Contributor(s):
   - DigDiver (for HTTPS support)
   - cheemeng
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -231,7 +231,7 @@ type
   // - useBidirSocket will use the standard Sockets library but via the
   // TWebSocketServerRest class, allowing HTTP connection upgrade to the
   // WebSockets protocol, allowing immediate event callbacks in addition to the
-  // standard RESTful mode 
+  // standard RESTful mode
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TSQLHttpServerOptions =
     ({$ifndef ONLYUSEHTTPSOCKET}useHttpApi, useHttpApiRegisteringURI, {$endif}
@@ -265,7 +265,7 @@ type
   // - under Linux, only THttpServer is available
   // - you can specify useBidirSocket kind of server (i.e. TWebSocketServerRest)
   // if you want the HTTP protocol connection to be upgraded to a WebSockets
-  // mode, to allow immediate callbacks from the server to the client 
+  // mode, to allow immediate callbacks from the server to the client
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
   // ! DBServer.NoAJAXJSON := false;
@@ -455,7 +455,7 @@ type
     property DBServerAccessRight[Index: integer]: PSQLAccessRights write SetDBServerAccessRight;
     /// find the first instance of a registered REST server
     // - note that the same REST server may appear several times in this HTTP
-    // server instance, e.g. with diverse security options 
+    // server instance, e.g. with diverse security options
     function DBServerFind(aServer: TSQLRestServer): integer;
     /// set this property to TRUE if the server must only respond to
     // request of MIME type APPLICATION/JSON
@@ -559,7 +559,7 @@ begin
   fLog.Enter(self);
   try
     n := high(fDBServers);
-    for i := n downto 0 do  
+    for i := n downto 0 do
     if fDBServers[i].Server=aServer then begin // FindServer() would find the 1st
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
@@ -572,7 +572,7 @@ begin
       SetLength(fDBServers,n);
       dec(n);
       aServer.OnNotifyCallback := nil;
-      result := true; // don't break here: may appear with another Security  
+      result := true; // don't break here: may appear with another Security
     end;
   finally
     fLog.Add.Log(sllHttp,'%.RemoveServer(Root=%)=%',
@@ -626,7 +626,7 @@ begin
     for i := 0 to high(aServers) do
     with fDBServers[i] do begin
       Server := aServers[i];
-      Server.OnNotifyCallback := NotifyCallback; 
+      Server.OnNotifyCallback := NotifyCallback;
       RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
       Security := aHttpServerSecurity;
     end;
@@ -927,13 +927,13 @@ function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
 var ctxt: THttpServerRequest;
     mode: TWebSocketProcessNotifyCallback;
     status: cardinal;
-begin    
+begin
   result := false;
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   try // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
     ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
-    try                                    
+    try
       ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
         aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
       if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
@@ -952,7 +952,7 @@ begin
       ctxt.Free;
     end;
   except
-    on E: Exception do 
+    on E: Exception do
       if aErrorMsg<>nil then
         aErrorMsg^ := ObjectToJSONDebug(E);
   end;
@@ -1006,7 +1006,7 @@ begin
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
   inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',HTTP_DEFAULT_MODE,nil,1);
   fEvent := aEvent;
-  AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS 
+  AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS
 end;
 
 destructor TSQLHTTPRemoteLogServer.Destroy;

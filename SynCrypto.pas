@@ -954,7 +954,7 @@ procedure XorConst(p: PIntegerArray; Count: integer);
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
-  // - use CompressShaAesSetKey() procedure to set this Key from text 
+  // - use CompressShaAesSetKey() procedure to set this Key from text
   CompressShaAesKey: TSHA256Digest;
 
   /// the AES-256 encoding class used by CompressShaAes() global function
@@ -973,7 +973,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractC
 // - as expected by THttpSocket.RegisterCompress()
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
 // - will use global CompressShaAesKey / CompressShaAesClass variables to be set
-// according to the expected algorithm and Key e.g. via a call to CompressShaAesSetKey() 
+// according to the expected algorithm and Key e.g. via a call to CompressShaAesSetKey()
 // - if you want to change the chaining mode, you can customize the global
 // CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
@@ -3990,7 +3990,7 @@ var H: TSHAHash;
 begin
   {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
-    if K256Aligned='' then 
+    if K256Aligned='' then
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
     if PtrUInt(K256ALigned)and 15=0 then begin
       sha256_sse4(TSHAContext(Context).Buffer,TSHAContext(Context).Hash,1);
@@ -5526,7 +5526,7 @@ var len: Cardinal;
 begin
   len := fCount and (AESBlockSize-1);
   if len<>0 then begin
-    EncryptInit; 
+    EncryptInit;
     AES.Encrypt(fCV,fCV);
     XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
   end;

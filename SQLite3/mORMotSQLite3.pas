@@ -31,7 +31,7 @@ unit mORMotSQLite3;
   Contributor(s):
   - Ondrej
   - Mario Moretti
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -278,7 +278,7 @@ uses
   SynLog,
   SynSQLite3,
   mORMot;
-  
+
 {$define INCLUDE_FTS3}
 { define this if you want to include the FTS3/FTS4 feature into the library
   - FTS3 is an SQLite module implementing full-text search
@@ -293,7 +293,7 @@ uses
   - those methods are deprecated - you should use DB.BackupBackground() instead }
 
 
-{ ****************** SQLite3 database used as kernel of our mORMot framework } 
+{ ****************** SQLite3 database used as kernel of our mORMot framework }
 
 type
   /// Execute a SQL statement in the local SQLite3 database engine, and get
@@ -313,7 +313,7 @@ type
     // - if the SQL statement is in the DB cache, it's retrieved from its cached
     //   value: our JSON parsing is a lot faster than SQLite3 engine itself,
     //   and uses less memory
-    // - will raise an ESQLException on any error 
+    // - will raise an ESQLException on any error
     constructor Create(aDB: TSQLDatabase; const Tables: array of TSQLRecordClass;
       const aSQL: RawUTF8; Expand: boolean); reintroduce;
   end;
@@ -423,7 +423,7 @@ type
     // - to be used to speed up some SQL statements like Insert/Update/Delete
     // - must be ended with Commit on success
     // - must be aborted with Rollback if any SQL statement failed
-    // - return true if no transaction is active, false otherwise 
+    // - return true if no transaction is active, false otherwise
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
     // - write all pending SQL statements to the disk
@@ -463,13 +463,13 @@ type
     // - database is closed, source DB file is replaced by the supplied content,
     //   then reopened
     // - there are cases where this method will fail and return FALSE: consider
-    //   shuting down the server, replace the file, then relaunch the server instead 
+    //   shuting down the server, replace the file, then relaunch the server instead
     function Restore(const ContentToRestore: RawByteString): boolean;
     /// restore a database content on the fly, from a .gz compressed file
     // - database is closed, source DB file is replaced by the supplied content,
     //  then reopened
     // - there are cases where this method will fail and return FALSE: consider
-    //   shuting down the server, replace the file, then relaunch the server instead 
+    //   shuting down the server, replace the file, then relaunch the server instead
     function RestoreGZ(const BackupFileName: TFileName): boolean;
 
     /// initialize the associated DB connection
@@ -501,7 +501,7 @@ type
     // such high-level call will fail into an endless loop
     // - caller may use a transaction in order to speed up StoredProc() writing
     // - intercept any DB exception and return false on error, true on success
-    function StoredProcExecute(const aSQL: RawUTF8; StoredProc: TOnSQLStoredProc): boolean; 
+    function StoredProcExecute(const aSQL: RawUTF8; StoredProc: TOnSQLStoredProc): boolean;
   public
     /// initialize a REST server with an in-memory SQLite3 database
     // - could be used for test purposes
@@ -522,7 +522,7 @@ type
     destructor Destroy; override;
     /// save the TSQLRestServerDB properties into a persistent storage object
     // - RegisteredClassCreateFrom() will expect Definition.DatabaseName to store
-    // the DBFileName, and optionally encrypt the file using Definition.Password 
+    // the DBFileName, and optionally encrypt the file using Definition.Password
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -538,7 +538,7 @@ type
     /// associated database
     property DB: TSQLDataBase read fDB;
     /// contains some textual information about the latest Exception raised
-    // during SQL statement execution 
+    // during SQL statement execution
     property StatementLastException: RawUTF8 read fStatementLastException;
   end;
 
@@ -597,7 +597,7 @@ type
 
   /// define a Virtual Table module for a stand-alone SQLite3 engine
   // - it's not needed to free this instance: it will be destroyed by the SQLite3
-  // engine together with the DB connection 
+  // engine together with the DB connection
   TSQLVirtualTableModuleSQLite3 = class(TSQLVirtualTableModule)
   protected
     fDB: TSQLDataBase;
@@ -625,7 +625,7 @@ type
     property DB: TSQLDataBase read fDB;
   end;
 
-  /// define a Virtual Table module for a TSQLRestServerDB SQLite3 engine 
+  /// define a Virtual Table module for a TSQLRestServerDB SQLite3 engine
   TSQLVirtualTableModuleServerDB = class(TSQLVirtualTableModuleSQLite3)
   public
     /// register the Virtual Table to the database connection of a TSQLRestServerDB server
@@ -813,7 +813,7 @@ begin
             exit;
           end;
         end;
-        inc(fBatchIDMax); 
+        inc(fBatchIDMax);
         result := fBatchIDMax;
       end;
       AddInt64(TInt64DynArray(fBatchID),fBatchIDCount,result);
@@ -852,7 +852,7 @@ begin
     sqlite3.result_int64(Context,byte(aRTree.ContainedIn(BlobA^,BlobB^)));
 end;
 
-constructor TSQLRestServerDB.Create(aModel: TSQLModel; 
+constructor TSQLRestServerDB.Create(aModel: TSQLModel;
   aHandleUserAuthentication: boolean);
 begin
   Create(aModel,SQLITE_MEMORY_DATABASE_NAME,aHandleUserAuthentication);
@@ -1916,7 +1916,7 @@ begin
   Create(aClientModel,aServerModel,fOwnedDB,aServerClass,aHandleUserAuthentication);
 end;
 
-constructor TSQLRestClientDB.Create(aRunningServer: TSQLRestServerDB); 
+constructor TSQLRestClientDB.Create(aRunningServer: TSQLRestServerDB);
 var ClientModel: TSQLModel;
 begin
   if aRunningServer=nil then
@@ -2135,7 +2135,7 @@ end;
 
 function vt_Disconnect(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  TSQLVirtualTable(pvTab^.pInstance).Free; 
+  TSQLVirtualTable(pvTab^.pInstance).Free;
   sqlite3.free_(pVTab);
   result := SQLITE_OK;
 end;

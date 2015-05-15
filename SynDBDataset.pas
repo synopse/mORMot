@@ -159,51 +159,51 @@ type
     /// release the prepared statement
     destructor Destroy; override;
 
-    {{ Prepare an UTF-8 encoded SQL statement
-      - parameters marked as ? will be bound later, before ExecutePrepared call
-      - if ExpectResults is TRUE, then Step() and Column*() methods are available
-      to retrieve the data rows
-      - raise an ESQLDBDataset on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBDataset on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
-    {{ Execute a prepared SQL statement
-      - parameters marked as ? should have been already bound with Bind*() functions
-      - this implementation will also loop through all internal bound array
-      of values (if any), to implement BATCH mode even if the database library
-      does not support array binding (only SynDBFireDAC does support it yet)
-      - this overridden method will log the SQL statement if sllSQL has been
-        enabled in SynDBLog.Family.Level
-      - raise an ESQLDBDataset on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - this implementation will also loop through all internal bound array
+    // of values (if any), to implement BATCH mode even if the database library
+    // does not support array binding (only SynDBFireDAC does support it yet)
+    // - this overridden method will log the SQL statement if sllSQL has been
+    // enabled in SynDBLog.Family.Level
+    // - raise an ESQLDBDataset on any error
     procedure ExecutePrepared; override;
-    {/ Reset the previous prepared statement
-     - this overridden implementation will reset all bindings and the cursor state
-     - raise an ESQLDBDataset on any error }
+    /// Reset the previous prepared statement
+    // - this overridden implementation will reset all bindings and the cursor state
+    // - raise an ESQLDBDataset on any error
     procedure Reset; override;
 
-    {{ Access the next or first row of data from the SQL Statement result
-      - return true on success, with data ready to be retrieved by Column*() methods
-      - return false if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-      - if SeekFirst is TRUE, will put the cursor on the first row of results
-      - raise an ESQLDBDataset on any error }
+    /// Access the next or first row of data from the SQL Statement result
+    // - return true on success, with data ready to be retrieved by Column*() methods
+    // - return false if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - if SeekFirst is TRUE, will put the cursor on the first row of results
+    // - raise an ESQLDBDataset on any error
     function Step(SeekFirst: boolean = false): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: Integer): Int64; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: Integer): boolean; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: Integer): double; override;
-    {{ return a Column date and time value of the current Row, first Col is 0 }
+    /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: Integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0 }
+    /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: Integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: Integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: Integer): RawByteString; override;
-    {/ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
@@ -221,11 +221,11 @@ type
     procedure DataSetOutSQLParam(const aParamIndex: integer;
       var aParam: TSQLDBParam); override;
   public
-    {{ Prepare an UTF-8 encoded SQL statement
-      - parameters marked as ? will be bound later, before ExecutePrepared call
-      - if ExpectResults is TRUE, then Step() and Column*() methods are available
-      to retrieve the data rows
-      - raise an ESQLDBDataset on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBDataset on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
   end;
 
@@ -461,7 +461,7 @@ var Log: ISynLog;
     i,p: Integer;
     lArrayIndex: integer;
     Field: TField;
-begin                        
+begin
   Log := SynDBLog.Enter(Self);
   with Log.Instance do
     if sllSQL in Family.Level then
@@ -471,7 +471,7 @@ begin
     raise ESQLDBDataset.CreateUTF8(
       '%.ExecutePrepared expected % bound parameters, got %',
       [self,fPreparedParamsCount,fParamCount]);
-  lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support 
+  lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support
   repeat
     if (not fDatasetSupportBatchBinding) and (fParamsArrayCount>0) then
       inc(lArrayIndex); // enable BindArray() emulation
@@ -701,7 +701,7 @@ begin
               P.AsString := UTF8ToString(tmp);
           end else
             if (VData='') and fConnection.Properties.StoreVoidStringAsNull then
-              P.Clear else    
+              P.Clear else
             if fForceUseWideString then
               P.Value := UTF8ToWideString(VData) else
               P.AsString := UTF8ToString(VData);

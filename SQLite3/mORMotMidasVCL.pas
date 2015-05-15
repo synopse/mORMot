@@ -91,7 +91,7 @@ type
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRest=nil
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload; 
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
 
 /// convert a JSON result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from

@@ -43,13 +43,13 @@ unit mORMotBigTable;
 
   ***** END LICENSE BLOCK *****
 
-  
+
     IN WORK / UNFINISHED PROCESS: DO NOT USE THIS UNIT!
    *****************************************************
-	
+
   Version 1.15
   - first public release, corresponding to mORMot Framework 1.15
-  
+
   Version 1.18
   - unit SQLite3BigTable.pas renamed mORMotBigTable.pas
 
@@ -115,14 +115,14 @@ type
     function SearchField(const FieldName: ShortString; FieldValue: RawUTF8;
       var ResultID: TIntegerDynArray): boolean; overload; override;
     /// update an individual record field INTEGER value from a specified ID or Value
-    // - if ByID=true, search for RowID=Where, otherwise search for FieldName=Where 
+    // - if ByID=true, search for RowID=Where, otherwise search for FieldName=Where
     // - return true on success
     // - this method call RecordCanBeUpdated() to check if update is possible,
     // then call EngineExecute() with the corresponding SQL statement
     function UpdateField(Table: TSQLRecordClass; Where: integer;
       const FieldName: shortstring; FieldValue: integer; ByID: boolean): boolean; override;
     /// create one index for all specific FieldNames at once
-    // - this method should better be called before 
+    // - this method should better be called before
     function CreateSQLMultiIndex(Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
       Unique: boolean; IndexName: RawUTF8=''): boolean; override;
     /// the associated Big Table instance
@@ -130,7 +130,7 @@ type
     property BigTable: TSynBigTableTable read fBig;
   end;
 
-  
+
 implementation
 
 

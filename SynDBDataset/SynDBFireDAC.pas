@@ -194,11 +194,11 @@ type
     procedure DataSetOutSQLParam(const aParamIndex: integer;
       var aParam: TSQLDBParam); override;
   public
-    {{ Prepare an UTF-8 encoded SQL statement
-      - parameters marked as ? will be bound later, before ExecutePrepared call
-      - if ExpectResults is TRUE, then Step() and Column*() methods are available
-      to retrieve the data rows
-      - raise an ESQLDBFireDAC on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBFireDAC on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
   end;
 

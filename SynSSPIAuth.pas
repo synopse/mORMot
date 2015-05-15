@@ -97,7 +97,7 @@ type
   // - used to hold information between calls to ServerSSPIAuth
   TSecContextDynArray = array of TSecContext;
 
-  
+
 /// Sets aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 
@@ -110,7 +110,7 @@ procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int6
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
 function ClientSSPIAuth(var aSecContext: TSecContext;
-    const aInData: RawByteString; const aSecKerberosSPN: RawUTF8; 
+    const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
     out aOutData: RawByteString): Boolean;
 
 /// Client-side authentication procedure with clear text password.
@@ -294,7 +294,7 @@ function DeleteSecurityContext(phContext: PSecHandle): Integer; stdcall;
 function FreeCredentialsHandle(phCredential: PSecHandle): Integer; stdcall;
   external secur32 name 'FreeCredentialsHandle';
 
-  
+
 procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 begin
   aSecContext.ID := aConnectionID;
@@ -536,7 +536,7 @@ begin
 
   InBuf[1].BufferType := SECBUFFER_DATA;
   InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := UniqueRawUTF8(RawUTF8(EncBuffer)); 
+  InBuf[1].pvBuffer := UniqueRawUTF8(RawUTF8(EncBuffer));
 
   InDesc.ulVersion := SECBUFFER_VERSION;
   InDesc.cBuffers := 2;

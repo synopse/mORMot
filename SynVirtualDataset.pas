@@ -33,7 +33,7 @@ unit SynVirtualDataSet;
   - Esteban Martin (EMartin)
   - mingda
   - Murat Ak
-    
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -219,7 +219,7 @@ var
   GlobalDataSetCount: integer;
 
 type
-  /// define how a single row is identified 
+  /// define how a single row is identified
   // - for TSynVirtualDataSet, it is just the row index (starting at 0)
   TRecInfoIdentifier = integer;
 

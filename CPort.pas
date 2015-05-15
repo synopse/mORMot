@@ -768,7 +768,7 @@ procedure DoneAsync(var AsyncPtr: PAsync);
 
 /// enumerate all available COM ports on this system
 // - a sorted list of all COM port names is set to the supplied TStrings
-// - useful to populate a TListBox content e.g. 
+// - useful to populate a TListBox content e.g.
 procedure EnumComPorts(Ports: TStrings);
 
 /// string to baud rate
@@ -2242,10 +2242,10 @@ begin
     Result := dtrDisable else
     Result := I;
 end;
-                  
+
 function StrToChar(const Str: string): Char;
 var
-  A: Integer;                 
+  A: Integer;
 begin
   if Length(Str) > 0 then
   begin
@@ -2490,7 +2490,7 @@ end;
 // initialize registry
 procedure SetRegistry(Reg: TRegistry; Key: string; const Name: string);
 var
-  I: Integer;                               
+  I: Integer;
   Temp: string;
 begin
   I := Pos('\', Key);

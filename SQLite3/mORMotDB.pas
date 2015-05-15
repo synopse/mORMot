@@ -29,7 +29,7 @@ unit mORMotDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -109,7 +109,7 @@ unit mORMotDB;
   - fixed ticket [3c41462594] in TSQLRestStorageExternal.ExecuteFromJSON()
   - fixed ticket [9a821d26ee] in TSQLRestStorageExternal.Create() not
     creating any missing field
-  - fixed unexpected TSQLRestServer time synchronization to the DB local time in  
+  - fixed unexpected TSQLRestServer time synchronization to the DB local time in
     TSQLRestStorageExternal.Create - now the reference clock is the ORM server
   - fixed ticket [b109c22750] about SQLite3 cache not flushed after CRUD updates
   - ensure no INDEX is created for SQLite3 which generates an index for ID/RowID
@@ -158,7 +158,7 @@ uses
   SynLog,
   mORMot,
   SynDB;
-             
+
 type
   /// REST server with direct access to a SynDB-based external database
   // - handle all REST commands, using the external SQL database connection,
@@ -233,7 +233,7 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineSearchField(const FieldName: ShortString;
       const FieldValue: array of const; out ResultID: TIDDynArray): boolean;
-    // overridden method returning TRUE for next calls to EngineAdd/Update/Delete 
+    // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with external DB (syntax are too much specific)
     function InternalBatchStart(Method: TSQLURIMethod;
@@ -250,14 +250,14 @@ type
     // mapped external field names ('AS [InternalFieldName]' if needed), and
     // SQLTableName into fTableName
     // - any 'LIMIT #' clause will be changed into the appropriate SQL statement
-    // - handle also statements to avoid slow virtual table full scan, e.g. 
+    // - handle also statements to avoid slow virtual table full scan, e.g.
     // $ SELECT count(*) FROM table
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
     /// run INSERT of UPDATE from the corresponding JSON object
     // - Occasion parameter shall be only either soInsert or soUpate
     // - each JSON field will be bound with the proper SQL type corresponding to
     // the real external table columns (e.g. as TEXT for variant)
-    // - returns 0 on error, or the Updated/Inserted ID 
+    // - returns 0 on error, or the Updated/Inserted ID
     function ExecuteFromJSON(const SentData: RawUTF8; Occasion: TSQLOccasion;
       UpdatedID: TID): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
@@ -266,7 +266,7 @@ type
       Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
   public
     /// initialize the remote database connection
-    // - you should not use this, but rather call VirtualTableExternalRegister() 
+    // - you should not use this, but rather call VirtualTableExternalRegister()
     // - RecordProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
     // - RecordProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any database schema prefix
@@ -296,10 +296,10 @@ type
     // - return true if no transaction is active, false otherwise
     function TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean; override;
     /// end a transaction (implements REST END Member)
-    // - write all pending SQL statements to the external database 
+    // - write all pending SQL statements to the external database
     procedure Commit(SessionID: cardinal=1; RaiseException: boolean=false); override;
     /// abort a transaction (implements REST ABORT Member)
-    // - restore the previous state of the database, before the call to TransactionBegin 
+    // - restore the previous state of the database, before the call to TransactionBegin
     procedure RollBack(SessionID: cardinal=1); override;
      /// overridden method for direct external database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
@@ -353,7 +353,7 @@ type
   end;
 
   /// A Virtual Table cursor for reading a TSQLDBStatement content
-  // - this is the cursor class associated to TSQLVirtualTableExternal 
+  // - this is the cursor class associated to TSQLVirtualTableExternal
   TSQLVirtualTableCursorExternal = class(TSQLVirtualTableCursor)
   protected
     fStatement: ISQLDBStatement;
@@ -369,7 +369,7 @@ type
     // - will move cursor to first row of matching data
     // - will return false on low-level database error (but true in case of a
     // valid call, even if HasData will return false, i.e. no data match)
-    // - all WHERE and ORDER BY clauses are able to be translated into a plain 
+    // - all WHERE and ORDER BY clauses are able to be translated into a plain
     // SQL statement calling the external DB engine
     // - will create the internal fStatement from a SQL query, bind the
     // parameters, then execute it, ready to be accessed via HasData/Next
@@ -389,11 +389,11 @@ type
     /// read-only access to the SELECT statement
     property SQL: RawUTF8 read fSQL;
   end;
-  
+
   /// A SynDB-based virtual table for accessing any external database
   // - for ORM access, you should use VirtualTableExternalRegister method to
   //   associated this virtual table module to any TSQLRecord class
-  // - transactions are handled by this module, according to the external database 
+  // - transactions are handled by this module, according to the external database
   TSQLVirtualTableExternal = class(TSQLVirtualTable)
   public { overridden methods }
     /// returns the main specifications of the associated TSQLVirtualTableModule
@@ -523,7 +523,7 @@ function VirtualTableExternalRegisterAll(aModel: TSQLModel;
 // of this kind will be created and returned
 // - if aDefinition.Kind is a registered TSQLDBConnectionProperties class name,
 // it will instantiate an in-memory TSQLRestServerDB or a TSQLRestServerFullMemory
-// instance, then call VirtualTableExternalRegisterAll() on this connection 
+// instance, then call VirtualTableExternalRegisterAll() on this connection
 // - will return nil if the supplied aDefinition does not match any registered
 // TSQLRest or TSQLDBConnectionProperties types
 function TSQLRestExternalDBCreate(aModel: TSQLModel;
@@ -782,7 +782,7 @@ begin
   FieldAdded := false;
   with StoredClassRecordProps do
   for f := 0 to Fields.Count-1 do
-    if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany 
+    if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
     /// real database columns exist for Simple + Blob fields (not Many)
     if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
       // add new missing Field
@@ -1447,7 +1447,7 @@ begin
   if BlobFields<>nil then begin
     aID := Value.ID;
     if aID<=0 then
-      exit; 
+      exit;
     if Owner<>nil then
       Owner.FlushInternalDBCache;
     SetLength(Params,length(BlobFields));
@@ -1705,7 +1705,7 @@ begin
     result := nil else
     result := fProperties;
 end;
-  
+
 function TSQLRestStorageExternal.ExecuteFromJSON(
   const SentData: RawUTF8; Occasion: TSQLOccasion; UpdatedID: TID): TID;
 var Decoder: TJSONObjectDecoder;
@@ -1983,7 +1983,7 @@ end;
 
 function TSQLVirtualTableExternal.Delete(aRowID: Int64): boolean;
 begin
-  if (self<>nil) and (Static<>nil) and (aRowID>0) then 
+  if (self<>nil) and (Static<>nil) and (aRowID>0) then
     with Static as TSQLRestStorageExternal do
       result := ExecuteDirect('delete from % where %=?',
         [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[aRowID],false)<>nil else

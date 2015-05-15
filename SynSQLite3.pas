@@ -31,7 +31,7 @@ unit SynSQLite3;
   Contributor(s):
   - Eric Grange
   - Vaclav
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -149,7 +149,7 @@ unit SynSQLite3;
   - added TSQLRequest.BindS()/FieldS()/FieldDeclaredTypeS() methods for direct
     string process
   - now TSQLRequest.Bind(col,'') will bind '' void text instead of null value
-  - added TSQLDataBase.CacheSize, PageSize and LockingMode properties 
+  - added TSQLDataBase.CacheSize, PageSize and LockingMode properties
   - added TSQLDataBase.MemoryMappedMB for optional Memory-Mapped I/O process
   - added TSQLDatabase.LogResultMaximumSize property to reduce logged extend
   - added TSQLDataBase.Log property to customize the logging class (e.g. to
@@ -157,16 +157,16 @@ unit SynSQLite3;
   - added TSQLDataBase.LockAndFlushCache method to be used instead of Lock('ALTER')
   - added TSQLDataBase.Lock() method to be used instead of Lock('S')
   - TSQLDataBase.DBOpen will set the default page size to 4KB for a better
-    performance as a server, and allowing bigger database sizes 
+    performance as a server, and allowing bigger database sizes
   - added sqlite3.open_v2() support and optional flags for TSQLDataBase.Create()
     plus associated read-only TSQLDataBase.OpenV2Flags property
   - added sqlite3.column_text16() - to be used e.g. for UnicodeString in
     TSQLRequest.FieldS()
-  - added sqlite3.profile() experimental support 
+  - added sqlite3.profile() experimental support
   - added sqlite3.limit() and corresponding TSQLDatabase.Limit[] property
   - added sqlite3.backup_*() Online Backup API functions
   - added TSQLDataBase.BackupBackground() and BackupBackgroundWaitUntilFinished
-    for performing asynchronous backup as requested by [31eaadc5a5]/[428e45644c] 
+    for performing asynchronous backup as requested by [31eaadc5a5]/[428e45644c]
   - set SQLITE_TRANSIENT_VIRTUALTABLE constant, to circumvent Win64 Sqlite3 bug
   - TSQLStatementCached.Prepare won't call BindReset, since it is not mandatory;
     see http://hoogli.com/items/Avoid_sqlite3_clear_bindings().html
@@ -218,15 +218,15 @@ type
   /// internaly store the SQLite3 database handle
   TSQLite3DB = type PtrUInt;
 
-  {/ internaly store the SQLite3 statement handle
-   - This object is variously known as a "prepared statement" or a "compiled
-   SQL statement" or simply as a "statement".
-   - Create the object using sqlite3.prepare_v2() or a related function.
-   - Bind values to host parameters using the sqlite3.bind_*() interfaces.
-   - Run the SQL by calling sqlite3.step() one or more times.
-   - Reset the statement using sqlite3.reset() then go back to "Bind" step.
-     Do this zero or more times.
-   - Destroy the object using sqlite3.finalize(). }
+  /// internaly store the SQLite3 statement handle
+  // - This object is variously known as a "prepared statement" or a "compiled
+  // SQL statement" or simply as a "statement".
+  // - Create the object using sqlite3.prepare_v2() or a related function.
+  // - Bind values to host parameters using the sqlite3.bind_*() interfaces.
+  // - Run the SQL by calling sqlite3.step() one or more times.
+  // - Reset the statement using sqlite3.reset() then go back to "Bind" step.
+  //  Do this zero or more times.
+  // - Destroy the object using sqlite3.finalize().
   TSQLite3Statement = type PtrUInt;
 
   /// internaly store the SQLite3 blob handle
@@ -277,89 +277,89 @@ const
   {$endif}
   {$endif}
 
-  {/ internal SQLite3 type as Integer }
+  /// internal SQLite3 type as Integer
   SQLITE_INTEGER = 1;
-  {/ internal SQLite3 type as Floating point value }
+  /// internal SQLite3 type as Floating point value
   SQLITE_FLOAT = 2;
-  {/ internal SQLite3 type as Text }
+  /// internal SQLite3 type as Text
   SQLITE_TEXT = 3;
-  {/ internal SQLite3 type as Blob }
+  /// internal SQLite3 type as Blob
   SQLITE_BLOB = 4;
-  {/ internal SQLite3 type as NULL }
+  /// internal SQLite3 type as NULL
   SQLITE_NULL = 5;
 
-  {/ text is UTF-8 encoded }
+  /// text is UTF-8 encoded
   SQLITE_UTF8     = 1;
-  {/ text is UTF-16 LE encoded }
+  /// text is UTF-16 LE encoded
   SQLITE_UTF16LE  = 2;
-  {/ text is UTF-16 BE encoded }
+  /// text is UTF-16 BE encoded
   SQLITE_UTF16BE  = 3;
-  {/ text is UTF-16 encoded, using the system native byte order }
+  /// text is UTF-16 encoded, using the system native byte order
   SQLITE_UTF16    = 4;
-  {/ sqlite3.create_function don't care about text encoding }
+  /// sqlite3.create_function don't care about text encoding
   SQLITE_ANY      = 5;
-  {/ used by sqlite3.create_collation() only }
+  /// used by sqlite3.create_collation() only
   SQLITE_UTF16_ALIGNED = 8;
 
 
-  {/ sqlite_exec() return code: no error occured }
+  /// sqlite_exec() return code: no error occured
   SQLITE_OK = 0;
-  {/ sqlite_exec() return code: SQL error or missing database - legacy generic code }
+  /// sqlite_exec() return code: SQL error or missing database - legacy generic code
   SQLITE_ERROR = 1;
-  {/ sqlite_exec() return code: An internal logic error in SQLite  }
+  /// sqlite_exec() return code: An internal logic error in SQLite
   SQLITE_INTERNAL = 2;
-  {/ sqlite_exec() return code: Access permission denied  }
+  /// sqlite_exec() return code: Access permission denied
   SQLITE_PERM = 3;
-  {/ sqlite_exec() return code: Callback routine requested an abort  }
+  /// sqlite_exec() return code: Callback routine requested an abort
   SQLITE_ABORT = 4;
-  {/ sqlite_exec() return code: The database file is locked  }
+  /// sqlite_exec() return code: The database file is locked
   SQLITE_BUSY = 5;
-  {/ sqlite_exec() return code: A table in the database is locked  }
+  /// sqlite_exec() return code: A table in the database is locked
   SQLITE_LOCKED = 6;
-  {/ sqlite_exec() return code: A malloc() failed  }
+  /// sqlite_exec() return code: A malloc() failed
   SQLITE_NOMEM = 7;
-  {/ sqlite_exec() return code: Attempt to write a readonly database  }
+  /// sqlite_exec() return code: Attempt to write a readonly database
   SQLITE_READONLY = 8;
-  {/ sqlite_exec() return code: Operation terminated by sqlite3.interrupt() }
+  /// sqlite_exec() return code: Operation terminated by sqlite3.interrupt()
   SQLITE_INTERRUPT = 9;
-  {/ sqlite_exec() return code: Some kind of disk I/O error occurred  }
+  /// sqlite_exec() return code: Some kind of disk I/O error occurred
   SQLITE_IOERR = 10;
-  {/ sqlite_exec() return code: The database disk image is malformed  }
+  /// sqlite_exec() return code: The database disk image is malformed
   SQLITE_CORRUPT = 11;
-  {/ sqlite_exec() return code: (Internal Only) Table or record not found  }
+  /// sqlite_exec() return code: (Internal Only) Table or record not found
   SQLITE_NOTFOUND = 12;
-  {/ sqlite_exec() return code: Insertion failed because database is full  }
+  /// sqlite_exec() return code: Insertion failed because database is full
   SQLITE_FULL = 13;
-  {/ sqlite_exec() return code: Unable to open the database file  }
+  /// sqlite_exec() return code: Unable to open the database file
   SQLITE_CANTOPEN = 14;
-  {/ sqlite_exec() return code: (Internal Only) Database lock protocol error  }
+  /// sqlite_exec() return code: (Internal Only) Database lock protocol error
   SQLITE_PROTOCOL = 15;
-  {/ sqlite_exec() return code: Database is empty  }
+  /// sqlite_exec() return code: Database is empty
   SQLITE_EMPTY = 16;
-  {/ sqlite_exec() return code: The database schema changed, and unable to be recompiled }
+  /// sqlite_exec() return code: The database schema changed, and unable to be recompiled
   SQLITE_SCHEMA = 17;
-  {/ sqlite_exec() return code: Too much data for one row of a table  }
+  /// sqlite_exec() return code: Too much data for one row of a table
   SQLITE_TOOBIG = 18;
-  {/ sqlite_exec() return code: Abort due to contraint violation  }
+  /// sqlite_exec() return code: Abort due to contraint violation
   SQLITE_CONSTRAINT = 19;
-  {/ sqlite_exec() return code: Data type mismatch  }
+  /// sqlite_exec() return code: Data type mismatch
   SQLITE_MISMATCH = 20;
-  {/ sqlite_exec() return code: Library used incorrectly  }
+  /// sqlite_exec() return code: Library used incorrectly
   SQLITE_MISUSE = 21;
-  {/ sqlite_exec() return code: Uses OS features not supported on host  }
+  /// sqlite_exec() return code: Uses OS features not supported on host
   SQLITE_NOLFS = 22;
-  {/ sqlite_exec() return code: Authorization denied  }
+  /// sqlite_exec() return code: Authorization denied
   SQLITE_AUTH = 23;
-  {/ sqlite_exec() return code: Auxiliary database format error  }
+  /// sqlite_exec() return code: Auxiliary database format error
   SQLITE_FORMAT = 24;
-  {/ sqlite_exec() return code: 2nd parameter to sqlite3.bind out of range  }
+  /// sqlite_exec() return code: 2nd parameter to sqlite3.bind out of range
   SQLITE_RANGE = 25;
-  {/ sqlite_exec() return code: File opened that is not a database file  }
+  /// sqlite_exec() return code: File opened that is not a database file
   SQLITE_NOTADB = 26;
 
-  {/ sqlite3.step() return code: another result row is ready  }
+  /// sqlite3.step() return code: another result row is ready
   SQLITE_ROW = 100;
-  {/ sqlite3.step() return code: has finished executing  }
+  /// sqlite3.step() return code: has finished executing
   SQLITE_DONE = 101;
 
   /// The database is opened in read-only mode
@@ -494,13 +494,13 @@ type
   /// SQLite3 collation (i.e. sort and comparaison) function prototype
   // - this function MUST use s1Len and s2Len parameters during the comparaison:
   // s1 and s2 are not zero-terminated
-  // - used by sqlite3.create_collation low-level function 
+  // - used by sqlite3.create_collation low-level function
   TSQLCollateFunc = function(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
   /// SQLite3 user function or aggregate callback prototype
   // - argc is the number of supplied parameters, which are available in argv[]
-  // (you can call ErrorWrongNumberOfArgs(Context) in case of unexpected number) 
+  // (you can call ErrorWrongNumberOfArgs(Context) in case of unexpected number)
   // - use sqlite3.value_*(argv[*]) functions to retrieve a parameter value
   // - then set the result using sqlite3.result_*(Context,*) functions
   TSQLFunctionFunc = procedure(Context: TSQLite3FunctionContext;
@@ -509,15 +509,15 @@ type
   /// SQLite3 user final aggregate callback prototype
   TSQLFunctionFinal = procedure(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-  {/ SQLite3 callback prototype to handle SQLITE_BUSY errors
-  - The first argument to the busy handler is a copy of the user pointer which
-    is the third argument to sqlite3.busy_handler().
-  - The second argument to the busy handler callback is the number of times
-    that the busy handler has been invoked for this locking event.
-  - If the busy callback returns 0, then no additional attempts are made to
-    access the database and SQLITE_BUSY or SQLITE_IOERR_BLOCKED is returned.
-  - If the callback returns non-zero, then another attempt is made to open
-    the database for reading and the cycle repeats. }
+  /// SQLite3 callback prototype to handle SQLITE_BUSY errors
+  // - The first argument to the busy handler is a copy of the user pointer which
+  // is the third argument to sqlite3.busy_handler().
+  // - The second argument to the busy handler callback is the number of times
+  // that the busy handler has been invoked for this locking event.
+  // - If the busy callback returns 0, then no additional attempts are made to
+  // access the database and SQLITE_BUSY or SQLITE_IOERR_BLOCKED is returned.
+  // - If the callback returns non-zero, then another attempt is made to open
+  // the database for reading and the cycle repeats.
   TSQLBusyHandler = function(user: pointer; count: integer): integer;
      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -609,7 +609,7 @@ type
     // by the virtual table and is not checked again by SQLite
     // - By default, the SQLite core double checks all constraints on each
     // row of the virtual table that it receives. If such a check is redundant,
-    // xBestFilter() method can suppress that double-check by setting this field 
+    // xBestFilter() method can suppress that double-check by setting this field
     omit: boolean;
   end;
   PSQLite3IndexConstraintUsageArray = ^TSQLite3IndexConstraintUsageArray;
@@ -626,7 +626,7 @@ type
   // xFilter() method. Any desired meaning can be assigned to idxNum and idxStr
   // as long as xBestIndex() and xFilter() agree on what that meaning is.
   // Use the SetInfo() method of this object in order to make a temporary copy
-  // of any needed data. 
+  // of any needed data.
   TSQLite3IndexInfo = record
     /// input: Number of entries in aConstraint array
     nConstraint: Integer;
@@ -666,15 +666,15 @@ type
     estimatedCost: Double;
   end;
 
-  {/ Virtual Table Instance Object
-  - Every virtual table module implementation uses a subclass of this object
-    to describe a particular instance of the virtual table.
-  - Each subclass will be tailored to the specific needs of the module
-    implementation. The purpose of this superclass is to define certain fields
-    that are common to all module implementations. This structure therefore
-    contains a pInstance field, which will be used to store a class instance
-    handling the virtual table as a pure Delphi class: the TSQLVirtualTableModule
-    class will use it internaly }
+  /// Virtual Table Instance Object
+  // - Every virtual table module implementation uses a subclass of this object
+  // to describe a particular instance of the virtual table.
+  // - Each subclass will be tailored to the specific needs of the module
+  // implementation. The purpose of this superclass is to define certain fields
+  // that are common to all module implementations. This structure therefore
+  // contains a pInstance field, which will be used to store a class instance
+  // handling the virtual table as a pure Delphi class: the TSQLVirtualTableModule
+  // class will use it internaly
   TSQLite3VTab = record
     /// The module for this virtual table
     pModule: PSQLite3Module;
@@ -693,20 +693,20 @@ type
     pInstance: TObject;
   end;
 
-  {/ Virtual Table Cursor Object
-   - Every virtual table module implementation uses a subclass of the following
-     structure to describe cursors that point into the virtual table and are
-     used to loop through the virtual table.
-   - Cursors are created using the xOpen method of the module and are destroyed
-     by the xClose method. Cursors are used by the xFilter, xNext, xEof, xColumn,
-     and xRowid methods of the module.
-   - Each module implementation will define the content of a cursor structure
-     to suit its own needs.
-   - This superclass exists in order to define fields of the cursor that are
-     common to all implementationsThis structure therefore contains a pInstance
-     field, which will be used to store a class instance handling the virtual
-     table as a pure Delphi class: the TSQLVirtualTableModule class will use
-     it internaly }
+  /// Virtual Table Cursor Object
+  // - Every virtual table module implementation uses a subclass of the following
+  // structure to describe cursors that point into the virtual table and are
+  // used to loop through the virtual table.
+  // - Cursors are created using the xOpen method of the module and are destroyed
+  // by the xClose method. Cursors are used by the xFilter, xNext, xEof, xColumn,
+  // and xRowid methods of the module.
+  // - Each module implementation will define the content of a cursor structure
+  // to suit its own needs.
+  // - This superclass exists in order to define fields of the cursor that are
+  // common to all implementationsThis structure therefore contains a pInstance
+  // field, which will be used to store a class instance handling the virtual
+  // table as a pure Delphi class: the TSQLVirtualTableModule class will use
+  // it internaly
   TSQLite3VTabCursor = record
     /// Virtual table of this cursor
     pVtab: PSQLite3VTab;
@@ -714,401 +714,401 @@ type
     pInstance: TObject;
   end;
 
-  {/ defines a module object used to implement a virtual table.
-   - Think of a module as a class from which one can construct multiple virtual
-   tables having similar properties. For example, one might have a module that
-   provides read-only access to comma-separated-value (CSV) files on disk.
-   That one module can then be used to create several virtual tables where each
-   virtual table refers to a different CSV file.
-   - The module structure contains methods that are invoked by SQLite to perform
-   various actions on the virtual table such as creating new instances of a
-   virtual table or destroying old ones, reading and writing data, searching
-   for and deleting, updating, or inserting rows. }
+  /// defines a module object used to implement a virtual table.
+  // - Think of a module as a class from which one can construct multiple virtual
+  // tables having similar properties. For example, one might have a module that
+  // provides read-only access to comma-separated-value (CSV) files on disk.
+  // That one module can then be used to create several virtual tables where each
+  // virtual table refers to a different CSV file.
+  // - The module structure contains methods that are invoked by SQLite to perform
+  // various actions on the virtual table such as creating new instances of a
+  // virtual table or destroying old ones, reading and writing data, searching
+  // for and deleting, updating, or inserting rows.
   TSQLite3Module = record
-    {/ defines the particular edition of the module table structure
-    - Currently, handled iVersion is 2, but in future releases of SQLite the
-      module structure definition might be extended with additional methods and
-      in that case the iVersion value will be increased }
+    /// defines the particular edition of the module table structure
+    // - Currently, handled iVersion is 2, but in future releases of SQLite the
+    // module structure definition might be extended with additional methods and
+    // in that case the iVersion value will be increased
     iVersion: Integer;
-    {/ called to create a new instance of a virtual table in response to a
-      CREATE VIRTUAL TABLE statement
-    - The job of this method is to construct the new virtual table object (an
-      PSQLite3VTab object) and return a pointer to it in ppVTab
-    - The DB parameter is a pointer to the SQLite database connection that is
-      executing the CREATE VIRTUAL TABLE statement
-    - The pAux argument is the copy of the client data pointer that was the
-      fourth argument to the sqlite3.create_module_v2() call that registered
-      the virtual table module
-    - The argv parameter is an array of argc pointers to null terminated strings
-    - The first string, argv[0], is the name of the module being invoked. The
-      module name is the name provided as the second argument to sqlite3.create_module()
-      and as the argument to the USING clause of the CREATE VIRTUAL TABLE
-      statement that is running.
-    - The second, argv[1], is the name of the database in which the new virtual
-      table is being created. The database name is "main" for the primary
-      database, or "temp" for TEMP database, or the name given at the end of
-      the ATTACH statement for attached databases.
-    - The third element of the array, argv[2], is the name of the new virtual
-      table, as specified following the TABLE keyword in the CREATE VIRTUAL
-      TABLE statement
-    - If present, the fourth and subsequent strings in the argv[] array report
-      the arguments to the module name in the CREATE VIRTUAL TABLE statement
-    - As part of the task of creating a new PSQLite3VTab structure, this method
-      must invoke sqlite3.declare_vtab() to tell the SQLite core about the
-      columns and datatypes in the virtual table }
+    /// called to create a new instance of a virtual table in response to a
+    // CREATE VIRTUAL TABLE statement
+    // - The job of this method is to construct the new virtual table object (an
+    // PSQLite3VTab object) and return a pointer to it in ppVTab
+    // - The DB parameter is a pointer to the SQLite database connection that is
+    // executing the CREATE VIRTUAL TABLE statement
+    // - The pAux argument is the copy of the client data pointer that was the
+    // fourth argument to the sqlite3.create_module_v2() call that registered
+    // the virtual table module
+    // - The argv parameter is an array of argc pointers to null terminated strings
+    // - The first string, argv[0], is the name of the module being invoked. The
+    // module name is the name provided as the second argument to sqlite3.create_module()
+    // and as the argument to the USING clause of the CREATE VIRTUAL TABLE
+    // statement that is running.
+    // - The second, argv[1], is the name of the database in which the new virtual
+    // table is being created. The database name is "main" for the primary
+    // database, or "temp" for TEMP database, or the name given at the end of
+    // the ATTACH statement for attached databases.
+    // - The third element of the array, argv[2], is the name of the new virtual
+    // table, as specified following the TABLE keyword in the CREATE VIRTUAL
+    // TABLE statement
+    // - If present, the fourth and subsequent strings in the argv[] array report
+    // the arguments to the module name in the CREATE VIRTUAL TABLE statement
+    // - As part of the task of creating a new PSQLite3VTab structure, this method
+    // must invoke sqlite3.declare_vtab() to tell the SQLite core about the
+    // columns and datatypes in the virtual table
     xCreate: function(DB: TSQLite3DB; pAux: Pointer;
       argc: Integer; const argv: PPUTF8CharArray;
       var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ xConnect is called to establish a new connection to an existing virtual table,
-       whereas xCreate is called to create a new virtual table from scratch
-    - It has the same parameters and constructs a new PSQLite3VTab structure
-    - xCreate and xConnect methods are only different when the virtual table
-     has some kind of backing store that must be initialized the first time the
-     virtual table is created. The xCreate method creates and initializes the
-     backing store. The xConnect method just connects to an existing backing store. }
+    /// xConnect is called to establish a new connection to an existing virtual table,
+    // whereas xCreate is called to create a new virtual table from scratch
+    // - It has the same parameters and constructs a new PSQLite3VTab structure
+    // - xCreate and xConnect methods are only different when the virtual table
+    // has some kind of backing store that must be initialized the first time the
+    // virtual table is created. The xCreate method creates and initializes the
+    // backing store. The xConnect method just connects to an existing backing store.
     xConnect: function(DB: TSQLite3DB; pAux: Pointer;
       argc: Integer; const argv: PPUTF8CharArray;
       var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Used to determine the best way to access the virtual table
-    - The pInfo parameter is used for input and output parameters
-    - The SQLite core calls the xBestIndex() method when it is compiling a query
-     that involves a virtual table. In other words, SQLite calls this method when
-     it is running sqlite3.prepare() or the equivalent.
-    - By calling this method, the SQLite core is saying to the virtual table
-     that it needs to access some subset of the rows in the virtual table and
-     it wants to know the most efficient way to do that access. The xBestIndex
-     method replies with information that the SQLite core can then use to
-     conduct an efficient search of the virtual table, via the xFilter() method.
-    - While compiling a single SQL query, the SQLite core might call xBestIndex
-     multiple times with different settings in pInfo. The SQLite
-     core will then select the combination that appears to give the best performance.
-    - The information in the pInfo structure is ephemeral and may be overwritten
-     or deallocated as soon as the xBestIndex() method returns. If the
-     xBestIndex() method needs to remember any part of the pInfo structure,
-     it should make a copy. Care must be taken to store the copy in a place
-     where it will be deallocated, such as in the idxStr field with
-     needToFreeIdxStr set to 1. }
+    /// Used to determine the best way to access the virtual table
+    // - The pInfo parameter is used for input and output parameters
+    // - The SQLite core calls the xBestIndex() method when it is compiling a query
+    // that involves a virtual table. In other words, SQLite calls this method when
+    // it is running sqlite3.prepare() or the equivalent.
+    // - By calling this method, the SQLite core is saying to the virtual table
+    // that it needs to access some subset of the rows in the virtual table and
+    // it wants to know the most efficient way to do that access. The xBestIndex
+    // method replies with information that the SQLite core can then use to
+    // conduct an efficient search of the virtual table, via the xFilter() method.
+    // - While compiling a single SQL query, the SQLite core might call xBestIndex
+    // multiple times with different settings in pInfo. The SQLite
+    // core will then select the combination that appears to give the best performance.
+    // - The information in the pInfo structure is ephemeral and may be overwritten
+    // or deallocated as soon as the xBestIndex() method returns. If the
+    // xBestIndex() method needs to remember any part of the pInfo structure,
+    // it should make a copy. Care must be taken to store the copy in a place
+    // where it will be deallocated, such as in the idxStr field with
+    // needToFreeIdxStr set to 1.
     xBestIndex: function(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Releases a connection to a virtual table
-    - Only the pVTab object is destroyed. The virtual table is not destroyed and
-      any backing store associated with the virtual table persists. This method
-      undoes the work of xConnect.  }
+    /// Releases a connection to a virtual table
+    // - Only the pVTab object is destroyed. The virtual table is not destroyed and
+    // any backing store associated with the virtual table persists. This method
+    // undoes the work of xConnect.
     xDisconnect: function(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Releases a connection to a virtual table, just like the xDisconnect method,
-      and it also destroys the underlying table implementation.
-    - This method undoes the work of xCreate
-    - The xDisconnect method is called whenever a database connection that uses
-      a virtual table is closed. The xDestroy method is only called when a
-      DROP TABLE statement is executed against the virtual table. }
+    /// Releases a connection to a virtual table, just like the xDisconnect method,
+    // and it also destroys the underlying table implementation.
+    // - This method undoes the work of xCreate
+    // - The xDisconnect method is called whenever a database connection that uses
+    // a virtual table is closed. The xDestroy method is only called when a
+    // DROP TABLE statement is executed against the virtual table.
     xDestroy: function(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Creates a new cursor used for accessing (read and/or writing) a virtual table
-    - A successful invocation of this method will allocate the memory for the
-      TPSQLite3VTabCursor (or a subclass), initialize the new object, and
-      make ppCursor point to the new object. The successful call then returns SQLITE_OK.
-    - For every successful call to this method, the SQLite core will later
-     invoke the xClose method to destroy the allocated cursor.
-    - The xOpen method need not initialize the pVtab field of the ppCursor structure.
-      The SQLite core will take care of that chore automatically.
-    - A virtual table implementation must be able to support an arbitrary number
-      of simultaneously open cursors.
-    - When initially opened, the cursor is in an undefined state. The SQLite core
-      will invoke the xFilter method on the cursor prior to any attempt to
-      position or read from the cursor. }
+    /// Creates a new cursor used for accessing (read and/or writing) a virtual table
+    // - A successful invocation of this method will allocate the memory for the
+    // TPSQLite3VTabCursor (or a subclass), initialize the new object, and
+    // make ppCursor point to the new object. The successful call then returns SQLITE_OK.
+    // - For every successful call to this method, the SQLite core will later
+    // invoke the xClose method to destroy the allocated cursor.
+    // - The xOpen method need not initialize the pVtab field of the ppCursor structure.
+    // The SQLite core will take care of that chore automatically.
+    // - A virtual table implementation must be able to support an arbitrary number
+    // of simultaneously open cursors.
+    // - When initially opened, the cursor is in an undefined state. The SQLite core
+    // will invoke the xFilter method on the cursor prior to any attempt to
+    // position or read from the cursor.
     xOpen: function(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Closes a cursor previously opened by xOpen
-    - The SQLite core will always call xClose once for each cursor opened using xOpen.
-    - This method must release all resources allocated by the corresponding xOpen call.
-    - The routine will not be called again even if it returns an error. The
-     SQLite core will not use the pVtabCursor again after it has been closed. }
+    /// Closes a cursor previously opened by xOpen
+    // - The SQLite core will always call xClose once for each cursor opened using xOpen.
+    // - This method must release all resources allocated by the corresponding xOpen call.
+    // - The routine will not be called again even if it returns an error. The
+    // SQLite core will not use the pVtabCursor again after it has been closed.
     xClose: function(pVtabCursor: PSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Begins a search of a virtual table
-    - The first argument is a cursor opened by xOpen.
-    - The next two arguments define a particular search index previously chosen
-      by xBestIndex(). The specific meanings of idxNum and idxStr are unimportant
-      as long as xFilter() and xBestIndex() agree on what that meaning is.
-    - The xBestIndex() function may have requested the values of certain
-      expressions using the aConstraintUsage[].argvIndex values of its pInfo
-      structure. Those values are passed to xFilter() using the argc and argv
-      parameters.
-    - If the virtual table contains one or more rows that match the search criteria,
-      then the cursor must be left point at the first row. Subsequent calls to
-      xEof must return false (zero). If there are no rows match, then the cursor
-      must be left in a state that will cause the xEof to return true (non-zero).
-      The SQLite engine will use the xColumn and xRowid methods to access that row content.
-      The xNext method will be used to advance to the next row.
-    - This method must return SQLITE_OK if successful, or an sqlite error code
-      if an error occurs.}
+    /// Begins a search of a virtual table
+    // - The first argument is a cursor opened by xOpen.
+    // - The next two arguments define a particular search index previously chosen
+    // by xBestIndex(). The specific meanings of idxNum and idxStr are unimportant
+    // as long as xFilter() and xBestIndex() agree on what that meaning is.
+    // - The xBestIndex() function may have requested the values of certain
+    // expressions using the aConstraintUsage[].argvIndex values of its pInfo
+    // structure. Those values are passed to xFilter() using the argc and argv
+    // parameters.
+    // - If the virtual table contains one or more rows that match the search criteria,
+    // then the cursor must be left point at the first row. Subsequent calls to
+    // xEof must return false (zero). If there are no rows match, then the cursor
+    // must be left in a state that will cause the xEof to return true (non-zero).
+    // The SQLite engine will use the xColumn and xRowid methods to access that row content.
+    // The xNext method will be used to advance to the next row.
+    // - This method must return SQLITE_OK if successful, or an sqlite error code
+    // if an error occurs.
     xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: Integer; const idxStr: PAnsiChar;
       argc: Integer; var argv: TSQLite3ValueArray): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Advances a virtual table cursor to the next row of a result set initiated by xFilter
-    - If the cursor is already pointing at the last row when this routine is called,
-      then the cursor no longer points to valid data and a subsequent call to the
-      xEof method must return true (non-zero).
-    - If the cursor is successfully advanced to another row of content, then
-      subsequent calls to xEof must return false (zero).
-    - This method must return SQLITE_OK if successful, or an sqlite error code
-      if an error occurs. }
+    /// Advances a virtual table cursor to the next row of a result set initiated by xFilter
+    // - If the cursor is already pointing at the last row when this routine is called,
+    // then the cursor no longer points to valid data and a subsequent call to the
+    // xEof method must return true (non-zero).
+    // - If the cursor is successfully advanced to another row of content, then
+    // subsequent calls to xEof must return false (zero).
+    // - This method must return SQLITE_OK if successful, or an sqlite error code
+    // if an error occurs.
     xNext: function(var pVtabCursor: TSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Checks if cursor reached end of rows
-    - Must return false (zero) if the specified cursor currently points to a
-      valid row of data, or true (non-zero) otherwise }
+    /// Checks if cursor reached end of rows
+    // - Must return false (zero) if the specified cursor currently points to a
+    // valid row of data, or true (non-zero) otherwise
     xEof: function(var pVtabCursor: TSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ The SQLite core invokes this method in order to find the value for the
-      N-th column of the current row
-    - N is zero-based so the first column is numbered 0.
-    - The xColumn method may return its result back to SQLite using one of the
-      standard sqlite3.result_*() functions with the specified sContext
-    - If the xColumn method implementation calls none of the sqlite3.result_*()
-      functions, then the value of the column defaults to an SQL NULL.
-    - The xColumn method must return SQLITE_OK on success.
-    - To raise an error, the xColumn method should use one of the result_text()
-      methods to set the error message text, then return an appropriate error code. }
+    /// The SQLite core invokes this method in order to find the value for the
+    // N-th column of the current row
+    // - N is zero-based so the first column is numbered 0.
+    // - The xColumn method may return its result back to SQLite using one of the
+    // standard sqlite3.result_*() functions with the specified sContext
+    // - If the xColumn method implementation calls none of the sqlite3.result_*()
+    // functions, then the value of the column defaults to an SQL NULL.
+    // - The xColumn method must return SQLITE_OK on success.
+    // - To raise an error, the xColumn method should use one of the result_text()
+    // methods to set the error message text, then return an appropriate error code.
     xColumn: function(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
       N: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Should fill pRowid with the rowid of row that the virtual table cursor
-      pVtabCursor is currently pointing at }
+    /// Should fill pRowid with the rowid of row that the virtual table cursor
+    // pVtabCursor is currently pointing at
     xRowid: function(var pVtabCursor: TSQLite3VTabCursor; var pRowid: Int64): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Makes a change to a virtual table content (insert/delete/update)
-    - The nArg parameter specifies the number of entries in the ppArg[] array
-    - The value of nArg will be 1 for a pure delete operation or N+2 for an
-      insert or replace or update where N is the number of columns in the table
-      (including any hidden columns)
-    - The ppArg[0] parameter is the rowid of a row in the virtual table to be deleted.
-      If ppArg[0] is an SQL NULL, then no deletion occurs
-    - The ppArg[1] parameter is the rowid of a new row to be inserted into the
-      virtual table. If ppArg[1] is an SQL NULL, then the implementation must
-      choose a rowid for the newly inserted row. Subsequent ppArg[] entries
-      contain values of the columns of the virtual table, in the order that
-      the columns were declared. The number of columns will match the table
-      declaration that the xConnect or xCreate method made using the
-      sqlite3.declare_vtab() call. All hidden columns are included.
-    - When doing an insert without a rowid (nArg>1, ppArg[1] is an SQL NULL),
-      the implementation must set pRowid to the rowid of the newly inserted row;
-      this will become the value returned by the sqlite3.last_insert_rowid()
-      function. Setting this value in all the other cases is a harmless no-op;
-      the SQLite engine ignores the pRowid return value if nArg=1 or ppArg[1]
-      is not an SQL NULL.
-    - Each call to xUpdate() will fall into one of cases shown below. Note
-      that references to ppArg[i] mean the SQL value held within the ppArg[i]
-      object, not the ppArg[i] object itself:
-      $ nArg = 1
-      The single row with rowid equal to ppArg[0] is deleted. No insert occurs.
-      $ nArg > 1
-      $ ppArg[0] = NULL
-      A new row is inserted with a rowid ppArg[1] and column values in ppArg[2]
-      and following. If ppArg[1] is an SQL NULL, the a new unique rowid is
-      generated automatically.
-      $ nArg > 1
-      $ ppArg[0] <> NULL
-      $ ppArg[0] = ppArg[1]
-      The row with rowid ppArg[0] is updated with new values in ppArg[2] and
-      following parameters.
-      $ nArg > 1
-      $ ppArg[0] <> NULL
-      $ ppArg[0] <> ppArg[1]
-      The row with rowid ppArg[0] is updated with rowid ppArg[1] and new values
-      in ppArg[2] and following parameters. This will occur when an SQL statement
-      updates a rowid, as in the statement:
-      $ UPDATE table SET rowid=rowid+1 WHERE ...;
-    - The xUpdate() method must return SQLITE_OK if and only if it is successful.
-      If a failure occurs, the xUpdate() must return an appropriate error code.
-      On a failure, the pVTab.zErrMsg element may optionally be replaced with
-      a custom error message text.
-    - If the xUpdate() method violates some constraint of the virtual table
-      (including, but not limited to, attempting to store a value of the
-      wrong datatype, attempting to store a value that is too large or too small,
-      or attempting to change a read-only value) then the xUpdate() must fail
-      with an appropriate error code.
-    - There might be one or more TSQLite3VTabCursor objects open and in use on
-      the virtual table instance and perhaps even on the row of the virtual
-      table when the xUpdate() method is invoked. The implementation of xUpdate()
-      must be prepared for attempts to delete or modify rows of the table out
-      from other existing cursors. If the virtual table cannot accommodate such
-      changes, the xUpdate() method must return an error code. }
+    /// Makes a change to a virtual table content (insert/delete/update)
+    // - The nArg parameter specifies the number of entries in the ppArg[] array
+    // - The value of nArg will be 1 for a pure delete operation or N+2 for an
+    // insert or replace or update where N is the number of columns in the table
+    // (including any hidden columns)
+    // - The ppArg[0] parameter is the rowid of a row in the virtual table to be deleted.
+    // If ppArg[0] is an SQL NULL, then no deletion occurs
+    // - The ppArg[1] parameter is the rowid of a new row to be inserted into the
+    // virtual table. If ppArg[1] is an SQL NULL, then the implementation must
+    // choose a rowid for the newly inserted row. Subsequent ppArg[] entries
+    // contain values of the columns of the virtual table, in the order that
+    // the columns were declared. The number of columns will match the table
+    // declaration that the xConnect or xCreate method made using the
+    // sqlite3.declare_vtab() call. All hidden columns are included.
+    // - When doing an insert without a rowid (nArg>1, ppArg[1] is an SQL NULL),
+    // the implementation must set pRowid to the rowid of the newly inserted row;
+    // this will become the value returned by the sqlite3.last_insert_rowid()
+    // function. Setting this value in all the other cases is a harmless no-op;
+    // the SQLite engine ignores the pRowid return value if nArg=1 or ppArg[1]
+    // is not an SQL NULL.
+    // - Each call to xUpdate() will fall into one of cases shown below. Note
+    // that references to ppArg[i] mean the SQL value held within the ppArg[i]
+    // object, not the ppArg[i] object itself:
+    // $ nArg = 1
+    // The single row with rowid equal to ppArg[0] is deleted. No insert occurs.
+    // $ nArg > 1
+    // $ ppArg[0] = NULL
+    // A new row is inserted with a rowid ppArg[1] and column values in ppArg[2]
+    // and following. If ppArg[1] is an SQL NULL, the a new unique rowid is
+    // generated automatically.
+    // $ nArg > 1
+    // $ ppArg[0] <> NULL
+    // $ ppArg[0] = ppArg[1]
+    // The row with rowid ppArg[0] is updated with new values in ppArg[2] and
+    // following parameters.
+    // $ nArg > 1
+    // $ ppArg[0] <> NULL
+    // $ ppArg[0] <> ppArg[1]
+    // The row with rowid ppArg[0] is updated with rowid ppArg[1] and new values
+    // in ppArg[2] and following parameters. This will occur when an SQL statement
+    // updates a rowid, as in the statement:
+    // $ UPDATE table SET rowid=rowid+1 WHERE ...;
+    // - The xUpdate() method must return SQLITE_OK if and only if it is successful.
+    // If a failure occurs, the xUpdate() must return an appropriate error code.
+    // On a failure, the pVTab.zErrMsg element may optionally be replaced with
+    // a custom error message text.
+    // - If the xUpdate() method violates some constraint of the virtual table
+    // (including, but not limited to, attempting to store a value of the
+    // wrong datatype, attempting to store a value that is too large or too small,
+    // or attempting to change a read-only value) then the xUpdate() must fail
+    // with an appropriate error code.
+    // - There might be one or more TSQLite3VTabCursor objects open and in use on
+    // the virtual table instance and perhaps even on the row of the virtual
+    // table when the xUpdate() method is invoked. The implementation of xUpdate()
+    // must be prepared for attempts to delete or modify rows of the table out
+    // from other existing cursors. If the virtual table cannot accommodate such
+    // changes, the xUpdate() method must return an error code.
     xUpdate: function(var pVTab: TSQLite3VTab;
       nArg: Integer; var ppArg: TSQLite3ValueArray;
       var pRowid: Int64): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Begins a transaction on a virtual table
-    - This method is always followed by one call to either the xCommit or
-      xRollback method.
-    - Virtual table transactions do not nest, so the xBegin method will not be
-      invoked more than once on a single virtual table without an intervening
-      call to either xCommit or xRollback. For nested transactions, use
-      xSavepoint, xRelease and xRollBackTo methods.
-    - Multiple calls to other methods can and likely will occur in between the
-      xBegin and the corresponding xCommit or xRollback. }
+    /// Begins a transaction on a virtual table
+    // - This method is always followed by one call to either the xCommit or
+    // xRollback method.
+    // - Virtual table transactions do not nest, so the xBegin method will not be
+    // invoked more than once on a single virtual table without an intervening
+    // call to either xCommit or xRollback. For nested transactions, use
+    // xSavepoint, xRelease and xRollBackTo methods.
+    // - Multiple calls to other methods can and likely will occur in between the
+    // xBegin and the corresponding xCommit or xRollback.
     xBegin: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Signals the start of a two-phase commit on a virtual table
-    - This method is only invoked after call to the xBegin method and prior
-      to an xCommit or xRollback.
-    - In order to implement two-phase commit, the xSync method on all virtual
-      tables is invoked prior to invoking the xCommit method on any virtual table.
-    - If any of the xSync methods fail, the entire transaction is rolled back. }
+    /// Signals the start of a two-phase commit on a virtual table
+    // - This method is only invoked after call to the xBegin method and prior
+    // to an xCommit or xRollback.
+    // - In order to implement two-phase commit, the xSync method on all virtual
+    // tables is invoked prior to invoking the xCommit method on any virtual table.
+    // - If any of the xSync methods fail, the entire transaction is rolled back.
     xSync: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Causes a virtual table transaction to commit }
+    /// Causes a virtual table transaction to commit
     xCommit: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Causes a virtual table transaction to rollback }
+    /// Causes a virtual table transaction to rollback
     xRollback: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Called during sqlite3.prepare() to give the virtual table implementation
-      an opportunity to overload SQL functions
-    - When a function uses a column from a virtual table as its first argument,
-      this method is called to see if the virtual table would like to overload
-      the function. The first three parameters are inputs: the virtual table,
-      the number of arguments to the function, and the name of the function.
-      If no overloading is desired, this method returns 0. To overload the
-      function, this method writes the new function implementation into pxFunc
-      and writes user data into ppArg and returns 1.
-    - Note that infix functions (LIKE, GLOB, REGEXP, and MATCH) reverse the
-      order of their arguments. So "like(A,B)" is equivalent to "B like A".
-      For the form "B like A" the B term is considered the first argument to the
-      function. But for "like(A,B)" the A term is considered the first argument.
-    - The function pointer returned by this routine must be valid for the
-      lifetime of the pVTab object given in the first parameter. }
+    /// Called during sqlite3.prepare() to give the virtual table implementation
+    // an opportunity to overload SQL functions
+    // - When a function uses a column from a virtual table as its first argument,
+    // this method is called to see if the virtual table would like to overload
+    // the function. The first three parameters are inputs: the virtual table,
+    // the number of arguments to the function, and the name of the function.
+    // If no overloading is desired, this method returns 0. To overload the
+    // function, this method writes the new function implementation into pxFunc
+    // and writes user data into ppArg and returns 1.
+    // - Note that infix functions (LIKE, GLOB, REGEXP, and MATCH) reverse the
+    // order of their arguments. So "like(A,B)" is equivalent to "B like A".
+    // For the form "B like A" the B term is considered the first argument to the
+    // function. But for "like(A,B)" the A term is considered the first argument.
+    // - The function pointer returned by this routine must be valid for the
+    // lifetime of the pVTab object given in the first parameter.
     xFindFunction: function(var pVTab: TSQLite3VTab; nArg: Integer; const zName: PAnsiChar;
       var pxFunc: TSQLFunctionFunc; var ppArg: Pointer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Provides notification that the virtual table implementation that the
-      virtual table will be given a new name
-    - If this method returns SQLITE_OK then SQLite renames the table.
-    - If this method returns an error code then the renaming is prevented. }
+    /// Provides notification that the virtual table implementation that the
+    // virtual table will be given a new name
+    // - If this method returns SQLITE_OK then SQLite renames the table.
+    // - If this method returns an error code then the renaming is prevented.
     xRename: function(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer;
        {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Starts a new transaction with the virtual table
-    - SAVEPOINTs are a method of creating transactions, similar to BEGIN and
-      COMMIT, except that the SAVEPOINT and RELEASE commands are named and
-      may be nested. See @http://www.sqlite.org/lang_savepoint.html
-    - iSavepoint parameter indicates the unique name of the SAVEPOINT }
+    /// Starts a new transaction with the virtual table
+    // - SAVEPOINTs are a method of creating transactions, similar to BEGIN and
+    // COMMIT, except that the SAVEPOINT and RELEASE commands are named and
+    // may be nested. See @http://www.sqlite.org/lang_savepoint.html
+    // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xSavepoint: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
        {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Merges a transaction into its parent transaction, so that the specified
-      transaction and its parent become the same transaction
-    - Causes all savepoints back to and including the most recent savepoint
-      with a matching identifier to be removed from the transaction stack
-    - Some people view RELEASE as the equivalent of COMMIT for a SAVEPOINT.
-      This is an acceptable point of view as long as one remembers that the
-      changes committed by an inner transaction might later be undone by a
-      rollback in an outer transaction.
-    - iSavepoint parameter indicates the unique name of the SAVEPOINT }
+    /// Merges a transaction into its parent transaction, so that the specified
+    // transaction and its parent become the same transaction
+    // - Causes all savepoints back to and including the most recent savepoint
+    // with a matching identifier to be removed from the transaction stack
+    // - Some people view RELEASE as the equivalent of COMMIT for a SAVEPOINT.
+    // This is an acceptable point of view as long as one remembers that the
+    // changes committed by an inner transaction might later be undone by a
+    // rollback in an outer transaction.
+    // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xRelease: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
        {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ Reverts the state of the virtual table content back to what it was just
-      after the corresponding SAVEPOINT
-    - iSavepoint parameter indicates the unique name of the SAVEPOINT }
+    /// Reverts the state of the virtual table content back to what it was just
+    // after the corresponding SAVEPOINT
+    // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xRollbackTo: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
        {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   end;
 
-  {/ Compile-Time Authorization Callback prototype
-  - The authorizer callback is invoked as SQL statements are being compiled by
-    sqlite3.prepare2() e.g.
-  - The authorizer callback should return SQLITE_OK to allow the action,
-    SQLITE_IGNORE to disallow the specific action but allow the SQL statement
-    to continue to be compiled, or SQLITE_DENY to cause the entire SQL statement
-    to be rejected with an error.
-  - If the authorizer callback returns any value other than SQLITE_IGNORE,
-    SQLITE_OK, or SQLITE_DENY then the sqlite3.prepare_v2() or equivalent call
-    that triggered the authorizer will fail with an error message.
-  - The first pUserData parameter to the authorizer callback is a copy of the
-    third parameter to the sqlite3.set_authorizer() interface
-  - The second parameter to the callback is an integer action code that
-    specifies the particular action to be authorized:
-  - The third through sixth parameters to the callback are zero-terminated
-    strings that contain additional details about the action to be authorized.
-  - Here is a list of handled code constant, and their associated zTab / zCol
-    parameters:
-    !    const                       zTab            zCol
-    $ SQLITE_CREATE_INDEX          Index Name      Table Name
-    $ SQLITE_CREATE_TABLE          Table Name      nil
-    $ SQLITE_CREATE_TEMP_INDEX     Index Name      Table Name
-    $ SQLITE_CREATE_TEMP_TABLE     Table Name      nil
-    $ SQLITE_CREATE_TEMP_TRIGGER   Trigger Name    Table Name
-    $ SQLITE_CREATE_TEMP_VIEW      View Name       nil
-    $ SQLITE_CREATE_TRIGGER        Trigger Name    Table Name
-    $ SQLITE_CREATE_VIEW           View Name       nil
-    $ SQLITE_DELETE                Table Name      nil
-    $ SQLITE_DROP_INDEX            Index Name      Table Name
-    $ SQLITE_DROP_TABLE            Table Name      nil
-    $ SQLITE_DROP_TEMP_INDEX       Index Name      Table Name
-    $ SQLITE_DROP_TEMP_TABLE       Table Name      nil
-    $ SQLITE_DROP_TEMP_TRIGGER     Trigger Name    Table Name
-    $ SQLITE_DROP_TEMP_VIEW        View Name       nil
-    $ SQLITE_DROP_TRIGGER          Trigger Name    Table Name
-    $ SQLITE_DROP_VIEW             View Name       nil
-    $ SQLITE_INSERT                Table Name      nil
-    $ SQLITE_PRAGMA                Pragma Name     1st arg or nil
-    $ SQLITE_READ                  Table Name      Column Name
-    $ SQLITE_SELECT                nil             nil
-    $ SQLITE_TRANSACTION           Operation       nil
-    $ SQLITE_UPDATE                Table Name      Column Name
-    $ SQLITE_ATTACH                Filename        nil
-    $ SQLITE_DETACH                Database Name   nil
-    $ SQLITE_ALTER_TABLE           Database Name   Table Name
-    $ SQLITE_REINDEX               Index Name      nil
-    $ SQLITE_ANALYZE               Table Name      nil
-    $ SQLITE_CREATE_VTABLE         Table Name      Module Name
-    $ SQLITE_DROP_VTABLE           Table Name      Module Name
-    $ SQLITE_FUNCTION              nil             Function Name
-    $ SQLITE_SAVEPOINT             Operation       Savepoint Name
-   - The 5th parameter to the authorizer callback is the name of the database
-     ('main', 'temp', etc.) if applicable.
-   - The 6th parameter to the authorizer callback is the name of the inner-most
-     trigger or view that is responsible for the access attempt or nil if this
-     access attempt is directly from top-level SQL code. }
+  /// Compile-Time Authorization Callback prototype
+  // - The authorizer callback is invoked as SQL statements are being compiled by
+  // sqlite3.prepare2() e.g.
+  // - The authorizer callback should return SQLITE_OK to allow the action,
+  // SQLITE_IGNORE to disallow the specific action but allow the SQL statement
+  // to continue to be compiled, or SQLITE_DENY to cause the entire SQL statement
+  // to be rejected with an error.
+  // - If the authorizer callback returns any value other than SQLITE_IGNORE,
+  // SQLITE_OK, or SQLITE_DENY then the sqlite3.prepare_v2() or equivalent call
+  // that triggered the authorizer will fail with an error message.
+  // - The first pUserData parameter to the authorizer callback is a copy of the
+  // third parameter to the sqlite3.set_authorizer() interface
+  // - The second parameter to the callback is an integer action code that
+  // specifies the particular action to be authorized:
+  // - The third through sixth parameters to the callback are zero-terminated
+  // strings that contain additional details about the action to be authorized.
+  // - Here is a list of handled code constant, and their associated zTab / zCol
+  // parameters:
+  // !    const                       zTab            zCol
+  // $ SQLITE_CREATE_INDEX          Index Name      Table Name
+  // $ SQLITE_CREATE_TABLE          Table Name      nil
+  // $ SQLITE_CREATE_TEMP_INDEX     Index Name      Table Name
+  // $ SQLITE_CREATE_TEMP_TABLE     Table Name      nil
+  // $ SQLITE_CREATE_TEMP_TRIGGER   Trigger Name    Table Name
+  // $ SQLITE_CREATE_TEMP_VIEW      View Name       nil
+  // $ SQLITE_CREATE_TRIGGER        Trigger Name    Table Name
+  // $ SQLITE_CREATE_VIEW           View Name       nil
+  // $ SQLITE_DELETE                Table Name      nil
+  // $ SQLITE_DROP_INDEX            Index Name      Table Name
+  // $ SQLITE_DROP_TABLE            Table Name      nil
+  // $ SQLITE_DROP_TEMP_INDEX       Index Name      Table Name
+  // $ SQLITE_DROP_TEMP_TABLE       Table Name      nil
+  // $ SQLITE_DROP_TEMP_TRIGGER     Trigger Name    Table Name
+  // $ SQLITE_DROP_TEMP_VIEW        View Name       nil
+  // $ SQLITE_DROP_TRIGGER          Trigger Name    Table Name
+  // $ SQLITE_DROP_VIEW             View Name       nil
+  // $ SQLITE_INSERT                Table Name      nil
+  // $ SQLITE_PRAGMA                Pragma Name     1st arg or nil
+  // $ SQLITE_READ                  Table Name      Column Name
+  // $ SQLITE_SELECT                nil             nil
+  // $ SQLITE_TRANSACTION           Operation       nil
+  // $ SQLITE_UPDATE                Table Name      Column Name
+  // $ SQLITE_ATTACH                Filename        nil
+  // $ SQLITE_DETACH                Database Name   nil
+  // $ SQLITE_ALTER_TABLE           Database Name   Table Name
+  // $ SQLITE_REINDEX               Index Name      nil
+  // $ SQLITE_ANALYZE               Table Name      nil
+  // $ SQLITE_CREATE_VTABLE         Table Name      Module Name
+  // $ SQLITE_DROP_VTABLE           Table Name      Module Name
+  // $ SQLITE_FUNCTION              nil             Function Name
+  // $ SQLITE_SAVEPOINT             Operation       Savepoint Name
+  // - The 5th parameter to the authorizer callback is the name of the database
+  // ('main', 'temp', etc.) if applicable.
+  // - The 6th parameter to the authorizer callback is the name of the inner-most
+  // trigger or view that is responsible for the access attempt or nil if this
+  // access attempt is directly from top-level SQL code.
   TSQLAuthorizerCallback = function(pUserData: Pointer; code: Integer;
     const zTab, zCol, zDb, zAuthContext: PAnsiChar): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-  {/ Callback function invoked when a row is updated, inserted or deleted,
-    after sqlite3.update_hook() registration
-  - The first pUpdateArg argument is a copy of the third argument to
-    sqlite3.update_hook().
-  - The second op argument is one of SQLITE_INSERT, SQLITE_DELETE, or SQLITE_UPDATE,
-    depending on the operation that caused the callback to be invoked.
-  - The third and fourth zDB / zTbl arguments contain pointers to the database
-    and table name containing the affected row.
-  - The final iRowID parameter is the rowid of the row. In the case of an update,
-    this is the rowid after the update takes place.
-  - The update hook implementation must not do anything that will modify the
-    database connection that invoked the update hook. Any actions to modify the
-    database connection must be deferred until after the completion of the
-    sqlite3.step() call that triggered the update hook. Note that
-    sqlite3.prepare_v2() and sqlite3.step() both modify their database
-    connections for the meaning of "modify" in this paragraph. }
+  /// Callback function invoked when a row is updated, inserted or deleted,
+  // after sqlite3.update_hook() registration
+  // - The first pUpdateArg argument is a copy of the third argument to
+  // sqlite3.update_hook().
+  // - The second op argument is one of SQLITE_INSERT, SQLITE_DELETE, or SQLITE_UPDATE,
+  // depending on the operation that caused the callback to be invoked.
+  // - The third and fourth zDB / zTbl arguments contain pointers to the database
+  // and table name containing the affected row.
+  // - The final iRowID parameter is the rowid of the row. In the case of an update,
+  // this is the rowid after the update takes place.
+  // - The update hook implementation must not do anything that will modify the
+  // database connection that invoked the update hook. Any actions to modify the
+  // database connection must be deferred until after the completion of the
+  // sqlite3.step() call that triggered the update hook. Note that
+  // sqlite3.prepare_v2() and sqlite3.step() both modify their database
+  // connections for the meaning of "modify" in this paragraph.
   TSQLUpdateCallback = procedure(pUpdateArg: Pointer; op: Integer;
     const zDb, zTbl: PUTF8Char; iRowID: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-  {/ Commit And Rollback Notification Callback function after
-    sqlite3.commit_hook() or sqlite3.rollback_hook() registration
-  - The callback implementation must not do anything that will modify the
-    database connection that invoked the callback. Any actions to modify the
-    database connection must be deferred until after the completion of the
-    sqlite3.step() call that triggered the commit or rollback hook in the
-    first place. Note that sqlite3.prepare_v2() and sqlite3.step() both modify
-    their database connections for the meaning of "modify" in this paragraph.
-  - When the commit hook callback routine returns zero, the COMMIT operation
-    is allowed to continue normally. If the commit hook returns non-zero, then
-    the COMMIT is converted into a ROLLBACK. The rollback hook is invoked on
-    a rollback that results from a commit hook returning non-zero, just as
-    it would be with any other rollback.
-  - For the purposes of this API, a transaction is said to have been rolled
-    back if an explicit "ROLLBACK" statement is executed, or an error or
-    constraint causes an implicit rollback to occur. The rollback callback
-    is not invoked if a transaction is automatically rolled back because the
-    database connection is closed. }
+  /// Commit And Rollback Notification Callback function after
+  // sqlite3.commit_hook() or sqlite3.rollback_hook() registration
+  // - The callback implementation must not do anything that will modify the
+  // database connection that invoked the callback. Any actions to modify the
+  // database connection must be deferred until after the completion of the
+  // sqlite3.step() call that triggered the commit or rollback hook in the
+  // first place. Note that sqlite3.prepare_v2() and sqlite3.step() both modify
+  // their database connections for the meaning of "modify" in this paragraph.
+  // - When the commit hook callback routine returns zero, the COMMIT operation
+  // is allowed to continue normally. If the commit hook returns non-zero, then
+  // the COMMIT is converted into a ROLLBACK. The rollback hook is invoked on
+  // a rollback that results from a commit hook returning non-zero, just as
+  // it would be with any other rollback.
+  // - For the purposes of this API, a transaction is said to have been rolled
+  // back if an explicit "ROLLBACK" statement is executed, or an error or
+  // constraint causes an implicit rollback to occur. The rollback callback
+  // is not invoked if a transaction is automatically rolled back because the
+  // database connection is closed.
   TSQLCommitCallback = function(pArg: Pointer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 
-  {/ Callback function registered by sqlite3.trace()
-   - this procedure will be invoked at various times when an SQL statement is
-    being run by sqlite3.step() }
+  /// Callback function registered by sqlite3.trace()
+  // - this procedure will be invoked at various times when an SQL statement is
+  // being run by sqlite3.step()
   TSQLTraceCallback = procedure(TraceArg: Pointer; Trace: PUTF8Char);
     {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-  {/ Callback function registered by sqlite3.profile()
-   - this procedure will be invoked as each SQL statement finishes
-   - warning: sqlite3.profile() function is considered experimental and is
-     subject to change in future versions of SQLite }
+  /// Callback function registered by sqlite3.profile()
+  // - this procedure will be invoked as each SQL statement finishes
+  // - warning: sqlite3.profile() function is considered experimental and is
+  // subject to change in future versions of SQLite
   TSQLProfileCallback = procedure(ProfileArg: Pointer; Profile: PUTF8Char;
     ProfileNanoSeconds: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -1232,383 +1232,384 @@ type
     extended_errcode: function(DB: TSQLite3DB): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ add SQL functions or aggregates or to redefine the behavior of existing
-       SQL functions or aggregates
-      - The first parameter is the database connection to which the SQL function is
-        to be added. If an application uses more than one database connection then
-        application-defined SQL functions must be added to each database connection
-        separately.
-      - The second parameter is the name of the SQL function to be created or redefined.
-        The length of the name is limited to 255 bytes in a UTF-8 representation,
-        exclusive of the zero-terminator. Note that the name length limit is in
-        UTF-8 bytes, not characters nor UTF-16 bytes. Any attempt to create a
-        function with a longer name will result in SQLITE_MISUSE being returned.
-      - The third parameter (nArg) is the number of arguments that the SQL function
-        or aggregate takes. If the third parameter is less than -1 or greater than
-        127 then the behavior is undefined.
-      - The fourth parameter, eTextRep, specifies what text encoding this SQL
-        function prefers for its parameters. Every SQL function implementation must
-        be able to work with UTF-8, UTF-16le, or UTF-16be. But some implementations
-        may be more efficient with one encoding than another. When multiple
-        implementations of the same function are available, SQLite will pick the one
-        that involves the least amount of data conversion. If there is only a single
-        implementation which does not care what text encoding is used, then the
-        fourth argument should be SQLITE_ANY.
-      - The fifth parameter, pApp, is an arbitrary pointer. The implementation of the
-        function can gain access to this pointer using sqlite3.user_data().
-      - The seventh, eighth and ninth parameters, xFunc, xStep and xFinal, are
-        pointers to C-language functions that implement the SQL function or aggregate.
-        A scalar SQL function requires an implementation of the xFunc callback only;
-        nil pointers must be passed as the xStep and xFinal parameters. An aggregate
-        SQL function requires an implementation of xStep and xFinal and nil pointer
-        must be passed for xFunc. To delete an existing SQL function or aggregate,
-        pass nil pointers for all three function callbacks.
-      - It is permitted to register multiple implementations of the same functions
-        with the same name but with either differing numbers of arguments or
-        differing preferred text encodings. SQLite will use the implementation
-        that most closely matches the way in which the SQL function is used. }
+    /// add SQL functions or aggregates or to redefine the behavior of existing
+    // SQL functions or aggregates
+    // - The first parameter is the database connection to which the SQL function is
+    // to be added. If an application uses more than one database connection then
+    // application-defined SQL functions must be added to each database connection
+    // separately.
+    // - The second parameter is the name of the SQL function to be created or redefined.
+    // The length of the name is limited to 255 bytes in a UTF-8 representation,
+    // exclusive of the zero-terminator. Note that the name length limit is in
+    // UTF-8 bytes, not characters nor UTF-16 bytes. Any attempt to create a
+    // function with a longer name will result in SQLITE_MISUSE being returned.
+    // - The third parameter (nArg) is the number of arguments that the SQL function
+    // or aggregate takes. If the third parameter is less than -1 or greater than
+    // 127 then the behavior is undefined.
+    // - The fourth parameter, eTextRep, specifies what text encoding this SQL
+    // function prefers for its parameters. Every SQL function implementation must
+    // be able to work with UTF-8, UTF-16le, or UTF-16be. But some implementations
+    // may be more efficient with one encoding than another. When multiple
+    // implementations of the same function are available, SQLite will pick the one
+    // that involves the least amount of data conversion. If there is only a single
+    // implementation which does not care what text encoding is used, then the
+    // fourth argument should be SQLITE_ANY.
+    // - The fifth parameter, pApp, is an arbitrary pointer. The implementation of the
+    // function can gain access to this pointer using sqlite3.user_data().
+    // - The seventh, eighth and ninth parameters, xFunc, xStep and xFinal, are
+    // pointers to C-language functions that implement the SQL function or aggregate.
+    // A scalar SQL function requires an implementation of the xFunc callback only;
+    // nil pointers must be passed as the xStep and xFinal parameters. An aggregate
+    // SQL function requires an implementation of xStep and xFinal and nil pointer
+    // must be passed for xFunc. To delete an existing SQL function or aggregate,
+    // pass nil pointers for all three function callbacks.
+    // - It is permitted to register multiple implementations of the same functions
+    // with the same name but with either differing numbers of arguments or
+    // differing preferred text encodings. SQLite will use the implementation
+    // that most closely matches the way in which the SQL function is used.
     create_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ add SQL functions or aggregates or to redefine the behavior of existing
-       SQL functions or aggregates, including destruction
-      - if the additinal xDestroy parameter is not NULL, then it is invoked when
-        the function is deleted, either by being overloaded or when the database
-        connection closes.
-      - When the destructure callback of the tenth parameter is invoked, it is
-        passed a single argument which is a copy of the pointer which was the fifth
-        parameter to sqlite3.create_function_v2().
-      - this function is not available in older revisions - e.g. 3.6.* }
+    /// add SQL functions or aggregates or to redefine the behavior of existing
+    // SQL functions or aggregates, including destruction
+    // - if the additinal xDestroy parameter is not NULL, then it is invoked when
+    // the function is deleted, either by being overloaded or when the database
+    // connection closes.
+    // - When the destructure callback of the tenth parameter is invoked, it is
+    // passed a single argument which is a copy of the pointer which was the fifth
+    // parameter to sqlite3.create_function_v2().
+    // - this function is not available in older revisions - e.g. 3.6.*
     create_function_v2: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Define New Collating Sequences
-      - add new collation sequences to the database connection specified
-      - collation name is to be used in CREATE TABLE t1 (a COLLATE CollationName);
-       or in SELECT * FROM t1 ORDER BY c COLLATE CollationName;
-      - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
-      - TSQLDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations }
+    /// Define New Collating Sequences
+    // - add new collation sequences to the database connection specified
+    // - collation name is to be used in CREATE TABLE t1 (a COLLATE CollationName);
+    // or in SELECT * FROM t1 ORDER BY c COLLATE CollationName;
+    // - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
+    // - TSQLDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations
     create_collation: function(DB: TSQLite3DB; CollationName: PUTF8Char;
       StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Returns the rowid of the most recent successful INSERT into the database }
+    /// Returns the rowid of the most recent successful INSERT into the database
     last_insert_rowid: function(DB: TSQLite3DB): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Set A Busy Timeout
-     - This routine sets a busy handler that sleeps for a specified amount of time
-      when a table is locked. The handler will sleep multiple times until at least
-      "ms" milliseconds of sleeping have accumulated. After at least "ms" milliseconds
-      of sleeping, the handler returns 0 which causes sqlite3.step() to return
-      SQLITE_BUSY or SQLITE_IOERR_BLOCKED.
-     - Calling this routine with an argument less than or equal to zero turns off
-      all busy handlers.
-     -  There can only be a single busy handler for a particular database connection
-      any given moment. If another busy handler was defined (using
-      sqlite3.busy_handler()) prior to calling this routine, that other busy handler
-      is cleared. }
+    /// Set A Busy Timeout
+    // - This routine sets a busy handler that sleeps for a specified amount of time
+    // when a table is locked. The handler will sleep multiple times until at least
+    // "ms" milliseconds of sleeping have accumulated. After at least "ms" milliseconds
+    // of sleeping, the handler returns 0 which causes sqlite3.step() to return
+    // SQLITE_BUSY or SQLITE_IOERR_BLOCKED.
+    // - Calling this routine with an argument less than or equal to zero turns off
+    // all busy handlers.
+    // - There can only be a single busy handler for a particular database connection
+    // any given moment. If another busy handler was defined (using
+    // sqlite3.busy_handler()) prior to calling this routine, that other busy handler
+    // is cleared.
     busy_timeout: function(DB: TSQLite3DB; Milliseconds: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register A Callback To Handle SQLITE_BUSY Errors
-     - This routine sets a callback function that might be invoked whenever an
-      attempt is made to open a database table that another thread or process has locked.
-     - If the busy callback is NULL, then SQLITE_BUSY or SQLITE_IOERR_BLOCKED is
-      returned immediately upon encountering the lock. If the busy callback is not
-      NULL, then the callback might be invoked with two arguments.
-     - The default busy callback is NULL. }
+    /// Register A Callback To Handle SQLITE_BUSY Errors
+    // - This routine sets a callback function that might be invoked whenever an
+    // attempt is made to open a database table that another thread or process has locked.
+    // - If the busy callback is NULL, then SQLITE_BUSY or SQLITE_IOERR_BLOCKED is
+    // returned immediately upon encountering the lock. If the busy callback is not
+    // NULL, then the callback might be invoked with two arguments.
+    // - The default busy callback is NULL.
     busy_handler: function(DB: TSQLite3DB;
       CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Compile a SQL query into byte-code
-      - SQL must contains an UTF8-encoded null-terminated string query
-      - SQL_bytes contains -1 (to stop at the null char) or the number of bytes in
-       the input string, including the null terminator
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S will contain an handle of the resulting statement (an opaque sqlite3.stmt
-       object) on success, or will 0 on error - the calling procedure is responsible
-       for deleting the compiled SQL statement using sqlite3.finalize() after it has
-       finished with it
-      - in this "v2" interface, the prepared statement that is returned contains a
-       copy of the original SQL text
-      - this routine only compiles the first statement in SQL, so SQLtail is left pointing
-       to what remains uncompiled }
+    /// Compile a SQL query into byte-code
+    // - SQL must contains an UTF8-encoded null-terminated string query
+    // - SQL_bytes contains -1 (to stop at the null char) or the number of bytes in
+    // the input string, including the null terminator
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S will contain an handle of the resulting statement (an opaque sqlite3.stmt
+    // object) on success, or will 0 on error - the calling procedure is responsible
+    // for deleting the compiled SQL statement using sqlite3.finalize() after it has
+    // finished with it
+    // - in this "v2" interface, the prepared statement that is returned contains a
+    // copy of the original SQL text
+    // - this routine only compiles the first statement in SQL, so SQLtail is left pointing
+    // to what remains uncompiled
     prepare_v2: function(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
       var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Delete a previously prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - this routine can be called at any point during the execution of the prepared
-       statement. If the virtual machine has not completed execution when this routine
-       is called, that is like encountering an error or an interrupt. Incomplete updates
-       may be rolled back and transactions canceled, depending on the circumstances,
-       and the error code returned will be SQLITE_ABORT }
+    /// Delete a previously prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - this routine can be called at any point during the execution of the prepared
+    //  statement. If the virtual machine has not completed execution when this routine
+    //  is called, that is like encountering an error or an interrupt. Incomplete updates
+    //  may be rolled back and transactions canceled, depending on the circumstances,
+    //  and the error code returned will be SQLITE_ABORT
     finalize: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Find the next prepared statement
-      - this interface returns a handle to the next prepared statement after S,
-       associated with the database connection DB.
-      - if S is 0 then this interface returns a pointer to the first prepared
-       statement associated with the database connection DB.
-      - if no prepared statement satisfies the conditions of this routine, it returns 0 }
+    /// Find the next prepared statement
+    // - this interface returns a handle to the next prepared statement after S,
+    // associated with the database connection DB.
+    // - if S is 0 then this interface returns a pointer to the first prepared
+    // statement associated with the database connection DB.
+    // - if no prepared statement satisfies the conditions of this routine, it returns 0
     next_stmt: function(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Reset a prepared statement object back to its initial state, ready to be re-Prepared
-      - if the most recent call to sqlite3.step(S) returned SQLITE_ROW or SQLITE_DONE,
-       or if sqlite3.step(S) has never before been called with S, then sqlite3.reset(S)
-       returns SQLITE_OK.
-      - return an appropriate error code if the most recent call to sqlite3.step(S) failed
-      - any SQL statement variables that had values bound to them using the sqlite3.bind_*()
-       API retain their values. Use sqlite3.clear_bindings() to reset the bindings. }
+    /// Reset a prepared statement object back to its initial state, ready to be re-Prepared
+    // - if the most recent call to sqlite3.step(S) returned SQLITE_ROW or SQLITE_DONE,
+    // or if sqlite3.step(S) has never before been called with S, then sqlite3.reset(S)
+    // returns SQLITE_OK.
+    // - return an appropriate error code if the most recent call to sqlite3.step(S) failed
+    // - any SQL statement variables that had values bound to them using the sqlite3.bind_*()
+    // API retain their values. Use sqlite3.clear_bindings() to reset the bindings.
     reset: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/  returns true (non-zero) if and only if the prepared statement X
-      makes no direct changes to the content of the database file
-     - Transaction control statements such as BEGIN, COMMIT, ROLLBACK, SAVEPOINT,
-       and RELEASE cause sqlite3.stmt_readonly() to return true, since the statements
-       themselves do not actually modify the database but rather they control the
-       timing of when other statements modify the database. The ATTACH and DETACH
-       statements also cause sqlite3.stmt_readonly() to return true since, while
-       those statements change the configuration of a database connection, they
-       do not make changes to the content of the database files on disk. }
+    ///  returns true (non-zero) if and only if the prepared statement X
+    // makes no direct changes to the content of the database file
+    // - Transaction control statements such as BEGIN, COMMIT, ROLLBACK, SAVEPOINT,
+    // and RELEASE cause sqlite3.stmt_readonly() to return true, since the statements
+    // themselves do not actually modify the database but rather they control the
+    // timing of when other statements modify the database. The ATTACH and DETACH
+    // statements also cause sqlite3.stmt_readonly() to return true since, while
+    // those statements change the configuration of a database connection, they
+    // do not make changes to the content of the database files on disk.
     stmt_readonly: function(S: TSQLite3Statement): boolean; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Evaluate An SQL Statement, returning a result status:
-      - SQLITE_BUSY means that the database engine was unable to acquire the database
-       locks it needs to do its job. If the statement is a COMMIT or occurs outside of
-       an explicit transaction, then you can retry the statement. If the statement
-       is not a COMMIT and occurs within a explicit transaction then you should
-       rollback the transaction before continuing.
-      - SQLITE_DONE means that the statement has finished executing successfully.
-       sqlite3.step() should not be called again on this virtual machine without
-       first calling sqlite3.reset() to reset the virtual machine state back.
-      - SQLITE_ROW is returned each time a new row of data is ready for processing by
-       the caller. The values may be accessed using the column access functions below.
-       sqlite3.step() has to be called again to retrieve the next row of data.
-      - SQLITE_MISUSE means that the this routine was called inappropriately. Perhaps
-       it was called on a prepared statement that has already been finalized or on
-       one that had previously returned SQLITE_ERROR or SQLITE_DONE. Or it could be
-       the case that the same database connection is being used by two or more threads
-       at the same moment in time.
-      - SQLITE_SCHEMA means that the database schema changes, and the SQL statement
-       has been recompiled and run again, but the schame changed in a way that makes
-       the statement no longer valid, as a fatal error.
-      - another specific error code is returned on fatal error }
+    /// Evaluate An SQL Statement, returning a result status:
+    // - SQLITE_BUSY means that the database engine was unable to acquire the database
+    // locks it needs to do its job. If the statement is a COMMIT or occurs outside of
+    // an explicit transaction, then you can retry the statement. If the statement
+    // is not a COMMIT and occurs within a explicit transaction then you should
+    // rollback the transaction before continuing.
+    // - SQLITE_DONE means that the statement has finished executing successfully.
+    // sqlite3.step() should not be called again on this virtual machine without
+    // first calling sqlite3.reset() to reset the virtual machine state back.
+    // - SQLITE_ROW is returned each time a new row of data is ready for processing by
+    // the caller. The values may be accessed using the column access functions below.
+    // sqlite3.step() has to be called again to retrieve the next row of data.
+    // - SQLITE_MISUSE means that the this routine was called inappropriately. Perhaps
+    // it was called on a prepared statement that has already been finalized or on
+    // one that had previously returned SQLITE_ERROR or SQLITE_DONE. Or it could be
+    // the case that the same database connection is being used by two or more threads
+    // at the same moment in time.
+    // - SQLITE_SCHEMA means that the database schema changes, and the SQL statement
+    // has been recompiled and run again, but the schame changed in a way that makes
+    // the statement no longer valid, as a fatal error.
+    // - another specific error code is returned on fatal error
     step: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ number of columns in the result set for the statement }
+    /// get the number of columns in the result set for the statement
     column_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ datatype code for the initial data type of a result column
-      - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
-       SQLITE_BLOB or SQLITE_NULL
-      - S is the SQL statement, after sqlite3.step(S) returned SQLITE_ROW
-      - Col is the column number, indexed from 0 to sqlite3.column_count(S)-1
-      - must be called before any sqlite3.column_*() statement, which may result in
-       an implicit type conversion: in this case, value is undefined }
+    /// datatype code for the initial data type of a result column
+    // - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
+    // SQLITE_BLOB or SQLITE_NULL
+    // - S is the SQL statement, after sqlite3.step(S) returned SQLITE_ROW
+    // - Col is the column number, indexed from 0 to sqlite3.column_count(S)-1
+    // - must be called before any sqlite3.column_*() statement, which may result in
+    // an implicit type conversion: in this case, value is undefined
     column_type: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ returns a zero-terminated UTF-8 string containing the declared datatype of a result column }
+    /// returns a zero-terminated UTF-8 string containing the declared datatype
+    // of a result column
     column_decltype: function(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ returns the name of a result column as a zero-terminated UTF-8 string }
+    /// returns the name of a result column as a zero-terminated UTF-8 string
     column_name: function(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ number of bytes for a BLOB or UTF-8 string result
-      - S is the SQL statement, after sqlite3.step(S) returned SQLITE_ROW
-      - Col is the column number, indexed from 0 to sqlite3.column_count(S)-1
-      - an implicit conversion into UTF-8 text is made for a numeric value or
-        UTF-16 column: you must call sqlite3.column_text() or sqlite3.column_blob()
-        before calling sqlite3.column_bytes() to perform the conversion itself }
+    /// number of bytes for a BLOB or UTF-8 string result
+    // - S is the SQL statement, after sqlite3.step(S) returned SQLITE_ROW
+    // - Col is the column number, indexed from 0 to sqlite3.column_count(S)-1
+    // - an implicit conversion into UTF-8 text is made for a numeric value or
+    // UTF-16 column: you must call sqlite3.column_text() or sqlite3.column_blob()
+    // before calling sqlite3.column_bytes() to perform the conversion itself
     column_bytes: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ get the value handle of the Col column in the current row of prepared statement S
-      - this handle represent a sqlite3.value object
-      - this handle can then be accessed with any sqlite3.value_*() function below }
+    /// get the value handle of the Col column in the current row of prepared statement S
+    // - this handle represent a sqlite3.value object
+    // - this handle can then be accessed with any sqlite3.value_*() function below
     column_value: function(S: TSQLite3Statement; Col: integer): TSQLite3Value; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row prepared statement S
-      into a floating point value and returns a copy of that value
-      - NULL is converted into 0.0
-      - INTEGER is converted into corresponding floating point value
-      - TEXT or BLOB is converted from all correct ASCII numbers with 0.0 as default }
+    /// converts the Col column in the current row prepared statement S
+    // into a floating point value and returns a copy of that value
+    // - NULL is converted into 0.0
+    // - INTEGER is converted into corresponding floating point value
+    // - TEXT or BLOB is converted from all correct ASCII numbers with 0.0 as default
     column_double: function(S: TSQLite3Statement; Col: integer): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row prepared statement S
-      into a 32 bit integer value and returns a copy of that value
-      - NULL is converted into 0
-      - FLOAT is truncated into corresponding integer value
-      - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default }
+    /// converts the Col column in the current row prepared statement S
+    // into a 32 bit integer value and returns a copy of that value
+    // - NULL is converted into 0
+    // - FLOAT is truncated into corresponding integer value
+    // - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default
     column_int: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row prepared statement S
-      into a 64 bit integer value and returns a copy of that value
-      - NULL is converted into 0
-      - FLOAT is truncated into corresponding integer value
-      - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default }
+    /// converts the Col column in the current row prepared statement S
+    // into a 64 bit integer value and returns a copy of that value
+    // - NULL is converted into 0
+    // - FLOAT is truncated into corresponding integer value
+    // - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default
     column_int64: function(S: TSQLite3Statement; Col: integer): int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row prepared statement S
-      into a zero-terminated UTF-8 string and returns a pointer to that string
-      - NULL is converted into nil
-      - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
-      - TEXT is returned directly (with UTF-16 -> UTF-8 encoding if necessary)
-      - BLOB add a zero terminator if needed }
+    /// converts the Col column in the current row prepared statement S
+    // into a zero-terminated UTF-8 string and returns a pointer to that string
+    // - NULL is converted into nil
+    // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
+    // - TEXT is returned directly (with UTF-16 -> UTF-8 encoding if necessary)
+    // - BLOB add a zero terminator if needed
     column_text: function(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row prepared statement S
-      into a zero-terminated UTF-16 string and returns a pointer to that string
-      - NULL is converted into nil
-      - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
-      - TEXT is returned directly (with UTF-8 -> UTF-16 encoding if necessary)
-      - BLOB add a zero terminator if needed }
+    /// converts the Col column in the current row prepared statement S
+    // into a zero-terminated UTF-16 string and returns a pointer to that string
+    // - NULL is converted into nil
+    // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
+    // - TEXT is returned directly (with UTF-8 -> UTF-16 encoding if necessary)
+    // - BLOB add a zero terminator if needed
     column_text16: function(S: TSQLite3Statement; Col: integer): PWideChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts the Col column in the current row of prepared statement S
-      into a BLOB and then returns a pointer to the converted value
-      - NULL is converted into nil
-      - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
-      - TEXT and BLOB are returned directly }
+    /// converts the Col column in the current row of prepared statement S
+    // into a BLOB and then returns a pointer to the converted value
+    // - NULL is converted into nil
+    // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
+    // - TEXT and BLOB are returned directly
     column_blob: function(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 
-    {/ datatype code for a sqlite3.value object, specified by its handle
-      - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
-       SQLITE_BLOB or SQLITE_NULL
-      - must be called before any sqlite3.value_*() statement, which may result in
-       an implicit type conversion: in this case, value is undefined }
+    /// datatype code for a sqlite3.value object, specified by its handle
+    // - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
+    // SQLITE_BLOB or SQLITE_NULL
+    // - must be called before any sqlite3.value_*() statement, which may result in
+    // an implicit type conversion: in this case, value is undefined
     value_type: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ attempts to apply numeric affinity to the value
-      - This means that an attempt is made to convert the value to an integer or
-      floating point. If such a conversion is possible without loss of information
-      (in other words, if the value is a string that looks like a number) then the
-      conversion is performed. Otherwise no conversion occurs. The datatype after
-      conversion is returned.
-      - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
-       SQLITE_BLOB or SQLITE_NULL }
+    /// attempts to apply numeric affinity to the value
+    // - This means that an attempt is made to convert the value to an integer or
+    // floating point. If such a conversion is possible without loss of information
+    // (in other words, if the value is a string that looks like a number) then the
+    // conversion is performed. Otherwise no conversion occurs. The datatype after
+    // conversion is returned.
+    // - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
+    // SQLITE_BLOB or SQLITE_NULL
     value_numeric_type: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ number of bytes for a sqlite3.value object, specified by its handle
-      - used after a call to sqlite3.value_text() or sqlite3.value_blob()
-      to determine buffer size (in bytes) }
+    /// number of bytes for a sqlite3.value object, specified by its handle
+    // - used after a call to sqlite3.value_text() or sqlite3.value_blob()
+    //  to determine buffer size (in bytes)
     value_bytes: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts a sqlite3.value object, specified by its handle,
-      into a floating point value and returns a copy of that value }
+    /// converts a sqlite3.value object, specified by its handle,
+    // into a floating point value and returns a copy of that value
     value_double: function(Value: TSQLite3Value): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts a sqlite3.value object, specified by its handle,
-      into an integer value and returns a copy of that value }
+    /// converts a sqlite3.value object, specified by its handle,
+    // into an integer value and returns a copy of that value
     value_int64: function(Value: TSQLite3Value): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts a sqlite3.value object, specified by its handle,
-      into an UTF-8 encoded string, and returns a copy of that value }
+    /// converts a sqlite3.value object, specified by its handle,
+    // into an UTF-8 encoded string, and returns a copy of that value
     value_text: function(Value: TSQLite3Value): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ converts a sqlite3.value object, specified by its handle,
-      into a blob memory, and returns a copy of that value }
+    /// converts a sqlite3.value object, specified by its handle,
+    // into a blob memory, and returns a copy of that value
     value_blob: function(Value: TSQLite3Value): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 
-    {/ sets the return value of the application-defined function to be NULL}
+    /// sets the return value of the application-defined function to be NULL
     result_null: procedure(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ sets the return value of the application-defined function to be the 64-bit
-       signed integer value given in the 2nd argument }
+    /// sets the return value of the application-defined function to be the 64-bit
+    // signed integer value given in the 2nd argument
     result_int64: procedure(Context: TSQLite3FunctionContext; Value: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ sets the result from an application-defined function to be a floating point
-      value specified by its 2nd argument }
+    /// sets the result from an application-defined function to be a floating point
+    // value specified by its 2nd argument
     result_double: procedure(Context: TSQLite3FunctionContext; Value: double); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ sets the result from an application-defined function to be the BLOB
-      - content is pointed to by the Value and which is Value_bytes bytes long
-      - set DestroyPtr as SQLITE_STATIC (nil) for static binding
-      - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-        copy of the data (this is the prefered way in our Framework)
-      - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
-        or to @sqlite3InternalFreeObject if Value must be released via a Free method }
+    /// sets the result from an application-defined function to be the BLOB
+    // - content is pointed to by the Value and which is Value_bytes bytes long
+    // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
+    // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
+    // copy of the data (this is the prefered way in our Framework)
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_blob: procedure(Context: TSQLite3FunctionContext; Value: Pointer;
       Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ sets the return value of the application-defined function to be a text string
-      which is represented as UTF-8
-      - if Value_bytes is negative, then SQLite takes result text from the Value
-        parameter through the first zero character
-      - if Value_bytes is non-negative, then as many bytes (NOT characters: this
-        parameter must include the #0 terminator) of the text pointed to by the
-        Value parameter are taken as the application-defined function result
-      - set DestroyPtr as SQLITE_STATIC (nil) for static binding
-      - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-        copy of the data (this is the prefered way in our Framework)
-      - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
-        or to @sqlite3InternalFreeObject if Value must be released via a Free method }
+    /// sets the return value of the application-defined function to be a text string
+    // which is represented as UTF-8
+    // - if Value_bytes is negative, then SQLite takes result text from the Value
+    // parameter through the first zero character
+    // - if Value_bytes is non-negative, then as many bytes (NOT characters: this
+    // parameter must include the #0 terminator) of the text pointed to by the
+    // Value parameter are taken as the application-defined function result
+    // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
+    // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
+    // copy of the data (this is the prefered way in our Framework)
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_text: procedure(Context: TSQLite3FunctionContext; Value: PUTF8Char;
       Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ sets the result of the application-defined function to be a copy the unprotected
-      sqlite3.value object specified by the 2nd parameter
-      - The sqlite3.result_value() interface makes a copy of the sqlite3.value so
-      that the sqlite3.value specified in the parameter may change or be deallocated
-      after sqlite3.result_value() returns without harm }
+    /// sets the result of the application-defined function to be a copy the unprotected
+    // sqlite3.value object specified by the 2nd parameter
+    // - The sqlite3.result_value() interface makes a copy of the sqlite3.value so
+    // that the sqlite3.value specified in the parameter may change or be deallocated
+    // after sqlite3.result_value() returns without harm
     result_value: procedure(Context: TSQLite3FunctionContext; Value: TSQLite3Value); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ cause the implemented SQL function to throw an exception
-     - SQLite interprets the error message string from sqlite3.result_error() as UTF-8
-     - if MsgLen is negative, Msg must be #0 ended, or MsgLen must tell the numnber of
-       characters in the Msg UTF-8 buffer } 
+    /// cause the implemented SQL function to throw an exception
+    // - SQLite interprets the error message string from sqlite3.result_error() as UTF-8
+    // - if MsgLen is negative, Msg must be #0 ended, or MsgLen must tell the numnber of
+    // characters in the Msg UTF-8 buffer
     result_error: procedure(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ returns a copy of the pointer that was the pUserData parameter (the 5th
-      parameter) of the sqlite3.create_function() routine that originally
-      registered the application defined function
-      - This routine must be called from the same thread in which the
-        application-defined function is running }
+    /// returns a copy of the pointer that was the pUserData parameter (the 5th
+    // parameter) of the sqlite3.create_function() routine that originally
+    // registered the application defined function
+    // - This routine must be called from the same thread in which the
+    // application-defined function is running
     user_data: function(Context: TSQLite3FunctionContext): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ returns a copy of the pointer to the database connection (the 1st parameter)
-      of the sqlite3.create_function() routine that originally registered the
-      application defined function }
+    /// returns a copy of the pointer to the database connection (the 1st parameter)
+    // of the sqlite3.create_function() routine that originally registered the
+    // application defined function
     context_db_handle: function(Context: TSQLite3FunctionContext): TSQLite3DB; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Implementations of aggregate SQL functions use this routine to allocate
-     memory for storing their state.
-     - The first time the sqlite3.aggregate_context(C,N) routine is called for a
-     particular aggregate function, SQLite allocates N of memory, zeroes out that
-     memory, and returns a pointer to the new memory. On second and subsequent calls
-     to sqlite3.aggregate_context() for the same aggregate function instance, the
-     same buffer is returned. sqlite3.aggregate_context() is normally called once
-     for each invocation of the xStep callback and then one last time when the
-     xFinal callback is invoked. When no rows match an aggregate query, the xStep()
-     callback of the aggregate function implementation is never called and xFinal()
-     is called exactly once. In those cases, sqlite3.aggregate_context() might be
-     called for the first time from within xFinal().
-     - The sqlite3.aggregate_context(C,N) routine returns a NULL pointer if N is
-     less than or equal to zero or if a memory allocate error occurs.
-     - The amount of space allocated by sqlite3.aggregate_context(C,N) is
-     determined by the N parameter on first successful call. Changing the value
-     of N in subsequent call to sqlite3.aggregate_context() within the same
-     aggregate function instance will not resize the memory allocation.
-     - SQLite automatically frees the memory allocated by sqlite3.aggregate_context()
-     when the aggregate query concludes. }
+    /// Implementations of aggregate SQL functions use this routine to allocate
+    // memory for storing their state.
+    // - The first time the sqlite3.aggregate_context(C,N) routine is called for a
+    // particular aggregate function, SQLite allocates N of memory, zeroes out that
+    // memory, and returns a pointer to the new memory. On second and subsequent calls
+    // to sqlite3.aggregate_context() for the same aggregate function instance, the
+    // same buffer is returned. sqlite3.aggregate_context() is normally called once
+    // for each invocation of the xStep callback and then one last time when the
+    // xFinal callback is invoked. When no rows match an aggregate query, the xStep()
+    // callback of the aggregate function implementation is never called and xFinal()
+    // is called exactly once. In those cases, sqlite3.aggregate_context() might be
+    // called for the first time from within xFinal().
+    // - The sqlite3.aggregate_context(C,N) routine returns a NULL pointer if N is
+    // less than or equal to zero or if a memory allocate error occurs.
+    // - The amount of space allocated by sqlite3.aggregate_context(C,N) is
+    // determined by the N parameter on first successful call. Changing the value
+    // of N in subsequent call to sqlite3.aggregate_context() within the same
+    // aggregate function instance will not resize the memory allocation.
+    // - SQLite automatically frees the memory allocated by sqlite3.aggregate_context()
+    // when the aggregate query concludes.
     aggregate_context: function(Context: TSQLite3FunctionContext;
        nBytes: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Bind a Text Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set. The leftmost SQL parameter
-       has an index of 1.
-      - Text must contains an UTF8-encoded null-terminated string query
-      - Text_bytes contains -1 (to stop at the null char) or the number of chars
-        in the input string, excluding the null terminator
-      - set DestroyPtr as SQLITE_STATIC (nil) for static binding
-      - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-        copy of the data (this is the prefered way in our Framework)
-      - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem() }
+    /// Bind a Text Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set. The leftmost SQL parameter
+    // has an index of 1.
+    // - Text must contains an UTF8-encoded null-terminated string query
+    // - Text_bytes contains -1 (to stop at the null char) or the number of chars
+    // in the input string, excluding the null terminator
+    // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
+    // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
+    // copy of the data (this is the prefered way in our Framework)
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     bind_text: function(S: TSQLite3Statement; Param: integer;
       Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -1616,211 +1617,211 @@ type
       // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
       // all column values
 
-    {/ Bind a Blob Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set (leftmost=1)
-      - Buf must point to a memory buffer of Buf_bytes bytes
-      - Buf_bytes contains the number of bytes in Buf
-      - set DestroyPtr as SQLITE_STATIC (nil) for static binding
-      - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
-        copy of the data (this is the prefered way in our Framework)
-      - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem() }
+    /// Bind a Blob Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set (leftmost=1)
+    // - Buf must point to a memory buffer of Buf_bytes bytes
+    // - Buf_bytes contains the number of bytes in Buf
+    // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
+    // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
+    // copy of the data (this is the prefered way in our Framework)
+    // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     bind_blob: function(S: TSQLite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
       DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ bind a ZeroBlob buffer to a parameter
-      - uses a fixed amount of memory (just an integer to hold its size) while
-       it is being processed. Zeroblobs are intended to serve as placeholders
-       for BLOBs whose content is later written using incremental BLOB I/O routines.
-      - a negative value for the Size parameter results in a zero-length BLOB
-      - the leftmost SQL parameter has an index of 1, but ?NNN may override it }
+    /// bind a ZeroBlob buffer to a parameter
+    // - uses a fixed amount of memory (just an integer to hold its size) while
+    // it is being processed. Zeroblobs are intended to serve as placeholders
+    // for BLOBs whose content is later written using incremental BLOB I/O routines.
+    // - a negative value for the Size parameter results in a zero-length BLOB
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     bind_zeroblob: function(S: TSQLite3Statement; Param: integer; Size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Bind a floating point Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set (leftmost=1)
-      - Value is the floating point number to bind }
+    /// Bind a floating point Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set (leftmost=1)
+    // - Value is the floating point number to bind
     bind_double: function(S: TSQLite3Statement; Param: integer; Value: double): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Bind a 32 bits Integer Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set (leftmost=1)
-      - Value is the 32 bits Integer to bind }
+    /// Bind a 32 bits Integer Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set (leftmost=1)
+    // - Value is the 32 bits Integer to bind
     bind_int: function(S: TSQLite3Statement; Param: integer; Value: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Bind a 64 bits Integer Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set (leftmost=1)
-      - Value is the 64 bits Integer to bind }
+    /// Bind a 64 bits Integer Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set (leftmost=1)
+    // - Value is the 64 bits Integer to bind
     bind_int64: function(S: TSQLite3Statement; Param: integer; Value: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Bind a NULL Value to a parameter of a prepared statement
-      - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
-      - S is a statement prepared by a previous call to sqlite3.prepare_v2()
-      - Param is the index of the SQL parameter to be set (leftmost=1) }
+    /// Bind a NULL Value to a parameter of a prepared statement
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
+    // - Param is the index of the SQL parameter to be set (leftmost=1)
     bind_null: function(S: TSQLite3Statement; Param: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Reset All Bindings On A Prepared Statement }
-    clear_bindings: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} 
+    /// Reset All Bindings On A Prepared Statement
+    clear_bindings: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Number Of SQL Parameters for a prepared statement
-     - returns the index of the largest (rightmost) parameter. For all forms
-      except ?NNN, this will correspond to the number of unique parameters.
-      If parameters of the ?NNN are used, there may be gaps in the list. }
-    bind_parameter_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} 
+    /// Number Of SQL Parameters for a prepared statement
+    // - returns the index of the largest (rightmost) parameter. For all forms
+    // except ?NNN, this will correspond to the number of unique parameters.
+    // - If parameters of the ?NNN type are used, there may be gaps in the list.
+    bind_parameter_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Open a BLOB For Incremental I/O
-      - returns a BLOB handle for row RowID, column ColumnName, table TableName
-        in database DBName; in other words, the same BLOB that would be selected by:
-      ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID; }
+    /// Open a BLOB For Incremental I/O
+    // - returns a BLOB handle for row RowID, column ColumnName, table TableName
+    // in database DBName; in other words, the same BLOB that would be selected by:
+    // ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
     blob_open: function(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
       RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Close A BLOB Handle }
+    /// Close A BLOB Handle
     blob_close: function(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Read Data From a BLOB Incrementally }
+    /// Read Data From a BLOB Incrementally
     blob_read: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Write Data To a BLOB Incrementally }
+    /// Write Data To a BLOB Incrementally
     blob_write: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Return The Size Of An Open BLOB }
+    /// Return The Size Of An Open BLOB
     blob_bytes: function(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Used to register a new virtual table module name
-      - The module name is registered on the database connection specified by the
-        first DB parameter.
-      - The name of the module is given by the second parameter.
-      - The third parameter is a pointer to the implementation of the virtual table
-        module.
-      - The fourth parameter is an arbitrary client data pointer that is passed
-        through into the xCreate and xConnect methods of the virtual table module
-        when a new virtual table is be being created or reinitialized.
-      - The fifth parameter can be used to specify a custom destructor for the
-        pClientData buffer. SQLite will invoke the destructor function (if it is
-        not nil) when SQLite no longer needs the pClientData pointer. The
-        destructor will also be invoked if call to sqlite3.create_module_v2() fails. }
+    /// Used to register a new virtual table module name
+    // - The module name is registered on the database connection specified by the
+    // first DB parameter.
+    // - The name of the module is given by the second parameter.
+    // - The third parameter is a pointer to the implementation of the virtual table
+    // module.
+    // - The fourth parameter is an arbitrary client data pointer that is passed
+    // through into the xCreate and xConnect methods of the virtual table module
+    // when a new virtual table is be being created or reinitialized.
+    // - The fifth parameter can be used to specify a custom destructor for the
+    // pClientData buffer. SQLite will invoke the destructor function (if it is
+    // not nil) when SQLite no longer needs the pClientData pointer. The
+    // destructor will also be invoked if call to sqlite3.create_module_v2() fails.
     create_module_v2: function(DB: TSQLite3DB; const zName: PAnsiChar;
       var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Declare the Schema of a virtual table
-      - The xCreate() and xConnect() methods of a virtual table module call this
-      interface to declare the format (the names and datatypes of the columns) of
-      the virtual tables they implement. The string can be deallocated and/or reused
-      as soon as the sqlite3.declare_vtab() routine returns.
-      - If a column datatype contains the special keyword "HIDDEN" (in any
-      combination of upper and lower case letters) then that keyword it is omitted
-      from the column datatype name and the column is marked as a hidden column
-      internally. A hidden column differs from a normal column in three respects:
-      1. Hidden columns are not listed in the dataset returned by "PRAGMA table_info",
-      2. Hidden columns are not included in the expansion of a "*" expression in
-      the result set of a SELECT, and 3. Hidden columns are not included in the
-      implicit column-list used by an INSERT statement that lacks an explicit
-      column-list. }
+    /// Declare the Schema of a virtual table
+    // - The xCreate() and xConnect() methods of a virtual table module call this
+    // interface to declare the format (the names and datatypes of the columns) of
+    // the virtual tables they implement. The string can be deallocated and/or reused
+    // as soon as the sqlite3.declare_vtab() routine returns.
+    // - If a column datatype contains the special keyword "HIDDEN" (in any
+    // combination of upper and lower case letters) then that keyword it is omitted
+    // from the column datatype name and the column is marked as a hidden column
+    // internally. A hidden column differs from a normal column in three respects:
+    // 1. Hidden columns are not listed in the dataset returned by "PRAGMA table_info",
+    // 2. Hidden columns are not included in the expansion of a "*" expression in
+    // the result set of a SELECT, and 3. Hidden columns are not included in the
+    // implicit column-list used by an INSERT statement that lacks an explicit
+    // column-list.
     declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Registers an authorizer callback to a specified DB connection
-      - Only a single authorizer can be in place on a database connection at a time
-      - Each call to sqlite3.set_authorizer overrides the previous call
-      - Disable the authorizer by installing a nil callback
-      - The authorizer is disabled by default }
+    /// Registers an authorizer callback to a specified DB connection
+    // - Only a single authorizer can be in place on a database connection at a time
+    // - Each call to sqlite3.set_authorizer overrides the previous call
+    // - Disable the authorizer by installing a nil callback
+    // - The authorizer is disabled by default
     set_authorizer: function(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
       pUserData: Pointer): Integer;   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register Data Change Notification Callbacks
-     - The sqlite3.update_hook() interface registers a callback function with
-       the database connection identified by the first argument to be invoked
-       whenever a row is updated, inserted or deleted.
-     - Any callback set by a previous call to this function for the same
-       database connection is overridden.
-     - sqlite3.update_hook(D,C,P) function returns the P argument from the
-       previous call on the same database connection D, or nil for the first
-       call on database connection D.
-     - The update hook is not invoked when internal system tables are modified
-       (i.e. sqlite_master and sqlite_sequence).
-     - In the current implementation, the update hook is not invoked when
-       duplication rows are deleted because of an ON CONFLICT REPLACE clause.
-       Nor is the update hook invoked when rows are deleted using the truncate
-       optimization. The exceptions defined in this paragraph might change in
-       a future release of SQLite.
-     - Note that you should also trace COMMIT and ROLLBACK commands (calling
-       sqlite3.commit_hook() and sqlite3.rollback_hook() functions) if you want to
-       ensure that the notified update was not canceled by a later Rollback. }
+    /// Register Data Change Notification Callbacks
+    // - The sqlite3.update_hook() interface registers a callback function with
+    // the database connection identified by the first argument to be invoked
+    // whenever a row is updated, inserted or deleted.
+    // - Any callback set by a previous call to this function for the same
+    // database connection is overridden.
+    // - sqlite3.update_hook(D,C,P) function returns the P argument from the
+    // previous call on the same database connection D, or nil for the first
+    // call on database connection D.
+    // - The update hook is not invoked when internal system tables are modified
+    // (i.e. sqlite_master and sqlite_sequence).
+    // - In the current implementation, the update hook is not invoked when
+    // duplication rows are deleted because of an ON CONFLICT REPLACE clause.
+    // Nor is the update hook invoked when rows are deleted using the truncate
+    // optimization. The exceptions defined in this paragraph might change in
+    // a future release of SQLite.
+    // - Note that you should also trace COMMIT and ROLLBACK commands (calling
+    // sqlite3.commit_hook() and sqlite3.rollback_hook() functions) if you want to
+    // ensure that the notified update was not canceled by a later Rollback.
     update_hook: function(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
       pArg: pointer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register Commit Notification Callbacks
-     - The sqlite3.commit_hook() interface registers a callback function to be
-       invoked whenever a transaction is committed.
-     - Any callback set by a previous call to sqlite3.commit_hook() for the same
-      database connection is overridden.
-     - Registering a nil function disables the Commit callback.
-     - The sqlite3.commit_hook(D,C,P) function returns the P argument from the
-       previous call of the same function on the same database connection D, or nil
-       for the first call for each function on D. }
+    /// Register Commit Notification Callbacks
+    // - The sqlite3.commit_hook() interface registers a callback function to be
+    // invoked whenever a transaction is committed.
+    // - Any callback set by a previous call to sqlite3.commit_hook() for the same
+    // database connection is overridden.
+    // - Registering a nil function disables the Commit callback.
+    // - The sqlite3.commit_hook(DB,C,P) function returns the P argument from the
+    // previous call of the same function on the same database connection DB, or nil
+    // for the first call for each function on DB.
     commit_hook: function(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
       pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register Rollback Notification Callbacks
-     - The sqlite3.rollback_hook() interface registers a callback function to be
-       invoked whenever a transaction is rolled back.
-     - Any callback set by a previous call to sqlite3.rollback_hook() for the same
-       database connection is overridden.
-     - Registering a nil function disables the Rollback callback.
-     - The sqlite3.rollback_hook(D,C,P) function returns the P argument from the
-       previous call of the same function on the same database connection D, or nil
-       for the first call for each function on D. }
+    // Register Rollback Notification Callbacks
+    // - The sqlite3.rollback_hook() interface registers a callback function to be
+    // invoked whenever a transaction is rolled back.
+    // - Any callback set by a previous call to sqlite3.rollback_hook() for the same
+    // database connection is overridden.
+    // - Registering a nil function disables the Rollback callback.
+    // - The sqlite3.rollback_hook(D,C,P) function returns the P argument from the
+    // previous call of the same function on the same database connection D, or nil
+    // for the first call for each function on D.
     rollback_hook: function(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
       pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Count The Number Of Rows Modified
-     - This function returns the number of database rows that were changed or
-     inserted or deleted by the most recently completed SQL statement on the
-     database connection specified by the first parameter. Only changes that
-     are directly specified by the INSERT, UPDATE, or DELETE statement are counted.
-     Auxiliary changes caused by triggers or foreign key actions are not counted.
-     Use the sqlite3.total_changes() function to find the total number of changes
-     including changes caused by triggers and foreign key actions.
-     - If a separate thread makes changes on the same database connection while
-     sqlite3.changes() is running then the value returned is unpredictable and not
-     meaningful. }
+    /// Count The Number Of Rows Modified
+    // - This function returns the number of database rows that were changed or
+    // inserted or deleted by the most recently completed SQL statement on the
+    // database connection specified by the first parameter. Only changes that
+    // are directly specified by the INSERT, UPDATE, or DELETE statement are counted.
+    // Auxiliary changes caused by triggers or foreign key actions are not counted.
+    // Use the sqlite3.total_changes() function to find the total number of changes
+    // including changes caused by triggers and foreign key actions.
+    // - If a separate thread makes changes on the same database connection while
+    // sqlite3.changes() is running then the value returned is unpredictable and not
+    // meaningful.
     changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Total Number Of Rows Modified
-     - This function returns the number of row changes caused by INSERT, UPDATE or
-     DELETE statements since the database connection was opened. The count returned
-     by sqlite3.total_changes() includes all changes from all trigger contexts and
-     changes made by foreign key actions. However, the count does not include
-     changes used to implement REPLACE constraints, do rollbacks or ABORT
-     processing, or DROP TABLE processing. The count does not include rows of
-     views that fire an INSTEAD OF trigger, though if the INSTEAD OF trigger makes
-     changes of its own, those changes are counted. The sqlite3.total_changes()
-     function counts the changes as soon as the statement that makes them is
-     completed (when the statement handle is passed to sqlite3.reset()
-     or sqlite3.finalize()).
-     - If a separate thread makes changes on the same database connection while
-     sqlite3.total_changes() is running then the value returned is unpredictable and not
-     meaningful. }
-    total_changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} 
+    /// Total Number Of Rows Modified
+    // - This function returns the number of row changes caused by INSERT, UPDATE or
+    // DELETE statements since the database connection was opened. The count returned
+    // by sqlite3.total_changes() includes all changes from all trigger contexts and
+    // changes made by foreign key actions. However, the count does not include
+    // changes used to implement REPLACE constraints, do rollbacks or ABORT
+    // processing, or DROP TABLE processing. The count does not include rows of
+    // views that fire an INSTEAD OF trigger, though if the INSTEAD OF trigger makes
+    // changes of its own, those changes are counted. The sqlite3.total_changes()
+    // function counts the changes as soon as the statement that makes them is
+    // completed (when the statement handle is passed to sqlite3.reset()
+    // or sqlite3.finalize()).
+    // - If a separate thread makes changes on the same database connection while
+    // sqlite3.total_changes() is running then the value returned is unpredictable and not
+    // meaningful.
+    total_changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Returns a pointer to a block of memory at least N bytes in length
-     - should call native malloc() function, i.e. GetMem() in this unit }
+    /// Returns a pointer to a block of memory at least N bytes in length
+    // - should call native malloc() function, i.e. GetMem() in this unit
     malloc: function(n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Attempts to resize a prior memory allocation
-     - should call native realloc() function, i.e. ReallocMem() in this unit }
+    /// Attempts to resize a prior memory allocation
+    // - should call native realloc() function, i.e. ReallocMem() in this unit
     realloc: function(pOld: Pointer; n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Releases memory previously returned by sqlite3.malloc() or sqlite3.realloc()
-     - should call native free() function, i.e. FreeMem() in this unit
-     - renamed free_ in order not to override TObject.Free method }
+    /// Releases memory previously returned by sqlite3.malloc() or sqlite3.realloc()
+    // - should call native free() function, i.e. FreeMem() in this unit
+    // - renamed free_ in order not to override TObject.Free method
     free_: procedure(p: Pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Returns the number of bytes of memory currently outstanding (malloced but not freed)
@@ -1830,126 +1831,126 @@ type
     // was last reset
     memory_highwater: function(resetFlag: Integer): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register callback function that can be used for tracing the execution of
-      SQL statements
-      - The callback function registered by sqlite3.trace() is invoked at various
-      times when an SQL statement is being run by sqlite3.step(). The sqlite3.trace()
-      callback is invoked with a UTF-8 rendering of the SQL statement text as the
-      statement first begins executing. Additional sqlite3.trace() callbacks might
-      occur as each triggered subprogram is entered. The callbacks for triggers
-      contain a UTF-8 SQL comment that identifies the trigger. }
+    /// Register callback function that can be used for tracing the execution of
+    // SQL statements
+    // - The callback function registered by sqlite3.trace() is invoked at various
+    // times when an SQL statement is being run by sqlite3.step(). The sqlite3.trace()
+    // callback is invoked with a UTF-8 rendering of the SQL statement text as the
+    // statement first begins executing. Additional sqlite3.trace() callbacks might
+    // occur as each triggered subprogram is entered. The callbacks for triggers
+    // contain a UTF-8 SQL comment that identifies the trigger.
     trace: function(DB: TSQLite3DB; Callback: TSQLTraceCallback;
       UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Register callback function that can be used for tracing the execution of
-      SQL statements
-      - The callback function registered by sqlite3.profile() is invoked as
-      each SQL statement finishes. The profile callback contains the original
-      statement text and an estimate of wall-clock time of how long that
-      statement took to run. The profile callback time is in units of
-      nanoseconds, however the current implementation is only capable
-      of millisecond resolution so the six least significant digits in the time
-      are meaningless. Future versions of SQLite might provide greater resolution
-      on the profiler callback.
-      - The sqlite3.profile() function is considered experimental and is subject
-       to change in future versions of SQLite. }
+    /// Register callback function that can be used for tracing the execution of
+    // SQL statements
+    // - The callback function registered by sqlite3.profile() is invoked as
+    // each SQL statement finishes. The profile callback contains the original
+    // statement text and an estimate of wall-clock time of how long that
+    // statement took to run. The profile callback time is in units of
+    // nanoseconds, however the current implementation is only capable
+    // of millisecond resolution so the six least significant digits in the time
+    // are meaningless. Future versions of SQLite might provide greater resolution
+    // on the profiler callback.
+    // - The sqlite3.profile() function is considered experimental and is subject
+    // to change in future versions of SQLite.
     profile: function(DB: TSQLite3DB; Callback: TSQLProfileCallback;
       UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Allows the size of various constructs to be limited on a connection
-      by connection basis
-      - The first parameter is the database connection whose limit is to be
-      set or queried
-      - The second parameter is one of the limit categories that define a
-      class of constructs to be size limited - see TSQLLimitCategory enumerate
-      - The third parameter is the new limit for that construct. If the new
-      limit is a negative number, the limit is unchanged.
-      - Regardless of whether or not the limit was changed, the sqlite3.limit()
-      interface returns the prior value of the limit. Hence, to find the current
-      value of a limit without changing it, simply invoke this interface with
-      the third parameter set to -1. }
+    /// Allows the size of various constructs to be limited on a connection
+    // by connection basis
+    // - The first parameter is the database connection whose limit is to be
+    // set or queried
+    // - The second parameter is one of the limit categories that define a
+    // class of constructs to be size limited - see TSQLLimitCategory enumerate
+    // - The third parameter is the new limit for that construct. If the new
+    // limit is a negative number, the limit is unchanged.
+    // - Regardless of whether or not the limit was changed, the sqlite3.limit()
+    // interface returns the prior value of the limit. Hence, to find the current
+    // value of a limit without changing it, simply invoke this interface with
+    // the third parameter set to -1.
     limit: function(DB: TSQLite3DB; id,newValue: integer): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ Initialize a backup process of a given SQLite3 database instance
-      - The DestDB and DestDatabaseName arguments are the database connection
-      associated with the destination database and the database name,
-      respectively.  The database name is "main" for the main database,
-      "temp" for the temporary database, or the name specified after
-      the AS keyword in an ATTACH statement for an attached database.
-      - The SourceDB and SourceDatabaseName arguments identify the database
-      connection and database name of the source database, respectively.
-      - The source and destination database connections (parameters SourceDB and
-      DestDB) must be different or else function will fail with an error.
-      - If an error occurs within backup_init(), then nil is returned and an
-      error code and error message are stored in the destination database
-      connection DestDB. The error code and message for the failed call to
-      backup_init() can be retrieved using the errcode() or errmsg() functions.
-      - A successful call to backup_init() returns a pointer to an TSQLite3Backup
-      object. The TSQLite3Backup object may be used with the backup_step() and
-      backup_finish() functions to perform the specified backup operation. }
+    /// Initialize a backup process of a given SQLite3 database instance
+    // - The DestDB and DestDatabaseName arguments are the database connection
+    // associated with the destination database and the database name,
+    // respectively.  The database name is "main" for the main database,
+    // "temp" for the temporary database, or the name specified after
+    // the AS keyword in an ATTACH statement for an attached database.
+    // - The SourceDB and SourceDatabaseName arguments identify the database
+    // connection and database name of the source database, respectively.
+    // - The source and destination database connections (parameters SourceDB and
+    // DestDB) must be different or else function will fail with an error.
+    // - If an error occurs within backup_init(), then nil is returned and an
+    // error code and error message are stored in the destination database
+    // connection DestDB. The error code and message for the failed call to
+    // backup_init() can be retrieved using the errcode() or errmsg() functions.
+    // - A successful call to backup_init() returns a pointer to an TSQLite3Backup
+    // object. The TSQLite3Backup object may be used with the backup_step() and
+    // backup_finish() functions to perform the specified backup operation.
     backup_init: function(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
       SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-    {/ perform a backup step to transfer the data between the two databases
-    - backup_step() will copy up to nPages pages between the source and
-    destination databases specified by TSQLite3Backup object Backup.
-    - If nPages is negative, all remaining source pages are copied.
-    - If backup_step() successfully copies nPages pages and there are still more
-    pages to be copied, then the function returns SQLITE_OK.
-    - If backup_step() successfully finishes copying all pages from source to
-    destination, then it returns SQLITE_DONE.
-    - If an error occurs while running backup_step(), an error code is returned.
-    - As well as SQLITE_OK and SQLITE_DONE, a call to backup_step() may return
-    SQLITE_READONLY, SQLITE_NOMEM, SQLITE_BUSY, SQLITE_LOCKED, or an
-    SQLITE_IOERR_XXX extended error code. The function might return
-    SQLITE_READONLY if the destination database was opened read-only, or is
-    using WAL journaling and the destination and source page sizes differ, or
-    the destination database is an in-memory database and the destination and
-    source page sizes differ. SQLITE_BUSY indicates that the file-system lock
-    did not succeed: in this case the call to backup_step() can be retried later.
-    If the source database connection is being used to write to the source
-    database when backup_step() is called, then SQLITE_LOCKED is returned
-    immediately. Again, in this case the call to backup_step() can be retried
-    later on. If SQLITE_IOERR_XXX, SQLITE_NOMEM, or SQLITE_READONLY is returned,
-    then there is no point in retrying the call to backup_step(). These errors
-    are considered fatal. The application must accept that the backup operation
-    has failed and pass the backup operation handle to the backup_finish() to
-    release associated resources.
-    - The first call to sqlite3_backup_step() obtains an exclusive lock on the
-    destination file. The exclusive lock is not released until either
-    backup_finish() is called or the backup operation is complete and
-    backup_step() returns SQLITE_DONE. Every call to backup_step() obtains a
-    shared lock on the source database that lasts for the duration of the
-    backup_step() call.
-    - Because the source database is not locked between calls to backup_step(),
-    the source database may be modified mid-way through the backup process.
-    If the source database is modified by an external process or via a database
-    connection other than the one being used by the backup operation, then the
-    backup will be automatically restarted by the next call to backup_step().
-    If the source database is modified by the using the same database connection
-    as is used by the backup operation (which is the case in the SynSQLite3 and
-    mORMotSQLite3 units), then the backup database is automatically updated at
-    the same time, so you won't loose any data. }
+    /// perform a backup step to transfer the data between the two databases
+    // - backup_step() will copy up to nPages pages between the source and
+    // destination databases specified by TSQLite3Backup object Backup.
+    // - If nPages is negative, all remaining source pages are copied.
+    // - If backup_step() successfully copies nPages pages and there are still more
+    // pages to be copied, then the function returns SQLITE_OK.
+    // - If backup_step() successfully finishes copying all pages from source to
+    // destination, then it returns SQLITE_DONE.
+    // - If an error occurs while running backup_step(), an error code is returned.
+    // - As well as SQLITE_OK and SQLITE_DONE, a call to backup_step() may return
+    // SQLITE_READONLY, SQLITE_NOMEM, SQLITE_BUSY, SQLITE_LOCKED, or an
+    // SQLITE_IOERR_XXX extended error code. The function might return
+    // SQLITE_READONLY if the destination database was opened read-only, or is
+    // using WAL journaling and the destination and source page sizes differ, or
+    // the destination database is an in-memory database and the destination and
+    // source page sizes differ. SQLITE_BUSY indicates that the file-system lock
+    // did not succeed: in this case the call to backup_step() can be retried later.
+    // If the source database connection is being used to write to the source
+    // database when backup_step() is called, then SQLITE_LOCKED is returned
+    // immediately. Again, in this case the call to backup_step() can be retried
+    // later on. If SQLITE_IOERR_XXX, SQLITE_NOMEM, or SQLITE_READONLY is returned,
+    // then there is no point in retrying the call to backup_step(). These errors
+    // are considered fatal. The application must accept that the backup operation
+    // has failed and pass the backup operation handle to the backup_finish() to
+    // release associated resources.
+    // - The first call to sqlite3_backup_step() obtains an exclusive lock on the
+    // destination file. The exclusive lock is not released until either
+    // backup_finish() is called or the backup operation is complete and
+    // backup_step() returns SQLITE_DONE. Every call to backup_step() obtains a
+    // shared lock on the source database that lasts for the duration of the
+    // backup_step() call.
+    // - Because the source database is not locked between calls to backup_step(),
+    // the source database may be modified mid-way through the backup process.
+    // If the source database is modified by an external process or via a database
+    // connection other than the one being used by the backup operation, then the
+    // backup will be automatically restarted by the next call to backup_step().
+    // If the source database is modified by the using the same database connection
+    // as is used by the backup operation (which is the case in the SynSQLite3 and
+    // mORMotSQLite3 units), then the backup database is automatically updated at
+    // the same time, so you won't loose any data.
     backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-    {/ finalize a Backup process on a given database
-    - When backup_step() has returned SQLITE_DONE, or when the application
-    wishes to abandon the backup operation, the application should destroy the
-    TSQLite3Backup by passing it to backup_finish().
-    - The backup_finish() interfaces releases all resources associated with the
-    TSQLite3Backup object. If backup_step() has not yet returned SQLITE_DONE,
-    then any active write-transaction on the destination database is rolled back.
-    - The TSQLite3Backup object is invalid and may not be used following a call
-    to backup_finish().
-    - The value returned by backup_finish is SQLITE_OK if no backup_step() errors
-    occurred, regardless or whether or not backup_step() completed. If an
-    out-of-memory condition or IO error occurred during any prior backup_step()
-    call on the same TSQLite3Backup object, then backup_finish() returns the
-    corresponding error code.
-    - A return of SQLITE_BUSY or SQLITE_LOCKED from backup_step() is not a
-    permanent error and does not affect the return value of backup_finish(). }
+    /// finalize a Backup process on a given database
+    // - When backup_step() has returned SQLITE_DONE, or when the application
+    // wishes to abandon the backup operation, the application should destroy the
+    // TSQLite3Backup by passing it to backup_finish().
+    // - The backup_finish() interfaces releases all resources associated with the
+    // TSQLite3Backup object. If backup_step() has not yet returned SQLITE_DONE,
+    // then any active write-transaction on the destination database is rolled back.
+    // - The TSQLite3Backup object is invalid and may not be used following a call
+    // to backup_finish().
+    // - The value returned by backup_finish is SQLITE_OK if no backup_step() errors
+    // occurred, regardless or whether or not backup_step() completed. If an
+    // out-of-memory condition or IO error occurred during any prior backup_step()
+    // call on the same TSQLite3Backup object, then backup_finish() returns the
+    // corresponding error code.
+    // - A return of SQLITE_BUSY or SQLITE_LOCKED from backup_step() is not a
+    // permanent error and does not affect the return value of backup_finish().
     backup_finish: function(Backup: TSQLite3Backup): integer;
       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -2003,13 +2004,13 @@ type
     property LibraryName: TFileName read fLibraryName;
   end;
 
-  
-{/ an internal function which calls Freemem(p)
-  - can be used to free some PUTF8Char pointer allocated by Delphi Getmem() }
+
+/// an internal function which calls Freemem(p)
+// - can be used to free some PUTF8Char pointer allocated by Delphi Getmem()
 procedure sqlite3InternalFree(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-{/ an internal function which calls TObject(p).Free
-  - can be used to free some Delphi class instance }
+/// an internal function which calls TObject(p).Free
+// - can be used to free some Delphi class instance
 procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
@@ -2110,7 +2111,7 @@ function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 
 /// test the result state of a sqlite3.*() function
 // - raise a ESQLite3Exception if the result state is an error
-// - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.) 
+// - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
 
 var
@@ -2197,6 +2198,8 @@ type
   PSQLRequest = ^TSQLRequest;
 
   /// wrapper to a SQLite3 request
+  // - defined as a record, so that it may be allocated on the stack
+  // - do not forget to call the Close method to release the request resources
   {$ifdef UNICODE}
   TSQLRequest = record
   {$else}
@@ -2212,72 +2215,72 @@ type
 
   // 1. general request process
   public
-    {/ Prepare a UTF-8 encoded SQL statement
-     - compile the SQL into byte-code
-     - parameters ? ?NNN :VV @VV $VV can be bound with Bind*() functions below
-     - raise an ESQLite3Exception on any error }
+    /// Prepare a UTF-8 encoded SQL statement
+    // - compile the SQL into byte-code
+    // - parameters ? ?NNN :VV @VV $VV can be bound with Bind*() functions below
+    // - raise an ESQLite3Exception on any error
     function Prepare(DB: TSQLite3DB; const SQL: RawUTF8): integer;
-    {/ Prepare a WinAnsi SQL statement
-     - behave the same as Prepare() }
+    /// Prepare a WinAnsi SQL statement
+    // - behave the same as Prepare()
     function PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
-    {/ Prepare the next SQL command initialized in previous Prepare()
-     - raise an ESQLite3Exception on any error }
+    /// Prepare the next SQL command initialized in previous Prepare()
+    // - raise an ESQLite3Exception on any error
     function PrepareNext: integer;
-    {/ Evaluate An SQL Statement, returning the sqlite3.step() result status:
-     - return SQLITE_ROW on success, with data ready to be retrieved via the
-      Field*() methods
-     - return SQLITE_DONE if the SQL commands were executed
-     - raise an ESQLite3Exception on any error }
+    /// Evaluate An SQL Statement, returning the sqlite3.step() result status:
+    // - return SQLITE_ROW on success, with data ready to be retrieved via the
+    // Field*() methods
+    // - return SQLITE_DONE if the SQL commands were executed
+    // - raise an ESQLite3Exception on any error
     function Step: integer;
-    {/ Reset A Prepared Statement Object
-     - reset a prepared statement object back to its initial state,
-      ready to be re-executed.
-     - any SQL statement variables that had values bound to them using the Bind*()
-      function below retain their values. Use BindReset() to reset the bindings
-     - return SQLITE_OK on success, or the previous Step error code }
+    /// Reset A Prepared Statement Object
+    // - reset a prepared statement object back to its initial state,
+    // ready to be re-executed.
+    // - any SQL statement variables that had values bound to them using the Bind*()
+    // function below retain their values. Use BindReset() to reset the bindings
+    // - return SQLITE_OK on success, or the previous Step error code
     function Reset: integer;
-    {/ Execute all SQL statements already prepared by a call to Prepare()
-     - the statement is closed
-     - raise an ESQLite3Exception on any error }
+    /// Execute all SQL statements already prepared by a call to Prepare()
+    // - the statement is closed
+    // - raise an ESQLite3Exception on any error
     procedure ExecuteAll; overload;
-    {/ Execute all SQL statements in the aSQL UTF-8 encoded string
-     - internaly call Prepare() then Step then PrepareNext until end of aSQL
-     - Close is always called internaly
-     - raise an ESQLite3Exception on any error }
+    /// Execute all SQL statements in the aSQL UTF-8 encoded string
+    // - internaly call Prepare() then Step then PrepareNext until end of aSQL
+    // - Close is always called internaly
+    // - raise an ESQLite3Exception on any error
     procedure ExecuteAll(aDB: TSQLite3DB; const aSQL: RawUTF8); overload;
-    {/ Execute one SQL statement already prepared by a call to Prepare()
-     - the statement is closed
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement already prepared by a call to Prepare()
+    // - the statement is closed
+    // - raise an ESQLite3Exception on any error
     procedure Execute; overload;
-    {/ Execute one SQL statement in the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL: call Prepare() then Step once
-     - Close is always called internaly
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement in the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL: call Prepare() then Step once
+    // - Close is always called internaly
+    // - raise an ESQLite3Exception on any error
     procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8); overload;
-    {/ Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get (at least) one field/column result of INTEGER
-     - return result as a dynamic array of Int64 in ID
-     - return count of row in integer function result (may be < length(ID))
-     - raise an ESQLite3Exception on any error }
+    /// Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get (at least) one field/column result of INTEGER
+    // - return result as a dynamic array of Int64 in ID
+    // - return count of row in integer function result (may be < length(ID))
+    // - raise an ESQLite3Exception on any error
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var ID: TInt64DynArray): integer; overload;
-    {/ Execute a SQL statement which return one integer from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get (at least) one field/column result of INTEGER
-     - return result as an unique Int64 in ID
-     - raise an ESQLite3Exception on any error }
+    /// Execute a SQL statement which return one integer from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get (at least) one field/column result of INTEGER
+    // - return result as an unique Int64 in ID
+    // - raise an ESQLite3Exception on any error }
     procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out ID: Int64); overload;
-    {/ Execute a SQL statement which return one TEXT value from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get (at least) one field/column result of TEXT
-     - raise an ESQLite3Exception on any error }
+    /// Execute a SQL statement which return one TEXT value from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get (at least) one field/column result of TEXT
+    // - raise an ESQLite3Exception on any error
     procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; out Value: RawUTF8); overload;
-    {/ Execute a SQL statement which return TEXT from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get (at least) one field/column result of TEXT
-     - return result as a dynamic array of RawUTF8 in ID
-     - return count of row in integer function result (may be < length(ID))
-     - raise an ESQLite3Exception on any error }
+    /// Execute a SQL statement which return TEXT from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get (at least) one field/column result of TEXT
+    // - return result as a dynamic array of RawUTF8 in ID
+    // - return count of row in integer function result (may be < length(ID))
+    // - raise an ESQLite3Exception on any error
     function Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - JSON format is more compact than XML and well supported
@@ -2304,126 +2307,126 @@ type
     // - if any error occurs, the ESQLite3Exception is handled and '' is returned
     function ExecuteJSON(aDB: TSQLite3DB; const aSQL: RawUTF8; Expand: boolean=false;
       aResultCount: PPtrInt=nil): RawUTF8;
-    {/ Execute all SQL statements in the aSQL UTF-8 encoded string, results will
-      be written as ANSI text in OutFile }
+    /// Execute all SQL statements in the aSQL UTF-8 encoded string, results will
+    // be written as ANSI text in OutFile
     procedure ExecuteDebug(aDB: TSQLite3DB; const aSQL: RawUTF8; var OutFile: Text);
-    {/ close the Request handle
-     - call it even if an ESQLite3Exception has been raised }
+    /// close the Request handle
+    // - call it even if an ESQLite3Exception has been raised
     procedure Close;
 
-    {/ read-only access to the Request (SQLite3 statement) handle }
+    /// read-only access to the Request (SQLite3 statement) handle
     property Request: TSQLite3Statement read fRequest;
-    {/ read-only access to the SQLite3 database handle }
+    /// read-only access to the SQLite3 database handle
     property RequestDB: TSQLite3DB read fDB;
-    {/ returns true if the current prepared statement makes no direct changes
-      to the content of the database file
-     - Transaction control statements such as BEGIN, COMMIT, ROLLBACK, SAVEPOINT,
-     and RELEASE cause this property to return true, since the statements
-     themselves do not actually modify the database but rather they control the
-     timing of when other statements modify the database. The ATTACH and DETACH
-     statements also cause this property to return true since, while
-     those statements change the configuration of a database connection, they
-     do not make changes to the content of the database files on disk. }
+    /// returns true if the current prepared statement makes no direct changes
+    // to the content of the database file
+    // - Transaction control statements such as BEGIN, COMMIT, ROLLBACK, SAVEPOINT,
+    // and RELEASE cause this property to return true, since the statements
+    // themselves do not actually modify the database but rather they control the
+    // timing of when other statements modify the database. The ATTACH and DETACH
+    // statements also cause this property to return true since, while
+    // those statements change the configuration of a database connection, they
+    // do not make changes to the content of the database files on disk.
     property IsReadOnly: Boolean read GetReadOnly;
 
   // 2. Bind parameters to a SQL query (for the last prepared statement)
   public
-    {/ Reset All Bindings On A Prepared Statement
-     - Contrary to the intuition of many, Reset() does not reset the bindings
-      on a prepared statement. Use this routine to reset all host parameter }
+    /// Reset All Bindings On A Prepared Statement
+    // - Contrary to the intuition of many, Reset() does not reset the bindings
+    // on a prepared statement. Use this routine to reset all host parameter
     procedure BindReset;
-    {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
-    procedure BindNull(Param: Integer); 
-    {/ bind an integer value to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a NULL value to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
+    procedure BindNull(Param: Integer);
+    /// bind an integer value to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; Value: Int64); overload;
-    {/ bind a double value to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a double value to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; Value: double); overload;
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; const Value: RawUTF8); overload;
-    {/ bind a generic VCL string to a parameter
-     - with versions prior to Delphi 2009, you may loose some content here:
-       Bind(Param: integer; Value: RawUTF8) is the prefered method
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
-    procedure BindS(Param: Integer; const Value: string); 
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a generic VCL string to a parameter
+    // - with versions prior to Delphi 2009, you may loose some content here:
+    // Bind(Param: integer; Value: RawUTF8) is the prefered method
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
+    procedure BindS(Param: Integer; const Value: string);
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; Data: pointer; Size: integer); overload;
-    {/ bind a Blob TCustomMemoryStream buffer to a parameter
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a Blob TCustomMemoryStream buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; Data: TCustomMemoryStream); overload;
-    {/ bind a ZeroBlob buffer to a parameter
-     - uses a fixed amount of memory (just an integer to hold its size) while
-      it is being processed. Zeroblobs are intended to serve as placeholders
-      for BLOBs whose content is later written using incremental BLOB I/O routines
-      (as with TSQLBlobStream created from TSQLDataBase.Blob() e.g.).
-     - a negative value for the Size parameter results in a zero-length BLOB
-     - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-     - raise an ESQLite3Exception on any error }
+    /// bind a ZeroBlob buffer to a parameter
+    // - uses a fixed amount of memory (just an integer to hold its size) while
+    // it is being processed. Zeroblobs are intended to serve as placeholders
+    // for BLOBs whose content is later written using incremental BLOB I/O routines
+    // (as with TSQLBlobStream created from TSQLDataBase.Blob() e.g.).
+    // - a negative value for the Size parameter results in a zero-length BLOB
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
     procedure BindZero(Param: Integer; Size: integer);
 
   // 3. Field attributes after a sucessfull Step() (returned SQLITE_ROW)
   public
-    {/ the field name of the current ROW  }
+    /// the field name of the current ROW
     function FieldName(Col: integer): RawUTF8;
-    {/ the field index matching this name
-      - return -1 if not found }
+    /// the field index matching this name
+    // - return -1 if not found
     function FieldIndex(const aColumnName: RawUTF8): integer;
-    {/ return the field as a sqlite3.value object handle, first Col is 0 }
+    /// return the field as a sqlite3.value object handle, first Col is 0
     function FieldValue(Col: integer): TSQLite3Value;
-    {/ return a field integer value, first Col is 0 }
+    /// return a field integer value, first Col is 0
     function FieldInt(Col: integer): Int64;
-    {/ return a field floating point value, first Col is 0 }
+    /// return a field floating point value, first Col is 0
     function FieldDouble(Col: integer): double;
-    {/ return a field UTF-8 encoded text value, first Col is 0 }
+    /// return a field UTF-8 encoded text value, first Col is 0
     function FieldUTF8(Col: integer): RawUTF8;
-    {/ return a text value value as generic VCL string, first Col is 0
-     - note that prior to Delphi 2009, you may loose content during conversion }
+    /// return a text value value as generic VCL string, first Col is 0
+    // - note that prior to Delphi 2009, you may loose content during conversion
     function FieldS(Col: integer): string;
-    {/ return a field as Win-Ansi (i.e. code page 1252) encoded text value, first Col is 0 }
+    /// return a field as Win-Ansi (i.e. code page 1252) encoded text value, first Col is 0
     function FieldA(Col: integer): WinAnsiString;
-    {/ return a field RawUnicode encoded text value, first Col is 0 }
+    /// return a field RawUnicode encoded text value, first Col is 0
     function FieldW(Col: integer): RawUnicode;
-    {/ return a field as a blob value (RawByteString/TSQLRawBlob is an AnsiString),
-      first Col is 0 }
+    /// return a field as a blob value (RawByteString/TSQLRawBlob is an AnsiString),
+    // first Col is 0
     function FieldBlob(Col: integer): RawByteString;
-    {/ return a field as a TStream blob value, first Col is 0
-     - caller shall release the returned TStream instance }
+    /// return a field as a TStream blob value, first Col is 0
+    // - caller shall release the returned TStream instance
     function FieldBlobToStream(Col: integer): TStream;
-    {/ return TRUE if the column value is NULL, first Col is 0 }
+    /// return TRUE if the column value is NULL, first Col is 0
     function FieldNull(Col: Integer): Boolean;
-    {/ return the field type of this column
-     - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
-       i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB  }
+    /// return the field type of this column
+    // - retrieve the "SQLite3" column type as returned by sqlite3.column_type -
+    //  i.e. SQLITE_NULL, SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, or SQLITE_BLOB
     function FieldType(Col: Integer): integer;
-    {/ return the type of this column, as declared at creation
-     - textual type used for CREATE TABLE of the corresponding column, as
-       returned by sqlite3.column_decltype()  }
+    /// return the type of this column, as declared at creation
+    // - textual type used for CREATE TABLE of the corresponding column, as
+    // returned by sqlite3.column_decltype()
     function FieldDeclaredType(Col: Integer): RawUTF8;
-    {/ return the generic VCL string type of this column, as declared at creation
-     - textual type used for CREATE TABLE of corresponding column, as
-       returned by sqlite3.column_decltype()
-     - note that prior to Delphi 2009, you may loose content during conversion }
+    /// return the generic VCL string type of this column, as declared at creation
+    // - textual type used for CREATE TABLE of corresponding column, as
+    // returned by sqlite3.column_decltype()
+    // - note that prior to Delphi 2009, you may loose content during conversion
     function FieldDeclaredTypeS(Col: Integer): string;
-    {/ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    // format and contains true BLOB data
     procedure FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean=false);
-    {/ the column/field count of the current ROW
-     - fields numerotation starts with 0 }
+    /// the column/field count of the current ROW
+    // - fields numerotation starts with 0
     property FieldCount: integer read fFieldCount;
-    {/ the bound parameters count }
+    /// the bound parameters count
     property ParamCount: integer read GetParamCount;
   end;
 
@@ -2508,7 +2511,7 @@ type
     // - you should better use the already existing faster SQL functions
     // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains() if possible
     // (this implementation will allocate each dynamic array into memory before
-    // comparison, and will be therefore slower than those optimized versions)   
+    // comparison, and will be therefore slower than those optimized versions)
     constructor Create(aTypeInfo: pointer; aCompare: TDynArraySortCompare;
       const aFunctionName: RawUTF8=''); reintroduce;
   end;
@@ -2518,33 +2521,33 @@ type
   // - the implementation may update the database directly by using a
   // local or shared TSQLRequest
   // - the TSQLRequest may be shared and prepared before the call for even
-  // faster access than with a local TSQLRequest 
+  // faster access than with a local TSQLRequest
   // - no TSQLDataBase or higher levels objects can be used inside this method,
   // since all locking and try..finally protection is outside it
   // - can optionnaly trigger a ESQLite3Exception on any error
   TOnSQLStoredProc = procedure(const Statement: TSQLRequest) of object;
 
-  {/ TSQLDataBase.TransactionBegin can be deferred, immediate, or exclusive
-   - tbDeferred means that no locks are acquired on the database until the
-   database is first accessed. Thus with a deferred transaction, the BEGIN
-   statement itself does nothing to the filesystem. Locks are not acquired
-   until the first read or write operation. The first read operation against
-   a database creates a SHARED lock and the first write operation creates a
-   RESERVED lock. Because the acquisition of locks is deferred until they are
-   needed, it is possible that another thread or process could create a
-   separate transaction and write to the database after the BEGIN on the
-   current thread has executed.
-   - If the transaction is tbImmediate, then RESERVED locks are acquired
-   on all databases as soon as the BEGIN command is executed, without waiting
-   for the database to be used. After a BEGIN IMMEDIATE, no other database
-   connection will be able to write to the database or do a BEGIN IMMEDIATE
-   or BEGIN EXCLUSIVE. Other processes can continue to read from the database,
-   however.
-   - A tbExclusive transaction causes EXCLUSIVE locks to be acquired on all
-   databases. After a BEGIN EXCLUSIVE, no other database connection except
-   for read_uncommitted connections will be able to read the database and
-   no other connection without exception will be able to write the database
-   until the transaction is complete. }
+  /// TSQLDataBase.TransactionBegin can be deferred, immediate, or exclusive
+  // - tbDeferred means that no locks are acquired on the database until the
+  // database is first accessed. Thus with a deferred transaction, the BEGIN
+  // statement itself does nothing to the filesystem. Locks are not acquired
+  // until the first read or write operation. The first read operation against
+  // a database creates a SHARED lock and the first write operation creates a
+  // RESERVED lock. Because the acquisition of locks is deferred until they are
+  // needed, it is possible that another thread or process could create a
+  // separate transaction and write to the database after the BEGIN on the
+  // current thread has executed.
+  // - If the transaction is tbImmediate, then RESERVED locks are acquired
+  // on all databases as soon as the BEGIN command is executed, without waiting
+  // for the database to be used. After a BEGIN IMMEDIATE, no other database
+  // connection will be able to write to the database or do a BEGIN IMMEDIATE
+  // or BEGIN EXCLUSIVE. Other processes can continue to read from the database,
+  // however.
+  // - A tbExclusive transaction causes EXCLUSIVE locks to be acquired on all
+  // databases. After a BEGIN EXCLUSIVE, no other database connection except
+  // for read_uncommitted connections will be able to read the database and
+  // no other connection without exception will be able to write the database
+  // until the transaction is complete.
   TSQLDataBaseTransactionBehaviour = (
     tbDeferred,
     tbImmediate,
@@ -2654,98 +2657,98 @@ type
     // so that it should be SQLITE_OK on success
     function DBClose: integer;
   public
-    {/ open a SQLite3 database file
-     - open an existing database file or create a new one if no file exists
-     - if specified, the password will be used to cypher this file on disk
-       (the main SQLite3 database file is encrypted, not the wal file during run)
-     - you can specify some optional flags for sqlite3.open_v2() as
-       SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
-       value (which corresponds to the sqlite3.open() behavior)
-     - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive compare,
-       which is used also in the SQLite3UI unit for coherency and efficiency)
-     - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
-     - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
-     - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
-       RANK, CONCAT
-     - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
-     - raise an ESQLite3Exception on any error }
+    /// open a SQLite3 database file
+    // - open an existing database file or create a new one if no file exists
+    // - if specified, the password will be used to cypher this file on disk
+    // (the main SQLite3 database file is encrypted, not the wal file during run)
+    // - you can specify some optional flags for sqlite3.open_v2() as
+    // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
+    // value (which corresponds to the sqlite3.open() behavior)
+    // - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive compare,
+    // which is used also in the SQLite3UI unit for coherency and efficiency)
+    // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
+    // - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
+    // - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
+    // RANK, CONCAT
+    // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
+    // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
       aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
-    {/ close a database and free its memory and context
-      - if TransactionBegin was called but not commited, a RollBack is performed }
+    /// close a database and free its memory and context
+    //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
-    {/ Execute all SQL statements in aSQL UTF-8 encoded string
-     - can be prepared with TransactionBegin()
-     - raise an ESQLite3Exception on any error }
+    /// Execute all SQL statements in aSQL UTF-8 encoded string
+    // - can be prepared with TransactionBegin()
+    // - raise an ESQLite3Exception on any error
     procedure ExecuteAll(const aSQL: RawUTF8);
-    {/ Execute one SQL statements in aSQL UTF-8 encoded string
-     - can be prepared with TransactionBegin()
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statements in aSQL UTF-8 encoded string
+    // - can be prepared with TransactionBegin()
+    // - raise an ESQLite3Exception on any error
     procedure Execute(const aSQL: RawUTF8); overload;
-    {/ Execute one SQL statement which return integers from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get a one field/column result of INTEGER
-     - return result as a dynamic array of RawUTF8, as TEXT result
-     - return count of row in integer function result (may be < length(ID))
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement which return integers from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get a one field/column result of INTEGER
+    // - return result as a dynamic array of RawUTF8, as TEXT result
+    // - return count of row in integer function result (may be < length(ID))
+    // - raise an ESQLite3Exception on any error
     function Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer; overload;
-    {/ Execute one SQL statement returning TEXT from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get (at least) one field/column result of TEXT
-     - return result as a dynamic array of RawUTF8 in ID
-     - return count of row in integer function result (may be < length(ID))
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement returning TEXT from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get (at least) one field/column result of TEXT
+    // - return result as a dynamic array of RawUTF8 in ID
+    // - return count of row in integer function result (may be < length(ID))
+    // - raise an ESQLite3Exception on any error
     function Execute(const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer; overload;
-    {/ Execute one SQL statement which returns one integer from the aSQL UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get a one field/column result of INTEGER
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement which returns one integer from the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get a one field/column result of INTEGER
+    // - raise an ESQLite3Exception on any error
     procedure Execute(const aSQL: RawUTF8; out ID: Int64; NoLog: boolean=false); overload;
-    {/ Execute one SQL statement which returns one UTF-8 encoded string value
-     - Execute the first statement in aSQL
-     - this statement must get a one field/column result of TEXT
-     - raise an ESQLite3Exception on any error }
+    /// Execute one SQL statement which returns one UTF-8 encoded string value
+    // - Execute the first statement in aSQL
+    // - this statement must get a one field/column result of TEXT
+    // - raise an ESQLite3Exception on any error
     procedure Execute(const aSQL: RawUTF8; out ID: RawUTF8; NoLog: boolean=false); overload;
-    {/ Execute one SQL statements in aSQL UTF-8 encoded string
-     - can be prepared with TransactionBegin()
-     - raise no Exception on error, but returns FALSE in such case }
-    function ExecuteNoException(const aSQL: RawUTF8): boolean; 
-    {/ Seamless execution of a SQL statement which returns one integer
-     - Execute the first statement in aSQL
-     - this statement must get a one field/column result of INTEGER
-     - returns 0 on any error }
-    function ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64; 
-    {/ Seamless execution of a SQL statement which returns one UTF-8 encoded string
-     - Execute the first statement in aSQL
-     - this statement must get a one field/column result of TEXT
-     - returns '' on any error }
-    function ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8; 
+    /// Execute one SQL statements in aSQL UTF-8 encoded string
+    // - can be prepared with TransactionBegin()
+    // - raise no Exception on error, but returns FALSE in such case
+    function ExecuteNoException(const aSQL: RawUTF8): boolean;
+    /// Seamless execution of a SQL statement which returns one integer
+    // - Execute the first statement in aSQL
+    // - this statement must get a one field/column result of INTEGER
+    // - returns 0 on any error
+    function ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64;
+    /// Seamless execution of a SQL statement which returns one UTF-8 encoded string
+    // - Execute the first statement in aSQL
+    // - this statement must get a one field/column result of TEXT
+    // - returns '' on any error
+    function ExecuteNoExceptionUTF8(const aSQL: RawUTF8): RawUTF8;
     /// Execute one SQL statement returning its results in JSON format
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
     function ExecuteJSON(const aSQL: RawUTF8; Expand: boolean=false; aResultCount: PPtrInt=nil): RawUTF8;
-    {/ begin a transaction
-     - Execute SQL statements with Execute() procedure below
-     - must be ended with Commit on success
-     - must be aborted with Rollback after an ESQLite3Exception raised
-    - The default transaction behavior is tbDeferred }
+    /// begin a transaction
+    // - Execute SQL statements with Execute() procedure below
+    // - must be ended with Commit on success
+    // - must be aborted with Rollback after an ESQLite3Exception raised
+    // - The default transaction behavior is tbDeferred
     procedure TransactionBegin(aBehavior: TSQLDataBaseTransactionBehaviour = tbDeferred);
-    {/ end a transaction: write all Execute() statements to the disk }
+    /// end a transaction: write all Execute() statements to the disk
     procedure Commit;
-    {/ abort a transaction: restore the previous state of the database }
+    /// abort a transaction: restore the previous state of the database
     procedure RollBack;
-    {/ return the last Insert Rowid }
+    /// return the last Insert Rowid
     function LastInsertRowID: Int64;
-    {/ count the number of rows modified by the last SQL statement
-     - this method returns the number of database rows that were changed or
-     inserted or deleted by the most recently completed SQL statement on the
-     database connection specified by the first parameter. Only changes that
-     are directly specified by the INSERT, UPDATE, or DELETE statement are counted.
-     - wrapper around the sqlite3.changes() low-level function }
+    /// count the number of rows modified by the last SQL statement
+    // - this method returns the number of database rows that were changed or
+    // inserted or deleted by the most recently completed SQL statement on the
+    // database connection specified by the first parameter. Only changes that
+    // are directly specified by the INSERT, UPDATE, or DELETE statement are counted.
+    // - wrapper around the sqlite3.changes() low-level function
     function LastChangeCount: integer;
 
-    {/ get all table names contained in this database file }
+    /// get all table names contained in this database file
     procedure GetTableNames(var Names: TRawUTF8DynArray);
-    {/ get all field names for a specified Table }
+    /// get all field names for a specified Table
     procedure GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
     /// add a SQL custom function to the SQLite3 database engine
     // - the supplied aFunction instance will be used globally and freed
@@ -2765,7 +2768,7 @@ type
     // ! Demo.RegisterSQLFunction(InternalSQLFunctionCharIndex,2,'CharIndex');
     procedure RegisterSQLFunction(aFunction: TSQLFunctionFunc;
       aFunctionParametersCount: Integer; const aFunctionName: RawUTF8); overload;
-    /// add a SQL custom function for a dynamic array to the database 
+    /// add a SQL custom function for a dynamic array to the database
     // - the resulting SQL function will expect two parameters: the first is the
     // BLOB field content, and the 2nd is the array element to search (as set with
     // TDynArray.ElemSave() or with BinToBase64WithMagic(aDynArray.ElemSave())
@@ -2776,57 +2779,57 @@ type
     // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains() if possible
     // (this implementation will allocate each dynamic array into memory before
     // comparison, and will be therefore slower than those optimized versions -
-    // but it will be always faster than Client-Server query, in all cases)   
+    // but it will be always faster than Client-Server query, in all cases)
     procedure RegisterSQLFunction(aDynArrayTypeInfo: pointer; aCompare: TDynArraySortCompare;
       const aFunctionName: RawUTF8=''); overload;
 
-    {/ open a BLOB incrementally for read[/write] access
-     - find a BLOB located in row RowID, column ColumnName, table TableName
-      in database DBName; in other words, the same BLOB that would be selected by:
-      ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
-     - use after a TSQLRequest.BindZero() to reserve Blob memory
-     - if RowID=0, then the last inserted RowID is used (beware that this
-       value won't be thread-safe, if another thread run another INSERT)
-     - will raise an ESQLite3Exception on any error }
+    /// open a BLOB incrementally for read[/write] access
+    // - find a BLOB located in row RowID, column ColumnName, table TableName
+    // in database DBName; in other words, the same BLOB that would be selected by:
+    // ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
+    // - use after a TSQLRequest.BindZero() to reserve Blob memory
+    // - if RowID=0, then the last inserted RowID is used (beware that this
+    // value won't be thread-safe, if another thread run another INSERT)
+    // - will raise an ESQLite3Exception on any error
     function Blob(const DBName, TableName, ColumnName: RawUTF8;
       RowID: Int64; ReadWrite: boolean=false): TSQLBlobStream;
-    {/ backup of the opened Database into an external file name
-     - warning: this method won't use the SQLite Online Backup API
-     - database is closed, VACCUUMed, copied, then reopened: it's very fast for
-       small databases, but is blocking and should be an issue
-     - if you use some virtual tables, they won't be restored after backup:
-       this method would probably fail e.g. in the context of mORMot.pas }
+    /// backup of the opened Database into an external file name
+    // - warning: this method won't use the SQLite Online Backup API
+    // - database is closed, VACCUUMed, copied, then reopened: it's very fast for
+    // small databases, but is blocking and should be an issue
+    // - if you use some virtual tables, they won't be restored after backup:
+    // this method would probably fail e.g. in the context of mORMot.pas
     function Backup(const BackupFileName: TFileName): boolean;
-    {/ backup of the opened Database into an external file name
-     - this method will use the SQLite Online Backup API and a dedicated
-       background thread for the process
-     - this will be asynchronous, and would block the main database process
-       only when copying the StepPageNumber numer of pages for each step,
-       waiting StepSleepMS milliseconds before performing the next step:
-       as a result, the copy operation can be done incrementally, by blocks of
-       StepPageNumber pages, in which case the source database does not need
-       to be locked for the duration of the copy, only for the brief periods of
-       time when it is actually being read from: this allows other database
-       users to continue uninterrupted (at least during StepSleepMS
-       milliseconds) while a backup is running
-     - if StepPageNumber is -1, the whole DB will be copied in a single step,
-       therefore in blocking mode, e.g. with BackupBackgroundWaitUntilFinished
-     - the supplied OnProgress event handler will be called at each step, in
-       the context of the background thread
-     - the background thread will be released when the process is finished
-     - if only one connection to the database does exist (e.g. if you use only
-       one TSQLDataBase instance on the same database file), any modification
-       to the source database during the background process will be included in
-       the backup - so this method will work perfectly e.g. for mORMot.pas
-     - if specified, a password will be used to cypher BackupFileName on disk
-       (it will work only with SynSQLite3Static) - you can uncypher the resulting
-       encrypted database file later via ChangeSQLEncryptTablePassWord()
-     - returns TRUE if backup started as expected, or FALSE in case of error
-       (e.g. if there is already another backup started, if the source or
-       destination databases are locked or invalid, or if the sqlite3.dll is too
-       old and does not support the Online Backup API)
-     - you can also use this method to save an SQLite3 ':memory:' database,
-       perhaps in conjunction with the BackupBackgroundWaitUntilFinished method }
+    /// backup of the opened Database into an external file name
+    // - this method will use the SQLite Online Backup API and a dedicated
+    // background thread for the process
+    // - this will be asynchronous, and would block the main database process
+    // only when copying the StepPageNumber numer of pages for each step,
+    // waiting StepSleepMS milliseconds before performing the next step:
+    // as a result, the copy operation can be done incrementally, by blocks of
+    // StepPageNumber pages, in which case the source database does not need
+    // to be locked for the duration of the copy, only for the brief periods of
+    // time when it is actually being read from: this allows other database
+    // users to continue uninterrupted (at least during StepSleepMS
+    // milliseconds) while a backup is running
+    // - if StepPageNumber is -1, the whole DB will be copied in a single step,
+    // therefore in blocking mode, e.g. with BackupBackgroundWaitUntilFinished
+    // - the supplied OnProgress event handler will be called at each step, in
+    // the context of the background thread
+    // - the background thread will be released when the process is finished
+    // - if only one connection to the database does exist (e.g. if you use only
+    // one TSQLDataBase instance on the same database file), any modification
+    // to the source database during the background process will be included in
+    // the backup - so this method will work perfectly e.g. for mORMot.pas
+    // - if specified, a password will be used to cypher BackupFileName on disk
+    // (it will work only with SynSQLite3Static) - you can uncypher the resulting
+    // encrypted database file later via ChangeSQLEncryptTablePassWord()
+    // - returns TRUE if backup started as expected, or FALSE in case of error
+    // (e.g. if there is already another backup started, if the source or
+    // destination databases are locked or invalid, or if the sqlite3.dll is too
+    // old and does not support the Online Backup API)
+    // - you can also use this method to save an SQLite3 ':memory:' database,
+    // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
       const aPassword: RawUTF8=''): boolean;
@@ -2844,7 +2847,7 @@ type
     /// flush the internal SQL-based JSON cache content
     // - to be called when the regular Lock/LockJSON methods are not called,
     // e.g. with external tables as defined in SQLite3DB unit
-    // - will also increment the global InternalState property value (if set) 
+    // - will also increment the global InternalState property value (if set)
     procedure CacheFlush;
 
     /// read-only access to the SQLite3 database handle
@@ -2905,7 +2908,7 @@ type
     // - the page size must be a power of two between 512 and 65536 inclusive
     // - DBOpen method will set the PageSize to 4096 (if the database is not
     // encrypted), which sounds better than the default 1024 value - you should
-    // not have to set this property usually 
+    // not have to set this property usually
     // - setting this property will only cause an immediate change in the page
     // size if it is issued while the database is still empty, prior to the
     // first CREATE TABLE statement; if this property is used to specify a new
@@ -2988,13 +2991,13 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
     /// change the current read position
     function Seek(Offset: Longint; Origin: Word): Longint; override;
-    /// read-only access to the BLOB object handle 
+    /// read-only access to the BLOB object handle
     property Handle: TSQLite3Blob read fBlob;
   end;
 
   /// kind of event triggerred during TSQLDatabase.BackupBackground() process
   // - you can use (Sender.Step in backupAnyStep), to check for normal step,
-  // or (Sender.Step in backupFinished) to check for process end 
+  // or (Sender.Step in backupFinished) to check for process end
   TSQLDatabaseBackupEventStep = (
     backupNone, backupStart, backupSuccess, backupFailure,
     backupStepOk, backupStepBusy, backupStepLocked);
@@ -3031,12 +3034,12 @@ type
     property SourceDB: TSQLDatabase read fSourceDB;
     /// the destination database of the backup process
     property DestDB: TSQLDatabase read fDestDB;
-    /// the raised exception in case of backupFailure notification 
+    /// the raised exception in case of backupFailure notification
     property FailureError: Exception read fError;
   end;
 
 const
-  /// identify the iterative step events during TSQLDatabase.BackupBackground() 
+  /// identify the iterative step events during TSQLDatabase.BackupBackground()
   // - you can use (Sender.Step in backupAnyStep), to check for normal step
   backupAnyStep = [backupStepOk,backupStepBusy,backupStepLocked];
   /// identify the end step events during TSQLDatabase.BackupBackground()
@@ -3308,7 +3311,7 @@ begin
       score := 0;
       for p := 1 to MI^.nPhrase do
         for c := 1 to MI^.nCol do
-        with MI^.hits[c] do 
+        with MI^.hits[c] do
           if this_row>0 then
             score := score+(this_row/all_rows)*sqlite3.value_double(argv[c]);
       sqlite3.result_double(Context,score);
@@ -3878,7 +3881,7 @@ end;
 
 function TSQLDataBase.GetBackupBackgroundInProcess: boolean;
 begin
-  result := (self<>nil) and (fBackupBackgroundInProcess<>nil); 
+  result := (self<>nil) and (fBackupBackgroundInProcess<>nil);
 end;
 
 class function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
@@ -3908,7 +3911,7 @@ begin
   if Backup=0 then begin
     Dest.Free;
     exit;
-  end; 
+  end;
   fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
     Backup,self,Dest,StepPageNumber,StepSleepMS,OnProgress);
   result := true;
@@ -3927,7 +3930,7 @@ begin
       end;
       Lock;
       if fBackupBackgroundInProcess<>nil then
-        fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion 
+        fBackupBackgroundInProcess.Terminate; // notify Execute loop abortion
       UnLock;
       for i := 1 to 500 do begin // wait 5 seconds for process to be aborted
         SleepHiRes(10);
@@ -4842,7 +4845,7 @@ end;
 
 function TSQLDataBaseSQLFunction.CreateFunction(DB: TSQLite3DB): Integer;
 begin
-  if self<>nil then 
+  if self<>nil then
     result := sqlite3.create_function(DB,pointer(fSQLName),
       FunctionParametersCount,SQLITE_ANY,self,fInternalFunction,nil,nil) else
     result := SQLITE_ERROR;
@@ -4861,7 +4864,7 @@ begin
     exit; // two parameters expected
   end;
   DynArray := sqlite3.value_blob(argv[0]);
-  Elem := sqlite3.value_blob(argv[1]); 
+  Elem := sqlite3.value_blob(argv[1]);
   Func := sqlite3.user_data(Context);
   if (DynArray<>nil) and (Elem<>nil) and (Func<>nil) then
   with Func.fDummyDynArray do

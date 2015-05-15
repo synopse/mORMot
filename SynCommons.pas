@@ -883,33 +883,33 @@ type
   TVariantDynArray = array of variant;
 {$endif}
 
-  {/ RawUnicode is an Unicode String stored in an AnsiString
-    - faster than WideString, which are allocated in Global heap (for COM)
-    - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
-    - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
-     for WideChar count (that's why the definition of this type since Delphi 2009
-     is AnsiString(1200) and not UnicodeString)
-    - pointer(RawUnicode) is compatible with Win32 'Wide' API call
-    - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
-    - all conversion to/from AnsiString or RawUTF8 must be explicit }
+/// RawUnicode is an Unicode String stored in an AnsiString
+// - faster than WideString, which are allocated in Global heap (for COM)
+// - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
+// - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
+// for WideChar count (that's why the definition of this type since Delphi 2009
+// is AnsiString(1200) and not UnicodeString)
+// - pointer(RawUnicode) is compatible with Win32 'Wide' API call
+// - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
+// - all conversion to/from AnsiString or RawUTF8 must be explicit
 {$ifdef UNICODE} RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
 {$else}          RawUnicode = type AnsiString;
 {$endif}
 
-  {/ RawUTF8 is an UTF-8 String stored in an AnsiString
-    - use this type instead of System.UTF8String, which behavior changed
-     between Delphi 2009 compiler and previous versions: our implementation
-     is consistent and compatible with all versions of Delphi compiler
-    - mimic Delphi 2009 UTF8String, without the charset conversion overhead
-    - all conversion to/from AnsiString or RawUnicode must be explicit }
+  /// RawUTF8 is an UTF-8 String stored in an AnsiString
+  // - use this type instead of System.UTF8String, which behavior changed
+  // between Delphi 2009 compiler and previous versions: our implementation
+  // is consistent and compatible with all versions of Delphi compiler
+  // - mimic Delphi 2009 UTF8String, without the charset conversion overhead
+  // - all conversion to/from AnsiString or RawUnicode must be explicit
 {$ifdef UNICODE} RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
 {$else}          RawUTF8 = type AnsiString; {$endif}
 
-  {/ WinAnsiString is a WinAnsi-encoded AnsiString (code page 1252)
-    - use this type instead of System.String, which behavior changed
-     between Delphi 2009 compiler and previous versions: our implementation
-     is consistent and compatible with all versions of Delphi compiler
-    - all conversion to/from RawUTF8 or RawUnicode must be explicit }
+  /// WinAnsiString is a WinAnsi-encoded AnsiString (code page 1252)
+  // - use this type instead of System.String, which behavior changed
+  // between Delphi 2009 compiler and previous versions: our implementation
+  // is consistent and compatible with all versions of Delphi compiler
+  // - all conversion to/from RawUTF8 or RawUnicode must be explicit
 {$ifdef UNICODE} WinAnsiString = type AnsiString(1252); // WinAnsi Codepage
 {$else}          WinAnsiString = type AnsiString; {$endif}
 
@@ -931,16 +931,16 @@ type
   // transmission of TSQLTableJSON result
   RawJSON = type RawUTF8;
 
-  {/ SynUnicode is the fastest available Unicode native string type, depending
-    on the compiler used
-   - this type is native to the compiler, so you can use Length() Copy() and
-     such functions with it (this is not possible with RawUnicodeString type)
-   - before Delphi 2009+, it uses slow OLE compatible WideString
-     (with our Enhanced RTL, WideString allocation can be made faster by using
-     an internal caching mechanism of allocation buffers - WideString allocation
-     has been made much faster since Windows Vista/Seven)
-   - starting with Delphi 2009, it uses fastest UnicodeString type, which
-     allow Copy On Write, Reference Counting and fast heap memory allocation }
+  /// SynUnicode is the fastest available Unicode native string type, depending
+  //  on the compiler used
+  // - this type is native to the compiler, so you can use Length() Copy() and
+  //   such functions with it (this is not possible with RawUnicodeString type)
+  // - before Delphi 2009+, it uses slow OLE compatible WideString
+  //   (with our Enhanced RTL, WideString allocation can be made faster by using
+  //   an internal caching mechanism of allocation buffers - WideString allocation
+  //   has been made much faster since Windows Vista/Seven)
+  // - starting with Delphi 2009, it uses fastest UnicodeString type, which
+  //   allow Copy On Write, Reference Counting and fast heap memory allocation
   {$ifdef UNICODE}SynUnicode = UnicodeString;
   {$else}         SynUnicode = WideString; {$endif}
 
@@ -2059,32 +2059,32 @@ function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
 // - this version will decode the UTF-8 content before using NormToUpper[]
 function PosIU(substr: PUTF8Char; const str: RawUTF8): Integer;
 
-{/ internal fast integer val to text conversion
- - expect the last available temporary char position in P
- - return the last written char position (write in reverse order in P^)
- - typical use:
-  !function Int32ToUTF8(Value : integer): RawUTF8;
-  !var tmp: array[0..15] of AnsiChar;
-  !    P: PAnsiChar;
-  !begin
-  !  P := StrInt32(@tmp[15],Value);
-  !  SetString(result,P,@tmp[15]-P);
-  !end;
- - not to be called directly: use IntToStr() instead }
+/// internal fast integer val to text conversion
+// - expect the last available temporary char position in P
+// - return the last written char position (write in reverse order in P^)
+// - typical use:
+//  !function Int32ToUTF8(Value : integer): RawUTF8;
+//  !var tmp: array[0..15] of AnsiChar;
+//  !    P: PAnsiChar;
+//  !begin
+//  !  P := StrInt32(@tmp[15],Value);
+//  !  SetString(result,P,@tmp[15]-P);
+//  !end;
+// - not to be called directly: use IntToStr() instead
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 
-{/ internal fast unsigned integer val to text conversion
- - expect the last available temporary char position in P
- - return the last written char position (write in reverse order in P^) }
+/// internal fast unsigned integer val to text conversion
+// - expect the last available temporary char position in P
+// - return the last written char position (write in reverse order in P^)
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 
-{/ internal fast Int64 val to text conversion
- - same calling convention as with StrInt32() above }
+/// internal fast Int64 val to text conversion
+// - same calling convention as with StrInt32() above
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-{/ internal fast unsigned Int64 val to text conversion
- - same calling convention as with StrInt32() above }
+/// internal fast unsigned Int64 val to text conversion
+// - same calling convention as with StrInt32() above
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
   {$ifdef CPU64}inline;{$endif}
 
@@ -2406,7 +2406,7 @@ function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 // - ignore case - up^ must be already Upper
 // - chars are compared as 7 bit Ansi only (no accentuated characters)
 // - this function expects upArray[] items to have at least 2 characters (it
-// will use a fast comparison of word values) 
+// will use a fast comparison of word values)
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 
 /// returns true if the beginning of p^ is the same as up^
@@ -2672,28 +2672,28 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 /// fast replace of a specified char into a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
 
-{/ format a text content with quotes
- - UTF-8 version of the function available in SysUtils
- - this function implements what is specified in the official SQLite3
-   documentation: "A string constant is formed by enclosing the string in single
-   quotes ('). A single quote within the string can be encoded by putting two
-   single quotes in a row - as in Pascal." }
+/// format a text content with quotes
+// - UTF-8 version of the function available in SysUtils
+// - this function implements what is specified in the official SQLite3
+//   documentation: "A string constant is formed by enclosing the string in single
+//   quotes ('). A single quote within the string can be encoded by putting two
+//   single quotes in a row - as in Pascal."
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar=''''): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-{/ format a buffered text content with quotes
- - this function implements what is specified in the official SQLite3
-   documentation: "A string constant is formed by enclosing the string in single
-   quotes ('). A single quote within the string can be encoded by putting two
-   single quotes in a row - as in Pascal." }
+/// format a buffered text content with quotes
+// - this function implements what is specified in the official SQLite3
+//   documentation: "A string constant is formed by enclosing the string in single
+//   quotes ('). A single quote within the string can be encoded by putting two
+//   single quotes in a row - as in Pascal."
 function QuotedStr(Text: PUTF8Char; Quote: AnsiChar): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-{/ format a buffered text content with quotes
- - this function implements what is specified in the official SQLite3
-   documentation: "A string constant is formed by enclosing the string in single
-   quotes ('). A single quote within the string can be encoded by putting two
-   single quotes in a row - as in Pascal." }
+/// format a buffered text content with quotes
+// - this function implements what is specified in the official SQLite3
+//   documentation: "A string constant is formed by enclosing the string in single
+//   quotes ('). A single quote within the string can be encoded by putting two
+//   single quotes in a row - as in Pascal."
 procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); overload;
 
 /// convert a buffered text content into a JSON string
@@ -3152,7 +3152,7 @@ function FindObjectEntryWithoutExt(const Content, Name: RawUTF8): RawUTF8;
 
 
 type
-  {/ available pronunciations for our fast Soundex implementation }
+  /// available pronunciations for our fast Soundex implementation
   TSynSoundExPronunciation =
     (sndxEnglish, sndxFrench, sndxSpanish, sndxNone);
 
@@ -3160,15 +3160,15 @@ type
   PSoundExValues = ^TSoundExValues;
 
   PSynSoundEx = ^TSynSoundEx;
-  {/ fast search of a text value, using the Soundex searching mechanism
-    - Soundex is a phonetic algorithm for indexing names by sound,
-      as pronounced in a given language. The goal is for homophones to be
-      encoded to the same representation so that they can be matched despite
-      minor differences in spelling
-    - this implementation is very fast and can be used e.g. to parse and search
-      in a huge text buffer
-    - This version also handles french and spanish pronunciations on request,
-      which differs from default Soundex, i.e. English }
+  /// fast search of a text value, using the Soundex approximation mechanism
+  // - Soundex is a phonetic algorithm for indexing names by sound,
+  //  as pronounced in a given language. The goal is for homophones to be
+  //  encoded to the same representation so that they can be matched despite
+  //  minor differences in spelling
+  // - this implementation is very fast and can be used e.g. to parse and search
+  //  in a huge text buffer
+  // - This version also handles french and spanish pronunciations on request,
+  //  which differs from default Soundex, i.e. English
   TSynSoundEx = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Search, FirstChar: cardinal;
@@ -3188,20 +3188,20 @@ type
     function Ansi(A: PAnsiChar): boolean;
   end;
 
-{/ Retrieve the Soundex value of a text word, from Ansi buffer
-  - Return the soundex value as an easy to use cardinal value, 0 if the
-    incoming string contains no valid word
-  - if next is defined, its value is set to the end of the encoded word
-    (so that you can call again this function to encode a full sentence) }
+/// Retrieve the Soundex value of a text word, from Ansi buffer
+// - Return the soundex value as an easy to use cardinal value, 0 if the
+// incoming string contains no valid word
+// - if next is defined, its value is set to the end of the encoded word
+// (so that you can call again this function to encode a full sentence)
 function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar=nil;
   Lang: TSynSoundExPronunciation=sndxEnglish): cardinal;
 
-{/ Retrieve the Soundex value of a text word, from UTF-8 buffer
-  - Return the soundex value as an easy to use cardinal value, 0 if the
-    incoming string contains no valid word
-  - if next is defined, its value is set to the end of the encoded word
-    (so that you can call again this function to encode a full sentence)
-  - very fast: all UTF-8 decoding is handled on the fly }
+/// Retrieve the Soundex value of a text word, from UTF-8 buffer
+// - Return the soundex value as an easy to use cardinal value, 0 if the
+// incoming string contains no valid word
+// - if next is defined, its value is set to the end of the encoded word
+// (so that you can call again this function to encode a full sentence)
+// - very fast: all UTF-8 decoding is handled on the fly
 function SoundExUTF8(U: PUTF8Char; next: PPUTF8Char=nil;
   Lang: TSynSoundExPronunciation=sndxEnglish): cardinal;
 
@@ -4593,7 +4593,7 @@ type
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
-    // - returns the resulting count of stored values in the TDocVariant 
+    // - returns the resulting count of stored values in the TDocVariant
     function MergeDocVariant(var DocVariant: variant): integer;
     {$endif}
     /// returns true if the Init() method has been called
@@ -5492,7 +5492,7 @@ type
 
   TJSONRecordAbstract = class;
 
-{/// implement a reference to a unregistered record type
+(* /// implement a reference to a unregistered record type
   // - i.e. ptCustom kind of property, not handled by the
   // TTextWriter.RegisterCustomJSONSerializer*() internal list
   TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
@@ -5510,7 +5510,7 @@ type
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
     /// release any memory used by the instance
     procedure FinalizeItem(Data: Pointer); override;
-  end;}
+  end; *)
 
   /// used to handle additional RTTI for JSON record serialization
   // - this class is used to define how a record is defined, and will work
@@ -5973,7 +5973,7 @@ type
     procedure AddNoJSONEscape(P: Pointer; Len: integer); overload;
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJSONEscapeUTF8(const text: RawByteString); 
+    procedure AddNoJSONEscapeUTF8(const text: RawByteString);
       {$ifdef HASINLINE}inline;{$endif}
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
@@ -7624,18 +7624,18 @@ function IsValidEmail(P: PUTF8Char): boolean;
 /// return TRUE if the supplied content is a valid IP v4 address
 function IsValidIP4Address(P: PUTF8Char): boolean;
 
-{/ return TRUE if the supplied content matchs to a grep-like pattern
-  - ?	   	Matches any single characer
-	- *	   	Matches any contiguous characters
-	- [abc]  	Matches a or b or c at that position
-	- [^abc]	Matches anything but a or b or c at that position
-	- [!abc]	Matches anything but a or b or c at that position
-	- [a-e]  	Matches a through e at that position
-  - [abcx-z]  Matches a or b or c or x or y or or z, as does [a-cx-z]
-  - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
-  - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
-    match 'this as a test' nor 'this is a zest'
-  - initial C version by Kevin Boylan, first Delphi port by Sergey Seroukhov }
+/// return TRUE if the supplied content matchs to a grep-like pattern
+// - ?	   	Matches any single characer
+// - *	   	Matches any contiguous characters
+// - [abc]  	Matches a or b or c at that position
+// - [^abc]	Matches anything but a or b or c at that position
+// - [!abc]	Matches anything but a or b or c at that position
+// - [a-e]  	Matches a through e at that position
+// - [abcx-z]  Matches a or b or c or x or y or or z, as does [a-cx-z]
+// - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
+// - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
+// match 'this as a test' nor 'this is a zest'
+// - initial C version by Kevin Boylan, first Delphi port by Sergey Seroukhov
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
 
@@ -7779,10 +7779,10 @@ type
       var ErrorMsg: string): boolean; override;
   end;
 
-  {/ grep-like case-insensitive pattern validation of a Record field content
-    (typicaly a TSQLRecord)
-    - parameter is NOT JSON encoded, but is some basic grep-like pattern
-    - same as TSynValidatePattern, but is NOT case sensitive }
+  /// grep-like case-insensitive pattern validation of a text field content
+  // (typicaly a TSQLRecord)
+  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
 
   /// text validation to ensure that to any text field would not be ''
@@ -8098,24 +8098,24 @@ procedure Curr64ToStr(const Value: Int64; var result: RawUTF8); overload;
 // - return the number of chars written to Dest^
 function Curr64ToPChar(const Value: Int64; Dest: PUTF8Char): PtrInt;
 
-{/ internal fast INTEGER Curr64 (value*10000) value to text conversion
- - expect the last available temporary char position in P
- - return the last written char position (write in reverse order in P^)
- - will return 0 for Value=0, or a string representation with always 4 decimals
-   (e.g. 1->'0.0001' 500->'0.0500' 25000->'2.5000' 30000->'3.0000')
- - is called by Curr64ToPChar() and Curr64ToStr() functions }
+/// internal fast INTEGER Curr64 (value*10000) value to text conversion
+// - expect the last available temporary char position in P
+// - return the last written char position (write in reverse order in P^)
+// - will return 0 for Value=0, or a string representation with always 4 decimals
+//   (e.g. 1->'0.0001' 500->'0.0500' 25000->'2.5000' 30000->'3.0000')
+// - is called by Curr64ToPChar() and Curr64ToStr() functions
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-{/ truncate a Currency value to only 2 digits
-  - implementation will use fast Int64 math to avoid any precision loss due to
-    temporary floating-point conversion }
+/// truncate a Currency value to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
 function TruncTo2Digits(Value: Currency): Currency;
 
-{/ simple, no banker rounding of a Currency value to only 2 digits
-  - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
-  - implementation will use fast Int64 math to avoid any precision loss due to
-    temporary floating-point conversion }
+/// simple, no banker rounding of a Currency value to only 2 digits
+// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
 function SimpleRoundTo2Digits(Value: Currency): Currency;
 
 var
@@ -9307,18 +9307,18 @@ var
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
 
-{/ this function can be used to create a GDI compatible window, able to
-  receive Windows Messages for fast local communication
-  - will return 0 on failure (window name already existing e.g.), or
-    the created HWND handle on success
-  - it will call the supplied message handler defined for a given Windows Message:
-    for instance, define such a method in any object definition:
-  !  procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA; }
+/// this function can be used to create a GDI compatible window, able to
+// receive Windows Messages for fast local communication
+// - will return 0 on failure (window name already existing e.g.), or
+//  the created HWND handle on success
+// - it will call the supplied message handler defined for a given Windows Message:
+//  for instance, define such a method in any object definition:
+// !  procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA;
 function CreateInternalWindow(const aWindowName: string; aObject: TObject): HWND;
 
-{/ delete the window resources used to receive Windows Messages
-  - must be called for each CreateInternalWindow() function
-  - both parameter values are then reset to ''/0 }
+/// delete the window resources used to receive Windows Messages
+// - must be called for each CreateInternalWindow() function
+// - both parameter values are then reset to ''/0
 function ReleaseInternalWindow(var aWindowName: string; var aWindow: HWND): boolean;
 
 var
@@ -9543,7 +9543,7 @@ type
      // other variable-size field value
      tftVarInt64);
 
-  {/ set of available field types for TSynTable }
+  /// set of available field types for TSynTable
   TSynTableFieldTypes = set of TSynTableFieldType;
 
   /// available option types for a field property
@@ -10402,7 +10402,7 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 procedure SetVariantNull(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster 
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 function VarIsEmptyOrNull(const V: Variant): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11783,7 +11783,7 @@ type
   end;
 
   {$M+}
-  
+
   /// able to serialize any timing as raw micro-seconds number or text
   TSynMonitorTime = class
   protected
@@ -36203,7 +36203,7 @@ begin
       B := fTempBuf;
     until false;
     dec(B); // allow CancelLastChar
-  end; 
+  end;
 end;
 
 procedure TTextWriter.AddNoJSONEscapeUTF8(const text: RawByteString);
@@ -37068,7 +37068,7 @@ begin
       AddString(ColNames[i]);
       AddNoJSONEscape(PAnsiChar('","'),3);
     end;
-    CancelLastChar('"'); 
+    CancelLastChar('"');
     fStartDataPosition := fStream.Position+(B-fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
@@ -45779,4 +45779,4 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
-end.
+end.

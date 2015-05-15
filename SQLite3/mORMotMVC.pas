@@ -29,7 +29,7 @@ unit mORMotMVC;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -44,7 +44,7 @@ unit mORMotMVC;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
     and feature request [bd94c11ab1]
@@ -182,7 +182,7 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpers(const aNames: array of RawUTF8;
       const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
-    /// will add Expression Helpers for some ORM tables 
+    /// will add Expression Helpers for some ORM tables
     // - e.g. to read a TSQLMyRecord from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
@@ -200,7 +200,7 @@ type
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(
       aRest: TSQLRest): TMVCViewsMustache; overload;
-    /// will add some Expression Helpers for hashing 
+    /// will add some Expression Helpers for hashing
     // - i.e. md5, sha1 and sha256 hashing
     // - would allow e.g. to compute a Gravatar URI via:
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
@@ -209,7 +209,7 @@ type
     destructor Destroy; override;
   end;
 
-  
+
   { ====== Sessions ====== }
 
   /// an abstract class able to implement ViewModel/Controller sessions
@@ -318,7 +318,7 @@ type
 
   /// abtract MVC rendering execution context
   // - you shoud not execute this abstract class, but any of the inherited class
-  // - one instance inherited from this class would be allocated for each event 
+  // - one instance inherited from this class would be allocated for each event
   // - may return some data (when inheriting from TMVCRendererReturningData), or
   // even simply display the value in a VCL/FMX GUI, without any output
   TMVCRendererAbstract = class
@@ -329,7 +329,7 @@ type
     fInput: RawUTF8;
     procedure Renders(outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
-    function Redirects(const action: TMVCAction): boolean; virtual;  
+    function Redirects(const action: TMVCAction): boolean; virtual;
     procedure CommandError(const ErrorName: RawUTF8; const ErrorValue: variant;
       ErrorCode: Integer); virtual;
   public
@@ -547,7 +547,7 @@ type
   // TMVCViewsAbtract (e.g. TMVCViewsMustache), and the ViewModel/Controller
   // will be implemented with IMVCApplication methods of the inherited class
   // - inherits from TInjectableObject, so that you could resolve dependencies
-  // via services or stubs, following the IoC pattern  
+  // via services or stubs, following the IoC pattern
   TMVCApplication = class(TInjectableObject)
   protected
     fFactory: TInterfaceFactory;
@@ -602,7 +602,7 @@ type
     // - you may call Locker.ProtectMethod in any implementation method to
     // ensure that no other thread would access the same data
     // - for store some cache data among methods, you may consider defining a
-    // ILockedDocVariant private field, and use it to store values safely 
+    // ILockedDocVariant private field, and use it to store values safely
     // - note that regular RestModel CRUD operations are already thread safe, so
     // it is not necessary to use this Locker with ORM or SOA methods
     property Locker: IAutoLocker read fLocker;
@@ -1594,7 +1594,7 @@ begin
       fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
     end;
     Ctxt.Returns(fMvcInfoCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
-  end else 
+  end else
   if (publishStatic in fPublishOptions) and
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
     // code below will use a local in-memory cache, but would do the same as:

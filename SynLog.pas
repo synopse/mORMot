@@ -47,7 +47,7 @@ unit SynLog;
   Version 1.18
   - first public release, extracted from SynCommons.pas unit
   - BREAKING CHANGE: PWinAnsiChar type for constant text format parameters has
-    been changed into a RawUTF8, to please all supported platforms and compilers  
+    been changed into a RawUTF8, to please all supported platforms and compilers
   - WARNING: any user of the framework in heavy-loaded multi-threaded application
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
   - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Windows target platform only)
@@ -240,7 +240,7 @@ type
 
   TSynLogFamily = class;
   TSynLogFile = class;
-  
+
   {$M-}
 
   /// a generic interface used for logging a method
@@ -364,7 +364,7 @@ type
   // - will be called by TSynLog.PerformRotation
   // - should return TRUE if the function did process the file name
   // - should return FALSE if the function did not do anything, so that the
-  // caller should perform the rotation as usual  
+  // caller should perform the rotation as usual
   TSynLogRotateEvent = function(aLog: TSynLog; const aOldLogFileName: TFileName): boolean;
 
   /// how threading is handled by the TSynLogFamily
@@ -385,24 +385,24 @@ type
   /// how file existing shall be handled during logging
   TSynLogExistsAction = (acOverwrite, acAppend, acAppendWithHeader);
 
-  {/ regroup several logs under an unique family name
-   - you should usualy use one family per application or per architectural
-     module: e.g. a server application may want to log in separate files the
-     low-level Communication, the DB access, and the high-level process
-   - initialize the family settings before using them, like in this code:
-     ! with TSynLogDB.Family do begin
-     !   Level := LOG_VERBOSE;
-     !   PerThreadLog := ptOneFilePerThread;
-     !   DestinationPath := 'C:\Logs';
-     ! end;
-   - then use the logging system inside a method:
-     ! procedure TMyDB.MyMethod;
-     ! var ILog: ISynLog;
-     ! begin
-     !   ILog := TSynLogDB.Enter(self,'MyMethod');
-     !   // do some stuff
-     !   ILog.Log(sllInfo,'method called');
-     ! end; }
+  /// regroup several logs under an unique family name
+  // - you should usualy use one family per application or per architectural
+  // module: e.g. a server application may want to log in separate files the
+  // low-level Communication, the DB access, and the high-level process
+  // - initialize the family settings before using them, like in this code:
+  // ! with TSynLogDB.Family do begin
+  // !   Level := LOG_VERBOSE;
+  // !   PerThreadLog := ptOneFilePerThread;
+  // !   DestinationPath := 'C:\Logs';
+  // ! end;
+  //- then use the logging system inside a method:
+  // ! procedure TMyDB.MyMethod;
+  // ! var ILog: ISynLog;
+  // ! begin
+  // !   ILog := TSynLogDB.Enter(self,'MyMethod');
+  // !   // do some stuff
+  // !   ILog.Log(sllInfo,'method called');
+  // ! end;
   TSynLogFamily = class
   protected
     fLevel, fLevelStackTrace: TSynLogInfos;
@@ -536,7 +536,7 @@ type
     // (and the computer name if IncludeComputerNameInFileName is true)
     // - you can specify your own file name here, to be used instead
     // - this file name should not contain any folder, nor file extension (which
-    // are set by DestinationPath and DefaultExtension properties) 
+    // are set by DestinationPath and DefaultExtension properties)
     property CustomFileName: TFileName read fCustomFileName write fCustomFileName;
     /// the folder where old log files must be compressed
     // - by default, is in the executable folder, i.e. the same as DestinationPath
@@ -568,7 +568,7 @@ type
     // application on the customer side (using TSynLog.Enter methods)
     // - set to FALSE by default, or if RotateFileCount and RotateFileSizeKB /
     // RotateFileDailyAtHour are set (the high resolution frequency is set
-    // in the log file header, so expects a single file) 
+    // in the log file header, so expects a single file)
     property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
@@ -587,11 +587,11 @@ type
     {$endif}
     /// force no log to be written to any file
     // - may be usefull in conjunction e.g. with EchoToConsole or any other
-    // third-party logging component 
+    // third-party logging component
     property NoFile: boolean read fNoFile write fNoFile;
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
-    // - can be set to a number of rotating files: rotation and compression will 
+    // - can be set to a number of rotating files: rotation and compression will
     // happen, and main file size will be up to RotateFileSizeKB number of bytes,
     // or when RotateFileDailyAtHour time is reached
     // - if set to 1, no .synlz backup will be created, so the main log file will
@@ -609,13 +609,13 @@ type
     /// fixed hour of the day where logging files rotation should be performed
     // - by default, equals -1, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
-    // specified hour 
+    // specified hour
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 30, maximum is 255
-    // - if stOnlyAPI is defined as StackTraceUse under Windows XP, maximum 
+    // - if stOnlyAPI is defined as StackTraceUse under Windows XP, maximum
     // value may be around 60, due to RtlCaptureStackBackTrace() API limitations
     property StackTraceLevel: byte read fStackTraceLevel write fStackTraceLevel;
     /// how the stack trace shall use only the Windows API
@@ -695,7 +695,7 @@ type
     fThreadLastHash: integer;
     fThreadIndex: integer;
     {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
-    fThreadHandleExceptionBackup: TSynLog; 
+    fThreadHandleExceptionBackup: TSynLog;
     {$endif}
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
@@ -726,7 +726,7 @@ type
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-     aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload; 
+     aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
     // any call to this method MUST call LogTrailerUnLock
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINE}inline;{$endif}
@@ -762,7 +762,7 @@ type
     // occur at application closing: you can use this Release method if you
     // are sure that you won't need this TSynLog instance any more
     // - ensure there is no pending Leave element in a stack-allocated ISynLog
-    // (see below) 
+    // (see below)
     // - can be used e.g. to release the instance when finishing a thread when
     // Family.PerThreadLog=ptOneFilePerThread:
     // ! var
@@ -778,53 +778,54 @@ type
     // ! end;
     procedure Release;
     /// you may call this method when a thread is ended
-    // - should be called in the thread context
+    // - should be called in the thread context which is about to terminate,
+    // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
     // - is called e.g. by TSQLRest.EndCurrentThread
     procedure NotifyThreadEnded;
-    {/ handle generic method enter / auto-leave tracing
-     - this is the main method to be called within a procedure/function to trace:
-     ! procedure TMyDB.SQLExecute(const SQL: RawUTF8);
-     ! var ILog: ISynLog;
-     ! begin
-     !   ILog := TSynLogDB.Enter(self,'SQLExecute');
-     !   // do some stuff
-     !   ILog.Log(sllInfo,'SQL=%',[SQL]);
-     ! end;
-     - returning a ISynLog interface will allow you to have an automated
-     sllLeave log created when the method is left (thanks to the hidden
-     try..finally block generated by the compiler to protect the ISynLog var)
-     - it is convenient to define a local variable to store the returned ISynLog
-     and use it for any specific logging within the method execution 
-     - if you just need to access the log inside the method block, you may
-     not need any ISynLog interface variable:
-     ! procedure TMyDB.SQLFlush;
-     ! begin
-     !   TSynLogDB.Enter(self,'SQLFlush');
-     !   // do some stuff
-     ! end;
-     - if no Method name is supplied, it will use the caller address, and
-     will write it as hexa and with full unit and symbol name, if the debugging
-     information is available (i.e. if TSynMapFile retrieved the .map content):
-     ! procedure TMyDB.SQLFlush;
-     ! begin
-     !   TSynLogDB.Enter(self);
-     !   // do some stuff
-     ! end;
-     - note that supplying a method name is faster than using the .map content:
-     if you want accurate profiling, it's better to use a method name or not to
-     use a .map file - note that this method name shall be a constant, and not
-     a locally computed variable, since it may trigger some random GPF at
-     runtime - if it is a local variable, you can set aMethodNameLocal=true
-     - if TSynLogFamily.HighResolutionTimeStamp is TRUE, high-resolution
-     time stamp will be written instead of ISO 8601 date and time: this will
-     allow performance profiling of the application on the customer side
-     - Enter() will write the class name (and the unit name for classes with
-     published properties, if TSynLogFamily.WithUnitName is true) for both
-     enter (+) and leave (-) events:
-      $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
-      $ 20110325 19325801 info   SQL=SELECT * FROM Table;
-      $ 20110325 19325801  -    MyDBUnit.TMyDB(004E11F4).SQLExecute }
+    /// handle generic method enter / auto-leave tracing
+    // - this is the main method to be called within a procedure/function to trace:
+    // ! procedure TMyDB.SQLExecute(const SQL: RawUTF8);
+    // ! var ILog: ISynLog;
+    // ! begin
+    // !   ILog := TSynLogDB.Enter(self,'SQLExecute');
+    // !   // do some stuff
+    // !   ILog.Log(sllInfo,'SQL=%',[SQL]);
+    // ! end;
+    // - returning a ISynLog interface will allow you to have an automated
+    // sllLeave log created when the method is left (thanks to the hidden
+    // try..finally block generated by the compiler to protect the ISynLog var)
+    // - it is convenient to define a local variable to store the returned ISynLog
+    // and use it for any specific logging within the method execution
+    // - if you just need to access the log inside the method block, you may
+    // not need any ISynLog interface variable:
+    // ! procedure TMyDB.SQLFlush;
+    // ! begin
+    // !   TSynLogDB.Enter(self,'SQLFlush');
+    // !   // do some stuff
+    // ! end;
+    // - if no Method name is supplied, it will use the caller address, and
+    // will write it as hexa and with full unit and symbol name, if the debugging
+    // information is available (i.e. if TSynMapFile retrieved the .map content):
+    // ! procedure TMyDB.SQLFlush;
+    // ! begin
+    // !   TSynLogDB.Enter(self);
+    // !   // do some stuff
+    // ! end;
+    // - note that supplying a method name is faster than using the .map content:
+    // if you want accurate profiling, it's better to use a method name or not to
+    // use a .map file - note that this method name shall be a constant, and not
+    // a locally computed variable, since it may trigger some random GPF at
+    // runtime - if it is a local variable, you can set aMethodNameLocal=true
+    // - if TSynLogFamily.HighResolutionTimeStamp is TRUE, high-resolution
+    // time stamp will be written instead of ISO 8601 date and time: this will
+    // allow performance profiling of the application on the customer side
+    // - Enter() will write the class name (and the unit name for classes with
+    // published properties, if TSynLogFamily.WithUnitName is true) for both
+    // enter (+) and leave (-) events:
+    //  $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
+    //  $ 20110325 19325801 info   SQL=SELECT * FROM Table;
+    //  $ 20110325 19325801  -    MyDBUnit.TMyDB(004E11F4).SQLExecute
     class function Enter(aInstance: TObject=nil; aMethodName: PUTF8Char=nil;
       aMethodNameLocal: boolean=false): ISynLog; overload;
     /// retrieve the current instance of this TSynLog class
@@ -952,7 +953,7 @@ type
   /// used by TSynLogFile.LogProcSort method
   TLogProcSortOrder = (
     soNone, soByName, soByOccurrence, soByTime, soByProperTime);
-    
+
   /// used to parse a .log file, as created by TSynLog, into high-level data
   // - this particular TMemoryMapText class will retrieve only valid event lines
   // (i.e. will fill EventLevel[] for each line <> sllNone)
@@ -1037,9 +1038,9 @@ type
     /// retrieve all event thread IDs
     // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOnFile
     // - for ptMergedInOneFile (default) or ptOneFilePerThread logging process,
-    // the array will be void (EventThread=nil)   
+    // the array will be void (EventThread=nil)
     property EventThread: TWordDynArray read fThreads;
-    /// the number of threads 
+    /// the number of threads
     property ThreadsCount: cardinal read fThreadMax;
     /// the number of occurences of each thread ID
     property ThreadsRows: TCardinalDynArray read fThreadsRows;
@@ -1054,7 +1055,7 @@ type
     property LogProcMerged: boolean read fLogProcIsMerged write SetLogProcMerged;
     /// all used event levels, as retrieved at log file content parsing
     property LevelUsed: TSynLogInfos read fLevelUsed;
-    /// high-resolution time stamp frequence, as retrieved from log file header 
+    /// high-resolution time stamp frequence, as retrieved from log file header
     // - equals 0 if date time resolution, >0 if high-resolution time stamp
     property Freq: Int64 read fFreq;
     /// custom headers, to be searched as .ini content
@@ -1828,7 +1829,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var SynLog: TSynLog;
 begin
   SynLog := GlobalCurrentHandleExceptionSynLog;
-  if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then 
+  if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then
     SynLog := GetHandleExceptionSynLog;
   if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
     exit;
@@ -1929,7 +1930,7 @@ procedure oldUnWindProc; external kernel32 name 'RtlUnwind';
 
 {$ifdef WITH_MAPPED_EXCEPTIONS} // Kylix specific exception handling
 
-{$W-} // disable stack frame generation (duplicate from Synopse.inc) 
+{$W-} // disable stack frame generation (duplicate from Synopse.inc)
 
 threadvar
   CurrentTopOfStack: Cardinal;
@@ -1970,7 +1971,7 @@ end;
 // types and constants from from System.pas / unwind.h
 
 type
-  PInternalUnwindException = ^TInternalUnwindException; 
+  PInternalUnwindException = ^TInternalUnwindException;
   TInternalUnwindException = packed record
     exception_class: LongWord;
     exception_cleanup: Pointer;
@@ -2326,8 +2327,8 @@ begin
   try
     result := fSynLogClass.Create(self);
     i := SynLogFileList.Add(result);
-    if fPerThreadLog=ptOneFilePerThread then 
-      if (fRotateFileCount=0) and (fRotateFileSize=0) and (fRotateFileAtHour<0) then 
+    if fPerThreadLog=ptOneFilePerThread then
+      if (fRotateFileCount=0) and (fRotateFileSize=0) and (fRotateFileAtHour<0) then
         SynLogFileIndexThreadVar[fIdent] := i+1 else begin
         fPerThreadLog := ptIdentifiedInOnFile; // excluded by rotation
         fGlobalLog := result;
@@ -2587,6 +2588,8 @@ end;
 
 procedure TSynLog.NotifyThreadEnded;
 begin
+  if fThreadContextCount=0 then
+    exit; // nothing to release
   LockAndGetThreadContext;
   try
     fThreadHash[fThreadLastHash] := 0; // so that slot would be re-used
@@ -2595,7 +2598,7 @@ begin
     if fThreadIndexReleasedCount>=length(fThreadIndexReleased) then
       SetLength(fThreadIndexReleased,fThreadIndexReleasedCount+128);
     fThreadIndexReleased[fThreadIndexReleasedCount] := fThreadIndex;
-    inc(fThreadIndexReleasedCount);
+    inc(fThreadIndexReleasedCount); // allow naive but very efficient reuse
   finally
     {$ifndef NOEXCEPTIONINTERCEPT}
     GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
@@ -3578,7 +3581,7 @@ begin
   max_stack := CurrentTopOfStack;
   if max_stack=0 then begin
     ComputeCurrentTopOfStack;
-    max_stack := CurrentTopOfStack;         
+    max_stack := CurrentTopOfStack;
   end;
   {$else}
   asm
@@ -4025,7 +4028,7 @@ begin
     if LineBeg[8]=' ' then // YYYYMMDD HHMMSS is one char bigger than TimeStamp
       fLineLevelOffset := 19 else
       fLineLevelOffset := 18;
-    if (LineBeg[fLineLevelOffset]='!') or // ! = thread 1 
+    if (LineBeg[fLineLevelOffset]='!') or // ! = thread 1
        (GetLogLevelFromText(LineBeg)=sllNone) then begin
       inc(fLineLevelOffset,3);
       fThreadsCount := fLinesMax;

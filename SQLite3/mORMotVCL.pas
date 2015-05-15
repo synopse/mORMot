@@ -114,7 +114,7 @@ type
     /// initialize the virtual TDataSet from a supplied JSON result
     // - you can set the expected column types matching the results column layout
     // - this constructor will parse the supplied JSON content and create
-    // an internal TSQLTableJSON instance to process the data 
+    // an internal TSQLTableJSON instance to process the data
     // - with non-Unicode version of Delphi, you can set aForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
@@ -123,7 +123,7 @@ type
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
     /// finalize the class instance
     destructor Destroy; override;
-    
+
     /// if the supplied TSQLTable instance should be released with this class
     // - Create() will left to FALSE (meaning that the TSQLTable instance shall
     // remain available all the time the TSynSQLTableDataSet instance is used)
@@ -205,7 +205,7 @@ begin
     CreateOwnedTable(Owner,T{$ifndef UNICODE},ForceWideString{$endif});
     T := nil;
   finally
-    T.Free; // release temporary instance in case of TSynSQLTableDataSet error 
+    T.Free; // release temporary instance in case of TSynSQLTableDataSet error
   end;
 end;
 
@@ -219,7 +219,7 @@ begin
     CreateOwnedTable(Owner,T{$ifndef UNICODE},ForceWideString{$endif});
     T := nil;
   finally
-    T.Free; // release temporary instance in case of TSynSQLTableDataSet error 
+    T.Free; // release temporary instance in case of TSynSQLTableDataSet error
   end;
 end;
 

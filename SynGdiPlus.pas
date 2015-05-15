@@ -167,7 +167,7 @@ type
 
   /// GDI+ types of conversion from EMF to EMF+
   TEmfType = (
-     etEmf0, etEmf1, etEmf2, { for Delphi 5: no etEmfOnly=3 syntax } 
+     etEmf0, etEmf1, etEmf2, { for Delphi 5: no etEmfOnly=3 syntax }
      etEmfOnly, etEmfPlusOnly, etEmfPlusDual);
 
   /// GDI+ available filling modes
@@ -480,7 +480,7 @@ type
 {$A-}
   /// handle most GDI+ library calls
   // - an instance of this object is initialized by this unit: you don't have
-  // to create a new instance    
+  // to create a new instance
   TGDIPlusFull = class(TGDIPlus)
   protected
     DrawLine: function(graphics, pen: THandle; x1,y1,x2,y2: integer): TGdipStatus; stdcall;
@@ -1930,7 +1930,7 @@ type
     CachedFont: array of packed record
       handle: THandle;
       objfont: TFontSpec;
-      LogFont: TLogFontW; 
+      LogFont: TLogFontW;
     end;
     // the DC states, as stored by SaveDC / RestoreDC methods
     nDC: integer;
@@ -2185,7 +2185,7 @@ begin
     end;
   EMR_STRETCHDIBITS: begin
       NormalizeRect(PEMRStretchDIBits(Rec)^.rclBounds);
-      with PEMRStretchDIBits(Rec)^ do 
+      with PEMRStretchDIBits(Rec)^ do
         if (offBmiSrc<>0) and (offBitsSrc<>0) and (iUsageSrc=DIB_RGB_COLORS) then
           Ref.DrawBitmap(xSrc,ySrc,cxSrc,cySrc, xDest,yDest,cxDest,cyDest,
             pointer(PAnsiChar(Rec)+offBmiSrc),pointer(PAnsiChar(Rec)+offBitsSrc));

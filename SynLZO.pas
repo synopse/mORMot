@@ -43,7 +43,7 @@ unit SynLZO;
   ***** END LICENSE BLOCK *****
 
 
-  
+
      Pascal SynLZO Compression / Decompression library
      =================================================
      by Arnaud Bouchez http://bouchez.info
@@ -331,7 +331,7 @@ asm
         add     eax, ebx
         mov     [ebp-0CH], eax
         mov     eax, [ebp-0CH]
-        sub     eax, 9 
+        sub     eax, 9
         mov     [ebp-10H], eax
         mov     [ebp-14H], ebx
         add     ebx, 4
@@ -437,20 +437,20 @@ asm
         mov     [ebp-14H], edx
         jmp     @@1768
 
-@@1765: mov     edx, eax                               
-        sub     edx, 18                                
-        mov     [ebp-1CH], edx               
-        mov     edx, [ebp-8H]                
-        mov     byte ptr [edx], 0                      
+@@1765: mov     edx, eax
+        sub     edx, 18
+        mov     [ebp-1CH], edx
+        mov     edx, [ebp-8H]
+        mov     byte ptr [edx], 0
         inc     dword ptr [ebp-8H]
         cmp     dword ptr [ebp-1CH], 255
-        jle     @@1767                                 
+        jle     @@1767
 @@1766: sub     dword ptr [ebp-1CH], 255
-        mov     edx, [ebp-8H]                
-        mov     byte ptr [edx], 0                      
+        mov     edx, [ebp-8H]
+        mov     byte ptr [edx], 0
         inc     dword ptr [ebp-8H]
         cmp     dword ptr [ebp-1CH], 255
-        jg      @@1766                                 
+        jg      @@1766
 @@1767: mov     dl, [ebp-1CH]
         mov     ecx, [ebp-8H]
         mov     [ecx], dl
@@ -501,8 +501,8 @@ asm
         sub     eax, [ebp-14H]
         cmp     esi, 16384
         jg      @@1773
-        dec     esi                                    
-        cmp     eax, 33                                
+        dec     esi
+        cmp     eax, 33
         jg      @@1772
 {$ifdef CONDITIONALEXPRESSIONS}
         lea     esi,esi*4
@@ -520,30 +520,30 @@ asm
         jmp     @@1788
 
 @@1772: sub     eax, 33
-        mov     edx, [ebp-8H]                
-        mov     byte ptr [edx], 32                     
-        jmp     @@1775                                 
+        mov     edx, [ebp-8H]
+        mov     byte ptr [edx], 32
+        jmp     @@1775
 
 @@1773: sub     esi, 16384
         cmp     eax, 9
-        jg      @@1774                                 
-        mov     edx, esi                               
-        and     edx, 4000H                             
-        shr     edx, 11                                
-        or      dl, 10H                                
-        sub     al, 2                                  
-        or      dl, al                                 
-        mov     eax, [ebp-8H]                
-        mov     [eax], dl                     
+        jg      @@1774
+        mov     edx, esi
+        and     edx, 4000H
+        shr     edx, 11
+        or      dl, 10H
+        sub     al, 2
+        or      dl, al
+        mov     eax, [ebp-8H]
+        mov     [eax], dl
         inc     dword ptr [ebp-8H]
-        jmp     @@1778                                 
+        jmp     @@1778
 
-@@1774: sub     eax, 9                                 
-        mov     edx, esi                               
-        and     edx, 4000H                             
-        shr     edx, 11                                
-        or      dl, 10H                                
-        mov     ecx, [ebp-8H]                
+@@1774: sub     eax, 9
+        mov     edx, esi
+        and     edx, 4000H
+        shr     edx, 11
+        or      dl, 10H
+        mov     ecx, [ebp-8H]
         mov     [ecx], dl
 @@1775: inc     dword ptr [ebp-8H]
         cmp     eax, 255
@@ -565,8 +565,8 @@ asm
         add     dword ptr [ebp-8H], 2
         mov     word ptr [eax], si
         mov     [ebp-14H], ebx
-        cmp     ebx, [ebp-10H]               
-        jc      @@1760                                 
+        cmp     ebx, [ebp-10H]
+        jc      @@1760
         jmp     @@1788
 @@1779: inc     ebx
 @@1780: inc     ebx
@@ -603,16 +603,16 @@ asm
         lea     eax, [ebx-2]
         dec     esi
         sub     eax, [ebp-14H]
-        shl     esi, 10                                
-        or      eax, 20H                               
-        mov     edx, [ebp-8H]                
+        shl     esi, 10
+        or      eax, 20H
+        mov     edx, [ebp-8H]
         or      eax, esi
         add     dword ptr [ebp-8H], 3
         mov     [edx], eax
         mov     [ebp-14H], ebx
-        cmp     ebx, [ebp-10H]               
-        jc      @@1760                                 
-        jmp     @@1788                                 
+        cmp     ebx, [ebp-10H]
+        jc      @@1760
+        jmp     @@1788
 @@1787: sub     esi, 16384
         lea     eax, [ebx-2]
         mov     edx, esi
@@ -1716,7 +1716,7 @@ begin
               db := MapViewOfFile(dm, FILE_MAP_ALL_ACCESS, 0, 0, 0);
               if db <> nil then begin
                 dec(sl,sizeof(cardinal)+sizeof(TFileTime));
-                if adler32(0,sb,sl)=PCardinal(sb+sl)^ then begin // integrity 
+                if adler32(0,sb,sl)=PCardinal(sb+sl)^ then begin // integrity
                   result := lzopas_decompress(sb,sl,db)=dl; // decompression
                   if result then
                     st := PFileTime(sb+sl+sizeof(cardinal))^;

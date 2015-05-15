@@ -124,7 +124,7 @@ unit SynDB;
     and modified TQueryValue in consequence
   - enhanced TSQLDBStatement.Bind(const Params: array of const) to accept
     BLOB content, when transmitted after BinToBase64WithMagic() conversion,
-    and TDateTime parameters via Date[Time]ToSQL() encoding 
+    and TDateTime parameters via Date[Time]ToSQL() encoding
   - declared TSQLDBConnectionProperties.GetMainConnection() method as virtual,
     then override it for thread-safe connections - see ticket [65e24b2de4]
   - now TSQLDBStatement.ColumnToVarData method will store '' when TDateTime value
@@ -156,7 +156,7 @@ unit SynDB;
     ("DataBase Owner") by default for dMSSQL kind of database engine
   - introducing TSQLDBConnectionProperties DefinitionTo/DefinitionToJSON/
     DefinitionToFile methods and CreateFrom*() class methods to persist the
-    database connection properties, and the associated class, as JSON 
+    database connection properties, and the associated class, as JSON
   - new TSQLDBConnectionProperties/TSQLDBConnection.OnProcess event handlers
   - new TSQLDBConnectionProperties.OnStatementInfo event handler
   - added TSQLDBConnectionProperties.StoreVoidStringAsNull, which will be
@@ -318,16 +318,16 @@ uses
   SynCommons,
   SynLog;
 
-  
+
 { -------------- TSQLDB* generic classes and types }
 
 type
   // NOTE: TSQLDBFieldType is defined in SynCommons.pas (used by TSQLVar)
-  
+
   /// an array of RawUTF8, for each existing column type
   // - used e.g. by SQLCreate method
   // - ftUnknown maps int32 field (e.g. boolean), ftNull maps RawUTF8 index # field,
-  // ftUTF8 maps RawUTF8 blob field, other types map their default kind 
+  // ftUTF8 maps RawUTF8 blob field, other types map their default kind
   // - for UTF-8 text, ftUTF8 will define the BLOB field, whereas ftNull will
   // expect to be formated with an expected field length in ColumnAttr
   // - the RowID definition will expect the ORM to create an unique identifier,
@@ -473,7 +473,7 @@ type
     // - for SynDBODBC: state of the latest SQLGetData() call
     ColumnDataState: TSQLDBStatementGetCol;
     /// may contain the current column size for not FIXEDLENGTH_SQLDBFIELDTYPE
-    // - for SynDBODBC: size (in bytes) in corresponding fColData[] 
+    // - for SynDBODBC: size (in bytes) in corresponding fColData[]
     // - TSQLDBProxyStatement: the actual maximum column size
     ColumnDataSize: integer;
   end;
@@ -508,12 +508,12 @@ type
     cCreate, cRead, cUpdate, cDelete);
 
   /// identify the CRUD modes of a statement
-  // - used e.g. for batch send abilities of a DB engine 
+  // - used e.g. for batch send abilities of a DB engine
   TSQLDBStatementCRUDs = set of TSQLDBStatementCRUD;
 
   /// the known database definitions
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
-  // for OleDB/ODBC/ZDBC tuning according to the connected database engine  
+  // for OleDB/ODBC/ZDBC tuning according to the connected database engine
   TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL,
     dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2);
 
@@ -543,129 +543,128 @@ type
   // you only have access to the Step() and Column*() methods
   ISQLDBRows = interface
     ['{11291095-9C15-4984-9118-974F1926DB9F}']
-    {/ After a prepared statement has been prepared returning a ISQLDBRows
-      interface, this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - should raise an Exception on any error
-     - typical use may be:
-     ! var Customer: Variant;
-     ! begin
-     !   with Props.Execute( 'select * from Sales.Customer where AccountNumber like ?', ['AW000001%'],@Customer) do
-     !     while Step do // loop through all matching data rows
-     !       assert(Copy(Customer.AccountNumber,1,8)='AW000001');
-     ! end;
-    }
+    /// After a prepared statement has been prepared returning a ISQLDBRows
+    // interface, this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    // if SeekFirst is TRUE, will put the cursor on the first row of results,
+    // otherwise, it will fetch one row of data, to be called within a loop
+    // - should raise an Exception on any error
+    // - typical use may be:
+    // ! var Customer: Variant;
+    // ! begin
+    // !   with Props.Execute( 'select * from Sales.Customer where AccountNumber like ?', ['AW000001%'],@Customer) do
+    // !     while Step do //  loop through all matching data rows
+    // !       assert(Copy(Customer.AccountNumber,1,8)='AW000001');
+    // ! end;
     function Step(SeekFirst: boolean=false): boolean;
-     
-    {/ the column/field count of the current Row }
+
+    /// the column/field count of the current Row
     function ColumnCount: integer;
-    {/ the Column name of the current Row
-     - Columns numeration (i.e. Col value) starts with 0
-     - it's up to the implementation to ensure than all column names are unique }
+    /// the Column name of the current Row
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - it's up to the implementation to ensure than all column names are unique
     function ColumnName(Col: integer): RawUTF8;
-    {/ returns the Column index of a given Column name
-     - Columns numeration (i.e. Col value) starts with 0
-     - returns -1 if the Column name is not found (via case insensitive search) }
+    /// returns the Column index of a given Column name
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - returns -1 if the Column name is not found (via case insensitive search)
     function ColumnIndex(const aColumnName: RawUTF8): integer;
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
-    {/ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
-    {/ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; overload;
-    {/ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; overload;
-    {/ return a column date and time value of the current Row, first Col is 0 }
+    /// return a column date and time value of the current Row, first Col is 0
     function ColumnTimeStamp(Col: integer): TTimeLog; overload;
-    {/ return a Column currency value of the current Row, first Col is 0 }
+    /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: integer): currency; overload;
-    {/ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload;
-    {/ return a Column text value as generic VCL string of the current Row, first Col is 0 }
-    function ColumnString(Col: integer): string; overload; 
-    {/ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column text value as generic VCL string of the current Row, first Col is 0
+    function ColumnString(Col: integer): string; overload;
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; overload;
-    {/ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlobBytes(Col: integer): TBytes; overload;
-    {/ return a Column as a TSQLVar value, first Col is 0
-     - the specified Temp variable will be used for temporary storage of
-       svtUTF8/svtBlob values }
+    /// return a Column as a TSQLVar value, first Col is 0
+    // - the specified Temp variable will be used for temporary storage of
+    // svtUTF8/svtBlob values
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
       var Temp: RawByteString);
     {$ifndef LVCL}
-    {/ return a Column as a variant
-     - a ftUTF8 TEXT content will be mapped into a generic WideString variant
-       for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-       since Delphi 2009: you may not loose any data during charset conversion
-     - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant }
+    /// return a Column as a variant
+    // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
+    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
+    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnVariant(Col: integer): Variant; overload;
-    {/ return a Column as a variant, first Col is 0
-     - this default implementation will call Column*() method above
-     - a ftUTF8 TEXT content will be mapped into a generic WideString variant
-       for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-       since Delphi 2009: you may not loose any data during charset conversion
-     - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant }
+    /// return a Column as a variant, first Col is 0
+    // - this default implementation will call Column*() method above
+    // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
+    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
+    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; overload;
     {$endif}
-    {/ return a special CURSOR Column content as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such columns are mapped as ftNull internally - so this method is the only
-       one giving access to the data rows
-     - see also BoundCursor() if you want to access a CURSOR out parameter }
+    /// return a special CURSOR Column content as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such columns are mapped as ftNull internally - so this method is the only
+    // one giving access to the data rows
+    // - see also BoundCursor() if you want to access a CURSOR out parameter
     function ColumnCursor(Col: integer): ISQLDBRows; overload;
 
-    {/ return a Column integer value of the current Row, from a supplied column name }
+    /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUTF8): Int64; overload;
-    {/ return a Column floating point value of the current Row, from a supplied column name }
+    /// return a Column floating point value of the current Row, from a supplied column name
     function ColumnDouble(const ColName: RawUTF8): double; overload;
-    {/ return a Column floating point value of the current Row, from a supplied column name }
+    /// return a Column floating point value of the current Row, from a supplied column name
     function ColumnDateTime(const ColName: RawUTF8): TDateTime; overload;
-    {/ return a column date and time value of the current Row, from a supplied column name }
+    /// return a column date and time value of the current Row, from a supplied column name
     function ColumnTimeStamp(const ColName: RawUTF8): TTimeLog; overload;
-    {/ return a Column currency value of the current Row, from a supplied column name }
+    /// return a Column currency value of the current Row, from a supplied column name
     function ColumnCurrency(const ColName: RawUTF8): currency; overload;
-    {/ return a Column UTF-8 encoded text value of the current Row, from a supplied column name }
+    /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
-    {/ return a Column text value as generic VCL string of the current Row, from a supplied column name }
-    function ColumnString(const ColName: RawUTF8): string; overload; 
-    {/ return a Column as a blob value of the current Row, from a supplied column name }
+    /// return a Column text value as generic VCL string of the current Row, from a supplied column name
+    function ColumnString(const ColName: RawUTF8): string; overload;
+    /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
-    {/ return a Column as a blob value of the current Row, from a supplied column name }
+    /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
     {$ifndef LVCL}
-    {/ return a Column as a variant, from a supplied column name }
+    /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
-    {/ return a Column as a variant, from a supplied column name
-      - since a property getter can't be an overloaded method, we define one
-      for the Column[] property }
+    /// return a Column as a variant, from a supplied column name
+    // - since a property getter can't be an overloaded method, we define one
+    // for the Column[] property
     function GetColumnVariant(const ColName: RawUTF8): Variant;
-    {/ return a special CURSOR Column content as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such columns are mapped as ftNull internally - so this method is the only
-       one giving access to the data rows }
+    /// return a special CURSOR Column content as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such columns are mapped as ftNull internally - so this method is the only
+    // one giving access to the data rows
     function ColumnCursor(const ColName: RawUTF8): ISQLDBRows; overload;
-    {/ return a Column as a variant
-      - this default property can be used to write simple code like this:
-       ! procedure WriteFamily(const aName: RawUTF8);
-       ! var I: ISQLDBRows;
-       ! begin
-       !   I := MyConnProps.Execute('select * from table where name=?',[aName]);
-       !   while I.Step do
-       !     writeln(I['FirstName'],' ',DateToStr(I['BirthDate']));
-       ! end;
-      - of course, using a variant and a column name will be a bit slower than
-       direct access via the Column*() dedicated methods, but resulting code
-       is fast in practice }
+    /// return a Column as a variant
+    // - this default property can be used to write simple code like this:
+    // ! procedure WriteFamily(const aName: RawUTF8);
+    // ! var I: ISQLDBRows;
+    // ! begin
+    // !   I := MyConnProps.Execute('select * from table where name=?',[aName]);
+    // !   while I.Step do
+    // !     writeln(I['FirstName'],' ',DateToStr(I['BirthDate']));
+    // ! end;
+    // - of course, using a variant and a column name will be a bit slower than
+    // direct access via the Column*() dedicated methods, but resulting code
+    // is fast in practice
     property Column[const ColName: RawUTF8]: Variant read GetColumnVariant; default;
     {$ifndef DELPHI5OROLDER}
     /// create a TSQLDBRowVariantType able to access any field content via late binding
@@ -729,61 +728,61 @@ type
   // - inherits from ISQLDBRows, so gives access to the result columns data
   // - not all TSQLDBStatement methods are available, but only those to bind
   // parameters and retrieve data after execution
-  // - reference counting mechanism of this interface will feature statement 
+  // - reference counting mechanism of this interface will feature statement
   // cache (if available) for NewThreadSafeStatementPrepared() or PrepareInlined()
   ISQLDBStatement = interface(ISQLDBRows)
   ['{EC27B81C-BD57-47D4-9711-ACFA27B583D7}']
-    {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1 
-     - some providers (e.g. OleDB during MULTI INSERT statements) expect the
-       proper column type to be set in BoundType, even for NULL values }
+    /// bind a NULL value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
+    // proper column type to be set in BoundType, even for NULL values
     procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
       BoundType: TSQLDBFieldType=ftNull);
-    {/ bind an integer value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind an integer value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: Int64;
       IO: TSQLDBParamInOutType=paramIn); overload;
-    {/ bind a double value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a double value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: double;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a TDateTime value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a TDateTime value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindDateTime(Param: Integer; Value: TDateTime;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a currency value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a currency value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindCurrency(Param: Integer; Value: currency;
-      IO: TSQLDBParamInOutType=paramIn); overload; 
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextU(Param: Integer; const Value: RawUTF8;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a UTF-8 encoded buffer text (#0 ended) to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: Integer; Value: PUTF8Char;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextS(Param: Integer; const Value: string;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextW(Param: Integer; const Value: WideString;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
-      IO: TSQLDBParamInOutType=paramIn); overload;  
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType=paramIn); overload;
-    {/ bind a Variant value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - will call all virtual Bind*() methods from the Data type
-     - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
-       of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes }
+    /// bind a Variant value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - will call all virtual Bind*() methods from the Data type
+    // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
+    // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
     procedure BindVariant(Param: Integer; const Data: Variant; DataIsBlob: boolean;
       IO: TSQLDBParamInOutType=paramIn);
     /// bind one TSQLVar value
@@ -796,32 +795,32 @@ type
     // (i.e. number, 'quoted string', 'YYYY-MM-DD hh:mm:ss', null)
     procedure Bind(Param: Integer; ParamType: TSQLDBFieldType; const Value: RawUTF8;
       ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType=paramIn); overload;
-    {/ bind an array of const values
-     - parameters marked as ? should be specified as method parameter in Params[]
-     - BLOB parameters can be bound with this method, when set after encoding
-       via BinToBase64WithMagic() call
-     - TDateTime parameters can be bound with this method, when encoded via
-       a DateToSQL() or DateTimeToSQL() call }
+    /// bind an array of const values
+    // - parameters marked as ? should be specified as method parameter in Params[]
+    // - BLOB parameters can be bound with this method, when set after encoding
+    // via BinToBase64WithMagic() call
+    // - TDateTime parameters can be bound with this method, when encoded via
+    // a DateToSQL() or DateTimeToSQL() call
     procedure Bind(const Params: array of const;
-      IO: TSQLDBParamInOutType=paramIn); overload; 
-    {/ bind an array of fields from an existing SQL statement
-     - can be used e.g. after ColumnsToSQLInsert() method call for fast data
-       conversion between tables }
+      IO: TSQLDBParamInOutType=paramIn); overload;
+    /// bind an array of fields from an existing SQL statement
+    // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
+    // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
       Rows: TSQLDBStatement);
-    {/ bind a special CURSOR parameter to be returned as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such parameters are mapped as ftUnknown
-     - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
-       execution of the statement }
+    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such parameters are mapped as ftUnknown
+    // - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
+    // execution of the statement
     procedure BindCursor(Param: integer);
-    {/ return a special CURSOR parameter content as a SynDB result set
-     - this method is not about a column, but a parameter defined with
-       BindCursor() before method execution
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - this method allow direct access to the data rows after execution }
+    /// return a special CURSOR parameter content as a SynDB result set
+    // - this method is not about a column, but a parameter defined with
+    // BindCursor() before method execution
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - this method allow direct access to the data rows after execution
     function BoundCursor(Param: Integer): ISQLDBRows;
 
     /// bind an array of values to a parameter
@@ -861,21 +860,21 @@ type
     procedure BindArray(Param: Integer; const Values: array of RawUTF8); overload;
 
     {$ifndef LVCL}
-    {/ retrieve the parameter content, after SQL execution
-     - the leftmost SQL parameter has an index of 1
-     - to be used e.g. with stored procedures:
-     ! query :=  'BEGIN TEST_PKG.DUMMY(?, ?, ?, ?, ?); END;';
-     ! stmt := Props.NewThreadSafeStatementPrepared(query, false);
-     ! stmt.Bind(1, in1, paramIn);
-     ! stmt.BindTextU(2, in2, paramIn);
-     ! stmt.BindTextU(3, in3, paramIn);
-     ! stmt.BindTextS(4, '', paramOut); // to be retrieved with out1: string
-     ! stmt.Bind(5, 0, paramOut);       // to be retrieved with out2: integer
-     ! stmt.ExecutePrepared;
-     ! stmt.ParamToVariant(4, out1, true);
-     ! stmt.ParamToVariant(5, out2, true);
-     - the parameter should have been bound with IO=paramOut or IO=paramInOut
-       if CheckIsOutParameter is TRUE }
+    /// retrieve the parameter content, after SQL execution
+    // - the leftmost SQL parameter has an index of 1
+    // - to be used e.g. with stored procedures:
+    // ! query :=  'BEGIN TEST_PKG.DUMMY(?, ?, ?, ?, ?); END;';
+    // ! stmt := Props.NewThreadSafeStatementPrepared(query, false);
+    // ! stmt.Bind(1, in1, paramIn);
+    // ! stmt.BindTextU(2, in2, paramIn);
+    // ! stmt.BindTextU(3, in3, paramIn);
+    // ! stmt.BindTextS(4, '', paramOut); //  to be retrieved with out1: string
+    // ! stmt.Bind(5, 0, paramOut);       //  to be retrieved with out2: integer
+    // ! stmt.ExecutePrepared;
+    // ! stmt.ParamToVariant(4, out1, true);
+    // ! stmt.ParamToVariant(5, out2, true);
+    // - the parameter should have been bound with IO=paramOut or IO=paramInOut
+    // if CheckIsOutParameter is TRUE
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType;
     {$endif}
@@ -943,7 +942,7 @@ type
   // ! Process(cExecuteToJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
   // ! Process(cExecuteToExpandedJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
   // - cExceptionRaised is a pseudo-command, used only for sending an exception
-  // to the client in case of execution problem on the server side 
+  // to the client in case of execution problem on the server side
   TSQLDBProxyConnectionCommand = (
     cGetToken,cGetDBMS,
     cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
@@ -1089,7 +1088,7 @@ type
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
     function GetMainConnection: TSQLDBConnection; virtual;
     /// any overriden TSQLDBConnectionProperties class should call it in the
-    // initialization section of its implementation unit to be recognized 
+    // initialization section of its implementation unit to be recognized
     class procedure RegisterClassNameForDefinition;
     /// will be called at the end of constructor
     // - this default implementation will do nothing
@@ -1189,7 +1188,7 @@ type
     // - as previously serialized with TSQLDBConnectionProperties.DefinitionToJSON
     // - you can specify a custom Key, if the default is not safe enough for you
     class function CreateFromJSON(const aJSONDefinition: RawUTF8;
-      aKey: cardinal=0): TSQLDBConnectionProperties; virtual; 
+      aKey: cardinal=0): TSQLDBConnectionProperties; virtual;
     /// create a new TSQLDBConnectionProperties instance from a JSON file
     // - as previously serialized with TSQLDBConnectionProperties.DefinitionToFile
     // - you can specify a custom Key, if the default is not safe enough for you
@@ -1225,7 +1224,7 @@ type
     // consumpted resources, and stabilize long running n-Tier servers
     // - ThreadSafeConnection method will check for the last activity on this
     // TSQLDBConnectionProperties instance, then call ClearConnectionPool
-    // to release all active connections if the idle time elapsed was too long 
+    // to release all active connections if the idle time elapsed was too long
     // - warning: no connection shall still be used on the background (e.g. in
     // multi-threaded applications), or some unexpected issues may occur - for
     // instance, ensure that your mORMot ORM server runs all its statements in
@@ -1245,7 +1244,7 @@ type
     // - on error, returns nil and you can check Connnection.LastErrorMessage /
     // Connection.LastErrorException to retrieve corresponding error information
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
-    // raise an exception) 
+    // raise an exception)
     function NewThreadSafeStatementPrepared(const aSQL: RawUTF8;
        ExpectResults: Boolean; RaiseExceptionOnError: Boolean=false): ISQLDBStatement; overload;
     /// create a new thread-safe statement from an internal cache (if any)
@@ -1316,7 +1315,7 @@ type
     // - will use a simple reference counting mechanism to allow nested
     // transactions, identified by a session identifier
     // - will fail if the same connection is not used for the whole process,
-    // which would induce a potentially incorrect behavior  
+    // which would induce a potentially incorrect behavior
     // - returns the connection corresponding to the session, nil on error
     function SharedTransaction(SessionID: cardinal;
       action: TSQLDBSharedTransactionAction): TSQLDBConnection; virtual;
@@ -1412,7 +1411,7 @@ type
     /// get one field/column definition as text
     // - return column type as 'Name [Type Length Precision Scale]'
     class function GetFieldDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
-    /// get one field/column definition as text, targeting a TSQLRecord 
+    /// get one field/column definition as text, targeting a TSQLRecord
     // published property
     // - return e.g. property type information as:
     // ! 'Name: RawUTF8 read fName write fName index 20;';
@@ -1434,7 +1433,7 @@ type
     // - any further call will use this internal list, so response will be
     // immediate
     // - the whole foreign key list is shared by all connections
-    function GetForeignKey(const aTableName, aColumnName: RawUTF8): RawUTF8; 
+    function GetForeignKey(const aTableName, aColumnName: RawUTF8): RawUTF8;
 
     /// returns the information to adapt the LIMIT # clause in the SQL SELECT
     // statement to a syntax matching the underlying DBMS
@@ -1584,7 +1583,7 @@ type
 
   /// server-side implementation of a remote connection to any SynDB engine
   // - implements digitally signed SynLZ-compressed binary message format,
-  // with simple symmetric encryption 
+  // with simple symmetric encryption
   TSQLDBRemoteConnectionProtocol = class(TSQLDBProxyConnectionProtocol)
   protected
     /// SynLZ decompression + digital signature + encryption
@@ -1619,7 +1618,7 @@ type
     function GetInTransaction: boolean; virtual;
     function GetServerTimeStamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
-    function GetLastErrorWasAboutConnection: boolean; 
+    function GetLastErrorWasAboutConnection: boolean;
     /// raise an exception if IsConnected returns false
     procedure CheckConnection;
     /// call OnProcess() call back event, if needed
@@ -1695,7 +1694,7 @@ type
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
     // will most likely return a local time, not an UTC time
     // - this property will return the timestamp in TTimeLog / TTimeLogBits /
-    // Int64 value 
+    // Int64 value
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
@@ -1764,7 +1763,7 @@ type
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
-    // - expects Dest to be of the exact type (e.g. Int64, not Integer) 
+    // - expects Dest to be of the exact type (e.g. Int64, not Integer)
     function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
     /// retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     // - use ParamToVariant() virtual method
@@ -1776,7 +1775,7 @@ type
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
       MaxCharCount: integer); virtual;
     {$ifndef LVCL}
-    {/ return a Column as a variant }
+    /// return a Column as a variant
     function GetColumnVariant(const ColName: RawUTF8): Variant;
     {$endif}
     /// return the associated statement instance for a ISQLDBRows interface
@@ -1785,57 +1784,57 @@ type
     /// create a statement instance
     constructor Create(aConnection: TSQLDBConnection); virtual;
 
-    {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - some providers (e.g. OleDB during MULTI INSERT statements) expect the
-       proper column type to be set in BoundType, even for NULL values }
+    /// bind a NULL value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
+    // proper column type to be set in BoundType, even for NULL values
     procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
       BoundType: TSQLDBFieldType=ftNull); virtual; abstract;
-    {/ bind an integer value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind an integer value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: Int64;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a double value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a double value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: double;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a TDateTime value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a TDateTime value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindDateTime(Param: Integer; Value: TDateTime;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a currency value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a currency value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextU(Param: Integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a UTF-8 encoded buffer text (#0 ended) to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: Integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextS(Param: Integer; const Value: string;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextW(Param: Integer; const Value: WideString;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual; abstract;
-    {/ bind a Variant value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - will call all virtual Bind*() methods from the Data type
-     - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
-       of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes }
+    /// bind a Variant value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - will call all virtual Bind*() methods from the Data type
+    // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
+    // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
     procedure BindVariant(Param: Integer; const Data: Variant; DataIsBlob: boolean;
       IO: TSQLDBParamInOutType=paramIn); virtual;
     /// bind one TSQLVar value
@@ -1850,38 +1849,38 @@ type
     // computed by TJSONObjectDecoder.Decode()
     procedure Bind(Param: Integer; ParamType: TSQLDBFieldType; const Value: RawUTF8;
       ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType=paramIn); overload; virtual;
-    {/ bind an array of const values
-     - parameters marked as ? should be specified as method parameter in Params[]
-     - BLOB parameters can be bound with this method, when set after encoding
-       via BinToBase64WithMagic() call
-     - TDateTime parameters can be bound with this method, when encoded via
-       a DateToSQL() or DateTimeToSQL() call
-     - any variant parameter will be bound with BindVariant(i,VVariant^,true,IO)
-       i.e. with DataIsBlob=true
-     - this default implementation will call corresponding Bind*() method }
+    /// bind an array of const values
+    // - parameters marked as ? should be specified as method parameter in Params[]
+    // - BLOB parameters can be bound with this method, when set after encoding
+    // via BinToBase64WithMagic() call
+    // - TDateTime parameters can be bound with this method, when encoded via
+    // a DateToSQL() or DateTimeToSQL() call
+    // - any variant parameter will be bound with BindVariant(i,VVariant^,true,IO)
+    // i.e. with DataIsBlob=true
+    // - this default implementation will call corresponding Bind*() method
     procedure Bind(const Params: array of const;
       IO: TSQLDBParamInOutType=paramIn); overload; virtual;
-    {/ bind an array of fields from an existing SQL statement
-     - can be used e.g. after ColumnsToSQLInsert() method call for fast data
-       conversion between tables }
+    /// bind an array of fields from an existing SQL statement
+    // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
+    // conversion between tables
     procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
       Rows: TSQLDBStatement);
-    {/ bind a special CURSOR parameter to be returned as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such parameters are mapped as ftUnknown
-     - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
-       execution of the statement
-     - this default method will raise an exception about unexpected behavior }
+    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such parameters are mapped as ftUnknown
+    // - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
+    // execution of the statement
+    // - this default method will raise an exception about unexpected behavior
     procedure BindCursor(Param: integer); virtual;
-    {/ return a special CURSOR parameter content as a SynDB result set
-     - this method is not about a column, but a parameter defined with
-       BindCursor() before method execution
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - this method allow direct access to the data rows after execution
-     - this default method will raise an exception about unexpected behavior }
-    function BoundCursor(Param: Integer): ISQLDBRows; virtual; 
+    /// return a special CURSOR parameter content as a SynDB result set
+    // - this method is not about a column, but a parameter defined with
+    // BindCursor() before method execution
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - this method allow direct access to the data rows after execution
+    // - this default method will raise an exception about unexpected behavior
+    function BoundCursor(Param: Integer): ISQLDBRows; virtual;
 
     /// bind an array of values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -1919,53 +1918,53 @@ type
     // does not support array binding
     procedure BindArray(Param: Integer; const Values: array of RawUTF8); overload; virtual;
 
-    {/ Prepare an UTF-8 encoded SQL statement
-     - parameters marked as ? will be bound later, before ExecutePrepared call
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - should raise an Exception on any error
-     - this default implementation will just store aSQL content and the
-       ExpectResults parameter, and connect to the remote server is was not
-       already connected }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - should raise an Exception on any error
+    // - this default implementation will just store aSQL content and the
+    // ExpectResults parameter, and connect to the remote server is was not
+    // already connected
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean); overload; virtual;
-    {/ Execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - should raise an Exception on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - should raise an Exception on any error
     procedure ExecutePrepared; virtual; abstract;
-    {/ Reset the previous prepared statement
-     - some drivers expect an explicit reset before binding parameters and
-       executing the statement another time
-     - this default implementation will just do nothing }
+    /// Reset the previous prepared statement
+    // - some drivers expect an explicit reset before binding parameters and
+    // executing the statement another time
+    // - this default implementation will just do nothing
     procedure Reset; virtual;
-    {/ Prepare and Execute an UTF-8 encoded SQL statement
-     - parameters marked as ? should have been already bound with Bind*()
-       functions above
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - should raise an Exception on any error
-     - this method will call Prepare then ExecutePrepared methods }
+    /// Prepare and Execute an UTF-8 encoded SQL statement
+    // - parameters marked as ? should have been already bound with Bind*()
+    //  functions above
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    //  to retrieve the data rows
+    // - should raise an Exception on any error
+    // - this method will call Prepare then ExecutePrepared methods
     procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean); overload;
-    {/ Prepare and Execute an UTF-8 encoded SQL statement
-     - parameters marked as ? should be specified as method parameter in Params[]
-     - BLOB parameters could not be bound with this method, but need an explicit
-       call to BindBlob() method
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - should raise an Exception on any error
-     - this method will bind parameters, then call Excecute() virtual method }
+    /// Prepare and Execute an UTF-8 encoded SQL statement
+    // - parameters marked as ? should be specified as method parameter in Params[]
+    // - BLOB parameters could not be bound with this method, but need an explicit
+    // call to BindBlob() method
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - should raise an Exception on any error
+    // - this method will bind parameters, then call Excecute() virtual method
     procedure Execute(const aSQL: RawUTF8; ExpectResults: Boolean;
       const Params: array of const); overload;
-    {/ Prepare and Execute an UTF-8 encoded SQL statement
-     - parameters marked as % will be replaced by Args[] value in the SQL text
-     - parameters marked as ? should be specified as method parameter in Params[]
-     - so could be used as such, mixing both % and ? parameters:
-     ! Statement.Execute('SELECT % FROM % WHERE RowID=?',true,[FieldName,TableName],[ID])
-     - BLOB parameters could not be bound with this method, but need an explicit
-       call to BindBlob() method
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - should raise an Exception on any error
-     - this method will bind parameters, then call Excecute() virtual method }
+    /// Prepare and Execute an UTF-8 encoded SQL statement
+    // - parameters marked as % will be replaced by Args[] value in the SQL text
+    // - parameters marked as ? should be specified as method parameter in Params[]
+    // - so could be used as such, mixing both % and ? parameters:
+    // ! Statement.Execute('SELECT % FROM % WHERE RowID=?',true,[FieldName,TableName],[ID])
+    // - BLOB parameters could not be bound with this method, but need an explicit
+    // call to BindBlob() method
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - should raise an Exception on any error
+    // - this method will bind parameters, then call Excecute() virtual method
     procedure Execute(SQLFormat: PUTF8Char; ExpectResults: Boolean;
       const Args, Params: array of const); overload;
     /// execute a prepared SQL statement and return all rows content as a JSON string
@@ -1983,138 +1982,137 @@ type
     // - default implementation returns 0
     function UpdateCount: integer; virtual;
     {$ifndef LVCL}
-    {/ retrieve the parameter content, after SQL execution
-     - the leftmost SQL parameter has an index of 1
-     - to be used e.g. with stored procedures:
-     ! query :=  'BEGIN TEST_PKG.DUMMY(?, ?, ?, ?, ?); END;';
-     ! stmt := Props.NewThreadSafeStatementPrepared(query, false);
-     ! stmt.Bind(1, in1, paramIn);
-     ! stmt.BindTextU(2, in2, paramIn);
-     ! stmt.BindTextU(3, in3, paramIn);
-     ! stmt.BindTextS(4, '', paramOut); // to be retrieved with out1: string
-     ! stmt.Bind(5, 0, paramOut);       // to be retrieved with out2: integer
-     ! stmt.ExecutePrepared;
-     ! stmt.ParamToVariant(4, out1, true);
-     ! stmt.ParamToVariant(5, out2, true);
-     - the parameter should have been bound with IO=paramOut or IO=paramInOut
-       if CheckIsOutParameter is TRUE
-     - this implementation just check that Param is correct: overridden method
-       should fill Value content }
+    /// retrieve the parameter content, after SQL execution
+    // - the leftmost SQL parameter has an index of 1
+    // - to be used e.g. with stored procedures:
+    // ! query :=  'BEGIN TEST_PKG.DUMMY(?, ?, ?, ?, ?); END;';
+    // ! stmt := Props.NewThreadSafeStatementPrepared(query, false);
+    // ! stmt.Bind(1, in1, paramIn);
+    // ! stmt.BindTextU(2, in2, paramIn);
+    // ! stmt.BindTextU(3, in3, paramIn);
+    // ! stmt.BindTextS(4, '', paramOut); //  to be retrieved with out1: string
+    // ! stmt.Bind(5, 0, paramOut);       //  to be retrieved with out2: integer
+    // ! stmt.ExecutePrepared;
+    // ! stmt.ParamToVariant(4, out1, true);
+    // ! stmt.ParamToVariant(5, out2, true);
+    // - the parameter should have been bound with IO=paramOut or IO=paramInOut
+    // if CheckIsOutParameter is TRUE
+    // - this implementation just check that Param is correct: overridden method
+    // should fill Value content
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; virtual;
     {$endif}
 
-    {/ After a statement has been prepared via Prepare() + ExecutePrepared() or
-       Execute(), this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - should raise an Exception on any error
-     - typical use may be (see also e.g. the mORMotDB unit):
-     ! var Query: ISQLDBStatement;
-     ! begin
-     !   Query := Props.NewThreadSafeStatementPrepared('select AccountNumber from Sales.Customer where AccountNumber like ?', ['AW000001%'],true);
-     !   if Query<>nil then begin
-     !     assert(SameTextU(Query.ColumnName(0),'AccountNumber'));
-     !     while Query.Step do // loop through all matching data rows
-     !       assert(Copy(Query.ColumnUTF8(0),1,8)='AW000001');
-     !   end;
-     ! end;
-    }
+    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    // Execute(), this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    // if SeekFirst is TRUE, will put the cursor on the first row of results,
+    // otherwise, it will fetch one row of data, to be called within a loop
+    // - should raise an Exception on any error
+    // - typical use may be (see also e.g. the mORMotDB unit):
+    // ! var Query: ISQLDBStatement;
+    // ! begin
+    // !   Query := Props.NewThreadSafeStatementPrepared('select AccountNumber from Sales.Customer where AccountNumber like ?', ['AW000001%'],true);
+    // !   if Query<>nil then begin
+    // !     assert(SameTextU(Query.ColumnName(0),'AccountNumber'));
+    // !     while Query.Step do //  loop through all matching data rows
+    // !       assert(Copy(Query.ColumnUTF8(0),1,8)='AW000001');
+    // !   end;
+    // ! end;
     function Step(SeekFirst: boolean=false): boolean; virtual; abstract;
-    {/ the column/field count of the current Row }
+    /// the column/field count of the current Row
     function ColumnCount: integer;
-    {/ the Column name of the current Row
-     - Columns numeration (i.e. Col value) starts with 0
-     - it's up to the implementation to ensure than all column names are unique }
+    /// the Column name of the current Row
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - it's up to the implementation to ensure than all column names are unique
     function ColumnName(Col: integer): RawUTF8; virtual; abstract;
-    {/ returns the Column index of a given Column name
-     - Columns numeration (i.e. Col value) starts with 0
-     - returns -1 if the Column name is not found (via case insensitive search) }
+    /// returns the Column index of a given Column name
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - returns -1 if the Column name is not found (via case insensitive search)
     function ColumnIndex(const aColumnName: RawUTF8): integer; virtual; abstract;
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType; virtual; abstract;
-    {/ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; virtual; abstract;
-    {/ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload; virtual; abstract;
-    {/ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; overload; virtual; abstract;
-    {/ return a Column date and time value of the current Row, first Col is 0 }
+    /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; overload; virtual; abstract;
-    {/ return a column date and time value of the current Row, first Col is 0
-    - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
-     stamp from a TDateTime or text }
+    /// return a column date and time value of the current Row, first Col is 0
+    // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
+    // stamp from a TDateTime or text
     function ColumnTimeStamp(Col: integer): TTimeLog; overload;
-    {/ return a Column currency value of the current Row, first Col is 0 }
+    /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: integer): currency; overload; virtual; abstract;
-    {/ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; overload; virtual; abstract;
-    {/ return a Column text value as generic VCL string of the current Row, first Col is 0
-     - this default implementation will call ColumnUTF8 }
+    /// return a Column text value as generic VCL string of the current Row, first Col is 0
+    // - this default implementation will call ColumnUTF8
     function ColumnString(Col: integer): string; overload; virtual;
-    {/ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; overload; virtual; abstract;
-    {/ return a Column as a blob value of the current Row, first Col is 0
-      - this function will return the BLOB content as a TBytes
-      - this default virtual method will call ColumnBlob()  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - this function will return the BLOB content as a TBytes
+    // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; overload; virtual;
     {$ifndef LVCL}
-    {/ return a Column as a variant, first Col is 0
-     - this default implementation will call ColumnToVariant() method
-     - a ftUTF8 TEXT content will be mapped into a generic WideString variant
-       for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-       since Delphi 2009: you may not loose any data during charset conversion
-     - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant }
+    /// return a Column as a variant, first Col is 0
+    // - this default implementation will call ColumnToVariant() method
+    // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
+    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
+    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnVariant(Col: integer): Variant; overload;
-    {/ return a Column as a variant, first Col is 0
-     - this default implementation will call Column*() method above
-     - a ftUTF8 TEXT content will be mapped into a generic WideString variant
-       for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-       since Delphi 2009: you may not loose any data during charset conversion
-     - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant }
+    /// return a Column as a variant, first Col is 0
+    // - this default implementation will call Column*() method above
+    // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
+    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
+    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; virtual;
     {$endif}
-    {/ return a Column as a TSQLVar value, first Col is 0
-     - the specified Temp variable will be used for temporary storage of
-       svtUTF8/svtBlob values }
+    /// return a Column as a TSQLVar value, first Col is 0
+    // - the specified Temp variable will be used for temporary storage of
+    // svtUTF8/svtBlob values
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
       var Temp: RawByteString); virtual;
-    {/ return a special CURSOR Column content as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such columns are mapped as ftNull internally - so this method is the only
-       one giving access to the data rows
-     - this default method will raise an exception about unexpected behavior }
+    /// return a special CURSOR Column content as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such columns are mapped as ftNull internally - so this method is the only
+    // one giving access to the data rows
+    // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(Col: integer): ISQLDBRows; overload; virtual;
-    {/ return a Column integer value of the current Row, from a supplied column name }
+    /// return a Column integer value of the current Row, from a supplied column name
     function ColumnInt(const ColName: RawUTF8): Int64; overload;
-    {/ return a Column floating point value of the current Row, from a supplied column name }
+    /// return a Column floating point value of the current Row, from a supplied column name
     function ColumnDouble(const ColName: RawUTF8): double; overload;
-    {/ return a Column date and time value of the current Row, from a supplied column name }
+    /// return a Column date and time value of the current Row, from a supplied column name
     function ColumnDateTime(const ColName: RawUTF8): TDateTime; overload;
-    {/ return a column date and time value of the current Row, from a supplied column name
-    - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
-     stamp from a TDateTime or text }
+    /// return a column date and time value of the current Row, from a supplied column name
+    // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
+    // stamp from a TDateTime or text
     function ColumnTimeStamp(const ColName: RawUTF8): TTimeLog; overload;
-    {/ return a Column currency value of the current Row, from a supplied column name }
+    /// return a Column currency value of the current Row, from a supplied column name
     function ColumnCurrency(const ColName: RawUTF8): currency; overload;
-    {/ return a Column UTF-8 encoded text value of the current Row, from a supplied column name }
+    /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUTF8(const ColName: RawUTF8): RawUTF8; overload;
-    {/ return a Column text value as generic VCL string of the current Row, from a supplied column name }
+    /// return a Column text value as generic VCL string of the current Row, from a supplied column name
     function ColumnString(const ColName: RawUTF8): string; overload;
-    {/ return a Column as a blob value of the current Row, from a supplied column name }
+    /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlob(const ColName: RawUTF8): RawByteString; overload;
-    {/ return a Column as a blob value of the current Row, from a supplied column name }
+    /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlobBytes(const ColName: RawUTF8): TBytes; overload;
     {$ifndef LVCL}
-    {/ return a Column as a variant, from a supplied column name }
+    /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
     {$ifndef DELPHI5OROLDER}
     /// create a TSQLDBRowVariantType able to access any field content via late binding
@@ -2137,7 +2135,7 @@ type
     // Oracle) usually use such structures to get data from strored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
     // one giving access to the data rows
-    // - this default method will raise an exception about unexpected behavior 
+    // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(const ColName: RawUTF8): ISQLDBRows; overload;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
@@ -2146,14 +2144,14 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data (unless ForceBlobAsNull property was set)
     procedure ColumnsToJSON(WR: TJSONWriter); virtual;
-    {/ compute the SQL INSERT statement corresponding to this columns row
-    - and populate the Fields[] array with columns information (type and name)
-    - if the current column value is NULL, will return ftNull: it is up to the
-      caller to set the proper field type 
-    - the SQL statement is prepared with bound parameters, e.g.
-    $ insert into TableName (Col1,Col2) values (?,N)
-    - used e.g. to convert some data on the fly from one database to another,
-      via the TSQLDBConnection.NewTableFromRows method }
+    /// compute the SQL INSERT statement corresponding to this columns row
+    // - and populate the Fields[] array with columns information (type and name)
+    // - if the current column value is NULL, will return ftNull: it is up to the
+    // caller to set the proper field type
+    // - the SQL statement is prepared with bound parameters, e.g.
+    // $ insert into TableName (Col1,Col2) values (?,N)
+    // - used e.g. to convert some data on the fly from one database to another,
+    // via the TSQLDBConnection.NewTableFromRows method
     function ColumnsToSQLInsert(const TableName: RawUTF8;
       var Fields: TSQLDBColumnCreateDynArray): RawUTF8; virtual;
     // append all rows content as a JSON stream
@@ -2362,60 +2360,60 @@ type
     /// create a statement instance
     // - this overridden version will initialize the internal fParam* fields
     constructor Create(aConnection: TSQLDBConnection); override;
-    {/ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error 
-     - some providers (only OleDB during MULTI INSERT statements, so never used
-       in this class) expect the  proper column type to be set in BoundType }
+    /// bind a NULL value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
+    // - some providers (only OleDB during MULTI INSERT statements, so never used
+    // in this class) expect the  proper column type to be set in BoundType
     procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
       BoundType: TSQLDBFieldType=ftNull); override;
-    {/ bind an integer value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind an integer value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure Bind(Param: Integer; Value: Int64;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a double value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a double value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure Bind(Param: Integer; Value: double;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a TDateTime value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a TDateTime value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure BindDateTime(Param: Integer; Value: TDateTime;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a currency value to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a currency value to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure BindTextU(Param: Integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a UTF-8 encoded buffer text (#0 ended) to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: Integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a VCL string to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a VCL string to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure BindTextS(Param: Integer; const Value: string;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind an OLE WideString to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind an OLE WideString to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error }
     procedure BindTextW(Param: Integer; const Value: WideString;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error
     procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {/ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1
-     - raise an Exception on any error }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
+    // - raise an Exception on any error M
     procedure BindBlob(Param: Integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
 
@@ -2473,26 +2471,26 @@ type
     // a TDateTime value if the corresponding binding has been defined as ftDate
     // by BindArrayRowPrepare()
     procedure BindArrayRow(const aValues: array of const);
-    {/ bind an array of fields from an existing SQL statement for array binding
-     - supplied Rows columns shall follow the BindArrayRowPrepare() supplied
-       types (i.e. RawUTF8, Integer/Int64, double, date)
-     - can be used e.g. after ColumnsToSQLInsert() method call for fast data
-       conversion between tables }
+    /// bind an array of fields from an existing SQL statement for array binding
+    // - supplied Rows columns shall follow the BindArrayRowPrepare() supplied
+    // types (i.e. RawUTF8, Integer/Int64, double, date)
+    // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
+    // conversion between tables
     procedure BindFromRows(Rows: TSQLDBStatement); virtual;
-       
+
     {$ifndef LVCL}
-    {/ retrieve the parameter content, after SQL execution
-     - the leftmost SQL parameter has an index of 1
-     - to be used e.g. with stored procedures
-     - this overridden function will retrieve the value stored in the protected
-       fParams[] array: the ExecutePrepared method should have updated its
-       content as exepcted}
+    /// retrieve the parameter content, after SQL execution
+    // - the leftmost SQL parameter has an index of 1
+    // - to be used e.g. with stored procedures
+    // - this overridden function will retrieve the value stored in the protected
+    // fParams[] array: the ExecutePrepared method should have updated its
+    // content as exepcted
     function ParamToVariant(Param: Integer; var Value: Variant;
       CheckIsOutParameter: boolean=true): TSQLDBFieldType; override;
     {$endif}
 
     /// Reset the previous prepared statement
-    // - this overridden implementation will just do reset the internal fParams[] 
+    // - this overridden implementation will just do reset the internal fParams[]
     procedure Reset; override;
   end;
 
@@ -2508,20 +2506,20 @@ type
     /// create a statement instance
     // - this overridden version will initialize the internal fColumn* fields
     constructor Create(aConnection: TSQLDBConnection); override;
-    {/ retrieve a column name of the current Row
-     - Columns numeration (i.e. Col value) starts with 0
-     - it's up to the implementation to ensure than all column names are unique }
+    /// retrieve a column name of the current Row
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - it's up to the implementation to ensure than all column names are unique
     function ColumnName(Col: integer): RawUTF8; override;
-    {/ returns the Column index of a given Column name
-     - Columns numeration (i.e. Col value) starts with 0
-     - returns -1 if the Column name is not found (via case insensitive search) }
+    /// returns the Column index of a given Column name
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - returns -1 if the Column name is not found (via case insensitive search)
     function ColumnIndex(const aColumnName: RawUTF8): integer; override;
-    {/ the Column type of the current Row
-     - ftCurrency type should be handled specifically, for faster process and
-       avoid any rounding issue, since currency is a standard OleDB type
-     - FieldSize can be set to store the size in chars of a ftUTF8 column
-       (0 means BLOB kind of TEXT column) - this implementation will store
-       fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true}
+    /// the Column type of the current Row
+    // - ftCurrency type should be handled specifically, for faster process and
+    // avoid any rounding issue, since currency is a standard OleDB type
+    // - FieldSize can be set to store the size in chars of a ftUTF8 column
+    // (0 means BLOB kind of TEXT column) - this implementation will store
+    // fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType; override;
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
@@ -2535,7 +2533,7 @@ type
   public
     /// constructor which will use FormatUTF8() instead of Format()
     // - if the first Args[0] is a TSQLDBStatement class instance, the current
-    // SQL statement will be part of the exception message 
+    // SQL statement will be part of the exception message
     constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
   published
     /// associated TSQLDBStatement instance, if supplied as first parameter
@@ -2584,7 +2582,7 @@ type
     /// calls Process(cGetForeignKeys,self,fForeignKeys)
     procedure GetForeignKeys; override;
   public
-    /// will notify for proxy disconnection 
+    /// will notify for proxy disconnection
     destructor Destroy; override;
     /// create a new TSQLDBProxyConnection instance
     // - the caller is responsible of freeing this instance
@@ -2743,7 +2741,7 @@ type
     // buffer retrieved by ExecutePrepared, so would be almost immediate,
     // and would allow e.g. direct consumption via our TSynSQLStatementDataSet
     // - note that DataRowPosition won't be set by this method: will be done
-    // e.g. in TSQLDBProxyStatementRandomAccess.Create  
+    // e.g. in TSQLDBProxyStatementRandomAccess.Create
     function FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal=0;
       DataRowPosition: PCardinalDynArray=nil): cardinal; override;
 
@@ -2772,7 +2770,7 @@ type
       virtual; abstract;
   end;
 
-  /// fake proxy class for testing the remote connection to any SynDB engine 
+  /// fake proxy class for testing the remote connection to any SynDB engine
   // - resulting overhead due to our binary messaging: unnoticeable :)
   TSQLDBRemoteConnectionPropertiesTest = class(TSQLDBRemoteConnectionPropertiesAbstract)
   protected
@@ -2962,7 +2960,7 @@ type
     /// access the BLOB Value as an AnsiString
     // - will work for all Delphi versions, including Unicode versions (i.e.
     // since Delphi 2009)
-    // - for a BLOB parameter or column, you should use AsBlob or AsBlob 
+    // - for a BLOB parameter or column, you should use AsBlob or AsBlob
     // properties instead of AsString (this later won't work after Delphi 2007)
     property AsBlob: TBlobData read GetBlob write SetBlob;
     /// access the BLOB Value as array of byte (TBytes)
@@ -3261,7 +3259,7 @@ const
   DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUTF8 = (
     '=','<>','<','<=','>','>=',' in ',' is null',' is not null',' like ');
 
-  
+
 implementation
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
@@ -3627,9 +3625,9 @@ procedure TQuery.First;
 begin
   if (self=nil) or (fPrepared=nil) then
     raise ESQLQueryException.Create('First: Invalid call');
-  if fRowIndex<>1 then // perform only if cursor not already on first data row 
+  if fRowIndex<>1 then // perform only if cursor not already on first data row
     if fPrepared.Step(true) then
-      // cursor sucessfully set to 1st row  
+      // cursor sucessfully set to 1st row
       fRowIndex := 1 else
       // no row is available -> empty result
       fRowIndex := -1; // =-1 if empty, =0 if eof, >=1 if cursor on row data
@@ -3889,7 +3887,7 @@ begin
   speActive:
     if InterlockedIncrement(fInternalProcessActive)=1 then
       OnProcess(self,Event);
-  speNonActive: 
+  speNonActive:
     if InterlockedDecrement(fInternalProcessActive)=0 then
       OnProcess(self,Event);
   else
@@ -4014,7 +4012,7 @@ end;
 function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
 begin
   result := (self<>nil) and (Properties<>nil) and
-    Properties.ExceptionIsAboutConnection(fErrorException,fErrorMessage); 
+    Properties.ExceptionIsAboutConnection(fErrorException,fErrorMessage);
 end;
 
 function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
@@ -4086,7 +4084,7 @@ begin
       result := nil;
     end;
   end;
-end;  
+end;
 
 procedure TSQLDBConnection.Rollback;
 begin
@@ -4182,7 +4180,7 @@ constructor TSQLDBProxyConnectionProtocol.Create(aAuthenticate: TSynAuthenticati
 begin
   fAuthenticate := aAuthenticate;
   fTransactionRetryTimeout := 100;
-  fTransactionActiveTimeout := 120000; // after 2 minutes, clear any transaction 
+  fTransactionActiveTimeout := 120000; // after 2 minutes, clear any transaction
   InitializeCriticalSection(fLock);
 end;
 
@@ -4557,7 +4555,7 @@ begin
     exit;
   Query := PrepareInlined(aSQL,ExpectResults);
   if Query=nil then
-    exit; // e.g. invalid aSQL 
+    exit; // e.g. invalid aSQL
   Query.ExecutePrepared;
   result := Query;
 end;
@@ -4586,7 +4584,7 @@ begin
   result := fMainConnection;
 end;
 
-function TSQLDBConnectionProperties.NewConnection: TSQLDBConnection; 
+function TSQLDBConnectionProperties.NewConnection: TSQLDBConnection;
 begin
   raise ESQLDBException.CreateUTF8('%.NewConnection',[self]);
 end;
@@ -5112,7 +5110,7 @@ begin
     ' FIELD_DECIMALS, FIELD_INDEX from #fields where TABLE_NAME = '''+aTableName+'''';
     exit;
   end;
-  else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver 
+  else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
   SQLSplitTableName(aTableName,Owner,Table);
   result := FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Table)]);
@@ -5325,7 +5323,7 @@ end;
 
 procedure TSQLDBConnectionProperties.SetForeignKeysData(const Value: RawByteString);
 begin
-  if not fForeignKeys.Initialized then 
+  if not fForeignKeys.Initialized then
     fForeignKeys.Init(false);
   fForeignKeys.BlobData := Value;
 end;
@@ -5601,7 +5599,7 @@ begin
         AddShort(')'#10);
       end;
       AddShort('select 1 from dual');
-      SQLCached := true; 
+      SQLCached := true;
     end;
     else begin //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2
       AddShort('INSERT INTO '); // INSERT .. VALUES (..),(..),(..),..
@@ -5654,7 +5652,7 @@ begin
     sqllen := maxf*48; // worse case (with BLOB param)
     for f := 0 to maxf-1 do
       inc(sqllen,Length(FieldNames[f]));
-    batchRowCount := 32000 div sqllen; 
+    batchRowCount := 32000 div sqllen;
     if batchRowCount>RowCount then
       batchRowCount := RowCount;
   end;
@@ -6151,7 +6149,7 @@ begin
         [self,i,VType]);
   end;
 end;
-      
+
 procedure TSQLDBStatement.BindVariant(Param: Integer; const Data: Variant;
   DataIsBlob: boolean; IO: TSQLDBParamInOutType);
 {$ifndef DELPHI5OROLDER}
@@ -6216,7 +6214,7 @@ begin
     else
     if VType=varByRef or varVariant then
       BindVariant(Param,PVariant(VPointer)^,DataIsBlob,IO) else
-    if VType=varByRef or varOleStr then 
+    if VType=varByRef or varOleStr then
       BindTextW(Param,PWideString(VAny)^,IO) else
     {$ifdef LVCL}
       raise ESQLDBException.CreateUTF8(
@@ -6526,7 +6524,7 @@ begin
       W.Add(',');
       inc(result);
     end;
-    if (result=0) and W.Expand then begin   
+    if (result=0) and W.Expand then begin
       // we want the field names at least, even with no data (RowCount=0)
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
       W.CancelAll;
@@ -6575,7 +6573,7 @@ begin
     // add CSV rows
     while Step do begin
       for F := 0 to FMax do begin
-        ColumnToSQLVar(F,V,tmp); 
+        ColumnToSQLVar(F,V,tmp);
         case V.VType of
           ftNull:     W.AddShort(NULL[tab]);
           ftInt64:    W.Add(V.VInt64);
@@ -7721,7 +7719,7 @@ function TSQLDBProxyConnection.GetServerDateTime: TDateTime;
 var TimeStamp: TTimeLogBits;
 begin
   fProxy.Process(cServerTimeStamp,self,TimeStamp);
-  result := TimeStamp.ToDateTime; 
+  result := TimeStamp.ToDateTime;
 end;
 
 function TSQLDBProxyConnection.IsConnected: boolean;
@@ -7782,7 +7780,7 @@ begin
     for F := 0 to colCount-1 do
     with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(FromVarString(Data)))^ do begin
       ColumnType := TSQLDBFieldType(Data^);
-      fDataCurrentRowColTypes[F] := ColumnType; 
+      fDataCurrentRowColTypes[F] := ColumnType;
       inc(Data);
       ColumnValueDBSize := FromVarUInt32(Data);
     end;
@@ -7850,7 +7848,7 @@ begin
   for col := 0 to fColumnCount-1 do begin
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    Data := fDataCurrentRowValues[col]; 
+    Data := fDataCurrentRowValues[col];
     if Data=nil then
       WR.AddShort('null') else
     case fDataCurrentRowColTypes[col] of
@@ -7906,7 +7904,7 @@ begin
       result := ftNull else
       with fColumns[Col] do begin
         if FieldSize<>nil then
-          FieldSize^ := ColumnDataSize; // true max size as computed at loading 
+          FieldSize^ := ColumnDataSize; // true max size as computed at loading
         result := fDataCurrentRowColTypes[Col]; // per-row column type (SQLite3)
       end else
     raise ESQLDBException.CreateUTF8('Invalid %.ColumnType()',[self]);

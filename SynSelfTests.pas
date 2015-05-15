@@ -230,27 +230,27 @@ type
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
   public
-    {/ method used to test the Client-Side
-       ModelRoot/TableName/ID/MethodName RESTful request, i.e.
-       ModelRoot/People/ID/DataAsHex in this case
-     - this method calls the supplied TSQLRestClient to retrieve its results,
-       with the ID taken from the current TSQLRecordPeole instance ID field
-     - parameters and result types depends on the purpose of the function
-     - TSQLRestServerTest.DataAsHex published method implements the result
-       calculation on the Server-Side }
+    /// method used to test the Client-Side
+    // ModelRoot/TableName/ID/MethodName RESTful request, i.e.
+    // ModelRoot/People/ID/DataAsHex in this case
+    // - this method calls the supplied TSQLRestClient to retrieve its results,
+    // with the ID taken from the current TSQLRecordPeole instance ID field
+    // - parameters and result types depends on the purpose of the function
+    // - TSQLRestServerTest.DataAsHex published method implements the result
+    // calculation on the Server-Side
     function DataAsHex(aClient: TSQLRestClientURI): RawUTF8;
-    {/ method used to test the Client-Side
-       ModelRoot/MethodName RESTful request, i.e. ModelRoot/Sum in this case
-     - this method calls the supplied TSQLRestClient to retrieve its results
-     - parameters and result types depends on the purpose of the function
-     - TSQLRestServerTest.Sum published method implements the result calculation
-       on the Server-Side
-     - this method doesn't expect any ID to be supplied, therefore will be
-       called as class function - normally, it should be implement in a
-       TSQLRestClient descendant, and not as a TSQLRecord, since it does't depend
-       on TSQLRecordPeople at all
-     - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
-       but it won't make any difference) }
+    /// method used to test the Client-Side
+    // ModelRoot/MethodName RESTful request, i.e. ModelRoot/Sum in this case
+    // - this method calls the supplied TSQLRestClient to retrieve its results
+    // - parameters and result types depends on the purpose of the function
+    // - TSQLRestServerTest.Sum published method implements the result calculation
+    // on the Server-Side
+    // - this method doesn't expect any ID to be supplied, therefore will be
+    // called as class function - normally, it should be implement in a
+    // TSQLRestClient descendant, and not as a TSQLRecord, since it does't depend
+    // on TSQLRecordPeople at all
+    // - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
+    // but it won't make any difference)
     class function Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
   end;
 {$endif}
@@ -520,7 +520,7 @@ type
     /// check the PCRE-based REGEX function
     procedure RegexpFunction;
     {$endif TEST_REGEXP}
-    /// test Master/Slave replication using TRecordVersion field 
+    /// test Master/Slave replication using TRecordVersion field
     procedure _TRecordVersion;
   end;
 
@@ -641,33 +641,33 @@ type
   //  order to test the Server-Side ModelRoot/TableName/ID/MethodName RESTful model
   TSQLRestServerTest = class(TSQLRestServerDB)
   published
-    {/ test ModelRoot/People/ID/DataAsHex
-     - this method is called by TSQLRestServer.URI when a
-       ModelRoot/People/ID/DataAsHex GET request is provided
-     - Parameters values are not used here: this service only need aRecord.ID
-     - SentData is set with incoming data from a PUT method
-     - if called from ModelRoot/People/ID/DataAsHex with GET or PUT methods,
-       TSQLRestServer.URI will create a TSQLRecord instance and set its ID
-       (but won't retrieve its other field values automaticaly)
-     - if called from ModelRoot/People/DataAsHex with GET or PUT methods,
-       TSQLRestServer.URI will leave aRecord.ID=0 before launching it
-     - if called from ModelRoot/DataAsHex with GET or PUT methods,
-       TSQLRestServer.URI will leave aRecord=nil before launching it
-     - implementation must return the HTTP error code (e.g. 200 as success)
-     - Table is overloaded as TSQLRecordPeople here, and still match the
-       TSQLRestServerCallBack prototype: but you have to check the class
-       at runtime: it can be called by another similar but invalid URL, like
-       ModelRoot/OtherTableName/ID/DataAsHex }
+    /// test ModelRoot/People/ID/DataAsHex
+    // - this method is called by TSQLRestServer.URI when a
+    // ModelRoot/People/ID/DataAsHex GET request is provided
+    // - Parameters values are not used here: this service only need aRecord.ID
+    // - SentData is set with incoming data from a PUT method
+    // - if called from ModelRoot/People/ID/DataAsHex with GET or PUT methods,
+    // TSQLRestServer.URI will create a TSQLRecord instance and set its ID
+    // (but won't retrieve its other field values automaticaly)
+    // - if called from ModelRoot/People/DataAsHex with GET or PUT methods,
+    // TSQLRestServer.URI will leave aRecord.ID=0 before launching it
+    // - if called from ModelRoot/DataAsHex with GET or PUT methods,
+    // TSQLRestServer.URI will leave aRecord=nil before launching it
+    // - implementation must return the HTTP error code (e.g. 200 as success)
+    // - Table is overloaded as TSQLRecordPeople here, and still match the
+    // TSQLRestServerCallBack prototype: but you have to check the class
+    // at runtime: it can be called by another similar but invalid URL, like
+    // ModelRoot/OtherTableName/ID/DataAsHex
     procedure DataAsHex(Ctxt: TSQLRestServerURIContext);
-    {/ method used to test the Server-Side ModelRoot/Sum or
-       ModelRoot/People/Sum Requests with JSON process
-      - implementation of this method returns the sum of two floating-points,
-        named A and B, as in the public TSQLRecordPeople.Sum() method,
-        which implements the Client-Side of this service
-      - Table nor ID are never used here }
+    /// method used to test the Server-Side ModelRoot/Sum or
+    // ModelRoot/People/Sum Requests with JSON process
+    // - implementation of this method returns the sum of two floating-points,
+    // named A and B, as in the public TSQLRecordPeople.Sum() method,
+    // which implements the Client-Side of this service
+    // - Table nor ID are never used here
     procedure Sum(Ctxt: TSQLRestServerURIContext);
-    {/ method used to test the Server-Side ModelRoot/Sum or
-       ModelRoot/People/Sum Requests with variant process }
+    /// method used to test the Server-Side ModelRoot/Sum or
+    // ModelRoot/People/Sum Requests with variant process
     procedure Sum2(Ctxt: TSQLRestServerURIContext);
   end;
 

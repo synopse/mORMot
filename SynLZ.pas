@@ -28,7 +28,7 @@ unit SynLZ;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -301,11 +301,11 @@ asm
         push    esi
         push    edi
         push    eax
-        mov     eax, 8                                 
+        mov     eax, 8
 @@0906: add     esp, -4092
-        push    eax                                    
+        push    eax
         dec     eax
-        jnz     @@0906                                 
+        jnz     @@0906
         mov     eax, [esp+8000H]
         add     esp, -32
         mov     esi, ecx
@@ -339,10 +339,10 @@ asm
         mov     eax, esi
         mov     [esp+18H], eax
         xor     edx, edx
-        mov     [eax], edx                   
+        mov     [eax], edx
         add     esi, 4
-        lea     eax, [esp+24H]                         
-        xor     ecx, ecx                               
+        lea     eax, [esp+24H]
+        xor     ecx, ecx
         mov     edx, 16384
         call    system.@fillchar
         // main loop:
@@ -350,8 +350,8 @@ asm
         ja      @@0900
 @@0892: mov     edx, [edi]
         mov     eax, edx
-        shr     edx, 12                                
-        xor     edx, eax                               
+        shr     edx, 12
+        xor     edx, eax
         and     edx, 0FFFH
         mov     ebp, [esp+edx*4+24H]
         mov     ecx, [esp+edx*4+4024H]
@@ -365,7 +365,7 @@ asm
         or      ebp,ebp
         jz      @@0897
         sub     eax, ebp
-        cmp     eax, 2                                 
+        cmp     eax, 2
         mov     ecx, [esp+18H]
         jle     @@0897
         mov     eax,[ecx]
@@ -660,33 +660,33 @@ asm
         push    ebp
         push    ebx
         push    esi
-        push    edi                                    
+        push    edi
         push    eax
-        mov     eax, 4                                 
+        mov     eax, 4
 @@0906: add     esp, -4092
-        push    eax                                    
+        push    eax
         dec     eax
-        jnz     @@0906                                 
-        mov     eax, [esp+4000H]             
-        add     esp, -24                               
-        mov     esi, ecx                               
+        jnz     @@0906
+        mov     eax, [esp+4000H]
+        add     esp, -24
+        mov     esi, ecx
         mov     ebx, eax
-        mov     [esp+8H], esi                
-        add     edx, ebx                               
-        mov     [esp+10H], edx               
-        movzx   eax, word ptr [ebx]                    
-        mov     [esp], eax                   
-        or      eax,eax                     
-        je      @@0917                                 
+        mov     [esp+8H], esi
+        add     edx, ebx
+        mov     [esp+10H], edx
+        movzx   eax, word ptr [ebx]
+        mov     [esp], eax
+        or      eax,eax
+        je      @@0917
         add     ebx, 2
-        mov     eax, [esp]                   
+        mov     eax, [esp]
         test    ah, 80H
         jz      @@0907
-        and     eax, 7FFFH                             
-        movzx   edx, word ptr [ebx]                    
+        and     eax, 7FFFH
+        movzx   edx, word ptr [ebx]
         shl     edx, 15
-        or      eax, edx                               
-        mov     [esp], eax                   
+        or      eax, edx
+        mov     [esp], eax
         add     ebx, 2
 @@0907: lea     ebp, [esi-1]
 @@0908: mov     ecx, [ebx]

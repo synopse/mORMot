@@ -27,7 +27,7 @@ unit SynKylix;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -90,7 +90,7 @@ const
   CLOCK_MONOTONIC = 1;
   CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
 
-  
+
 /// compatibility function, wrapping Win32 API high resolution timer
 // - this version will return the CLOCK_MONOTONIC value, with a 1 ns resolution
 procedure QueryPerformanceCounter(var Value: Int64);
@@ -147,7 +147,7 @@ function IconvBufConvert(context: iconv_t;
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
 // another pending thread, i.e. call sched_yield() API
-procedure SleepHiRes(ms: cardinal); 
+procedure SleepHiRes(ms: cardinal);
 
 /// similar to FPC's unix.GetHostName function
 function GetHostName: string;
@@ -224,7 +224,7 @@ begin
     result := 0;
 end;
 
-const  
+const
   HoursPerDay = 24;
   MinsPerHour = 60;
   SecsPerMin  = 60;

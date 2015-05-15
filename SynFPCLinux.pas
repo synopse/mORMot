@@ -29,7 +29,7 @@ unit SynFPCLinux;
   Contributor(s):
   - Arnaud Bouchez
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -134,7 +134,7 @@ function GetTickCount: cardinal;
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
 // another pending thread, i.e. call sched_yield() API
-procedure SleepHiRes(ms: cardinal); 
+procedure SleepHiRes(ms: cardinal);
 
 
 implementation
@@ -357,4 +357,4 @@ end;
 
 {$endif}
 
-end.
+end.

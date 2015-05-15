@@ -29,7 +29,7 @@ unit SynDBSQLite3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -70,7 +70,7 @@ unit SynDBSQLite3;
   Version 1.18
   - statement cache refactoring: cache logic is now at SynDB unit level
   - fixed ticket [4c68975022] about broken SQL statement when logging active
-  - fixed logging SQL content of external SQLite3 statements 
+  - fixed logging SQL content of external SQLite3 statements
   - added TSQLDBSQLite3ConnectionProperties.SQLTableName() overridden method
   - added TSQLDBSQLite3ConnectionProperties.Create(aDB: TSQLDatabase) overloaded
     constructor, to be used e.g. with a TSQLRestServerDB.DB existing database
@@ -135,7 +135,7 @@ type
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
   public
-    /// initialize access to a SQLite3 engine with some properties 
+    /// initialize access to a SQLite3 engine with some properties
     // - only used parameter is aServerName, which should point to the SQLite3
     // database file to be opened (one will be created if none exists)
     // - you can specify an optional password, which will be used to access
@@ -149,7 +149,7 @@ type
     /// initialize access to an existing SQLite3 engine
     // - this overloaded constructor allows to access via SynDB methods to an
     // existing SQLite3 database, e.g. TSQLRestServerDB.DB (from mORMotSQLite3.pas)
-    constructor Create(aDB: TSQLDatabase); reintroduce; overload; 
+    constructor Create(aDB: TSQLDatabase); reintroduce; overload;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
@@ -225,130 +225,130 @@ type
     fBindShouldStoreValue: boolean;
     fBindValues: TRawUTF8DynArray;
     fBindIsString: TByteDynArray;
-    {{ retrieve the inlined value of a given parameter, e.g. 1 or 'name' }
+    // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     function GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8; override;
   public
-    {{ create a SQLite3 statement instance, from an existing SQLite3 connection
-     - the Execute method can be called once per TSQLDBSQLite3Statement instance,
-       but you can use the Prepare once followed by several ExecutePrepared methods
-     - if the supplied connection is not of TOleDBConnection type, will raise
-       an exception }
+    /// create a SQLite3 statement instance, from an existing SQLite3 connection
+    // - the Execute method can be called once per TSQLDBSQLite3Statement instance,
+    // but you can use the Prepare once followed by several ExecutePrepared methods
+    // - if the supplied connection is not of TOleDBConnection type, will raise
+    // an exception
     constructor Create(aConnection: TSQLDBConnection); override;
-    {{ release all associated memory and SQLite3 handles }
+    /// release all associated memory and SQLite3 handles
     destructor Destroy; override;
 
-    {{ bind a NULL value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a NULL value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindNull(Param: Integer; IO: TSQLDBParamInOutType=paramIn;
       BoundType: TSQLDBFieldType=ftNull); override;
-    {{ bind an integer value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind an integer value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: Int64;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a double value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a double value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: Integer; Value: double;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a TDateTime value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a TDateTime value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindDateTime(Param: Integer; Value: TDateTime;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a currency value to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a currency value to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindCurrency(Param: Integer; Value: currency;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextU(Param: Integer; const Value: RawUTF8;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a UTF-8 encoded buffer text (#0 ended) to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: Integer; Value: PUTF8Char;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextS(Param: Integer; const Value: string;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a UTF-8 encoded string to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a UTF-8 encoded string to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindTextW(Param: Integer; const Value: WideString;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; Data: pointer; Size: integer;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
-    {{ bind a Blob buffer to a parameter
-     - the leftmost SQL parameter has an index of 1 }
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: Integer; const Data: RawByteString;
       IO: TSQLDBParamInOutType=paramIn); overload; override;
 
-    {{ Prepare an UTF-8 encoded SQL statement
-     - parameters marked as ? will be bound later, before ExecutePrepared call
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - raise an ESQLDBException on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBException on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
-    {{ Execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - raise an ESQLDBException on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - raise an ESQLDBException on any error
     procedure ExecutePrepared; override;
 
-    {/ After a statement has been prepared via Prepare() + ExecutePrepared() or
-       Execute(), this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - raise an ESQLite3Exception exception on any error }
+    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    // Execute(), this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    // if SeekFirst is TRUE, will put the cursor on the first row of results,
+    // otherwise, it will fetch one row of data, to be called within a loop
+    // - raise an ESQLite3Exception exception on any error
     function Step(SeekFirst: boolean=false): boolean; override;
-    {{ retrieve a column name of the current Row
-     - Columns numeration (i.e. Col value) starts with 0
-     - it's up to the implementation to ensure than all column names are unique }
+    /// retrieve a column name of the current Row
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - it's up to the implementation to ensure than all column names are unique
     function ColumnName(Col: integer): RawUTF8; override;
-    {{ returns the Column index of a given Column name
-     - Columns numeration (i.e. Col value) starts with 0
-     - returns -1 if the Column name is not found (via case insensitive search) }
+    /// returns the Column index of a given Column name
+    // - Columns numeration (i.e. Col value) starts with 0
+    // - returns -1 if the Column name is not found (via case insensitive search)
     function ColumnIndex(const aColumnName: RawUTF8): integer; override;
-    {{ the Column type of the current Row
-     - ftCurrency type should be handled specificaly, for faster process and
-     avoid any rounding issue, since currency is a standard OleDB type }
+    /// the Column type of the current Row
+    // - ftCurrency type should be handled specificaly, for faster process and
+    // avoid any rounding issue, since currency is a standard OleDB type
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType; override;
-    {{ Reset the previous prepared statement }
+    /// Reset the previous prepared statement
     procedure Reset; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0
-     - should retrieve directly the 64 bit Currency content, to avoid
-     any rounding/conversion error from floating-point types }
+    /// return a Column currency value of the current Row, first Col is 0
+    // - should retrieve directly the 64 bit Currency content, to avoid
+    // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0
-    - ColumnBlob() will return the binary content of the field is was not ftBlob,
-      e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
-      or a direct mapping of the RawUnicode  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - ColumnBlob() will return the binary content of the field is was not ftBlob,
+    // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
+    // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    {{ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - fast overridden implementation with no temporary variable
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - fast overridden implementation with no temporary variable
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter); override;
   end;
 
 /// direct export of a DB statement rows into a SQLite3 database
 // - the corresponding table will be created within the specified DB file
 function RowsToSQLite3(const Dest: TFileName; const TableName: RawUTF8;
-  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer; 
+  Rows: TSQLDBStatement; UseMormotCollations: boolean): integer;
 
 
 implementation
@@ -573,7 +573,7 @@ end;
 
 const
   NULCHAR: AnsiChar = #0;
-  
+
 procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer;
   Value: PUTF8Char; IO: TSQLDBParamInOutType);
 var Len: integer;

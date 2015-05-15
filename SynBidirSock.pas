@@ -159,7 +159,7 @@ type
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
-    function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; virtual; 
+    function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; virtual;
     function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
   public
     /// abstract constructor to initialize the protocol
@@ -518,14 +518,14 @@ type
     // useless until you execute Protocols.Add()
     // - in the current implementation, the ServerThreadPoolCount parameter will
     // be ignored by this class, and one thread will be maintained per client
-    constructor Create(const aPort: SockString 
+    constructor Create(const aPort: SockString
       {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=0{$endif}); override;
     /// close the server
     destructor Destroy; override;
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList read fProtocols;
     /// the settings to be used for WebSockets process
-    // - note that those parameters won't be propagated to existing connections 
+    // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -660,10 +660,10 @@ type
 var
   /// if set, will log all WebSockets raw information
   // - see also TWebSocketProcessSettings.LogDetails and
-  // TWebSocketProcessSettings.SetFullLog to setup even more verbose information 
+  // TWebSocketProcessSettings.SetFullLog to setup even more verbose information
   WebSocketLog: TSynLogClass;
 
-  
+
 implementation
 
 
@@ -846,7 +846,7 @@ begin
       Ctxt.Free;
     end;
   end else
-    Sender.fIncoming.Push(request); 
+    Sender.fIncoming.Push(request);
 end;
 
 // by convention, defaults are POST and JSON, to reduce frame size for SOA calls
@@ -1486,7 +1486,7 @@ var request,answer: TWebSocketFrame;
     start,max: Int64;
 begin
   WebSocketLog.Add.Log(sllDebug,'%.NotifyCallback(%,%)',[ClassType,aRequest.URL,
-     GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^]); 
+     GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^]);
   result := STATUS_NOTFOUND;
   if (fProtocol=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
@@ -1568,7 +1568,7 @@ begin
             SendFrame(request);
             fState := wpsClose;
             break; // will close the connection
-          end;                                             
+          end;
           end;
         end else
         if TThreadHook(fOwnerThread).Terminated then
@@ -1640,7 +1640,7 @@ end;
 constructor TWebSocketServer.Create(const aPort: SockString
   {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
 begin
-  inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool  
+  inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
   fProtocols := TWebSocketProtocolList.Create;
@@ -1754,7 +1754,7 @@ begin
   fWebSocketConnections.Lock;
   try
     with fWebSocketConnections do
-    for i := 0 to Count-1 do 
+    for i := 0 to Count-1 do
       if TWebSocketServerResp(List[i]).ConnectionID=ConnectionID then begin
         result := TWebSocketServerResp(List[i]);
         exit;

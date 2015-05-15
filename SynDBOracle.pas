@@ -31,7 +31,7 @@ unit SynDBOracle;
   Contributor(s):
   - richard6688
   - mpv
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -181,7 +181,7 @@ type
     /// convert Delphi TDateTime into native Oracle date and time format
     procedure From(const aValue: TDateTime); overload;
     /// convert textual ISO-8601 into native Oracle date and time format
-    procedure From(const aIso8601: RawUTF8); overload; 
+    procedure From(const aIso8601: RawUTF8); overload;
     /// convert textual ISO-8601 into native Oracle date and time format
     procedure From(aIso8601: PUTF8Char; Length: integer); overload;
   end;
@@ -356,103 +356,103 @@ type
     //   an exception
     constructor Create(aConnection: TSQLDBConnection); override;
     /// initialize the class from an existing OCI statement (and connection)
-    // - to be called e.g. by ColumnCursor() for SQLT_RSET kind of column }
+    // - to be called e.g. by ColumnCursor() for SQLT_RSET kind of column
     constructor CreateFromExistingStatement(aConnection: TSQLDBConnection; aStatement: pointer);
     /// release all associated memory and OCI handles
     destructor Destroy; override;
 
-    {{ Prepare an UTF-8 encoded SQL statement
-     - parameters marked as ? will be bound later, before ExecutePrepared call
-     - if ExpectResults is TRUE, then Step() and Column*() methods are available
-       to retrieve the data rows
-     - raise an ESQLDBOracle on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBOracle on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: Boolean=false); overload; override;
-    {{ Execute a prepared SQL statement
-     - parameters marked as ? should have been already bound with Bind*() functions
-     - raise an ESQLDBOracle on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - raise an ESQLDBOracle on any error
     procedure ExecutePrepared; override;
 
-    {/ After a statement has been prepared via Prepare() + ExecutePrepared() or
-       Execute(), this method must be called one or more times to evaluate it
-     - you shall call this method before calling any Column*() methods
-     - return TRUE on success, with data ready to be retrieved by Column*()
-     - return FALSE if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-     - access the first or next row of data from the SQL Statement result:
-       if SeekFirst is TRUE, will put the cursor on the first row of results,
-       otherwise, it will fetch one row of data, to be called within a loop
-     - raise an ESQLDBOracle on any error }
+    /// After a statement has been prepared via Prepare() + ExecutePrepared() or
+    // Execute(), this method must be called one or more times to evaluate it
+    // - you shall call this method before calling any Column*() methods
+    // - return TRUE on success, with data ready to be retrieved by Column*()
+    // - return FALSE if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - access the first or next row of data from the SQL Statement result:
+    // if SeekFirst is TRUE, will put the cursor on the first row of results,
+    // otherwise, it will fetch one row of data, to be called within a loop
+    // - raise an ESQLDBOracle on any error
     function Step(SeekFirst: boolean=false): boolean; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: integer): double; override;
-    {{ return a Column date and time value of the current Row, first Col is 0 }
+    /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0
-     - should retrieve directly the 64 bit Currency content, to avoid
-     any rounding/conversion error from floating-point types }
+    /// return a Column currency value of the current Row, first Col is 0
+    // - should retrieve directly the 64 bit Currency content, to avoid
+    // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0
-    - ColumnBlob() will return the binary content of the field is was not ftBlob,
-      e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
-      or a direct mapping of the RawUnicode  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - ColumnBlob() will return the binary content of the field is was not ftBlob,
+    // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
+    // or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
-    {/ return a Column as a blob value of the current Row, first Col is 0
-      - this function will return the BLOB content as a TBytes
-      - this default virtual method will call ColumnBlob()  }
+    /// return a Column as a blob value of the current Row, first Col is 0
+    // - this function will return the BLOB content as a TBytes
+    // - this default virtual method will call ColumnBlob()
     function ColumnBlobBytes(Col: integer): TBytes; override;
-    {{ return a Column as a variant
-     - this implementation will retrieve the data with no temporary variable
-       (since TQuery calls this method a lot, we tried to optimize it)
-     - a ftUTF8 content will be mapped into a generic WideString variant
-       for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
-       since Delphi 2009: you may not loose any data during charset conversion
-     - a ftBlob content will be mapped into a TBlobData AnsiString variant }
+    /// return a Column as a variant
+    // - this implementation will retrieve the data with no temporary variable
+    // (since TQuery calls this method a lot, we tried to optimize it)
+    // - a ftUTF8 content will be mapped into a generic WideString variant
+    // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
+    // since Delphi 2009: you may not loose any data during charset conversion
+    // - a ftBlob content will be mapped into a TBlobData AnsiString variant
     function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; override;
-    {/ return a Column as a TSQLVar value, first Col is 0
-     - the specified Temp variable will be used for temporary storage of
-       svtUTF8/svtBlob values
-     - this implementation will retrieve the data with no temporary variable,
-       and handling ftCurrency/NUMBER(22,0) as fast as possible, directly from
-       the memory buffers returned by OCI: it will ensure best performance
-       possible when called from TSQLVirtualTableCursorExternal.Column method
-       as defined in mORMotDB unit (i.e. mORMot external DB access) }
+    /// return a Column as a TSQLVar value, first Col is 0
+    // - the specified Temp variable will be used for temporary storage of
+    // svtUTF8/svtBlob values
+    // - this implementation will retrieve the data with no temporary variable,
+    // and handling ftCurrency/NUMBER(22,0) as fast as possible, directly from
+    // the memory buffers returned by OCI: it will ensure best performance
+    // possible when called from TSQLVirtualTableCursorExternal.Column method
+    // as defined in mORMotDB unit (i.e. mORMot external DB access)
     procedure ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
       var Temp: RawByteString); override;
-    {{ append all columns values of the current Row to a JSON stream
-     - will use WR.Expand to guess the expected output format
-     - fast overridden implementation with no temporary variable (about 20%
-       faster when run over high number of data rows) 
-     - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-       format and contains true BLOB data }
+    /// append all columns values of the current Row to a JSON stream
+    // - will use WR.Expand to guess the expected output format
+    // - fast overridden implementation with no temporary variable (about 20%
+    // faster when run over high number of data rows)
+    // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
+    // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter); override;
-    {/ return a special CURSOR Column content as a SynDB result set
-     - Cursors are not handled internally by mORMot, but Oracle usually use
-       such structures to get data from strored procedures
-     - such columns are mapped as ftUTF8, with the rows converted to JSON
-     - this overridden method will allow direct access to the data rows }
+    /// return a special CURSOR Column content as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but Oracle usually use
+    // such structures to get data from strored procedures
+    // - such columns are mapped as ftUTF8, with the rows converted to JSON
+    // - this overridden method will allow direct access to the data rows
     function ColumnCursor(Col: integer): ISQLDBRows; override;
 
-    {/ bind a special CURSOR parameter to be returned as a SynDB result set
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - such parameters are mapped as ftUnknown, and is always of paramOut type
-     - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
-       execution of the statement
-     - this overridden method will prepare direct access to the data rows }
+    /// bind a special CURSOR parameter to be returned as a SynDB result set
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - such parameters are mapped as ftUnknown, and is always of paramOut type
+    // - use BoundCursor() method to retrieve the corresponding ISQLDBRows after
+    // execution of the statement
+    // - this overridden method will prepare direct access to the data rows
     procedure BindCursor(Param: integer); override;
-    {/ return a special CURSOR parameter content as a SynDB result set
-     - this method is not about a column, but a parameter defined with
-       BindCursor() before method execution
-     - Cursors are not handled internally by mORMot, but some databases (e.g.
-       Oracle) usually use such structures to get data from strored procedures
-     - this method allow direct access to the data rows after execution
-     - this overridden method will allow direct access to the data rows }
+    /// return a special CURSOR parameter content as a SynDB result set
+    // - this method is not about a column, but a parameter defined with
+    // BindCursor() before method execution
+    // - Cursors are not handled internally by mORMot, but some databases (e.g.
+    // Oracle) usually use such structures to get data from strored procedures
+    // - this method allow direct access to the data rows after execution
+    // - this overridden method will allow direct access to the data rows
     function BoundCursor(Param: Integer): ISQLDBRows; override;
 
     /// returns the number of rows updated by the execution of this statement
@@ -653,7 +653,7 @@ type
   OCITypeCode = ub2;
 
   OCITypeGetOpt = (OCI_TYPEGET_HEADER, OCI_TYPEGET_ALL);
-  
+
 const
   { OCI Handle Types }
   OCI_HTYPE_FIRST               = 1;
@@ -1857,7 +1857,7 @@ begin
             fOCICharSet := ColumnInt(0) else
             fOCICharSet := CodePageToCharSetID(fEnv,0); // retrieve from NLS_LANG
         except // on error, retrieve from NLS_LANG
-          fOCICharSet := CodePageToCharSetID(fEnv,0); 
+          fOCICharSet := CodePageToCharSetID(fEnv,0);
         end;
       finally
         Free;
@@ -1880,7 +1880,7 @@ begin
       Free;
     end;
     //Check(TransStart(fContext,fError,0,OCI_DEFAULT),fError);
-    inherited Connect; // notify any re-connection 
+    inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
       Log.Log(sllError,E);
@@ -1984,7 +1984,7 @@ begin
   if TransactionCount>0 then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
       'transactions are supported by the Oracle driver',[self]);
-  inherited StartTransaction;               
+  inherited StartTransaction;
   if fTrans=nil then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction call',[self]);
   // Oracle creates implicit transactions, and we'll handle AutoCommit in
@@ -2350,7 +2350,7 @@ end;
 
 procedure TSQLDBOracleStatement.BindCursor(Param: integer);
 begin
-  CheckParam(Param,ftUnknown,paramOut); // ftUnknown+paramOut indicate SQLT_RSET 
+  CheckParam(Param,ftUnknown,paramOut); // ftUnknown+paramOut indicate SQLT_RSET
 end;
 
 function TSQLDBOracleStatement.BoundCursor(Param: Integer): ISQLDBRows;
@@ -2616,7 +2616,7 @@ begin
         end;
         SQLT_LVB: begin
           SetString(VData,nil,oLength*fParamsArrayCount);
-          oData := Pointer(VData); 
+          oData := Pointer(VData);
           oDataSTR := oData;
           for j := 0 to fParamsArrayCount-1 do begin
             move(Pointer(PtrInt(VArray[j])-sizeof(Integer))^,oDataSTR^,
@@ -2688,7 +2688,7 @@ begin
           ftUnknown: begin
             if VInOut=paramIn then
               raise ESQLDBOracle.CreateUTF8(
-                '%.ExecutePrepared: Unexpected IN cursor parameter #%',[self,i+1]); 
+                '%.ExecutePrepared: Unexpected IN cursor parameter #%',[self,i+1]);
             VDBType := SQLT_RSET;
             with OCI do
               Check(nil,self,HandleAlloc(Env,PPointer(oData)^,OCI_HTYPE_STMT,0,nil),fError);
@@ -3115,7 +3115,7 @@ begin
     end;
     assert(fColumn.Count=integer(ColCount));
     // 3. Dispatch data in row buffer
-    assert(fRowBuffer=nil); 
+    assert(fRowBuffer=nil);
     fRowCount := (fInternalBufferSize-ColCount shl 4) div RowSize;
     if fRowCount=0 then begin // reserve space for at least one row of data
       fInternalBufferSize := RowSize+ColCount shl 4;
@@ -3265,4 +3265,4 @@ end;
 initialization
   TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
 end.
-
+

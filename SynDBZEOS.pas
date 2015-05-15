@@ -28,7 +28,7 @@ unit SynDBZeos;
   Portions created by the Initial Developer are Copyright (C) 2015
   the Initial Developer. All Rights Reserved.
 
-  Contributor(s):  
+  Contributor(s):
   - Daniel Kuettner
   - delphinium
   - EgonHugeist (Michael)
@@ -303,19 +303,19 @@ type
     fResultSet: IZResultSet;
     fResultInfo: IZResultSetMetaData;
   public
-    {{ Prepare an UTF-8 encoded SQL statement
-      - parameters marked as ? will be bound later, before ExecutePrepared call
-      - if ExpectResults is TRUE, then Step() and Column*() methods are available
-      to retrieve the data rows
-      - raise an ESQLDBZeos on any error }
+    /// Prepare an UTF-8 encoded SQL statement
+    // - parameters marked as ? will be bound later, before ExecutePrepared call
+    // - if ExpectResults is TRUE, then Step() and Column*() methods are available
+    // to retrieve the data rows
+    // - raise an ESQLDBZeos on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
-    {{ Execute a prepared SQL statement
-      - parameters marked as ? should have been already bound with Bind*() functions
-      - this implementation will also handle bound array of values (if any),
-        if IZDatabaseInfo.SupportsArrayBindings is true for this provider
-      - this overridden method will log the SQL statement if sllSQL has been
-        enabled in SynDBLog.Family.Level
-      - raise an ESQLDBZeos on any error }
+    /// Execute a prepared SQL statement
+    // - parameters marked as ? should have been already bound with Bind*() functions
+    // - this implementation will also handle bound array of values (if any),
+    // if IZDatabaseInfo.SupportsArrayBindings is true for this provider
+    // - this overridden method will log the SQL statement if sllSQL has been
+    // enabled in SynDBLog.Family.Level
+    // - raise an ESQLDBZeos on any error
     procedure ExecutePrepared; override;
     {$ifdef ZEOS72UP}
     /// append all columns values of the current Row to a JSON stream
@@ -326,31 +326,31 @@ type
     {$endif}
     /// gets a number of updates made by latest executed statement
     function UpdateCount: integer; override;
-    {/ Reset the previous prepared statement
-     - this overridden implementation will reset all bindings and the cursor state
-     - raise an ESQLDBZeos on any error }
+    /// Reset the previous prepared statement
+    // - this overridden implementation will reset all bindings and the cursor state
+    // - raise an ESQLDBZeos on any error
     procedure Reset; override;
 
-    {{ Access the next or first row of data from the SQL Statement result
-      - return true on success, with data ready to be retrieved by Column*() methods
-      - return false if no more row is available (e.g. if the SQL statement
-      is not a SELECT but an UPDATE or INSERT command)
-      - if SeekFirst is TRUE, will put the cursor on the first row of results
-      - raise an ESQLDBZeos on any error }
+    /// Access the next or first row of data from the SQL Statement result
+    // - return true on success, with data ready to be retrieved by Column*() methods
+    // - return false if no more row is available (e.g. if the SQL statement
+    // is not a SELECT but an UPDATE or INSERT command)
+    // - if SeekFirst is TRUE, will put the cursor on the first row of results
+    // - raise an ESQLDBZeos on any error
     function Step(SeekFirst: boolean = false): boolean; override;
-    {{ return a Column integer value of the current Row, first Col is 0 }
+    /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: Integer): Int64; override;
-    {{ returns TRUE if the column contains NULL }
+    /// returns TRUE if the column contains NULL
     function ColumnNull(Col: Integer): boolean; override;
-    {{ return a Column floating point value of the current Row, first Col is 0 }
+    /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDouble(Col: Integer): double; override;
-    {{ return a Column date and time value of the current Row, first Col is 0 }
+    /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: Integer): TDateTime; override;
-    {{ return a Column currency value of the current Row, first Col is 0 }
+    /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: Integer): currency; override;
-    {{ return a Column UTF-8 encoded text value of the current Row, first Col is 0 }
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: Integer): RawUTF8; override;
-    {{ return a Column as a blob value of the current Row, first Col is 0 }
+    /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: Integer): RawByteString; override;
   end;
 
@@ -386,8 +386,8 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
      (aServerName[Length(aServerName)-1]=']')) then begin
     fServerName := Copy(aServerName,1,BrakedPos-1);
     fDBMSName := Copy(aServerName,BrakedPos+1,PosEx(']',aServerName)-1-BrakedPos);
-  end else 
-    fServerName := aServerName; 
+  end else
+    fServerName := aServerName;
   if (fServerName<>'') and (PosEx(':',fServerName)=0) then
     fServerName := fServerName+':';
   if not IdemPChar(Pointer(aServerName),'ZDBC:') then
@@ -406,31 +406,31 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     ConnectionProperties:
     Make it possible to Assign Parameters on the fly e.g.:
     FireBird:
-      - add custom TIL's by hand if tiNone was set. or some more custom settings:
+     - add custom TIL's by hand if tiNone was set. or some more custom settings:
         see ZDbcInterbaseUtils.pas: TransactionParams and DatabaseParams
-      - "hard_commit=true" False by default
+     - "hard_commit=true" False by default
     PostgreSQL:
-      - "oidasblob=true" - False by default
+     - "oidasblob=true" - False by default
         notify Zeos should use Oid fields as BLob's
-      - "CheckFieldVisibility=True/False"
+     - "CheckFieldVisibility=True/False"
         notify Zeos should determine temporary tables field meta informations too
         required for mORMot?
-      - "NoTableInfoCache=True/False" - False by default
+     - "NoTableInfoCache=True/False" - False by default
         notify Zeos it should use internal TableInfo-cache.
         Set the value to true to save memory
     ADO:
       7.3up
-      - "internal_buffer_size=X" in bytes default are 128KB
+     - "internal_buffer_size=X" in bytes default are 128KB
        this is the max size in bytes you allow Zeos to use for batch-ole array_bindings
        This parameter is only used if "use_ole_update_params=True"
-      - "use_ole_update_params=True/False" default = False
+     - "use_ole_update_params=True/False" default = False
        bypassing slow MSADO15.DLL and direct use OleDB parameters for all kind
        of updates including batch Note: current code is also able to handle Out/InOut
        params except for out/inout lob's.
       note: both internal_buffer_size and use_ole_update_params can be used as
        statement parameters as well
     Oracle:
-      - "row_prefetch_size=x! in bytes
+     - "row_prefetch_size=x! in bytes
        this value will be send to OCI and indicates Oracle which
        row_prefetch_size you allow to execute a query
   }
@@ -693,7 +693,7 @@ begin
   inherited Create(aProperties);
   fDatabase := DriverManager.GetConnectionWithParams(
     (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
-  fDatabase.SetReadOnly(false); 
+  fDatabase.SetReadOnly(false);
   // about transactions, see http://synopse.info/forum/viewtopic.php?id=2209
   fDatabase.SetAutoCommit(true);
   fDatabase.SetTransactionIsolation(tiReadCommitted);
@@ -712,7 +712,7 @@ begin
     fDatabase.Open;
     Log.Log(sllDB,'Connected to % using % %',
       [fProperties.ServerName,fProperties.DatabaseName,fDatabase.GetClientVersion]);
-    inherited Connect; // notify any re-connection 
+    inherited Connect; // notify any re-connection
   except
     on E: Exception do begin
       Log.Log(sllError,E);
@@ -1098,7 +1098,7 @@ var col: integer;
 procedure WriteIZBlob;
 var blob: IZBlob;
 begin
-  blob := fResultSet.GetBlob(col+1);  
+  blob := fResultSet.GetBlob(col+1);
   WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
 end;
 procedure WriteUTF8;
@@ -1107,7 +1107,7 @@ begin
   tmp := fResultSet.GetUTF8String(Col+1);
   WR.AddJSONEscape(pointer(tmp),length(tmp));
 end;
-begin // take care of the layout of internal ZDBC buffers for each provider 
+begin // take care of the layout of internal ZDBC buffers for each provider
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do begin
@@ -1148,7 +1148,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         end;
         WR.Add('"');
       end;
-      ftBlob:              
+      ftBlob:
         if fForceBlobAsNull then
           WR.AddShort('null') else
         if fDBMS in [dMySQL,dSQLite] then begin

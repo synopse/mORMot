@@ -86,7 +86,7 @@ uses
   SynLog,
   SysUtils;
 
-  
+
 { ************ Unit-Testing classes and functions }
 
 type
@@ -205,10 +205,10 @@ type
       const Precision: double=1E-12; const msg: string = ''): Boolean;
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[...
-    // and ExpectedResult=true 
+    // and ExpectedResult=true
     procedure CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
       CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = '');
-    /// create a temporary string random content, WinAnsi (code page 1252) content 
+    /// create a temporary string random content, WinAnsi (code page 1252) content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomString(CharCount: Integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
@@ -304,7 +304,7 @@ type
     // optional identifier to be supplied to its constructor
     // - if the executable was launched with a parameter, it will be used as
     // file name for the output - otherwise, tests information will be written
-    // to the console 
+    // to the console
     // - it will optionally enable full logging during the process
     // - a typical use will first assign the same log class for the whole
     // framework, if the mORMot.pas unit is to be used - in such case, before
@@ -398,7 +398,7 @@ type
     /// called when a test case failed: log into the file
     procedure Failed(const msg: string; aTest: TSynTestCase); override;
     /// this method is called before every run
-    // - overridden implementation to implement a per-test case logging 
+    // - overridden implementation to implement a per-test case logging
     function BeforeRun(const TestName: RawUTF8): IUnknown; override;
   public
     /// create the test instance and initialize associated LogFile instance

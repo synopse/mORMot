@@ -231,7 +231,7 @@ type
   protected
     procedure Changed; virtual;
     procedure Changing; virtual;
-    function Get(Index: integer): string; override; 
+    function Get(Index: integer): string; override;
     function GetParaString(Index: integer): string;
     function GetParagraph(Index: integer): PParagraph;
     procedure Put(Index: integer; const S: string); override;
@@ -409,7 +409,7 @@ type
     FGroupUndo: boolean;
     {$ENDIF MEMOEX_UNDO}
     {$IFDEF MEMOEX_COMPLETION}
-    FCompletion: TCompletion; 
+    FCompletion: TCompletion;
     {$ENDIF MEMOEX_COMPLETION}
 
     { internal - Columns and rows attributes }
@@ -433,7 +433,7 @@ type
 
     { internal - selection attributes }
     FSelected: boolean;
-    FSelBlock: boolean; 
+    FSelBlock: boolean;
     FSelBegX, FSelBegY, FSelEndX, FSelEndY: integer;
     FUpdateSelBegX, FUpdateSelEndX, FUpdateSelBegY, FUpdateSelEndY: integer;
     FSelStartX, FSelStartY: integer;
@@ -1708,7 +1708,7 @@ function StringDynArrayGetSize(V: PIntegerArray; FCount: integer): integer;
 var i: integer;
 begin
   result := 0;
-  for i := 0 to FCount-1 do 
+  for i := 0 to FCount-1 do
     if V^[i]<>0 then // very fast inc(Result, length(FStrings[i-1])
       inc(result,PInteger(V^[i]-4)^);
 end;
@@ -3131,7 +3131,7 @@ var
   {$ENDIF}
   oldChar: string;
   i, _X, _Y, Y: integer;
-  b: boolean; 
+  b: boolean;
 begin
   ReLine;
   case Key of
@@ -4832,7 +4832,7 @@ begin
   {$ENDIF MEMOEX_UNDO}
   Delete(S, iBeg, iEnd - iBeg);
   Insert(S1, S, iBeg);
-  FLines.Text := S; 
+  FLines.Text := S;
   CaretFromPos(iBeg + NewCaret - 1, X, Y);
   SetCaretInternal(X, Y);
   Changed;
@@ -6889,7 +6889,7 @@ begin
     p := PosFromCaret(CaretX,CaretY);
     FWordWrap := Value;
     FLines.Reformat;
-    CantUndo;                     
+    CantUndo;
     CaretFromPos(p,x,y);
     SetCaret(0,Y); // aller en début de ligne (sinon risque de bug)
   end;

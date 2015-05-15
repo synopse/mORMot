@@ -26,7 +26,7 @@ unit SynBigTable;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -368,7 +368,7 @@ type
     // i.e. you can call TSynBigTable.FileFormatCheck,
     // TSynBigTableString.FileFormatCheck, TSynBigTableRecord.FileFormatCheck
     // or TSynBigTableMetaData.FileFormatCheck to verify a file layout
-    // - uses the protected virtual InternalMagic method 
+    // - uses the protected virtual InternalMagic method
     class function FileFormatCheck(const aFileName: TFileName): boolean;
     /// virtual method which can be used to store additional data into the header
     // - do nothing by default in TSynBigTable (means no additional header data)
@@ -387,7 +387,7 @@ type
     function GetOffset(Index: integer): Int64;
     /// retrieve an index from a supplied ID, and the associated AliasReal[] index
     function InternalIDToIndex(aID: integer; var aAliasIndex: integer): integer;
-    /// update the content, returing the updated physical ID 
+    /// update the content, returing the updated physical ID
     function InternalUpdateFromIndex(const aData: RawByteString;
       aID, aIndex, aAliasIndex: integer; var aNewIndex: cardinal): integer;
     /// will recreate the file processing all deleted or updated data, following
@@ -468,7 +468,7 @@ type
     // in the callback, but only the ID (faster)
     procedure GetIterating(aCallBack: TSynBigTableIterateEvent;
       Order: TSynBigTableIterationOrder=ioPhysical; Opaque: pointer=nil;
-      DontRetrieveData: Boolean=false); 
+      DontRetrieveData: Boolean=false);
     /// fast retrieval of all IDs
     // - returned in physical or increasing ID value order
     // - returns the number of IDs stored in the integer array
@@ -623,7 +623,7 @@ type
   end;
 
   TSynBigTableTableClass = class of TSynBigTableTable;
-  
+
   /// an abstract class, associating a TSynTable to a Big Table
   // - use optimized TSynTable logic for handling field values, using
   // our SBF compact binary format (similar to BSON or Protocol Buffers)
@@ -754,7 +754,7 @@ type
     fMetaDataCount: Integer;
     fMetaDataRecords: TRawByteStringDynArray;
     fMetaDataID: TIntegerDynArray;
-    /// retrieve pointer to the metadata, SBF-encoded  
+    /// retrieve pointer to the metadata, SBF-encoded
     function GetMetaData(aPhysicalIndex: integer; var aTempData: RawByteString): pointer;
     /// faster method using function[]
     function GetID(Index: integer): integer; override;
@@ -860,7 +860,7 @@ type
     function CustomHeader(Action: TSynBigTableCustomHeader;
       WriteBuffer: TFileBufferWriter): integer; override;
     class function InternalMagic: integer; override;
-    /// version used by Search() method, calling the default GetIterating method 
+    /// version used by Search() method, calling the default GetIterating method
     procedure SearchIterating(aCallBack: TSynBigTableIterateEvent;
       Order: TSynBigTableIterationOrder; Opaque: pointer); override;
     /// refresh all fields indexes
@@ -1251,7 +1251,7 @@ begin
     rec.Init(T.Table);
     start(format('Add %s records',[nstr]));
     for i := 0 to n-1 do begin
-      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1])); // same as rec.Field['text'] := 
+      rec.SetFieldSBFValue(fText,fText.SBF(By8[n-i-1])); // same as rec.Field['text'] :=
       rec.SetFieldSBFValue(fInt,fInt.SBF(i));
       if DoRecord and (TRec.RecordAdd(rec)<>i+1) then
         exit else
@@ -1277,7 +1277,7 @@ begin
     if DoRecord then
       T := TSynBigTableRecord.Create(FN,'test') else
       T := TSynBigTableMetaData.Create(FN,'test');
-    if not TRTest(T) then exit; 
+    if not TRTest(T) then exit;
     start('Add a field');
     T.AddField('bool',tftBoolean);
     start('Recreate file with new field layout');
@@ -1309,7 +1309,7 @@ begin
     end;
     fInt := T.Table['int'];
     if (fInt=nil) or not TRTest(T) then exit;
-    nInt := 500; // unique field update is slow by design, need to refresh index 
+    nInt := 500; // unique field update is slow by design, need to refresh index
     start(format('%d record unique Int field content update',[nint]));
     for i := 0 to nint-1 do begin
       id := i shl 3+1;
@@ -1919,7 +1919,7 @@ var i,j, n, aID, index: integer;
     next: array[deleted..alias] of integer;
     stop: array[deleted..alias] of cardinal;
     GetID: PInteger absolute Opaque;
-    Physical: PIterateGetDynArrayIntegerOpaque absolute Opaque; 
+    Physical: PIterateGetDynArrayIntegerOpaque absolute Opaque;
 label CallBack;
 begin
   if self=nil then
@@ -2602,7 +2602,7 @@ begin // in some cases, Data can be nil (some data string='')
   inc(PInteger(Opaque)^); // will fail test if not reached this line
 end;
 
-function TSynBigTable.TestIterateEventSpeed(Sender: TObject; Opaque: pointer; 
+function TSynBigTable.TestIterateEventSpeed(Sender: TObject; Opaque: pointer;
   ID, Index: integer; Data: pointer; DataLen: integer): boolean;
 begin
   result := true; // void call-back to test GetIterating() speed
@@ -2667,7 +2667,7 @@ begin
             SetLength(fOffset32,0);
           end else
             SetLength(fOffset64,fCount+fInMemoryCount) else
-          // total size < 1 GB -> less memory and faster with fOffset32[]  
+          // total size < 1 GB -> less memory and faster with fOffset32[]
           SetLength(fOffset32,fCount+fInMemoryCount);
         SetLength(fID,fCount+fInMemoryCount);
         for i := 0 to fInMemoryCount-1 do begin
@@ -3158,14 +3158,14 @@ begin
   if Pack then begin
     for i := 1 to n do
       if IntegerScanIndex(pointer(Deleted),length(Deleted),i)<0 then
-      if T.Get(i,Data) then 
+      if T.Get(i,Data) then
         if CheckFailed(TestString(i,Data)) then
           exit else
         if withString then
         if CheckFailed(TS.Get(Int32ToUTF8(i),Data)) or CheckFailed(TestString(i,Data)) then
           exit;
   end else
-    for i := 1 to n do 
+    for i := 1 to n do
       if T.Get(i,Data) THEN
         if CheckFailed(TestString(i,Data)) then
           exit else
@@ -3719,7 +3719,7 @@ begin
   Table.AddedField := nil;
   for i := 0 to Count-1 do
     fMetaDataRecords[i] := Table.UpdateFieldRecord(pointer(fMetaDataRecords[i]),AvailableFields);
-  fModified := true; 
+  fModified := true;
 end;
 
 constructor TSynBigTableMetaData.Create(const aFileName: TFileName;
@@ -3818,7 +3818,7 @@ function TSynBigTableMetaData.IndexToID(aIndex: Integer;
 begin
   if cardinal(aIndex)<cardinal(fMetaDataCount) then
     result := fMetaDataID[aIndex] else
-    result := 0; 
+    result := 0;
 end;
 
 class function TSynBigTableMetaData.InternalMagic: integer;

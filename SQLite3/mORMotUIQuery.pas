@@ -57,7 +57,7 @@ unit mORMotUIQuery;
     by default, will use only VCL components (i.e. TSynButton) for the form
   - handle TModTime published property / sftModTime SQL field
   - handle TCreateTime published property / sftCreateTime SQL field
-  
+
   Version 1.18
   - renamed SQLite3UIQuery.pas to mORMotUIQuery.pas
 
@@ -118,7 +118,7 @@ type
     // some custom queries, if necessary
     constructor Create(aOwner: TComponent; aTableToGrid: TSQLTableToGrid); reintroduce;
   end;
-                      
+
 
 
 implementation

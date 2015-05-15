@@ -34,7 +34,7 @@ unit PasZip;
     and some critical part rewrite
    - included .zip archive reading from file, resource or direct memory
    - included .zip archive write into a file (new .zip creation, not update)
-   
+
 }
 
 {$WARNINGS OFF}
@@ -249,7 +249,7 @@ type
   /// write-only access for creating a .zip archive file
   // - not to be used to update a .zip file, but to create a new one
   // - update can be done manualy by using a TZipRead instance and the
-  // AddFromZip() method 
+  // AddFromZip() method
   TZipWrite = class
   protected
     fAppendOffset: cardinal;
@@ -420,7 +420,7 @@ type
   PInflateBlocksState = ^TInflateBlocksState;
   TInflateBlocksState = record
     Mode: TInflateBlockMode;     // current inflate block mode
-    // mode dependent information 
+    // mode dependent information
     Sub: record                        // submode
       case Byte of
         0:
@@ -490,8 +490,8 @@ const
   MIN_MATCH = 3;
   MAX_MATCH = 258;
 
-  
-//----------------- deflation support 
+
+//----------------- deflation support
 
 const
   LENGTH_CODES = 29;         // number of length codes, not counting the special END_BLOCK code
@@ -504,7 +504,7 @@ const
   MAX_BITS = 15;             // all codes must not exceed MAX_BITS bits
 
 type
-  // data structure describing a single value and its code string 
+  // data structure describing a single value and its code string
   PTreeEntry = ^TTreeEntry;
   TTreeEntry = record
     fc: record
@@ -534,10 +534,10 @@ type
     Elements: Integer;        // max number of elements in the tree
     MaxLength: Integer;       // max bit length for the codes
   end;
-  
+
   PTreeDescriptor = ^TTreeDescriptor;
   TTreeDescriptor = record
-    DynamicTree: PTree;     
+    DynamicTree: PTree;
     MaxCode: Integer;                        // largest code with non zero frequency
     StaticDescriptor: PStaticTreeDescriptor; // the corresponding static tree
   end;
@@ -593,7 +593,7 @@ type
     MatchAvailable: Boolean;    // set if previous match exists
     StringStart: Cardinal;      // start of string to insert
     MatchStart: Cardinal;       // start of matching string
-    Lookahead: Cardinal;        // number of valid bytes ahead in window 
+    Lookahead: Cardinal;        // number of valid bytes ahead in window
 
     // Length of the best match at previous step. Matches not greater than this
     // are discarded. This is used in the lazy match evaluation.
@@ -605,11 +605,11 @@ type
 
     LiteralDescriptor: TTreeDescriptor; // Descriptor for literal tree
     DistanceDescriptor: TTreeDescriptor; // Descriptor for distance tree
-    BitLengthDescriptor: TTreeDescriptor; // Descriptor for bit length tree 
+    BitLengthDescriptor: TTreeDescriptor; // Descriptor for bit length tree
 
     BitLengthCounts: array[0..MAX_BITS] of Word; // number of codes at each bit length for an optimal tree
 
-    Heap: array[0..2 * L_CODES] of Integer; // heap used to build the Huffman trees 
+    Heap: array[0..2 * L_CODES] of Integer; // heap used to build the Huffman trees
     HeapLength: Integer;        // number of elements in the heap
     HeapMaximum: Integer;       // element of largest frequency
     // The sons of Heap[N] are Heap[2 * N] and Heap[2 * N + 1]. Heap[0] is not used.
@@ -652,7 +652,7 @@ type
     ValidBits: Integer;         // Number of valid bits in BitsBuffer. All Bits above the last valid bit are always zero.
   end;
 
-//----------------- Huffmann trees 
+//----------------- Huffmann trees
 
 const
   DIST_CODE_LEN = 512; // see definition of array dist_code below
@@ -840,12 +840,12 @@ const
   REPZ_3_10 = 17;               // repeat a zero length 3-10 times  (3 Bits of repeat count)
   REPZ_11_138 = 18;             // repeat a zero length 11-138 times  (7 Bits of repeat count)
 
-  // extra bits for each length code 
+  // extra bits for each length code
   ExtraLengthBits: array[0..LENGTH_CODES - 1] of Integer = (
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
   );
 
-  // extra bits for each distance code 
+  // extra bits for each distance code
   ExtraDistanceBits: array[0..D_CODES-1] of Integer = (
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10 ,10, 11, 11, 12, 12, 13, 13
   );
@@ -888,7 +888,7 @@ const
     MaxLength: MAX_BL_BITS
   );
 
-//----------------- Inflate support 
+//----------------- Inflate support
 
 const
   InflateMask: array[0..16] of Cardinal = (
@@ -907,7 +907,7 @@ begin
   P := Z.NextOutput;
   Q := S.Read;
 
-  // compute number of bytes to copy as far as end of window 
+  // compute number of bytes to copy as far as end of window
   if Cardinal(Q) <= Cardinal(S.Write) then N := Cardinal(S.Write) - Cardinal(Q)
                                       else N := Cardinal(S.zend) - Cardinal(Q);
   if N > Z.AvailableOutput then N := Z.AvailableOutput;
@@ -1040,7 +1040,7 @@ begin
             Dec(M, C);
             // offset before Dest
             if (Cardinal(Q) - Cardinal(S.Window)) >= D then begin
-              // copy without extra 
+              // copy without extra
               R := Q;
               Dec(R, D);
             end
@@ -1563,7 +1563,7 @@ end;
 const
   // Maximum Size of dynamic tree. The maximum found in an integer but non-exhaustive search was 1004 huft structures
   // (850 for length/literals and 154 for distances, the latter actually the result of an exhaustive search).
-  // The actual maximum is not known, but the value below is more than safe. 
+  // The actual maximum is not known, but the value below is more than safe.
   MANY = 1440;
 
   // Tables for deflate from PKZIP'S appnote.txt
@@ -1618,7 +1618,7 @@ const
   // bits. The distance table codes 30 possible values, or a little less
   // than five bits, flat. The optimum values for speed end up being
   // about one bit more than those, so LiteralTreeBits is 8 + 1 and DistanceTreeBits is 5 + 1.
-  // The optimum values may differ though from machine to machine, and possibly even between compilers. 
+  // The optimum values may differ though from machine to machine, and possibly even between compilers.
 
 const
   // maximum bit length of any code,
@@ -1649,7 +1649,7 @@ function BuildHuffmanTables(const B: array of Cardinal; N, S: Cardinal; const D,
 // finally V is a working area which receives values in order of bit length
 
 var
-  A: Cardinal;                     // counter for codes of length K 
+  A: Cardinal;                     // counter for codes of length K
   F: Cardinal;                     // I repeats in table every F entries
   G: Integer;                      // maximum code Length
   H: Integer;                      // table Level
@@ -1830,7 +1830,7 @@ Begin
           Temp^ := Q;
       end;
 
-      // set up table entry in R 
+      // set up table entry in R
       R.Bits := Byte(K - W);
 
       // out of values -> invalid code
@@ -1881,11 +1881,11 @@ Begin
     Inc(K);
   end;
 
-  // Return Z_BUF_ERROR if we were given an incomplete table 
+  // Return Z_BUF_ERROR if we were given an incomplete table
   if (Y <> 0) and (G <> 1) then
     Result := Z_BUF_ERROR else
     Result := Z_OK;
-end; 
+end;
 
 
 function InflateTreesBits(var C: array of Cardinal; var BB: Cardinal; var TB: PInflateHuft;
@@ -1897,8 +1897,8 @@ function InflateTreesBits(var C: array of Cardinal; var BB: Cardinal; var TB: PI
 // Z - for messages
 var
   R: Integer;
-  HN: Cardinal;          // hufts used in space 
-  V: array[0..18] of Cardinal;     // work area for BuildHuffmanTables 
+  HN: Cardinal;          // hufts used in space
+  V: array[0..18] of Cardinal;     // work area for BuildHuffmanTables
 begin
   HN := 0;
   R := BuildHuffmanTables(C, 19, 19, CopyLengths, CopyLiteralExtra, @TB, BB, HP, HN, V);
@@ -1954,7 +1954,7 @@ var
 const
   // number of hufts used by fixed tables
   FIXEDH = 544;
-  
+
 var
   FixedTablesMemory: array[0..FIXEDH - 1] of TInflateHuft;
   FixedLiteralBits: Cardinal;
@@ -1977,7 +1977,7 @@ var
   F: Cardinal;       // number of hufts used in FixedTablesMemory
 
 begin
-  // build fixed tables if not already (multiple overlapped executions ok) 
+  // build fixed tables if not already (multiple overlapped executions ok)
   if not FixedBuild then begin
     F := 0;
     C := nil;
@@ -2099,8 +2099,8 @@ var
   P: PByte;       // input data pointer
   N: Cardinal;    // bytes available there
   Q: PByte;       // output Window write pointer
-  M: Cardinal;    // bytes to end of window or read pointer 
-  // fixed code blocks 
+  M: Cardinal;    // bytes to end of window or read pointer
+  // fixed code blocks
   LiteralBits,
   DistanceBits: Cardinal;
   TL,
@@ -2883,7 +2883,7 @@ end;
 
           FillChar(S.BitLengthCounts, SizeOf(S.BitLengthCounts), 0);
 
-          // in a first pass, compute the optimal bit lengths (which may overflow in the case of the bit length tree) 
+          // in a first pass, compute the optimal bit lengths (which may overflow in the case of the bit length tree)
           Tree[S.Heap[S.HeapMaximum]].dl.Len := 0; // root of the heap
 
           for H := S.HeapMaximum + 1 to HEAP_SIZE - 1 do begin
@@ -2948,7 +2948,7 @@ end;
         Elements: Integer;
         N, M: Integer;    // iterate over heap elements
         MaxCode: Integer; // largest code with non zero frequency
-        Node: Integer;    // new node being created 
+        Node: Integer;    // new node being created
 
       begin
         Tree := Descriptor.DynamicTree;
@@ -2957,7 +2957,7 @@ end;
         MaxCode := -1;
 
         // Construct the initial Heap, with least frequent element in Heap[SMALLEST].
-        // The sons of Heap[N] are Heap[2 * N] and Heap[2 * N + 1]. Heap[0] is not used. 
+        // The sons of Heap[N] are Heap[2 * N] and Heap[2 * N + 1]. Heap[0] is not used.
         S.HeapLength := 0;
         S.HeapMaximum := HEAP_SIZE;
 
@@ -3332,7 +3332,7 @@ end;
               Dec(Distance, BaseDistance[Code]);
               SendBits(S, Distance, Extra);   // send the extra distance bits
             end;
-          end; // literal or match pair? 
+          end; // literal or match pair?
 
           // Check that the overlay between PendingBuffer and DistanceBuffer + LiteralBuffer is ok
         until I >= S.LastLiteral;
@@ -3363,12 +3363,12 @@ end;
       // if Iompression failed and this is the first and last block,
       // and if the .zip file can be seeked (to rewrite the local header),
       // the whole file is transformed into a stored file.
-      // (4 are the two words for the lengths) 
+      // (4 are the two words for the lengths)
       if (StoredLength + 4 <= OptimalByteLength) and Assigned(Buffer) then begin
         // The test Buffer <> nil is only necessary if LiteralBufferSize > WSize.
         // Otherwise we can't have processed more than WSize input bytes since
         // the last block dlush, because compression would have been successful.
-        // if LiteralBufferSize <= WSize, it is never too late to transform a block into a stored block. 
+        // if LiteralBufferSize <= WSize, it is never too late to transform a block into a stored block.
         TreeStroredBlock(S, Buffer, StoredLength, EOF);
       end
       else
@@ -3919,7 +3919,7 @@ begin
     result := result and (i2 > 0);
     if result then begin
       with lhr do begin
-        signature     := $06054b50+1; dec(signature); // +1 to avoid finding it 
+        signature     := $06054b50+1; dec(signature); // +1 to avoid finding it
         thisDisk      := 0;
         headerDisk    := 0;
         thisFiles     := i2;
@@ -4018,7 +4018,7 @@ begin
     if Size<=sizeof(lhr^) then
       break;
   end;
-  if lhr^.signature+1<>$06054b51 then begin // +1 to avoid finding it 
+  if lhr^.signature+1<>$06054b51 then begin // +1 to avoid finding it
     UnMap;
     MessageBox(0,'ZIP format',nil,MB_SYSTEMMODAL or MB_ICONERROR);
     exit;
@@ -4028,7 +4028,7 @@ begin
   SetLength(Entry,lhr^.totalFiles); // fill Entry[] with the Zip headers
   H := @BufZip[lhr^.headerOffset];
   for i := 1 to lhr^.totalFiles do begin
-    if H^.signature+1<>$02014b51 then begin // +1 to avoid finding it 
+    if H^.signature+1<>$02014b51 then begin // +1 to avoid finding it
       UnMap;
       MessageBox(0,'ZIP format',nil,MB_SYSTEMMODAL or MB_ICONERROR);
       exit;
@@ -4058,7 +4058,7 @@ begin
 end;
 
 constructor TZipRead.Create(Instance: THandle; const ResName: string; ResType: PChar);
-// locked resources are memory map of the executable -> direct access is easy  
+// locked resources are memory map of the executable -> direct access is easy
 var HResInfo: THandle;
     HGlobal: THandle;
 begin
@@ -4136,7 +4136,7 @@ end;
 function TZipRead.UnZip(aIndex: integer): string;
 var len: cardinal;
 begin
-  result := ''; // somewhat faster is memory is reallocated each time 
+  result := ''; // somewhat faster is memory is reallocated each time
   if cardinal(aIndex)>=cardinal(Count) then
     exit;
   with Entry[aIndex] do begin
@@ -4173,7 +4173,7 @@ begin
     DestPath := DestPath+'\';
   F := CreateFile(pointer(DestPath+Entry[aIndex].Name),
     GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, 0, 0);
-  if F<>INVALID_HANDLE_VALUE then 
+  if F<>INVALID_HANDLE_VALUE then
   with Entry[aIndex] do
   try
     Size := GetFileSize(F, nil);

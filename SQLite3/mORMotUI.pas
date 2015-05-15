@@ -114,7 +114,7 @@ unit mORMotUI;
     - added AutoResizeColumns optional parameter to TSQLTableToGrid.Refresh() -
       see feature request [c2e1ff324b]
     - added TSQLTableToGrid.OnSort event handler - see request [bffff9b4c3]
-      
+
 *)
 
 
@@ -193,7 +193,7 @@ type
   // ready to be used with the VCL for all Delphi compiler versions
   // - if the cell at FiieldIndex/RowIndex is to have a custom content,
   // shall set the Text variable content and return TRUE
-  // - if returns FALSE, the default content will be displayed 
+  // - if returns FALSE, the default content will be displayed
   TValueTextEvent = function(Sender: TSQLTable; FieldIndex, RowIndex: Integer; var Text: string): boolean of object;
 
   /// kind of event used to change some text on the fly for popup hint
@@ -376,12 +376,12 @@ type
     procedure SetMark(aAction: TSQLAction);
     /// retrieve the Marked[] bits array
     function GetMarkedBits: pointer;
-    {{ read-only access to a particular row values, as VCL text
-     - Model is one TSQLModel instance (used to display TRecordReference)
-     - returns the text as generic string, ready to be displayed via the VCL
-       after translation, for sftEnumerate, sftTimeLog, sftRecord and all other
-       properties
-     - uses OnValueText property Event if defined by caller }
+    /// read-only access to a particular row values, as VCL text
+    // - Model is one TSQLModel instance (used to display TRecordReference)
+    // - returns the text as generic string, ready to be displayed via the VCL
+    // after translation, for sftEnumerate, sftTimeLog, sftRecord and all other
+    // properties
+    // - uses OnValueText property Event if defined by caller
     function ExpandRowAsString(Row: integer; Client: TObject): string;
     /// retrieve the associated TSQLTableToGrid from a specific TDrawGrid
     class function From(Grid: TDrawGrid): TSQLTableToGrid;
@@ -595,7 +595,7 @@ procedure AddPortToFirewall(const EntryName: string; PortNumber: cardinal);
 // the header properly (using the current mORMoti18n.pas language settings, if any)
 // - the Client optional parameter will be used to display any RecordRef column
 // - all data will be stored within the TStringGrid: you can safely release the
-// Source data after having called this procedure  
+// Source data after having called this procedure
 procedure FillStringGrid(Source: TSQLTable; Dest: TStringGrid; Client: TSQLRest=nil);
 
 
@@ -1124,7 +1124,7 @@ begin
       alRight: begin
         SetTextAlign(Handle,TA_RIGHT);
         XInc := L-4;
-      end else 
+      end else
         XInc := 4;
       end;
       if WithMark then
@@ -1143,7 +1143,7 @@ begin
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
           length(StringValue), nil); // translated text
       //sftID,sftTID:
-      // proposal: display ID as TSQLRecord content? better compute it in SELECT 
+      // proposal: display ID as TSQLRecord content? better compute it in SELECT
       else begin
         // normal field value: unicode text (even with Delphi 2-2007 VCL), left aligned
         L := Table.GetWP(ARow,ACol,tmp,high(tmp));
@@ -1230,7 +1230,7 @@ begin
       // column changed -> sort ascending first
       SortForce(ACol,true);
   end else
-    // not first row: data 
+    // not first row: data
     if (Button=mbRight) and (ssRight in Shift) and Assigned(OnRightClickCell) then
       OnRightClickCell(Table,ACol,ARow,X,Y) else
     if (ssCtrl in Shift) or (Button<>mbLeft) then begin
@@ -1250,7 +1250,7 @@ begin
 end;
 
 resourcestring
-  sPutMarkedRowFirst = 'Sort marked rows first';    
+  sPutMarkedRowFirst = 'Sort marked rows first';
 
 procedure TSQLTableToGrid.DrawGridMouseMove(Sender: TObject;
   Shift: TShiftState; X, Y: Integer);
@@ -1562,7 +1562,7 @@ begin
     Invalidate;
   end;
   if AutoResizeColumns then
-    Resize(nil); 
+    Resize(nil);
   if Assigned(OnSelectCell) then
      OnSelectCell(Owner,0,CurrentRow,Bulk); // refresh details
 end;
@@ -1684,7 +1684,7 @@ end;
 
 function TSQLTableToGrid.GetMarkedTotalCount: integer;
 begin
-  with TDrawGrid(Owner) do 
+  with TDrawGrid(Owner) do
     if not fMarkAllowed or (fMarked=nil) then
       result := 0 else
       result := GetBitsCount(fMarked[0],RowCount);
@@ -1692,7 +1692,7 @@ end;
 
 function TSQLTableToGrid.ExpandRowAsString(Row: integer; Client: TObject): string;
 var F, i: integer;
-    Text: string; // generic VCL-ready string 
+    Text: string; // generic VCL-ready string
 begin
   result := '';
   if (self=nil) or (cardinal(Row)>cardinal(Table.RowCount)) or (Table.FieldCount<=0) then
@@ -1713,7 +1713,7 @@ end;
 procedure TSQLTableToGrid.OnTableUpdate(State: TOnTableUpdateState);
 begin
   if (self=nil) or (fMarked=nil) then
-    exit; // wrong parameters 
+    exit; // wrong parameters
   case State of
     tusPrepare:
       // save current marked entries
@@ -1842,7 +1842,7 @@ begin
 end;
 var R: integer;
 function Btn(const ResName: string): TSpeedButton;
-begin 
+begin
   dec(R,BUT_SIZE+1);
   result := TSpeedButton.Create(aTopMostPanel);
   result.Parent := aTopMostPanel;

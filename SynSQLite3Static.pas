@@ -57,7 +57,7 @@ unit SynSQLite3Static;
   Will work only on Windows 32 bit (with Delphi or FPC, with expected .obj / .o)
   or Linux 32 bit (with FPC, with the corresponding .o)
   under other platforms, this unit will just do nothing (but compile).
-  
+
   To compile our patched SQlite3.c version, available in this source folder:
   - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
   - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
@@ -80,7 +80,7 @@ unit SynSQLite3Static;
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
   - under Win64, expects an external sqlite3-64.dll file to be available
-  - added sqlite3.backup_*() Online Backup API functions 
+  - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
 
 
@@ -102,10 +102,10 @@ procedure DoInitialization;
 begin
   FreeAndNil(sqlite3);
   try
-    sqlite3 := TSQLite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);        
+    sqlite3 := TSQLite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
-    on E: Exception do  
+    on E: Exception do
       {$ifdef LINUX}
       writeln(SQLITE_LIBRARY_DEFAULT_NAME+' initialization failed with ',
         E.ClassName,': ',E.Message);
@@ -173,7 +173,7 @@ type
 // - the first page (first 1024 bytes) is not encrypted, since its content
 // (mostly zero) can be used to easily guess the beginning of the key
 // - if the key is not correct, a ESQLite3Exception will be raised with
-// 'database disk image is malformed' (SQLITE_CORRUPT) at database opening 
+// 'database disk image is malformed' (SQLITE_CORRUPT) at database opening
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 {$endif}

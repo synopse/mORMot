@@ -89,7 +89,7 @@ type
   public
     /// initialize the virtual TDataSet from a FetchAllToBinary() buffer
     procedure From(const BinaryData: RawByteString;
-      DataRowPosition: PCardinalDynArray=nil); overload; virtual; 
+      DataRowPosition: PCardinalDynArray=nil); overload; virtual;
     /// initialize the virtual TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied ISQLDBRows instance can safely be freed by the caller,
     // since a private binary copy will be owned by this instance (in Data)
@@ -103,7 +103,7 @@ type
   end;
 
   /// TDataSet able to execute any SQL as SynDB's TSQLStatement result set
-  // - this class is not meant to be used by itself, but via TSynDBDataSet, 
+  // - this class is not meant to be used by itself, but via TSynDBDataSet,
   // defined in SynDBMidasVCL.pas, as a data provider able to apply updates to
   // the remote SynDB connection
   // - typical usage may be for instance over a SynDBRemote connection:
@@ -204,7 +204,7 @@ begin
 end;
 
 function ToDataSet(aOwner: TComponent; aStatement: ISQLDBRows;
-  aMaxRowCount: integer): TSynBinaryDataSet; 
+  aMaxRowCount: integer): TSynBinaryDataSet;
 begin
   if aStatement=nil then
     result  := nil else
@@ -323,7 +323,7 @@ procedure TSynDBSQLDataSet.InternalOpen;
 var Rows: ISQLDBRows;
 begin
   if fCommandText='' then begin
-    if fData<>'' then // called e.g. after From() method 
+    if fData<>'' then // called e.g. after From() method
       inherited InternalOpen;
     exit;
   end;

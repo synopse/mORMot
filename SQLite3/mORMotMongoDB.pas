@@ -29,7 +29,7 @@ unit mORMotMongoDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -44,12 +44,12 @@ unit mORMotMongoDB;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
     and feature request [0fee1d995c]
 
-  
+
   TODO:
   - complex WHERE clause with a MongoDB Query object instead of SQL syntax
     (mitigated by the fact that most SQL queries are translated into BSON
@@ -60,7 +60,7 @@ unit mORMotMongoDB;
   - allow PolyMorphic schemas: the same MongoDB collection may be able to
     store a hierarchy of TSQLRecord classes, storing only relevant fields in
     each document - this may be a huge benefit in common OOP work - could be
-    implemented in mORMot.pas for any DB - see [bf459fe126] and [da0bccd89e] 
+    implemented in mORMot.pas for any DB - see [bf459fe126] and [da0bccd89e]
   - SQLite3 Virtual Table mode, for full integration with mORMotDB - certainly
     in a dedicated mORMotDBMongoDB unit (but perhaps we may loose interest)
 
@@ -340,7 +340,7 @@ begin
     fStoredClassRecordProps.FieldBits[sftBlob],@fBSONProjectionBlobFieldsNames);
   CreateIndexes;
 end;
-    
+
 procedure TSQLRestStorageMongoDB.CreateIndexes;
 var F: integer;
 begin
@@ -550,11 +550,11 @@ begin
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: Invalid JSON context',[self]);
 end;
 
-function TSQLRestStorageMongoDB.EngineAdd(TableModelIndex: integer; 
+function TSQLRestStorageMongoDB.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var doc: TDocVariantData;
 begin
-  if (fCollection=nil) or (TableModelIndex<0) or 
+  if (fCollection=nil) or (TableModelIndex<0) or
     (fModel.Tables[TableModelIndex]<>fStoredClass) then
     result := 0 else
     try
@@ -1135,10 +1135,10 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
         if (Stmt.SQLStatement='') or // parsing failed
           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return '' to mark error
-          exit;                                                      
+          exit;
         extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
         if Stmt.SelectFunctionCount<>0 then
-          if (length(Stmt.Select)=1) and (Stmt.Select[0].Alias='') and 
+          if (length(Stmt.Select)=1) and (Stmt.Select[0].Alias='') and
              IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
           if Stmt.Where=nil then
             // was "SELECT Count(*) FROM TableName;"
@@ -1146,7 +1146,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             // was "SELECT Count(*) FROM TableName WHERE ..."
             if ComputeQuery then
               SetCount(fCollection.FindCount(Query)) else
-              exit else 
+              exit else
             // e.g. SELECT Distinct(Age),max(RowID) FROM TableName GROUP BY Age
             ComputeAggregate else
         // save rows as JSON from returned BSON

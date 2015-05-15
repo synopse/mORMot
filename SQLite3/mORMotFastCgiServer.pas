@@ -855,7 +855,7 @@ begin
       Content := ''; // force no content if only Header was asked for
     if (fResponseHeaders<>'') and
        (fResponseHeaders[length(fResponseHeaders)]<>#10) then
-      fResponseHeaders := fResponseHeaders+#13#10; 
+      fResponseHeaders := fResponseHeaders+#13#10;
     if not ExistsIniName(pointer(fResponseHeaders),HEADER_CONTENT_TYPE_UPPER) then
       fResponseHeaders := fResponseHeaders+HTML_CONTENT_TYPE_HEADER+#13#10;
     Content := fResponseHeaders+#13#10+Content;
@@ -877,7 +877,7 @@ begin
       result := SendPacket(pointer(fTempResponse),sizeof(TFCGIHeader)+Len+PadLen);
       inc(P,Len);
     until not Result or (P-pointer(Content)>=PLen);
-  end; 
+  end;
 end;
 
 {$endif}

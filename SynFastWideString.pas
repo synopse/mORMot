@@ -1,5 +1,5 @@
 /// this unit will patch the System.pas RTL to use a custom NON OLE COMPATIBLE
-// WideString type, NOT using the slow Windows API, but FastMM4 (without COW) 
+// WideString type, NOT using the slow Windows API, but FastMM4 (without COW)
 unit SynFastWideString;
 
 interface
@@ -30,7 +30,7 @@ interface
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -76,7 +76,7 @@ interface
 
    Since we add a trailing 0 byte at the end of the buffer, we need the
    memory manager to let enough place for it: oldest Borland MM does not :(
-   SO IF YOU WORK WITH A VERSION PRIOR TO DELPHI 2006, ADD FASTMM4 TO YOUR .DPR  
+   SO IF YOU WORK WITH A VERSION PRIOR TO DELPHI 2006, ADD FASTMM4 TO YOUR .DPR
 
   WARNING:
 
@@ -164,7 +164,7 @@ type // some types here since we do not want any dependency on any other units
   TByteArray = array[0..MaxInt-1] of byte;
 
 // we need to patch the oleaut32.dll library calls as defined in System.pas
-// -> retrieve CALL address from low-level funtions asm, then the API slot 
+// -> retrieve CALL address from low-level funtions asm, then the API slot
 
 function _SysAllocStringLen: pointer;
 asm
@@ -191,7 +191,7 @@ begin
   if PWord(source)^<>$25ff then // expect "jmp dword ptr []" asm
     halt;
   inc(PWord(source));
-  source := PPointer(source)^;  // get "dword ptr []" address of API redirection  
+  source := PPointer(source)^;  // get "dword ptr []" address of API redirection
   if VirtualProtect(source,SizeOf(source),PAGE_EXECUTE_READWRITE,RestoreProtection) then begin
     PPointer(source)^ := dest;  // replace oleaut32.dll API with our own function
     VirtualProtect(source,SizeOf(source),RestoreProtection,Ignore);

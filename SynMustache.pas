@@ -30,7 +30,7 @@ unit SynMustache;
 
   Contributor(s):
   - shura1990
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -244,7 +244,7 @@ type
     /// delete the partials
     destructor Destroy; override;
   end;
-  
+
   /// stores one {{mustache}} pre-rendered template
   // - once parsed, a template will be stored in this class instance, to be
   // rendered lated via the Render() method
@@ -341,7 +341,7 @@ type
     // - the rendering extended in fTags[] is supplied as parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
     procedure RenderContext(Context: TSynMustacheContext; TagStart,TagEnd: integer;
-      Partials: TSynMustachePartials; NeverFreePartials: boolean); 
+      Partials: TSynMustachePartials; NeverFreePartials: boolean);
     /// renders the {{mustache}} template from a variant defined context
     // - the context is given via a custom variant type implementing
     // TSynInvokeableVariantType.Lookup, e.g. TDocVariant or TSMVariant
@@ -404,7 +404,7 @@ type
 const
   /// this constant can be used to define as JSON a tag value
   NULL_OR_TRUE: array[boolean] of RawUTF8 = ('null','true');
-  
+
   /// this constant can be used to define as JSON a tag value as separator
   NULL_OR_COMMA: array[boolean] of RawUTF8 = ('null','","');
 
@@ -570,7 +570,7 @@ begin
     '!': Kind := mtComment;
     '>': Kind := mtPartial;
     '<': Kind := mtSetPartial;
-    '"': Kind := mtTranslate; 
+    '"': Kind := mtTranslate;
     else Kind := mtVariable;
     end;
     if Kind<>mtVariable then
@@ -615,7 +615,7 @@ begin
                   fTemplate.fInternalPartials := TSynMustachePartials.Create;
                 fTemplate.fInternalPartials.Add(Value,
                   TextStart+TextLen+2,fTemplate.fTags[j].TextStart);
-              end;               
+              end;
               break;
             end else
               raise ESynMustache.CreateFmt('Got {{/%s}}, expected {{/%s}}',

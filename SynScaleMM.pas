@@ -73,7 +73,7 @@ unit SynScaleMM;
 
   Version 0.4
   - Reallocation made a lot faster, in case of a growing size by some bytes
-  
+
 }
 
 interface
@@ -260,7 +260,7 @@ type
   end;
 
   POtherThreadFreedMemory = {$ifdef USEBITMAP}PMemBlock{$else}PMemHeader{$endif};
-  
+
   /// handles per-thread memory managment
   TThreadMemManager = object
   private
@@ -305,7 +305,7 @@ type
     /// all thread memory managers
     FFirstThreadMemory: PThreadMemManager;
     /// freed/used thread memory managers
-    // - used to cache the per-thread managers in case of multiple threads creation 
+    // - used to cache the per-thread managers in case of multiple threads creation
     FFirstFreedThreadMemory: PThreadMemManager;
     /// main thread manager (owner of all global mem)
     FMainThreadMemory: PThreadMemManager;
@@ -380,7 +380,7 @@ procedure Sleep(dwMilliseconds: DWORD); stdcall; external kernel32 name 'Sleep';
 {$ifdef SPINWAITBACKOFF}
 function  SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
 {$else}
-  {$undef BACKOFFSLEEP1} // this additional Sleep(1) is for spin wait backoff 
+  {$undef BACKOFFSLEEP1} // this additional Sleep(1) is for spin wait backoff
 {$endif}
 function  FlushInstructionCache(hProcess: THandle; const lpBaseAddress: Pointer; dwSize: DWORD): BOOL; stdcall; external kernel32 name 'FlushInstructionCache';
 function  GetCurrentProcess: THandle; stdcall; external kernel32 name 'GetCurrentProcess';
@@ -441,7 +441,7 @@ begin
   {$ifdef SCALE_INJECT_OFFSET}
   p  := @GetSmallMemManager;
   SetPermission(p, 5, PAGE_EXECUTE_READWRITE);
-  PCardinal(p+1)^ := GOwnTlsOffset;  // write fixed offset 
+  PCardinal(p+1)^ := GOwnTlsOffset;  // write fixed offset
   {$endif}
 end;
 
@@ -469,7 +469,7 @@ end;
 
 // compare oldvalue with destination: if equal then newvalue is set
 function CAS0(const oldValue: pointer; newValue: pointer; var destination): boolean;
-// - if failed, try to Switch to next OS thread, or Sleep 0 ms if it no next thread 
+// - if failed, try to Switch to next OS thread, or Sleep 0 ms if it no next thread
 asm // eax=oldValue, edx=newValue, ecx=Destination
   lock cmpxchg dword ptr [Destination],newValue
   // will compile as "lock cmpxchg dword ptr [ecx],edx" under Win32 e.g.
@@ -561,7 +561,7 @@ var i, j: NativeUInt;
 begin
   fillchar(self,sizeof(self),0);
   FThreadId := GetCurrentThreadId;
-  j := 32; 
+  j := 32;
   for i := Low(FMiniMemoryBlocks) to High(FMiniMemoryBlocks) do
   begin // 32, 64, 96, 128, 160, 192, 224 bytes
     FMiniMemoryBlocks[i].Owner := @Self;
@@ -618,7 +618,7 @@ begin
     ptempmem.Owner.FreeMem(ptempmem);
 {$endif}
   end;
-end;    
+end;
 
 procedure TThreadMemManager.Reset;
 var
@@ -664,11 +664,11 @@ begin
       break;
 {$ifdef BACKOFFSLEEP1}
     poldmem := FOtherThreadFreedMemory;
-    currentmem.NextMem  := poldmem;  
+    currentmem.NextMem  := poldmem;
     if CAS1(poldmem, currentmem, FOtherThreadFreedMemory) then
       break;
 {$endif}
-  until false;               
+  until false;
 end;
 
 function TThreadMemManager.FreeMem(aMemory: Pointer): NativeInt;
@@ -710,14 +710,14 @@ begin
     begin
       Result := nil;
       Exit;
-    end 
+    end
   else if aSize <= (length(FSmallMemoryBlocks)*256) then
     // blocks of 256: 256,512,768,1024,1280,1536,1792 bytes
     bm := @FSmallMemoryBlocks[(aSize-1) shr 8]
 {$ifdef USEMEDIUM}
   else if aSize <= (length(FMediumMemoryBlocks)*2048) then
     // blocks of 2048: 2048, 4096... bytes
-    bm := @FMediumMemoryBlocks[(aSize-1) shr 11]     
+    bm := @FMediumMemoryBlocks[(aSize-1) shr 11]
 {$endif}
   else
   begin
@@ -900,7 +900,7 @@ begin
     end;
   end;
   FRecursive := False;
-end;           
+end;
 
 function TMemBlockList.GetMemFromNewBlock: Pointer;
 var

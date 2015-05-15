@@ -16,7 +16,7 @@ uses
   mORMot,
   WinSvc,
   mORMotService;
-  
+
 const
   SERVICENAME = 'KOL_ServiceA';
   SERVICEEXE = 'd:\temp\debug\TestKOLService.exe';

@@ -25,10 +25,10 @@ type
   public
     /// initialize the Client for a specified network Server name
     constructor Create(const aServer: AnsiString); reintroduce;
-	/// used internaly to retrieve a given action
+  	/// used internaly to retrieve a given action
     function OnSetAction(TableIndex, ToolbarIndex: integer; TestEnabled: boolean;
       var Action): string;
-	/// client-side access to the remote RESTful service
+  	/// client-side access to the remote RESTful service
     procedure AddAuditTrail(aEvent: TFileEvent; aAssociatedRecord: TSQLRecord);
   end;
 

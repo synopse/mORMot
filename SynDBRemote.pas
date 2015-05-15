@@ -2,7 +2,7 @@
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynDBRemote;
-             
+
 {
     This file is part of Synopse framework.
 
@@ -29,7 +29,7 @@ unit SynDBRemote;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -82,7 +82,7 @@ const
   SYNDB_DEFAULT_HTTP_PORT = '8092';
 
 type
-  /// used to define the HTTP server class for publishing a SynDB connection 
+  /// used to define the HTTP server class for publishing a SynDB connection
   TSQLDBServerClass = class of TSQLDBServerAbstract;
 
   /// implements a generic HTTP server, able to publish any SynDB connection
@@ -268,7 +268,7 @@ type
 
   {$endif USEWININET}
 
-  
+
 implementation
 
 { TSQLDBServerAbstract }

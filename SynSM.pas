@@ -36,7 +36,7 @@ unit SynSM;
   - Arnaud Bouchez
   - Vadim Orel
   - win2014
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -64,7 +64,7 @@ unit SynSM;
   - enhanced multi thread process
   - add TSMEngine.MaybeGarbageCollect method
   - add timeout Framework
-  
+
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -528,7 +528,7 @@ type
     property DefaultPropertyAttrs: TJSPropertyAttrs read FDefaultPropertyAttrs write SetDefaultPropertyAttrs;
   end;
 
-  
+
   //// variant-based callback signature used for TSMEngine.RegisterMethod()
   // - any Delphi exception raised during this execution will be converted into
   // a JavaScript exception by TSMEngine
@@ -678,7 +678,7 @@ type
     // assigned as value for a property to create new object type property,
     // as in JavaScript:
     // ! var obj = {}
-    function NewSMVariant: variant; 
+    function NewSMVariant: variant;
       {$ifdef HASINLINE}inline;{$endif}
     /// create new ordinary JavaScript object, stored as TSMVariant custom type,
     // and rooted to avoid garbage collection
@@ -795,7 +795,7 @@ type
   // - allow thread-safe access to an internal per-thread TSMEngine instance list
   // - contains runtime-level properties shared between thread-safe engines
   // - you can create several TSMEngineManager instances, if you need several
-  // separate scripting instances 
+  // separate scripting instances
   // - set OnNewEngine callback to initialize each TSMEngine, when a new thread
   // is accessed, and tune per-engine memory allocation via MaxPerEngineMemory
   // and MaxRecursionDepth
@@ -863,7 +863,7 @@ type
   end;
   {$M-}
 
-  
+
 var
   /// the internal custom variant type used to register TSMVariant
   SMVariantType: TSynInvokeableVariantType = nil;
@@ -892,7 +892,7 @@ type
     class procedure New(const aObject: TSMObject; out aValue: variant); overload;
     /// initialize a variant instance to store a JavaScript object
     class procedure New(cx: PJSContext; obj: PJSObject; out aValue: variant); overload;
-    /// initialize a variant instance to store a new JavaScript object 
+    /// initialize a variant instance to store a new JavaScript object
     class procedure New(engine: TSMEngine; out aValue: variant); overload;
     /// handle type conversion
     // - any TSMVariant will be converted to '<<JavaScript TSMVariant>>' text
@@ -1158,7 +1158,7 @@ end;
 
 procedure TSMEngine.CheckJSError(res: JSBool);
 begin
-  if FTimeOutAborted then 
+  if FTimeOutAborted then
     raise ESMException.CreateUTF8('%: script runs for too long, abort',[self]);
   if FErrorExist then begin
     SynSMLog.Add.Log(sllError, FLastErrorMsg);
@@ -1794,14 +1794,14 @@ var oDate: PJSObject;
     if JS_GetUCProperty(cx, oDate, pointer(funcName), Length(funcName), fval) = JS_TRUE then
       if JS_CallFunctionValue(cx, oDate, fval, 0, nil, v)  = JS_TRUE then
         Result := JSVAL_TO_INT(v);
-  end; 
+  end;
 {$endif}
 begin
   oDate := JSVAL_TO_OBJECT(FValue);
   if JS_ObjectIsDate(cx, oDate) = JS_FALSE then
     raise ESMException.Create('TSMValue.ToDateTime: not a DateTime object');
 {$ifdef CONSIDER_TIME_IN_Z}
-  ms := 0;         
+  ms := 0;
   if JS_CallFunctionName(cx, oDate, PCChar('getTime'), 0, nil, fval) = JS_TRUE then
     ms := JSVAL_TO_DOUBLE(fval);
   if ms = 0 then
@@ -2106,7 +2106,7 @@ begin
     JS_RemoveObjectRoot(cx, @obj);
 end;
 
-function TSMObject.DefineNativeMethod(const methodName: SynUnicode; func: JSNative; nargs: uintN; 
+function TSMObject.DefineNativeMethod(const methodName: SynUnicode; func: JSNative; nargs: uintN;
   attrs: TJSPropertyAttrs): PJSFunction;
 begin
   Result := JS_DefineUCFunction(cx, obj,
@@ -2121,7 +2121,7 @@ begin
   fObj := nil;
 end;
 
-function TSMObject.DefineNativeMethod(const methodName: AnsiString; func: JSNative; nargs: uintN; 
+function TSMObject.DefineNativeMethod(const methodName: AnsiString; func: JSNative; nargs: uintN;
   attrs: TJSPropertyAttrs): PJSFunction;
 begin
   Result := JS_DefineFunction(cx, obj,
@@ -2178,7 +2178,7 @@ begin
   FErrorExist := True;
   FLastErrorFileName := '(w/o name)';
   FLastErrorLine := 0;
-  FLastErrorMsg := FormatUTF8('JSError. Filename: %. Line %. Message: %',  
+  FLastErrorMsg := FormatUTF8('JSError. Filename: %. Line %. Message: %',
     [FLastErrorFileName, FLastErrorLine, 'Script runs for too long, terminating']);
   JS_TriggerOperationCallback(rt);
 end;
@@ -2230,7 +2230,7 @@ var eng: TSMEngine;
     rt: PJSRuntime;
     now_: int64;
     sleepDuration: PRIntervalTime;
-    status: PRStatus; 
+    status: PRStatus;
 begin
   PR_SetCurrentThreadName('JS Watchdog');
   eng := TSMEngine(arg);
@@ -2308,7 +2308,7 @@ procedure TSMEngine.SetTimeoutValue(const Value: Double);
 begin
   fTimeoutInterval := Value;
   ScheduleWatchdog(Value);
-end;     
+end;
 
 function TSMObject.GetPrivate: pointer;
 {$ifdef WITHASSERT}
@@ -2318,7 +2318,7 @@ begin
   if obj=nil then
     result := nil else
 {$ifdef WITHASSERT}
-// JS_GetPrivate can return some not-nil pointer when we call JS_GetPrivate for object 
+// JS_GetPrivate can return some not-nil pointer when we call JS_GetPrivate for object
 // with class which has no flag JSCLASS_HAS_PRIVATE
   begin
     C := JS_GetClass(obj);
@@ -2337,7 +2337,7 @@ procedure TSMObject.SetPrivate(const Value: pointer);
 var C: PJSClass;
 {$endif}
 begin
-  if obj<>nil then 
+  if obj<>nil then
 {$ifdef WITHASSERT} begin
     // If we set private data into object with class which has no flag JSCLASS_HAS_PRIVATE
     // SM don't raise exception, but we can get AV in any other place

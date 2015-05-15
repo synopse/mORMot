@@ -1,4 +1,4 @@
-// test logging when more than 512 threads are created
+// test logging when 6000 threads are created (per chunks of 20)
 program thread512;
 
 {$APPTYPE CONSOLE}

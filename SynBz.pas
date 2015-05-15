@@ -61,7 +61,7 @@ unit SynBz;
     Cross-Platform:
       - under Win32, use fast bzip.dll (provided in bzasm.zip) + assembler
       - under Linux, use default libbz2.so
-       (Linux can use faster assembler version - must be checked if this 
+       (Linux can use faster assembler version - must be checked if this
         is really useful)
 
   The contents of this file are subject to the Mozilla Public License
@@ -83,7 +83,7 @@ unit SynBz;
   Version 1.18
   - fixed ticket [2783e5f81b] about UNICODE compilation issue
 
-  
+
 }
 
 
@@ -264,7 +264,7 @@ var BZCompressModule:   HMODULE = 0;
 function BZInitCompressFunctions(Module: HMODULE): Boolean;
 begin
   BZCompressModule := Module;
-  if Module=0 then 
+  if Module=0 then
     Result := false else begin
     BZ2_bzCompressInit := GetProcAddress(Module, 'BZ2_bzCompressInit');
     BZ2_bzCompress := GetProcAddress(Module, 'BZ2_bzCompress');
@@ -530,7 +530,7 @@ begin
       if FStrm.avail_in=0 then
         exit; // leave result=0 to mark error
     end;
-    case Bz2Check(BZ2_bzDecompress(FStrm),                        
+    case Bz2Check(BZ2_bzDecompress(FStrm),
       [BZ_OK, BZ_STREAM_END, BZ_DATA_ERROR, BZ_DATA_ERROR_MAGIC]) of
       BZ_STREAM_END: begin
         FReachedEnd := True;

@@ -29,7 +29,7 @@ unit mORMotHttpClient;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -96,7 +96,7 @@ unit mORMotHttpClient;
       - added optional aProxyName, aProxyByPass parameters to
         TSQLite3HttpClientWinGeneric / TSQLite3HttpClientWinINet and
         TSQLite3HttpClientWinHTTP constructors
-		
+
     Version 1.18
      - unit SQLite3HttpClient.pas renamed mORMotHttpClient.pas
        (see mORMotHTTPServer.pas for the server side)
@@ -171,7 +171,7 @@ type
   TSQLHttpCompressions = set of TSQLHttpCompression;
 
   /// abstract HTTP/1.1 RESTful JSON mORMot Client class
-  // - this class, and other inherited classes defined in this unit, are 
+  // - this class, and other inherited classes defined in this unit, are
   // thread-safe, since each of their URI() method is protected by a giant lock
   TSQLHttpClientGeneric = class(TSQLRestClientURI)
   protected
@@ -231,7 +231,7 @@ type
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
 
-  /// HTTP/1.1 RESTful JSON mORMot Client class using SynCrtSock's Sockets 
+  /// HTTP/1.1 RESTful JSON mORMot Client class using SynCrtSock's Sockets
   // - will give the best performance on a local computer, but has been found
   // out to be slower over a network
   // - is not able to use secure HTTPS protocol
@@ -392,7 +392,7 @@ type
   /// HTTP/1.1 RESTful JSON Client class using libculr
   // - will handle HTTP and HTTPS, if OpenSSL or similar libray is available
   TSQLHttpClientCurl = class(TSQLHttpClientRequest)
-  protected                               
+  protected
     procedure InternalSetClass; override;
   end;
   {$endif USELIBCURL}
@@ -612,7 +612,7 @@ begin
   if result then
     with fWebSocketParams do
     if AutoUpgrade then
-      result := WebSocketsUpgrade(Key,Ajax,Compression)=''; 
+      result := WebSocketsUpgrade(Key,Ajax,Compression)='';
 end;
 
 function TSQLHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -668,7 +668,7 @@ begin
       aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
     if result='' then
       with fWebSocketParams do begin // store parameters for auto-reconnection
-        AutoUpgrade := true; 
+        AutoUpgrade := true;
         Key := aWebSocketsEncryptionKey;
         Compression := aWebSocketsCompression;
         Ajax := aWebSocketsAJAX;

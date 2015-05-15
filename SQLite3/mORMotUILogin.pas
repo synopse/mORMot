@@ -140,7 +140,7 @@ var
   // - default is 2000 ms, i.e. 2 seconds
   OnIdleProcessTemporaryFormTimeout: integer = 2000;
 
-  /// define the message text displayed by TLoginForm.OnIdleProcessForm() 
+  /// define the message text displayed by TLoginForm.OnIdleProcessForm()
   // - default is sOnIdleProcessFormMessage resourcestring, i.e. 'Please wait...'
   OnIdleProcessTemporaryFormMessage: string;
 
@@ -290,7 +290,7 @@ begin
     Transparent := true;
     Picture.Bitmap.LoadFromResourceName(hInstance,'ROC');
     SetBounds((330-156)div 2,20,156,73);
-  end; 
+  end;
   with TLabel.Create(Result) do begin
     Parent := P;
     Font.Name := 'Tahoma'; Font.Size := 11;
@@ -909,7 +909,7 @@ begin
 end;
 
 class procedure TLoginForm.HandleApplicationException(Sender: TObject; E: Exception);
-begin // so that exception will be shown with new User Interface 
+begin // so that exception will be shown with new User Interface
   ShowMessage(E.Message,true);
 end;
 

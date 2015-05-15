@@ -232,14 +232,14 @@ uses
 
 
 type
-  {{ languages handled by this mORMoti18n unit
-   - include all languages known by WinXP SP2 without some unicode-only very
-   rare languages; total count is 60
-   - some languages (Japanase, Chinese, Arabic) may need specific language
-   pack installed on western/latin version of windows
-   - lngEnglish is the default language of the executable, used as reference
-   for all other translation, and included into executable (no EN.msg file
-   will never be loaded) }
+  /// languages handled by this mORMoti18n unit
+  // - include all languages known by WinXP SP2 without some unicode-only very
+  // rare languages; total count is 60
+  // - some languages (Japanase, Chinese, Arabic) may need specific language
+  // pack installed on western/latin version of windows
+  // - lngEnglish is the default language of the executable, used as reference
+  // for all other translation, and included into executable (no EN.msg file
+  // will never be loaded)
   TLanguages = (
     lngHebrew, lngGreek, lngLatin, lngDari, lngBosnian, lngCatalan,
     lngCorsican, lngCzech, lngCoptic, lngSlavic, lngWelsh, lngDanish,
@@ -373,14 +373,14 @@ resourcestring
 // - by default, if the supplied language does not have a corrrespondig .msg
 // local file, it will fallback to lngEnlish for the whole application
 // - you may set aForceEnglishIfNoMsgFile=false to change the application
-// localization code, even if there is no matching .msg file 
+// localization code, even if there is no matching .msg file
 procedure SetCurrentLanguage(aLanguage: TLanguages; aForceEnglishIfNoMsgFile: boolean=true); overload;
 
 /// resets all translation and locale-specific variables via SetThreadLocale()
 // - by default, if the supplied language does not have a corrrespondig .msg
 // local file, it will fallback to lngEnlish for the whole application
 // - you may set aForceEnglishIfNoMsgFile=false to change the application
-// localization code, even if there is no matching .msg file 
+// localization code, even if there is no matching .msg file
 procedure SetCurrentLanguage(const value: RawUTF8; aForceEnglishIfNoMsgFile: boolean=true); overload;
 {$endif}
 {$endif}
@@ -463,50 +463,50 @@ var
 type
   TCustomFormDynArray = array of TCustomForm;
 
-  {{ class to load and handle translation files (fr.msg, de.msg, ja.msg.. e.g.)
-   - This standard .msg text file contains all the program resources translated
-    into any language.
-   - Unicode characters (Chinese or Japanese) can be used.
-   - The most important part of this file is the [Messages] section, which
-    contain all the text to be displayed in NumericValue=Text pairs.
-    The numeric value is a hash (i.e. unique identifier) of the Text.
-    To make a new translation, the "Text" part of these pairs must be translated,
-    but the NumericValue must remain the same.
-   - In the "Text" part, translator must be aware of some important characters,
-    which must NOT be modified, and appears in exactly the same place inside
-    the translated text:\line
-    1. | indicates a CR (carriage return) character;\line
-    2. ~ indicates a LF (line feed) character;\line
-    3. , sometimes is a comma inside a sentence, but is also used some other times
-    as a delimiter between sentences; \line
-    4. %s will be replaced by a textual value before display;\line
-    5. %d will be replaced by a numerical value before display;\line
-    some HTML code may appear (e.g. <br><font color="clnavy">...) and all text
-    between < and > must NOT be modified;\line
-    6. no line feed or word wrap is to be used inside the "Text" part; the whole
-    NumericValue=Text pair must be contained in an unique line, even if it is huge.
-   - Some other sections appears before the [Messages] part, and does apply to
-    windows as they are displayed on screen. By default, the text is replaced by
-    a _ with a numerical value pointing to a text inside the [Messages] section.
-    On some rare occasion, this default translation may be customized: in such
-    cases, the exact new text to be displayed can be used instead of the
-    _1928321 part. At the end of every line, the original text (never used,
-    only put there for translator convenience) was added.
-   - In order to add a new language, the steps are to be performed:\line
-   0. Extract all english message into a .txt ansi file, by calling the
-     ExtractAllResources() procedure in the main program\line
-   1. Use the latest .txt original file, containing the original English messages\line
-   2. Open this file into a text editor (not Microsoft Word, but a real text editor,
-    like the Windows notepad)\line
-   3. Translate the English text into a new language; some Unicode characters may be used\line
-   4. Save this new file, with the ISO two chars corresponding to the new language
-    as file name, and .msg as file extension (e.g. FR.msg for French or RU.msg for Russian).\line
-   5. By adding this .msg file into the PhD.exe folder, the PC User software
-    will automatically find and use it to translate the User Interface on the fly.
-    Each user is able to select its own preferred translation.\line
-   6. The translator can perform the steps 3 to 5 more than once, to see in real
-    time its modifications: he/she just has to restart the PC software to
-    reload the updated translations. }
+  /// class to load and handle translation files (fr.msg, de.msg, ja.msg.. e.g.)
+  // - This standard .msg text file contains all the program resources translated
+  // into any language.
+  // - Unicode characters (Chinese or Japanese) can be used.
+  // - The most important part of this file is the [Messages] section, which
+  // contain all the text to be displayed in NumericValue=Text pairs.
+  // The numeric value is a hash (i.e. unique identifier) of the Text.
+  // To make a new translation, the "Text" part of these pairs must be translated,
+  // but the NumericValue must remain the same.
+  // - In the "Text" part, translator must be aware of some important characters,
+  // which must NOT be modified, and appears in exactly the same place inside
+  // the translated text:\line
+  // 1. | indicates a CR (carriage return) character;\line
+  // 2. ~ indicates a LF (line feed) character;\line
+  // 3. , sometimes is a comma inside a sentence, but is also used some other times
+  // as a delimiter between sentences; \line
+  // 4. %s will be replaced by a textual value before display;\line
+  // 5. %d will be replaced by a numerical value before display;\line
+  // some HTML code may appear (e.g. <br><font color="clnavy">...) and all text
+  // between < and > must NOT be modified;\line
+  // 6. no line feed or word wrap is to be used inside the "Text" part; the whole
+  // NumericValue=Text pair must be contained in an unique line, even if it is huge.
+  // - Some other sections appears before the [Messages] part, and does apply to
+  // windows as they are displayed on screen. By default, the text is replaced by
+  // a _ with a numerical value pointing to a text inside the [Messages] section.
+  // On some rare occasion, this default translation may be customized: in such
+  // cases, the exact new text to be displayed can be used instead of the
+  // _1928321 part. At the end of every line, the original text (never used,
+  // only put there for translator convenience) was added.
+  // - In order to add a new language, the steps are to be performed:\line
+  // 0. Extract all english message into a .txt ansi file, by calling the
+  // ExtractAllResources() procedure in the main program\line
+  // 1. Use the latest .txt original file, containing the original English messages\line
+  // 2. Open this file into a text editor (not Microsoft Word, but a real text editor,
+  // like the Windows notepad)\line
+  // 3. Translate the English text into a new language; some Unicode characters may be used\line
+  // 4. Save this new file, with the ISO two chars corresponding to the new language
+  // as file name, and .msg as file extension (e.g. FR.msg for French or RU.msg for Russian).\line
+  // 5. By adding this .msg file into the PhD.exe folder, the PC User software
+  // will automatically find and use it to translate the User Interface on the fly.
+  // Each user is able to select its own preferred translation.\line
+  // 6. The translator can perform the steps 3 to 5 more than once, to see in real
+  // time its modifications: he/she just has to restart the PC software to
+  // reload the updated translations.
   TLanguageFile = class
   protected
     /// the content of the .msg file, translated into generic VCL string
@@ -549,7 +549,7 @@ type
     procedure LanguageClick(Sender: TObject);
 {$endif USEFORMCREATEHOOK}
     /// get corresponding *.msg translation text file name from current exe directory
-    // - e.g. return 'C:\Program Files\MyApplication\FR.msg' 
+    // - e.g. return 'C:\Program Files\MyApplication\FR.msg'
     class function FileName(aLanguageLocale: TLanguages): TFileName;
     /// return a translated text from a Hash32(WinAnsiString) value
     // - search is very fast (use binary search algorithm)
@@ -1280,7 +1280,7 @@ begin
         if CurrentLanguage.Index=lngEnglish then
           exit else
           aLanguage := lngEnglish;
-      LanguageForLanguageFile := lngEnglish; // no .msg -> no translation 
+      LanguageForLanguageFile := lngEnglish; // no .msg -> no translation
     end;
 
   // 3. reset all Locale settings + AnsiCompare*() functions
@@ -1734,7 +1734,7 @@ var Section: PUTF8Char; {$endif}
       TranslateObj(C,ParentName+RawUTF8(C.Name)+'.');
     end;
   end;
-  
+
 var UpperSection: array[byte] of AnsiChar;
 begin
   if (Self=nil) or (Text='') or (aForm=nil) then
@@ -2218,7 +2218,7 @@ end;
 // called within *A() Win32 API -> only english=Ansi text is expected here
 function CB_EnumDFMProc(hModule: THandle; lpszType, lpszName: PAnsiChar;
   lParam: PtrInt): Boolean; stdcall;
-// code below use the string generic type, which is prefered for the RTTI 
+// code below use the string generic type, which is prefered for the RTTI
 var F: ^Text absolute lparam;
     Reader: TReader;
 
@@ -2382,7 +2382,7 @@ var F: ^Text absolute lparam;
     end;
     Reader.ReadListEnd;
   end;
-  
+
 var RS: TResourceStream;
     Signature: cardinal;
 begin
@@ -2450,7 +2450,7 @@ var F: Text;
       P := P^.Next;
     end;
   end;
-                       
+
 begin
   // all code below use *A() Win32 API -> only english=Ansi text is expected here
   CB_Enum.Init(TypeInfo(TWinAnsiDynArray),CB_EnumStrings,nil,nil,Hash32Str,@CB_EnumStringsCount);
@@ -2472,7 +2472,7 @@ begin
         // add custom captions for all tables of a database model
         with TSQLModel(Objects[i]) do
         for index := 0 to high(Tables) do
-        with Tables[index] do begin // TSQLRecord.CaptionName() may be overridden 
+        with Tables[index] do begin // TSQLRecord.CaptionName() may be overridden
           AddOnceDynArray(StringToWinAnsi(CaptionName(nil))); // add table name
           CT := Tables[index];
           repeat
@@ -2485,7 +2485,7 @@ begin
           until CT=nil;
         end;
       end else
-      // add standard captions for all TPersistent published fields 
+      // add standard captions for all TPersistent published fields
       if Objects[i].InheritsFrom(TPersistent) then
         AddClass(Objects[i].ClassType);
     // add standard captions for all published fields of these classes

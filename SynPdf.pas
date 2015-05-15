@@ -359,7 +359,7 @@ uses
   {$ifdef USE_SYNGDIPLUS}
   SynGdiPlus; // use our GDI+ library for handling TJpegImage and such
   {$else}
-  jpeg;            
+  jpeg;
   {$endif}
 
 const
@@ -456,7 +456,7 @@ type
   /// a PDF date, encoded as 'D:20100414113241'
   TPdfDate = PDFString;
 
-  /// the internal pdf file format 
+  /// the internal pdf file format
   TPdfFileFormat = (pdf13, pdf14, pdf15, pdf16);
 
   /// PDF exception, raised when an invalid value is given to a constructor
@@ -503,7 +503,7 @@ type
   TPdfViewerPreference = (
     vpHideToolbar, vpHideMenubar, vpHideWindowUI, vpFitWindow, vpCenterWindow,
     vpEnforcePrintScaling);
-                         
+
   /// set of Viewer preferences
   TPdfViewerPreferences = set of TPdfViewerPreference;
 
@@ -645,7 +645,7 @@ type
       const aUserPassword, aOwnerPassword: string); virtual;
     /// prepare a specific document to be encrypted
     // - internally used by TPdfDocument.NewDoc method
-    procedure AttachDocument(aDoc: TPdfDocument); virtual; 
+    procedure AttachDocument(aDoc: TPdfDocument); virtual;
     /// will create the expected TPdfEncryption instance, depending on aLevel
     // - to be called as parameter of TPdfDocument/TPdfDocumentGDI.Create()
     // - currently, only elRC4_40 and elRC4_128 levels are implemented
@@ -829,7 +829,7 @@ type
   protected
     procedure InternalWriteTo(W: TPdfWrite); virtual;
     procedure SetObjectNumber(Value: integer);
-    function SpaceNotNeeded: boolean; virtual; 
+    function SpaceNotNeeded: boolean; virtual;
   public
     /// create the PDF object instance
     constructor Create; virtual;
@@ -842,7 +842,7 @@ type
     /// low-level force the object to be saved now
     // - you should not use this low-level method, unless you want to force
     // the FSaveAtTheEnd internal flag to be set to force, so that
-    // TPdfDocument.SaveToStreamDirectPageFlush would flush the object content 
+    // TPdfDocument.SaveToStreamDirectPageFlush would flush the object content
     procedure ForceSaveNow;
     /// the associated PDF Object Number
     // - If you set an object number higher than zero, the object is considered
@@ -925,7 +925,7 @@ type
     FValue: RawUTF8;
   protected
     procedure InternalWriteTo(W: TPdfWrite); override;
-    function SpaceNotNeeded: boolean; override; 
+    function SpaceNotNeeded: boolean; override;
   public
     constructor Create(const AValue: RawUTF8); reintroduce;
     property Value: RawUTF8 read FValue write FValue;
@@ -1213,7 +1213,7 @@ type
     /// the associated Generation Number
     // - mostly 0, or 65535 (PDF_MAX_GENERATION_NUM) for the root 'f' entry
     property GenerationNumber: integer read FGenerationNumber write FGenerationNumber;
-    /// the associated PDF object 
+    /// the associated PDF object
     property Value: TPdfObject read FValue;
   end;
 
@@ -1474,7 +1474,7 @@ type
     // - if ParentContentGroup is not nil, the new content group is a subgroup to ParentContentGroup
     // - Title is the string shown in the PDF Viewer
     // - Visible controls the initial state of the content group
-    function CreateOptionalContentGroup(ParentContentGroup: TPdfOptionalContentGroup; 
+    function CreateOptionalContentGroup(ParentContentGroup: TPdfOptionalContentGroup;
       const Title: string; Visible: Boolean=true): TPdfOptionalContentGroup;
     // create a Radio Optional ContentGroup
     // - ContentGroups is a array of TPdfOptionalContentGroups which should behave like
@@ -1727,7 +1727,7 @@ type
     procedure LineToI(x, y: Single); overload;
     // wrapper call I2X() and I2Y() for conversion
     procedure MoveToI(x, y: Integer); overload;
-    procedure MoveToI(x, y: Single); overload;  
+    procedure MoveToI(x, y: Single); overload;
     // wrapper call I2X() and I2Y() for conversion
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
@@ -1767,93 +1767,93 @@ type
     // matrix, we added a custom decimal number parameter here
     procedure ConcatToCTM(a, b, c, d, e, f: Single; Decimals: Cardinal=6); {  cm  }
 
-    {{ Set the flatness tolerance in the graphics state
-      - see Section 6.5.1, “Flatness Tolerance” of the PDF 1.3 reference:
-      The flatness tolerance controls the maximum permitted distance in
-      device pixels between the mathematically correct path and an
-      approximation constructed from straight line segments
-      - Flatness is a number in the range 0 to 100; a value of 0 specifies
-      the output device's default flatness tolerance }
+    /// Set the flatness tolerance in the graphics state
+    // - see Section 6.5.1, “Flatness Tolerance” of the PDF 1.3 reference:
+    // The flatness tolerance controls the maximum permitted distance in
+    // device pixels between the mathematically correct path and an
+    // approximation constructed from straight line segments
+    // - Flatness is a number in the range 0 to 100; a value of 0 specifies
+    // the output device's default flatness tolerance
     procedure SetFlat(flatness: Byte);                           {  i   }
-    {{ Set the line cap style in the graphics state
-     - The line cap style specifies the shape to be used at the
-      ends of open subpaths (and dashes, if any) when they are stroked }
+    /// Set the line cap style in the graphics state
+    // - The line cap style specifies the shape to be used at the
+    // ends of open subpaths (and dashes, if any) when they are stroked
     procedure SetLineCap(linecap: TLineCapStyle);                {  J   }
-    {{ Set the line dash pattern in the graphics state
-     - The line dash pattern controls the pattern of dashes and gaps
-      used to stroke paths. It is specified by a dash array and a dash phase.
-      The dash array's elements are numbers that specify the lengths of
-      alternating dashes and gaps; the dash phase specifies the distance into
-      the dash pattern at which to start the dash. The elements of both the
-      dash array and the dash phase are expressed in user space units.
-      Before beginning to stroke a path, the dash array is cycled through,
-      adding up the lengths of dashes and gaps. When the accumulated length
-      equals the value specified by the dash phase, stroking of the path begins,
-      using the dash array cyclically from that point onward. }
+    /// Set the line dash pattern in the graphics state
+    // - The line dash pattern controls the pattern of dashes and gaps
+    // used to stroke paths. It is specified by a dash array and a dash phase.
+    // The dash array's elements are numbers that specify the lengths of
+    // alternating dashes and gaps; the dash phase specifies the distance into
+    // the dash pattern at which to start the dash. The elements of both the
+    // dash array and the dash phase are expressed in user space units.
+    // Before beginning to stroke a path, the dash array is cycled through,
+    // adding up the lengths of dashes and gaps. When the accumulated length
+    // equals the value specified by the dash phase, stroking of the path begins,
+    // using the dash array cyclically from that point onward.
     procedure SetDash(const aarray: array of integer; phase: integer=0); {  d   }
-    {{ Set the line join style in the graphics state
-     - The  line join style specifies the shape to be used at the
-     corners of paths that are stroked }
+    /// Set the line join style in the graphics state
+    // - The  line join style specifies the shape to be used at the
+    // corners of paths that are stroked
     procedure SetLineJoin(linejoin: TLineJoinStyle);             {  j   }
-    {{ Set the line width in the graphics state
-     - The line width parameter specifies the thickness of the line used
-     to stroke a path. It is a nonnegative number expressed in user space
-     units; stroking a path entails painting all points whose perpendicular
-     distance from the path in user space is less than or equal to half the
-     line width. The effect produced in device space depends on the current
-     transformation matrix (CTM) in effect at the time the path is stroked.
-     If the CTM specifies scaling by different factors in the x and y
-     dimensions, the thickness of stroked lines in device space will vary
-     according to their orientation. The actual line width achieved can differ
-     from the requested width by as much as 2 device pixels, depending on
-     the positions of lines with respect to the pixel grid. }
+    /// Set the line width in the graphics state
+    // - The line width parameter specifies the thickness of the line used
+    // to stroke a path. It is a nonnegative number expressed in user space
+    // units; stroking a path entails painting all points whose perpendicular
+    // distance from the path in user space is less than or equal to half the
+    // line width. The effect produced in device space depends on the current
+    // transformation matrix (CTM) in effect at the time the path is stroked.
+    // If the CTM specifies scaling by different factors in the x and y
+    // dimensions, the thickness of stroked lines in device space will vary
+    // according to their orientation. The actual line width achieved can differ
+    // from the requested width by as much as 2 device pixels, depending on
+    // the positions of lines with respect to the pixel grid.
     procedure SetLineWidth(linewidth: Single);                   {  w   }
-    {{ Set the miter limit in the graphics state
-      - When two line segments meet at a sharp angle and mitered joins have been
-      specified as the line join style, it is possible for the miter to extend
-      far beyond the thickness of the line stroking the path. The miter limit
-      imposes a maximum on the ratio of the miter length to the line width.
-      When the limit is exceeded, the join is converted from a miter to a bevel }
+    /// Set the miter limit in the graphics state
+    // - When two line segments meet at a sharp angle and mitered joins have been
+    // specified as the line join style, it is possible for the miter to extend
+    // far beyond the thickness of the line stroking the path. The miter limit
+    // imposes a maximum on the ratio of the miter length to the line width.
+    // When the limit is exceeded, the join is converted from a miter to a bevel
     procedure SetMiterLimit(miterlimit: Single);                 {  M   }
 
-    {{ change the current coordinates position
-    - Begin a new subpath by moving the current point to coordinates
-      (x, y), omitting any connecting line segment. If the previous path
-      construction operator in the current path was also MoveTo(), the new MoveTo()
-      overrides it; no vestige of the previous MoveTo() call remains in the path. }
+    /// change the current coordinates position
+    // - Begin a new subpath by moving the current point to coordinates
+    // (x, y), omitting any connecting line segment. If the previous path
+    // construction operator in the current path was also MoveTo(), the new MoveTo()
+    // overrides it; no vestige of the previous MoveTo() call remains in the path.
     procedure MoveTo(x, y: Single);                              {  m   }
-    {{ Append a straight line segment from the current point to the point (x, y).
-     -  The new current point is (x, y) }
+    /// Append a straight line segment from the current point to the point (x, y).
+    // -  The new current point is (x, y)
     procedure LineTo(x, y: Single);                              {  l   }
-    {{ Append a cubic Bezier curve to the current path
-      - The curve extends from the current point to the point (x3, y3),
-      using (x1, y1) and (x2, y2) as the Bezier control points
-      - The new current point is (x3, y3) }
+    /// Append a cubic Bezier curve to the current path
+    // - The curve extends from the current point to the point (x3, y3),
+    // using (x1, y1) and (x2, y2) as the Bezier control points
+    // - The new current point is (x3, y3)
     procedure CurveToC(x1, y1, x2, y2, x3, y3: Single);          {  c   }
-    {{ Append a cubic Bezier curve to the current path
-      - The curve extends from the current point to the point (x3, y3),
-      using the current point and (x2, y2) as the Bezier control points
-      - The new current point is (x3, y3) }
+    /// Append a cubic Bezier curve to the current path
+    // - The curve extends from the current point to the point (x3, y3),
+    // using the current point and (x2, y2) as the Bezier control points
+    // - The new current point is (x3, y3)
     procedure CurveToV(x2, y2, x3, y3: Single);                  {  v   }
-    {{ Append a cubic Bezier curve to the current path
-     - The curve extends from the current point to the point (x3, y3),
-     using (x1, y1) and (x3, y3) as the Bezier control points
-     - The new current point is (x3, y3) }
+    /// Append a cubic Bezier curve to the current path
+    // - The curve extends from the current point to the point (x3, y3),
+    // using (x1, y1) and (x3, y3) as the Bezier control points
+    // - The new current point is (x3, y3)
     procedure CurveToY(x1, y1, x3, y3: Single);                  {  y   }
-    {{ Append a rectangle to the current path as a complete subpath, with
-      lower-left corner (x, y) and dimensions  width and  height in user space }
+    /// Append a rectangle to the current path as a complete subpath, with
+    // lower-left corner (x, y) and dimensions  width and  height in user space
     procedure Rectangle(x, y, width, height: Single);            {  re  }
-    {{ Close the current subpath by appending a straight line segment
-      from the current point to the starting point of the subpath
-      - This operator terminates the current subpath; appending another
-      segment to the current path will begin a new subpath, even if the new
-      segment begins at the endpoint reached by the h operation
-      - If the current subpath is already closed or the current path is empty,
-      it does nothing }
+    /// Close the current subpath by appending a straight line segment
+    // from the current point to the starting point of the subpath
+    // - This operator terminates the current subpath; appending another
+    // segment to the current path will begin a new subpath, even if the new
+    // segment begins at the endpoint reached by the h operation
+    // - If the current subpath is already closed or the current path is empty,
+    // it does nothing
     procedure Closepath;                                         {  h   }
-    {{ End the path object without filling or stroking it
-     - This operator is a “path-painting no-op,” used primarily for the
-     side effect of changing the clipping path }
+    /// End the path object without filling or stroking it
+    // - This operator is a “path-painting no-op,” used primarily for the
+    // side effect of changing the clipping path
     procedure NewPath;                                           {  n   }
     /// Stroke the path
     procedure Stroke;                                            {  S   }
@@ -1865,101 +1865,101 @@ type
     procedure Fill;                                              {  f   }
     /// Fill the path, using the even-odd rule to determine the region to fill
     procedure EoFill;                                            {  f*  }
-    {{ Fill and then stroke the path, using the nonzero winding number rule
-      to determine the region to fill
-      - This produces the same result as constructing two identical path
-      objects, painting the first with Fill and the second with Stroke. Note,
-      however, that the filling and stroking portions of the operation consult
-      different values of several graphics state parameters, such as the color }
+    /// Fill and then stroke the path, using the nonzero winding number rule
+    // to determine the region to fill
+    // - This produces the same result as constructing two identical path
+    // objects, painting the first with Fill and the second with Stroke. Note,
+    // however, that the filling and stroking portions of the operation consult
+    // different values of several graphics state parameters, such as the color
     procedure FillStroke;                                        {  B   }
-    {{ Close, fill, and then stroke the path, using the nonzero winding number
-     rule to determine the region to fill
-      - This operator has the same effect as the sequence ClosePath; FillStroke; }
+    /// Close, fill, and then stroke the path, using the nonzero winding number
+    // rule to determine the region to fill
+    // - This operator has the same effect as the sequence ClosePath; FillStroke;
     procedure ClosepathFillStroke;                               {  b   }
-    {{ Fill and then stroke the path, using the even-odd rule to determine
-      the region to fill
-      - This operator produces the same result as FillStroke, except that
-      the path is filled as if with Eofill instead of Fill }
+    /// Fill and then stroke the path, using the even-odd rule to determine
+    // the region to fill
+    // - This operator produces the same result as FillStroke, except that
+    // the path is filled as if with Eofill instead of Fill
     procedure EofillStroke;                                      {  B*  }
-    {{ Close, fill, and then stroke the path, using the even-odd rule to
-      determine the region to fill
-     - This operator has the same effect as the sequence Closepath; EofillStroke; }
+    /// Close, fill, and then stroke the path, using the even-odd rule to
+    // determine the region to fill
+    // - This operator has the same effect as the sequence Closepath; EofillStroke;
     procedure ClosepathEofillStroke;                             {  b*  }
-    {{ Nonzero winding clipping path set
-      - Modify the current clipping path by intersecting it with the current path,
-      using the nonzero winding number rule to determine which regions
-      lie inside the clipping path
-      - The graphics state contains a clipping path that limits the regions of
-       the page affected by painting operators. The closed subpaths of this path
-       define the area that can be painted. Marks falling inside this area will
-       be applied to the page; those falling outside it will not. (Precisely what
-       is considered to be “inside” a path is discussed under “Filling,” above.)
-      - The initial clipping path includes the entire page. Both clipping path
-       methods (Clip and EoClip) may appear after the last path construction operator
-       and before the path-painting operator that terminates a path object.
-       Although the clipping path operator appears before the painting operator,
-       it does not alter the clipping path at the point where it appears. Rather,
-       it modifies the effect of the succeeding painting operator. After the path
-       has been painted, the clipping path in the graphics state is set to the
-       intersection of the current clipping path and the newly constructed path. }
+    /// Nonzero winding clipping path set
+    // - Modify the current clipping path by intersecting it with the current path,
+    // using the nonzero winding number rule to determine which regions
+    // lie inside the clipping path
+    // - The graphics state contains a clipping path that limits the regions of
+    // the page affected by painting operators. The closed subpaths of this path
+    // define the area that can be painted. Marks falling inside this area will
+    // be applied to the page; those falling outside it will not. (Precisely what
+    // is considered to be “inside” a path is discussed under “Filling,” above.)
+    // - The initial clipping path includes the entire page. Both clipping path
+    // methods (Clip and EoClip) may appear after the last path construction operator
+    // and before the path-painting operator that terminates a path object.
+    // Although the clipping path operator appears before the painting operator,
+    // it does not alter the clipping path at the point where it appears. Rather,
+    // it modifies the effect of the succeeding painting operator. After the path
+    // has been painted, the clipping path in the graphics state is set to the
+    // intersection of the current clipping path and the newly constructed path.
     procedure Clip;                                              {  W   }
-    {{ Even-Odd winding clipping path set
-      - Modify the current clipping path by intersecting it with the current path,
-      using the even-odd rule to determine which regions lie inside the clipping path }
+    /// Even-Odd winding clipping path set
+    // - Modify the current clipping path by intersecting it with the current path,
+    // using the even-odd rule to determine which regions lie inside the clipping path
     procedure EoClip;                                            {  W*  }
 
-    {{ Set the character spacing
-     - CharSpace is a number expressed in unscaled text space units.
-     - Character spacing is used by the ShowText and ShowTextNextLine methods
-     - Default value is 0 }
+    /// Set the character spacing
+    // - CharSpace is a number expressed in unscaled text space units.
+    // - Character spacing is used by the ShowText and ShowTextNextLine methods
+    // - Default value is 0
     procedure SetCharSpace(charSpace: Single);                   {  Tc  }
-    {{ Set the word spacing
-      - WordSpace is a number expressed in unscaled text space units
-      - word spacing is used by the ShowText and ShowTextNextLine methods
-      - Default value is 0 }
+    /// Set the word spacing
+    // - WordSpace is a number expressed in unscaled text space units
+    // - word spacing is used by the ShowText and ShowTextNextLine methods
+    // - Default value is 0
     procedure SetWordSpace(wordSpace: Single);                   {  Tw  }
-    {{ Set the horizontal scaling to (scale ÷ 100)
-      - hScaling is a number specifying the percentage of the normal width
-      - Default value is 100 (e.g. normal width) }
-    procedure SetHorizontalScaling(hScaling: Single);              {  Tz  } 
-    {{ Set the text leading, Tl, to the specified leading value
-      - leading which is a number expressed in unscaled text space units;
-        it specifies the vertical distance between the baselines of adjacent
-        lines of text
-      - Text leading is used only by the MoveToNextLine and ShowTextNextLine methods
-      - you can force the next line to be just below the current one by calling:
-      ! SetLeading(Attributes.FontSize);
-      - Default value is 0 }
+    /// Set the horizontal scaling to (scale ÷ 100)
+    // - hScaling is a number specifying the percentage of the normal width
+    // - Default value is 100 (e.g. normal width)
+    procedure SetHorizontalScaling(hScaling: Single);              {  Tz  }
+    /// Set the text leading, Tl, to the specified leading value
+    // - leading which is a number expressed in unscaled text space units;
+    // it specifies the vertical distance between the baselines of adjacent
+    // lines of text
+    // - Text leading is used only by the MoveToNextLine and ShowTextNextLine methods
+    // - you can force the next line to be just below the current one by calling:
+    // ! SetLeading(Attributes.FontSize);
+    // - Default value is 0
     procedure SetLeading(leading: Single);                       {  TL  }
-    {{ Set the font, Tf, to  font and the font size, Tfs , to size.
-     - font is the name of a font resource in the Font subdictionary of the
-      current resource dictionary (e.g. 'F0')
-     - size is a number representing a scale factor
-     - There is no default value for either font or size; they must be specified
-       using this method before any text is shown }
+    /// Set the font, Tf, to  font and the font size, Tfs , to size.
+    // - font is the name of a font resource in the Font subdictionary of the
+    // current resource dictionary (e.g. 'F0')
+    // - size is a number representing a scale factor
+    // - There is no default value for either font or size; they must be specified
+    // using this method before any text is shown
     procedure SetFontAndSize(const fontshortcut: PDFString; size: Single);    {  Tf  }
       {$ifdef HASINLINE}inline;{$endif}
-    {{ Set the text rendering mode
-      - the text rendering mode determines whether text is stroked, filled,
-      or used as a clipping path }
+    /// Set the text rendering mode
+    // - the text rendering mode determines whether text is stroked, filled,
+    // or used as a clipping path
     procedure SetTextRenderingMode(mode: TTextRenderingMode);    {  Tr  }
-    {{ Set the text rise, Trise, to the specified value
-      - rise is a number expressed in unscaled text space units, which
-      specifies the distance, in unscaled text space units, to move the
-      baseline up or down from its default location. Positive values of
-      text rise move the baseline up. Adjustments to the baseline are
-      useful for drawing superscripts or subscripts. The default location of
-      the baseline can be restored by setting the text rise to 0.
-      - Default value is 0 }
+    /// Set the text rise, Trise, to the specified value
+    // - rise is a number expressed in unscaled text space units, which
+    // specifies the distance, in unscaled text space units, to move the
+    // baseline up or down from its default location. Positive values of
+    // text rise move the baseline up. Adjustments to the baseline are
+    // useful for drawing superscripts or subscripts. The default location of
+    // the baseline can be restored by setting the text rise to 0.
+    // - Default value is 0
     procedure SetTextRise(rise: word);                           {  Ts  }
     /// Begin a text object
     // - Text objects cannot be nested
     procedure BeginText;   {$ifdef HASINLINE}inline;{$endif}     {  BT  }
     /// End a text object, discarding the text matrix
     procedure EndText;     {$ifdef HASINLINE}inline;{$endif}     {  ET  }
-    {{ Move to the start of the next line, offset from the start of the current
-      line by (tx ,ty)
-      - tx and ty are numbers expressed in unscaled text space units }
+    /// Move to the start of the next line, offset from the start of the current
+    // line by (tx ,ty)
+    // - tx and ty are numbers expressed in unscaled text space units
     procedure MoveTextPoint(tx, ty: Single); {$ifdef HASINLINE}inline;{$endif} {  Td  }
     /// set the Text Matrix to a,b,c,d and the text line Matrix x,y
     procedure SetTextMatrix(a, b, c, d, x, y: Single);           {  Tm  }
@@ -2173,13 +2173,13 @@ type
     property Title: string read GetTitle write SetTitle;
   end;
 
-  { a dictionary wrapper class for the PDF document catalog fields
-   - It contains references to other objects defining the document's contents,
-   outline, article threads (PDF 1.1), named destinations, and other attributes.
-   In addition, it contains information about how the document should be displayed
-   on the screen, such as whether its outline and thumbnail page images should be
-   displayed automatically and whether some location other than the first page
-   should be shown when the document is opened }
+  /// a dictionary wrapper class for the PDF document catalog fields
+  // - It contains references to other objects defining the document's contents,
+  // outline, article threads (PDF 1.1), named destinations, and other attributes.
+  // In addition, it contains information about how the document should be displayed
+  // on the screen, such as whether its outline and thumbnail page images should be
+  // displayed automatically and whether some location other than the first page
+  // should be shown when the document is opened
   TPdfCatalog = class(TPdfDictionaryWrapper)
   private
     FOpenAction: TPdfDestination;
@@ -2205,10 +2205,10 @@ type
     property NonFullScreenPageMode: TPdfPageMode read GetNonFullScreenPageMode write SetNonFullScreenPageMode;
     /// Page mode determines how the document should appear when opened
     property PageMode: TPdfPageMode read GetPageMode write SetPageMode;
-    {{ A viewer preferences dictionary specifying the way the document is to be
-     displayed on the screen
-      - If this entry is absent, viewer applications should use their own current
-      user preference settings }
+    /// A viewer preferences dictionary specifying the way the document is to be
+    // displayed on the screen
+    // - If this entry is absent, viewer applications should use their own current
+    // user preference settings
     property ViewerPreference: TPdfViewerPreferences read GetViewerPreference write SetViewerPreference;
     /// The page tree node that is the root of the document's page tree
     // - Required, must be an indirect reference
@@ -2407,10 +2407,10 @@ type
     property WinAnsiFont: TPdfFontTrueType read fWinAnsiFont;
   end;
 
-  {{ A destination defines a particular view of a document, consisting of the following:
-    - The page of the document to be displayed
-    - The location of the display window on that page
-    - The zoom factor to use when displaying the page }
+  /// A destination defines a particular view of a document, consisting of the following:
+  // - The page of the document to be displayed
+  // - The location of the display window on that page
+  // - The zoom factor to use when displaying the page
   TPdfDestination = class(TObject)
   private
     FDoc: TPdfDocument;
@@ -2730,7 +2730,7 @@ function _DateTimeToPdfDate(ADate: TDateTime): TPdfDate;
 function _PdfDateToDateTime(const AText: TPdfDate): TDateTime;
 
 /// wrapper to create a temporary PDF coordinates rectangle
-function PdfRect(Left, Top, Right, Bottom: Single): TPdfRect; overload; {$ifdef HASINLINE}inline;{$endif} 
+function PdfRect(Left, Top, Right, Bottom: Single): TPdfRect; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to create a temporary PDF coordinates rectangle
 function PdfRect(const Box: TPdfBox): TPdfRect; overload; {$ifdef HASINLINE}inline;{$endif}
@@ -2820,55 +2820,55 @@ const
   USP_E_SCRIPT_NOT_IN_FONT = HRESULT((SEVERITY_ERROR shl 31) or (FACILITY_ITF shl 16)) or $200;
 
 type
-  {{ UniScribe script state flag elements
-    - r0,r1,r2,r3,r4: map TScriptState.uBidiLevel
-    - fOverrideDirection: Set when in LRO/RLO embedding
-    - fInhibitSymSwap: Set by U+206A (ISS), cleared by U+206B (ASS)
-    - fCharShape: Set by U+206D (AAFS), cleared by U+206C (IAFS)
-    - fDigitSubstitute: Set by U+206E (NADS), cleared by U+206F (NODS)
-    - fInhibitLigate: Equiv !GCP_Ligate, no Unicode control chars yet
-    - fDisplayZWG: Equiv GCP_DisplayZWG, no Unicode control characters yet
-    - fArabicNumContext: For EN->AN Unicode rule
-    - fGcpClusters: For Generating Backward Compatible GCP Clusters (legacy Apps) }
+  /// UniScribe script state flag elements
+  // - r0,r1,r2,r3,r4: map TScriptState.uBidiLevel
+  // - fOverrideDirection: Set when in LRO/RLO embedding
+  // - fInhibitSymSwap: Set by U+206A (ISS), cleared by U+206B (ASS)
+  // - fCharShape: Set by U+206D (AAFS), cleared by U+206C (IAFS)
+  // - fDigitSubstitute: Set by U+206E (NADS), cleared by U+206F (NODS)
+  // - fInhibitLigate: Equiv !GCP_Ligate, no Unicode control chars yet
+  // - fDisplayZWG: Equiv GCP_DisplayZWG, no Unicode control characters yet
+  // - fArabicNumContext: For EN->AN Unicode rule
+  // - fGcpClusters: For Generating Backward Compatible GCP Clusters (legacy Apps)
   TScriptState_enum = (
     r0,r1,r2,r3,r4,
     fOverrideDirection, fInhibitSymSwap, fCharShape, fDigitSubstitute,
     fInhibitLigate, fDisplayZWG, fArabicNumContext, fGcpClusters);
 
-  {{ a set of UniScribe script state flags }
+  /// a set of UniScribe script state flags
   TScriptState_set = set of TScriptState_enum;
 
   PScriptState = ^TScriptState;
 
-  {{ an UniScribe script state
-    - uBidiLevel: Unicode Bidi algorithm embedding level (0..16) 
-    - fFlags: Script state flags }
+  /// an UniScribe script state
+  // - uBidiLevel: Unicode Bidi algorithm embedding level (0..16)
+  // - fFlags: Script state flags
   TScriptState = packed record
    case Byte of
     0: (uBidiLevel: Byte)    {:5};
     1: (fFlags: TScriptState_set)
   end;
-  {{ Uniscribe script analysis flag elements
-    - s0,s1,s2,s3,s4,s5,s6,s7,s8,s9: map TScriptAnalysis.eScript
-    - fRTL: Rendering direction
-    - fLayoutRTL: Set for GCP classes ARABIC/HEBREW and LOCALNUMBER
-    - fLinkBefore: Implies there was a ZWJ before this item
-    - fLinkAfter: Implies there is a ZWJ following this item.
-    - fLogicalOrder: Set by client as input to ScriptShape/Place
-    - fNoGlyphIndex: Generated by ScriptShape/Place - this item does not use
-     glyph indices }
+  /// Uniscribe script analysis flag elements
+  // - s0,s1,s2,s3,s4,s5,s6,s7,s8,s9: map TScriptAnalysis.eScript
+  // - fRTL: Rendering direction
+  // - fLayoutRTL: Set for GCP classes ARABIC/HEBREW and LOCALNUMBER
+  // - fLinkBefore: Implies there was a ZWJ before this item
+  // - fLinkAfter: Implies there is a ZWJ following this item.
+  // - fLogicalOrder: Set by client as input to ScriptShape/Place
+  // - fNoGlyphIndex: Generated by ScriptShape/Place - this item does not use
+  // glyph indices
   TScriptAnalysis_enum = (
     s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,
     fRTL, fLayoutRTL, fLinkBefore, fLinkAfter, fLogicalOrder, fNoGlyphIndex);
 
-  {{ a set of Uniscribe script analysis flags }
+  /// a set of Uniscribe script analysis flags
   TScriptAnalysis_set = set of TScriptAnalysis_enum;
 
   PScriptAnalysis = ^TScriptAnalysis;
-  {{ an Uniscribe script analysis
-    - eScript:  Shaping engine
-    - fFlags: Script analysis flags
-    - s: Script state }
+  /// an Uniscribe script analysis
+  // - eScript:  Shaping engine
+  // - fFlags: Script analysis flags
+  // - s: Script state
   TScriptAnalysis = packed record
    case Byte of
     0: (eScript: Word);
@@ -2880,25 +2880,25 @@ type
   TScriptItem = packed record
     /// Logical offset to first character in this item
     iCharPos: Integer;
-    /// corresponding Uniscribe script analysis 
+    /// corresponding Uniscribe script analysis
     a: TScriptAnalysis;
   end;
-  
-  {{ all possible Uniscribe processing properties of a given language
-    - fNumeric:  if a script contains only digits
-    - fComplex: Script requires special shaping or layout
-    - fNeedsWordBreaking: Requires ScriptBreak for word breaking information
-    - fNeedsCaretInfo: Requires caret restriction to cluster boundaries
-    - bCharSet0 .. bCharSet7: Charset to use when creating font
-    - fControl: Contains only control characters
-    - fPrivateUseArea: This item is from the Unicode range U+E000 through U+F8FF
-    - fNeedsCharacterJustify: Requires inter-character justification
-    - fInvalidGlyph: Invalid combinations generate glyph wgInvalid in the glyph buffer
-    - fInvalidLogAttr: Invalid combinations are marked by fInvalid in the logical attributes
-    - fCDM: Contains Combining Diacritical Marks
-    - fAmbiguousCharSet: Script does not correspond 1//:1 with a charset
-    - fClusterSizeVaries: Measured cluster width depends on adjacent clusters
-    - fRejectInvalid: Invalid combinations should be rejected }
+
+  /// all possible Uniscribe processing properties of a given language
+  // - fNumeric:  if a script contains only digits
+  // - fComplex: Script requires special shaping or layout
+  // - fNeedsWordBreaking: Requires ScriptBreak for word breaking information
+  // - fNeedsCaretInfo: Requires caret restriction to cluster boundaries
+  // - bCharSet0 .. bCharSet7: Charset to use when creating font
+  // - fControl: Contains only control characters
+  // - fPrivateUseArea: This item is from the Unicode range U+E000 through U+F8FF
+  // - fNeedsCharacterJustify: Requires inter-character justification
+  // - fInvalidGlyph: Invalid combinations generate glyph wgInvalid in the glyph buffer
+  // - fInvalidLogAttr: Invalid combinations are marked by fInvalid in the logical attributes
+  // - fCDM: Contains Combining Diacritical Marks
+  // - fAmbiguousCharSet: Script does not correspond 1// :1 with a charset
+  // - fClusterSizeVaries: Measured cluster width depends on adjacent clusters
+  // - fRejectInvalid: Invalid combinations should be rejected
   TScriptProperties_enum = (
     fNumeric, fComplex, fNeedsWordBreaking, fNeedsCaretInfo,
     bCharSet0, bCharSet1, bCharSet2, bCharSet3, bCharSet4, bCharSet5,
@@ -2914,7 +2914,7 @@ type
   TScriptProperties = packed record
     /// Primary and sublanguage associated with script
     langid: Word;
-    /// set of possible Uniscribe processing properties for a given language                   
+    /// set of possible Uniscribe processing properties for a given language
     fFlags: TScriptProperties_set;
   end;
 
@@ -2922,12 +2922,12 @@ type
   /// an array of Uniscribe processing information
   TPScriptPropertiesArray = array[byte] of PScriptProperties;
 
-  {{ Uniscribe visual (glyph) attributes
-    - a0 .. a3: map the Justification class number
-    - fClusterStart: First glyph of representation of cluster
-    - fDiacritic: Diacritic
-    - fZeroWidth: Blank, ZWJ, ZWNJ etc, with no width
-    - fReserved: General reserved bit }
+  /// Uniscribe visual (glyph) attributes
+  // - a0 .. a3: map the Justification class number
+  // - fClusterStart: First glyph of representation of cluster
+  // - fDiacritic: Diacritic
+  // - fZeroWidth: Blank, ZWJ, ZWNJ etc, with no width
+  // - fReserved: General reserved bit
   TScriptVisAttr_enum = (
     a0,a1,a2,a3,
     fClusterStart,     {:1}  // First glyph of representation of cluster
@@ -2939,11 +2939,11 @@ type
   TScriptVisAttr_set = set of TScriptVisAttr_enum;
 
   PScriptVisAttr = ^TScriptVisAttr;
-  {{ Contains the visual (glyph) attributes that identify clusters and
-    justification points, as generated by ScriptShape
-  - uJustification: Justification class
-  - fFlags: Uniscribe visual (glyph) attributes
-  - fShapeReserved: Reserved for use by shaping engines }
+  /// Contains the visual (glyph) attributes that identify clusters and
+  // justification points, as generated by ScriptShape
+  // - uJustification: Justification class
+  // - fFlags: Uniscribe visual (glyph) attributes
+  // - fShapeReserved: Reserved for use by shaping engines
   TScriptVisAttr = packed record
    case Byte of
     0: (uJustification: Byte) {:4};
@@ -2970,65 +2970,65 @@ type
   end;
   PScriptControl = ^TScriptControl;
 
-{{ Uniscribe function to break a Unicode string into individually shapeable items
-   - pwcInChars: Pointer to a Unicode string to itemize.
-   - cInChars: Number of characters in pwcInChars to itemize.
-   - cMaxItems: Maximum number of SCRIPT_ITEM structures defining items to process.
-   - psControl: Optional. Pointer to a SCRIPT_CONTROL structure indicating the
-   type of itemization to perform. Alternatively, the application can set this
-   parameter to NULL if no SCRIPT_CONTROL properties are needed.
-   - psState: Optional. Pointer to a SCRIPT_STATE structure indicating
-   the initial bidirectional algorithm state. Alternatively, the application
-   can set this parameter to NULL if the script state is not needed.
-   - pItems: Pointer to a buffer in which the function retrieves SCRIPT_ITEM
-   structures representing the items that have been processed. The buffer
-   should be cMaxItems*sizeof(SCRIPT_ITEM) + 1 bytes in length. It is invalid
-   to call this function with a buffer to hold less than two SCRIPT_ITEM
-   structures. The function always adds a terminal item to the item analysis
-   array so that the length of the item with zero-based index "i" is
-   always available as:
-   ! pItems[i+1].iCharPos - pItems[i].iCharPos;
-   - pcItems: Pointer to the number of SCRIPT_ITEM structures processed }
+/// Uniscribe function to break a Unicode string into individually shapeable items
+// - pwcInChars: Pointer to a Unicode string to itemize.
+// - cInChars: Number of characters in pwcInChars to itemize.
+// - cMaxItems: Maximum number of SCRIPT_ITEM structures defining items to process.
+// - psControl: Optional. Pointer to a SCRIPT_CONTROL structure indicating the
+// type of itemization to perform. Alternatively, the application can set this
+// parameter to NULL if no SCRIPT_CONTROL properties are needed.
+// - psState: Optional. Pointer to a SCRIPT_STATE structure indicating
+// the initial bidirectional algorithm state. Alternatively, the application
+// can set this parameter to NULL if the script state is not needed.
+// - pItems: Pointer to a buffer in which the function retrieves SCRIPT_ITEM
+// structures representing the items that have been processed. The buffer
+// should be cMaxItems*sizeof(SCRIPT_ITEM) + 1 bytes in length. It is invalid
+// to call this function with a buffer to hold less than two SCRIPT_ITEM
+// structures. The function always adds a terminal item to the item analysis
+// array so that the length of the item with zero-based index "i" is
+// always available as:
+// ! pItems[i+1].iCharPos - pItems[i].iCharPos;
+// - pcItems: Pointer to the number of SCRIPT_ITEM structures processed
 function ScriptItemize(
     const pwcInChars: PWideChar; cInChars: Integer; cMaxItems: Integer;
     const psControl: pointer; const psState: pointer;
     pItems: PScriptItem; var pcItems: Integer): HRESULT; stdcall; external Usp10;
 
-{{ Uniscribe function to retrieve information about the current scripts
-   - ppSp: Pointer to an array of pointers to SCRIPT_PROPERTIES structures
-     indexed by script.
-   - piNumScripts: Pointer to the number of scripts. The valid range for this
-     value is 0 through piNumScripts-1. }
+/// Uniscribe function to retrieve information about the current scripts
+// - ppSp: Pointer to an array of pointers to SCRIPT_PROPERTIES structures
+// indexed by script.
+// - piNumScripts: Pointer to the number of scripts. The valid range for this
+// value is 0 through piNumScripts-1.
 function ScriptGetProperties(out ppSp: PScriptPropertiesArray;
   out piNumScripts: Integer): HRESULT; stdcall; external Usp10;
 
-{{ Uniscribe function to convert an array of run embedding levels to a map
-  of visual-to-logical position and/or logical-to-visual position
-   - cRuns: Number of runs to process
-   - pbLevel: Array of run embedding levels
-   - piVisualToLogical: List of run indices in visual order
-   - piLogicalToVisual: List of visual run positions }
+/// Uniscribe function to convert an array of run embedding levels to a map
+// of visual-to-logical position and/or logical-to-visual position
+// - cRuns: Number of runs to process
+// - pbLevel: Array of run embedding levels
+// - piVisualToLogical: List of run indices in visual order
+// - piLogicalToVisual: List of visual run positions
 function ScriptLayout(cRuns: Integer; const pbLevel: PByte;
     piVisualToLogical: PInteger; piLogicalToVisual: PInteger): HRESULT; stdcall; external Usp10;
 
-{{ Uniscribe function to generate glyphs and visual attributes for an Unicode run
-   - hdc: Optional (see under caching)
-   - psc: Uniscribe font metric cache handle
-   - pwcChars: Logical unicode run
-   - cChars: Length of unicode run
-   - cMaxGlyphs: Max glyphs to generate
-   - psa: Result of ScriptItemize (may have fNoGlyphIndex set)
-   - pwOutGlyphs: Output glyph buffer
-   - pwLogClust: Logical clusters
-   - psva: Visual glyph attributes
-   - pcGlyphs: Count of glyphs generated }
+/// Uniscribe function to generate glyphs and visual attributes for an Unicode run
+// - hdc: Optional (see under caching)
+// - psc: Uniscribe font metric cache handle
+// - pwcChars: Logical unicode run
+// - cChars: Length of unicode run
+// - cMaxGlyphs: Max glyphs to generate
+// - psa: Result of ScriptItemize (may have fNoGlyphIndex set)
+// - pwOutGlyphs: Output glyph buffer
+// - pwLogClust: Logical clusters
+// - psva: Visual glyph attributes
+// - pcGlyphs: Count of glyphs generated
 function ScriptShape(hdc: HDC; var psc: pointer; const pwcChars: PWideChar;
     cChars: Integer; cMaxGlyphs: Integer; psa: PScriptAnalysis;
     pwOutGlyphs: PWord; pwLogClust: PWord; psva: PScriptVisAttr;
     var pcGlyphs: Integer): HRESULT; stdcall; external Usp10;
 
-{{ Uniscribe function to apply the specified digit substitution settings
-  to the specified script control and script state structures }
+/// Uniscribe function to apply the specified digit substitution settings
+// to the specified script control and script state structures
 function ScriptApplyDigitSubstitution(
     const psds: Pointer; const psControl: pointer;
     const psState: pointer): HRESULT; stdcall; external Usp10;
@@ -3432,7 +3432,7 @@ procedure TPdfText.InternalWriteTo(W: TPdfWrite);
 begin
   // if the value has multibyte character, convert the value to hex unicode.
   // otherwise, escape characters.
-  if SysLocale.FarEast and _HasMultiByteString(pointer(FValue)) then 
+  if SysLocale.FarEast and _HasMultiByteString(pointer(FValue)) then
     W.Add('<FEFF').AddToUnicodeHex(FValue).Add('>') else
     W.Add('(').AddEscapeContent(FValue).Add(')');
 end;
@@ -4104,7 +4104,7 @@ begin
   result.Left := Box.Left;
   result.Top := Box.Top;
   result.Right := Box.Left+Box.Width;
-  result.Bottom := Box.Top-Box.Height; 
+  result.Bottom := Box.Top-Box.Height;
 end;
 
 function PdfBox(Left, Top, Width, Height: Single): TPdfBox;
@@ -4129,7 +4129,7 @@ begin
             break else
             inc(result,2);
   end else
-    result := SynCommons.StrLen(pointer(Text)); 
+    result := SynCommons.StrLen(pointer(Text));
 end;
 
 function CombineTransform(xform1, xform2: XFORM): XFORM;
@@ -4465,7 +4465,7 @@ end;
 function TPdfWrite.AddIso8601(DateTime: TDateTime): TPdfWrite;
 begin // add e.g. '2010-06-16T15:06:59'
   result := Add(DateTimeToIso8601(DateTime,true,'T'));
-end;               
+end;
 
 function TPdfWrite.AddWithSpace(Value: TSynExtended): TPdfWrite;
 var Buffer: ShortString;
@@ -4694,7 +4694,7 @@ begin
       if fRTL in items[i].a.fFlags then
         R2L := true;
   if not complex and not R2L then
-    exit; // avoid slower UniScribe if content does not require it 
+    exit; // avoid slower UniScribe if content does not require it
   // 3. get Visual Order, i.e. how to render the content from left to right
   SetLength(level,count);
   for i := 0 to Count-1 do
@@ -4877,7 +4877,7 @@ begin
         if AVisAttrs<>nil then
           inc(AVisAttrs);
       end;
-      if not first then 
+      if not first then
         Add('> Tj'#10);
     end;
   end;
@@ -5471,7 +5471,7 @@ begin
         exit;
   result := -1;
 end;
-                                
+
 function TPdfDocument.GetXObject(const AName: PDFString): TPdfXObject;
 var i: integer;
 begin
@@ -5501,7 +5501,7 @@ begin
       Obj := TPdfXObject(FXRef.GetObject(Obj.FObjectNumber));
     if (Obj<>nil) and Obj.InheritsFrom(TPdfImage) and
        (Img.PixelWidth=Width) and (Img.PixelHeight=Height) and
-       (not IsZero(@Img.fHash,sizeof(Hash))) and 
+       (not IsZero(@Img.fHash,sizeof(Hash))) and
        CompareMem(@Img.fHash,@Hash,SizeOf(Hash)) and
        (Obj.Attributes<>nil) then begin
       result := TPdfName(Obj.Attributes.ValueByName('Name')).Value;
@@ -5872,7 +5872,7 @@ begin
           Value.WriteValueTo(fSaveToStreamWriter);
       end;
     FTrailer.XrefAddress := fSaveToStreamWriter.Position;
-    if fFileFormat<pdf15 then 
+    if fFileFormat<pdf15 then
       FXref.WriteTo(fSaveToStreamWriter);
     FTrailer.Attributes.PdfNumberByName('Size').Value := FXref.ItemCount;
     FTrailer.WriteTo(fSaveToStreamWriter);
@@ -7704,7 +7704,7 @@ constructor TPdfFontTrueType.Create(ADoc: TPdfDocument; AFontIndex: integer;
 var W: packed array of TABC;
     c: AnsiChar;
     aFontName: PDFString;
-    Flags: integer;    
+    Flags: integer;
 begin
   if AWinAnsiFont<>nil then begin
     fWinAnsiFont := AWinAnsiFont;
@@ -7818,7 +7818,7 @@ end;
 
 { font subset embedding using Windows XP CreateFontPackage() FontSub.dll
   see http://msdn.microsoft.com/en-us/library/dd183502 }
-  
+
 function lpfnAllocate(Size: Integer): pointer; cdecl;
 begin
   GetMem(result,Size);
@@ -7842,7 +7842,7 @@ var
     var pulBytesWritten: Cardinal; usFlags, usTTCIndex, usSubsetFormat,
     usSubsetLanguage, usSubsetPlatform, usSubsetEncoding: word;
     pusSubsetKeepList: PWordArray; usSubsetKeepListCount: word;
-    lpfnAllocate, lpfnReAllocate, lpfnFree, reserved: pointer): cardinal; cdecl; 
+    lpfnAllocate, lpfnReAllocate, lpfnFree, reserved: pointer): cardinal; cdecl;
 
 procedure TPdfFontTrueType.PrepareForSaving;
 var c: AnsiChar;
@@ -9140,7 +9140,7 @@ begin
       end;
   EMR_TRANSPARENTBLT:
     with PEMRTransparentBLT(R)^ do // only handle RGB bitmaps (no palette)
-      if (offBmiSrc<>0) and (offBitsSrc<>0) then 
+      if (offBmiSrc<>0) and (offBitsSrc<>0) then
         E.DrawBitmap(xSrc,ySrc,cxSrc,cySrc,xDest,yDest,cxDest,cyDest,iUsageSrc,
           pointer(PtrUInt(R)+offBmiSrc),pointer(PtrUInt(R)+offBitsSrc),
           @PEMRTransparentBLT(R)^.rclBounds, @PEMRTransparentBLT(R)^.xformSrc,
@@ -9902,7 +9902,7 @@ begin
   for i := 0 to n-1 do
     inc(result,DX^[i]);
 end;
-        
+
 procedure TPdfEnum.TextOut(var R: TEMRExtTextOut);
 var nspace,i: integer;
     cur: cardinal;
@@ -10245,7 +10245,7 @@ begin
       if aDoc.ForceJPEGCompression=0 then // recompression only if necessary
         SaveInternalToStream(FWriter.fDestStream) else
       {$endif}
-        SaveToStream(FWriter.fDestStream); // with CompressionQuality recompress 
+        SaveToStream(FWriter.fDestStream); // with CompressionQuality recompress
       end;
     FWriter.fDestStreamPosition := FWriter.fDestStream.Seek(0,soFromCurrent);
   end else begin

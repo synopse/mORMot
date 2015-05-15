@@ -49,7 +49,7 @@ unit SynSQLite3RegEx;
    *********************************************
 
   This unit allows to enable a REGEXP operator to be used in SQlite3 statements.
-   
+
   It will use the PCRE library as available since Delphi XE, or will rely
   on http://www.regular-expressions.info/download/TPerlRegEx.zip for older
   versions of Delphi.

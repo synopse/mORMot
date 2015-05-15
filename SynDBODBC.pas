@@ -58,7 +58,7 @@ unit SynDBODBC;
     retrieved in left-to-right order
   - fixed unexpected exception raised if SQL_NO_DATA is returned
   - fixed issue when binding parameters: now specifies the correct SQL data type
-  - now trim any spaces when retrieving database schema text values 
+  - now trim any spaces when retrieving database schema text values
   - fixed ticket [4c68975022] about broken SQL statement when logging active
   - fixed ticket [d48283f5ec] about error at binding void string parameter
   - GetCol() will now retrieve all columns at once - mandatory for drivers not
@@ -71,7 +71,7 @@ unit SynDBODBC;
   TODO:
   - implement array binding of parameters
     http://msdn.microsoft.com/en-us/library/windows/desktop/ms709287
-  - implement row-wise binding when all columns are inlined 
+  - implement row-wise binding when all columns are inlined
     http://msdn.microsoft.com/en-us/library/windows/desktop/ms711730
 
 }
@@ -230,7 +230,7 @@ type
     // - the Execute method can be called once per TODBCStatement instance,
     //   but you can use the Prepare once followed by several ExecutePrepared methods
     // - if the supplied connection is not of TOleDBConnection type, will raise
-    //   an exception 
+    //   an exception
     constructor Create(aConnection: TSQLDBConnection); override;
     // release all associated memory and ODBC handles
     destructor Destroy; override;
@@ -245,7 +245,7 @@ type
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this overridden method will log the SQL statement if sllSQL has been
     //   enabled in SynDBLog.Family.Level
-    // - raise an EODBCException or ESQLDBException on any error 
+    // - raise an EODBCException or ESQLDBException on any error
     procedure ExecutePrepared; override;
     /// Reset the previous prepared statement
     // - this overridden implementation will reset all bindings and the cursor state
@@ -261,7 +261,7 @@ type
     // - access the first or next row of data from the SQL Statement result:
     //   if SeekFirst is TRUE, will put the cursor on the first row of results,
     //   otherwise, it will fetch one row of data, to be called within a loop
-    // - raise an EODBCException or ESQLDBException exception on any error 
+    // - raise an EODBCException or ESQLDBException exception on any error
     function Step(SeekFirst: boolean=false): boolean; override;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; override;
@@ -273,20 +273,20 @@ type
     function ColumnDateTime(Col: integer): TDateTime; override;
     /// return a Column currency value of the current Row, first Col is 0
     // - should retrieve directly the 64 bit Currency content, to avoid
-    // any rounding/conversion error from floating-point types 
+    // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
-    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0 
+    /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUTF8(Col: integer): RawUTF8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     // - ColumnBlob() will return the binary content of the field is was not ftBlob,
     //  e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
-    //  or a direct mapping of the RawUnicode  
+    //  or a direct mapping of the RawUnicode
     function ColumnBlob(Col: integer): RawByteString; override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
-    //   format and contains true BLOB data 
+    // format and contains true BLOB data
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// returns the number of rows updated by the execution of this statement
     function UpdateCount: integer; override;
@@ -1309,7 +1309,7 @@ begin
       offs := 0;
       while res=colDataTruncated do begin
         inc(offs,ColumnDataSize);
-        res := GetColNextChunk(Col); 
+        res := GetColNextChunk(Col);
         if ColumnDataSize<=0 then
           break;
         SetLength(result,offs+ColumnDataSize);
@@ -1708,7 +1708,7 @@ begin
     SQL_HANDLE_DBC,ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info,Len shr 1);
 end;
-  
+
 procedure TODBCLib.HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
@@ -1815,7 +1815,7 @@ begin
       Free; // TODBCStatement release
     end;
     // get indexes
-    if n>0 then 
+    if n>0 then
       with TODBCStatement.Create(MainConnection) do
       try
         AllocStatement;
@@ -1882,7 +1882,7 @@ begin
         ODBC.ForeignKeysA(fStatement,nil,0,nil,0,nil,0,nil,0,nil,0,'%',SQL_NTS),
         SQL_HANDLE_STMT,fStatement);
       BindColumns;
-      while Step do 
+      while Step do
         fForeignKeys.Add(
           Trim(ColumnUTF8(5))+'.'+Trim(ColumnUTF8(6))+'.'+Trim(ColumnUTF8(7)),
           Trim(ColumnUTF8(1))+'.'+Trim(ColumnUTF8(2))+'.'+Trim(ColumnUTF8(3)));
@@ -1957,4 +1957,4 @@ end;
 
 initialization
   TODBCConnectionProperties.RegisterClassNameForDefinition;
-end.
+end.

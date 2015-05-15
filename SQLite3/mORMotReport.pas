@@ -250,8 +250,8 @@ const
   MAXCOLS = 20;
   MAXTABS = 20;
 
-  {{ this constant can be used to be replaced by the page number in
-   the middle of any text }
+  /// this constant can be used to be replaced by the page number in
+  // the middle of any text
   PAGENUMBER = '<<pagenumber>>';
 
 type
@@ -283,7 +283,7 @@ type
   // - Text content can be modified by this event handler to customize
   // some characters (e.g. '>=' can be converted to the one Unicode glyph)
   TOnStringToUnicodeEvent = function(const Text: SynUnicode): SynUnicode of object;
-    
+
   /// available known paper size for NewPageLayout() method
   TGdiPagePaperSize = (
     psA4, psA5, psA3, psLetter, psLegal);
@@ -359,7 +359,7 @@ type
 
   /// used to store all pages of the report
   TGDIPageContentDynArray = array of TGDIPageContent;
-  
+
   /// the available menu items
   TGdiPagePreviewButton = (
     rNone, rNextPage, rPreviousPage, rGotoPage, rZoom, rBookmarks,
@@ -522,7 +522,7 @@ type
     procedure PrintColumnHeaders;
 
     procedure SetZoom(zoom: integer);
-    procedure SetZoomStatus(aZoomStatus: TZoomStatus); 
+    procedure SetZoomStatus(aZoomStatus: TZoomStatus);
     procedure ZoomTimerInternal(X,Y: integer; ZoomIn: boolean);
     procedure ZoomTimer(Sender: TObject);
 
@@ -664,15 +664,15 @@ type
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
     // - by default, will write a paragraph, unless withNewLine is set to FALSE,
-    // so that the next DrawText() will continue drawing at the current position 
+    // so that the next DrawText() will continue drawing at the current position
     procedure DrawText(const s: string; withNewLine: boolean=true);
-      {$ifdef HASINLINE}inline;{$endif} 
+      {$ifdef HASINLINE}inline;{$endif}
     /// draw some UTF-8 text as a paragraph, with the current alignment
     // - this method does all word-wrapping and formating if necessary
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
     // - by default, will write a paragraph, unless withNewLine is set to FALSE,
-    // so that the next DrawText() will continue drawing at the current position 
+    // so that the next DrawText() will continue drawing at the current position
     procedure DrawTextU(const s: RawUTF8; withNewLine: boolean=true);
       {$ifdef HASINLINE}inline;{$endif}
     /// draw some Unicode text as a paragraph, with the current alignment
@@ -680,8 +680,8 @@ type
     // - this method handle multiple paragraphs inside s (separated by newlines -
     // i.e. #13)
     // - by default, will write a paragraph, unless withNewLine is set to FALSE,
-    // so that the next DrawText() will continue drawing at the current position 
-    procedure DrawTextW(const s: SynUnicode; withNewLine: boolean=true); 
+    // so that the next DrawText() will continue drawing at the current position
+    procedure DrawTextW(const s: SynUnicode; withNewLine: boolean=true);
     /// draw some text as a paragraph, with the current alignment
     // - this method use format() like parameterss
     procedure DrawTextFmt(const s: string; const Args: array of const;
@@ -931,7 +931,7 @@ type
     /// create a link entry at the specified coordinates of the current page
     // - coordinates are specified in mm
     // - the bookmark name is not checked by this method: a bookmark can be
-    // linked before being marked in the document 
+    // linked before being marked in the document
     procedure AddLink(const aBookmarkName: string; aRect: TRect;
       aPageNumber: integer=0); virtual;
 
@@ -1049,7 +1049,7 @@ type
     // - default value is TRUE
     property ExportPDFUseFontFallBack: boolean read fExportPDFUseFontFallBack
       write fExportPDFUseFontFallBack;
-    /// set the font name to be used for missing characters in exported PDF document 
+    /// set the font name to be used for missing characters in exported PDF document
     // - used only if UseFontFallBack is TRUE
     // - default value is 'Arial Unicode MS', if existing
     property ExportPDFFontFallBackName: string read fExportPDFFontFallBackName
@@ -1076,9 +1076,9 @@ type
     // - default value is PDF_PERMISSION_ALL (i.e. no restriction)
     property ExportPDFEncryptionPermissions: TPdfEncryptionPermissions
       read fExportPDFEncryptionPermissions write fExportPDFEncryptionPermissions;
-    /// set to TRUE to export in PDF 1.5 format, which may produce smaller files 
+    /// set to TRUE to export in PDF 1.5 format, which may produce smaller files
     property ExportPDFGeneratePDF15File: Boolean
-      read fExportPDFGeneratePDF15File write fExportPDFGeneratePDF15File; 
+      read fExportPDFGeneratePDF15File write fExportPDFGeneratePDF15File;
 {$endif}
     /// the current page number, during text adding
     // - Page is used during preview, after text adding
@@ -1107,7 +1107,7 @@ type
     // - used e.g. for PDF generation
     // - this is enabled by default
     property UseOutlines: boolean read fUseOutlines write fUseOutlines;
-    /// left justification hang indentation  
+    /// left justification hang indentation
     property HangIndent: integer read fHangIndent write fHangIndent;
     /// Line spacing: can be lsSingle, lsOneAndHalf or lsDouble
     property LineSpacing: TLineSpacing read fLineSpacing write fLineSpacing;
@@ -1256,7 +1256,7 @@ type
     constructor Create(Owner: TRenderPages);
     /// add some text at the current position
     // - the text is converted to Unicode before adding (calling
-    // Owner.OnStringToUnicode if was defined) 
+    // Owner.OnStringToUnicode if was defined)
     // - the current Owner Font settings are used for the rendering
     // - warning: this method won't handle control chars (like #13 or #10), but
     // will replace them with a space: it's about the caller to
@@ -2188,7 +2188,7 @@ function TGDIPages.CreateMetaFile(aWidth, aHeight: integer): TMetaFile;
 begin
   result := TMetafile.Create;
   if Self=nil then exit;
-  result.Enhanced := true; 
+  result.Enhanced := true;
   result.Width := aWidth;
   result.Height := aHeight;
 end;
@@ -2268,7 +2268,7 @@ end;
 function TGDIPages.CreateMetafileCanvas(Page: TMetafile): TMetafileCanvas;
 begin
   result := TMetafileCanvas.Create(Page,fPtrHdl);
-  if Self=nil then exit; 
+  if Self=nil then exit;
   UpdateMetafileCanvasFont(result);
   result.Pen.Width := fPrinterPxPerInch.y div screen.PixelsPerInch;
 end;
@@ -2588,7 +2588,7 @@ begin
 end;
 
 procedure TGDIPages.PrintFormattedLine(s: SynUnicode; flags: integer;
-  const aBookmark: string; const aLink: string; withNewLine: boolean); 
+  const aBookmark: string; const aLink: string; withNewLine: boolean);
 var i, xpos: integer;
     leftOffset, rightOffset: integer;
 begin
@@ -2631,7 +2631,7 @@ begin
     // first line of written text is added
 end;
 
-procedure TGDIPages.LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean); 
+procedure TGDIPages.LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean);
 var indent, leftOffset, rightOffset, LineWidth: integer;
     leftstring, rightstring: SynUnicode;
     firstLoop: boolean;
@@ -2670,7 +2670,7 @@ begin
     NewLine;
   until false;
   if withNewLine then
-    NewLine; 
+    NewLine;
 end;
 
 procedure TGDIPages.RightOrCenterWrap(const s: SynUnicode);
@@ -2712,7 +2712,7 @@ begin
   // Offsets (in Printer pixels) based on current page margins
   LeftOffset := fPageMarginsPx.left;
   if fForcedLeftOffset <> -1 then
-    leftOffset := fForcedLeftOffset; 
+    leftOffset := fForcedLeftOffset;
   RightOffset := fPhysicalSizePx.x-fPageMarginsPx.right;
   if RightOffset < LeftOffset then
     raise Exception.Create('GetTextLimitsPx: wrong margins');
@@ -2778,7 +2778,7 @@ begin
     if BiDiMode=bdRightToLeft then
       leftOffset := rightOffset-size.cx;
     TextOut(fCanvas,leftOffset,fCurrentYPos,PW,PWLen);
-    fForcedLeftOffset := leftOffset+size.cx; 
+    fForcedLeftOffset := leftOffset+size.cx;
     // don't care about line width: it should be always equal or smaller,
     // and we are left aligned
   end else begin // justified
@@ -2914,7 +2914,7 @@ begin
       exit;
     end;
   end;
-  if (Button=mbLeft) and (ssDouble in Shift) then 
+  if (Button=mbLeft) and (ssDouble in Shift) then
     // allows dblclick to alternate between PAGE_FIT and PAGE_WIDTH
     if ZoomStatus = zsPageWidth then
       Zoom := PAGE_FIT else
@@ -3222,7 +3222,7 @@ begin
   fBookmarks := TStringList.Create;
   fLinks := TStringList.Create;
   fOutline := TStringList.Create;
-  fForcedLeftOffset := -1; 
+  fForcedLeftOffset := -1;
 end;
 
 destructor TGDIPages.Destroy;
@@ -3561,7 +3561,7 @@ begin
   if Self=nil then exit; // avoid GPF
   CheckHeaderDone;
   inc(fCurrentYPos, GetLineHeight);
-  fForcedLeftOffset := -1; 
+  fForcedLeftOffset := -1;
 //  fCanvasText := fCanvasText+#13#10;
 end;
 
@@ -3597,7 +3597,7 @@ procedure TGDIPages.NewPageIfAnyContent;
 begin
   if Self=nil then exit; // avoid GPF
   if fHeaderDone then
-    NewPage; 
+    NewPage;
 end;
 
 procedure TGDIPages.BeginGroup;
@@ -3769,7 +3769,7 @@ begin
     M := Root;
     for i := 0 to fOutline.Count-1 do
     with TGDIPagereference(fOutline.Objects[i]) do begin
-      while (M<>Root) and (cardinal(-2000-M.Tag)<cardinal(fOutline.Count)) and 
+      while (M<>Root) and (cardinal(-2000-M.Tag)<cardinal(fOutline.Count)) and
          (Rect.Bottom<=TGDIPagereference(fOutline.Objects[-2000-M.Tag]).Rect.Bottom) do
         M := M.Parent;
       M := NewPopupMenuItem(fOutline[i],-2000-i,M);
@@ -4156,7 +4156,7 @@ end;
 procedure TGDIPages.DrawTextAcrossColsFromCSV(var CSV: PWideChar; BackgroundColor: TColor=clNone);
 begin
   if Self<>nil then // avoid GPF
-    DrawTextAcrossCols(CSVToArray(CSV,length(fColumns)),[],BackgroundColor); 
+    DrawTextAcrossCols(CSVToArray(CSV,length(fColumns)),[],BackgroundColor);
 end;
 
 /// round inverted color to white or black
@@ -4169,7 +4169,7 @@ begin
     result := clBlack;
 end;
 
-procedure TGDIPages.DrawTextAcrossCols(const StringArray: array of SynUnicode; 
+procedure TGDIPages.DrawTextAcrossCols(const StringArray: array of SynUnicode;
   BackgroundColor: TColor);
 begin
   DrawTextAcrossCols(StringArray,[],BackgroundColor);
@@ -4658,7 +4658,7 @@ begin
         Page := Comp.Tag;
   end;
   if PreviewForm<>nil then
-    SetFocus; 
+    SetFocus;
 end;
 
 procedure TGDIPages.InternalUnicodeString(const s: SynUnicode;
@@ -4700,7 +4700,7 @@ begin
   while M.Count>0 do
     M.Delete(0);
   M.Enabled := PageCount>1;
-  if PageCount>=1 then begin // add 'Go to Page' sub menus (group by 10 pages) 
+  if PageCount>=1 then begin // add 'Go to Page' sub menus (group by 10 pages)
     P := pointer(string(sReportPopupMenu2));
     PageFromTo := GetNextItemS(P); // Pages %d to %d
     PageN := GetNextItemS(P);      // Page %d
@@ -5394,7 +5394,7 @@ begin
     BreakCount := 0;
   end;
   if DoLineFeed then begin
-    // we must handle the line feed layout 
+    // we must handle the line feed layout
     Align := Owner.TextAlign;
     Adjust := LineW-(X+W);
     if (Adjust<=0) or
