@@ -88,28 +88,29 @@
 // -> in practice, this conditional is ALWAYS DEFINED, since needed by SQLite3
 
 {.$define ENHANCEDRTL}
-{ define this if you DID install our Enhanced Runtime library or the LVCL:
-  - it's better to define this conditional globaly in the Project/Options window
-  - we need to hack the "legacy" LoadResString() procedure and add a
-    LoadResStringTranslate() function, for on the fly resourcestring i18n
-  - it will also define the TwoDigitLookup[] array and some very fast x86 asm
-    IntToStr() and other functions, available in our Enhanced Runtime library
-    (and our LVCL library)
-  - it will be unset automaticaly (see below) for Delphi 2009 and up
-  - this conditional must be defined in both SQLite3Commons and SQLite3i18n units,
-    or (even better) globally in the Project options }
+// define this if you DID install our Enhanced Runtime library or the LVCL:
+// - it's better to define this conditional globaly in the Project/Options window
+// - we need to hack the "legacy" LoadResString() procedure and add a
+//   LoadResStringTranslate() function, for on the fly resourcestring i18n
+// - it will also define the TwoDigitLookup[] array and some very fast x86 asm
+//   IntToStr() and other functions, available in our Enhanced Runtime library
+//   (and our LVCL library)
+// - it will be unset automaticaly (see below) for Delphi 2009 and up
+// - this conditional must be defined in both SQLite3Commons and SQLite3i18n units,
+//   or (even better) globally in the Project options
 
 {.$define USEPACKAGES}
-{ define this if you compile the unit within a Delphi package
-  - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
-    to access 'VarCopyProc' from unit 'SynCommons'"
-  - shall be set at the package options level, and left untouched by default }
+// define this if you compile the unit within a Delphi package
+// - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
+//   to access 'VarCopyProc' from unit 'SynCommons'"
+// - shall be set at the package options level, and left untouched by default 
 
 {$define WITHLOG}
 // if defined, logging will be supported via the TSQLLog family
-// - by default, should be left defined: undefine this only if you have
-// performance issue (but TSQLog.Family.Level default setting won't log nothing,
-// so there could be a very unnoticable performance penalty having this defined)
+// - should be left defined: TSQLog.Family.Level default setting won't log
+// anything, so there won't be any noticeable performance penalty to have
+// this WITHLOG conditional defined, which is expected by high-level units
+// of the framework, like DDD or UI
 
 {.$define DOPATCHTRTL}
 // if defined, the low-level patches made to RecordCopy() low-level function
@@ -148,14 +149,14 @@
 
 
 {$define INCLUDE_FTS3}
-{ define this if you want to include the FTS3/FTS4 feature into the library
-  - FTS3 is an SQLite module implementing full-text search
-  - will include also FTS4 extension module since 3.7.4
-  - see http://www.sqlite.org/fts3.html for documentation
-  - is defined by default, but can be unset by defining EXCLUDE_FTS3 conditional
-    to save about 50 KB of code size (is it worth it nowdays?)
-  - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units,
-    so a global condition in this Synopse.inc does make sense }
+// define this if you want to include the FTS3/FTS4 feature into the library
+// - FTS3 is an SQLite module implementing full-text search
+// - will include also FTS4 extension module since 3.7.4
+// - see http://www.sqlite.org/fts3.html for documentation
+// - is defined by default, but can be unset by defining EXCLUDE_FTS3 conditional
+//   to save about 50 KB of code size (is it worth it nowdays?)
+// - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units,
+//   so a global condition in this Synopse.inc does make sense
 
 {$ifdef EXCLUDE_FTS3}
   {$undef INCLUDE_FTS3}

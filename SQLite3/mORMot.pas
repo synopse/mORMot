@@ -5140,7 +5140,7 @@ type
     /// the corresponding TAuthSession.User.LogonName value
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionUserName: RawUTF8;
-    /// the remote IP, if any
+    /// the remote IP from which the TAuthSession was created, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionRemoteIP: RawUTF8;
     /// the static instance corresponding to the associated Table (if any)
@@ -28405,9 +28405,7 @@ begin
     FreeAndNil(fModel);
   fServices.Free;
   fCache.Free;
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllInfo,'%.Destroy -> %',[ClassType,self]);
-  {$endif}
+  InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
   for cmd := Low(cmd) to high(cmd) do
     FreeAndNil(fAcquireExecution[cmd]); // should be done BEFORE private GC
   if fPrivateGarbageCollector<>nil then begin
@@ -28517,7 +28515,7 @@ end;
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  if Level in fLogFamily.Level then
+  if (self<>nil) and (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level,Text,self);
   {$endif}
 end;
@@ -28526,7 +28524,7 @@ procedure TSQLRest.InternalLog(const Format: RawUTF8;
   const Args: array of const; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  if Level in fLogFamily.Level then
+  if (self<>nil) and (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level,Format,Args,self);
   {$endif}
 end;
@@ -29727,7 +29725,9 @@ end;
 
 procedure TSQLRest.EndCurrentThread(Sender: TThread);
 begin // most would be done e.g. in TSQLRestServer.EndCurrentThread
+  {$ifdef WITHLOG}
   fLogClass.Add.NotifyThreadEnded;
+  {$endif}
 end;
 
 function TSQLRest.GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
@@ -30760,25 +30760,26 @@ function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var url, header: RawUTF8;
+    {$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if self=nil then
     result := HTML_UNAVAILABLE else begin
-{$ifdef WITHLOG}
-    fLogClass.Enter(Self,pointer(aMethodName),true);
-{$endif}
+    {$ifdef WITHLOG}
+    Log := fLogClass.Enter(self,pointer(aMethodName),true);
+    {$endif}
     url := Model.getURICallBack(aMethodName,aTable,aID)+
       UrlEncode(aNameValueParameters);
     result := URI(url,'GET',@aResponse,@header).Lo;
     if aResponseHead<>nil then
       aResponseHead^ := header;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
-        if IsHTMLContentTypeTextual(pointer(header)) then
-          fLogFamily.SynLog.Log(sllServiceReturn,
-            aResponse,nil,MAX_SIZE_RESPONSE_LOG) else
-          fLogFamily.SynLog.Log(sllServiceReturn,
-            '% bytes "%"',[length(aResponse),header]);
-{$endif}
+      if IsHTMLContentTypeTextual(pointer(header)) then
+        Log.Log(sllServiceReturn,aResponse,nil,MAX_SIZE_RESPONSE_LOG) else
+        Log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header]);
+    {$endif}
   end;
 end;
 
@@ -30920,10 +30921,7 @@ DoRetry:
     fLastErrorCode := Call.OutStatus;
     if (Call.OutStatus=HTML_TIMEOUT) and aRetryOnceOnTimeout then begin
       aRetryOnceOnTimeout := false;
-{$ifdef WITHLOG}
-      fLogFamily.SynLog.Log(sllError,'% % returned "408 Request Timeout" -> RETRY',
-        [method,url],self);
-{$endif}
+      InternalLog('% % returned "408 Request Timeout" -> RETRY',[method,url],sllError);
       goto DoRetry;
     end;
     if not (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) then begin
@@ -30931,10 +30929,8 @@ DoRetry:
       if Call.OutBody='' then
         fLastErrorMessage := StatusMsg else
         fLastErrorMessage := Call.OutBody;
-{$ifdef WITHLOG}
-      fLogFamily.SynLog.Log(sllError,'% % returned % % with message  %',
-        [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],self);
-{$endif}
+      InternalLog('% % returned % % with message  %',
+        [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],sllError);
     end;
     if (Call.OutStatus<>HTML_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
       break;
@@ -30972,18 +30968,19 @@ function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
   'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+{$ifdef WITHLOG}
+var Log: ISynLog; // for Enter auto-leave to work with FPC
+{$endif}
 begin
   if (self=nil) or (method<Low(NAME)) then
     result := HTML_UNAVAILABLE else begin
-{$ifdef WITHLOG}
-    fLogClass.Enter(self,pointer(aMethodName),true);
-{$endif}
+    {$ifdef WITHLOG}
+    Log := fLogClass.Enter(self,pointer(aMethodName),true);
+    {$endif}
     result := URI(Model.getURICallBack(aMethodName,aTable,aID),
       NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
-{$ifdef WITHLOG}
-    fLogFamily.SynLog.Log(sllServiceReturn,'% result=% resplen=%',
-      [NAME[method],result,length(aResponse)]);
-{$endif}
+    InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
+      sllServiceReturn);
   end;
 end;
 
@@ -31724,12 +31721,15 @@ begin
 end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
+{$ifdef WITHLOG}
+var Log: ISynLog; // for Enter auto-leave to work with FPC
+{$endif}
 begin
   if fSessions=nil then
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
-  fLogClass.Enter(self,'Shutdown').
-    Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount]);
+  Log := fLogClass.Enter(self,'Shutdown');
+  Log.Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount],self);
   {$endif}
   OnNotifyCallback := nil;
   fSessions.Lock;
@@ -32037,10 +32037,13 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
   Master: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
+{$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  {$ifdef WITHLOG}
-  fLogClass.Enter(self);
-  {$endif}
+  Log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   result := 0;
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
@@ -32088,11 +32091,14 @@ var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Rec: TSQLRecord;
     DeletedMinID: TID;
     Deleted: TSQLRecordTableDeleted;
+{$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
+  Log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   result := nil;
-  {$ifdef WITHLOG}
-  fLogClass.Enter(self);
-  {$endif}
   if Master=nil then
     raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Master=nil)',[self]);
   TableIndex := Model.GetTableIndexExisting(Table);
@@ -33961,9 +33967,7 @@ begin
   finally
     Free;
   end;
-  {$ifdef WITHLOG}
-  Log.Log(sllDebug,Call.OutBody,Server);
-  {$endif}
+  Server.InternalLog('%.Error: %',[ClassType,Call.OutBody],sllDebug);
 end;
 
 
@@ -34195,7 +34199,14 @@ const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
   ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
+{$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
+  Log := fLogClass.Enter(self,pointer(FormatUTF8('URI(% % inlen=%)',
+    [Call.Method,Call.Url,length(Call.InBody)])),true);
+{$else}
+begin
+{$endif}
   QueryPerformanceCounter(timeStart);
   InterlockedIncrement(fStats.fCurrentRequestCount);
   Call.OutInternalState := InternalState; // other threads may change it
@@ -34203,10 +34214,7 @@ begin
   Ctxt := ServicesRouting.Create(self,Call);
   try
     {$ifdef WITHLOG}
-    Ctxt.Log := fLogClass.Add;
-    if sllEnter in Ctxt.Log.Family.Level then
-      Ctxt.Log.Enter(self,pointer(FormatUTF8('URI(% % inlen=%)',
-        [Call.Method,Call.Url,length(Call.InBody)])),true);
+    Ctxt.Log := Log.Instance;
     {$endif}
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTML_UNAVAILABLE) else
@@ -34272,11 +34280,9 @@ begin
     QueryPerformanceCounter(timeEnd);
     dec(timeEnd,timeStart);
     timeStart := fStats.FromExternalQueryPerformanceCounters(timeEnd);
-    {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllServer,'% % % %/% %-> % with outlen=% in % us',
+    InternalLog('% % % %/% %-> % with outlen=% in % us',
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
-      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),timeStart],self);
-    {$endif}
+      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),timeStart],sllServer);
     if mlTables in StatLevels then
       case Ctxt.Command of
       execORMGet:
@@ -34537,13 +34543,10 @@ begin
   with TAuthSession(fSessions.List[aSessionIndex]) do begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
-    {$ifdef WITHLOG}
     if Ctxt=nil then
-      fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/%',
-        [User.LogonName,IDCardinal],self) else
-      fLogFamily.SynLog.Log(sllUserAuth,'Deleted session %/% from %/%',
-        [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],self);
-    {$endif}
+      InternalLog('Deleted session %/%',[User.LogonName,IDCardinal],sllUserAuth) else
+      InternalLog('Deleted session %/% from %/%',
+        [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],sllUserAuth);
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self,fSessions.List[aSessionIndex],Ctxt);
     fSessions.Delete(aSessionIndex);
@@ -34696,10 +34699,8 @@ begin
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllTrace,'%.BeginCurrentThread(%) ThreadID=% ThreadCount=%',
-    [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
-  {$endif}
+  InternalLog('BeginCurrentThread(%) ThreadID=% ThreadCount=%',
+    [Sender.ClassType,pointer(CurrentThreadId),fStats.CurrentThreadCount],sllTrace);
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
@@ -34728,10 +34729,8 @@ begin
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllTrace,'%.EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [ClassType,Sender.ClassType,CurrentThreadId,fStats.CurrentThreadCount]);
-  {$endif}
+  InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
+    [Sender.ClassType,pointer(CurrentThreadId),fStats.CurrentThreadCount],sllTrace);
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
@@ -35052,10 +35051,14 @@ var HistBlob: TSQLRecordHistory;
     HistID, ModifiedRecord: TInt64DynArray;
     TableHistoryIndex,i,HistIDCount,n: integer;
     ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
+{$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  {$ifdef WITHLOG}
-  fLogClass.Enter;
-  {$endif}
+  Log := fLogClass.Enter(self);
+  Log.Log(sllInfo,'TrackChangesFlush(%)',[aTableHistory],self);
+{$else}
+begin
+{$endif}
   fAcquireExecution[execORMWrite].Enter; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
@@ -35414,10 +35417,13 @@ var EndOfObject: AnsiChar;
       not CurrentContext.Call.RestAccessRights^.CanExecuteORMWrite(
         URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
   end;
+{$ifdef WITHLOG}
+var Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  {$ifdef WITHLOG}
-  fLogClass.Enter(self);
-  {$endif}
+  Log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   Sent := pointer(Data);
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
@@ -36048,9 +36054,9 @@ function TSQLRestClientURINamedPipe.InternalCheckOpen: boolean;
 procedure InternalCreateClientPipe;
 var Pipe: THandle;
     StartTime64: Int64;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     Log: ISynLog;
-{$endif}
+    {$endif}
 procedure CreatePipe;
 begin
   Pipe := CreateFile(pointer(fPipeName), GENERIC_READ or GENERIC_WRITE,
@@ -36063,9 +36069,9 @@ begin
 {$endif}
 end;
 begin
-{$ifdef WITHLOG}
-  Log := fLogClass.Enter;
-{$endif}
+  {$ifdef WITHLOG}
+  Log := fLogClass.Enter(self);
+  {$endif}
 {$ifdef ANONYMOUSNAMEDPIPE}
   if not ImpersonateAnonymousToken(GetCurrentThread) then
      raise Exception.Create('ImpersonateAnonymousToken');
@@ -36085,9 +36091,7 @@ begin
   end;
   StartTime64 := GetTickCount64;
   if (Pipe=INVALID_HANDLE_VALUE) and (GetLastError=ERROR_PIPE_BUSY) then
-    {$ifdef WITHLOG}
-    Log.Log(sllDebug,'Busy % -> retry',[fPipeName],self);
-    {$endif}
+    InternalLog('Busy % -> retry',[fPipeName],sllDebug);
     repeat
       SleepHiRes(10);
       if WaitNamedPipe(pointer(fPipeName),50) then begin
@@ -36097,10 +36101,8 @@ begin
       end;
     until GetTickCount64>StartTime64+2000;
   if Pipe=INVALID_HANDLE_VALUE then begin
-    {$ifdef WITHLOG}
-    Log.Log(sllLastError,'when connecting to % after % ms',
-      [fPipeName,GetTickCount64-StartTime64],self);
-    {$endif}
+    InternalLog('when connecting to % after % ms',
+      [fPipeName,GetTickCount64-StartTime64],sllLastError);
     exit;
   end;
 {$ifdef ANONYMOUSNAMEDPIPE}
@@ -36108,9 +36110,7 @@ begin
     RevertToSelf; // we just needed to be anonymous during pipe connection
   end;
 {$endif}
-  {$ifdef WITHLOG}
-  Log.Log(sllDebug,'Connected to %',[fPipeName],self);
-  {$endif}
+  InternalLog('Connected to %',[fPipeName],sllDebug);
   fServerPipe := Pipe;
 end;
 begin
@@ -36133,16 +36133,16 @@ end;
 procedure TSQLRestClientURINamedPipe.InternalURI(var Call: TSQLRestURIParams);
 var Card: cardinal;
 {.$define TSQLRestClientURIDll_TIMEOUT} // to be tried over slow networks if errors
-{$ifdef TSQLRestClientURIDll_TIMEOUT}
+    {$ifdef TSQLRestClientURIDll_TIMEOUT}
     i: integer;
-{$endif}
-{$ifdef WITHLOG}
+    {$endif}
+    {$ifdef WITHLOG}
     Log: ISynLog;
-{$endif}
+    {$endif}
 begin
-{$ifdef WITHLOG}
+  {$ifdef WITHLOG}
   Log := fLogClass.Enter(self,nil,true);
-{$endif}
+  {$endif}
   Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
   EnterCriticalSection(fMutex);
   try
@@ -36161,9 +36161,7 @@ begin
           if (fServerPipe=Invalid_Handle_Value) or
              (FileWrite(fServerPipe,Card,4)<>4) then begin
             Card := GetLastError;
-            {$ifdef WITHLOG}
-            Log.Log(sllLastError,'reconnecting to %',[fPipeName],self);
-            {$endif}
+            InternalLog('reconnecting to %',[fPipeName],sllLastError);
             if fServerPipe<>Invalid_Handle_Value then
               FileClose(fServerPipe);
             fServerPipe := 0;
@@ -36201,9 +36199,7 @@ begin
 {$endif}
      except
        on E: Exception do begin // error in ReadString()
-         {$ifdef WITHLOG}
-         Log.Log(sllLastError,'% for PipeName=%',[E,fPipeName],self);
-         {$endif}
+         InternalLog('% for PipeName=%',[E,fPipeName],sllLastError);
          Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
          WriteString(fServerPipe,''); // try to notify the server of client logout
          FileClose(fServerPipe);
@@ -36213,10 +36209,8 @@ begin
   finally
     LeaveCriticalSection(fMutex);
   end;
-{$ifdef WITHLOG}
   with Call do
-    Log.Log(sllClient,'% % status=% state=%',[method,url,OutStatus,OutInternalState],self);
-{$endif}
+    InternalLog('% % status=% state=%',[method,url,OutStatus,OutInternalState],sllClient);
 end;
 
 {$endif MSWINDOWS}
@@ -37547,10 +37541,8 @@ begin
   finally
     StorageUnLock;
   end;
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllDB,'UpdateFile(%) done in %',
-    [fStoredClassRecordProps.SQLTableName,Timer.Stop],self);
-  {$endif}
+  InternalLog('UpdateFile(%) done in %',
+    [fStoredClassRecordProps.SQLTableName,Timer.Stop],sllDB);
 end;
 
 procedure TSQLRestStorageInMemory.ReloadFromFile;
@@ -38047,9 +38039,7 @@ begin
   finally
     S.Free;
   end;
-  {$ifdef WITHLOG}
-  fLogFamily.SynLog.Log(sllDB,'UpdateToFile done in %',[Timer.Stop],self);
-  {$endif}
+  InternalLog('UpdateToFile done in %',[Timer.Stop],sllDB);
 end;
 
 function TSQLRestServerFullMemory.EngineExecute(const aSQL: RawUTF8): boolean;
@@ -40027,18 +40017,16 @@ var Msg: RawUTF8;
     Finished64: Int64;
     P: PUTF8Char;
     aMsg: TMsg;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     Log: ISynLog;
-{$endif}
+    {$endif}
 begin
-{$ifdef WITHLOG}
+  {$ifdef WITHLOG}
   Log := fLogClass.Enter(self,nil,true);
-{$endif}
+  {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
-    {$ifdef WITHLOG}
-    Log.Log(sllClient,'InternalCheckOpen failure',self);
-    {$endif}
+    InternalLog('InternalCheckOpen failure',sllClient);
     exit;
   end;
   // 1. send request
@@ -40054,10 +40042,8 @@ begin
     Call.OutStatus := SendMessage(fServerWindow,WM_COPYDATA,fClientWindow,PtrInt(@Data));
     if not (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) then begin
       fCurrentResponse := '';
-  {$ifdef WITHLOG}
       with Call do
-        Log.Log(sllError,'% % status=%',[Method,Url,OutStatus],self);
-  {$endif}
+        InternalLog('% % status=%',[Method,Url,OutStatus],sllError);
       exit;
     end;
     // 2. expect answer from server
@@ -40100,10 +40086,8 @@ begin
   finally
     LeaveCriticalSection(fMutex);
   end;
-{$ifdef WITHLOG}
   with Call do
-    Log.Log(sllClient,'% % status=% state=%',[Method,Url,OutStatus,OutInternalState],self);
-{$endif}
+    InternalLog('% % status=% state=%',[Method,Url,OutStatus,OutInternalState],sllClient);
 end;
 
 procedure TSQLRestClientURIMessage.WMCopyData(var Msg: TWMCopyData);
@@ -42699,17 +42683,11 @@ begin
       end;
   end;
   if (result=nil) or (result.fID=0) then begin
-    {$ifdef WITHLOG}
-    fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      '%.LogonName=% not found',[fServer.fSQLAuthUserClass,aUserName],self);
-    {$endif}
+    fServer.InternalLog('%.LogonName=% not found',[fServer.fSQLAuthUserClass,aUserName],sllUserAuth);
     FreeAndNil(result);
   end else
   if not result.CanUserLog(Ctxt) then begin
-    {$ifdef WITHLOG}
-    fServer.fLogFamily.SynLog.Log(sllUserAuth,
-      '%.CanUserLog(%) returned FALSE -> rejected',[result,aUserName],self);
-    {$endif}
+    fServer.InternalLog('%.CanUserLog(%) returned FALSE -> rejected',[result,aUserName],sllUserAuth);
     FreeAndNil(result);
   end;
 end;
@@ -43140,11 +43118,9 @@ begin
   if SecCtxIdx<0 then begin
     // 1st call: create SecCtxId
     if High(fSSPIAuthContexts)>MAXSSPIAUTHCONTEXTS then begin
-      {$ifdef WITHLOG}
-      Ctxt.Log.Log(sllUserAuth,
+      fServer.InternalLog(
         'Too many Windows Authenticated session in pending state: MAXSSPIAUTHCONTEXTS=%',
-        [MAXSSPIAUTHCONTEXTS],self);
-      {$endif}
+        [MAXSSPIAUTHCONTEXTS],sllUserAuth);
       exit;
     end;
     SecCtxIdx := CtxArr.New; // add a new entry to fSSPIAuthContexts[]
@@ -46772,10 +46748,7 @@ begin
   Inst.Instance := CreateInstance(true);
   if Inst.Instance=nil then
     exit;
-  {$ifdef WITHLOG}
-  fRest.fLogFamily.SynLog.Log(sllServiceCall,'Adding % instance (id=%)',
-    [fInterfaceURI,Inst.InstanceID],self);
-  {$endif}
+  fRest.InternalLog('Adding % instance (id=%)',[fInterfaceURI,Inst.InstanceID],sllServiceCall);
   P := pointer(fInstances);
   for i := 1 to fInstancesCount do
     if P^.InstanceID=0 then begin
@@ -46799,11 +46772,8 @@ begin
       if InstanceID<>0 then
       if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
         // deprecated -> mark this entry as empty
-        {$ifdef WITHLOG}
-        fRest.fLogFamily.SynLog.Log(sllServiceCall,
-          'Deleted % instance (id=%) after % ms timeout (max % ms)',
-          [fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],self);
-        {$endif}
+        fRest.InternalLog('Deleted % instance (id=%) after % ms timeout (max % ms)',
+          [fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllServiceCall);
         SafeFreeInstance(self);
       end;
     if Inst.InstanceID=0 then begin
@@ -47952,6 +47922,9 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
 var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
     status: integer;
+    {$ifdef WITHLOG}
+    Log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   result := false;
   if Self=nil then
@@ -47960,7 +47933,7 @@ begin
     fClient := fRest as TSQLRestClientURI;
   {$ifdef WITHLOG}
   if sllEnter in fRest.fLogFamily.Level then
-    fRest.LogClass.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
+    Log := fRest.LogClass.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
   {$endif}
   // compute URI according to current routing scheme
   if fRest.Services.ExpectMangledURI then
@@ -47983,7 +47956,7 @@ begin
   if aServiceCustomAnswer=nil then begin // decode JSON object
     {$ifdef WITHLOG}
     if (sllServiceReturn in fRest.fLogFamily.Level) and (resp<>'') then
-      fRest.fLogFamily.SynLog.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
+      Log.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
     {$endif}
     JSONDecode(resp,['result','id'],Values,True);
     if Values[0]=nil then begin // assume ID=0 if no "id":... value
@@ -47996,11 +47969,7 @@ begin
     if aClientDrivenID<>nil then
       aClientDrivenID^ := GetCardinal(Values[1]);
   end else begin // free answer returned in TServiceCustomAnswer
-    {$ifdef WITHLOG}
-    if sllServiceReturn in fRest.fLogFamily.Level then
-      fRest.fLogFamily.SynLog.Log(sllServiceReturn,
-        'TServiceCustomAnswer(%) returned len=%',[head,length(resp)]);
-    {$endif}
+    fRest.InternalLog('TServiceCustomAnswer(%) returned len=%',[head,length(resp)],sllServiceReturn);
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
     if aClientDrivenID<>nil then
