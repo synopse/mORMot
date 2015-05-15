@@ -14180,10 +14180,10 @@ type
       const aContractExpected: RawUTF8=''): boolean; overload;
 
     /// compute the full statistics about this server, as JSON
-    // - is a wrapper around the Stats() method-based service
+    // - is a wrapper around the Stats() method-based service, setting withall=1
     function FullStatsAsJson: RawUTF8; virtual;
     /// compute the full statistics about this server, as a TDocVariant document
-    // - is a wrapper around the Stats() method-based service
+    // - is a wrapper around the Stats() method-based service, setting withall=1
     function FullStatsAsDocVariant: variant;
 
     /// read-only access to the list of registered server-side authentication
@@ -34298,7 +34298,7 @@ end;
 function TSQLRestServer.FullStatsAsJson: RawUTF8;
 var Ctxt: TSQLRestServerURIContext;
     call: TSQLRestURIParams;
-begin
+begin // emulates root/stat?withall=1 method call
   Ctxt := TSQLRestRoutingREST.Create(Self,call);
   try
     Ctxt.Parameters := 'withall=1';

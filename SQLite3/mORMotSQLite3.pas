@@ -703,11 +703,9 @@ begin
     timer := @fStatementTimer else
     timer := nil;
   fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer);
-  {$ifdef WITHLOG}
   if wasPrepared then
-    fLogClass.Add.Log(sllDB,'prepared % % %',
-      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],self);
-  {$endif}
+    InternalLog('prepared % % %',
+      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
   if timer=nil then begin
     fStaticStatementTimer.Start;
     fStatementTimer := @fStaticStatementTimer;
@@ -751,12 +749,9 @@ begin
     if fStatementTimer<>nil then begin
       fStatementTimer^.Pause;
       fStatementTimer^.ComputeTime;
-      {$ifdef WITHLOG}
-      with fLogFamily.SynLog do
       if E=nil then
-        Log(sllSQL,'% % %',[fStatementTimer^.Time,Msg,fStatementSQL],self) else
-        Log(sllError,'% for % // %',[E,fStatementSQL,fStatementGenericSQL],self);
-      {$endif}
+        InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
+        InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
     end;
   finally
@@ -793,12 +788,9 @@ begin
   SQL := Props.SQLTableName;
   if fBatchMethod<>mNone then begin
     result := 0; // indicates error
-    if SentData='' then begin
-      {$ifdef WITHLOG}
-      fLogFamily.SynLog.Log(sllError,'BATCH with MainEngineAdd(%,SentData="") -> '+
-        'DEFAULT VALUES not implemented',[SQL],self);
-      {$endif}
-    end else
+    if SentData='' then 
+      InternalLog('BATCH with MainEngineAdd(%,SentData="") -> '+
+        'DEFAULT VALUES not implemented',[SQL],sllError) else
     if (fBatchMethod=mPOST) and (fBatchIDMax>=0) and
        ((fBatchTableIndex<0) or (fBatchTableIndex=TableModelIndex)) then begin
       fBatchTableIndex := TableModelIndex;
@@ -1019,10 +1011,13 @@ end;
 
 destructor TSQLRestServerDB.Destroy;
 var i: integer;
+{$ifdef WITHLOG}
+    Log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLogClass.Enter(self);
-  {$endif}
+  Log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   try
     if fRegisteredVirtualTableModules<>nil then
       with fRegisteredVirtualTableModules do
@@ -1130,7 +1125,7 @@ begin
   except
     on E: ESQLite3Exception do begin
       {$ifdef WITHLOG}
-      fLogFamily.SynLog.Log(sllError,'% for % // %',[E,aSQL,fStatementGenericSQL],self);
+      InternalLog('% for % // %',[E,aSQL,fStatementGenericSQL],sllError);
       {$else}
       LogToTextFile('TSQLRestServerDB.InternalExecute '+RawUTF8(E.Message)+#13#10+aSQL);
       {$endif}

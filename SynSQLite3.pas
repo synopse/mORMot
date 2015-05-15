@@ -3473,10 +3473,13 @@ destructor TSQLDataBase.Destroy;
 {$ifndef INCLUDE_FTS3}
 var S: TSQLite3Statement;
 {$endif}
+{$ifdef WITHLOG}
+var FPCLog: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.Enter(self);
-  {$endif}
+  FPCLog := fLog.Enter(self);
+{$else}
+begin
+{$endif}
   if DB<>0 then
   try
     Rollback; // any unfinished transaction is rollbacked
@@ -3941,12 +3944,16 @@ begin
 end;
 
 function TSQLDataBase.DBClose: integer;
+{$ifdef WITHLOG}
+var FPCLog: ISynLog;
+{$endif}
 begin
   result := SQLITE_OK;
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  fLog.Enter.Log(sllDB,'closing "%"',[FileName],self);
+  FPCLog := fLog.Enter;
+  FPCLog.Log(sllDB,'closing "%"',[FileName],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
@@ -3960,9 +3967,9 @@ function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
     i: integer;
 {$ifdef WITHLOG}
-    Log: ISynLog;
+    FPCLog: ISynLog;
 begin
-  Log := fLog.Enter(self);
+  FPCLog := fLog.Enter(self);
 {$else}
 begin
 {$endif}
@@ -3985,8 +3992,8 @@ begin
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    if Log<>nil then
-      Log.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
+    if FPCLog<>nil then
+      FPCLog.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
     {$endif}
     sqlite3.close(fDB); // should always be closed, even on failure
@@ -4046,7 +4053,7 @@ begin
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
   {$ifdef WITHLOG}
-  Log.Log(sllDB,'"%" database file opened with PageSize=% and CacheSize=%',
+  FPCLog.Log(sllDB,'"%" database file opened with PageSize=% and CacheSize=%',
     [FileName,PageSize,CacheSize],self);
   {$endif}
 end;
@@ -4964,7 +4971,7 @@ procedure TSQLDatabaseBackupThread.Execute;
     fStep := aStep;
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
-        raise ESQLite3Exception.Create('Backup process aborted by OnProgress');
+        raise ESQLite3Exception.Create('Backup process aborted by OnProgress=false');
   end;
 var res: integer;
 begin
