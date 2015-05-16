@@ -95,13 +95,21 @@ function ToClientDataSet(aOwner: TComponent; aTable: TSQLTable; aClient: TSQLRes
 
 /// convert a JSON result into a new VCL TClientDataSet
 // - current implementation will return a TClientDataSet instance, created from
-// the supplied TSQLTable content (a more optimized version may appear later)
+// the supplied TSQLTable content - see mORMotVCL.pas if you need a more
+// efficient, but read-only version
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed
 // - with Unicode version of Delphi (2009+), UnicodeString will be used
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
 function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8; aClient: TSQLRest=nil
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
+
+/// convert a JSON result into a new VCL TClientDataSet
+// - this overloaded method allows to specify the TSQLRecord class types
+// associated with the supplied JSON
+function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8;
+  const Tables: array of TSQLRecordClass; aClient: TSQLRest=nil
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
 
 
@@ -130,8 +138,8 @@ function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: T
 // - with Unicode version of Delphi (2009+), UnicodeString will be used
 // - for better speed with Delphi older than Delphi 2009 Update 3, it is
 // recommended to use http://andy.jgknet.de/blog/bugfix-units/midas-speed-fix-12
-function JSONToClientDataSet(aDataSet: TClientDataSet; const aJSON: RawUTF8; aClient: TSQLRest=nil;
-  aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
+function JSONToClientDataSet(aDataSet: TClientDataSet; const aJSON: RawUTF8;
+  aClient: TSQLRest=nil; aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 
 
@@ -155,6 +163,19 @@ function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8; aClient: 
 var T: TSQLTableJSON;
 begin
   T := TSQLTableJSON.Create('',aJSON);
+  try
+    result := ToClientDataSet(aOwner,T,aClient{$ifndef UNICODE},aForceWideString{$endif});
+  finally
+    T.Free;
+  end;
+end;
+
+function JSONToClientDataSet(aOwner: TComponent; const aJSON: RawUTF8;
+  const Tables: array of TSQLRecordClass; aClient: TSQLRest=nil
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TClientDataSet; overload;
+var T: TSQLTableJSON;
+begin
+  T := TSQLTableJSON.CreateFromTables(Tables,'',aJSON);
   try
     result := ToClientDataSet(aOwner,T,aClient{$ifndef UNICODE},aForceWideString{$endif});
   finally
@@ -233,8 +254,6 @@ begin
     aDataSet.Open;
     {$endif}
   end;
-
-
   // handle columns
   {$ifndef UNICODE}
   if not aForceWideString then
