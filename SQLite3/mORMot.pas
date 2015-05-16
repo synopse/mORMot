@@ -1933,6 +1933,14 @@ type
 function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): PUTF8Char;
 
+/// read an object properties, as saved by ObjectToJSON function
+// - ObjectInstance must be an existing TObject instance
+// - this overloaded version will make a private copy of the supplied JSON
+// content, to ensure the original buffer won't be modified during process
+// - will return TRUE on success, or FALSE if the supplied JSON was invalid
+function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
+  TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
+
 /// create a new object instance, as saved by ObjectToJSON(..woStoreClassName]);
 // - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
 // - woStoreClassName option shall have been used at ObjectToJSON() call
@@ -39393,6 +39401,26 @@ begin
   else result := false;
   end else
     result := false; // assume true instance by default
+end;
+
+function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
+  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
+var buf: array[0..511] of AnsiChar;
+    tmp: PUTF8Char;
+    len: integer;
+begin
+  result := false;
+  len := length(JSON);
+  if len=0 then
+    exit;
+  inc(len); // include trailing #0
+  if len>sizeof(buf) then
+    GetMem(tmp,len) else
+    tmp := @buf;
+  move(pointer(JSON)^,tmp^,len);
+  JSONToObject(ObjectInstance,tmp,result,nil,[]);
+  if tmp<>@buf then
+    Freemem(tmp);
 end;
 
 function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
