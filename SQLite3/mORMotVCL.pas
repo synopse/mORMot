@@ -105,7 +105,8 @@ type
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce;
     /// initialize the virtual TDataSet from a supplied JSON result
     // - this constructor will parse the supplied JSON content and create
-    // an internal TSQLTableJSON instance to process the data
+    // an internal TSQLTableJSON instance to process the data, guessing the
+    // column types from the JSON content
     // - with non-Unicode version of Delphi, you can set aForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
@@ -120,6 +121,16 @@ type
     // - the TDataSet will be opened once created
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
       const ColumnTypes: array of TSQLFieldType
+      {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
+    /// initialize the virtual TDataSet from a supplied JSON ORM result
+    // - you can set the TSQLRecord classes to retrieve the expected column types 
+    // - this constructor will parse the supplied JSON content and create
+    // an internal TSQLTableJSON instance to process the data
+    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // force the use of WideString fields instead of AnsiString, if needed
+    // - the TDataSet will be opened once created
+    constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
+      const Tables: array of TSQLRecordClass
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
     /// finalize the class instance
     destructor Destroy; override;
@@ -137,7 +148,7 @@ type
   end;
 
 
-/// convert a JSON result into a VCL DataSet
+/// convert a JSON result into a VCL DataSet, guessing the field types from the JSON
 // - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed
@@ -146,7 +157,17 @@ function JSONToDataSet(aOwner: TComponent; const aJSON: RawUTF8
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; overload;
  {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a JSON result into a VCL DataSet
+/// convert a JSON ORM result into a VCL DataSet, following TSQLRecord field types
+// - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()
+// - with non-Unicode version of Delphi, you can set aForceWideString to
+// force the use of WideString fields instead of AnsiString, if needed
+// - with Unicode version of Delphi (2009+), string/UnicodeString will be used
+function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
+  const Tables: array of TSQLRecordClass
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; 
+ {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a JSON result into a VCL DataSet, with a given set of column types
 // - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed
@@ -172,6 +193,16 @@ begin
   result := TSynSQLTableDataSet.CreateFromJSON(
     aOwner,aJSON,ColumnTypes{$ifndef UNICODE},aForceWideString{$endif});
 end;
+
+function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
+  const Tables: array of TSQLRecordClass
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; overload;
+ {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := TSynSQLTableDataSet.CreateFromJSON(
+    aOwner,aJSON,Tables{$ifndef UNICODE},aForceWideString{$endif});
+end;
+
 
 
 { TSynSQLTableDataSet }
@@ -222,6 +253,21 @@ begin
     T.Free; // release temporary instance in case of TSynSQLTableDataSet error
   end;
 end;
+
+constructor TSynSQLTableDataSet.CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
+  const Tables: array of TSQLRecordClass
+  {$ifndef UNICODE}; ForceWideString: boolean=false{$endif});
+var T: TSQLTable;
+begin
+  T := TSQLTableJSON.CreateFromTables(Tables,'',JSON);
+  try
+    CreateOwnedTable(Owner,T{$ifndef UNICODE},ForceWideString{$endif});
+    T := nil;
+  finally
+    T.Free; // release temporary instance in case of TSynSQLTableDataSet error
+  end;
+end;
+
 
 destructor TSynSQLTableDataSet.Destroy;
 begin
