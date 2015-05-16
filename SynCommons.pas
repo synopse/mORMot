@@ -5206,7 +5206,7 @@ type
   // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
   TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS-1] of TSQLDBFieldType;
 
-  /// memory structure used for database values storage
+  /// memory structure used for database values by reference storage
   // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
   // - defines only TSQLDBFieldType data types (similar to those handled by
   // SQLite3, with the addition of ftCurrency and ftDate)
@@ -5215,7 +5215,8 @@ type
   // - variable-length data (e.g. UTF-8 text or binary BLOB) are never stored
   // within this record, but VText/VBlob will point to an external (temporary)
   // memory buffer
-  // - date/time is stored as ISO-8601 text, and currency as double
+  // - date/time is stored as ISO-8601 text, and currency as double or
+  // BCD in most databases
   TSQLVar = record
     case VType: TSQLDBFieldType of
     ftInt64: (
@@ -5233,7 +5234,7 @@ type
       VBlobLen: Integer)
   end;
 
-  /// dynamic array of database values storage
+  /// dynamic array of database values by reference storage
   TSQLVarDynArray = array of TSQLVar;
 
   /// used to store bit set for all available fields in a Table

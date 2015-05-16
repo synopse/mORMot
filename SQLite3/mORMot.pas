@@ -8724,7 +8724,7 @@ type
   published
     /// will be filled by the ORM when this item will be created in the database
     property Created: TCreateTime read fCreated write fCreated;
-    /// will be filled by the ORM any this item will be written in the database
+    /// will be filled by the ORM each time this item will be written in the database
     property Modified: TModTime read fModified write fModified;
   end;
 
@@ -20470,8 +20470,18 @@ begin
       // not found from fQueryTables/fQueryColumnTypes[]: get from content
       if IsRowID(fResults[f]) then
         FieldType := sftInteger else
-      if f in fFieldParsedAsString then // the parser identified as string value
-        FieldType := sftUTF8Text else begin
+      if f in fFieldParsedAsString then  begin
+        // the parser identified as string value -> check if was sftDateTime
+        FieldType := sftUTF8Text;
+        U := @fResults[FieldCount+f];
+        for i := 1 to fRowCount do
+          if U^=nil then  // search for a non void column
+            inc(U,FieldCount) else begin
+            if Iso8601ToTimeLogPUTF8Char(U^,0)<>0 then
+              FieldType := sftDateTime; // this was a ISO-8601 date/time value
+            break;
+          end;
+      end else begin
         U := @fResults[FieldCount+f];
         for i := 1 to fRowCount do begin
           FieldType := UTF8ContentNumberType(U^);
