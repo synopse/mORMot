@@ -478,8 +478,9 @@ begin
     result := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
-      'argsOutputCount',ArgsOutputValuesCount,
-      'methodDescription',fDescriptions.GetValueOrNull(InterfaceDotMethodName)]);
+      'argsOutputCount',ArgsOutputValuesCount]);
+    if self<>nil then
+      result.methodDescription := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
     if ArgsInFirst>=0 then
       result.hasInParams := true;
     if ArgsOutFirst>=0 then
@@ -501,7 +502,7 @@ begin
   RawUTF8ToVariant(@aUnitName[1],ord(aUnitName[0]),unitName);
   if addAsProperty<>nil then
     _ObjAddProps(['unitName',unitName],addAsProperty^);
-  if fUnits.SearchItemByValue(unitName)>=0 then
+  if (self=nil) or (fUnits.SearchItemByValue(unitName)>=0) then
     exit; // already registered
   fUnits.AddItem(unitName);
   if fSourcePath=nil then
