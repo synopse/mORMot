@@ -73,6 +73,7 @@ type
   EDDDEmail = class(EDDDInfraException);
 
   /// parameters used for the validation link of an email address
+  // - may be stored as daemon/service level settings, using e.g. dddInfraSettings
   TDDDEmailRedirection = class(TSynPersistent)
   private
     fSuccessRedirectURI: RawUTF8;
@@ -80,7 +81,7 @@ type
     fValidationMethodName: RawUTF8;
   published
     /// the public URI which would be accessible from the Internet
-    // - may be e.g 'http://cumulusservice/restroot'
+    // - may be e.g 'http://publicserver/restroot'
     property RestServerPublicRootURI: RawUTF8
       read fRestServerPublicRootURI write fRestServerPublicRootURI;
     /// the validation method name for the URI
@@ -91,12 +92,13 @@ type
     /// the URI on which the browser will be redirected on validation success
     // - you can specify some '%' parameter markers, ordered as logon, email,
     // and validation IP
-    // - may be e.g. 'http://cumuluswebsite/success&logon=%'
+    // - may be e.g. 'http://publicwebsite/success&logon=%'
     property SuccessRedirectURI: RawUTF8
       read fSuccessRedirectURI write fSuccessRedirectURI;
   end;
 
   /// parameters used for the validation/verification process of an email address
+  // - may be stored as daemon/service level settings, using e.g. dddInfraSettings
   TDDDEmailValidation = class(TSynAutoCreateFields)
   private
     fTemplate: TDomUserEmailTemplate;
@@ -112,7 +114,7 @@ type
     /// where the template files are to be found
     property TemplateFolder: TFileName
       read fTemplateFolder write fTemplateFolder;
-    /// define the validation link of an email address
+    /// parameters defining the validation link of an email address
     property Redirection: TDDDEmailRedirection read fRedirection;
   end;
 
@@ -121,6 +123,7 @@ type
   TSQLRecordEmailValidationClass = class of TSQLRecordEmailValidation;
 
   /// abstract parent of any email-related service
+  // - will define some common methods to validate an email address
   TDDDEmailServiceAbstract = class(TCQRSQueryObjectRest,IDomUserEmailCheck)
   protected
     fEmailValidate: TSynValidate;
@@ -154,6 +157,8 @@ type
     procedure EmailValidate(Ctxt: TSQLRestServerURIContext);
   public
     /// initialize the validation service for a given ORM persistence
+    // - would recognize the TSQLRecordEmailValidation class from aRest.Model
+    // - will use aRest.Services for IoC, e.g. EMailer/Template properties 
     constructor Create(aRest: TSQLRest); override;
     /// register the callback URI service
     procedure SetURIForServer(aRestServerPublic: TSQLRestServer;
@@ -167,21 +172,35 @@ type
     /// check the supplied parameters, and send an email for validation
     function StartEmailValidation(const aTemplate: TDomUserEmailTemplate;
       const aLogonName,aEmail: RawUTF8): TCQRSResult; virtual;
-    /// check if an email has been validated for a given  
+    /// check if an email has been validated for a given logon
     function IsEmailValidated(const aLogonName,aEmail: RawUTF8): boolean; virtual;
-  published // will be injected (and freed) with the corresponding services
+  published
+    /// will be injected (and freed) with the emailer service
     property EMailer: IDomUserEmailer read fEmailer;
+    /// will be injected (and freed) with the email template service
     property Template: IDomUserTemplate read fTemplate;
-  published // serialized properties
+  published
+    /// the associated ORM class used to store the email validation process
+    // - any class inheriting from TSQLRecordEmailValidation in the aRest.Model
+    // will be recognized by Create(aRest) to store its information
+    // - this temporary storage should not be the main user persistence domain
     property RestClass: TSQLRecordEmailValidationClass read fRestClass;
+    /// the validation method name for the URI
+    // - if not set, TDDDEmailValidationService will use 'EmailValidate'
+    // - clickable URI would be ValidationServerRoot+'/'+ValidationMethodName
     property ValidationURI: RawUTF8 read fValidationMethodName;
+    /// the public URI which would be accessible from the Internet
+    // - may be e.g 'http://publicserver/restroot'
     property ValidationServerRoot: RawUTF8 read fValidationServerRoot;
   end;
 
+  /// ORM class storing an email in addition to creation/modification timestamps
+  // - declared as its own class, since may be reused
   TSQLRecordEmailAbstract = class(TSQLRecordTimed)
   private
     fEmail: RawUTF8;
   published
+    /// the stored email address
     property Email: RawUTF8 read fEmail write fEmail;
   end;
 
@@ -273,7 +292,7 @@ end;
 constructor TDDDEmailValidationService.Create(aRest: TSQLRest);
 var rnd: Int64;
 begin
-  inherited Create(aRest);
+  inherited Create(aRest); // will inject aRest.Services for IoC
   fRestClass := fRest.Model.AddTableInherited(TSQLRecordEmailValidation);
   fRestClass.AddFilterNotVoidText(['Email','Logon']);
   rnd := GetTickCount64*PtrInt(self)*Random(MaxInt);

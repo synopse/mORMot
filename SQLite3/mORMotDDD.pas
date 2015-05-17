@@ -386,10 +386,12 @@ type
     // ! ...  read f.... write f... stored AS_UNIQUE;
     // for fields which should be unique, and/or
     // ! ... read f... write f... index #;
-    // to specify a field width for SQL storage which requires it, and/or define
+    // to specify an optional textual field width (VARCHAR n) for SQL storage
+    // - most advanced ORM-level filters/validators, or low-level implementation
+    // details (like the Sqlite3 collation) may be added by overriding this method:
     // !protected
     // !  class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
-    // to add some ORM-level filters/validators, or low-level :
+    // ! ...
     // !class procedure TSQLRecordMyAggregate.InternalDefineModel(
     // !  Props: TSQLRecordProperties);
     // !begin
@@ -569,11 +571,11 @@ type
     // - this is a generic operation which would work for any class
     // - if you do not need this method, just do not declare it in I*Command
     function DeleteAll: TCQRSResult; virtual;
-    /// write all pending changes prepared by Add/UpdatePassword/Delete methods
+    /// write all pending changes prepared by Add/Update/Delete methods
     // - this is the only mandatory method, to be declared in your I*Command
     // - in practice, will send the current internal BATCH to the REST instance
     function Commit: TCQRSResult; virtual;
-    /// flush any pending changes prepared by Add/UpdatePassword/Delete methods
+    /// flush any pending changes prepared by Add/Update/Delete methods
     // - if you do not need this method, just do not publish it in I*Command
     // - the easiest to perform a roll-back would be to release the I*Command
     // instance - but you may explictly reset the pending changes by calling

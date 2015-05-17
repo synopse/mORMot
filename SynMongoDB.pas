@@ -1778,7 +1778,8 @@ type
     property ConnectionString: RawUTF8 read fConnectionString;
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
-    // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6
+    // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6, or
+    // ! 3000300 for MongoDB 3.0.3
     // - this property is cached, so can be used to check for available
     // features at runtime
     property ServerBuildInfoNumber: cardinal read GetServerBuildInfoNumber;

@@ -175,6 +175,7 @@ uses
   dddInfraEmail,
   dddInfraEmailer,
   dddInfraAuthRest,
+  dddInfraRepoUser,
 {$endif DELPHI5OROLDER}
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
@@ -865,6 +866,8 @@ type
     procedure AuthenticationModel;
     /// test the Email validation process
     procedure EmailValidationProcess;
+    /// test the CQRS Repository for TUser persistence
+    procedure UserCQRSRepository;
   end;
 
 
@@ -13354,6 +13357,11 @@ procedure TTestDDDSharedUnits.UserModel;
 begin
   TCountry.RegressionTests(self);
   TPersonContactable.RegressionTests(self);
+end;
+
+procedure TTestDDDSharedUnits.UserCQRSRepository;
+begin
+  TInfraRepoUserFactory.RegressionTests(self);
 end;
 
 {$endif DELPHI5OROLDER}

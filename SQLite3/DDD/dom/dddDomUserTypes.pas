@@ -169,6 +169,7 @@ type
   TLastName = type RawUTF8;
   TFirstName = type RawUTF8;
   TMiddleName = type RawUTF8;
+  TFullName = type RawUTF8;
 
   /// Person full name
   TPersonFullName = class(TSynPersistent)
@@ -178,6 +179,7 @@ type
     fLast: TLastName;
   public
     function Equals(another: TPersonFullName): boolean; reintroduce;
+    function FullName(country: TCountryIdentifier=ccUndefined): TFullName; virtual;
   published
     property First: TFirstName read fFirst write fFirst;
     property Middle: TMiddleName read fMiddle write fMiddle;
@@ -230,6 +232,8 @@ type
     property Email: TEmailAddress read fEmail write fEmail;
   end;
 
+  TPersonContactableObjArray = array of TPersonContactable;
+
 
 { *********** Email Validation Modeling }
 
@@ -238,7 +242,7 @@ type
   TDomUserEmailValidation = (evUnknown, evValidated, evFailed);
 
   /// how a confirmation email is to be rendered, for email address validation
-  // - this information will be available as data context to the Mustache
+  // - this information will be available as data context, e.g. to the Mustache
   // template used for rendering of the email body
   TDomUserEmailTemplate = class(TSynPersistent)
   private
@@ -261,55 +265,30 @@ type
   end;
 
 
-{ *********** Person / User / Customer Persistence ORM classes }
+{ *********** Application User Modeling, with Logon and Email Validation }
 
 type
-  /// ORM class able to store a TPerson object
-  // - the TPerson.Name property has been flattened to Name_* columns as
-  // expected by TDDDRepositoryRestFactory.ComputeMapping
-  TSQLRecordPerson = class(TSQLRecord)
-  protected
-    fFirst: RawUTF8;
-    fMiddle: RawUTF8;
-    fLast: RawUTF8;
-    fBirthDate: TDateTime;
+  TLogonName = type RawUTF8;
+
+  /// an application level-user, whose account would be authenticated per Email
+  TUser = class(TPersonContactable)
+  private
+    fLogonName: TLogonName;
+    fEmailValidated: TDomUserEmailValidation;
   published
-    property Name_First: RawUTF8 read fFirst write fFirst;
-    property Name_Middle: RawUTF8 read fMiddle write fMiddle;
-    property Name_Last: RawUTF8 read fLast write fLast;
-    property Birth: TDateTime read fBirthDate;
+    /// the logon name would be the main entry point to the application
+    property LogonName: TLogonName
+      read fLogonName write fLogonName;
+    /// will reflect the current state of email validation process for this user
+    // - the validation is not handled by this class: this is just a property
+    // which reflects the state of TDDDEmailValidationService/IDomUserEmailValidation 
+    property EmailValidated: TDomUserEmailValidation
+      read fEmailValidated write fEmailValidated;
   end;
 
-  /// ORM class able to store a TPersonContactable object
-  // - the TPersonContactable.Address property has been flattened to Address_*
-  // columns as expected by TDDDRepositoryRestFactory.ComputeMapping
-  TSQLRecordPersonContactable = class(TSQLRecordPerson)
-  protected
-    fStreet1: RawUTF8;
-    fStreet2: RawUTF8;
-    fCityArea: RawUTF8;
-    fCity: RawUTF8;
-    fRegion: RawUTF8;
-    fCode: RawUTF8;
-    fCountry: integer;
-    fEmail: RawUTF8;
-    fPhone1: RawUTF8;
-    fPhone2: RawUTF8;
-  published
-    property Address_Street1: RawUTF8 read fStreet1 write fStreet1;
-    property Address_Street2: RawUTF8 read fStreet2 write fStreet2;
-    property Address_CityArea: RawUTF8 read fCityArea write fCityArea;
-    property Address_City: RawUTF8 read fCity write fCity;
-    property Address_Region: RawUTF8 read fRegion write fRegion;
-    property Address_Code: RawUTF8 read fCode write fCode;
-    property Address_Country: integer read fCountry;
-    property Phone1: RawUTF8 read fPhone1 write fPhone1;
-    property Phone2: RawUTF8 read fPhone2 write fPhone2;
-    property Email: RawUTF8 read fEmail write fEmail;
-  end;
+  TUserObjArray = array of TUser;
 
-
-
+  
 implementation
 
 { TCountry }
@@ -597,6 +576,19 @@ begin
       (Middle=another.Middle);
 end;
 
+function TPersonFullName.FullName(country: TCountryIdentifier): TFullName;
+begin // see country-specific http://en.wikipedia.org/wiki/Family_name
+  case country of
+  ccJP,ccCN,ccTW,ccKP,ccKR,ccVN,ccHU,ccRO:
+    // Eastern Order
+    result := Trim(Trim(Last+' '+Middle)+' '+First);
+  else
+    // default Western Order
+    result := Trim(Trim(First+' '+Middle)+' '+Last);
+  end; 
+end;
+
+
 { TPersonBirthDate }
 
 function TPersonBirthDate.Age: integer;
@@ -656,7 +648,8 @@ begin
   with test do
   try
     p.Phone2 := '123456';
-    p.Name.First := 'Smith';
+    p.Name.Last := 'Smith';
+    p.Name.First := 'John';
     p.Birth.Date := Iso8601ToDateTime('19721029');
     Check(p.Birth.Age>40);
     Check(p.Birth.Age(Iso8601ToDateTime('19821020'))=9);
@@ -669,10 +662,24 @@ begin
   p := TPersonContactable.Create;
   with test do
   try
+    // FileFromString(JSONReformat(json),'person.json');
+    Check(ObjectLoadJSON(p,json));
+    Check(p.Phone2='123456');
+    Check(p.Name.Last='Smith');
+    Check(p.Name.First='John');
+    Check(p.Birth.Age(Iso8601ToDateTime('19821030'))=10);
+    Check(p.Address.Country.Alpha3='FRA');
+  finally
+    p.Free;
+  end;
+  p := TPersonContactable.Create;
+  with test do
+  try
     Check(JSONToObject(p,pointer(json),valid)^='*');
     Check(valid);
     Check(p.Phone2='123456');
-    Check(p.Name.First='Smith');
+    Check(p.Name.Last='Smith');
+    Check(p.Name.First='John');
     Check(p.Birth.Age(Iso8601ToDateTime('19821030'))=10);
     Check(p.Address.Country.Alpha3='FRA');
   finally
@@ -684,5 +691,7 @@ end;
 initialization
   Initialize;
   TJSONSerializer.RegisterObjArrayForJSON([
-    TypeInfo(TAddressObjArray),TAddress]);
+    TypeInfo(TAddressObjArray),TAddress,
+    TypeInfo(TPersonContactableObjArray),TPersonContactable,
+    TypeInfo(TUserObjArray),TUser]);
 end.

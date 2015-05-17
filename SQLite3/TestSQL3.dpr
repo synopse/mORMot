@@ -113,10 +113,12 @@ uses
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
   dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
+  dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
   dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
   dddInfraSettings in 'DDD\infra\dddInfraSettings.pas',
   dddInfraEmail in 'DDD\infra\dddInfraEmail.pas',
   dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
+  dddInfraRepoUser in 'DDD\infra\dddInfraRepoUser.pas',
   {$endif NOVARIANTS}
   {$endif LVCL}
   {$ifdef MSWINDOWS}
