@@ -16398,7 +16398,7 @@ const
   /// options to specify no index createon for TSQLRestServer.CreateMissingTables
   // and TSQLRecord.InitializeTable methods
   INITIALIZETABLE_NOINDEX: TSQLInitializeTableOptions =
-    [itoNoIndex4ID..itoNoIndex4RecordReference];
+    [itoNoIndex4ID..itoNoIndex4RecordVersion];
 
   /// default value of TSQLRestServer.StatLevels property
   // - i.e. gather all statistics, but mlSessions
@@ -25598,12 +25598,14 @@ class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var f: integer;
 begin // is not part of TSQLRecordProperties because has been declared as virtual
-  if (self<>nil) and (Server<>nil) then begin
+  if (self<>nil) and (Server<>nil) and
+     (Options*INITIALIZETABLE_NOINDEX<>INITIALIZETABLE_NOINDEX) then begin
+    // ensure ID/RowID column is indexed
     if not (itoNoIndex4ID in Options) then
       if (FieldName='') or IsRowID(pointer(FieldName)) then
         Server.CreateSQLIndex(self,'ID',true); // for external tables
-    with RecordProps do
     // automatic column indexation of fields which are commonly searched by value
+    with RecordProps do
     for f := 0 to Fields.Count-1 do
       with Fields.List[f] do
       if (FieldName='') or IdemPropNameU(FieldName,Name) then
@@ -32459,15 +32461,13 @@ begin
   if high(FieldNames)<0 then
     exit; // avoid endless loop for TSQLRestStorage with no overridden method
   TableIndex := Model.GetTableIndexExisting(Table);
-  if fStaticVirtualTable<>nil then begin
-    Rest := fStaticVirtualTable[TableIndex];
-    if Rest<>nil then begin
-      if Rest.InheritsFrom(TSQLRestStorage) then
-         // will try to create an index on the static table (e.g. for external DB)
-         result := TSQLRestStorage(Rest).
-           CreateSQLMultiIndex(Table,FieldNames,Unique,IndexName);
-      exit;
-    end;
+  Rest := GetStaticDataServerOrVirtualTable(TableIndex);
+  if Rest<>nil then begin
+    if Rest.InheritsFrom(TSQLRestStorage) then
+       // will try to create an index on the static table (e.g. for external DB)
+       result := TSQLRestStorage(Rest).
+         CreateSQLMultiIndex(Table,FieldNames,Unique,IndexName);
+    exit;
   end;
   if (high(FieldNames)=0) and IsRowID(pointer(FieldNames[0])) then begin
     result := true; // SQLite3 has always its ID/RowID primary key indexed

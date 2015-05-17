@@ -106,9 +106,7 @@ type
     fBatchWriter: TBSONWriter;
     fBatchIDs: TIDDynArray;
     fBatchIDsCount: integer;
-    fIndexesCreated: Boolean;
     function EngineNextID: TID;
-    procedure CreateIndexes;
     function DocFromJSON(const JSON: RawUTF8; Occasion: TSQLOccasion;
       var Doc: TDocVariantData): TID;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
@@ -146,13 +144,8 @@ type
     procedure InternalBatchStop; override;
   public
     /// initialize the direct access to the MongoDB collection
-    // - you should not use this, but rather call StaticMongoDBRegister()
-    // - in practice, just call the other reintroduced constructor, supplying
-    // a TMongoDatabase instance
-    // - will create the indexes
-    // - to initilialize void tables, you can call, after the main database is
-    // launched:
-    // ! aServer.InitializeTables(INITIALIZETABLE_NOINDEX);
+    // - in practice, you should not have to call this constructor, but rather
+    // StaticMongoDBRegister() with a TMongoDatabase instance
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); override;
     /// release used memory
     destructor Destroy; override;
@@ -193,7 +186,7 @@ type
 // you can customize it with the corresponding parameter
 // - the TSQLRecord.ID (RowID) field is always mapped to MongoDB's _id field
 // - will call create needed indexes
-// - you can later call aServer.InitializeTables(INITIALIZETABLE_NOINDEX) to
+// - you can later call aServer.InitializeTables to create any missing index and
 // initialize the void tables (e.g. default TSQLAuthGroup and TSQLAuthUser records)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
@@ -233,6 +226,8 @@ type
 
 /// create and register ALL classes of a given model to access a MongoDB server
 // - the collection names will follow the class names
+// - this function will call aServer.InitializeTables to create any missing
+// index or populate default collection content
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
   aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions=[]): boolean;
 
@@ -294,6 +289,8 @@ begin
       continue else
     if StaticMongoDBRegister(Tables[i],aServer,aMongoDatabase,'')=nil then
       result := false;
+  if result then // ensure TSQLRecord.InitializeTable() is called
+    aServer.InitializeTables([]); // will create indexes and default data
 end;
 
 function TSQLRestMongoDBCreate(aModel: TSQLModel;
@@ -338,19 +335,6 @@ begin
     fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
     fStoredClassRecordProps.FieldBits[sftBlob],@fBSONProjectionBlobFieldsNames);
-  CreateIndexes;
-end;
-
-procedure TSQLRestStorageMongoDB.CreateIndexes;
-var F: integer;
-begin
-  fIndexesCreated := true;
-  if IsZero(fIsUnique) then
-    exit;
-  for F := 0 to fStoredClassRecordProps.Fields.Count-1 do
-    if F in fIsUnique then
-      fCollection.EnsureIndex(
-        [fStoredClassProps.ExternalDB.FieldNames[f]],true,true);
 end;
 
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
@@ -395,10 +379,18 @@ function TSQLRestStorageMongoDB.CreateSQLMultiIndex(
   Table: TSQLRecordClass; const FieldNames: array of RawUTF8;
   Unique: boolean; IndexName: RawUTF8): boolean;
 begin
-  result := false;
-  if (self=nil) or (fCollection=nil) or (Table<>fStoredClass) then
+  if (self=nil) or (fCollection=nil) or (Table<>fStoredClass) then begin
+    result := false;
     exit;
-  fCollection.EnsureIndex(FieldNames,true,Unique);
+  end;
+  result := true;
+  if (high(FieldNames)=0) and IsRowID(pointer(FieldNames[0])) then
+    exit; // ID primary key is always indexed by MongoDB
+  try
+    fCollection.EnsureIndex(FieldNames,true,Unique);
+  except
+    result := false;
+  end;
 end;
 
 procedure TSQLRestStorageMongoDB.Drop;
@@ -410,7 +402,6 @@ begin
   Collection.Drop;
   fCollection := DB.CollectionOrCreate[CollName];
   fEngineLastID := 0;
-  fIndexesCreated := false;
 end;
 
 destructor TSQLRestStorageMongoDB.Destroy;
@@ -442,8 +433,6 @@ function TSQLRestStorageMongoDB.EngineNextID: TID;
 procedure ComputeMax_ID;
 var res: variant;
 begin
-  if not fIndexesCreated then
-    CreateIndexes;
   res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
   if DocVariantType.IsOfType(res) then
     fEngineLastID := VariantToInt64Def(res.max,0);

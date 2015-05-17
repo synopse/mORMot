@@ -198,7 +198,7 @@ class procedure TSQLAuthor.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var Auth: TSQLAuthor;
 begin
-  inherited;
+  inherited InitializeTable(Server,FieldName,Options);
   if FieldName='' then begin // new table -> create default Author
     Auth := TSQLAuthor.Create;
     try

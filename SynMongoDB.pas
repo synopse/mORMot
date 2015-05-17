@@ -5630,6 +5630,8 @@ const Order: array[boolean] of Integer = (-1,1);
 var k,opt: variant;
     A: integer;
 begin
+  if high(Keys)<0 then
+    exit; // no column name
   TDocVariant.New(k);
   for A := 0 to high(Keys) do
     TDocVariantData(k).AddValue(Keys[A],Order[Ascending]);
