@@ -170,7 +170,6 @@ begin
   Check(fDB.Collection[COLL_NAME]=Coll);
   Check(fDB.CollectionOrCreate[COLL_NAME]=Coll);
   errmsg := Coll.Drop;
-  Check(errmsg<>'','dropping a non existing collection should return an error');
   Check(fClient.ServerBuildInfoNumber>20000);
   fValues := nil;
   SetLength(fValues,COLL_COUNT);
@@ -489,13 +488,15 @@ end;
 
 procedure TTestORM.RetrieveFromSQL;
 var R: TSQLORM;
-    n,tot,tot2,total: integer;
+    n,tot,tot2,total,stat: integer;
     i64: Int64;
     ages: TIntegerDynArray;
     prev: RawUTF8;
     doc: variant;
     T: TSQLTable;
+    bytes: Int64;
 begin
+  bytes := fMongoClient.BytesTransmitted;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name=?',['Name 43']);
   try
     n := 0;
@@ -507,6 +508,7 @@ begin
   finally
     R.Free;
   end;
+  stat := n;
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age<?',[51]);
   try
     n := 0;
@@ -519,6 +521,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'not RowID=?',[50]);
   try
     n := 0;
@@ -531,6 +534,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'not Age<?',[52]);
   try
     n := 0;
@@ -543,6 +547,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10',[51]);
   try
     n := 0;
@@ -554,6 +559,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age<? limit 10 offset 10',[51]);
   try
     n := 0;
@@ -565,6 +571,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'order by Name',[]);
   try
     n := 0;
@@ -582,6 +589,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20)',[]);
   try
     n := 0;
@@ -594,6 +602,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and ID=?',[10]);
   try
     n := 0;
@@ -605,6 +614,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=?',[30]);
   try
     n := 0;
@@ -617,6 +627,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (10,20) or ID=? order by ID desc',[40]);
   try
     n := 0;
@@ -629,6 +640,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1%']);
   try
     n := 0;
@@ -641,6 +653,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['name 1']);
   try
     n := 0;
@@ -653,6 +666,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Name like ?',['%ame 1%']);
   try
     n := 0;
@@ -665,6 +679,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'not Name like ?',['%ame 1%']);
   try
     tot := 0;
@@ -677,6 +692,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   R := TSQLORM.CreateAndFillPrepare(fClient,'Age in (1,10,20) and '+
     'IntegerDynArrayContains(Ints,?)',[10]);
   try
@@ -689,6 +705,7 @@ begin
   finally
     R.Free;
   end;
+  inc(stat,n);
   check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is null',[],[],i64));
   check(i64=COLL_COUNT,'{Data:null}');
   check(fClient.OneFieldValue(TSQLORM,'count(*)','Data is not null',[],[],i64));
@@ -714,6 +731,7 @@ begin
   Check(doc.a=49);
   doc := fClient.RetrieveDocVariant(TSQLORM,'not RowID=?',[50],'count(RowID) as a');
   Check(doc.a=COLL_COUNT-1);
+  inc(stat,9);
   T := fClient.MultiFieldValues(TSQLORM,'Distinct(Age),max(RowID) as first,'+
     'count(Age) as count,sum(Age) as total','order by age group by age');
   if not CheckFailed(T<>nil) then
@@ -740,6 +758,8 @@ begin
   finally
     T.Free;
   end;
+  inc(stat,n);
+  NotifyTestSpeed('rows retrieved',stat,fMongoClient.BytesTransmitted-bytes);
 end;
 
 procedure TTestORM.Update;
