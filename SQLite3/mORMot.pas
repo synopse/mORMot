@@ -13434,16 +13434,22 @@ type
     property Deleted: QWord read fDeleted;
   end;
 
-  /// used to access a TSQLRestServer from its URI
-  // - URI format is 'address:port/root'
+  /// a specialized UTF-8 string type, used for TSQLRestServerURI storage
+  // - URI format is 'address:port/root', but port or root are optional
+  // - you could use TSQLRestServerURI record to store and process it
+  TSQLRestServerURIString = type RawUTF8;
+
+  /// used to access a TSQLRestServer from its TSQLRestServerURIString URI
+  // - URI format is 'address:port/root', and may be transmitted as
+  // TSQLRestServerURIString text instances
   {$ifdef UNICODE}
   TSQLRestServerURI = record
   {$else}
   TSQLRestServerURI = object
   {$endif}
   private
-    function GetURI: RawUTF8;
-    procedure SetURI(const Value: RawUTF8);
+    function GetURI: TSQLRestServerURIString;
+    procedure SetURI(const Value: TSQLRestServerURIString);
   public
     /// the TSQLRestServer IP Address or DNS name
     Address: RawUTF8;
@@ -13451,9 +13457,10 @@ type
     Port: RawUTF8;
     /// the TSQLRestServer model Root
     Root: RawUTF8;
-    /// property which allows to set the Address/Port/Root fields
+    /// property which allows to read or set the Address/Port/Root fields as
+    // one UTF-8 text field (i.e. a TSQLRestServerURIString instance)
     // - URI format is 'address:port/root', but port or root are optional
-    property URI: RawUTF8 read GetURI write SetURI;
+    property URI: TSQLRestServerURIString read GetURI write SetURI;
   end;
 
   /// class-reference type (metaclass) of a REST server
@@ -36301,7 +36308,7 @@ end;
 
 { TSQLRestServerURI }
 
-function TSQLRestServerURI.GetURI: RawUTF8;
+function TSQLRestServerURI.GetURI: TSQLRestServerURIString;
 begin
   result := Address;
   if Port<>'' then
@@ -36310,7 +36317,7 @@ begin
     result := result+'/'+Root;
 end;
 
-procedure TSQLRestServerURI.SetURI(const Value: RawUTF8);
+procedure TSQLRestServerURI.SetURI(const Value: TSQLRestServerURIString);
 begin
   Split(Value,':',Address,Port);
   if Port<>'' then
