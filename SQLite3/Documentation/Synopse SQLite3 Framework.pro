@@ -623,7 +623,7 @@ label="         Featuring";
 =Featured=User Management - Security & Rights - Sessions - Replication¤Unit Testing - Mocks/Stubs - Logging - Performance - Profiling¤http.sys - WebSockets - MultiCore - Templates (MVC) ¤JSON - JavaScript Engine -  Reporting - PDF - UI
 \
 {\i mORMot} offers all features needed for building any kind of modern software project, with state-of-the-art integrated software components, designed for both completeness and complementarity, offering {\i @*convention over configuration@} solutions, and implemented for speed and efficiency.
-For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshaling, table creation, SQL generation, validation.
+For {\i storing some data}, you define a {\f1\fs20 class}, and the framework will take care of everything: routing, JSON marshalling, table creation, SQL generation, validation.
 For {\i creating a service}, you define an {\f1\fs20 interface} and a {\f1\fs20 class}, and you are done. Of course, the same ORM/ODM or SOA methods will run on both server and client sides: code once, use everywhere!
 For {\i building a MVC web site}, write a Controller class in Delphi, then some HTML Views using {\i @*Mustache@} templates, leveraging the same ORM/ODM or SOA methods as Model.
 If you need a HTTP server, a proxy @*redirection@, master/slave @*replication@, @*publish-subscribe@, a test, a mock, add security, define users or manage rights, a script engine, a report, User Interface, switch to XML format or publish HTML dynamic pages - just pick up the right {\f1\fs20 class} or method. If you need a tool or feature, it is probably already there, waiting for you to use it.
@@ -1055,7 +1055,7 @@ SOA is mainly about {\i decoupling}.\line That is, it enables implementation ind
 |Platform|Hardware, Framework or Operating System should not constrain choices of the Services consumers|Standard protocols, mainly Web services (e.g. SOAP or RESTful/JSON)
 |Location|Consumers may not be impacted by service hosting changes|Routing and proxies will maintain Services access
 |Availability|Maintenance tasks shall be transparent|Remote access allows centralized support on Server side
-|Versions|New services shall be introduced without requiring upgrades of clients|Contract marshaling can be implemented on the Server side
+|Versions|New services shall be introduced without requiring upgrades of clients|Contract marshalling can be implemented on the Server side
 |%
 SOA and ORM - see @13@ - do not exclude themselves. In fact, even if some software architects tend to use only one of the two features, both can coexist and furthermore complete each other, in any @*Client-Server@ application:
 - ORM access could be used to access to the data with objects, that is with the native presentation of the Server or Client side ({\i Delphi}, {\i @*JavaScript@}...) - so ORM can be used to provide efficient access to the data or the business logic - this is the idea of @*CQRS@ pattern;
@@ -3609,7 +3609,7 @@ In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs
 Process below includes all aspects of our ORM:
 - Access via high level @*CRUD@ methods ({\i Add/Update/Delete/Retrieve}, either per-object or in BATCH mode);
 - Read and write access of {\f1\fs20 TSQLRecord} instances, via optimized RTTI;
-- @*JSON@ marshaling of all values (ready to be transmitted over a network);
+- @*JSON@ marshalling of all values (ready to be transmitted over a network);
 - @*REST@ routing, with security, logging and statistic;
 - Virtual cross-database layer using its {\i SQLite3} kernel;
 - SQL on-the-fly generation and translation (in {\i virtual} mode);
@@ -5343,7 +5343,7 @@ Then, you execute your favorite SQL using the connection just as usual:
 Or you may use it with VCL components, using the {\f1\fs20 SynDBVCL.pas} unit:
 !  ds1.DataSet.Free; // release previous TDataSet
 !  ds1.DataSet := ToDataSet(ds1,Props.Execute('select * from people',[]));
-The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshaling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
+The {\f1\fs20 TSynSQLStatementDataSet} result set would map directly the raw binary data returned by the {\f1\fs20 TSQLDBServer*} class, avoiding any slow data marshalling in your client application, even for huge content. Note that all the whole data is computed and sent by the server: even if you display only the first rows in your {\f1\fs20 TDBGrid}, all the data has been transmitted. In fact, partial retrieval works well on a local network, but is not a good idea over the Internet, due to its much higher {\f1\fs20 ping}. So consider adding some filter fields, or some application-level paging, to reduce the number of rows retrieved from the {\f1\fs20 SynDBRemote} server.
 If you defined you own {\f1\fs20 TSynAuthentication} class on the server class (e.g. to use REST users and groups via {\f1\fs20 TSynAuthenticationRest}), you should create you own class, and override the following method:
 !procedure TSQLDBWinHTTPConnectionPropertiesRest.SetInternalProperties;
 !begin
@@ -6229,7 +6229,7 @@ Standard {\i Delphi} value types are serialized directly within the JSON content
 All {\f1\fs20 string} content is serialized as standard JSON text field, i.e. nested with double quotes ({\f1\fs20 "}). Since JSON uses @*UTF-8@ encoding, it is one of the reasons why we introduced the {\f1\fs20 @*RawUTF8@} type, and use it everywhere in our framework.
 :51  Record serialization
 In {\i Delphi}, the {\f1\fs20 @**record@} has some nice advantages:
-- {\f1\fs20 record} are value objects, i.e. accessed by value, not by reference - this can be very convenient, e.g. when defining @54@;
+- {\f1\fs20 record} are {\i value} objects, i.e. accessed by value, not by reference - this can be very convenient, e.g. when defining @54@;
 - {\f1\fs20 record} can contain any other {\f1\fs20 record} or {\i dynamic array}, so are very convenient to work with (no need to define sub-classes or lists);
 - {\f1\fs20 record} variables can be allocated on stack, so won't solicited the global heap;
 - {\f1\fs20 record} instances automatically freed by the compiler when they come out of scope, so you won't need to write any {\f1\fs20 try..finally Free; end} block.
@@ -6260,7 +6260,7 @@ In fact, there are two entry points to specify a custom JSON serialization for {
 - By setting explicitly serialization callbacks for the {\f1\fs20 TypeInfo()} of the record, with the very same {\f1\fs20 TTextWriter. @*RegisterCustomJSONSerializer@} method used for dynamic arrays.
 Then the {\f1\fs20 Reader} and {\f1\fs20 Writer} callbacks can be defined by two means:
 - By hand, i.e. coding the methods with manual conversion to JSON text or parsing;
-- Via some text-based type definition, which will follow the {\f1\fs20 record} layout, but will do all the marshaling (including memory allocation) on its own.
+- Via some text-based type definition, which will follow the {\f1\fs20 record} layout, but will do all the marshalling (including memory allocation) on its own.
 :    Defining callbacks
 For instance, if you want to serialize the following {\f1\fs20 record}:
 !  TSQLRestCacheEntryValue = record
@@ -8089,7 +8089,7 @@ Here is how we may implement the fastest possible parameters parsing - see sampl
 !  end else
 !    Ctxt.Error('Missing Parameter');
 !end;
-The only not obvious part of this code is the parameters marshaling, i.e. how the values are retrieved from the incoming {\f1\fs20 Ctxt.Parameters} text buffer, then converted into native local variables.
+The only not obvious part of this code is the parameters marshalling, i.e. how the values are retrieved from the incoming {\f1\fs20 Ctxt.Parameters} text buffer, then converted into native local variables.
 On the Server side, typical implementation steps are therefore:
 - Use the {\f1\fs20 UrlDecodeNeedParameters} function to check that all expected parameters were supplied by the caller in {\f1\fs20 Ctxt.Parameters};
 - Call {\f1\fs20 UrlDecodeInteger / UrlDecodeInt64 / UrlDecodeDouble / UrlDecodeExtended / UrlDecodeValue / UrlDecodeObject} functions (all defined in {\f1\fs20 SynCommons.pas}) to retrieve each individual parameter from standard JSON content;
@@ -8658,7 +8658,7 @@ The following implementation will definitively leak memory:
 !begin
 !  FParent := Value;
 !end;
-In {\i Delphi}, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not value objects, but reference objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
+In {\i Delphi}, most common kind of reference-copy variables (i.e. {\f1\fs20 variant}, {\i dynamic array} or {\f1\fs20 string}) solve this issue by implementing {\i copy-on-write}. Unfortunately, this pattern is not applicable to {\f1\fs20 interface}, which are not {\i value} objects, but {\i reference} objects, tied to an implementation {\f1\fs20 class}, which can't be copied.
 One common solution is to use {\i Weak pointers}, by which the {\f1\fs20 interface} is assigned to a property without incrementing the reference count.
 Note that @*garbage collector@ based languages (like Java or C#) do not suffer from this problem, since the circular references are handled by their memory model: objects lifetime are maintained globally by the memory manager. Of course, it will increase memory use, slowdown the process due to additional actions during allocation and assignments (all objects and their references have to be maintained in internal lists), and may slow down the application when garbage collector enters in action. In order to avoid such issues when performance matters, experts tend to pre-allocate and re-use objects: this is one common limitation of this memory model, and why {\i Delphi} is still a good candidate (like unmanaged C or C++ - and also {\i Objective C}) when it deals with performance and stability. In some cases (e.g. when using an object cache), such languages have to introduce some kind of "weak pointers", to allow some referenced objects to be reclaimed by garbage collection: but it is a diverse mechanism, under the same naming.
 :  Handling weak pointers
@@ -8789,7 +8789,7 @@ Using the real implementation of {\f1\fs20 IUserRepository} would expect a true 
 For our testing purpose, we only want to ensure that when the "forgot my password" scenario is executed, the user record modification is persisted to the database.
 One possibility could be to define two new dedicated {\f1\fs20 class}es, implementing both {\f1\fs20 IUserRepository} and {\f1\fs20 ISmsSender} interfaces. But it will be obviously time consuming and error-prone. This may be typical case when writing the test could be more complex than writing the method to be tested.
 In order to maximize your ROI, and allow you to focus on your business logic, the {\i mORMot} framework proposes a simple and efficient way of creating "fake" implementations of any {\f1\fs20 interface}, just by defining the minimum behavior needed to run the test.
-:   Stubs and mocks
+:166   Stubs and mocks
 In the book "{\i The Art of Unit Testing}" (Osherove, Roy - 2009), a distinction is drawn between {\i @**stub@} and {\i @**mock@} objects:
 - {\i Stubs} are the simpler of the two families of fake objects, simply implementing the same interface as the object that they represent and returning pre-arranged responses. Thus a fake object merely provides a set of method stubs. Therefore the name. In {\i mORMot}, it is created via the {\f1\fs20 TInterfaceStub} generator;
 - {\i Mocks} are described as a fake object that helps decide if a test failed or passed, by verifying if an interaction on an object occurred or not. Everything else is defined as a stub. In {\i mORMot}, it is created via the {\f1\fs20 TInterfaceMock} generator, which will link the fake object to an existing {\f1\fs20 TSynTestCase} instance - see @12@.
@@ -8942,10 +8942,10 @@ Here is how we may enhance our stub, to ensure it will return a {\f1\fs20 TUser}
 !  TInterfaceMock.Create(IUserRepository,UserRepository,self).
 !!    Returns('GetUserByName','"toto"',RecordSaveJSON(U,TypeInfo(TUser))).
 !    ExpectsCount('Save',qoEqualTo,1);
-The only trick in the above code is that we use {\f1\fs20 RecordSaveJSON()} function to compute the internal JSON representation of the record, as expected by {\i mORMot}'s data marshaling.
+The only trick in the above code is that we use {\f1\fs20 RecordSaveJSON()} function to compute the internal JSON representation of the record, as expected by {\i mORMot}'s data marshalling.
 :  Stubbing via a custom delegate or callback
 In some cases, it could be very handy to define a complex process for a given method, without the need of writing a whole implementation class.
-A delegate or event callback can be specified to implement this process, with three parameters marshaling modes:
+A delegate or event callback can be specified to implement this process, with three parameters marshalling modes:
 - Via some {\f1\fs20 Named[]} variant properties (which are the default for the {\f1\fs20 Ctxt} callback parameter) - the easiest and safest to work with;
 - Via some {\f1\fs20 Input[]} and {\f1\fs20 Output[]} variant properties;
 - Directly as a JSON array text (the fastest, since native to the {\i mORMot} core).
@@ -9114,8 +9114,8 @@ When such an {\f1\fs20 TInjectableObject} instance is created within {\i mORMot}
 :63Client-Server services via interfaces
 %cartoon06.png
 In real world, especially when your application relies heavily on services, the @49@ implementation pattern has some drawbacks:
-- Most content marshaling is to be done by hand, so may introduce implementation issues;
-- Client and server side code does not have the same implementation pattern, so you will have to code explicitly data marshaling twice, for both client and server ({\i DataSnap} and WCF both suffer from a similar issue, by which client classes shall be coded separately, most time generated by a Wizard);
+- Most content marshalling is to be done by hand, so may introduce implementation issues;
+- Client and server side code does not have the same implementation pattern, so you will have to code explicitly data marshalling twice, for both client and server ({\i DataSnap} and WCF both suffer from a similar issue, by which client classes shall be coded separately, most time generated by a Wizard);
 - You can not easily {\i test} your services, unless you write a lot of code to emulate a "fake" service implementation;
 - The services do not have any hierarchy, and are listed as a plain list, which is not very convenient;
 - It is difficult to synchronize several service calls within a single context, e.g. when a workflow is to be handled during the application process (you have to code some kind of state machine on both sides, and define all session handling by hand);
@@ -9133,7 +9133,7 @@ Here are the key features of the current implementation of services using interf
 |Server factory|You can get an implementation on the server side
 |Client factory|You can get a "fake" implementation on the client side, remotely calling the server to execute the process
 |Cross-platform clients|A {\i mORMot} server is able to generate cross-platform client code via a set of templates - see @86@
-|Auto marshaling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE8
+|Auto marshalling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to XE8
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
 |@*Stateless@|Following a standard request/reply pattern
@@ -9787,7 +9787,7 @@ The services are initialized on the server side with the following code:
 !  end;
 !end.
 This is a typical {\i mORMot} server initialization, published over the HTTP communication protocol (with auto-registration feature, if possible, as stated by the {\f1\fs20 useHttpApiRegisteringURI} flag). Since we won't use ORM for any purpose but authentication, a fast {\f1\fs20 TObjectList}-based engine (i.e. {\f1\fs20 TSQLRestServerFullMemory}) is enough for this sample purpose.
-In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB.pas} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshaling and communication will be multi-threaded in the framework units).
+In the above code, you can note that {\f1\fs20 IRemoteSQL} service is defined with the {\f1\fs20 optExecInMainThread} and {\f1\fs20 optFreeInMainThread} options. It means that all methods will be executed in the main process thread. In practice, since {\f1\fs20 SynDB.pas} database access may open one connection per thread (e.g. for {\i @*OleDB@} / {\i @*MS SQL@} or {\i @*Oracle@} providers), it may use a lot of memory. Forcing the database execution in the main thread will lower the resource consumption, and still will perform with decent speed (since all the internal marshalling and communication will be multi-threaded in the framework units).
 From the client point of view, it will be consumed as such:
 !procedure TMainForm.FormShow(Sender: TObject);
 !  (...)
@@ -10112,12 +10112,12 @@ Then you subscribe to your remote service as such:
 !      Service := nil;  // release the service local instance BEFORE Client.Free
 !    end;
 You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
-If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshaling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and JSON marshalling over TCP/IP).
+If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and JSON marshalling over TCP/IP).
 \page
 : Implementation details
-:  Error handling
+:165  Error handling
 Usually, in Delphi applications (like in most high-level languages), errors are handled via {\i exceptions}. By default, any {\f1\fs20 Exception} raised on the server side, within an {\f1\fs20 interface}-based service method, will be intercepted, and transmitted as an HTTP error to the client side, then a safe but somewhat obfuscated {\f1\fs20 EInterfaceFactoryException} will be raised, containing additional information serialized as JSON.
-You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not value objects, but true {\f1\fs20 class} instances, with some methods and potentially internal references to other objects. Most of the time, they are tied to a particular execution context, and even some low-level implementation details. A Delphi {\f1\fs20 exception} is even something very specific, and would not be easily converted into e.g. a {\i JavaScript}, {\i Java} or C# exception.
+You may wonder why exceptions are not transmitted and raised directly on the client side, as if they were executed locally.\line In fact, {\f1\fs20 Exceptions} are not {\i value} objects, but true {\f1\fs20 class} instances, with some methods and potentially internal references to other objects. Most of the time, they are tied to a particular execution context, and even some low-level implementation details. A Delphi {\f1\fs20 exception} is even something very specific, and would not be easily converted into e.g. a {\i JavaScript}, {\i Java} or C# exception.
 In practice, re-creating and raising an instance of the same {\f1\fs20 Exception class} which occurred on the server side would induce a strong dependency of the client code towards the server implementation details. For instance, if the server side raises a {\f1\fs20 ESQLDBOracle} exception, translating it on the other end would link your client side with the whole {\f1\fs20 SynDBOracle.pas} unit, which certainly not worth it. The {\f1\fs20 ESQLDBOracle} exception, by itself, contains a link to an {\i Oracle} statement instance, which would be lost when transmitted over the wire. Some client platforms (e.g. mobile or AJAX) do not even have any knowledge of what an {\i Oracle} database is...\line As such, {\f1\fs20 exception} are not good candidate on serialization, and transmission per value, from the server side to the client side. We would NOT be in favor of propagating exceptions to the client side.
 This is why exceptions should better be intercepted on the server side, with a {\f1\fs20 try .. except} block within the service methods, then converted into low level DTO types, specific to the service, then explicitly transmitted as error codes to the client.
 The first rule is that raising {\f1\fs20 exception} should be {\i exceptional} - as its name states: {\f1\fs20 exception}al. I mean, service code should not raise an {\f1\fs20 exception} in normal execution, even in case of wrong input. For instance, a wrong input parameter should lead into an application level error, transmitted as an enumeration item and/or some additional (probably text) information, but the business logic should never raise any {\f1\fs20 exception}. Only in case of low-level unexpected event (e.g. a SQL level failure, a GPF or Access Violation, a communication error with another trusted internal service), the server side may enter in {\i panic} mode, and raise an {\f1\fs20 exception}. Remember that {\f1\fs20 exception}s are intercepted by {\f1\fs20 SynLog.pas} and can be easily logged by our @16@: you would be able to identify the execution context, and find a full stack trace of the issue. But most common errors should be handled at business logic level, even defined in each service layers.
@@ -10137,7 +10137,7 @@ See for instance how {\f1\fs20 ICQRSQuery}, and its associated {\f1\fs20 TCQRSRe
 !    function GetLastError: TCQRSResult;
 !    function GetLastErrorInfo: variant;
 !  end;
-The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub or mock of the interfaces, fake methods will return as successful, as expected - see @62@.
+The first {\f1\fs20 cqrsSuccess} item of the {\f1\fs20 TCQRSResult} enumerate will be the default one (mapped and transmitted to a 0 JSON number), so in case of any stub or mock of the interfaces, fake methods will return as successful, as expected - see @166@.
 When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSResult} enumeration value can be returned as result, so that error would be transmitted directly:
 !function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 !...
@@ -10662,13 +10662,13 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - Remote @*CRUD@ operations, via @*JSON@ and @*REST@, with a {\f1\fs20 TSQLRestClientURI} class, with the same methods as with the {\f1\fs20 mORMot.pas} framework unit;
 - Optimized {\f1\fs20 TSQLTableJSON} class to handle a JSON result table, as returned by {\i mORMot}'s REST server ORM - see @87@;
 - @*Batch@ process - see @28@ - for transactional and high-speed writes;
-- @49@ with parameters marshaling;
-- @63@ with parameters marshaling and instance-life time;
+- @49@ with parameters marshalling;
+- @63@ with parameters marshalling and instance-life time;
 - Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
 - Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server - see @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
-In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshaling issues which may occur with XML or binary formats.
+In the future, C# or Java clients may be written.\line The {\f1\fs20 CrossPlatform} sub-folder code could be used as reference, to write minimal and efficient clients on any platform. Our REST model is pretty straightforward and standard, and use of JSON tends to leverage a lot of potential marshalling issues which may occur with XML or binary formats.
 In practice, a code generator embedded in the {\i mORMot} server can be used to create the client wrappers, using the @81@ included on the server side. With a click, you can generate and download a client source file for any supported platform. A set of {\f1\fs20 .mustache} templates is available, and can be customized or extended to support any new platform: any help is welcome, especially for targeting Java or C# clients.
 \page
 : Available client platforms
@@ -11093,7 +11093,7 @@ Here is an extract of the {\f1\fs20 mORMotClient.pas} unit as generated for the 
 !    procedure ToText(const Value: currency; const Curr: string; var Sexe: TPeopleSexe; var Name: string);
 !    function RecordToText(var Rec: TTestCustomJSONArraySimpleArray): string;
 !  end;
-As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshaling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as @*UTF-8@ for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
+As you can see, a dedicated class has been generated to consume the server-side {\f1\fs20 ICalculator} interface-based service, in its own {\f1\fs20 ICalculator} client-side type.\line It is able to handle complex types, like enumerations (e.g. {\f1\fs20 TPeopleSexe}) and records (e.g. {\f1\fs20 TTestCustomJSONArraySimpleArray}), which are also defined in the very same {\f1\fs20 mORMotClient.pas} unit.\line You can note that the {\f1\fs20 RawUTF8} type has been changed into the standard {\i Delphi} / {\i @*FreePascal@ }{\f1\fs20 string} type, since it is the native type used by our {\f1\fs20 SynCrossPlatformJSON.pas} unit for all its JSON marshalling. Of course, under latest version of {\i Delphi} and {\i FreePascal}, this kind of content may be Unicode encoded (either as UTF-16 for the {\f1\fs20 string} = {\f1\fs20 UnicodeString} {\i Delphi} type, or as @*UTF-8@ for the {\i FreePascal} / {\i @*Lazarus@} {\f1\fs20 string} type).
 The supplied regression tests show how to use remotely those services:
 !!var calc: ICalculator;
 !    i,j: integer;
@@ -11313,7 +11313,7 @@ There is a {\f1\fs20 TSQLRecordPeople} class generated, which will map the follo
 !  public
 !    property Simple: TTestCustomJSONArraySimpleArray read fSimple;
 !  end;
-Here, a complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record field has been published, thanks to a manual {\f1\fs20 InternalRegisterCustomProperties()} registration, as we already stated above. Since {\i SmartPascal} is limited in terms of RTTI, the code generator did define some {\f1\fs20 ComputeRTTI() GetProperty()} and {\f1\fs20 SetProperty()} protected methods, which will, at runtime, perform all the properties marshaling to and from JSON.\line You can see that types like {\f1\fs20 RawUTF8} in the original {\i Delphi} {\f1\fs20 TSQLRecord} were mapped to the standard {\i SmartPascal} {\f1\fs20 string} type, as expected, when converted to the {\f1\fs20 mORMotClient.pas} generated unit.
+Here, a complex {\f1\fs20 TTestCustomJSONArraySimpleArray} record field has been published, thanks to a manual {\f1\fs20 InternalRegisterCustomProperties()} registration, as we already stated above. Since {\i SmartPascal} is limited in terms of RTTI, the code generator did define some {\f1\fs20 ComputeRTTI() GetProperty()} and {\f1\fs20 SetProperty()} protected methods, which will, at runtime, perform all the properties marshalling to and from JSON.\line You can see that types like {\f1\fs20 RawUTF8} in the original {\i Delphi} {\f1\fs20 TSQLRecord} were mapped to the standard {\i SmartPascal} {\f1\fs20 string} type, as expected, when converted to the {\f1\fs20 mORMotClient.pas} generated unit.
 Your AJAX client can then access to this {\f1\fs20 TSQLRecordPeople} content easily, via standard CRUD operations.\line See the {\f1\fs20 SQLite3\\Samples\\29 - SmartMobileStudio Client} sample, for instance the following line:
 !!  people := new TSQLRecordPeople;
 !  for i := 1 to 200 do begin
@@ -11697,7 +11697,7 @@ Following this low-level method-based services process, you can easily create a 
 |%
 But still, a lot of code is needed to glue the MVC parts.
 :   MVC/MVVM Design
-In practice, the method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshaling, rendering or routing.
+In practice, the method-based services @*MVC@ pattern is difficult to work with. You have a lot of plumbing to code by yourself, e.g. parameter marshalling, rendering or routing.
 The {\f1\fs20 mORMotMVC.pas} unit offers a true @**MVVM@ ({\i Model View ViewModel})design, much more advanced, which relies on {\f1\fs20 interface} definitions to build the application - see @46@:
 |%20%80
 |\b MVVM|mORMot\b0
@@ -12879,7 +12879,7 @@ Here, the local {\f1\fs20 LoadFile()} method is implemented as such in native co
 !  result := AnyTextFileToSynUnicode(Args[0]);
 !end;
 As you can see, this is perfectly easy to follow.\line Its purpose is to load a file content from {\i JavaScript}, by defining a new global function named {\f1\fs20 loadFile()}.\line Remember that the {\i SpiderMonkey} engine, by itself, does not know anything about file system, database or even DOM. Only basic objects were registered, like arrays. We have to explicitly register the functions needed by the {\i JavaScript} code.
-In the above code snippet, we used the {\f1\fs20 TSMEngineMethodEventVariant} callback signature, marshaling {\f1\fs20 variant} values as parameters. This is the easiest method, with only a slight performance impact.
+In the above code snippet, we used the {\f1\fs20 TSMEngineMethodEventVariant} callback signature, marshalling {\f1\fs20 variant} values as parameters. This is the easiest method, with only a slight performance impact.
 Such methods have the following features:
 - Arguments will be transmitted from {\i JavaScript} values as simple {\i Delphi} types (for numbers or text), or as our custom {\f1\fs20 TSMVariant} type for {\i JavaScript} objects, which allows @*late-binding@;
 - The {\f1\fs20 This: variant} first parameter map the "callee" {\i JavaScript} object as a {\f1\fs20 TSMVariant} custom instance, so that you would be able to access the other object's methods or properties directly via late-binding;
@@ -12922,7 +12922,7 @@ As you can see, this {\f1\fs20 nsm_loadFile()} function is much more difficult t
 - You need to do a lot of manual low-level conversions - via {\f1\fs20 JS_ARGV()} then e.g. {\f1\fs20 JSVAL_TO_STRING()} macros - to retrieve the actual values of the arguments;
 - And the returning function is to be marshaled by hand - see the {\f1\fs20 JS_SET_RVAL()} line.
 Since the {\f1\fs20 variant}-based callback has only a slight performance impact (nothing measurable, when compared to the {\i SpiderMonkey} engine performance itself), and still have access to all the transmitted information, we strongly encourage you to use this safer and cleaner pattern, and do not define any native function via low-level API.
-Note that there is an alternate JSON-based callback, which is not to be used in your end-user code, but will be used when marshaling to JSON is needed, e.g. when working with {\i mORMot}'s ORM or SOA features.
+Note that there is an alternate JSON-based callback, which is not to be used in your end-user code, but will be used when marshalling to JSON is needed, e.g. when working with {\i mORMot}'s ORM or SOA features.
 :  TSMVariant custom type
 As stated above, the {\f1\fs20 SynSM.pas} unit defines a {\f1\fs20 @**TSMVariant@} custom variant type. It will be used by the unit to marshal any {\i JSObject} instance as variant.
 Via the magic of @*late-binding@, it will allow access of any {\i JavaScript} object property, or execute any of its functions. Only with a slightly performance penalty, but with much better code readability than with low-level access of the {\i SpiderMonkey} API.
@@ -13113,7 +13113,7 @@ Then {\i Application @*Service@s} will define the {\i workflows} of all end-user
 Out on the edges you see User Interface, Infrastructure (including e.g. database persistence), and Tests. This outer layer is separated from the other three internal layers, which are sometimes called {\i Application Core}.\line This is where all technical particularities will be concentrated, e.g. where RDBMS / SQL / ORM mapping will be defined, or platform-specific code will reside. This is the right level to test your end-user workflows, e.g. using @**Behavior-Driven Development@ (abbreviated BDD), with the help of your Domain experts.
 The premise of this Architecture is that {\i it controls coupling}. The main rule is that all coupling is toward the center: all code can depend on layers more central, but code cannot depend on layers further out from the core. This is clearly stated in the @%%mORMotDesignOnion@ diagram: just follow the arrows, and you will find out the coupling order. This architecture is unashamedly biased toward object-oriented programming, and it puts objects before all others.
 This {\i Clean Architecture} relies heavily on the {\i Dependency Inversion} principle - see @47@. It emphasizes the use of {\f1\fs20 interface}s for behavior contracts, and it forces the externalization of infrastructure to dedicated implementation classes. The {\i Application Core} needs implementation of core interfaces, and if those implementing classes reside at the edges of the application, we need some mechanism for injecting that code at runtime so the application can do something useful. {\i mORMot}'s @63@ provide all needed process to access, even remotely, e.g. to persistence or any third party services, in an abstract way.
-With {\i Clean Architecture}, the database is not the center of your logic, nor the bottom of your physical design - it is {\i external}. Externalizing the database can be quite a challenge for some people used to thinking about applications as "database applications", especially for {\i Delphi} programmers with a RAD / {\f1\fs20 TDataSet} background. With Clean Architecture, there are no database applications. There are applications that might use a database as a storage service but only though some external infrastructure code that implements an interface which makes sense to the application core. The domain could be even decoupled from any @*ORM@ pattern, if needed. Decoupling the application from the database, file system, third party services and all technical details lowers the cost of maintenance for the life of the application, and allows proper testing of the code, since all Domain interfaces can be mocked on purpose - see @62@.
+With {\i Clean Architecture}, the database is not the center of your logic, nor the bottom of your physical design - it is {\i external}. Externalizing the database can be quite a challenge for some people used to thinking about applications as "database applications", especially for {\i Delphi} programmers with a RAD / {\f1\fs20 TDataSet} background. With Clean Architecture, there are no database applications. There are applications that might use a database as a storage service but only though some external infrastructure code that implements an interface which makes sense to the application core. The domain could be even decoupled from any @*ORM@ pattern, if needed. Decoupling the application from the database, file system, third party services and all technical details lowers the cost of maintenance for the life of the application, and allows proper testing of the code, since all Domain {\f1\fs20 interface} types could be mocked on purpose - see @166@.
 \page
 : mORMot's DDD
 :  Designer's commitments
@@ -13131,34 +13131,36 @@ Before going a bit deeper into the low-level stuff, here are some key sentences 
 - I shall always {\i adapt my model} as soon as possible, once it appears inadequate.
 As a consequence, you will find in {\i mORMot} no magic powder to build your DDD, but all the tools you need to focus on your business, without loosing time in re-inventing the wheel, or fixing technical details.
 :  Defining objects in Delphi
-How to implement all those DDD concepts in an object-oriented language like {\i Delphi}? Let's go back to the basics. Objects are defined by a state, a behavior and an identity. A factory helps creating objects with the same state and behavior.
-In {\i Delphi} and most Object-Oriented languages (@**OOP@ - including C# or Java) each {\f1\fs20 @*class@} instance (always inheriting from @*TObject@):
-- State is defined by all its property / member values;
-- Behavior are defined by all its methods;
-- Identity is defined {\i by reference}, i.e. {\f1\fs20 a=b} is true only if {\f1\fs20 a} and {\f1\fs20 b} refers to the same object;
-- Factory is in fact the {\f1\fs20 class} type definition itself, which will force each instance to have the same members and methods.
+How to implement all those DDD concepts in an object-oriented language like {\i Delphi}? Let's go back to the basics. Objects are defined by a {\i state}, a {\i behavior} and an {\i identity}. A {\i factory} helps creating objects with the same state and behavior.
+In {\i Delphi} and most Object-Oriented (@**OOP@) languages - including C# or Java, each {\f1\fs20 @*class@} instance has the following behavior:
+- {\i State} is defined by all its property / member values;
+- {\i Behavior} are defined by all its methods;
+- {\i Identity} is defined {\i by reference}, i.e. {\f1\fs20 a=b} is true only if {\f1\fs20 a} and {\f1\fs20 b} refers to the same object;
+- {\i Factory} is in fact the {\f1\fs20 class} type definition itself, which will force each instance to have the same members and methods.
 In {\i Delphi}, the {\f1\fs20 @*record@} type (and deprecated {\f1\fs20 object} type for older versions of the compiler) has an alternative behavior:
-- State is also defined by all its property / member values;
-- Behavior are also defined by all its methods;
-- But identity is defined {\i by content}, i.e. {\f1\fs20 RecordEquals(a,b)} is true only if {\f1\fs20 a} and {\f1\fs20 b} have the same exact property values;
-- Factory is in fact the {\f1\fs20 record} / {\f1\fs20 object} type definition itself, which will force each instance to have the same members and methods.
+- {\i State} is also defined by all its property / member values;
+- {\i Behavior} are also defined by all its methods;
+- But {\i identity} is defined {\i by content}, i.e. {\f1\fs20 RecordEquals(a,b)} is true only if {\f1\fs20 a} and {\f1\fs20 b} have the same exact property values;
+- {\i Factory} is in fact the {\f1\fs20 record} / {\f1\fs20 object} type definition itself, which will force each instance to have the same members and methods.
 In practice, you may use either one of the two kinds of object types (i.e. either {\f1\fs20 class} or {\f1\fs20 record}), depending on the behavior expected by DDD patterns:
-- DDD's {\i @*DTO@} may be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based @51@;
-- But other kinds of DDD objects , i.e. {\i Value Objects}, {\i Entities} and {\i Aggregate Roots}, should better be defined as dedicated {\f1\fs20 class}.
+- DDD's {\i @*DTO@} may be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based @51@ - as an alternative, you may consider using @80@;
+- But other kinds of DDD objects , i.e. {\i @*Value Objects@}, {\i @*Entity Objects@} and {\i @*Aggregates@}, should better be defined as dedicated {\f1\fs20 class}, since {\f1\fs20 class} type definition offers more possibility than plain {\f1\fs20 record} structures. The framework defines some parent classes (e.e. {\f1\fs20 TSynPersistent} and {\f1\fs20 TSynAutoCreateFields}) which makes working with {\f1\fs20 class} instances almost as easy than stack-allocated {\f1\fs20 record} values.
 :  Defining DDD objects in mORMot
-We will now detail two ways of implementing DDD objects as {\f1\fs20 class} types:
+When defining domain objects, we should always make the implicit {\i explicit}, i.e. writing one {\f1\fs20 class} type per reality in the model, in every {\i bounded context}. Thanks to {\i Delphi}'s strong typing, you would ensure that the Domain {\i Ubiquitous language} will appear in the code, and that your model would be expressed in a clean, uncoupled way.
+If those {\f1\fs20 class} types are defined as plain PODO, even your domain experts - which may not know anything about writing code - may be part of the class definition: we usually write the domain objects and services with the domain experts, writing the code in real time during a meeting. The domain is therefore expressed as plain code, and experts are able to validate the workflows and properties of the model as soon as possible. Such coding sessions truly benefit of being a cooperative team work, not only coders'.
+Once the domain model is stabilized, we may start implementing the interfaces using this common work as contract. In this implementation process, the {\i mORMot} framework offers a lot of tools to make it happen in a quick and efficient manner.
+There are in fact two ways of implementing DDD objects as {\f1\fs20 class} types, in {\i mORMot}:
 - Directly using the framework types, e.g. {\f1\fs20 TSQLRecord} specialized {\f1\fs20 class} for {\i Entities} or {\i Aggregates};
-- Or relying of no framework structure, but clean @*PODO@s ({\i Plain Old Delphi Object} - see so-called POJO or POCO for Java or C#) {\f1\fs20 class} types, then use the {\f1\fs20 mORMotDDD.pas} unit for automatic marshalling.
+- Or relying of no framework structure, but clean @**PODO@s ({\i Plain Old Delphi Object} - see so-called POJO or POCO for Java or C#) {\f1\fs20 class} types, then use the {\f1\fs20 mORMotDDD.pas} unit for automatic marshalling.
 Of course, the second option may be preferred, since it sounds like a better implementation path, uncoupled from the framework itself. Remember that DDD is mainly about {\i uncoupling} the Domain code from any external dependency, even from {\i mORMot} itself. You should better not be forced to use the framework ORM, if you have some existing legacy SQL statements, for instance.
-In all cases, when defining domain objects, we should always make the implicit {\i explicit}, i.e. defining one {\f1\fs20 class} type per reality in the model, in every {\i bounded context}. Thanks to {\i Delphi}'s strong typing, you would ensure that the Domain {\i Ubiquitous language} will appear in the code.
 :   Use framework types for DDD objects
 If you want to directly use framework structure, DDD's {\i @*Value Objects@} are probably meant to be defined as {\f1\fs20 record}, with methods (i.e. in this case as {\f1\fs20 object} for older versions of {\i Delphi}). You may also use {\f1\fs20 TComponent} or {\f1\fs20 TSQLRecord} classes, ensuring the {\f1\fs20 published} properties do not have setters but just {\f1\fs20 read F...} definition, to make them read-only, and, at the same time, directly serializable.\line If you use {\f1\fs20 record} / {\f1\fs20 object} types, you may need to customize the JSON serialization - see @51@ - when targeting AJAX clients, especially for any version prior to {\i Delphi} 2010 (by default, {\f1\fs20 record}s are serialized as binary + @*Base64@ encoding due to the lack of @*enhanced RTTI@, but you can define easily the record serialization e.g. from text). Note that since {\f1\fs20 record} / {\f1\fs20 object} defines in {\i Delphi} {\i by-value} types (whereas {\f1\fs20 class} defines {\i by-reference} types - see previous paragraph), they are probably the cleanest way of defining {\i Value Objects}.
-In this context, DDD's {\i @**Entity objects@} could inherit from {\f1\fs20 TSQLRecord}. It would give access to a whole set of methods supplied by {\i mORMot}, implementing some kind of "@**Layer Supertype@", as explained by Martin Fowler.
-In this case, DDD's {\i @**Aggregates@} would benefit of using {\i mORMot}'s @3@. {\i Entities} would be stored as regular {\f1\fs20 TSQLRecord}, e.g. using @70@ cardinality, as available from the framework.
-For most simple cases, this solution may be just good enough. But it may have the drawback of uncoupling your {\i Domain logic} with {\i mORMot} internals. Your Domain will eventually be polluted by the framework implementation details, which should better be avoided.
+In this context, DDD's {\i @*Entity objects@} could inherit from {\f1\fs20 TSQLRecord}. It would give access to a whole set of methods supplied by {\i mORMot}, implementing some kind of "@**Layer Supertype@", as explained by Martin Fowler.
+Finally, DDD's {\i @*Aggregates@} would benefit of using {\i mORMot}'s @3@. {\i Entities} would be stored as regular {\f1\fs20 TSQLRecord}, e.g. using @70@ cardinality, as available from the framework.
+For most simple cases, this solution may be just good enough. But it may have the drawback of coupling your {\i Domain logic} with {\i mORMot} internals. Your Domain will eventually be polluted by the framework implementation details, which should better be avoided.
 :   Define uncoupled DDD objects
-In order to uncouple our {\i Domain} code from its persistence layer, {\i mORMot} offers some dedicated types and units to use PODO class definitions within your DDD core.
-You may use regular {\f1\fs20 TPersistent} as parent class, but you may consider using {\f1\fs20 TSynPersistent} and {\f1\fs20 TSynAutoCreateFields} fields instead.
+In order to uncouple our {\i Domain} code from its persistence layer, {\i mORMot} offers some dedicated types and units to use @*PODO@ {\f1\fs20 class} definitions within your DDD core.
+You may use regular {\f1\fs20 TPersistent} as parent class, but you may consider using {\f1\fs20 TSynPersistent} and {\f1\fs20 TSynAutoCreateFields} fields instead - we will see soon their benefit.
 Let's start from existing code, available in the {\f1\fs20 SQLite3\\DDD\\dom} sub-folder of the framework source code repository, in the {\f1\fs20 dddDomUserTypes.pas} unit. This unit defined some reusable class types, able to store user information, in a clean DDD way.
 :   Specialize your simple types
 Each reality in this unit would have its own type definition, using the extended pascal syntax, even for simple types like {\f1\fs20 string} or {\f1\fs20 integer}:
@@ -13180,7 +13182,7 @@ With such a method signature, we would ensure that we won't supply a {\f1\fs20 T
 It may sound like a small enhancement, but be sure that it would increase your code safety, and expressiveness. One of the biggest failure in NASA history was {\i Mars Climate Orbiter}. A variable type error burn up a $327.6 million project in minutes, when one engineering group working on the thrusters measured in English units of pounds-force seconds, whereas the others used metric Newton-seconds. The result of that inattention is now lost in space, possibly in pieces.
 Remember when our physic teachers leaped all over answers that consisted of a number. If the answer was 2.5, they would take their red pens and write "2.5 what? Weeks? Puppies? Demerits?" And proceed to mark the answer wrong. In our DDD code, we should rather follow this rule, and try to make the implicit {\i explicit}.
 :   Define your PODO classes
-Main point is first to define your {\i Value Objects} as plain Delphi {\f1\fs20 class} types, following the {\i Ubiquitous Language}.
+Main point is first to define your DDD Objects as plain Delphi {\f1\fs20 class} types - the famous @*PODO@s, following the {\i Ubiquitous Language}. We would in fact define {\i @*Value Objects@} {\f1\fs20 class} types, which may be grouped and nested to become {\i @*Entity Objects@} or {\i @*Aggregates@}.
 To define a {\f1\fs20 TPerson} object, able to modelize a person identity, we may write the following classes:
 !type
 !  /// Person full name
@@ -13223,7 +13225,7 @@ To define a {\f1\fs20 TPerson} object, able to modelize a person identity, we ma
 !  end;
 First of all, you would see that we inherit from {\f1\fs20 TSynPersistent} and {\f1\fs20 TSynAutoCreateFields}. The benefit of those classes are the following:
 - {\f1\fs20 TSynPersistent} has a {\f1\fs20 virtual} constructor, and a little less overhead than {\f1\fs20 TPersistent}, so may be preferred, especially when we would use @161@;
-- {\f1\fs20 TSynAutoCreateFields} inherits from {\f1\fs20 TSynPersistent}, and its overriden {\f1\fs20 Create} would allocate all {\f1\fs20 published} class properties automagically - whereas its overriden {\f1\fs20 Destroy} would release those instances for you. As such, inheriting from {\f1\fs20 TSynAutoCreateFields} makes it a perfect fit for a value object, nesting sub objects as properties;
+- {\f1\fs20 TSynAutoCreateFields} inherits from {\f1\fs20 TSynPersistent}, and its overridden {\f1\fs20 Create} would allocate all {\f1\fs20 published} class properties auto-magically - whereas its overridden {\f1\fs20 Destroy} would release those instances for you. As such, inheriting from {\f1\fs20 TSynAutoCreateFields} makes it a perfect fit for a {\i Value Object}, nesting sub objects as properties;
 - Both have the RTTI enabled, so all published properties would be easily serialized as JSON (when used as @*DTO@), or persisted later on on a database, when joined as {\i Aggregate Roots}.
 In the above code, we defined {\f1\fs20 TPerson.Name} as a {\f1\fs20 TPersonFullName} class. So that we may use {\f1\fs20 aPerson.Name.First} or {\f1\fs20 aPerson.Name.Last} or even the runtime-computed {\f1\fs20 aPerson.Name.FullName} method which is able to display the full name, depending on per-country culture. We also reintroduced the {\f1\fs20 Equals()} method, which will allow to compare the objects per value, and not per reference.
 Even if the birth date is just a date, we introduced a dedicated {\f1\fs20 TPersonBirthDate} class. The benefit is to have the overloaded {\f1\fs20 Age()} methods, which are pretty convenient in practice.
@@ -13250,16 +13252,14 @@ Take a look at the {\f1\fs20 dddDomUserTypes.pas} unit, to identify such pattern
 !    fEmail: TEmailAddress;
 !  public
 !    function Equals(another: TPersonContactable): boolean; reintroduce;
-!    /// built-in simple unit tests
-!    class procedure RegressionTests(test: TSynTestCase);
 !  published
 !    property Address: TAddress read fAddress;
 !    property Phone1: TPhoneNumber read fPhone1 write fPhone1;
 !    property Phone2: TPhoneNumber read fPhone2 write fPhone2;
 !    property Email: TEmailAddress read fEmail write fEmail;
 !  end;
-You can see that we did not pollute the {\f1\fs20 class} definition with any detail about persistence. What we did by now was to define {\i Value Objects}. We did not define any {\i Entity}, nor introduce a primary key to identify as single access point.
-In the next paragraph, we would define a {\f1\fs20 TUser} Aggregate Root, which would be a {\f1\fs20 TPersonContactable}, i.e. modelizing any application user account with all its personal information, with a flag to testify that its email validated:
+You can see that we did not pollute the {\f1\fs20 class} definition with any detail about persistence. What we did by now was to define a plain {\i Value Object}. We did not even specify that this {\f1\fs20 class} may be any {\i Entity}, nor introduce a primary key to identify it from a single access point. We found this way much cleaner that the approach of most other Java or C# DDD frameworks, which usually require to inherit from a parent {\f1\fs20 Entity} class, or use {\i attributes} to define the persistence expectations (like the primary key). We think that the domain types should not be polluted with those implementation details, and focus on expressing the model.
+We would finally define a {\f1\fs20 TUser} {\i Entity} (or {\i Aggregate Root}), inheriting from {\f1\fs20 TPersonContactable}, i.e. modelizing any application user account with all its personal information, with a flag to testify that its email was validated:
 !  TUser = class(TPersonContactable)
 !  private
 !    fLogonName: TLogonName;
@@ -13268,22 +13268,33 @@ In the next paragraph, we would define a {\f1\fs20 TUser} Aggregate Root, which 
 !    property LogonName: TLogonName read fLogonName write fLogonName;
 !    property EmailValidated: TDomUserEmailValidation read fEmailValidated write fEmailValidated;
 !  end;
-Such a {\f1\fs20 TPersistent}-inheriting class could be use as a {\i Value Object}, but become an {\i Aggregate} in the bounded countext of the user account personal information. So we would define an {\f1\fs20 interface}, implementing a {\i Persistence Service}.
+Such a {\f1\fs20 TPersistent}-inheriting class could be used as a {\i Value Object} (or even a @*DTO@), but become an {\i Entity} or {\i Aggregate} in the bounded context of the user account personal information. In order to store this data, we would now define an {\f1\fs20 interface}, implementing a {\i Persistence Service}.
 :   Store your Entities in CQRS Repositories
-In order to persist our precious {\i Value Objects}, we will follow some DDD patterns:
-- Define {\i Aggregate Root} (or {\i Entities}) as practical data context for storing the information;
-- Use {\i @**Repository@} to store the {\i @**Aggregates@};
-- Follow {\i @**CQRS@} ({\i Command Query Responsibility Segregation}) via a dedicated dual interface, spliting reads (Queries) and writes (Commands) for the {\i Repository};
-- Use {\i @*Factory@} to instantiate {\i CQRS} interfaces on need.
-The {\f1\fs20 mORMotDDD.pas} unit defines the following {\f1\fs20 interface}:
+When persisting our precious DDD Objects, the framework tries to follow some DDD patterns:
+- Define {\i Aggregate Root} (or {\i Entities}) from {\i Value Objects}, as practical data context for storing the information;
+- Use a {\i @**Repository@} service to store those {\i @**Aggregates@} instances;
+- Follow {\i @**CQRS@} ({\i Command Query Responsibility Segregation}) via a dedicated dual {\f1\fs20 interface}, splitting reads ({\i Queries}) and writes ({\i Commands}) in the {\i Repository} contract;
+- Use {\i @*Factory@} to instantiate {\i CQRS Repository} contracts on need.
+In practice, we would use a {\i Factory} to create {\i Repository} {\f1\fs20 class} instances implementing the {\i CQRS} service methods, defined as a hierachy of {\f1\fs20 interface} types, for a given {\i Aggregate Root}.\line Let's start from an example, i.e. implement {\i CQRS Repository} services for our {\f1\fs20 TUser} {\f1\fs20 class}.
+:    CQRS Interfaces
+The {\f1\fs20 mORMotDDD.pas} unit defines the following {\f1\fs20 interface}, which would benefit of being the root {\f1\fs20 interface} of all {\i Repository} services:
 !type
 !  ICQRSQuery = interface(IInvokable)
 !    ['{923614C8-A639-45AD-A3A3-4548337923C9}']
 !    function GetLastError: TCQRSResult;
 !    function GetLastErrorInfo: variant;
 !  end;
-This interface does nothing but allowing a generic access to the last error which occurred.\line In practice, we would use a {\i Factory} to create {\i Repository} {\f1\fs20 class} instances implementing the {\i CQRS} methods for a given {\i Aggregate Root}.
-In {\f1\fs20 dddDomUserCQRS.pas}, we defined two {\f1\fs20 interface} types, one {\f1\fs20 IDomUserQuery} for the read operations (i.e. {\i Queries}) of {\f1\fs20 TUser} aggregates, and an inherited {\f1\fs20 IDomUserCommand} for the write operations (i.e. {\i Commands}) of {\f1\fs20 TUser} aggregates.
+This interface does nothing but allowing a generic access to the last error which occurred. This would be used instead of {\f1\fs20 Exception}, via the {\f1\fs20 TCQRSResult} enumeration, as a safe way of handling errors in a remote {\i Service}
+Exceptions are very convenient when running code in a process, but are difficult to handle over a wire, since the execution context is spread on both client and server sides. It is very difficult to propagate an {\f1\fs20 exception} raised on the server side to the client side, without leaking the server implementation. For instance, the @*SOAP@ standard provide a way of transmitting execution errors as dedicated XML messages - but it turns out to be a very verbose and complex path.
+In {\i mORMot}, we defined a generic way of sending errors to the client side, for CQRS Services. By convention, any method would be defined as a {\f1\fs20 function}, returning its execution state as a {\f1\fs20 TCQRSResult} enumeration. If {\f1\fs20 cqrsSuccess} is returned, no error did happen on the server side, and execution may continue on the client side. Otherwise, an error "kind" is specified in the {\f1\fs20 TCQRSResult} transmitted value, and additional information is available as {\f1\fs20 string} or a @80@ in the {\f1\fs20 ICQRSQuery.GetLastErrorInfo} method. This allows to safely handle any kind of execution error on the client side, without the need to define dedicated exceptions. As we already stated about @165@, {\f1\fs20 exception} should be {\i exceptional} - please refer to this paragraph for more details, including the benefit of that any stubed or mocked interface would return {\f1\fs20 cqrsSuccess} (i.e. 0) by default, so let the test pass.
+For our {\f1\fs20 TUser} {\i CQRS Repository} service, we would therefore define two {\f1\fs20 interface} types, one inheriting from {\f1\fs20 ICQRSQuery} for the {\i Queries} methods, and another one inheriting from this later interface to define the {\i Commands} methods:
+\graph DDDCQRSInterface CQRS Repository Service Interface for TUser
+\IDomUserCommand\IDomUserQuery
+\IDomUserQuery\ICQRSQuery
+\Write Operations\Read Operations
+\Read Operations\Error Handling
+\
+In {\f1\fs20 dddDomUserCQRS.pas}, we therefore defined two {\f1\fs20 interface} types, one {\f1\fs20 IDomUserQuery} for the read operations (i.e. {\i Queries}) of {\f1\fs20 TUser} aggregates, and an inherited {\f1\fs20 IDomUserCommand} for the write operations (i.e. {\i Commands}) of {\f1\fs20 TUser} aggregates.
 :    Queries Interface
 Since we would segregate queries and commands, we would first define the interface for actually reading {\f1\fs20 TUser} information:
 !type
@@ -13298,16 +13309,19 @@ Since we would segregate queries and commands, we would first define the interfa
 !    function GetCount: integer;
 !    function HowManyValidatedEmail: integer;
 !  end;
+As we stated previously, all those methods do return a {\f1\fs20 TCQRSResult} enumeration, which would be used on the service consumer side to notify on any execution error.
 Instances of those interface would in fact have a limited life-time. To access the {\f1\fs20 TUser} persistence layer, a CQRS {\f1\fs20 interface} would be injected - via @161@, then allow to handle one or several {\f1\fs20 TUser} instances.
-For queries, you could use {\f1\fs20 IDomUserQuery.SelectByLogonName}, {\f1\fs20 IDomUserQuery.SelectByLastName} or {\f1\fs20 IDomUserQuery.SelectByEmailValidation} methods to initialize a request. As you can see, there is no mention of primary key or {\f1\fs20 ID} in this interface definition. Even if under the hood, the implementation {\i may} use our ORM, and a {\f1\fs20 TSQLRecord} with its {\f1\fs20 TSQLRecord.ID: TID} property, the CQRS interface themselves make not those implementation details appear - unless it would be necessary. But in our use case of an application targeting a single user, it is enough to be able to retrieve a user by its logon name, or by its last name.
-If the {\f1\fs20 Select*} methods successed, you could later on retrieve the content by calling:
-- {\f1\fs20 IDomUserQuery.Get} (for filling the properties of a single already existing {\f1\fs20 TUser} object),
-- {\f1\fs20 IDomUserQuery.GetAll} would return a list of {\f1\fs20 TUser} instances - for storage, we would use a {\f1\fs20 TUserObjArray} dynamic array, which should be released by the caller using {\f1\fs20 ObjArrayClear()} on the result;
-- or {\f1\fs20 IDomUserQuery.GetNext} to retrieve the actual matching {\f1\fs20 TUser}, one by one, following the principle of a database {\i cursor};
+For queries, you could use {\f1\fs20 IDomUserQuery.SelectByLogonName}, {\f1\fs20 IDomUserQuery.SelectByLastName} or {\f1\fs20 IDomUserQuery.SelectByEmailValidation} methods to initialize a request. As you can see, there is no mention of primary key or {\f1\fs20 ID} in this {\f1\fs20 interface} definition. Even if under the hood, the implementation {\i may} use our ORM, and a {\f1\fs20 TSQLRecord} with its {\f1\fs20 TSQLRecord.ID: TID} property, the CQRS interface themselves make not those implementation details appear - unless it would be necessary. In our use case of an application targeting a single user, it is enough to be able to retrieve a user by its logon name, or by its last name.
+If the {\f1\fs20 Select*} method executed without error (i.e. returned {\f1\fs20 cqrsSuccess}), we can later on retrieve the content by calling:
+- {\f1\fs20 IDomUserQuery.Get} for filling the properties of a single already existing {\f1\fs20 TUser} object);
+- {\f1\fs20 IDomUserQuery.GetAll} to return a list of {\f1\fs20 TUser} instances - for storage, we would use a {\f1\fs20 TUserObjArray} dynamic array, which should be released by the caller using {\f1\fs20 ObjArrayClear()} on the result variable;
+- {\f1\fs20 IDomUserQuery.GetNext} to retrieve the actual matching {\f1\fs20 TUser}, one by one, following the principle of a database {\i cursor};
 - {\f1\fs20 IDomUserQuery.GetCount} would return the number of items matching the {\f1\fs20 Select*}.
-Since the {\f1\fs20 IDomUserQuery interface} has a lifetime, you could call {\f1\fs20 IDomUserQuery.Get} or {\f1\fs20 IDomUserQuery.GetAll} several times after a single {\f1\fs20 Select*}. Note that in the common ORM-based implementation we would define below, the {\f1\fs20 TUser} information is actually {\i retrieved} and stored in memory by the {\f1\fs20 Select*} method.\line The {\f1\fs20 IDomUserQuery.HowManyValidatedEmail} method, on the other hand, is stateless, and could be used without any prior {\f1\fs20 Select*}.
-The main point here is that, when defining your CQRS interface, you should focus on {\i which} data you need to access, in the most convenient way for you, and forget about the real persistence implementation - i.e. {\i how} data is stored. This is called, in DDD methods, as {\i @**Persistence Ignorance@}, and is a very convenient way of uncoupling your business logic from actual technical details. If you was never asked by your commercials to support a new database engine, or even be able to switch from a SQL to a NoSQL storage, or an existing legacy proprietary obscure database for a given customer... you are a lucky programmer, but - you know - it happens in real life!
+Since the {\f1\fs20 IDomUserQuery interface} has a lifetime, you could call {\f1\fs20 IDomUserQuery.Get} or {\f1\fs20 IDomUserQuery.GetAll} several times after a single {\f1\fs20 Select*}. Note that in the common ORM-based implementation we would define below, the {\f1\fs20 TUser} information is actually {\i retrieved} and stored in memory by the {\f1\fs20 Select*} method.
+Note that in the {\f1\fs20 IDomUserQuery} contract, the {\f1\fs20 IDomUserQuery.HowManyValidatedEmail} method, on the other hand, is stateless, and could be used without any prior {\f1\fs20 Select*}. Such methods may appear, depending on the Domain expectations.
+The main point here is that, when defining your CQRS interface, you should focus on {\i which} data you need to access, in the most convenient way for you, and forget about the real persistence implementation - i.e. {\i how} data is stored. This is called, in DDD methods, as {\i @**Persistence Ignorance@}, and is a very convenient way of uncoupling your business logic from actual technical details. If you was never asked by your commercials to support a new database engine, or even be able to switch from a SQL to a NoSQL storage, or an existing legacy proprietary obscure database used by a given customer... you are a lucky programmer, but - you know - it happens in real life!
 Another advantage of starting from what you need in your domain, by using {\f1\fs20 interface} types as contracts, is that you would probably focus on the domain, and may avoid the risk of an {\i @*anemic domain model@} symptom, which appears when your persistence service is just a CRUD operation in disguise. If we need only CRUD operations, an ORM, or even plain SQL is enough. But if we want to have our domain code follow the ubiquitous language, and stick to the use cases of our business model, we should better design the persistence this way.
+Last but not least, you would be able to {\i mock} or {\i stub} the persistence service - see @166@, so ease unit test of your {\i Domain} code, without any dependency to any actual database layer. Following {\i Test Driven Design}, you would even be able to write the Domain core tests first, validate all your interfaces, even write the {\i Application layer} and test it with the current mock-up of the end-user application, and eventually finalize and tune the SQL or NoSQL storage at the final step, when the whole workflow is stabilized. It would help testing sooner, therefore fix sooner, and... hopefully release sooner.
 :    Commands Interface
 Following the CQRS ({\i Command Query Responsibility Segregation}) principle, we defined the write operations (i.e. {\i Commands}) in a separate {\f1\fs20 interface}. This type would inherit from {\f1\fs20 IDomUserQuery}, since it may be convenient to be able to first {\i read} the {\f1\fs20 TUser}, for instance before applying a modification to the stored information, like updating existing data, or adding some a missing entry.
 !type
@@ -13326,14 +13340,14 @@ For instance, to modification an existing record, you would call:
 - {\f1\fs20 IDomUserQuery.SelectByLogonName};
 - {\f1\fs20 IDomUserCommand.Update};
 - {\f1\fs20 IDomUserCommand.Commit}.
-If the logon name is unknown, an error would raise at the first step. If the updated modification transmitted at the second step is invalid (i.e. you forgot to fill a mandatory field, or a value which should be unique, like a serial number, appear to exist already), then another error would be reported. But even after a sucessfull {\f1\fs20 Update}, nothing would be stored in the database. Why? Because in most use cases, you would probably need to synchronize several operations: for instance, you may have to send an email, or call a third-party service, and write the new data only if everything was right. As such, you would need a two-phase write operation: first, you prepare and validate your data on each involved service, then, once everyone did give its green light, you eventually launch the process, which is, in the case of a persistence layer, calling {\f1\fs20 Commit}. In a real application, an unexpected low-level error may happen during the {\i Commit} phase - e.g. a network failure, a concurrency issue, or a problem between a chair and a keyboard - but it would not be likely to happen often. The {\i dual-phase} commit would ensure that most errors would be identified during the first phase, using our ORM's @56@ abilities.
+If the logon name is unknown, an error would raise at the first step. If the updated modification transmitted at the second step is invalid (i.e. you forgot to fill a mandatory field, or a value which should be unique, like a serial number, appear to exist already), then another error would be reported. But even after a successful {\f1\fs20 Update}, nothing would be stored in the database. Why? Because in most use cases, you would probably need to synchronize several operations: for instance, you may have to send an email, or call a third-party service, and write the new data only if everything was right. As such, you would need a two-phase write operation: first, you prepare and validate your data on each involved service, then, once everyone did give its green light, you eventually launch the process, which is, in the case of a persistence layer, calling {\f1\fs20 Commit}. In a real application, an unexpected low-level error may happen during the {\i Commit} phase - e.g. a network failure, a concurrency issue, or a problem between a chair and a keyboard - but it would not be likely to happen often. The {\i dual-phase} commit would ensure that most errors would be identified during the first phase, using our ORM's @56@ abilities.
 Of course, if you want to run the {\f1\fs20 IDomUserCommand.Add} method, no prior {\f1\fs20 IDomUserQuery.Select*} call is mandatory. But for {\f1\fs20 Update} and {\f1\fs20 Delete} or {\f1\fs20 DeleteAll} commands, you would need first to define the data extend you would work on, by a previous call to {\f1\fs20 Select*}.
 This {\i dual-phase} commit appears to be a clean way of implement the @100@. Under the hood, when used with our ORM - as we will now explain - {\i @*Unit Of Work@} will be expressed as a {\f1\fs20 I*Command} service, uncoupled from the persistence layer it runs on.
 :    Automated Repository using the ORM
-As you may have noticied, we did just implemented the {\f1\fs20 interface} types we needed. That is, we have the {\i contract} of our persistence services, but no actual implementation of it. As such, those {\f1\fs20 interface} definitions are useless. Luckily for use, the {\f1\fs20 mORMotDDD.pas} unit offers an easy way to implement those using @3@, with minimal coding.
+As you may have noticed, we did just implemented the {\f1\fs20 interface} types we needed. That is, we have the {\i contract} of our persistence services, but no actual implementation of it. As such, those {\f1\fs20 interface} definitions are useless. Luckily for use, the {\f1\fs20 mORMotDDD.pas} unit offers an easy way to implement those using @3@, with minimal coding.
 First we would need to map our domain object (i.e. our {\f1\fs20 TUser} instance and its properties) into a {\f1\fs20 TSQLRecord}. We may do it by hand, but you may find an handy way. Just run the following in the context of your application:
 ! TDDDRepositoryRestFactory.ComputeSQLRecord(TUser);
-This {\f1\fs20 class procedure} would create a {\f1\fs20 ddsqlrecord.inc} file in the executable folder, containing the needed field definition, with one {\f1\fs20 TSQLRecord} type corresponding to eeach hierarchy level of the original {\f1\fs20 TPersistent} definition. Nested fields would be defined as a single column in the {\f1\fs20 TSQLRecord}, e.g. {\f1\fs20 Address.Country.Iso} would be flattened as a {\f1\fs20 Address_Country} property.
+This {\f1\fs20 class procedure} would create a {\f1\fs20 ddsqlrecord.inc} file in the executable folder, containing the needed field definition, with one {\f1\fs20 TSQLRecord} type corresponding to each hierarchy level of the original {\f1\fs20 TPersistent} definition. Nested fields would be defined as a single column in the {\f1\fs20 TSQLRecord}, e.g. {\f1\fs20 Address.Country.Iso} would be flattened as a {\f1\fs20 Address_Country} property.
 So if we follow the class hierarchy, we would have:
 \graph DDDCQRSORMMapping CQRS Class Hierarchy Mapping for ORM and DDD Entities
 \TPerson\TPersonContactable
@@ -13401,7 +13415,7 @@ As you can see, the main point of this {\f1\fs20 constructor} is to supply the r
 - The associated {\f1\fs20 TSQLRest} server would be the one supplied to this class;
 - The ORM class, defining the actual SQL table or NoSQL collection which would store the data, is {\f1\fs20 TSQLRecordUser};
 - An optional {\f1\fs20 TDDDRepositoryRestManager} instance may be supplied as owner of this factory - but it is not used in most cases.
-The {\f1\fs20 AddFilterOrValidate()} method allows to set some @56@ expectations at DDD level. Those rules would be applied before {\f1\fs20 Commit} would take place, without any use of the ORM rules. In the above code, {\f1\fs20 TSynFilterTrim} would remove any space from all text fields of the {\f1\fs20 TUser} instance, and {\f1\fs20 TSynValidateNonVoidText} will ensure that the {\f1\fs20 TUser.LogonName} field would not be {\f1\fs20 ''} - after space triming. You may consider those rules as the SQL constraints you may be used to. But since they would be defined at DDD level, they would apply on any database backend, even if it does not support any constraint - e.g. if it is a NoSQL engine, or a third-party persistence service you do not have the hand on.
+The {\f1\fs20 AddFilterOrValidate()} method allows to set some @56@ expectations at DDD level. Those rules would be applied before {\f1\fs20 Commit} would take place, without any use of the ORM rules. In the above code, {\f1\fs20 TSynFilterTrim} would remove any space from all text fields of the {\f1\fs20 TUser} instance, and {\f1\fs20 TSynValidateNonVoidText} will ensure that the {\f1\fs20 TUser.LogonName} field would not be {\f1\fs20 ''} - after space trimming. You may consider those rules as the SQL constraints you may be used to. But since they would be defined at DDD level, they would apply on any database back-end, even if it does not support any constraint - e.g. if it is a NoSQL engine, or a third-party persistence service you do not have the hand on.
 Then we define the needed methods of {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} in our custom class:
 !type
 !  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand)
@@ -13465,7 +13479,10 @@ What we need know is to implement those methods, using the internal protected {\
 !  if ORMSelectCount('EmailValidated=%',[ord(evValidated)],[],result)<>cqrsSuccess then
 !    result := 0;
 !end;
-As you can see, almost everything is already defined at {\f1\fs20 TDDDRepositoryRestCommand} level. Our {\f1\fs20 TInfraRepoUser} class, implementing a full CQRS service, fully abstracted from the ORM, is implemented by a few internal {\f1\fs20 ORM*()} method calls. In fact, our {\f1\fs20 TInfraRepoUser} is just a thin wrapper forcing use of strong typing in its methods parameters (i.e. using {\f1\fs20 TUser}/{\f1\fs20 TUserObjArray} whereas the {\f1\fs20 ORM*()} methods are more relaxed about actual typing), and that the ORM specificities are followed as expected, e.g. a search against the {\f1\fs20 TUser.Name.Last} field would use the {\f1\fs20 TSQLRecordUser.Name_Last} column, with the proper {\f1\fs20 LIKE} operator.
+Almost everything is already defined at {\f1\fs20 TDDDRepositoryRestCommand} level. Our {\f1\fs20 TInfraRepoUser} class, implementing a full CQRS service, fully abstracted from the ORM, is implemented by a few internal {\f1\fs20 ORM*()} method calls.
+All the error handling, including server-side {\f1\fs20 exception} catching, and conversion into {\f1\fs20 TCQRSResult} / {\f1\fs20 ICQRSQuery.GetLastErrorInfo} content, is already implemented in {\f1\fs20 TDDDRepositoryRestCommand}.
+All the data access via the {\f1\fs20 TSQLRecordUser} REST persistence layer, with any @56@ defined rule, is also incorporated in {\f1\fs20 TDDDRepositoryRestCommand}. The conversion to/from {\f1\fs20 TUser} properties has been optimized, so that fields would be moved {\i by reference}, with no memory allocation nor content modification, for best performance and data safety. The type mapping specified by {\f1\fs20 TInfraRepoUserFactory.Create} is enough to make the whole process as automated as possible.
+In fact, our {\f1\fs20 TInfraRepoUser} {\f1\fs20 class} is just a thin wrapper forcing use of strong typing in its methods parameters (i.e. using {\f1\fs20 TUser}/{\f1\fs20 TUserObjArray} whereas the {\f1\fs20 ORM*()} methods are more relaxed about actual typing), and ensuring that the ORM specificities are followed as expected, e.g. a search against the {\f1\fs20 TUser.Name.Last} DDD field would use the {\f1\fs20 TSQLRecordUser.Name_Last} ORM column, with the proper {\f1\fs20 LIKE} operator.
 To use those CQRS interfaces, you could use @*IoC@ as usual:
 !var cmd: IDomUserCommand;
 !    user: TUser;
@@ -13484,26 +13501,28 @@ To use those CQRS interfaces, you could use @*IoC@ as usual:
 !      user.Address.Country.Alpha2 := 'fr';
 !      user.Phone1 := itext;
 !!      if cmd.Add(user)<>cqrsSuccess then
-!        writeln('Write Error');
+!          raise EMyApplicationException.CreateFmt('Invalid data: %s',[cmd.GetLastErrorInfo]);
 !    end;
 !    // here nothing is actually written to the database
 !!    if cmd.Commit<>cqrsSuccess then
-!      writeln('Commit Error');
+!        raise EMyApplicationException.CreateFmt('Commit error: %s',[cmd.GetLastErrorInfo]);
 !    // here everything has been written to the database
 !  finally
 !    user.Free;
 !  end;
-Under the hood, {\f1\fs20 TDDDRepositoryRestCommand} will define a {\f1\fs20 TSqlRestBatch} - see @28@ - for storing all write commands in memory (as JSON) - e.g. {\f1\fs20 cmd.Add}, and will send them to the database engine, with optimized SQL or NoSQL statements, only when {\f1\fs20 cmd.Commit} would be executed. Internally, {\f1\fs20 TDDDRepositoryRestCommand.ORMPrepareForCommit} will call all DDD and ORM {\f1\fs20 TSynFilter} and {\f1\fs20 TSynValidate} rules, as previously defined. It sounds indeed like a real advantage to not need to reach the database to have those constraints verified. The sooner an error is notified, the better - especially in a complex @*SOA@ system.
+Under the hood, {\f1\fs20 TDDDRepositoryRestCommand} will define a {\f1\fs20 TSqlRestBatch} - see @28@ - for storing all write commands in memory (as JSON) - e.g. {\f1\fs20 cmd.Add}, and will send them to the database engine, with optimized SQL or NoSQL statements, only when {\f1\fs20 cmd.Commit} would be executed.
+Internally, {\f1\fs20 TDDDRepositoryRestCommand.ORMPrepareForCommit} will call all DDD and ORM {\f1\fs20 TSynFilter} and {\f1\fs20 TSynValidate} rules, as previously defined. It sounds indeed like a real advantage to not need to reach the database to have those constraints verified. The sooner an error is notified, the better - especially in a complex @*SOA@ system.
 :   Isolate using DTOs
-DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate. But if it tends to enforce you writing a lot of wrapping code, forget about it, and expose your {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always...
+DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate.
+But defining {\i DTO} types, just for uncoupling, may become time consuming. If you start writing a lot of wrapping code, forget about it, and expose your Domain {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always... And never forget to write proper unit testing of this marshalling code, since it may induce some unexpected issues.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
 :  Defining services
 In practice, {\i mORMot}'s Client-Server architecture may be used as such:
 - {\i @*Service@s via methods} - see @49@ - can be used to publish methods corresponding to your aggregate roots defined as {\f1\fs20 TSQLRecord}.\line This will make it pretty @*REST@ful compatible.
 - {\i Services via interfaces} - see @63@ - can be used to publish all your processes.\line Dedicated factories can be used on both Client and Server side, to define your repositories and/or domain operations.
-Both methods will allow proper customization, and, especially for the second, offer both integrated and automated process, e.g. RESTful access, @*JSON@ marshalling, @*session@, @*security@, @*log@ging, @*multi-thread@ing.
+Both methods will allow proper customization, and, especially for the second, offer both integrated and automated process, e.g. RESTful access, @*JSON@ marshalling, @*session@, @*security@, @*log@ging, @*multi-thread@ing, and callbacks for events.
 :  Event-Driven Design
-DDD's {\i Events} could easily be implemented as @149@, when an {\f1\fs20 interface} callback is defined as @154@. In this case, the {\f1\fs20 interface} type would define the various DDD events, ready to be notified and propagated in real-time across the whole system.
+DDD's {\i @**Events@} could easily be implemented as @149@, when an {\f1\fs20 interface} callback is defined as @154@. In this case, the {\f1\fs20 interface} type would define the various DDD events, ready to be notified and propagated in real-time across the whole system.
 An application layer may provide a specific callback to the domain, which would push the notification as a regular Delphi call, but in fact transmitted via {\i WebSockets} from the corresponding Domain Service to the right application layer.
 No need to put in production a @*Message bus@, or a centralized system. Using callbacks, you would your outer layers (e.g. {\i Application} or {\i Presentation} layers) be cleanly notified by the Domain Services, without any waste of resource, and without potential bottleneck. Each node of your system would communicate directly with its subscriber, from a pure {\f1\fs20 interface} method call, as if it was a local process. No need to encapsulate your events within a dedicated message class, or follow a protocol: just run a notification method corresponding to the event, and you are done - all subscribers would be notified.
 :  Building a Clean architecture

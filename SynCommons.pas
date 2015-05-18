@@ -453,6 +453,7 @@ unit SynCommons;
     and will return any size > 2 GB as expected
   - faster PosEx() function in pure pascal mode (based on Avatar Zondertau work)
   - introducing StreamToRawByteString() / RawByteStringToStream() functions
+  - introducing RawByteStringToBytes() / BytesToRawByteString() functions
   - added StringDynArrayToRawUTF8DynArray() and StringListToRawUTF8DynArray()
   - added CSVToRawUTF8DynArray() overloaded functions
   - added GetLastCSVItem() function and dedicated HashPointer() function
