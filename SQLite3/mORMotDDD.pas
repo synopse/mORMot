@@ -148,16 +148,22 @@ type
      cqrsNoPriorQuery, cqrsNoPriorCommand,
      cqrsVPSTooManyEvents);
 
-  /// generic interface, to be used for CQRS I*Query types definition
-  // - TCQRSQueryObject class will allow to easily implement LastError* members
-  ICQRSQuery = interface(IInvokable)
+  /// generic interface, to be used for CQRS I*Query and I*Command types definition
+  // - TCQRSService class will allow to easily implement LastError* members
+  // - all CQRS services, which may be executed remotely, would favor a function
+  // result as TCQRSResult enumeration for error handling, rather than a local
+  // Exception, which is not likely to be transferred easily on consummer side 
+  ICQRSService = interface(IInvokable)
     ['{923614C8-A639-45AD-A3A3-4548337923C9}']
     /// should return the last error as an enumerate
+    // - when stubed or mocked via TInterfaceStub, any method interface would
+    // return 0, i.e. cqrsSuccess by default, to let the test pass
     function GetLastError: TCQRSResult;
     /// should return addition information for the last error
     // - may be a plain string, or a JSON document stored as TDocVariant
     function GetLastErrorInfo: variant;
   end;
+
 
 { ----- Services / Daemon Interfaces }
 
@@ -232,7 +238,8 @@ type
   // expected a I*Command.Commit
   TCQRSQueryState = (qsNone, qsQuery, qsCommand);
 
-  /// to be inherited to implement CQRS I*Query services extended error process
+  /// to be inherited to implement CQRS I*Query or I*Command services extended
+  // error process
   // - you should never assign directly a cqrs* value to a method result, but
   // rather use the CqrsBeginMethod/CqrsSetResult/CqrsSetResultMsg methods provided by this class:
   // ! function TMyService.MyMethod: TCQRSResult;
@@ -245,7 +252,7 @@ type
   // !   end;
   // - the methods are implemented as a simple state machine, following
   // the TCQRSQueryAction and TCQRSQueryState definitions
-  TCQRSQueryObject = class(TInjectableObject, ICQRSQuery)
+  TCQRSService = class(TInjectableObject, ICQRSService)
   protected
     fLastErrorAddress: ^TCQRSResult;
     fLastError: TCQRSResult;
@@ -283,7 +290,7 @@ type
     property LastErrorInfo: variant read GetLastErrorInfo;
     /// the action currently processing
     property Action: TCQRSQueryAction read fAction;
-    /// current step of the TCQRSQueryObject state machine
+    /// current step of the TCQRSService state machine
     property State: TCQRSQueryState read fState;
   end;
 
@@ -294,8 +301,8 @@ type
   TDDDRepositoryRestFactory = class;
   TDDDRepositoryRestQuery = class;
 
-  /// class-reference type (metaclass) to implement I*Query interface
-  // using our RESTful ORM
+  /// class-reference type (metaclass) to implement I*Query or I*Command
+  // interface definitions using our RESTful ORM
   TDDDRepositoryRestClass = class of TDDDRepositoryRestQuery;
 
   /// abstract ancestor for all persistence/repository related Exceptions
@@ -492,7 +499,7 @@ type
   /// abstract repository class to implement I*Query interface using RESTful ORM
   // - actual repository implementation will just call the ORM*() protected
   // method from the published Aggregate-oriented CQRS service interface
-  TDDDRepositoryRestQuery = class(TCQRSQueryObject)
+  TDDDRepositoryRestQuery = class(TCQRSService)
   protected
     fFactory: TDDDRepositoryRestFactory;
     fCurrentORMInstance: TSQLRecord;
@@ -592,7 +599,7 @@ type
   // - not used directly by the DDD repositories (since they will rely on
   // a TDDDRepositoryRestFactory for the actual ORM process), but may be the
   // root class for any Rest-based infrastructure cross-cutting features
-  TCQRSQueryObjectRest = class(TCQRSQueryObject)
+  TCQRSQueryObjectRest = class(TCQRSService)
   protected
     fRest: TSQLRest;
   public
@@ -744,7 +751,7 @@ type
   // be able to launch and administrate such process, via a remote REST link
   // - inherited class should override the Internal* virtual abstract protected
   // methods to supply the actual process (e.g. set a background thread)
-  TDDDAdministratedDaemon = class(TCQRSQueryObject,IAdministratedDaemon)
+  TDDDAdministratedDaemon = class(TCQRSService,IAdministratedDaemon)
   protected
     fAdministrationServer: TSQLRestServer;
     fAdministrationServerOwned: boolean;
@@ -874,20 +881,20 @@ implementation
 
 { *********** Persistence / Repository Interfaces }
 
-{ TCQRSQueryObject }
+{ TCQRSService }
 
-constructor TCQRSQueryObject.Create;
+constructor TCQRSService.Create;
 begin
   fLock := TAutoLocker.Create;
   inherited Create;
 end;
 
-function TCQRSQueryObject.GetLastError: TCQRSResult;
+function TCQRSService.GetLastError: TCQRSResult;
 begin
   result := fLastError;
 end;
 
-function TCQRSQueryObject.GetLastErrorInfo: Variant;
+function TCQRSService.GetLastErrorInfo: Variant;
 begin
   result := fLastErrorContext;
 end;
@@ -899,7 +906,7 @@ const
     // qsNone = no state change after this action
     qsNone, qsQuery, qsNone, qsCommand, qsCommand, qsNone);
 
-function TCQRSQueryObject.CqrsBeginMethod(aAction: TCQRSQueryAction;
+function TCQRSService.CqrsBeginMethod(aAction: TCQRSQueryAction;
   var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
   fLastErrorAddress := @aResult;
@@ -919,26 +926,26 @@ begin
   result := true;
 end;
 
-function TCQRSQueryObject.CqrsSetResultError(aError: TCQRSResult): TCQRSResult;
+function TCQRSService.CqrsSetResultError(aError: TCQRSResult): TCQRSResult;
 begin
   CqrsBeginMethod(qaNone,result);
   CqrsSetResult(aError);
 end;
 
-procedure TCQRSQueryObject.CqrsSetResult(Error: TCQRSResult);
+procedure TCQRSService.CqrsSetResult(Error: TCQRSResult);
 begin
   InternalCqrsSetResult(Error);
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.CqrsSetResult(E: Exception);
+procedure TCQRSService.CqrsSetResult(E: Exception);
 begin
   InternalCqrsSetResult(cqrsInternalError);
   _ObjAddProps(['Exception',ObjectToVariantDebug(E)],fLastErrorContext);
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.InternalCqrsSetResult(Error: TCQRSResult);
+procedure TCQRSService.InternalCqrsSetResult(Error: TCQRSResult);
 begin
   if fLastErrorAddress=nil then
     raise ECQRSException.CreateUTF8('%.CqrsSetResult(%) with no prior CqrsBeginMethod',
@@ -952,11 +959,11 @@ begin
   fAction := qaNone;
 end;
 
-procedure TCQRSQueryObject.AfterInternalCqrsSetResult;
+procedure TCQRSService.AfterInternalCqrsSetResult;
 begin
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultSuccessIf(SuccessCondition: boolean;
+procedure TCQRSService.CqrsSetResultSuccessIf(SuccessCondition: boolean;
   ErrorIfFalse: TCQRSResult);
 begin
   if SuccessCondition then
@@ -964,7 +971,7 @@ begin
     CqrsSetResult(ErrorIfFalse);
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultDoc(Error: TCQRSResult;
+procedure TCQRSService.CqrsSetResultDoc(Error: TCQRSResult;
   const ErrorInfo: variant);
 begin
   InternalCqrsSetResult(Error);
@@ -972,13 +979,13 @@ begin
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultJSON(Error: TCQRSResult;
+procedure TCQRSService.CqrsSetResultJSON(Error: TCQRSResult;
   JSONFmt: PUTF8Char; const Args,Params: array of const);
 begin
   CqrsSetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultMsg(Error: TCQRSResult;
+procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
   const ErrorMessage: RawUTF8);
 begin
   InternalCqrsSetResult(Error);
@@ -986,7 +993,7 @@ begin
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultString(Error: TCQRSResult;
+procedure TCQRSService.CqrsSetResultString(Error: TCQRSResult;
   const ErrorMessage: string);
 begin
   InternalCqrsSetResult(Error);
@@ -994,7 +1001,7 @@ begin
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSQueryObject.CqrsSetResultMsg(Error: TCQRSResult;
+procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
   ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
 begin
   CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));

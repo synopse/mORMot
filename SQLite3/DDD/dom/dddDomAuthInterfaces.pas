@@ -78,7 +78,7 @@ type
   end;
 
   /// repository service to authenticate credentials via a dual pass challenge
-  IDomAuthQuery = interface(ICQRSQuery)
+  IDomAuthQuery = interface(ICQRSService)
     ['{5FB1E4A6-B432-413F-8958-1FA1857D1195}']
     /// initiate the first phase of a dual pass challenge authentication
     function ChallengeSelectFirst(const aLogonName: RawUTF8): TAuthQueryNonce;

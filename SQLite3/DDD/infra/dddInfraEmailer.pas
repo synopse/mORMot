@@ -224,7 +224,7 @@ type
 
 type
   /// abstract Mustache-Based templating
-  TDDDTemplateAbstract = class(TCQRSQueryObject,IDomUserTemplate)
+  TDDDTemplateAbstract = class(TCQRSService,IDomUserTemplate)
   protected
     fPartials: TSynMustachePartials;
     fHelpers: TSynMustacheHelpers;

@@ -69,7 +69,7 @@ type
   // - you could use SelectByLogonName, SelectByLastName or SelectByEmailValidation
   // methods to initialize a request, then call Get, GetAll or GetNext to retrieve
   // the actual matching Aggregate Roots
-  IDomUserQuery = interface(ICQRSQuery)
+  IDomUserQuery = interface(ICQRSService)
     ['{198C01D6-5189-4B74-AAF4-C322237D7D53}']
     /// would select a single TUser from its logon name
     // - then use Get() method to retrieve its content
