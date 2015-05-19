@@ -965,7 +965,8 @@ begin
           DB.TransactionBegin; // make initialization faster by using transaction
         DB.Execute(Model.GetSQLCreate(t)); // don't catch exception in constructor
         include(TableJustCreated,t);       // mark to be initialized below
-      end else begin
+      end else
+      if not (itoNoCreateMissingField in Options) then begin
         // this table is existing: check that all fields exist -> create if necessary
         DB.GetFieldNames(aFields,SQLTableName);
         nf := length(aFields);

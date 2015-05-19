@@ -5566,6 +5566,9 @@ type
   // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
   // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
   // tables with default records
+  // - itoNoCreateMissingField will avoid to create the missing fields on a
+  // table (may be used to circumvent specific DB driver or case sensitivity
+  // issue) 
   // - itoNoIndex4ID won't create the index for the main ID field
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
@@ -5575,6 +5578,7 @@ type
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoAutoCreateGroups, itoNoAutoCreateUsers,
+    itoNoCreateMissingField,
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
     itoNoIndex4TID, itoNoIndex4RecordVersion);
