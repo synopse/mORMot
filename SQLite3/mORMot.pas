@@ -5566,9 +5566,7 @@ type
   // - itoNoAutoCreateGroups and itoNoAutoCreateUsers will avoid
   // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
   // tables with default records
-  // - itoNoCreateMissingField will avoid to create the missing fields on a
-  // table (may be used to circumvent specific DB driver or case sensitivity
-  // issue) 
+  // - itoNoCreateMissingField will avoid to create the missing fields on a table
   // - itoNoIndex4ID won't create the index for the main ID field
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
@@ -5578,7 +5576,7 @@ type
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoAutoCreateGroups, itoNoAutoCreateUsers,
-    itoNoCreateMissingField,
+    itoNoCreateMissingField, 
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
     itoNoIndex4TID, itoNoIndex4RecordVersion);
@@ -7748,13 +7746,30 @@ type
     InsertSet: RawUTF8;
   end;
 
+  /// used by TSQLRecordPropertiesMapping.Options for custom field mapping
+  // of a TSQLRecord on an external database process
+  // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
+  // i.e. if field names which may conflict with a keyword should be
+  // automatically mapped to a harmless symbol name
+  // - rpmNoCreateMissingTable would bypass the existing table check, e.g.
+  // to circumvent some specific DB provider or case sensitivity issue on tables
+  // - rpmNoCreateMissingField would bypass the existing field check, e.g.
+  // to circumvent some specific DB provider or case sensitivity issue on fields
+  // - by default, check of missing field name would be case insensitive, unless
+  // the rpmMissingFieldNameCaseSensitive option is set
+  TSQLRecordPropertiesMappingOptions = set of (
+    rpmAutoMapKeywordFields,
+    rpmNoCreateMissingTable, rpmNoCreateMissingField,
+    rpmMissingFieldNameCaseSensitive);
+    
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
   PSQLRecordPropertiesMapping = ^TSQLRecordPropertiesMapping;
 
   /// allow custom field mapping of a TSQLRecord
-  // - used e.g. for external database process, including SQL generation
-  // - in end user code, mostly MapField/MapFields/MapAutoKeywordFields methods
+  // - used e.g. for external database process, including SQL generation,
+  // as implemented in the mORMotDB.pas unit
+  // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
   {$ifdef UNICODE}
@@ -7771,7 +7786,7 @@ type
     fFieldNames: TRawUTF8DynArray;
     fSQL: TSQLModelRecordPropertiesSQL;
     fFieldNamesMatchInternal: TSQLFieldBits;
-    fMapAutoKeywordFields: boolean;
+    fOptions: TSQLRecordPropertiesMappingOptions;
     fAutoComputeSQL: boolean;
     fMappingVersion: cardinal;
     /// fill fRowIDFieldName/fSQL with the current information
@@ -7794,9 +7809,19 @@ type
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
     // !   MapField('IntField','ExtField').
     // !   MapAutoKeywordFields;
+    // - will in fact include the rpmAutoMapKeywordFields flag in Options
     // - since it returns a PSQLRecordPropertiesMapping instance, you can
     // chain MapField().MapAutoKeywordFields.MapField(); calls to map several fields
     function MapAutoKeywordFields: PSQLRecordPropertiesMapping;
+    /// specify some advanced options for the field mapping
+    // - see TSQLRecordPropertiesMappingOptions for all possibilities
+    // - can be used e.g. as
+    // ! aModel.Props[TSQLMyExternal].ExternalDB.
+    // !   MapField('IntField','ExtField').
+    // !   SetOptions([rpmNoCreateMissingTable,rpmNoCreateMissingField]);
+    // - since it returns a PSQLRecordPropertiesMapping instance, you can
+    // chain MapField().SetOptions().MapField(); calls to map several fields
+    function SetOptions(aOptions: TSQLRecordPropertiesMappingOptions): PSQLRecordPropertiesMapping;
     /// add several custom field mappings
     // - can be used e.g. as
     // ! aModel.Props[TSQLMyExternal].ExternalDB.
@@ -7889,8 +7914,8 @@ type
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
     property FieldNamesMatchInternal: TSQLFieldBits read fFieldNamesMatchInternal;
-    /// equals TRUE if MapAutoKeywordFields has been defined
-    property AutoMapKeywordFields: boolean read fMapAutoKeywordFields;
+    /// how the mapping process would take place
+    property Options: TSQLRecordPropertiesMappingOptions read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
     property MappingVersion: cardinal read fMappingVersion;
@@ -27227,7 +27252,15 @@ function TSQLRecordPropertiesMapping.MapAutoKeywordFields:
   PSQLRecordPropertiesMapping;
 begin
   if @self<>nil then
-    fMapAutoKeywordFields := True;
+    include(fOptions,rpmAutoMapKeywordFields);
+  result := @self;
+end;
+
+function TSQLRecordPropertiesMapping.SetOptions(
+  aOptions: TSQLRecordPropertiesMappingOptions): PSQLRecordPropertiesMapping;
+begin
+  if @self<>nil then
+    fOptions := aOptions;
   result := @self;
 end;
 

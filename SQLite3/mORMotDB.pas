@@ -131,6 +131,8 @@ unit mORMotDB;
   - added VirtualTableExternalMap() function for easier mapping definition
   - handle TSQLRecordPropertiesMapping.MapAutoKeywordFields for automatic
     maping of field which name conflicts with a SQL keyword - see [7fbbd53966]
+  - handle TSQLRecordPropertiesMapping.Options settings to customize tables
+    or fields automatic creation on external DB
   - this unit will now set SynDBLog := TSQLLog during its initialization
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
     shared with SynDB and mORMot units (includes methods refactoring)
@@ -392,7 +394,7 @@ type
 
   /// A SynDB-based virtual table for accessing any external database
   // - for ORM access, you should use VirtualTableExternalRegister method to
-  //   associated this virtual table module to any TSQLRecord class
+  //   associate this virtual table module to any TSQLRecord class
   // - transactions are handled by this module, according to the external database
   TSQLVirtualTableExternal = class(TSQLVirtualTable)
   public { overridden methods }
@@ -653,13 +655,6 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
       end;
     end;
   end;
-  function FieldsExternalIndexOf(const ColName: RawUTF8): integer;
-  begin
-    for result := 0 to high(fFieldsExternal) do
-      if IdemPropNameU(fFieldsExternal[result].ColumnName,ColName) then
-        exit;
-    result := -1;
-  end;
   function PropInfoToExternalField(Prop: TSQLPropInfo;
     var Column: TSQLDBColumnCreate): boolean;
   const
@@ -710,15 +705,28 @@ var SQL: RawUTF8;
     i,f: integer;
     nfo: TSQLPropInfo;
     Field: TSQLDBColumnCreate;
-    FieldAdded: Boolean;
+    TableCreated,FieldAdded: Boolean;
     CreateColumns: TSQLDBColumnCreateDynArray;
+    options: TSQLRecordPropertiesMappingOptions;
     log: TSynLog;
-procedure GetFields;
-begin
-  fProperties.GetFields(fTableName,fFieldsExternal);
-  log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
-end;
-begin
+  procedure GetFields;
+  begin
+    fProperties.GetFields(fTableName,fFieldsExternal);
+    log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
+  end;
+  function FieldsExternalIndexOf(const ColName: RawUTF8): integer;
+  begin
+    if rpmMissingFieldNameCaseSensitive in options then begin
+      for result := 0 to high(fFieldsExternal) do
+        if fFieldsExternal[result].ColumnName=ColName then
+          exit;
+    end else
+      for result := 0 to high(fFieldsExternal) do
+        if IdemPropNameU(fFieldsExternal[result].ColumnName,ColName) then
+          exit;
+    result := -1;
+  end;
+begin       
   {$ifdef WITHLOG}
   log := Owner.LogClass.Add;
   log.Enter(self);
@@ -727,6 +735,7 @@ begin
   {$endif}
   inherited Create(aClass,aServer);
   // initialize external DB properties
+  options := fStoredClassProps.ExternalDB.Options;
   fTableName := StoredClassProps.ExternalDB.TableName;
   fProperties := StoredClassProps.ExternalDB.ConnectionProperties as TSQLDBConnectionProperties;
   log.Log(sllInfo,'% % Server=%',[StoredClass,fProperties,Owner],self);
@@ -740,8 +749,8 @@ begin
       SQL := fStoredClassProps.ExternalDB.FieldNames[f];
       if fProperties.IsSQLKeyword(SQL) then begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
-          [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName]);
-        if fStoredClassProps.ExternalDB.AutoMapKeywordFields then begin
+          [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
+        if rpmAutoMapKeywordFields in options then begin
           log.Log(sllWarning,'-> %.% mapped to "%_"',
             [fStoredClass,nfo.Name,SQL]);
           fStoredClassProps.ExternalDB.MapField(nfo.Name,SQL+'_');
@@ -751,12 +760,14 @@ begin
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
+  TableCreated := false;
   GetFields;
+  if not (rpmNoCreateMissingTable in options) then
   if fFieldsExternal=nil then begin
     // table is not yet existing -> try to create it
     with aClass.RecordProps do begin
       SetLength(CreateColumns,Fields.Count+1);
-      CreateColumns[0].Name := StoredClassProps.ExternalDB.RowIDFieldName;
+      CreateColumns[0].Name := fStoredClassProps.ExternalDB.RowIDFieldName;
       CreateColumns[0].DBType := ftInt64;
       CreateColumns[0].Unique := true;
       CreateColumns[0].NonNullable := true;
@@ -775,31 +786,35 @@ begin
         if fFieldsExternal=nil then
           raise EORMException.CreateUTF8('%.Create: external table creation % failed:'+
             ' GetFields() returned nil - SQL="%"',[self,StoredClass,fTableName,SQL]);
+        TableCreated := true;
       end;
   end;
   FieldsInternalInit;
   // create any missing field if necessary
-  FieldAdded := false;
-  with StoredClassRecordProps do
-  for f := 0 to Fields.Count-1 do
-    if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
-    /// real database columns exist for Simple + Blob fields (not Many)
-    if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
-      // add new missing Field
-      Finalize(Field);
-      fillchar(Field,sizeof(Field),0);
-      if PropInfoToExternalField(Fields.List[f],Field) then begin
-        SQL := fProperties.SQLAddColumn(fTableName,Field);
-        if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
-          FieldAdded := true else
-          raise EORMException.CreateUTF8('%.Create: %: unable to create external '+
-            'missing field %.% - SQL="%"',
-            [self,StoredClass,fTableName,Fields.List[f].Name,SQL]);
+  if not (rpmNoCreateMissingField in options) then
+  if not TableCreated then begin
+    FieldAdded := false;
+    with StoredClassRecordProps do
+    for f := 0 to Fields.Count-1 do
+      if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
+      /// real database columns exist for Simple + Blob fields (not Many)
+      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
+        // add new missing Field
+        Finalize(Field);
+        fillchar(Field,sizeof(Field),0);
+        if PropInfoToExternalField(Fields.List[f],Field) then begin
+          SQL := fProperties.SQLAddColumn(fTableName,Field);
+          if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
+            FieldAdded := true else
+            raise EORMException.CreateUTF8('%.Create: %: unable to create external '+
+              'missing field %.% - SQL="%"',
+              [self,StoredClass,fTableName,Fields.List[f].Name,SQL]);
+        end;
       end;
+    if FieldAdded then begin
+      GetFields; // get from DB after ALTER TABLE
+      FieldsInternalInit;
     end;
-  if FieldAdded then begin
-    GetFields; // get from DB after ALTER TABLE
-    FieldsInternalInit;
   end;
   // compute the SQL statements used internaly for external DB requests
   with StoredClassProps.ExternalDB do begin
