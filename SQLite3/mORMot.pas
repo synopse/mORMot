@@ -37831,12 +37831,12 @@ begin
 end;
 
 procedure TSQLRestStorage.BeginCurrentThread(Sender: TThread);
-begin
+begin // called by TSQLRestServer.BeginCurrentThread
   // nothing to do in this basic REST static class
 end;
 
 procedure TSQLRestStorage.EndCurrentThread(Sender: TThread);
-begin
+begin // called by TSQLRestServer.EndCurrentThread
   // nothing to do in this basic REST static class
 end;
 

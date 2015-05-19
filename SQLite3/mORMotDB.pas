@@ -689,7 +689,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
-      exit; // ignore unkwnown fields
+      exit; // ignore unkwnown/virtual fields
     end;
     Column.DBType := mORMotType[Prop.SQLFieldType];
     Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
@@ -710,8 +710,12 @@ var SQL: RawUTF8;
     options: TSQLRecordPropertiesMappingOptions;
     log: TSynLog;
   procedure GetFields;
+  var rawTableName: RawUTF8;
   begin
-    fProperties.GetFields(fTableName,fFieldsExternal);
+    if fTableName[1] in ['[','"',''''] then // e.g. for ZDBC's GetFields()  
+      rawTableName := copy(fTableName,2,length(fTableName)-2) else
+      rawTableName := fTableName;
+    fProperties.GetFields(rawTableName,fFieldsExternal);
     log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
   end;
   function FieldsExternalIndexOf(const ColName: RawUTF8): integer;
