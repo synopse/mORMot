@@ -1046,7 +1046,7 @@ type
   TWordArray  = array[0..MaxInt div SizeOf(word)-1] of word;
   PWordArray = ^TWordArray;
 
-  TIntegerArray = array[0..MaxInt div SizeOf(Integer)-1] of Integer;
+  TIntegerArray = array[0..MaxInt div SizeOf(integer)-1] of integer;
   PIntegerArray = ^TIntegerArray;
 
   TCardinalArray = array[0..MaxInt div SizeOf(cardinal)-1] of cardinal;
@@ -1891,6 +1891,11 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
+
+/// convert an open array (const Args: array of const) argument to an UTF-8
+// encoded text, returning FALSE on error
+function VarRecToUTF8IsString(const V: TVarRec; out value: RawUTF8): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an open array (const Args: array of const) argument to an Int64
 // - returns TRUE and set Value if the supplied argument is a vtInteger or vtInt64
@@ -6229,7 +6234,13 @@ type
     // - it will return the cached TJSONRecordTextDefinition
     // instance corresponding to the supplied RTTI text definition
     class function RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
-      const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
+      const aRTTIDefinition: RawUTF8): TJSONRecordAbstract; overload;
+    /// define a custom serialization for several dynamic arrays or records
+    // - the TypeInfo() and textual RTTI information will here be defined as
+    // ([TypeInfo(TType1),_TType1,Typeinfo(TType2),_TType2]) pairs
+    // - a wrapper around the overloaded RegisterCustomJSONSerializerFromText()
+    class procedure RegisterCustomJSONSerializerFromText(
+      const aTypeInfoTextDefinitionPairs: array of const); overload;
     /// change options for custom serialization of dynamic array or record
     // - will return TRUE if the options have been changed, FALSE if the
     // supplied type info was not previously registered
@@ -6259,7 +6270,12 @@ type
     // - since Delphi 2010, any record type can be supplied - which is more
     // convenient than calling RegisterCustomJSONSerializerFromText()
     class procedure RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfo: pointer;
-      aTypeName: RawUTF8='');
+      aTypeName: RawUTF8=''); overload;
+    /// define a custom serialization for several simple types
+    // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
+    // method for each supplied type information 
+    class procedure RegisterCustomJSONSerializerFromTextSimpleType(
+       const aTypeInfos: array of pointer); overload;
     /// undefine a custom serialization for a given dynamic array or record
     // - it will un-register any callback or text-based custom serialization
     // i.e. any previous RegisterCustomJSONSerializer() or
@@ -14236,6 +14252,11 @@ begin
   end;
   if wasString<>nil then
     wasString^ := isString;
+end;
+
+function VarRecToUTF8IsString(const V: TVarRec; out value: RawUTF8): boolean;
+begin
+  VarRecToUTF8(V,value,@result);
 end;
 
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
@@ -35362,6 +35383,25 @@ begin
   result := GlobalJSONCustomParsers.RegisterFromText(aTypeInfo,aRTTIDefinition);
 end;
 
+class procedure TTextWriter.RegisterCustomJSONSerializerFromText(
+  const aTypeInfoTextDefinitionPairs: array of const);
+var n,i: integer;
+    def: RawUTF8;
+begin
+  n := length(aTypeInfoTextDefinitionPairs);
+  if (n=0) or (n and 1=1) then
+    exit;
+  n := n shr 1;
+  if n=0 then
+    exit;
+  for i := 0 to n-1 do
+    if (aTypeInfoTextDefinitionPairs[i*2].VType<>vtPointer) or
+       not VarRecToUTF8IsString(aTypeInfoTextDefinitionPairs[i*2+1],def) then
+      raise ESynException.Create('RegisterCustomJSONSerializerFromText[?]') else
+      GlobalJSONCustomParsers.RegisterFromText(
+        aTypeInfoTextDefinitionPairs[i*2].VPointer,def);
+end;
+
 class function TTextWriter.RegisterCustomJSONSerializerSetOptions(aTypeInfo: pointer;
   aOptions: TJSONCustomParserSerializationOptions; aAddIfNotExisting: boolean): boolean;
 var ndx: integer;
@@ -35409,6 +35449,14 @@ begin
   if aTypeName='' then
     TypeInfoToName(aTypeInfo,aTypeName);
   GlobalCustomJSONSerializerFromTextSimpleType.AddObjectIfNotExisting(aTypeName,aTypeInfo);
+end;
+
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
+  const aTypeInfos: array of pointer);
+var i: integer;
+begin
+  for i := 0 to high(aTypeInfos) do
+    RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfos[i],'');
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
