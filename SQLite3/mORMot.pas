@@ -27238,7 +27238,7 @@ begin
     end else begin
       fFieldNames[int] := InternalExternalPairs[i*2+1];
       if IdemPropNameU(fFieldNames[int],fProps.Fields.List[int].Name) then
-        include(fFieldNamesMatchInternal,int+1) else // [0]=ID
+        include(fFieldNamesMatchInternal,int+1) else // [0]=ID  [1..n]=fields[i-1]
         exclude(fFieldNamesMatchInternal,int+1);
     end;
   end;
@@ -32505,7 +32505,13 @@ begin
   if high(FieldNames)<0 then
     exit; // avoid endless loop for TSQLRestStorage with no overridden method
   TableIndex := Model.GetTableIndexExisting(Table);
-  Rest := GetStaticDataServerOrVirtualTable(TableIndex);
+  Rest := nil;
+  if TableIndex>=0 then begin // bypass fVirtualTableDirect 
+    if cardinal(TableIndex)<cardinal(length(fStaticData)) then
+      Rest := fStaticData[TableIndex];
+    if (Rest=nil) and (fStaticVirtualTable<>nil) then
+      Rest := fStaticVirtualTable[TableIndex];
+  end;
   if Rest<>nil then begin
     if Rest.InheritsFrom(TSQLRestStorage) then
        // will try to create an index on the static table (e.g. for external DB)
