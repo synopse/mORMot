@@ -73,7 +73,7 @@ uses
   SynLog,
   mORMot,
   mORMotDDD,
-  SynSQLite3, SynSQLite3Static, mORMotSQLite3, // for internal SQlite3 database
+  SynSQLite3, mORMotSQLite3, // for internal SQlite3 database
   mORMotHttpServer, // for publishing a TSQLRestServer over HTTP
   mORMotHttpClient, // for consumming a TSQLRestClient over HTTP
   SynDB, mORMotDB,  // for TRestSettings on external SQL database
