@@ -805,6 +805,8 @@ unit mORMot;
     - added TSQLRestServer.ServiceMethodRegister() low-level method
     - added TSQLRestServer.ServiceMethodRegisterPublishedMethods() to allow
       multi-class method-based services (e.g. for implementing MVC model)
+    - new TSQLRestClientURI.ServicePublishOwnInterfaces/ServiceRetrieveAssociated
+      methods, implementing a P2P automatic registration of associated services
     - ServiceContext threadvar will now be set in all ORM and SOA process, to
       allow access to the execution context
     - to make the implicit explicit, TSQLRestServerURIContext.ID has been
@@ -10737,6 +10739,12 @@ type
     /// notify the other side that the given Callback event interface is released
     // - this default implementation will do nothing
     function CallBackUnRegister(const Callback: IInvokable): boolean; virtual;
+    /// retrieve all registered Services TGUID 
+    procedure SetGUIDs(out Services: TGUIDDynArray);
+    /// retrieve all registered Services names
+    // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
+    // ICalculator 
+    procedure SetInterfaceNames(out Names: TRawUTF8DynArray);
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -13486,10 +13494,70 @@ type
     Port: RawUTF8;
     /// the TSQLRestServer model Root
     Root: RawUTF8;
+    /// returns TRUE if all field values do match, case insensitively
+    function Equals(const other: TSQLRestServerURI): boolean;
     /// property which allows to read or set the Address/Port/Root fields as
     // one UTF-8 text field (i.e. a TSQLRestServerURIString instance)
     // - URI format is 'address:port/root', but port or root are optional
     property URI: TSQLRestServerURIString read GetURI write SetURI;
+  end;
+  /// store a list of TSQLRestServer URIs
+  TSQLRestServerURIDynArray = array of TSQLRestServerURI;
+
+  /// used to publish all Services supported by a TSQLRestServer instance
+  // - as expected by TSQLRestServer.ServicesPublishedInterfaces
+  // - can be serialized as a JSON object via RecordLoadJSON/RecordSaveJSON
+  TServicesPublishedInterfaces = object
+    /// how this TSQLRestServer could be accessed
+    PublicURI: TSQLRestServerURI;
+    /// the list of supported services names
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    Names: TRawUTF8DynArray;
+  end;
+  /// store a list of published Services supported by a TSQLRestServer instance
+  TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
+
+  /// used e.g. by TSQLRestServer to store a list of TServicesPublishedInterfaces
+  TServicesPublishedInterfacesList = class(TSynCriticalSection)
+  private
+    fDynArray: TDynArray;
+    fLastPublishedJson: cardinal;
+  public
+    /// the internal list of published services
+    // - the list is stored in-order, i.e. it will follow the RegisterFromJSON()
+    // execution order: the latest registrations would appear last
+    List: TServicesPublishedInterfacesDynArray;
+    /// how many items are actually stored in List[]
+    Count: Integer;
+    /// initialize the storage
+    constructor Create;
+    /// add the JSON serialized TServicesPublishedInterfaces to the list
+    // - called by TSQLRestServerURIContext.InternalExecuteSOAByInterface when
+    // the client provides its own services
+    procedure RegisterFromJSON(const PublishedJson: RawUTF8);
+    /// search for a public URI in the registration list
+    function FindURI(const aPublicURI: TSQLRestServerURI): integer;
+    /// search for the latest registration of a service, by name
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    // - if the service name has been registered several times, the latest
+    // registration would be returned
+    function FindService(const aServiceName: RawUTF8): integer;
+    /// return all services URI by name, from the registration list, as URIs
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    // - the returned string would contain all matching server URI, the latest
+    // registration being the first to appear, e.g.
+    // ['addresslast:port/root','addressprevious:port/root','addressfirst:port/root']
+    function FindServiceAll(const aServiceName: RawUTF8): TRawUTF8DynArray; overload;
+    /// return all services URI by name, from the registration list, as JSON
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    // - the returned JSON array will would contain all matching server URI, the
+    // latest registration being the first to appear, e.g.
+    // ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
+    procedure FindServiceAll(const aServiceName: RawUTF8; aWriter: TTextWriter); overload;
   end;
 
   /// class-reference type (metaclass) of a REST server
@@ -13540,6 +13608,8 @@ type
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
     fPublishedMethodBatchIndex: integer;
+    fPublicURI: TSQLRestServerURI;
+    fAssociatedServices: TServicesPublishedInterfacesList;
     fStats: TSQLRestServerMonitor;
     fStatLevels: TSQLRestServerMonitorLevels;
     fShutdownRequested: boolean;
@@ -14126,6 +14196,19 @@ type
     // not free the returned instance
     property ServiceMethodStat[const aMethod: RawUTF8]: TSynMonitorInputOutput
       read GetServiceMethodStat;
+    /// compute a JSON description of all available services, and its public URI
+    // - the JSON object matches the TServicesPublishedInterfaces record type
+    // - used by TSQLRestClientURI.ServicePublishOwnInterfaces to register all
+    // the services supportes by the client itself
+    // - warning: the public URI should have been set via SetPublicURI()
+    function ServicesPublishedInterfaces: RawUTF8;
+    /// the HTTP server should call this method so that ServicesPublishedInterfaces
+    // registration would be able to work
+    procedure SetPublicURI(const Address,Port: RawUTF8);
+    /// a list of the services associated by all clients of this server instance
+    // - when a client connects to this server, it would publish its own services
+    // (when checking its interface contract), so that they may be identified
+    property AssociatedServices: TServicesPublishedInterfacesList read fAssociatedServices;
     /// returns a copy of the user associated to a session ID
     // - returns nil if the session does not exist (e.g. if authentication is
     // disabled)
@@ -14339,6 +14422,8 @@ type
     /// REST service accessible from ModelRoot/Stat URI
     // - returns the current execution statistics of this server, as a JSON object
     // - by default, will return the high-level information of this server
+    // - will return human-readable JSON layout if ModelRoot/Stat/json is used, or
+    // the corresponding XML content if ModelRoot/Stat/xml is used
     // - you can define withtables, withmethods, withinterfaces, withsessions or
     // withsqlite3 additional parameters to return detailed information about
     // method-based services, interface-based services, per session statistics,
@@ -14348,6 +14433,8 @@ type
     // - defining a 'withall' parameter will retrieve all available statistics
     // - note that TSQLRestServer.StatLevels property will enable statistics
     // gathering for tables, methods, interfaces, sqlite3 or sessions
+    // - a specific findservice=ServiceName parameter would not return any
+    // statistics, but matching URIs from the server AssociatedServices list
     procedure Stat(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from ModelRoot/Auth URI
     // - called by the clients for authentication and session management
@@ -15222,6 +15309,7 @@ type
     fMutex: TRTLCriticalSection;
     fRemoteLogClass: TSynLog;
     fRemoteLogOwnedByFamily: boolean;
+    fServicePublishOwnInterfaces: RawUTF8;
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
@@ -15593,6 +15681,33 @@ type
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefineClientDriven(const aInterface: TGUID; out Obj;
       const aContractExpected: RawUTF8=''): boolean; overload;
+    /// allow to notify a server the services this client may be actually capable
+    // - when this client will connect to a remote server to access its services,
+    // it will register its own services, supplying its TSQLRestServer instance,
+    // and its corresponding public URI, within its '_contract_' internal call
+    // - it will allow automatic service discovery of Peer To Peer Servers,
+    // without the need of an actual centralized SOA catalog service: any
+    // client could retrieve an associated REST server for a given service,
+    // via the ServiceRetrieveAssociated method
+    procedure ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
+    /// return all REST server URI associated to this client, for a given
+    // service name, the latest registered in first position
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service 
+    function ServiceRetrieveAssociated(const aServiceName: RawUTF8;
+      out URI: TSQLRestServerURIDynArray): boolean; overload;
+    /// return all REST server URI associated to this client, for a given service
+    // - here the service is specified as its TGUID, e.g. IMyInterface
+    // - this method expects the interface to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - the URI[] output array contains the matching server URIs, the latest
+    // registered in first position 
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service
+    function ServiceRetrieveAssociated(const aInterface: TGUID;
+      out URI: TSQLRestServerURIDynArray): boolean; overload;
 
     /// low-level error code, as returned by server
     // - check this value about HTML_* constants
@@ -31116,6 +31231,29 @@ begin
     TInterfaceFactory.GUID2TypeInfo(aInterface),Obj,aContractExpected);
 end;
 
+procedure TSQLRestClientURI.ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
+begin
+  fServicePublishOwnInterfaces := OwnServer.ServicesPublishedInterfaces;
+end;
+
+function TSQLRestClientURI.ServiceRetrieveAssociated(const aServiceName: RawUTF8;
+  out URI: TSQLRestServerURIDynArray): boolean;
+var json: RawUTF8;
+begin
+  result := (CallBackGet('stat',['findservice',aServiceName],json)=HTML_SUCCESS) and
+    (DynArrayLoadJSON(URI,pointer(json),TypeInfo(TSQLRestServerURIDynArray))<>nil);
+end;
+
+function TSQLRestClientURI.ServiceRetrieveAssociated(const aInterface: TGUID;
+  out URI: TSQLRestServerURIDynArray): boolean;
+var fact: TInterfaceFactory;
+begin
+  fact := TInterfaceFactory.Get(aInterface);
+  if fact=nil then
+    result := false else
+    result := ServiceRetrieveAssociated(copy(fact.InterfaceName,2,maxInt),URI);
+end;
+
 function TSQLRestClientURI.EngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var P: PUTF8Char;
@@ -31687,11 +31825,11 @@ begin
   SetLength(fTrackChangesHistoryTableIndex,fTrackChangesHistoryTableIndexCount);
   for t := 0 to fTrackChangesHistoryTableIndexCount-1 do
     fTrackChangesHistoryTableIndex[t] := -1;
+  fAssociatedServices := TServicesPublishedInterfacesList.Create;
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
   fStats := TSQLRestServerMonitor.Create(self);
-  fPrivateGarbageCollector.Add(fStats);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   fSessionCounter := GetTickCount; // force almost-random session ID
   if fSessionCounter>cardinal(maxInt) then
@@ -31780,8 +31918,10 @@ begin
   for i := 0 to high(fPublishedMethod) do
     fPublishedMethod[i].Stats.Free;
   FreeAndNil(fSessions);
+  FreeAndNil(fAssociatedServices);
   ObjArrayClear(fSessionAuthentication);
   inherited Destroy; // calls fServices.Free which will update fStats
+  FreeAndNil(fStats);
 end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
@@ -32665,6 +32805,29 @@ begin
     result := nil;
 end;
 
+procedure TSQLRestServer.SetPublicURI(const Address,Port: RawUTF8);
+begin
+  fPublicURI.Address := Address;
+  fPublicURI.Port := Port;
+  fPublicURI.Root := Model.Root;
+end;
+
+const
+  _TSQLRestServerURI = 'Address,Port,Root RawUTF8';
+  _TServicesPublishedInterfaces =
+    'PublicURI{Address,Port,Root RawUTF8} Names array of RawUTF8';
+
+function TSQLRestServer.ServicesPublishedInterfaces: RawUTF8;
+var nfo: TServicesPublishedInterfaces;
+begin
+  if (self=nil) or (Services=nil) then
+    result := '' else begin
+    nfo.PublicURI := fPublicURI;
+    Services.SetInterfaceNames(nfo.Names);
+    result := RecordSaveJSON(nfo,TypeInfo(TServicesPublishedInterfaces));
+  end;
+end;
+
 
 { Low-level background execution functions }
 
@@ -33136,6 +33299,8 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
         ServiceMethodIndex := -1; // notify ExecuteMethod() to release the instance
     ord(imContract): begin
       // "method":"_contract_" to retrieve the implementation contract
+      if (Call^.InBody<>'') and (Call^.InBody<>'[]') then
+        Server.AssociatedServices.RegisterFromJSON(Call^.InBody);
       ServiceResult('contract',Service.ContractExpected);
       exit; // "id":0 for this method -> no instance was created
     end;
@@ -34476,17 +34641,22 @@ end;
 
 procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
 var W: TTextWriter;
-    json,xml: RawUTF8;
+    json,xml,name: RawUTF8;
 begin
   W := TJSONSerializer.CreateOwnedStream;
   try
-    InternalStat(Ctxt,W);
+    name := Ctxt.InputUTF8OrVoid['findservice'];
+    if name='' then begin
+      InternalStat(Ctxt,W);
+      name := 'Stats';
+    end else
+      AssociatedServices.FindServiceAll(name,W);
     W.SetText(json);
     if Ctxt.InputExists['format'] or
        IdemPropNameU(Ctxt.URIBlobFieldName,'json') then
       json := JSONReformat(json) else
       if IdemPropNameU(Ctxt.URIBlobFieldName,'xml') then begin
-        JSONBufferToXML(pointer(json),XMLUTF8_HEADER,'<Stats>',xml);
+        JSONBufferToXML(pointer(json),XMLUTF8_HEADER,'<'+name+'>',xml);
         Ctxt.Returns(xml,200,XML_CONTENT_TYPE_HEADER);
         exit;
       end;
@@ -36366,6 +36536,118 @@ begin
   if Port<>'' then
     Split(Port,'/',Port,Root) else
     Split(Address,'/',Address,Root);
+end;
+
+function TSQLRestServerURI.Equals(const other: TSQLRestServerURI): boolean;
+begin
+  result := IdemPropNameU(Address,other.Address) and
+            IdemPropNameU(Port,other.Port) and
+            IdemPropNameU(Root,other.Root);
+end;
+
+
+{ TServicesPublishedInterfacesList }
+
+constructor TServicesPublishedInterfacesList.Create;
+begin
+  inherited Create;
+  fDynArray.Init(TypeInfo(TServicesPublishedInterfacesDynArray),List,@Count);
+end;
+
+function TServicesPublishedInterfacesList.FindURI(
+  const aPublicURI: TSQLRestServerURI): integer;
+begin
+  Enter;
+  try
+    for result := 0 to Count-1 do
+      if List[result].PublicURI.Equals(aPublicURI) then
+        exit;
+    result := -1;
+  finally
+    Leave;
+  end;
+end;
+
+function TServicesPublishedInterfacesList.FindService(
+  const aServiceName: RawUTF8): integer;
+begin
+  Enter;
+  try
+    for result := Count-1 downto 0 do // downwards to return the latest found
+      if FindRawUTF8(List[result].Names,length(List[result].Names),aServiceName,true)>=0 then
+        exit;
+    result := -1;
+  finally
+    Leave;
+  end;
+end;
+
+function TServicesPublishedInterfacesList.FindServiceAll(
+  const aServiceName: RawUTF8): TRawUTF8DynArray;
+var i,n: integer;
+begin
+  result := nil;
+  n := 0;
+  Enter;
+  try
+    for i := Count-1 downto 0 do // downwards to return the latest first
+      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+        AddRawUTF8(result,n,List[i].PublicURI.URI);
+  finally
+    Leave;
+  end;
+  SetLength(result,n);
+end;
+
+procedure TServicesPublishedInterfacesList.FindServiceAll(
+  const aServiceName: RawUTF8; aWriter: TTextWriter);
+var i: integer;
+begin
+  Enter;
+  try
+    aWriter.Add('[');
+    for i := Count-1 downto 0 do // downwards to return the latest first
+      with List[i] do
+      if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then begin
+        aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
+        aWriter.Add(',');
+      end;
+    aWriter.CancelLastComma;
+    aWriter.Add(']');
+  finally
+    Leave;
+  end;
+end;
+
+procedure TServicesPublishedInterfacesList.RegisterFromJSON(
+  const PublishedJson: RawUTF8);
+var ndx: integer;
+    nfo: TServicesPublishedInterfaces;
+    crc: cardinal;
+    P: PUTF8Char;
+begin
+  if PublishedJson='' then
+    exit;
+  crc := crc32c(0,pointer(PublishedJson),length(PublishedJson));
+  if (self=nil) or ((fLastPublishedJson<>0) and (crc=fLastPublishedJson)) then
+    exit; // rough but working good in practice
+  P := Pointer(PublishedJson);
+  if P^='[' then
+    inc(P);
+  if (RecordLoadJSON(nfo,P,TypeInfo(TServicesPublishedInterfaces))=nil) or
+     (nfo.PublicURI.Address='') then
+    exit; // invalid supplied JSON content
+  Enter;
+  try // store so that the latest updated version is always at the end
+    ndx := FindURI(nfo.PublicURI);
+    if ndx>=0 then
+      fDynArray.Delete(ndx);
+    if nfo.Names<>nil then
+      fDynArray.Add(nfo);
+    fLastPublishedJson := crc;
+  finally
+    Leave;
+  end;
 end;
 
 
@@ -43526,6 +43808,26 @@ begin
   result := nil;
 end;
 
+procedure TServiceContainer.SetGUIDs(out Services: TGUIDDynArray);
+var i: Integer;
+begin
+  if self=nil then
+    exit;
+  SetLength(Services,fList.Count);
+  for i := 0 to fList.Count-1 do
+    Services[i] := TServiceFactory(fList.ObjectPtr[i]).fInterface.fInterfaceIID;
+end;
+
+procedure TServiceContainer.SetInterfaceNames(out Names: TRawUTF8DynArray);
+var i: Integer;
+begin
+  if self=nil then
+    exit;
+  SetLength(Names,fList.Count);
+  for i := 0 to fList.Count-1 do
+    Names[i] :=  TServiceFactory(fList.ObjectPtr[i]).fInterfaceURI;
+end;
+
 function TServiceContainer.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
 var factory: TServiceFactory;
 begin
@@ -48089,9 +48391,10 @@ begin
     TInterfacedObjectFake(fSharedInstance)._AddRef; // force stay alive
   end;
   // check if this interface is supported on the server
-  if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],'',@RemoteContract,@Error) then
+  if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
+     TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
     raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
-      'supported by server%',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
+      'supported by server: %',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
   if ('['+ContractExpected+']'<>RemoteContract) and
      ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
     raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+
@@ -48404,6 +48707,10 @@ initialization
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
+  TJSONSerializer.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TServicesPublishedInterfaces),_TServicesPublishedInterfaces);
+  TJSONSerializer.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TSQLRestServerURI),_TSQLRestServerURI);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   InitializeCriticalSection(GlobalInterfaceResolutionLock);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);

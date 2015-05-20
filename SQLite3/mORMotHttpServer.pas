@@ -274,6 +274,7 @@ type
     fOnlyJSONRequests: boolean;
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: AnsiString;
+    fPublicAddress, fPublicPort: RawUTF8;
     /// internal servers to compute responses
     fDBServers: array of record
       Server: TSQLRestServer;
@@ -295,6 +296,8 @@ type
     function GetDBServerCount: integer; {$ifdef HASINLINE}inline;{$endif}
     function GetDBServer(Index: Integer): TSQLRestServer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
+    procedure SetDBServer(aIndex: integer; aServer: TSQLRestServer;
+      aSecurity: TSQLHttpServerSecurity; aRestAccessRights: PSQLAccessRights);
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
     function NotifyCallback(aSender: TSQLRestServer;
@@ -308,8 +311,9 @@ type
     // class must have an unique Model.Root value, to identify which TSQLRestServer
     // instance must handle a particular request from its URI
     // - port is an AnsiString, as expected by the WinSock API - in case of
-    // useHttpSocket or useBidirSocket kind of server, you can specify the
-    // server address to bind to: e.g. '1.2.3.4:1234'
+    // useHttpSocket or useBidirSocket kind of server, you should specify the
+    // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
+    // the public address could be used e.g. for TSQLRestServer.SetPublicURI()
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call:
     // it could be either a fully qualified case-insensitive domain name
     // an IPv4 or IPv6 literal string, or a wildcard ('+' will bound
@@ -343,7 +347,8 @@ type
     // - specify one TSQLRestServer server class to be used
     // - port is an AnsiString, as expected by the WinSock API - in case of
     // useHttpSocket or useBidirSocket kind of server, you can specify the
-    // server address to bind to: e.g. '1.2.3.4:1234'
+    // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
+    // the public address could be used e.g. for TSQLRestServer.SetPublicURI()
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD
@@ -439,11 +444,22 @@ type
       const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean=false;
       aWebSocketsCompressed: boolean=true): TWebSocketServerRest; overload;
     /// the associated running HTTP server instance
-    // - either THttpApiServer (under Windows), THttpServer or
-    // TWebSocketServerRest
+    // - either THttpApiServer (available only under Windows), THttpServer or
+    // TWebSocketServerRest (on any system)
     property HttpServer: THttpServerGeneric read fHttpServer;
-    /// the TCP/IP port on which this server is listening to
+    /// the TCP/IP (address and) port on which this server is listening to
+    // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
+    // - see PublicAddress and PublicPort properties if you want to get the
+    // true IP port or address 
     property Port: AnsiString read fPort;
+    /// the TCP/IP public address on which this server is listening to
+    // - equals e.g. '1.2.3.4' if Port = '1.2.3.4:1234'
+    // - if Port does not contain an explicit address (e.g. '1234'), the current
+    // computer host name would be assigned as PublicAddress 
+    property PublicAddress: RawUTF8 read fPublicAddress;
+    /// the TCP/IP public port on which this server is listening to
+    // - equals e.g. '1234' if Port = '1.2.3.4:1234'
+    property PublicPort: RawUTF8 read fPublicPort;
     /// the URLprefix used for internal HttpAddUrl API call
     property DomainName: AnsiString read fDomainName;
     /// read-only access to the number of registered internal servers
@@ -527,18 +543,12 @@ begin
       exit;
     {$endif}
     SetLength(fDBServers,n+1);
-    with fDBServers[n] do begin
-      Server := aServer;
-      Security := aHttpServerSecurity;
-      if aRestAccessRights=nil then
-        RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS else
-        RestAccessRights := aRestAccessRights;
-    end;
-    aServer.OnNotifyCallback := NotifyCallback;
+    SetDBServer(n,aServer,aHttpServerSecurity,aRestAccessRights);
     result := true;
   finally
-    fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%)=%',
-      [self,aServer,aServer.Model.Root,fPort,JSON_BOOLEAN[Result]],self);
+    fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%,Public=%:%)=%',
+      [self,aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
+       JSON_BOOLEAN[Result]],self);
   end;
 end;
 
@@ -563,7 +573,7 @@ begin
     if fDBServers[i].Server=aServer then begin // FindServer() would find the 1st
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
-        if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPort,
+        if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPublicPort,
            fDBServers[i].Security=secSSL,fDomainName)<>NO_ERROR then
           fLog.Add.Log(sllLastError,'%.RemoveUrl(%)',[self,aServer.Model.Root],self);
       {$endif}
@@ -607,6 +617,11 @@ begin
   fHosts.Init(false);
   fDomainName := aDomainName;
   fPort := aPort;
+  Split(RawUTF8(fPort),':',fPublicAddress,fPublicPort);
+  if fPublicPort='' then begin // you should better set aPort='publicip:port'
+    fPublicPort := fPublicAddress;
+    fPublicAddress := ExeVersion.Host;
+  end;
   fHttpServerKind := aHttpServerKind;
   if high(aServers)>=0 then begin
     for i := 0 to high(aServers) do
@@ -622,14 +637,10 @@ begin
       end;
     if ErrMsg<>'' then
        raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
+    // associate before HTTP server is started, for TSQLRestServer.BeginCurrentThread
     SetLength(fDBServers,length(aServers));
-    for i := 0 to high(aServers) do
-    with fDBServers[i] do begin
-      Server := aServers[i];
-      Server.OnNotifyCallback := NotifyCallback;
-      RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
-      Security := aHttpServerSecurity;
-    end;
+    for i := 0 to high(aServers) do 
+      SetDBServer(i,aServers[i],aHttpServerSecurity,HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
   {$ifndef USETCPPREFIX}
   {$ifndef ONLYUSEHTTPSOCKET}
@@ -655,9 +666,9 @@ begin
   if fHttpServer=nil then begin
     // http.sys failed -> create one instance of our pure Delphi server
     if aHttpServerKind=useBidirSocket then
-      fHttpServer := TWebSocketServerRest.Create(aPort) else
-      fHttpServer := THttpServer.Create(aPort
-        {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
+      fHttpServer := TWebSocketServerRest.Create(fPort) else
+      fHttpServer := THttpServer.Create(
+        fPort{$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
@@ -731,6 +742,21 @@ begin
     fDBServers[Index].RestAccessRights := Value;
 end;
 
+procedure TSQLHttpServer.SetDBServer(aIndex: integer; aServer: TSQLRestServer;
+  aSecurity: TSQLHttpServerSecurity; aRestAccessRights: PSQLAccessRights);
+begin
+  if (Self<>nil) and (cardinal(aIndex)<cardinal(length(fDBServers))) then
+    with fDBServers[aIndex] do begin
+      Server := aServer;
+      Server.OnNotifyCallback := NotifyCallback;
+      Server.SetPublicURI(fPublicAddress,fPublicPort);
+      Security := aSecurity;
+      if aRestAccessRights=nil then
+        RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
+        RestAccessRights := aRestAccessRights;
+    end;
+end;
+
 const
   HTTPS_TEXT: array[boolean] of string[1] = ('','s');
   HTTPS_SECURITY: array[boolean] of TSQLHttpServerSecurity = (secNone, secSSL);
@@ -741,7 +767,7 @@ begin
   if fRootRedirectToURI[aHttps]=aRedirectedURI then
     exit;
   fLog.Add.Log(sllHttp,'Redirect http%://localhost:% to http%://localhost:%/%',
-    [HTTPS_TEXT[aHttps],Port,HTTPS_TEXT[aHttps],Port,aRedirectedURI],self);
+    [HTTPS_TEXT[aHttps],fPublicPort,HTTPS_TEXT[aHttps],fPublicPort,aRedirectedURI],self);
   fRootRedirectToURI[aHttps] := aRedirectedURI;
   if aRedirectedURI<>'' then
     HttpApiAddUri('/','+',HTTPS_SECURITY[aHttps],aRegisterURI,true);
@@ -760,13 +786,13 @@ begin
     exit;
   https := aSecurity=secSSL;
   fLog.Add.Log(sllHttp,'http.sys registration of http%://%:%/%',
-    [HTTPS_TEXT[https],aDomainName,fPort,aRoot],self);
+    [HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot],self);
   // try to register the URL to http.sys
-  err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPort,https,aDomainName,aRegisterURI);
+  err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPublicPort,https,aDomainName,aRegisterURI);
   if err=NO_ERROR then
     exit;
   result := FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
-    [err,HTTPS_TEXT[https],aDomainName,fPort,aRoot]);
+    [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot]);
   if err=ERROR_ACCESS_DENIED then
     if aRegisterURI then
       result := result+' (administrator rights needed)' else

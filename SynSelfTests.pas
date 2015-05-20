@@ -12151,6 +12151,11 @@ procedure TTestServiceOrientedArchitecture.TestOverHTTP;
 var HTTPServer: TSQLHttpServer;
     HTTPClient: TSQLHttpClient;
     Inst: TTestServiceInstances;
+    json: RawUTF8;
+    i: integer;
+    URI: TSQLRestServerURIDynArray;
+const SERVICES: array[0..4] of RawUTF8 = (
+  'Calculator','ComplexCalculator','TestUser','TestGroup','TestPerThread');
 begin
   fClient.Server.ServicesRouting := TSQLRestRoutingREST; // back to default
   GlobalInterfaceTestMode := itmHttp;
@@ -12161,6 +12166,7 @@ begin
     fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
     try
+      HTTPClient.ServicePublishOwnInterfaces(fClient.Server); 
       //HTTPClient.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
       // HTTPClient.Compression := [hcSynShaAes]; // 350ms (300ms for [])
       Check(HTTPClient.SetUser('User','synopse'));
@@ -12185,6 +12191,20 @@ begin
       Inst.ExpectedUserID := HTTPClient.SessionUser.ID;
       Inst.ExpectedGroupID := HTTPClient.SessionUser.GroupRights.ID;
       //SetOptions(false{$ifndef LVCL},true,[optExecInMainThread]{$endif});
+      Check(HTTPClient.CallBackGet('stat',['findservice','toto'],json)=HTML_SUCCESS);
+      Check(json='[]');
+      for i := 0 to High(SERVICES) do begin
+        Check(HTTPClient.CallBackGet('stat',['findservice',SERVICES[i]],json)=HTML_SUCCESS);
+        Check(json<>'[]');
+        Check(HTTPClient.ServiceRetrieveAssociated(SERVICES[i],URI));
+        Check(length(URI)=1);
+        Check(URI[0].Port=HTTP_DEFAULTPORT);
+        Check(URI[0].Root=fClient.Model.Root);
+      end;
+      Check(HTTPClient.ServiceRetrieveAssociated(IComplexNumber,URI));
+      Check(length(URI)=1);
+      Check(HTTPClient.ServiceRetrieveAssociated(ITestSession,URI));
+      Check(length(URI)=1);
       Test(Inst,100);
       //SetOptions(false{$ifndef LVCL},true,[]{$endif});
     finally
