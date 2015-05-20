@@ -1791,7 +1791,7 @@ end;
 function TSQLRestStorageExternal.InternalFieldNameToFieldExternalIndex(
   const InternalFieldName: RawUTF8): integer;
 begin
-  result := StoredClassRecordProps.Fields.IndexByNameOrExcept(InternalFieldName);
+  result := fStoredClassRecordProps.Fields.IndexByNameOrExcept(InternalFieldName);
   result := fFieldsInternalToExternal[result+1];
 end;
 
@@ -1803,12 +1803,13 @@ var f,k: Integer;
 begin
   SetLength(ExternalFields,Decoder.FieldCount);
   for f := 0 to Decoder.FieldCount-1 do begin
-    k := InternalFieldNameToFieldExternalIndex(Decoder.FieldNames[f]);
+    k := fStoredClassRecordProps.Fields.IndexByNameOrExcept(Decoder.FieldNames[f]);
+    ExternalFields[f] := fStoredClassProps.ExternalDB.FieldNameByIndex(k);
+    k := fFieldsInternalToExternal[k+1]; // retrieve exact Types[f] from SynDB
     if k<0 then
       raise ESQLDBException.CreateUTF8(
-        '%.JSONDecodedPrepareToSQL: Unknown field "%" in %',
-        [self,Decoder.FieldNames[f],StoredClass]);
-    ExternalFields[f] := fFieldsExternal[k].ColumnName;
+        '%.JSONDecodedPrepareToSQL(%): No column for "%" field in table %',
+        [self,StoredClass,Decoder.FieldNames[f],fTableName]);
     Types[f] := fFieldsExternal[k].ColumnType;
   end;
   // compute SQL statement and associated bound parameters

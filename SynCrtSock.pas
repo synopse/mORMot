@@ -1753,7 +1753,7 @@ const
 // - e.g. StatusCodeToReason(200)='OK'
 function StatusCodeToReason(Code: integer): SockString;
 
-/// retrieve the IP adress from a computer name
+/// retrieve the IP address from a computer name
 function ResolveName(const Name: SockString;
   Family: Integer=AF_INET; SockProtocol: Integer=IPPROTO_TCP;
   SockType: integer=SOCK_STREAM): SockString;
