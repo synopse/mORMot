@@ -222,6 +222,9 @@ type
     /// create a temporary string random content, using ASCII 7 bit content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
+    /// create a temporary string random content, using A..Z,_,0..9 chars only
+    // - it somewhat faster if CharCount is a multiple of 5
+    class function RandomIdentifier(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
       LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''): RawUTF8;
@@ -639,6 +642,17 @@ begin
       inc(P);
       dec(CharCount);
     end;
+  end;
+end;
+
+class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
+const CHARS: array[0..36] of AnsiChar =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+begin
+  SetString(result,nil,CharCount);
+  while CharCount>0 do begin
+    result[CharCount] := CHARS[Random(High(CHARS))];
+    dec(CharCount);
   end;
 end;
 
