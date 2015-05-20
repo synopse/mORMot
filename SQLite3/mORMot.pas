@@ -4139,6 +4139,14 @@ const
   /// used as "stored AS_UNIQUE" published property definition in TSQLRecord
   AS_UNIQUE = false;
 
+  /// custom contract value to ignore contract validation from client side
+  // - you could set the aContractExpected parameter to this value for
+  // TSQLRestClientURI.ServiceDefine or TSQLRestClientURI.ServiceRegister
+  // so that the contract won't be checked with the server
+  // - it would be used e.g. if the remote server is not a mORMot server,
+  // but a plain REST/HTTP server - e.g. for public API notifications 
+  SERVICE_CONTRACT_NONE_EXPECTED = '*';
+
 
 type
   TSQLTable = class;
@@ -9266,12 +9274,12 @@ type
     constructor CreateInjected(const aStubsByGUID: array of TGUID;
       const aOtherResolvers: array of TInterfaceResolver;
       const aDependencies: array of TInterfacedObject;
-      aRaiseEServiceExceptionIfNotFound: boolean=true);
+      aRaiseEServiceExceptionIfNotFound: boolean=true); virtual;
     /// initialize an instance, defining one dependency resolver
     // - the resolver may be e.g. a TServiceContainer
     // - once the DI/IoC is defined, will call the AutoResolve() protected method
     constructor CreateWithResolver(aResolver: TInterfaceResolver;
-      aRaiseEServiceExceptionIfNotFound: boolean=true);
+      aRaiseEServiceExceptionIfNotFound: boolean=true); virtual;
     /// can be used to perform an DI/IoC for a given interface type information
     procedure Resolve(aInterface: PTypeInfo; out Obj); overload;
     /// can be used to perform an DI/IoC for a given interface TGUID
@@ -10316,6 +10324,10 @@ type
     // $ (...)
     // $ {"method":"_contract_","params":[]}
     // (e.g. to be checked in TServiceFactoryClient.Create constructor)
+    // - if set to SERVICE_CONTRACT_NONE_EXPECTED (i.e. '*'), the client won't
+    // check and ask the server contract for consistency: it may be used e.g.
+    // for accessing a plain REST HTTP server which is not based on mORMot,
+    // so may not implement POST /root/Interface._contract_ 
     property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
   end;
 
@@ -10612,6 +10624,7 @@ type
   TServiceFactoryClient = class(TServiceFactory)
   protected
     fClient: TSQLRestClientURI;
+    fForcedURI: RawUTF8;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -10646,6 +10659,12 @@ type
     // default setting, for security reasons) - this function is always available
     // on TServiceFactoryServer side
     function RetrieveSignature: RawUTF8; override;
+    /// could be used to force the remote URI to access the service
+    // - by default, the URI would be Root/Calculator or Root/InterfaceMangledURI
+    // but you may use this property to use another value, e.g. if you are
+    // accessign a non mORMot REST server (probably with aContractExpected set
+    // to SERVICE_CONTRACT_NONE_EXPECTED)
+    property ForcedURI: RawUTF8 read fForcedURI write fForcedURI;
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -46317,7 +46336,8 @@ procedure TInterfaceResolverInjected.InjectResolver(
   const aOtherResolvers: array of TInterfaceResolver);
 var i: integer;
 begin
-  for i := 0 to high(aOtherResolvers) do begin
+  for i := 0 to high(aOtherResolvers) do
+  if aOtherResolvers[i]<>nil then begin
     if aOtherResolvers[i].InheritsFrom(TInterfaceStub) then begin
       include(TInterfaceStub(aOtherResolvers[i]).fOptions,
         imoFakeInstanceWontReleaseTInterfaceStub);
@@ -46331,7 +46351,8 @@ procedure TInterfaceResolverInjected.InjectInstance(
   const aDependencies: array of TInterfacedObject);
 var i: integer;
 begin
-  for i := 0 to high(aDependencies) do begin
+  for i := 0 to high(aDependencies) do
+  if aDependencies[i]<>nil then begin
     IInterface(aDependencies[i])._AddRef; // Destroy will do _Release
     ObjArrayAdd(fDependencies,aDependencies[i]);
   end;
@@ -46475,12 +46496,12 @@ constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
   const aDependencies: array of TInterfacedObject;
   aRaiseEServiceExceptionIfNotFound: boolean);
 begin
-  Create;
   fResolver := TInterfaceResolverInjected.Create;
   fResolverOwned := true;
   TInterfaceResolverInjected(fResolver).InjectStub(aStubsByGUID);
   TInterfaceResolverInjected(fResolver).InjectResolver(aOtherResolvers);
   TInterfaceResolverInjected(fResolver).InjectInstance(aDependencies);
+  Create;
   AutoResolve(aRaiseEServiceExceptionIfNotFound);
 end;
 
@@ -48326,9 +48347,11 @@ begin
     Log := fRest.LogClass.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
   {$endif}
   // compute URI according to current routing scheme
-  if fRest.Services.ExpectMangledURI then
-    uri := fClient.Model.Root+'/'+fInterfaceMangledURI else
-    uri := fClient.Model.Root+'/'+fInterfaceURI;
+  if fForcedURI<>'' then
+    uri := fForcedURI else
+    if fRest.Services.ExpectMangledURI then
+      uri := fClient.Model.Root+'/'+fInterfaceMangledURI else
+      uri := fClient.Model.Root+'/'+fInterfaceURI;
   if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
@@ -48391,16 +48414,17 @@ begin
     TInterfacedObjectFake(fSharedInstance)._AddRef; // force stay alive
   end;
   // check if this interface is supported on the server
-  if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
-     TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
-    raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
-      'supported by server: %',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
-  if ('['+ContractExpected+']'<>RemoteContract) and
-     ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
-    raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+
-      'differs from client''s: expected [%], received %',
-      [self,fInterfaceURI,ContractExpected,RemoteContract]);
-end;
+  if ContractExpected<>SERVICE_CONTRACT_NONE_EXPECTED then begin
+    if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
+       TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
+      raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
+        'supported by server: %',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
+    if ('['+ContractExpected+']'<>RemoteContract) and
+       ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
+      raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+
+        'differs from client''s: expected [%], received %',
+        [self,fInterfaceURI,ContractExpected,RemoteContract]);
+  end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
