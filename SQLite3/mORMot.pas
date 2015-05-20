@@ -5114,6 +5114,13 @@ type
     // a JSON object, even if Service.ResultAsJSONObject=false: this may be
     // handy when the method is executed from a JavaScript content
     ForceServiceResultAsJSONObject: boolean;
+    /// force the interface-based service methods to return a plain JSON object
+    // - i.e. '{....}' instead of '{"result":{....}}'
+    // - only set if ForceServiceResultAsJSONObject=TRUE and if no ID is about
+    // to be returned
+    // - could be used e.g. for stateless interaction with a (non mORMot)
+    // stateless JSON REST Server 
+    ForceServiceResultAsJSONObjectWithoutResult: boolean;
     /// force the interface-based service methods to return a XML object
     // - default behavior is to follow Service.ResultAsJSONObject property value
     // (which own default is to return a more convenient JSON array)
@@ -10376,6 +10383,7 @@ type
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
     fResultAsJSONObject: boolean;
+    fResultAsJSONObjectWithoutResult: boolean;
     fResultAsXMLObject: boolean;
     fResultAsJSONObjectIfAccept: boolean;
     fResultAsXMLObjectNameSpace: RawUTF8;
@@ -10585,6 +10593,12 @@ type
     // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
     property ResultAsJSONObject: boolean
       read fResultAsJSONObject write fResultAsJSONObject;
+    /// set to TRUE to return the interface's methods result as JSON object
+    // with no '{"result":{...}}' nesting
+    // - could be used e.g. for plain non mORMot REST Client with in sicSingle
+    // or sicShared mode kind of services
+    property ResultAsJSONObjectWithoutResult: boolean
+      read fResultAsJSONObjectWithoutResult write fResultAsJSONObjectWithoutResult;
     /// set to TRUE to return the interface's methods result as XML object
     // - by default (FALSE), method execution will return a JSON array with
     // all VAR/OUT parameters, or a JSON object if ResultAsJSONObject is TRUE
@@ -33267,7 +33281,9 @@ procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
     ('{"result":[','{"result":{');
 begin // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
-  WR.AddString(JSONSTART[ForceServiceResultAsJSONObject]);
+  if ForceServiceResultAsJSONObjectWithoutResult then
+    WR.Add('{') else
+    WR.AddString(JSONSTART[ForceServiceResultAsJSONObject]);
 end;
 
 procedure TSQLRestServerURIContext.ServiceResultEnd(WR: TTextWriter; ID: TID);
@@ -33276,10 +33292,15 @@ const JSONSEND_WITHID: array[boolean] of RawUTF8 = ('],"id":','},"id":');
 begin // InternalExecuteSOAByInterface has set ForceServiceResultAsJSONObject
   if ID=0 then
     WR.Add(JSONSEND_NOID[ForceServiceResultAsJSONObject]) else begin
+    if ForceServiceResultAsJSONObjectWithoutResult then
+      raise EServiceException.CreateUTF8(
+        '%.ServiceResultEnd(ID=%) with ForceServiceResultAsJSONObjectWithoutResult',
+        [self,ID]);
     WR.AddString(JSONSEND_WITHID[ForceServiceResultAsJSONObject]);
     WR.Add(ID); // only used in sicClientDriven mode
   end;
-  WR.Add('}');
+  if not ForceServiceResultAsJSONObjectWithoutResult then
+    WR.Add('}');
 end;
 
 procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
@@ -33304,7 +33325,11 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       Service.ResultAsXMLObject;
     ForceServiceResultAsJSONObject := ForceServiceResultAsJSONObject or
       Service.ResultAsJSONObject or
+      Service.ResultAsJSONObjectWithoutResult or
       ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
+    ForceServiceResultAsJSONObjectWithoutResult := ForceServiceResultAsJSONObject and
+      (Service.InstanceCreation in [sicSingle,sicShared]) and
+      Service.ResultAsJSONObjectWithoutResult;
     if ForceServiceResultAsXMLObjectNameSpace='' then
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
     inc(Server.fStats.fServiceInterface);
@@ -48425,6 +48450,7 @@ begin
         'differs from client''s: expected [%], received %',
         [self,fInterfaceURI,ContractExpected,RemoteContract]);
   end;
+end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
