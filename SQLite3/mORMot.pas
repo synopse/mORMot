@@ -27370,7 +27370,7 @@ begin
     result := -1 else begin
     // search for customized field mapping
     for result := 0 to high(fFieldNames) do
-      if IdemPropNameU(ExtFieldName,fFieldNames[result]) then
+      if IdemPropNameU(ExtFieldName,UnQuotedSQLSymbolName(fFieldNames[result])) then
         exit;
     result := -2; // indicates not found
   end;

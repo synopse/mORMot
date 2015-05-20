@@ -459,7 +459,7 @@ unit SynCommons;
   - added GetLastCSVItem() function and dedicated HashPointer() function
   - added DirectoryDelete() and EnsureDirectoryExists() function
   - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy()
-  - added GetEnumNameValue() function
+  - added GetEnumNameValue() and UnQuotedSQLSymbolName() functions
   - added JSONEncodeArrayOfConst() function
   - JSONEncode() and TTextWriter.AddJSONEscape() with NameValuePairs parameters
     will now handle nested arrays or objects specified with '['..']' or '{'..'}'
@@ -1075,6 +1075,8 @@ type
 
   TPtrIntArray = array[0..MaxInt div SizeOf(PtrInt)-1] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
+
+  TGUIDDynArray = array of TGUID;
 
   PInt64Rec = ^Int64Rec;
   {$ifndef DELPHI5OROLDER}
@@ -2713,6 +2715,10 @@ function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 
 /// unquote a SQL-compatible string
 function UnQuoteSQLString(const Value: RawUTF8): RawUTF8;
+
+/// unquote a SQL-compatible symbol name
+// - e.g. '[symbol]' -> 'symbol' or '"symbol"' -> 'symbol'
+function UnQuotedSQLSymbolName(const ExternalDBSymbol: RawUTF8): RawUTF8;
 
 /// get the next character after a quoted buffer
 // - the first character in P^ must be either ', either "
@@ -16523,6 +16529,14 @@ end;
 function UnQuoteSQLString(const Value: RawUTF8): RawUTF8;
 begin
   UnQuoteSQLStringVar(pointer(Value),result);
+end;
+
+function UnQuotedSQLSymbolName(const ExternalDBSymbol: RawUTF8): RawUTF8;
+begin
+  if (ExternalDBSymbol<>'') and
+     (ExternalDBSymbol[1] in ['[','"','''','(']) then // e.g. for ZDBC's GetFields()
+    result := copy(ExternalDBSymbol,2,length(ExternalDBSymbol)-2) else
+    result := ExternalDBSymbol;
 end;
 
 function isSelect(P: PUTF8Char): boolean;

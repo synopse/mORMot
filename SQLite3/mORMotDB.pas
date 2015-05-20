@@ -710,12 +710,8 @@ var SQL: RawUTF8;
     options: TSQLRecordPropertiesMappingOptions;
     log: TSynLog;
   procedure GetFields;
-  var rawTableName: RawUTF8;
   begin
-    if fTableName[1] in ['[','"',''''] then // e.g. for ZDBC's GetFields()  
-      rawTableName := copy(fTableName,2,length(fTableName)-2) else
-      rawTableName := fTableName;
-    fProperties.GetFields(rawTableName,fFieldsExternal);
+    fProperties.GetFields(UnQuotedSQLSymbolName(fTableName),fFieldsExternal);
     log.Log(sllDebug,'GetFields',TypeInfo(TSQLDBColumnDefineDynArray),fFieldsExternal,self);
   end;
   function FieldsExternalIndexOf(const ColName: RawUTF8): integer;
@@ -755,11 +751,10 @@ begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
         if rpmAutoMapKeywordFields in options then begin
-          log.Log(sllWarning,'-> %.% mapped to "%_"',
-            [fStoredClass,nfo.Name,SQL]);
+          log.Log(sllWarning,'-> %.% mapped to "%_"',[fStoredClass,nfo.Name,SQL],self);
           fStoredClassProps.ExternalDB.MapField(nfo.Name,SQL+'_');
         end else
-          log.Log(sllWarning,'-> you should better use MapAutoKeywordFields');
+          log.Log(sllWarning,'-> you should better use MapAutoKeywordFields',self);
       end;
     end;
   end;
