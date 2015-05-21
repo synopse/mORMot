@@ -1088,7 +1088,12 @@ type
   TCollectionItemClass = class of TCollectionItem;
   {$endif}
 
+  /// class-reference type (metaclass) of a TStream
   TStreamClass = class of TStream;
+
+  /// class-reference type (metaclass) of a TInterfacedObject 
+  TInterfacedObjectClass = class of TInterfacedObject;
+
   PObject = ^TObject;
 
 
@@ -19767,7 +19772,7 @@ type
 function TextFileKind(const Map: TMemoryMap): TTextFileKind;
 begin
   result := isAnsi;
-  if Map.Size>3 then
+  if (Map.Buffer<>nil) and (Map.Size>3) then
     if PWord(Map.Buffer)^=$FEFF then
       result := isUnicode else
     if (PWord(Map.Buffer)^=$BBEF) and (PByteArray(Map.Buffer)[2]=$BF) then
@@ -40486,6 +40491,7 @@ function TMemoryMap.Map(aFile: THandle; aCustomSize: cardinal; aCustomOffset: In
 var Available: Int64;
 begin
   fBuf := nil;
+  fBufSize := 0;
   {$ifdef MSWINDOWS}
   fMap := 0;
   {$endif}
@@ -40573,6 +40579,7 @@ begin
     {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
+  fBufSize := 0;
   if fFile<>0 then begin
     if fFileLocal then
       FileClose(fFile);
