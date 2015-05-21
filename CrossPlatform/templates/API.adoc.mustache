@@ -12,7 +12,7 @@ This server does publish the following RESTful services:
 * <<{{uri}}>>.
 {{/soa.services}}
 
-It will also use some <<Objects>>, <<Arrays>> and <<Enumerations>> type definitions, which will be transmitted as JSON objects, arrays or integers. The expected MIME transmission type, at HTTP level, is `application/json; charset=UTF-8`. Communication protocol may be either `http://` or `https://`, depending on the server configuration.
+It will also use some <<Objects>>{{#withArrays}}, <<Arrays>>{{/withArrays}}{{#withEnumerates}}, <<Enumerations>>{{/withEnumerates}}{{#withsets}}, <<Sets>>{{/withsets}} type definitions, which will be transmitted as JSON objects, arrays or integers. The expected MIME transmission type, at HTTP level, is `application/json; charset=UTF-8`. Communication protocol may be either `http://` or `https://`, depending on the server configuration.
 
 The following documentation will detail each service, and the input/output JSON content, as expected by each command.
 
@@ -114,8 +114,15 @@ See also:
 {{>typeList}}
 {{/fields}}
 * Other <<Objects>>.
+{{#withArrays}}
 * Other <<Arrays>>.
+{{/withArrays}}
+{{#withEnumerates}}
 * Other <<Enumerations>>.
+{{/withEnumerates}}
+{{#withsets}}
+* Other <<Sets>>.
+{{/withsets}}
 
 {{/records}}
 
@@ -153,3 +160,25 @@ The following enumerations have been defined:
 
 {{/enumerates}}
 {{/withEnumerates}}
+
+{{#withsets}}
+
+=== Sets
+
+When transmitted within other <<Services>>, <<Objects>> or <<Arrays>> content, sets are represented by their `integer` JSON value, matching binary bit storage. The `integer` values below may be added, to compute the set of individual flags - a value of `0` meaning a void set.
+
+The following sets have been defined:
+
+{{#sets}}
+==== {{name}}
+
+[.lead]
+{{setDescription}}
+
+{{#values}}
+ {{PowerOfTwo -index0}} = {{EnumTrim .}}
+{{/values}}
+
+{{/sets}}
+
+{{/withsets}}
