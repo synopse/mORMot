@@ -282,6 +282,7 @@ type
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
     class procedure EnumTrim(const Value: variant; out result: variant);
+    class procedure PowerOfTwo(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -328,7 +329,8 @@ type
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
-    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim and WikiToHtml
+    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, PowerOfTwo
+    // and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -898,9 +900,9 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim'],
+       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','PowerOfTwo'],
       [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64,EnumTrim]);
+       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,PowerOfTwo]);
   result := HelpersStandardList;
 end;
 
@@ -911,8 +913,7 @@ begin
   HelperAdd(result,aNames,aEvents);
 end;
 
-class procedure TSynMustache.DateTimeToText(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.DateTimeToText(const Value: variant; out result: variant);
 var Time: TTimeLogBits;
 begin
   if TVarData(Value).VType=varDate then begin
@@ -922,8 +923,7 @@ begin
     SetVariantNull(result);
 end;
 
-class procedure TSynMustache.DateToText(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.DateToText(const Value: variant; out result: variant);
 var Time: TTimeLogBits;
 begin
   if TVarData(Value).VType=varDate then begin
@@ -941,8 +941,7 @@ begin
     SetVariantNull(result);
 end;
 
-class procedure TSynMustache.ToJSON(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.ToJSON(const Value: variant; out result: variant);
 begin
   RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)),result);
 end;
@@ -964,19 +963,19 @@ end;
 class procedure TSynMustache.WikiToHtml(const Value: variant; out result: variant);
 var txt: RawUTF8;
 begin
-  with TTextWriter.CreateOwnedStream do
-  try
-    txt := VariantToUTF8(Value);
-    AddHtmlEscapeWiki(pointer(txt));
-    SetText(txt);
-  finally
-    Free;
-  end;
+  txt := VariantToUTF8(Value);
+  if txt<>'' then
+    with TTextWriter.CreateOwnedStream do
+    try
+      AddHtmlEscapeWiki(pointer(txt));
+      SetText(txt);
+    finally
+      Free;
+    end;
   RawUTF8ToVariant(txt,result);
 end;
 
-class procedure TSynMustache.BlobToBase64(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.BlobToBase64(const Value: variant; out result: variant);
 var tmp: RawUTF8;
     wasString: boolean;
 begin
@@ -989,8 +988,7 @@ begin
     result := Value;
 end;
 
-class procedure TSynMustache.EnumTrim(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.EnumTrim(const Value: variant; out result: variant);
 var tmp: RawUTF8;
     wasString: boolean;
     short: PUTF8Char;
@@ -999,6 +997,15 @@ begin
   short := TrimLeftLowerCase(tmp);
   RawUTF8ToVariant(short,StrLen(short),result);
 end;
+
+class procedure TSynMustache.PowerOfTwo(const Value: variant; out result: variant);
+var V: Int64;
+begin
+  if TVarData(Value).VType>varNull then
+    if VariantToInt64(Value,V) then
+      result := Int64(1) shl V;
+end;
+
 
 { TSynMustacheContext }
 
