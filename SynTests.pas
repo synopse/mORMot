@@ -651,8 +651,8 @@ const CHARS: array[0..36] of AnsiChar =
 begin
   SetString(result,nil,CharCount);
   while CharCount>0 do begin
-    result[CharCount] := CHARS[Random(High(CHARS))];
     dec(CharCount);
+    PAnsiChar(Pointer(result))[CharCount] := CHARS[Random(High(CHARS)+1)];
   end;
 end;
 

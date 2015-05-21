@@ -73,7 +73,7 @@ type
   // - this class will use a supplied TSQLRest instance to persist TUser
   // Aggregate Roots, following the IDomUserCommand CQRS methods
   // - each TUser aggregate will be mapped into a TSQLRecordUser ORM table
-  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand)
+  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand,IDomUserQuery)
   public
     function SelectByLogonName(const aLogonName: RawUTF8): TCQRSResult;
     function SelectByEmailValidation(aValidationState: TDomUserEmailValidation): TCQRSResult;
@@ -237,7 +237,7 @@ begin
 end;
 
 class procedure TInfraRepoUserFactory.RegressionTests(test: TSynTestCase);
-var Command: TDDDRepositoryRestFactory;
+var Rest: TSQLRestServer;
 procedure TestOne;
 const MAX=1000;
       MOD_EMAILVALID=ord(high(TDomUserEmailValidation))+1;
@@ -251,7 +251,7 @@ var cmd: IDomUserCommand;
     count: array[TDomUserEmailValidation] of integer;
     msg: string;
 begin
-  test.Check(Command.GetOneInstance(cmd));
+  test.Check(Rest.Services.Resolve(IDomUserCommand,cmd));
   user := TUser.Create;
   try
     for i := 1 to MAX do begin
@@ -271,7 +271,7 @@ begin
   end; 
   user := TUser.Create;
   try
-    test.Check(Command.GetOneInstance(qry));
+    test.Check(Rest.Services.Resolve(IDomUserQuery,qry));
     test.Check(qry.GetCount=0);
     for i := 1 to MAX do begin
       UInt32ToUtf8(i,itext);
@@ -287,7 +287,7 @@ begin
       test.Check(user.Address.Country.Alpha2='FR');
       test.Check(user.Phone1=itext);
     end;
-    test.Check(Command.GetOneInstance(cmd));
+    test.Check(Rest.Services.Resolve(IDomUserCommand,cmd));
     try
       for v := low(TDomUserEmailValidation) to high(TDomUserEmailValidation) do begin
         test.Check(cmd.SelectByEmailValidation(v)=cqrsSuccess);
@@ -306,7 +306,7 @@ begin
     finally
       ObjArrayClear(users);
     end;
-    test.Check(Command.GetOneInstance(cmd));
+    test.Check(Rest.Services.Resolve(IDomUserCommand,cmd));
     for v := low(TDomUserEmailValidation) to high(TDomUserEmailValidation) do begin
       test.Check(cmd.SelectByEmailValidation(v)=cqrsSuccess);
       if v=evFailed then
@@ -330,16 +330,11 @@ begin
     user.Free;
   end;
 end;
-var Rest: TSQLRest;
 begin
   Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUser]);
   try
-    Command := Create(Rest);
-    try
-      TestOne; // sub function to ensure that all I*Command are released
-    finally
-      Command.Free;
-    end;
+    Rest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(Rest)],true);
+    TestOne; // sub function to ensure that all I*Command are released
   finally
     Rest.Free;
   end;

@@ -2295,10 +2295,21 @@ type
     function AnsiStringCodePage: integer; {$ifdef UNICODE}inline;{$endif}
     /// get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
-    function InterfaceGUID: PGUID;
+    function InterfaceGUID: PGUID; {$ifdef UNICODE}inline;{$endif}
     /// get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
+    /// get the ancestor/parent of a given interface type information
+    // - returns nil if this type has no parent
+    function InterfaceAncestor: PTypeInfo; {$ifdef UNICODE}inline;{$endif}
+    /// get all ancestors/parents of a given interface type information
+    // - only ancestors with an associated TGUID would be added
+    // - if OnlyImplementedBy is not nil, only the interface explicitly
+    // implemented by this class would be added, and AncestorsImplementedEntry[]
+    // would contain the corresponding PInterfaceEntry values 
+    procedure InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
+      OnlyImplementedBy: TInterfacedObjectClass;
+      out AncestorsImplementedEntry: TPointerDynArray);
   end;
 
 {$ifdef FPC}
@@ -3771,9 +3782,6 @@ type
   end;
 
   {$endif LVCL}
-
-  /// class-reference type (metaclass) of a TInterfacedObject kind
-  TInterfacedObjectClass = class of TInterfacedObject;
 
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them (and any T*ObjArray) when freed
@@ -9132,6 +9140,8 @@ type
   TInterfaceResolverForSingleInterface = class(TInterfaceResolver)
   protected
     fInterfaceTypeInfo: PTypeInfo;
+    fInterfaceAncestors: PTypeInfoDynArray;
+    fInterfaceAncestorsImplementationEntry: TPointerDynArray;
     fImplementationEntry: PInterfaceEntry;
     fImplementationClass: TInterfacedObjectClass;
     fImplementationClassIsCustomCreate: boolean;
@@ -9169,7 +9179,7 @@ type
   TInterfaceResolverInjected = class(TInterfaceResolver)
   protected
     fResolvers: TInterfaceResolverObjArray;
-    fCreatedInterfaceStub: TInterfaceStubObjArray;
+    fResolversToBeReleased: TInterfaceResolverObjArray;
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     class function RegisterGlobalCheck(aInterface: PTypeInfo;
@@ -9207,7 +9217,10 @@ type
     // kind of factory
     // - e.g. a customized TInterfaceStub/TInterfaceMock, a TServiceContainer,
     // a TDDDRepositoryRestObjectMapping or any factory class
-    procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver); overload; virtual;
+    // - by default, only TInterfaceStub/TInterfaceMock would be owned by this
+    // instance, and released by Destroy - unless you set OwnOtherResolvers
+    procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver;
+      OwnOtherResolvers: boolean=false); overload; virtual;
     /// prepare and setup interface DI/IoC resolution from a TInterfacedObject instance
     // - any TInterfacedObject declared as dependency will have its reference
     // count increased, and decreased in Destroy
@@ -12332,6 +12345,17 @@ type
     // ! if fServer.Services.Resolve(ICalculator,Calc) then
     // !   ...
     property Services: TServiceContainer read fServices;
+    /// access or initialize the internal IoC resolver, used for interface-based
+    // remote services, and more generaly any Services.Resolve() call
+    // - create and initialize the internal TServiceContainer if no service
+    // interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
+    // remote services, but internal IoC, without the ServiceRegister()
+    // or ServiceDefine() methods - e.g.
+    // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
+    // - overriden methods would return TServiceContainerClient or
+    // TServiceContainerServer instances, on TSQLRestClient or TSQLRestServer
+    function ServiceContainer: TServiceContainer; virtual; abstract;
     /// the routing classs of the service remote request
     // - by default, will use TSQLRestRoutingREST, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
@@ -14344,6 +14368,16 @@ type
     function ServiceDefine(aClient: TSQLRest; const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
       const aContractExpected: RawUTF8=''): boolean; overload;
+    /// access or initialize the internal IoC resolver, used for interface-based
+    // remote services, and more generaly any Services.Resolve() call
+    // - create and initialize the internal TServiceContainerServer if no
+    // service interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
+    // remote services, but internal IoC, without the ServiceRegister()
+    // or ServiceDefine() methods - e.g.
+    // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
+    // - this overriden method would return a TServiceContainerServer instance
+    function ServiceContainer: TServiceContainer; override;
 
     /// compute the full statistics about this server, as JSON
     // - is a wrapper around the Stats() method-based service, setting withall=1
@@ -14596,6 +14630,10 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; overload; virtual; abstract;
+    /// access or initialize the internal IoC resolver
+    // - this overriden method would return always nil, since IoC only makes
+    // sense at TSQLRestClient and TSQLRestServer level
+    function ServiceContainer: TServiceContainer; override;
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
@@ -15244,6 +15282,15 @@ type
     /// abort a transaction (calls REST ABORT Member)
     // - by default, Client transaction will use here a pseudo session
     procedure RollBack(SessionID: cardinal=CONST_AUTHENTICATION_NOT_USED); override;
+    /// access or initialize the internal IoC resolver, used for interface-based
+    // remote services, and more generaly any Services.Resolve() call
+    // - create and initialize the internal TServiceContainerClient if no
+    // service interface has been registered yet
+    // - may be used to inject some dependencies, which are not interface-based
+    // remote services, but internal IoC, without the ServiceRegister()
+    // or ServiceDefine() methods - e.g.
+    // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
+    function ServiceContainer: TServiceContainer; override;
 
     /// if set to TRUE, all BLOB fields of all tables will be transferred
     // between the Client and the remote Server
@@ -25159,6 +25206,50 @@ begin
     result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfUnit;
 end;
 
+function TTypeInfo.InterfaceAncestor: PTypeInfo;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    result := nil else
+    with PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^ do
+      if IntfParent=nil then
+        result := nil else
+        result := IntfParent{$ifndef FPC}^{$endif};
+end;
+
+procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
+  OnlyImplementedBy: TInterfacedObjectClass;
+  out AncestorsImplementedEntry: TPointerDynArray);
+var n: integer;
+    nfo: PTypeInfo;
+    typ: PInterfaceTypeData;
+    entry: pointer;
+begin
+  if (@self=nil) or (Kind<>tkInterface) then
+    exit;
+  n := 0;
+  typ := AlignToPtr(@Name[ord(Name[0])+1]);
+  repeat
+    if typ^.IntfParent=nil then
+      exit;
+    nfo := typ^.IntfParent{$ifndef FPC}^{$endif};
+    if nfo=TypeInfo(IInterface) then
+      exit;
+    typ := AlignToPtr(@nfo^.Name[ord(nfo^.Name[0])+1]);
+    if ifHasGuid in typ^.IntfFlags then begin
+      if OnlyImplementedBy<>nil then begin
+        entry := OnlyImplementedBy.GetInterfaceEntry(typ^.IntfGuid);
+        if entry=nil then
+          continue;
+        Setlength(AncestorsImplementedEntry,n+1);
+        AncestorsImplementedEntry[n] := entry;
+      end;
+      SetLength(Ancestors,n+1);
+      Ancestors[n] := nfo;
+      inc(n);
+    end;
+  until false;
+end;
+
 
 { TClassProp }
 
@@ -31209,9 +31300,7 @@ begin
   result := False;
   if (self=nil) or (high(aInterfaces)<0) then
     exit;
-  if fServices=nil then
-    fServices := TServiceContainerClient.Create(self);
-  result := (fServices as TServiceContainerClient).AddInterface(
+  result := (ServiceContainer as TServiceContainerClient).AddInterface(
     aInterfaces,aInstanceCreation,aContractExpected);
 end;
 
@@ -31224,9 +31313,7 @@ begin
     SetLastException;
     exit;
   end;
-  if fServices=nil then
-    fServices := TServiceContainerClient.Create(self);
-  with fServices as TServiceContainerClient do
+  with ServiceContainer as TServiceContainerClient do
   try
     result := AddInterface(aInterface,aInstanceCreation,aContractExpected);
   except
@@ -32428,18 +32515,21 @@ begin
   end;
 end;
 
+function TSQLRestServer.ServiceContainer: TServiceContainer;
+begin
+  if fServices=nil then
+    fServices := TServiceContainerServer.Create(self);
+  result := fServices;
+end;
+
 function TSQLRestServer.RecordVersionSynchronizeSubscribeMaster(Table: TSQLRecordClass;
   RecordVersion: TRecordVersion; const SlaveCallback: IServiceRecordVersionCallback): boolean;
 begin
-  if self=nil then begin
-    result := false;
-    exit;
-  end;
-  if fServices=nil then
-    fServices := TServiceContainerServer.Create(self);
-  result := TServiceContainerServer(fServices).
-    RecordVersionSynchronizeSubscribeMaster(Model.GetTableIndexExisting(Table),
-      RecordVersion,SlaveCallback);
+  if self=nil then
+    result := false else
+    result := (ServiceContainer as TServiceContainerServer).
+      RecordVersionSynchronizeSubscribeMaster(Model.GetTableIndexExisting(Table),
+        RecordVersion,SlaveCallback);
 end;
 
 function TSQLRestServer.RecordVersionSynchronizeMasterStart(
@@ -34418,22 +34508,18 @@ function TSQLRestServer.ServiceRegister(
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
-  if fServices=nil then
-    fServices := TServiceContainerServer.Create(self);
   if (aImplementationClass=nil) or (high(aInterfaces)<0) then
     result := nil else
-    result := (fServices as TServiceContainerServer).
+    result := (ServiceContainer as TServiceContainerServer).
       AddImplementation(aImplementationClass,aInterfaces,aInstanceCreation,nil,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceRegister(aSharedImplementation: TInterfacedObject;
   const aInterfaces: array of PTypeInfo; const aContractExpected: RawUTF8): TServiceFactoryServer;
 begin
-  if fServices=nil then
-    fServices := TServiceContainerServer.Create(self);
   if (self=nil) or (aSharedImplementation=nil) or (high(aInterfaces)<0) then
     result := nil else
-    result := (fServices as TServiceContainerServer).
+    result := (ServiceContainer as TServiceContainerServer).
       AddImplementation(TInterfacedClass(aSharedImplementation.ClassType),
         aInterfaces,sicShared,aSharedImplementation,aContractExpected);
 end;
@@ -34446,9 +34532,7 @@ begin
   result := False;
   if (self=nil) or (high(aInterfaces)<0) or (aClient=nil) then
     exit;
-  if fServices=nil then
-    fServices := TServiceContainerServer.Create(self);
-  result := (fServices as TServiceContainerServer).AddInterface(
+  result := (ServiceContainer as TServiceContainerServer).AddInterface(
     aInterfaces,aInstanceCreation,aContractExpected);
 end;
 
@@ -38178,6 +38262,11 @@ begin // called by TSQLRestServer.EndCurrentThread
   // nothing to do in this basic REST static class
 end;
 
+function TSQLRestStorage.ServiceContainer: TServiceContainer;
+begin
+  result := nil;
+end;
+
 function TSQLRestStorage.CreateSQLMultiIndex(Table: TSQLRecordClass;
   const FieldNames: array of RawUTF8; Unique: boolean; IndexName: RawUTF8): boolean;
 begin
@@ -38855,6 +38944,13 @@ begin
   finally
     Res.Free;
   end;
+end;
+
+function TSQLRestClient.ServiceContainer: TServiceContainer;
+begin
+  if fServices=nil then
+    fServices := TServiceContainerClient.Create(self);
+  result := fServices;
 end;
 
 
@@ -46180,6 +46276,8 @@ begin
   if fImplementationEntry=nil then
     raise EInterfaceResolverException.CreateUTF8('%.Create: % does not implement %',
       [self,aImplementation,fInterfaceTypeInfo^.Name]);
+  aInterface^.InterfaceAncestors(fInterfaceAncestors,aImplementation,
+    fInterfaceAncestorsImplementationEntry);
   fImplementationClass := aImplementation;
   fImplementationClassIsCustomCreate :=
     aImplementation.InheritsFrom(TInterfacedObjectWithCustomCreate);
@@ -46200,15 +46298,28 @@ end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
 begin
-  result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
+  if self=nil then
+    result := false else
+    // here we now that CreateInstance will implement the interface 
+    result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
 end;
 
 function TInterfaceResolverForSingleInterface.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
+var i: integer;
 begin
-  if fInterfaceTypeInfo<>aInterface then
-    result := false else
-    result := GetOneInstance(Obj);
+  if fInterfaceTypeInfo=aInterface then
+    result := GetOneInstance(Obj) else begin
+    // if not found exact interface, try any parent/ancestor interface
+    for i := 0 to length(fInterfaceAncestors)-1 do
+      if fInterfaceAncestors[i]=aInterface then begin
+        // here we now that CreateInstance will implement fInterfaceAncestors[]
+        result := GetInterfaceFromEntry(
+          CreateInstance,fInterfaceAncestorsImplementationEntry[i],Obj);
+        exit;
+      end;
+    result := false;
+  end;
 end;
 
 
@@ -46364,7 +46475,8 @@ begin
 end;
 
 procedure TInterfaceResolverInjected.InjectResolver(
-  const aOtherResolvers: array of TInterfaceResolver);
+  const aOtherResolvers: array of TInterfaceResolver;
+  OwnOtherResolvers: boolean);
 var i: integer;
 begin
   for i := 0 to high(aOtherResolvers) do
@@ -46372,8 +46484,10 @@ begin
     if aOtherResolvers[i].InheritsFrom(TInterfaceStub) then begin
       include(TInterfaceStub(aOtherResolvers[i]).fOptions,
         imoFakeInstanceWontReleaseTInterfaceStub);
-      ObjArrayAdd(fCreatedInterfaceStub,aOtherResolvers[i]);
-    end;
+      ObjArrayAdd(fResolversToBeReleased,aOtherResolvers[i]);
+    end else
+    if OwnOtherResolvers then
+      ObjArrayAdd(fResolversToBeReleased,aOtherResolvers[i]);
     ObjArrayAddOnce(fResolvers,aOtherResolvers[i]);
   end;
 end;
@@ -46393,7 +46507,7 @@ destructor TInterfaceResolverInjected.Destroy;
 var i: integer;
 begin
   try
-    ObjArrayClear(fCreatedInterfaceStub);
+    ObjArrayClear(fResolversToBeReleased);
     for i := 0 to length(fDependencies)-1 do
       IInterface(fDependencies[i])._Release;
   finally

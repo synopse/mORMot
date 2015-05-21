@@ -13388,7 +13388,8 @@ To use those CQRS interfaces, you could use @*IoC@ as usual:
 !  end;
 This {\i dual-phase} commit appears to be a clean way of implement the @100@. Under the hood, when used with our ORM - as we will now explain - {\i @*Unit Of Work@} will be expressed as a {\f1\fs20 I*Command} service, uncoupled from the persistence layer it runs on.
 :    Automated Repository using the ORM
-As you may have noticed, we did just implemented the {\f1\fs20 interface} types we needed. That is, we have the {\i contract} of our persistence services, but no actual implementation of it. As such, those {\f1\fs20 interface} definitions are useless. Luckily for use, the {\f1\fs20 mORMotDDD.pas} unit offers an easy way to implement those using @3@, with minimal coding.
+As you may have noticed, we did just defined the {\f1\fs20 interface} types we needed. That is, we have the {\i contract} of our persistence services, but no actual implementation of it. As such, those {\f1\fs20 interface} definitions are useless. Luckily for use, the {\f1\fs20 mORMotDDD.pas} unit offers an easy way to implement those using @3@, with minimal coding.
+:     DDD / ORM mapping
 First we would need to map our domain object (i.e. our {\f1\fs20 TUser} instance and its properties) into a {\f1\fs20 TSQLRecord}. We may do it by hand, but you may find an handy way. Just run the following in the context of your application:
 ! TDDDRepositoryRestFactory.ComputeSQLRecord(TUser);
 This {\f1\fs20 class procedure} would create a {\f1\fs20 ddsqlrecord.inc} file in the executable folder, containing the needed field definition, with one {\f1\fs20 TSQLRecord} type corresponding to each hierarchy level of the original {\f1\fs20 TPersistent} definition. Nested fields would be defined as a single column in the {\f1\fs20 TSQLRecord}, e.g. {\f1\fs20 Address.Country.Iso} would be flattened as a {\f1\fs20 Address_Country} property.
@@ -13435,6 +13436,7 @@ In practice, the following property would need to be tuned as such:
 !    property LogonName: RawUTF8 read fLogonName write fLogonName
 !!      stored AS_UNIQUE;
 Take a look at the {\f1\fs20 dddInfraRepoUser.pas} and {\f1\fs20 dddDomUserTypes.pas} units to make a comparison between the DDD objects and their corresponding {\f1\fs20 TSQLRecord*} types.
+:     Define the Factory
 Since the generated {\f1\fs20 TSQLRecordUser} type follows known conventions, the {\f1\fs20 mORMotDDD.pas} unit is able to do almost all the persistence work in an automated way, by inheriting of two classes:
 - Defining a {\i Repository Factory} (i.e. a class able to generate {\f1\fs20 IDomUserQuery} or {\f1\fs20 IDomUserCommand} instances on requests) by inheriting from {\f1\fs20 TDDDRepositoryRestFactory}
 - Defining the actual {\f1\fs20 IDomUserCommand} methods by inheriting from {\f1\fs20 TDDDRepositoryRestCommand}, and using high level protected methods to access the {\f1\fs20 TUser} from internal {\f1\fs20 TSQLRecordUser} ORM values.
@@ -13460,9 +13462,32 @@ As you can see, the main point of this {\f1\fs20 constructor} is to supply the r
 - The ORM class, defining the actual SQL table or NoSQL collection which would store the data, is {\f1\fs20 TSQLRecordUser};
 - An optional {\f1\fs20 TDDDRepositoryRestManager} instance may be supplied as owner of this factory - but it is not used in most cases.
 The {\f1\fs20 AddFilterOrValidate()} method allows to set some @56@ expectations at DDD level. Those rules would be applied before {\f1\fs20 Commit} would take place, without any use of the ORM rules. In the above code, {\f1\fs20 TSynFilterTrim} would remove any space from all text fields of the {\f1\fs20 TUser} instance, and {\f1\fs20 TSynValidateNonVoidText} will ensure that the {\f1\fs20 TUser.LogonName} field would not be {\f1\fs20 ''} - after space trimming. You may consider those rules as the SQL constraints you may be used to. But since they would be defined at DDD level, they would apply on any database back-end, even if it does not support any constraint - e.g. if it is a NoSQL engine, or a third-party persistence service you do not have the hand on.
+You would probably want to use those CQRS interfaces, via usual @*IoC@, at {\f1\fs20 TSQLRest} level, just like any @63@:
+!var cmd: IDomUserCommand;
+!...
+!  aServer.Services.Resolve(IDomUserCommand,cmd);
+or, for a {\i Query}:
+!var qry: IDomUserQuery;
+!...
+!  aServer.Services.Resolve(IDomUserQuery,qry);
+In order to be able to get a {\f1\fs20 IDomUserCommand} or {\f1\fs20 IDomUserQuery} instance from {\f1\fs20 aServer.Services.Resolve()}, you would need to register the {\f1\fs20 TInfraRepoUserFactory} first:
+! aServer.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aServer)],true);
+or if you want to maintain the factory instance life-time (e.g. to share it with other interface resolvers):
+!var factory: TInfraRepoUserFactory;
+! ...
+!  factory := TInfraRepoUserFactory.Create(aServer);
+!  try
+!    aServer.ServiceContainer.InjectResolver([factory]);
+!  ...
+!  finally
+!    factory.Free;
+!  end;
+This single {\f1\fs20 TInfraRepoUserFactory} would allow to implement both {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} contracts.
+Of course, having the ability to let {\f1\fs20 aServer} own the factory, via the {\f1\fs20 InjectResolver([...],true)} parameter, sounds easier to work with.
+:     Implement the CQRS methods
 Then we define the needed methods of {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} in our custom class:
 !type
-!  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand)
+!  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand,IDomUserQuery)
 !  public
 !    function SelectByLogonName(const aLogonName: RawUTF8): TCQRSResult;
 !    function SelectByEmailValidation(aValidationState: TDomUserEmailValidation): TCQRSResult;
@@ -13474,6 +13499,7 @@ Then we define the needed methods of {\f1\fs20 IDomUserCommand} and {\f1\fs20 ID
 !    function Update(const aUpdatedAggregate: TUser): TCQRSResult;
 !    function HowManyValidatedEmail: integer;
 !  end;
+Note that we defined the {\f1\fs20 TInfraRepoUser} class as implementing both interface we need, via {\f1\fs20 = class(...,IDomUserCommand,IDomUserQuery}). We need both types to be explicit in the {\f1\fs20 class} type definition, otherwise, @*IoC@ - i.e. {\f1\fs20 aServer.Services.Resolve()} calls - won't work for both.
 As you can see, some methods appear to me missing. There is no {\f1\fs20 Commit}, nor {\f1\fs20 Delete} - which are required by {\f1\fs20 IDomUserCommand}. But in fact, those commands are so generic that they are already implemented for you in {\f1\fs20 TDDDRepositoryRestCommand}!
 What we need know is to implement those methods, using the internal protected {\f1\fs20 ORM*()} methods inherited by this parent class:
 !function TInfraRepoUser.SelectByLogonName(const aLogonName: RawUTF8): TCQRSResult;
@@ -13529,7 +13555,7 @@ All the data access via the {\f1\fs20 TSQLRecordUser} REST persistence layer, wi
 In fact, our {\f1\fs20 TInfraRepoUser} {\f1\fs20 class} is just a thin wrapper forcing use of strong typing in its methods parameters (i.e. using {\f1\fs20 TUser}/{\f1\fs20 TUserObjArray} whereas the {\f1\fs20 ORM*()} methods are more relaxed about actual typing), and ensuring that the ORM specificities are followed as expected, e.g. a search against the {\f1\fs20 TUser.Name.Last} DDD field would use the {\f1\fs20 TSQLRecordUser.Name_Last} ORM column, with the proper {\f1\fs20 LIKE} operator.
 Internally, {\f1\fs20 TDDDRepositoryRestCommand.ORMPrepareForCommit} will call all DDD and ORM {\f1\fs20 TSynFilter} and {\f1\fs20 TSynValidate} rules, as previously defined. It sounds indeed like a real advantage not to wait until the database layer is reached, to have those constraints verified. The sooner an error is notified, the better - especially in a complex @*SOA@ system.
 Under the hood, {\f1\fs20 TDDDRepositoryRestCommand} will define a {\f1\fs20 TSqlRestBatch} - see @28@ - for storing all write commands in memory (as JSON) - e.g. {\f1\fs20 cmd.Add} - and will send them to the database engine, with optimized SQL or NoSQL statements, only when {\f1\fs20 cmd.Commit} would be executed.
-:   Isolate using DTOs
+:   Isolate your Domain using DTOs
 DDD's {\i @*DTO@} may also be defined as {\f1\fs20 record}, and directly serialized as JSON via text-based serialization. Don't be afraid of writing some translation layers between {\f1\fs20 TSQLRecord} and DTO records or, more generally, between your {\i Application layer} and your {\i Presentation layer}. It will be very fast, on the server side. If your service interfaces are cleaner, do not hesitate.
 But defining {\i DTO} types, just for uncoupling, may become time consuming. If you start writing a lot of wrapping code, forget about it, and expose your Domain {\i Value Objects} or even your {\i Entities}, as stated above. Or automate the wrapper coding, using RTTI and code generators. You have to weight the PROs and the CONs, like always... And never forget to write proper unit testing of this marshalling code, since it may induce some unexpected issues.
 If you expect your DDD's objects to be {\i schema-less} or with an evolving structure (e.g. for {\i DTO}), depending on each context, you may benefit of not using a fixed {\f1\fs20 type} like {\f1\fs20 class} or {\f1\fs20 record}, but use @80@. This kind of {\f1\fs20 variant} will be serialized as JSON, and allow @*late-binding@ access to its properties (for {\i object} documents) or items (for {\i array} documents). In the context of interface-based services, using {\i per-reference} option at creation (i.e. {\f1\fs20 _ObjFast() _ArrFast() _JsonFast() _JsonFmtFast()} functions) does make sense, in order to spare the server resources.
