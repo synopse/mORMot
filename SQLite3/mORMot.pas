@@ -2295,13 +2295,13 @@ type
     function AnsiStringCodePage: integer; {$ifdef UNICODE}inline;{$endif}
     /// get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
-    function InterfaceGUID: PGUID; {$ifdef UNICODE}inline;{$endif}
+    function InterfaceGUID: PGUID;
     /// get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
     /// get the ancestor/parent of a given interface type information
     // - returns nil if this type has no parent
-    function InterfaceAncestor: PTypeInfo; {$ifdef UNICODE}inline;{$endif}
+    function InterfaceAncestor: PTypeInfo;
     /// get all ancestors/parents of a given interface type information
     // - only ancestors with an associated TGUID would be added
     // - if OnlyImplementedBy is not nil, only the interface explicitly
