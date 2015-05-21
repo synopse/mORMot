@@ -13,6 +13,7 @@ Contributors
   Arnaud Bouchez
   Aweste
   Bas Schouten
+  BigStar
   Cheemeng
   CoMPi
   Damien (ddemars)
@@ -20,16 +21,22 @@ Contributors
   David Mead (MDW)
   Delphinium (louisyeow)
   DigDiver
+  EgorovAlex
   EMartin
   Eric Grange
   Esmond
+  EvaF
+  Goran Despalatovic (gigo)
+  ItSDS
   Joe (jokusoft)
   Jordi Tudela
   Mario Moretti
   Martin Suer
+  Mazinsw
   MChaos
   Miab3
   Michael (EgonHugeist)
+  MilesYou
   Mingda
   Ondrej (reddwarf)
   Pavel (mpv)
@@ -43,6 +50,7 @@ Contributors
   Stefan (itSDS)
   Vadim Orel
   Win2014
+  Wloochacz
   Wolfgang Ehrhardt
 
 [See below if you upgrade from 1.17 revision]

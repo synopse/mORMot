@@ -34,11 +34,12 @@ unit mORMot;
     DigDiver
     EgorovAlex
     Esmond
-    Pavel (mpv)
+    Goran Despalatovic (gigo)
     Jordi Tudela
     Martin Suer
     MilesYou
     Ondrej
+    Pavel (mpv)
     Sabbiolina
     Vadim Orel
 
@@ -11032,7 +11033,7 @@ type
     fOnNotify: TOnBatchWrite;
     // local TSQLRecordTableDeleted.ID follows current Model -> pre-compute offset
     fTableDeletedIDOffset: Int64;
-    procedure SetCurrentRevision(const Revision: TRecordVersion);
+    procedure SetCurrentRevision(const Revision: TRecordVersion; Event: TSQLOccasion);
   public
     /// initialize the instance able to apply callbacks for a given table on
     // a local slave REST server from a remote master REST server
@@ -13914,7 +13915,8 @@ type
     // Table class in their data model (maybe in diverse order)
     // - by default, all pending updates are retrieved, but you can define a value
     // to ChunkRowLimit, so that the updates would be retrieved by smaller chunks
-    // - returns 0 on error, or the latest applied revision number
+    // - returns -1 on error, or the latest applied revision number (which may
+    // be 0 if there is no data in the table)
     // - this method will use regular REST ORM commands, so will work with any
     // communication channels: for real-time push synchronization, consider using
     // RecordVersionSynchronizeMasterStart and RecordVersionSynchronizeSlaveStart
@@ -32374,7 +32376,7 @@ begin
 {$else}
 begin
 {$endif}
-  result := 0;
+  result := -1; // error
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
   repeat
@@ -32585,7 +32587,7 @@ begin
     repeat // retrieve all pending versions (may retry up to 5 times)
       previous := res;
       res := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
-      if res=0 then begin
+      if res<0 then begin
         InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',[self,Table],sllError);
         exit;
       end;
@@ -48332,12 +48334,13 @@ begin
 end;
 
 procedure TServiceRecordVersionCallback.SetCurrentRevision(
-  const Revision: TRecordVersion);
+  const Revision: TRecordVersion; Event: TSQLOccasion);
 begin
-  if Revision<=fSlave.fRecordVersionMax then
+  if (Revision<fSlave.fRecordVersionMax) or
+     ((Revision=fSlave.fRecordVersionMax) and (Event<>soInsert)) then
     raise EServiceException.CreateUTF8('%.SetCurrentRevision(%) on %: previous was %',
-      [self,Revision,fTable,fSlave.fRecordVersionMax]) else
-    fSlave.fRecordVersionMax := Revision;
+      [self,Revision,fTable,fSlave.fRecordVersionMax]);
+  fSlave.fRecordVersionMax := Revision;
 end;
 
 procedure TServiceRecordVersionCallback.Added(const NewContent: RawJSON);
@@ -48350,7 +48353,7 @@ begin
     if fBatch=nil then
       fSlave.Add(rec,true,true,true) else
       fBatch.Add(rec,true,true,fields,true);
-    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec),soInsert);
     if Assigned(fOnNotify) then
       fOnNotify(fBatch,soInsert,fTable,rec.IDValue,rec,fields);
   finally
@@ -48369,7 +48372,7 @@ begin
     if fBatch=nil then
       fSlave.Update(rec,fields,true) else
       fBatch.Update(rec,fields,true);
-    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec));
+    SetCurrentRevision(fRecordVersionField.PropInfo.GetInt64Prop(rec),soUpdate);
     if Assigned(fOnNotify) then
       fOnNotify(fBatch,soUpdate,fTable,rec.IDValue,rec,fields);
   finally
@@ -48398,7 +48401,7 @@ begin
       fBatch.Add(del,true,true);
       fBatch.Delete(fTable,ID);
     end;
-    SetCurrentRevision(Revision);
+    SetCurrentRevision(Revision,soDelete);
     if Assigned(fOnNotify) then
       fOnNotify(fBatch,soDelete,fTable,ID,nil,[]);
   finally
