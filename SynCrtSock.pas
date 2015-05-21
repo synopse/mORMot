@@ -4216,8 +4216,12 @@ end;
 { ECrtSocket }
 
 constructor ECrtSocket.Create(const Msg: string);
+var Error: integer;
 begin
-  Create(Msg,WSAGetLastError());
+  Error := WSAGetLastError();
+  if Error=0 then
+    Error := WSAEWOULDBLOCK; // if unknown error, probably a manual timeout
+  Create(Msg,Error);
 end;
 
 constructor ECrtSocket.Create(const Msg: string; Error: integer);

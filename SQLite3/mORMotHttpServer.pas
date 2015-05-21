@@ -752,7 +752,7 @@ begin
       Server.SetPublicURI(fPublicAddress,fPublicPort);
       Security := aSecurity;
       if aRestAccessRights=nil then
-        RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS;
+        RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS else
         RestAccessRights := aRestAccessRights;
     end;
 end;

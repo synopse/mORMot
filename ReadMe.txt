@@ -27,7 +27,6 @@ Contributors
   Esmond
   EvaF
   Goran Despalatovic (gigo)
-  ItSDS
   Joe (jokusoft)
   Jordi Tudela
   Mario Moretti
