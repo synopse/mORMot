@@ -4982,7 +4982,6 @@ type
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
     fSessionAccessRights: TSQLAccessRights; // session may be deleted meanwhile
-    procedure FillInput;
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
@@ -5181,6 +5180,12 @@ type
     {$endif}
     /// finalize the execution context
     destructor Destroy; override;
+    /// extract the input parameters from its URI
+    // - you should not have to call this method directly, but rather
+    // all the InputInt/InputDouble/InputUTF8/InputExists/... properties
+    // - may be useful if you want to access directly to InputPairs[] with no
+    // prior knowledge of the input parameter names
+    procedure FillInput;
     /// retrieve one input parameter from its URI name as Int64
     // - raise an EParsingException if the parameter is not found
     property InputInt[const ParamName: RawUTF8]: Int64 read GetInputInt;
@@ -5273,7 +5278,8 @@ type
     /// low-level access to the input parameters, stored as pairs of UTF-8
     // - even items are parameter names, odd are values
     // - Input*[] properties should have been called previously to fill the
-    // internal array
+    // internal array, or by calling FillInput if you do not know the input
+    // parameters which may appear
     property InputPairs: TRawUTF8DynArray read FInput;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
