@@ -5455,8 +5455,8 @@ type
 
   /// which kind of property does TJSONCustomParserCustomSimple refer to
   TJSONCustomParserCustomSimpleKnownType = (
-    ktNone, ktEnumeration, ktGUID, ktFixedArray, ktStaticArray, ktDynamicArray
-    {$ifndef FPC}, ktSet{$endif});
+    ktNone, ktEnumeration, ktSet, ktGUID,
+    ktFixedArray, ktStaticArray, ktDynamicArray);
 
   /// used to store additional RTTI for simple type as a ptCustom kind
   // - this class handle currently enumerate, TGUID or static/dynamic arrays
@@ -28595,22 +28595,20 @@ begin
       fTypeData := pointer(PtrUInt(@elSize)+NameLen);
     {$endif}
     case PTypeKind(fCustomTypeInfo)^ of
-    tkEnumeration{$ifndef FPC}, tkSet{$endif}: begin
+    tkEnumeration, tkSet: begin
       case TOrdType(PByte(fTypeData)^) of
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
       end;
-      {$ifdef FPC}
-      fKnownType := ktEnumeration;
-      {$else}
       if PTypeKind(fCustomTypeInfo)^=tkEnumeration then
         fKnownType := ktEnumeration else begin
         fKnownType := ktSet;
+        {$ifndef FPC}
         inc(PByte(fTypeData)); // jump over TOrdType (see TTypeInfo.SetEnumType)
         fTypeData := PPointer(PPointer(fTypeData)^)^;
+        {$endif}
       end;
-      {$endif}
     end;
     tkArray: begin
       if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
@@ -28649,9 +28647,8 @@ end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
-var i,max: integer;
+var i,int: integer;
     V: PByte;
-    item: PShortString;
 begin
   case fKnownType of
   ktStaticArray: begin
@@ -28662,7 +28659,7 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
-  {$ifndef FPC}
+  (*  max: integer; item: PShortString;
   ktSet: begin // written as an object with set names as fields = true/false
     aWriter.Add('{');
     item := GetEnumBaseTypeList(fTypeData,max);
@@ -28675,7 +28672,13 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add('}');
   end;
-  {$endif}
+  *)
+  ktEnumeration, ktSet: begin
+    int := 0;
+    move(aValue,int,fDataSize);
+    aWriter.AddU(int); // storing the value as binary/integer is safe and fast
+    //aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
+  end;
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): Unsupported',
         [self,fCustomTypeName]);
@@ -28684,8 +28687,6 @@ begin
     case fKnownType of
     ktGUID:
       aWriter.Add(TGUID(aValue));
-    ktEnumeration:
-      aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
     ktFixedArray:
       aWriter.AddBinToHex(@aValue,fFixedSize);
     end;
@@ -28701,7 +28702,7 @@ var PropValue: PUTF8Char;
     wasString: boolean;
     Val: PByte;
 begin
-  result := nil;
+  result := nil; // indicates error
   case fKnownType of
   ktStaticArray: begin
     if P^<>'[' then
@@ -28721,10 +28722,6 @@ begin
       inc(P);
     result := P;
   end;
-  {$ifndef FPC}
-  ktSet: // not implemented yet
-    raise ESynException.CreateUTF8('%.CustomReader("%") set',[self,fCustomTypeName]);
-  {$endif}
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomReader("%"): Unsupported',
         [self,fCustomTypeName]);
@@ -28736,18 +28733,16 @@ begin
     ktGUID:
       if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
         result := P;
-    ktEnumeration: begin
+    ktSet,ktEnumeration: begin
       if wasString then
-        V := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+        if fKnownType=ktSet then
+          raise ESynException.CreateUTF8('%.CustomReader("%") not implemented yet from string',
+            [self,fCustomTypeName]) else
+          V := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
         V := GetInteger(PropValue);
       if V<0 then
         exit;
-      case fDataSize of
-      1: byte(aValue) := V;
-      2: word(aValue) := V;
-      4: integer(aValue) := V;
-      else exit;
-      end;
+      Move(V,aValue,fDataSize);
       result := P;
     end;
     ktFixedArray:
