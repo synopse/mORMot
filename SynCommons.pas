@@ -8183,6 +8183,11 @@ function HexToCharValid(Hex: PAnsiChar): boolean;
 function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast conversion from two hexa bytes into a 16 bit UTF-16 WideChar
+// - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar) 
+function HexToWideChar(Hex: PAnsiChar): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast conversion from binary data into hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
 // enough space for at least BinBytes*2 chars
@@ -18499,6 +18504,28 @@ begin
   result := false; // return false if any invalid char
 end;
 
+function HexToWideChar(Hex: PAnsiChar): cardinal;
+var B: cardinal;
+begin
+  result := ConvertHexToBin[Ord(Hex[0])];
+  if result<=15 then begin
+    B := ConvertHexToBin[Ord(Hex[1])];
+    if B<=15 then begin
+      result := result shl 4+B;
+      B := ConvertHexToBin[Ord(Hex[2])];
+      if B<=15 then begin
+        result := result shl 4+B;
+        B := ConvertHexToBin[Ord(Hex[3])];
+        if B<=15 then begin
+          result := result shl 4+B;
+          exit;
+        end;
+      end;
+    end;
+  end;
+  result := 0;
+end;
+
 const
   b64: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -22883,30 +22910,32 @@ function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 var Beg,V: PUTF8Char;
     len, i: PtrInt;
 begin
-  // compute resulting length of value
-  Beg := U;
-  len := 0;
-  while (U^<>#0) and (U^<>'&') do begin
-    if (U^='%') and HexToCharValid(PAnsiChar(U+1)) then
-      inc(U,3) else
-      inc(U);
-    inc(len);
-  end;
-  // decode value content
-  SetLength(Value,len);
-  V := pointer(Value);
-  U := Beg;
-  for i := 1 to len do
-    if (U^='%') and HexToChar(PAnsiChar(U+1),V) then begin
-      inc(V);
-      inc(U,3);
-    end else begin
-      if U^='+' then
-        V^ := ' ' else
-        V^ := U^;
-      inc(V);
-      inc(U);
+  if U<>nil then begin
+    // compute resulting length of value
+    Beg := U;
+    len := 0;
+    while (U^<>#0) and (U^<>'&') do begin
+      if (U^='%') and HexToCharValid(PAnsiChar(U+1)) then
+        inc(U,3) else
+        inc(U);
+      inc(len);
     end;
+    // decode value content
+    SetLength(Value,len);
+    V := pointer(Value);
+    U := Beg;
+    for i := 1 to len do
+      if (U^='%') and HexToChar(PAnsiChar(U+1),V) then begin
+        inc(V);
+        inc(U,3);
+      end else begin
+        if U^='+' then
+          V^ := ' ' else
+          V^ := U^;
+        inc(V);
+        inc(U);
+      end;
+  end;
   result := U;
 end;
 
@@ -22914,27 +22943,26 @@ function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 var Beg, V: PUTF8Char;
     len, i: PtrInt;
 begin
+  result := nil;
+  if U=nil then
+    exit;
   // compute resulting length of name
   Beg := U;
   len := 0;
   repeat
     case U^ of
-    #0: begin
-      result := nil;
-      exit;
-    end;
+    #0:  exit;
     '=': begin
       result := U+1;
       break;
     end;
-    '%':
-      if (U[1]='3') and (U[2] in ['D','d']) then begin
-        result := U+3;
-        break;  // %3d means = according to the RFC
-      end else
-      if HexToCharValid(PAnsiChar(U+1)) then
-        inc(U,3) else
-        inc(U);
+    '%': if (U[1]='3') and (U[2] in ['D','d']) then begin
+           result := U+3;
+           break;  // %3d means = according to the RFC
+         end else
+         if HexToCharValid(PAnsiChar(U+1)) then
+           inc(U,3) else
+           inc(U);
     else inc(U);
     end;
     inc(len);
@@ -37511,7 +37539,6 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil): PUTF8Char;
 // this code is very fast
 var i,j: integer;
-    w: word;
     c4: integer;
 label slash;
 begin
@@ -37582,15 +37609,14 @@ slash:inc(i);
         'n': P[j] := #$0a;
         'f': P[j] := #$0c;
         'r': P[j] := #$0d;
-        'u':
-        if SynCommons.HexToBin(pointer(P+i+1),@w,2) and (w<>0) then begin // '\u0123'
-          w := swap(w);  // reverse byte order
-          if w<=$7f then // speed up UTF-8 encoding for most used chars
-            P[j] := ansichar(w) else
-            inc(j,WideCharToUtf8(P+j,w)-1);
-          inc(i,4);
-        end else
-          P[j] := '?'; // bad formated hexa number -> '?0123'
+        'u': begin
+          c4 := HexToWideChar(PAnsiChar(P+i+1));
+          if c4<>0 then begin // '\u0123'
+            inc(j,WideCharToUtf8(P+j,c4)-1);
+            inc(i,4);
+          end else
+            P[j] := '?'; // bad formated hexa number -> '?0123'
+        end;
         else P[j] := P[i]; // litterals: '\"' -> '"'
       end;
       inc(i);

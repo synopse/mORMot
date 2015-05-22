@@ -2353,10 +2353,10 @@ begin
   Check(P^=#0);
   Check(name='where');
   Check(value='name like :(''Arnaud%''):','URI from browser');
-  P := UrlDecodeNextNameValue('name%2Ccomplex=value',name,value);
+  P := UrlDecodeNextNameValue('name%2Ccom+plex=value',name,value);
   Check(P<>nil);
   Check(P^=#0);
-  Check(name='name,complex');
+  Check(name='name,com plex');
   Check(value='value');
   P := UrlDecodeNextNameValue('name%2Ccomplex%3Dvalue',name,value);
   Check(P<>nil);
