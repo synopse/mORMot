@@ -513,7 +513,8 @@ unit SynCommons;
     FastFindInt64Sorted() AddInt64() CSVToInt64DynArray() Int64DynArrayToCSV()
     and VariantToInt64() functions (used during TID=Int64 introduction in ORM)
   - added RawUnicodeToUtf8() and UTF8ToSynUnicode() overloaded procedures
-  - added UrlDecodeNextValue() and UrlDecodeNextNameValue() functions
+  - added HexToChar/HexToCharValid and UrlDecodeNextName(), UrlDecodeNextValue()
+    and UrlDecodeNextNameValue() functions
   - added Utf8DecodeToRawUnicodeUI() overloaded function returning text as var
   - added UrlEncodeJsonObject() and new overloaded JSONDecode() function
   - added TRawUTF8DynArrayFrom(const Values: array of RawUTF8) function
@@ -2355,6 +2356,12 @@ function UrlDecodeNextNameValue(U: PUTF8Char; var Name,Value: RawUTF8): PUTF8Cha
 // - returns a pointer just after the decoded value (may points e.g. to
 // #0 or '&') - it is up to the caller to continue the process or not
 function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+
+/// decode a URI-encoded Name from an input buffer
+// - decoded value is set in Name out variable
+// - returns a pointer just after the decoded name, after the '='
+// - returns nil if there was no name=... pattern in U
+function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 
 /// encode name/value pairs into CSV/INI raw format
 function CSVEncode(const NameValuePairs: array of const;
@@ -8162,6 +8169,19 @@ var
 // - using this function with Bin^ as an integer value will decode in big-endian
 // order (most-signignifican byte first)
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overload;
+
+/// fast conversion from one hexa char pair into a 8 bit AnsiChar
+// - return false if any invalid (non hexa) char is found in Hex^
+// - similar to HexToBin(Hex,nil,1)
+function HexToCharValid(Hex: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from one hexa char pair into a 8 bit AnsiChar
+// - return false if any invalid (non hexa) char is found in Hex^
+// - similar to HexToBin(Hex,Bin,1) but with Bin<>nil
+// - use HexToCharValid if you want to check a hexadecimal char content
+function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -18455,6 +18475,30 @@ begin
   result := true; // conversion OK
 end;
 
+function HexToCharValid(Hex: PAnsiChar): boolean;
+begin
+  result := (ConvertHexToBin[Ord(Hex[0])]<=15) and
+            (ConvertHexToBin[Ord(Hex[1])]<=15);
+end;
+
+function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
+var B,C: byte;
+begin
+  if Hex<>nil then begin
+    B := ConvertHexToBin[Ord(Hex[0])];
+    if B<=15 then begin
+      C := ConvertHexToBin[Ord(Hex[1])];
+      if C<=15 then begin
+        if Bin<>nil then
+          Bin^ := AnsiChar(B shl 4+C);
+        result := true;
+        exit;
+      end;
+    end;
+  end;
+  result := false; // return false if any invalid char
+end;
+
 const
   b64: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -22787,10 +22831,10 @@ begin
   P := pointer(result);
   while i<len do begin
     case s[i+1] of
-      #0: break; // reached end of s
-      '%': if not SynCommons.HexToBin(PAnsiChar(pointer(s))+i+1,PByte(P),1) then
-        P^ := s[i+1] else
-        inc(i,2); // browsers do not follow the RFC (e.g. encode % as % !)
+      #0:  break; // reached end of s
+      '%': if not HexToChar(PAnsiChar(pointer(s))+i+1,P) then
+             P^ := s[i+1] else
+             inc(i,2); // browsers may not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
     else
       P^ := s[i+1];
@@ -22819,10 +22863,10 @@ begin
   P := Dest;
   repeat
     case U^ of
-      #0: break; // reached end of URI
-      '%': if not SynCommons.HexToBin(PAnsiChar(U+1),PByte(P),1) then
-        P^ := U^ else
-        inc(U,2); // browsers do not follow the RFC (e.g. encode % as % !)
+      #0:  break; // reached end of URI
+      '%': if not HexToChar(PAnsiChar(U+1),P) then
+             P^ := U^ else
+             inc(U,2); // browsers may not follow the RFC (e.g. encode % as % !)
       '+': P^  := ' ';
     else
       P^ := U^;
@@ -22836,14 +22880,14 @@ begin
 end;
 
 function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
-var Beg, V: PUTF8Char;
+var Beg,V: PUTF8Char;
     len, i: PtrInt;
 begin
   // compute resulting length of value
   Beg := U;
   len := 0;
-  while not(U^ in [#0,'&']) do begin
-    if (U^='%') and SynCommons.HexToBin(PAnsiChar(U+1),nil,1) then
+  while (U^<>#0) and (U^<>'&') do begin
+    if (U^='%') and HexToCharValid(PAnsiChar(U+1)) then
       inc(U,3) else
       inc(U);
     inc(len);
@@ -22853,7 +22897,7 @@ begin
   V := pointer(Value);
   U := Beg;
   for i := 1 to len do
-    if (U^='%') and SynCommons.HexToBin(PAnsiChar(U+1),PByte(V),1) then begin
+    if (U^='%') and HexToChar(PAnsiChar(U+1),V) then begin
       inc(V);
       inc(U,3);
     end else begin
@@ -22866,23 +22910,60 @@ begin
   result := U;
 end;
 
+function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
+var Beg, V: PUTF8Char;
+    len, i: PtrInt;
+begin
+  // compute resulting length of name
+  Beg := U;
+  len := 0;
+  repeat
+    case U^ of
+    #0: begin
+      result := nil;
+      exit;
+    end;
+    '=': begin
+      result := U+1;
+      break;
+    end;
+    '%':
+      if (U[1]='3') and (U[2] in ['D','d']) then begin
+        result := U+3;
+        break;  // %3d means = according to the RFC
+      end else
+      if HexToCharValid(PAnsiChar(U+1)) then
+        inc(U,3) else
+        inc(U);
+    else inc(U);
+    end;
+    inc(len);
+  until false;
+  // decode name content
+  SetLength(Name,len);
+  V := pointer(Name);
+  U := Beg;
+  for i := 1 to len do
+    if (U^='%') and HexToChar(PAnsiChar(U+1),V) then begin
+      inc(V);
+      inc(U,3);
+    end else begin
+      if U^='+' then
+        V^ := ' ' else
+        V^ := U^;
+      inc(V);
+      inc(U);
+    end;
+end;
+
 function UrlDecodeNextNameValue(U: PUTF8Char; var Name,Value: RawUTF8): PUTF8Char;
-var Beg: PUTF8Char;
 begin
   result := nil;
   if U=nil then
     exit;
-  // get name
-  Beg := U;
-  while ord(U^) in IsURIUnreserved do
-    inc(U);
-  SetRawUTF8(Name,Beg,U-Beg);
-  if U^<>'=' then
-    if (U^='%') and (U[1]='3') and (U[2] in ['D','d']) then
-      inc(U,3) else // jump %3d (which means = according to the RFC)
-      exit else
-    inc(U); // jump '='
-  // decode value
+  U := UrlDecodeNextName(U,Name);
+  if U=nil then
+    exit;
   U := UrlDecodeNextValue(U,Value);
   if U^=#0 then
     result := U else
@@ -22913,7 +22994,8 @@ begin
     Next^ := U+1; // jump '&'
 end;
 
-function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;
+  var Value: integer; Next: PPUTF8Char=nil): boolean;
 var V: PtrInt;
     SignNeg: boolean;
 begin

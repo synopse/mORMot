@@ -2353,6 +2353,16 @@ begin
   Check(P^=#0);
   Check(name='where');
   Check(value='name like :(''Arnaud%''):','URI from browser');
+  P := UrlDecodeNextNameValue('name%2Ccomplex=value',name,value);
+  Check(P<>nil);
+  Check(P^=#0);
+  Check(name='name,complex');
+  Check(value='value');
+  P := UrlDecodeNextNameValue('name%2Ccomplex%3Dvalue',name,value);
+  Check(P<>nil);
+  Check(P^=#0);
+  Check(name='name,complex');
+  Check(value='value');
   for i := 0 to 100 do begin
     s := RandomString(i*5);
     Check(UrlDecode(UrlEncode(s))=s,string(s));

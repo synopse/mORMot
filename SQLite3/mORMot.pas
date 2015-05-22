@@ -5194,7 +5194,8 @@ type
     // all the InputInt/InputDouble/InputUTF8/InputExists/... properties
     // - may be useful if you want to access directly to InputPairs[] with no
     // prior knowledge of the input parameter names
-    procedure FillInput;
+    // - you can specify a title text to optionally log the input array
+    procedure FillInput(const LogInputIdent: RawUTF8='');
     /// retrieve one input parameter from its URI name as Int64
     // - raise an EParsingException if the parameter is not found
     property InputInt[const ParamName: RawUTF8]: Int64 read GetInputInt;
@@ -33845,7 +33846,7 @@ begin
     Server.fStats.NotifyORM(Method);
 end;
 
-procedure TSQLRestServerURIContext.FillInput;
+procedure TSQLRestServerURIContext.FillInput(const LogInputIdent: RawUTF8);
 var n,max: integer;
     P: PUTF8Char;
 begin
@@ -33868,6 +33869,10 @@ begin
     inc(n,2);
   until P^=#0;
   SetLength(fInput,n);
+  {$ifdef WITHLOG}
+  if LogInputIdent<>'' then
+    Log.Add.Log(sllDebug,LogInputIdent,TypeInfo(TRawUTF8DynArray),fInput);
+  {$endif}
 end;
 
 function TSQLRestServerURIContext.GetInputInt(const ParamName: RawUTF8): Int64;
