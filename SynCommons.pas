@@ -3729,7 +3729,7 @@ type
     djNone,
     djByte, djWord, djInteger, djCardinal, djSingle,
     djInt64, djDouble, djCurrency,
-    djTimeLog, djDateTime, djRawUTF8, djWinAnsi, djString,
+    djTimeLog, djDateTime, djRawUTF8, djWinAnsi, djString, djRawByteString,
     djWideString, djSynUnicode,
     {$ifndef NOVARIANTS}djVariant,{$endif}
     djCustom);
@@ -5074,14 +5074,14 @@ const
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
-    SortDynArrayUnicodeString, SortDynArrayUnicodeString,
+    SortDynArrayAnsiString, SortDynArrayUnicodeString, SortDynArrayUnicodeString,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
     (nil, SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger,
     SortDynArrayCardinal, SortDynArraySingle,
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
-    SortDynArrayUnicodeStringI, SortDynArrayUnicodeStringI,
+    SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI, SortDynArrayUnicodeStringI,
     {$ifndef NOVARIANTS}SortDynArrayVariantI,{$endif} nil));
 
   /// helper array to get the hashing function corresponding to a given
@@ -5093,14 +5093,14 @@ const
     HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
-    HashWideString, HashSynUnicode,
+    HashAnsiString, HashWideString, HashSynUnicode,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
-    HashWideStringI, HashSynUnicodeI,
+    HashAnsiStringI, HashWideStringI, HashSynUnicodeI,
     {$ifndef NOVARIANTS}HashVariantI,{$endif} nil));
 
 
@@ -32275,8 +32275,8 @@ var DynArray: TDynArray;
     VoidArray: pointer;
 const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = (
     '','byte','word','integer','cardinal','single','Int64','double','currency',
-    'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','WideString',
-    'SynUnicode',{$ifndef NOVARIANTS}'variant',{$endif}'');
+    'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','RawByteString',
+    'WideString','SynUnicode',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -32868,7 +32868,7 @@ end;
 const
   PTRSIZ = sizeof(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}sizeof(Variant),{$endif} 0);
 
 function TDynArray.GetArrayTypeName: RawUTF8;
@@ -32884,31 +32884,34 @@ begin
     result := fKnownType;
     exit;
   end;
-  { TByteDynArray/TWordDynArray/TIntegerDynArray/TInt64DynArray/TRawUF8DynArray/
-    TWideStringDynArray/TVariantDynArray/TUnicodeStringArray will be retrieved
-    from RTTI as tkLString/tkWString/tkVariant/tkUString }
-  if fTypeInfo=TypeInfo(TCardinalDynArray) then
-   fKnownType := djCardinal else
-  if fTypeInfo=TypeInfo(TSingleDynArray) then
-   fKnownType := djSingle else
-  if fTypeInfo=TypeInfo(TDoubleDynArray) then
-   fKnownType := djDouble else
-  if fTypeInfo=TypeInfo(TCurrencyDynArray) then
-   fKnownType := djCurrency else
-  if fTypeInfo=TypeInfo(TWinAnsiDynArray) then
-    fKnownType := djWinAnsi else
-  if fTypeInfo=TypeInfo(TStringDynArray) then
-    fKnownType := djString else
-  if fTypeInfo=TypeInfo(TTimeLogDynArray) then
-    fKnownType := djTimeLog else
-  if fTypeInfo=TypeInfo(TDateTimeDynArray) then
-    fKnownType := djDateTime else
-  if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
-    fKnownType := djSynUnicode else begin
-    // not found directly from T*DynArray -> guess from RTTI
-    fKnownType := djNone;
+  case ElemSize of
+  4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
+       fKnownType := djCardinal else
+     if fTypeInfo=TypeInfo(TSingleDynArray) then
+       fKnownType := djSingle
+  {$ifdef CPU64} ; 8: {$else} else {$endif}
+    if fTypeInfo=TypeInfo(TRawUTF8DynArray) then
+      fKnownType := djRawUTF8 else
+    if fTypeInfo=TypeInfo(TStringDynArray) then
+      fKnownType := djString else
+    if fTypeInfo=TypeInfo(TWinAnsiDynArray) then
+      fKnownType := djWinAnsi else
+    if fTypeInfo=TypeInfo(TRawByteStringDynArray) then
+      fKnownType := djRawByteString else
+    if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
+      fKnownType := djSynUnicode
+  {$ifdef CPU64} else {$else} ; 8: {$endif}
+     if fTypeInfo=TypeInfo(TDoubleDynArray) then
+       fKnownType := djDouble else
+     if fTypeInfo=TypeInfo(TCurrencyDynArray) then
+       fKnownType := djCurrency else
+     if fTypeInfo=TypeInfo(TTimeLogDynArray) then
+       fKnownType := djTimeLog else
+     if fTypeInfo=TypeInfo(TDateTimeDynArray) then
+       fKnownType := djDateTime;
+  end;
+  if (fKnownType=djNone) and not exactType then begin
     fKnownSize := 0;
-    if not exactType then
     if ElemType=nil then
 Bin:  case ElemSize of
       1: fKnownType := djByte;
@@ -32922,6 +32925,9 @@ Bin:  case ElemSize of
       tkWString: fKnownType := djWideString;
       {$ifdef UNICODE}
       tkUString: fKnownType := djString;
+      {$endif}
+      {$ifndef NOVARIANTS}
+      tkVariant: fKnownType := djVariant;
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         FieldTable := ElemType;
@@ -32968,10 +32974,7 @@ rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
         8: fKnownType := djInt64;
         else fKnownSize := Offset;
         end;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant: fKnownType := djVariant;
-    {$endif}
+      end;
     end;
   end;
   if KNOWNTYPE_SIZE[fKnownType]<>0 then
@@ -33066,7 +33069,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         djDouble:   PDoubleArray(fValue^)^[i] := GetExtended(Val);
         djCurrency: PInt64Array(fValue^)^[i] := StrToCurr64(Val);
         djRawUTF8:  RawUTF8(PPointerArray(fValue^)^[i]) := Val;
-        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,StrLen(Val),RawByteString(PPointerArray(fValue^)^[i]));
+        djRawByteString:
+          if not Base64MagicCheckAndDecode(Val,PRawByteStringArray(fValue^)^[i]) then
+            RawUTF8(PPointerArray(fValue^)^[i]) := Val;
+        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,StrLen(Val),PRawByteStringArray(fValue^)^[i]);
         djString:   UTF8DecodeToString(Val,StrLen(Val),string(PPointerArray(fValue^)^[i]));
         djWideString: UTF8ToWideString(Val,StrLen(Val),WideString(PPointerArray(fValue^)^[i]));
         djSynUnicode: UTF8ToSynUnicode(Val,StrLen(Val),SynUnicode(PPointerArray(fValue^)^[i]));
@@ -35877,7 +35883,7 @@ begin
 end;
 
 procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArray);
-var i, n, Len: integer;
+var i,n: integer;
     P: Pointer;
     T: TDynArrayKind;
     tmp: RawByteString;
@@ -35935,7 +35941,12 @@ begin // code below must match TDynArray.LoadFromJSON
       Add(',');
     end;
   {$endif}
-  djTimeLog..djSynUnicode: // add textual JSON content
+  djRawByteString:
+    for i := 0 to n do begin
+      WrBase64(PPointerArray(P)^[i],Length(PRawByteStringArray(P)^[i]),true);
+      Add(',');
+    end;
+  djTimeLog..djString,djWideString..djSynUnicode: // add textual JSON content
     for i := 0 to n do begin
       Add('"');
       case T of
@@ -35943,25 +35954,12 @@ begin // code below must match TDynArray.LoadFromJSON
       djDateTime: AddDateTime(@PDoubleArray(P)^[i]);
       djRawUTF8:  AddJSONEscape(PPointerArray(P)^[i]);
       djWideString, djSynUnicode: AddJSONEscapeW(PPointerArray(P)^[i]);
-      djWinAnsi:
-        if PPtrIntArray(P)^[i]<>0 then begin
-          Len := PInteger(PPtrIntArray(P)^[i]-sizeof(Integer))^;
-          if Len>length(tmp) then
-            SetLength(tmp,Len+1024);
-          AddJSONEscape(pointer(tmp),
-            WinAnsiConvert.AnsiBufferToUTF8(pointer(tmp),PPointerArray(P)^[i],Len)-pointer(tmp));
-        end;
+      djWinAnsi:  AddAnyAnsiString(PRawByteStringArray(P)^[i],twJSONEscape,CODEPAGE_US);
       djString:
         {$ifdef UNICODE}
         AddJSONEscapeW(PPointerArray(P)^[i]);
         {$else}
-        if PPtrIntArray(P)^[i]<>0 then begin
-          Len := PInteger(PPtrIntArray(P)^[i]-sizeof(Integer))^;
-          if Len*3>length(tmp) then
-            SetLength(tmp,Len*3+2048);
-          AddJSONEscape(pointer(tmp),
-            CurrentAnsiConvert.AnsiBufferToUTF8(pointer(tmp),PPointerArray(P)^[i],Len)-pointer(tmp));
-        end;
+        AddAnyAnsiString(PRawByteStringArray(P)^[i],twJSONEscape,0);
         {$endif}
       end;
       Add('"',',');
@@ -36474,8 +36472,9 @@ end;
 procedure TTextWriter.AddAnyAnsiString(const s: RawByteString;
   Escape: TTextWriterKind; CodePage: Integer);
 var L: PtrInt;
-    tmpU8: array[0..256*3] of AnsiChar;
+    tmpU8: array[0..256*12] of AnsiChar; // avoid memory allocation in most cases
     U8: PUTF8Char;
+    P: PAnsiChar;
 begin
   L := length(s);
   if L=0 then
@@ -36500,10 +36499,28 @@ begin
     WrBase64(pointer(s),L,false);
   end;
   else begin
+    P := pointer(s);
+    // first handle trailing 7 bit ASCII chars, by quad
+    if L>=4 then
+      repeat
+        if PCardinal(P)^ and $80808080<>0 then
+          break; // break on first non ASCII quad
+        inc(P,4);
+        dec(L,4);
+      until L<4;
+    if (L>0) and (P^<#128)  then
+      repeat
+        inc(P);
+        dec(L);
+      until (L=0) or (P^>=#127);
+    Add(pointer(s),P-pointer(s),Escape);
+    if L=0 then
+      exit;
+    // rely on explicit conversion for all remaining ASCII characters
     if L>=SizeOf(tmpU8)div 3 then
       Getmem(U8,L*3+1) else
       U8 := @tmpU8;
-    L := TSynAnsiConvert.Engine(CodePage).AnsiBufferToUTF8(U8,pointer(s),L)-U8;
+    L := TSynAnsiConvert.Engine(CodePage).AnsiBufferToUTF8(U8,P,L)-U8;
     Add(pointer(U8),L,Escape);
     if U8<>@tmpU8 then
       Freemem(U8);
@@ -36791,13 +36808,13 @@ begin
     {$ifdef UNICODE}
     AddJSONEscapeW(pointer(s),Length(s));
     {$else}
-    AddAnsiString(s,twJSONEscape);
+    AddAnyAnsiString(s,twJSONEscape,0);
     {$endif}
 end;
 
 procedure TTextWriter.AddJSONEscapeAnsiString(const s: AnsiString);
 begin
-  AddAnsiString(s,twJSONEscape);
+  AddAnyAnsiString(s,twJSONEscape,0);
 end;
 
 procedure TTextWriter.AddPropName(const PropName: ShortString);
@@ -37538,8 +37555,8 @@ end;
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil): PUTF8Char;
 // this code is very fast
-var i,j: integer;
-    c4: integer;
+var D: PUTF8Char;
+    b,c4: integer;
 label slash;
 begin
   if wasString<>nil then
@@ -37567,33 +37584,32 @@ begin
       wasString^ := true;
     inc(P);
     result := P;
-    i := 0;
-    j := 0;
+    D := p;
     repeat // unescape P^ into U^ (cf. http://www.ietf.org/rfc/rfc4627.txt)
-      case P[i] of
+      case P^ of
       #0:  exit;  // leave PDest=nil for unexpected end
       '"': break; // end of string
       '\': goto slash;
       else begin
-        P[j] := P[i]; // 3 stages pipelined process of unescaped chars
-        inc(i);
-        inc(j);
-        case P[i] of
+        D^ := P^; // 3 stages pipelined process of unescaped chars
+        inc(P);
+        inc(D);
+        case P^ of
         #0:  exit;
         '"': break;
         '\': goto slash;
         else begin
-          P[j] := P[i];
-          inc(i);
-          inc(j);
-          case P[i] of
+          D^ := P^;
+          inc(P);
+          inc(D);
+          case P^ of
           #0:  exit;
           '"': break;
           '\': goto slash;
           else begin
-            P[j] := P[i];
-            inc(i);
-            inc(j);
+            D^ := P^;
+            inc(P);
+            inc(D);
             continue;
           end;
           end;
@@ -37601,30 +37617,58 @@ begin
         end;
       end;
       end;
-slash:inc(i);
-      case P[i] of // unescape JSON string
+slash:inc(P);
+      case P^ of // unescape JSON string
         #0: exit; // to avoid potential buffer overflow issue for \#0
-        'b': P[j] := #08;
-        't': P[j] := #09;
-        'n': P[j] := #$0a;
-        'f': P[j] := #$0c;
-        'r': P[j] := #$0d;
-        'u': begin
-          c4 := HexToWideChar(PAnsiChar(P+i+1));
-          if c4<>0 then begin // '\u0123'
-            inc(j,WideCharToUtf8(P+j,c4)-1);
-            inc(i,4);
-          end else
-            P[j] := '?'; // bad formated hexa number -> '?0123'
+        'b': D^ := #08;
+        't': D^ := #09;
+        'n': D^ := #$0a;
+        'f': D^ := #$0c;
+        'r': D^ := #$0d;
+        'u': begin // inlined decoding of '\0123' UTF-16 codepoint into UTF-8
+          c4 := ConvertHexToBin[ord(P[1])];
+          if c4<=15 then begin
+            b := ConvertHexToBin[ord(P[2])];
+            if b<=15 then begin
+              c4 := c4 shl 4+b;
+              b := ConvertHexToBin[ord(P[3])];
+              if b<=15 then begin
+                c4 := c4 shl 4+b;
+                b := ConvertHexToBin[ord(P[4])];
+                if b<=15 then begin
+                  c4 := c4 shl 4+b;
+                  if c4<>0 then begin
+                    if c4<=$7F then begin
+                      D^ := AnsiChar(c4);
+                      inc(D);
+                    end else
+                    if c4>$7ff then begin
+                      D^ := AnsiChar($E0 or (c4 shr 12));
+                      D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
+                      D[2] := AnsiChar($80 or (c4 and $3F));
+                      inc(D,3);
+                    end else begin
+                      D^ := AnsiChar($C0 or (c4 shr 6));
+                      D[1] := AnsiChar($80 or (c4 and $3F));
+                      inc(D,2);
+                    end;
+                    inc(P,5);
+                    continue;
+                  end;
+                end;
+              end;
+            end;
+          end;
+          D^ := '?'; // bad formated hexa number -> '?0123'
         end;
-        else P[j] := P[i]; // litterals: '\"' -> '"'
+        else D^ := P^; // litterals: '\"' -> '"'
       end;
-      inc(i);
-      inc(j);
+      inc(P);
+      inc(D);
     until false;
-    // here P[i]='"'
-    P[j] := #0; // make zero-terminated
-    inc(P,i+1);
+    // here P^='"'
+    D^ := #0; // make zero-terminated
+    inc(P);
     if P^=#0 then
       exit;
   end else begin
@@ -37633,27 +37677,23 @@ slash:inc(i);
       if (P[0]<>'0') or (P[1] in ['0'..'9']) then // 0123 excluded by JSON!
         exit; // leave PDest=nil for unexpected end
     result := P;
-    i := 0;
     repeat
-      inc(i);
-      if not (P[i] in DigitFloatChars) then
+      if not (P^ in DigitFloatChars) then
         break;
-      inc(i);
-    until not (P[i] in DigitFloatChars);
-    inc(P,i);
+      inc(P);
+    until false;
     if P^=#0 then
       exit;
     if P^<=' ' then
       P^ := #0; // force numerical field with no trailing ' '
   end;
   if not (P^ in EndOfJSONField) then begin
-    i := 1;
-    while not (P[i] in EndOfJSONField) do begin
-      inc(i);
-      if P[i]=#0 then
+    inc(P);
+    while not (P^ in EndOfJSONField) do begin
+      inc(P);
+      if P^=#0 then
         exit; // leave PDest=nil for unexpected end
     end;
-    inc(P,i);
   end;
   if EndOfObject<>nil then
     EndOfObject^ := P^;
