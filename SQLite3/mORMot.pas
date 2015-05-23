@@ -28712,11 +28712,11 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
+  FreeAndNil(fServices);
+  FreeAndNil(fCache);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
     // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
-  fServices.Free;
-  fCache.Free;
   InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
   for cmd := Low(cmd) to high(cmd) do
     FreeAndNil(fAcquireExecution[cmd]); // should be done BEFORE private GC
@@ -32041,6 +32041,7 @@ begin
   CloseServerNamedPipe;
   CloseServerMessage;
   {$endif}
+  fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
@@ -44473,9 +44474,10 @@ end;
 
 destructor TInterfacedObjectFakeServer.Destroy;
 begin
-  with (fServer.Services as TServiceContainerServer) do
-    if fFakeCallbacks<>nil then
-      FakeCallbackRemove(self);
+  if fServer.Services<>nil then
+    with (fServer.Services as TServiceContainerServer) do
+      if fFakeCallbacks<>nil then
+        FakeCallbackRemove(self);
   inherited Destroy;
 end;
 
@@ -46828,6 +46830,7 @@ end;
 
 destructor TServiceContainerServer.Destroy;
 begin
+  fRecordVersionCallback := nil;
   FreeAndNil(fFakeCallbacks);
   inherited Destroy;
 end;

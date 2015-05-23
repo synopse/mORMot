@@ -8307,6 +8307,8 @@ begin
       if Test is TTestBidirectionalRemoteConnection then
         Test.Check(TTestBidirectionalRemoteConnection(Test).fHttpServer.
           RemoveServer(Master));
+      if Test is TTestBidirectionalRemoteConnection then
+        TTestBidirectionalRemoteConnection(Test).fHttpServer.RemoveServer(Master);
       Master.Free; // test TSQLRestServer.InternalRecordVersionMaxFromExisting
       MasterAccess.Free;
       CreateMaster(false);
@@ -8362,12 +8364,14 @@ begin
     finally
       Rec.Free;
     end;
+    if Test is TTestBidirectionalRemoteConnection then
+      TTestBidirectionalRemoteConnection(Test).fHttpServer.RemoveServer(Master);
   finally
     Slave2Callback := nil;
+    Slave1.Free; // warning: Free should be in this order for callbacks release  
     Slave2.Free;
-    Slave1.Free;
-    MasterAccess.Free;
     Master.Free;
+    MasterAccess.Free;
     Model.Free;
   end;
 end;
