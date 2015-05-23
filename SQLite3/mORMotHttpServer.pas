@@ -569,8 +569,8 @@ begin
   fLog.Enter(self);
   try
     n := high(fDBServers);
-    for i := n downto 0 do
-    if fDBServers[i].Server=aServer then begin // FindServer() would find the 1st
+    for i := n downto 0 do // may appear several times, with another Security
+    if fDBServers[i].Server=aServer then begin 
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPublicPort,
@@ -582,6 +582,7 @@ begin
       SetLength(fDBServers,n);
       dec(n);
       aServer.OnNotifyCallback := nil;
+      aServer.SetPublicURI('','');
       result := true; // don't break here: may appear with another Security
     end;
   finally

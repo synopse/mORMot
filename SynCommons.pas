@@ -1101,6 +1101,9 @@ type
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines }
 
 type
+  /// kind of adding in a TTextWriter
+  TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
+
   /// an abstract class to handle Ansi to/from Unicode translation
   // - implementations of this class will handle efficiently all Code Pages
   // - this default implementation will use the Operating System APIs
@@ -1114,6 +1117,8 @@ type
     {$ifdef KYLIX3}
     fIConvCodeName: RawUTF8;
     {$endif}
+    procedure InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+      DestTextWriter: TObject; Escape: TTextWriterKind); virtual;
   public
     /// initialize the internal conversion engine
     constructor Create(aCodePage: cardinal); reintroduce; virtual;
@@ -1132,7 +1137,7 @@ type
     // - a #0 char is appended at the end (and result will point to it)
     // - this default implementation will use the Operating System APIs
     function AnsiBufferToUTF8(Dest: PUTF8Char; Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char; overload; virtual;
-    /// convert any Ansi Text into an Unicode String
+    /// convert any Ansi Text into an UTF-16 Unicode String
     // - returns a value using our RawUnicode kind of string
     function AnsiToRawUnicode(const AnsiText: RawByteString): RawUnicode; overload;
     /// convert any Ansi buffer into an Unicode String
@@ -1198,6 +1203,8 @@ type
   protected
     fAnsiToWide: TWordDynArray;
     fWideToAnsi: TByteDynArray;
+    procedure InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+      DestTextWriter: TObject; Escape: TTextWriterKind); override;
   public
     /// initialize the internal conversion engine
     constructor Create(aCodePage: cardinal); override;
@@ -1251,6 +1258,9 @@ type
   // - match the TSynAnsiConvert signature, for code page CP_UTF8
   // - this class is mostly a non-operation for conversion to/from UTF-8
   TSynAnsiUTF8 = class(TSynAnsiConvert)
+  protected
+    procedure InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+      DestTextWriter: TObject; Escape: TTextWriterKind); override;
   public
     /// initialize the internal conversion engine
     constructor Create(aCodePage: cardinal); override;
@@ -5692,9 +5702,6 @@ type
   TSynLogInfoDynArray = array of TSynLogInfo;
 
 
-  /// kind of adding in a TTextWriter
-  TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
-
   /// available options for TTextWriter.WriteObject() method
   // - woHumanReadable will add some line feeds and indentation to the content,
   // to make it more friendly to the human eye
@@ -5776,6 +5783,8 @@ type
     function GetLength: cardinal;
     procedure SetStream(aStream: TStream);
     function EchoFlush: integer;
+    procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
+      const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
   public
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -5832,7 +5841,7 @@ type
     /// reset the internal buffer used for echoing content
     procedure EchoReset;
 
-    /// append one char to the buffer
+    /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append two chars to the buffer
@@ -5977,19 +5986,27 @@ type
     procedure Add(P: PUTF8Char; Escape: TTextWriterKind); overload;
     /// write some #0 ended UTF-8 text, according to the specified format
     procedure Add(P: PUTF8Char; Len: PtrInt; Escape: TTextWriterKind); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// write some #0 ended Unicode text as UTF-8, according to the specified format
     procedure AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - use the current system code page for AnsiString parameter
     procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
-    /// append some UTF-8 encoded chars to the buffer, from the any AnsiString type
+    /// append some UTF-8 encoded chars to the buffer, from any AnsiString value
     // - if CodePage is left to its default value of -1, it will assume
     // CurrentAnsiConvert.CodePage prior to Delphi 2009, but newer UNICODE
     // versions of Delphi will retrieve the code page from string
     // - if CodePage is defined to a >= 0 value, the encoding will take place
     procedure AddAnyAnsiString(const s: RawByteString; Escape: TTextWriterKind;
       CodePage: Integer=-1);
+    /// append some UTF-8 encoded chars to the buffer, from any Ansi buffer
+    // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
+    // CODEPAGE_US, or any version supported by the Operating System
+    // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
+    // - will use TSynAnsiConvert to perform the conversion to UTF-8 
+    procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: integer;
+      Escape: TTextWriterKind; CodePage: Integer);
     /// append some UTF-8 chars to the buffer
     // - input length is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
@@ -12494,7 +12511,7 @@ end;
 
 function TSynAnsiConvert.AnsiBufferToUTF8(Dest: PUTF8Char;
   Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char;
-var tmp: array[0..256*3] of WideChar;
+var tmp: array[0..256*6] of WideChar;
     c: cardinal;
     U: PWideChar;
 begin
@@ -12528,6 +12545,21 @@ begin
       FreeMem(U);
     end;
   result^ := #0;
+end;
+
+procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+  DestTextWriter: TObject; Escape: TTextWriterKind);
+var W: TTextWriter absolute DestTextWriter;
+    tmpU8: array[0..256*12] of AnsiChar; // avoid memory allocation in most cases
+    U8: PUTF8Char;
+begin // rely on explicit conversion
+  if SourceChars>=SizeOf(tmpU8)div 3 then
+    Getmem(U8,SourceChars*3+1) else
+    U8 := @tmpU8;
+  SourceChars := AnsiBufferToUTF8(U8,Source,SourceChars)-U8;
+  W.Add(pointer(U8),SourceChars,Escape);
+  if U8<>@tmpU8 then
+    Freemem(U8);
 end;
 
 function TSynAnsiConvert.AnsiToRawUnicode(const AnsiText: RawByteString): RawUnicode;
@@ -12622,7 +12654,7 @@ begin
 end;
 
 function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
-var tmpU8: array[0..256*3] of AnsiChar;
+var tmpU8: array[0..256*12] of AnsiChar;
     U8: PUTF8Char;
 begin
   if (Source=nil) or (SourceChars=0) then
@@ -12658,7 +12690,7 @@ begin
     WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
     UTF8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUTF8;
   end;
-  if aCodePage=0 then begin
+  if aCodePage<=0 then begin
     result := CurrentAnsiConvert;
     exit;
   end;
@@ -12753,7 +12785,7 @@ end;
 
 function TSynAnsiConvert.UTF8BufferToAnsi(Dest: PAnsiChar;
   Source: PUTF8Char; SourceChars: Cardinal): PAnsiChar;
-var tmp: array[0..256*3] of WideChar;
+var tmp: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
   if SourceChars<SizeOf(tmp)div 3 then
@@ -12898,7 +12930,7 @@ By1:  c := byte(Source^); inc(Source);
         if Source<endSource then continue else break;
       end
       else begin // no surrogate is expected in TSynAnsiFixedWidth charsets
-        c := fAnsiToWide[c]; // convert WinAnsi char into Unicode char
+        c := fAnsiToWide[c]; // convert FixedAnsi char into Unicode char
         if c>$7ff then begin
           Dest[0] := AnsiChar($E0 or (c shr 12));
           Dest[1] := AnsiChar($80 or ((c shr 6) and $3F));
@@ -12918,6 +12950,12 @@ By1:  c := byte(Source^); inc(Source);
   end;
   Dest^ := #0;
   Result := Dest;
+end;
+
+procedure TSynAnsiFixedWidth.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+  DestTextWriter: TObject; Escape: TTextWriterKind);
+begin
+  TTextWriter(DestTextWriter).InternalAddFixedAnsi(Source,SourceChars,fAnsiToWide,Escape);
 end;
 
 function TSynAnsiFixedWidth.AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode;
@@ -13190,6 +13228,12 @@ function TSynAnsiUTF8.AnsiBufferToUTF8(Dest: PUTF8Char; Source: PAnsiChar;
 begin
   move(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
+end;
+
+procedure TSynAnsiUTF8.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+  DestTextWriter: TObject; Escape: TTextWriterKind);
+begin
+  TTextWriter(DestTextWriter).Add(PUTF8Char(Source),SourceChars,Escape); 
 end;
 
 function TSynAnsiUTF8.AnsiToRawUnicode(Source: PAnsiChar;
@@ -13806,7 +13850,7 @@ begin
 end;
 
 function Utf8DecodeToRawUnicode(P: PUTF8Char; L: integer): RawUnicode; overload;
-var short: array[0..256*3] of WideChar;
+var short: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
   result := ''; // somewhat faster if result is freed before any SetLength()
@@ -14432,7 +14476,7 @@ begin
 end;
 
 procedure UTF8ToWideString(Text: PUTF8Char; Len: integer; var result: WideString); overload;
-var short: array[0..256*3] of WideChar;
+var short: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
   if (Text=nil) or (Len=0) then
@@ -36466,15 +36510,12 @@ end;
 
 procedure TTextWriter.AddAnsiString(const s: AnsiString; Escape: TTextWriterKind);
 begin
-  AddAnyAnsiString(s,Escape,0);
+  AddAnyAnsiBuffer(pointer(s),length(s),Escape,0);
 end;
 
 procedure TTextWriter.AddAnyAnsiString(const s: RawByteString;
   Escape: TTextWriterKind; CodePage: Integer);
-var L: PtrInt;
-    tmpU8: array[0..256*12] of AnsiChar; // avoid memory allocation in most cases
-    U8: PUTF8Char;
-    P: PAnsiChar;
+var L: integer;
 begin
   L := length(s);
   if L=0 then
@@ -36489,42 +36530,94 @@ begin
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif}
+  AddAnyAnsiBuffer(pointer(s),L,Escape,CodePage);
+end;
+
+procedure TTextWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: integer;
+  Escape: TTextWriterKind; CodePage: Integer);
+var B: PUTF8Char;
+begin
+  if Len>0 then
   case CodePage of
   CP_UTF8, CP_RAWBYTESTRING:
-    Add(pointer(s),0,Escape);  // direct write of RawUTF8/RawByteString content
+    Add(PUTF8Char(P),0,Escape);  // direct write of RawUTF8/RawByteString content
   CP_UTF16:
-    AddW(pointer(s),0,Escape); // direct write of UTF-16 content
+    AddW(PWord(P),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
     AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1],3);
-    WrBase64(pointer(s),L,false);
+    WrBase64(P,Len,false);
   end;
   else begin
-    P := pointer(s);
     // first handle trailing 7 bit ASCII chars, by quad
-    if L>=4 then
+    B := pointer(P);
+    if Len>=4 then
       repeat
         if PCardinal(P)^ and $80808080<>0 then
           break; // break on first non ASCII quad
         inc(P,4);
-        dec(L,4);
-      until L<4;
-    if (L>0) and (P^<#128)  then
+        dec(Len,4);
+      until Len<4;
+    if (Len>0) and (P^<#128)  then
       repeat
         inc(P);
-        dec(L);
-      until (L=0) or (P^>=#127);
-    Add(pointer(s),P-pointer(s),Escape);
-    if L=0 then
+        dec(Len);
+      until (Len=0) or (P^>=#127);
+    Add(B,P-B,Escape);
+    if Len=0 then
       exit;
     // rely on explicit conversion for all remaining ASCII characters
-    if L>=SizeOf(tmpU8)div 3 then
-      Getmem(U8,L*3+1) else
-      U8 := @tmpU8;
-    L := TSynAnsiConvert.Engine(CodePage).AnsiBufferToUTF8(U8,P,L)-U8;
-    Add(pointer(U8),L,Escape);
-    if U8<>@tmpU8 then
-      Freemem(U8);
+    TSynAnsiConvert.Engine(CodePage).InternalAppendUTF8(P,Len,self,Escape);
   end;
+  end;
+end;
+
+const // see http://www.ietf.org/rfc/rfc4627.txt
+  JSON_ESCAPE: set of byte = [0..31,ord('\'),ord('"')];
+
+procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
+  const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
+var c: cardinal;
+begin
+  while SourceChars>0 do begin
+    c := byte(Source^);
+    if c<=$7F then begin
+      if B>=BEnd then
+        FlushToStream;
+      case Escape of
+      twNone: begin
+        inc(B);
+        B^ := AnsiChar(c);
+      end;
+      twJSONEscape:
+        if c in JSON_ESCAPE then
+          AddJsonEscape(Source,1) else begin
+          inc(B);
+          B^ := AnsiChar(c);
+        end;
+      twOnSameLine: begin
+        inc(B);
+        if c<32 then
+          B^ := ' ' else
+          B^ := AnsiChar(c);
+      end;
+      end
+    end else begin // no surrogate is expected in TSynAnsiFixedWidth charsets
+      if B+3>BEnd then
+        FlushToStream;
+      c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
+      if c>$7ff then begin
+        B[1] := AnsiChar($E0 or (c shr 12));
+        B[2] := AnsiChar($80 or ((c shr 6) and $3F));
+        B[3] := AnsiChar($80 or (c and $3F));
+        inc(B,3);
+      end else begin
+        B[1] := AnsiChar($C0 or (c shr 6));
+        B[2] := AnsiChar($80 or (c and $3F));
+        inc(B,2);
+      end;
+    end;
+    dec(SourceChars);
+    inc(Source);
   end;
 end;
 
@@ -36584,9 +36677,6 @@ begin
     end;
   end;
 end;
-
-const // see http://www.ietf.org/rfc/rfc4627.txt
-  JSON_ESCAPE: set of byte = [0..31,ord('\'),ord('"')];
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
 var i,c: PtrInt;
