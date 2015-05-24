@@ -6072,6 +6072,7 @@ begin
 end;
 const MAX=20000;
 var Doc,Doc2: TDocVariantData;
+    vr: TTVarRecDynArray;
     i: integer;
     V,V1,V2: variant;
     s,j: RawUTF8;
@@ -6109,6 +6110,15 @@ begin
       Check(Values[i]=Value[i]);
   Check(Doc.ToJSON='["one",2,3]');
   Check(Variant(Doc)._JSON='["one",2,3]');
+  Doc.ToArrayOfConst(vr);
+  s := FormatUTF8('[?,?,?]',[],vr,true);
+  check(s='["one",2,3]');
+  s := FormatUTF8('[%,%,%]',vr,[],true);
+  check(s='[one,2,3]');
+  s := FormatUTF8('[?,?,?]',[],Doc.ToArrayOfConst,true);
+  check(s='["one",2,3]');
+  s := FormatUTF8('[%,%,%]',Doc.ToArrayOfConst,[],true);
+  check(s='[one,2,3]');
   V := _JSON(' [ "one" ,2,3 ]   ');
   Check(V._count=3);
   with TDocVariantData(V) do begin

@@ -990,6 +990,9 @@ type
   /// a dynamic array of RawByteString
   TRawByteStringDynArray = array of RawByteString;
 
+  /// a dynamic array of TVarRec, i.e. could match an "array of const" parameter
+  TTVarRecDynArray = array of TVarRec;
+
   /// a dynamic array of generic VCL strings
   TStringDynArray = array of string;
   PStringDynArray = ^TStringDynArray;
@@ -10830,6 +10833,7 @@ function VarRecToVariant(const V: TVarRec): variant; overload;
 /// convert a variant to an open array (const Args: array of const) argument
 // - will always map to a vtVariant kind of argument
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a dynamic array of variants into its JSON serialization
 // - will use a TDocVariantData temporary storage
@@ -11212,7 +11216,35 @@ type
     // EDocVariant exception
     // - will use VariantToUTF8() to populate the result array: as a consequence,
     // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
-    procedure ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
+    procedure ToRawUTF8DynArray(out Result: TRawUTF8DynArray); overload;
+    /// save a document as an array of UTF-8 encoded JSON
+    // - will expect the document to be a dvArray - otherwise, will raise a
+    // EDocVariant exception
+    // - will use VariantToUTF8() to populate the result array: as a consequence,
+    // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
+    function ToRawUTF8DynArray: TRawUTF8DynArray; overload;
+    /// save an array document as an array of TVarRec, i.e. an array of const
+    // - will expect the document to be a dvArray - otherwise, will raise a
+    // EDocVariant exception
+    // - would allow to write code as such:
+    // !  Doc.InitArray(['one',2,3]);
+    // !  Doc.ToArrayOfConst(vr);
+    // !  s := FormatUTF8('[%,%,%]',vr,[],true);
+    // !  // here s='[one,2,3]') since % would be replaced by Args[] parameters
+    // !  s := FormatUTF8('[?,?,?]',[],vr,true);
+    // !  // here s='["one",2,3]') since ? would be escaped by Params[] parameters
+    procedure ToArrayOfConst(out Result: TTVarRecDynArray); overload;
+    /// save an array document as an array of TVarRec, i.e. an array of const
+    // - will expect the document to be a dvArray - otherwise, will raise a
+    // EDocVariant exception
+    // - would allow to write code as such:
+    // !  Doc.InitArray(['one',2,3]);
+    // !  s := FormatUTF8('[%,%,%]',Doc.ToArrayOfConst,[],true);
+    // !  // here s='[one,2,3]') since % would be replaced by Args[] parameters
+    // !  s := FormatUTF8('[?,?,?]',[],Doc.ToArrayOfConst,true);
+    // !  // here s='["one",2,3]') since ? would be escaped by Params[] parameters
+    function ToArrayOfConst: TTVarRecDynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
 
     /// find an item index in this document from its name
     // - search will follow dvoNameCaseSensitive option of this document
@@ -30380,11 +30412,10 @@ end;
 
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
 begin
+  result.VType := vtVariant;
   if TVarData(V).VType=varByRef or varVariant then
-    VariantToVarRec(PVariant(TVarData(V).VPointer)^,result) else begin
-    result.VType := vtVariant;
+    result.VVariant := TVarData(V).VPointer else
     result.VVariant := @V;
-  end;
 end;
 
 function VarRecToVariant(const V: TVarRec): variant;
@@ -31762,11 +31793,36 @@ begin
   case VKind of
   dvUndefined: exit; // leave Result=[]
   dvArray: ;
-  else raise EDocVariant.Create('ToRawUTF8DynArray expects an array');
+  else raise EDocVariant.Create('ToRawUTF8DynArray expects a dvArray');
   end;
   SetLength(Result,VCount);
   for i := 0 to VCount-1 do
     VariantToUTF8(VValue[i],Result[i],wasString);
+end;
+
+function TDocVariantData.ToRawUTF8DynArray: TRawUTF8DynArray;
+begin
+  ToRawUTF8DynArray(result);
+end;
+
+procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
+var i: integer;
+begin
+  case VKind of
+  dvUndefined: exit; // leave Result=[]
+  dvArray: ;
+  else raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
+  end;
+  SetLength(Result,VCount);
+  for i := 0 to VCount-1 do begin
+    Result[i].VType := vtVariant;
+    Result[i].VVariant := @VValue[i];
+  end;
+end;
+
+function TDocVariantData.ToArrayOfConst: TTVarRecDynArray;
+begin
+  ToArrayOfConst(result);
 end;
 
 
