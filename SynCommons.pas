@@ -9365,7 +9365,6 @@ type
   end;
   {$endif}
 
-
 var
   /// is set to TRUE if the current process is running under WOW64
   // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
@@ -9427,6 +9426,23 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
+
+/// check if the current timestamp, in ms, matched a given period
+// - will compare the current GetTickCount64 to the supplied PreviousTix
+// - returns TRUE if the Internal ms period was not elapsed
+// - returns TRUE, and set PreviousTix, if the Interval ms period was elapsed
+// - possible use case may be:
+// !var Last: Int64;
+// !...
+// !  Last := GetTickCount64;
+// !  repeat
+// !    ...
+// !    if Elapsed(Last,1000) then begin
+// !      ... // do something every second
+// !    end;
+// !  until Terminated;
+// !...
+function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
 
 {$ifndef FPC} { FPC defines those functions as built-in }
 
@@ -17692,6 +17708,17 @@ end;
 
 {$endif MSWINDOWS}
 
+
+function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
+var now: Int64;
+begin
+  now := GetTickCount64;
+  if (Interval>0) and (now-PreviousTix>Interval) then begin
+    PreviousTix := now;
+    result := true;
+  end else
+    result := false;
+end;
 
 {$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
 {$ifdef PUREPASCAL}
