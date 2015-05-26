@@ -73,12 +73,13 @@ uses
   SynLog,
   mORMot,
   mORMotDDD,
+  SynCrtSock,
   SynSQLite3, mORMotSQLite3, // for internal SQlite3 database
   mORMotHttpServer, // for publishing a TSQLRestServer over HTTP
   mORMotHttpClient, // for consumming a TSQLRestClient over HTTP
-  SynDB, mORMotDB,  // for TRestSettings on external SQL database
-  mORMotMongoDB,    // for TRestSettings on external NoSQL database
-  mORMotWrappers;   // for TRestSettings to publish wrapper methods
+  SynDB, mORMotDB,  // for TDDDRestSettings on external SQL database
+  mORMotMongoDB,    // for TDDDRestSettings on external NoSQL database
+  mORMotWrappers;   // for TDDDRestSettings to publish wrapper methods
 
 
 { ----- Manage Service/Daemon settings }
@@ -89,7 +90,7 @@ type
   // its own values to any TInjectableAutoCreateFields instance
   // - you have to manage instance lifetime of these inherited classes with a
   // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
-  TApplicationSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
+  TDDDAppSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
     IAutoCreateFieldsResolve)
   protected
     fAllProps: PPropInfoDynArray;
@@ -111,7 +112,7 @@ type
 
   /// settings used to define how logging take place
   // - will map the most used TSynLogFamily parameters
-  TLogSettings = class(TSynPersistent)
+  TDDDLogSettings = class(TSynPersistent)
   protected
     fLevels: TSynLogInfos;
     fConsoleLevels: TSynLogInfos;
@@ -167,11 +168,11 @@ type
   end;
 
   /// parent class for storing application settings as a JSON file
-  TApplicationSettingsFile = class(TApplicationSettingsAbstract)
+  TDDDAppSettingsFile = class(TDDDAppSettingsAbstract)
   protected
     fSettingsJsonFileName: TFileName;
     fDescription: string;
-    fLog: TLogSettings;
+    fLog: TDDDLogSettings;
   public
     /// initialize and read the settings from the supplied JSON file name
     // - if no file name is specified, will use the executable name with
@@ -197,39 +198,40 @@ type
     /// some text which will be used to describe this application
     property Description: string read FDescription write FDescription;
     /// defines how logging will be done for this application
-    property Log: TLogSettings read fLog;
+    property Log: TDDDLogSettings read fLog;
   end;
 
-  /// some options to be used for TRestSettings
-  TRestSettingsOption =
+  /// some options to be used for TDDDRestSettings
+  TDDDRestSettingsOption =
     (optEraseDBFileAtStartup,optStoreDBFileRelativeToSettings,
      optSQlite3FileSafeSlowMode);
 
-  /// define options to be used for TRestSettings
-  TRestSettingsOptions = set of TRestSettingsOption;
+  /// define options to be used for TDDDRestSettings
+  TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
 
-  /// how TRestSettings.NewRestInstance would create its instances
+  /// how TDDDRestSettings.NewRestInstance would create its instances
   // - riOwnModel will set ModelInstance.Owner := RestInstance
   // - riHandleAuthentication will set the corresponding parameter to true
   // - riDefaultLocalSQlite3IfNone will create a SQLite3 engine with a local
-  // file, if TRestSettings.Kind is not set
+  // file, if TDDDRestSettings.Kind is not set
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
-  TNewRestInstanceOptions = set of (
+  TDDDNewRestInstanceOptions = set of (
     riOwnModel,
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
+    riDefaultFullMemoryIfNone,
     riCreateMissingTables);
 
   /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
   // pointing to a local or remote SQL/NoSQL database, with optional wrappers
-  TRestSettings = class(TSynAutoCreateFields)
+  TDDDRestSettings = class(TSynAutoCreateFields)
   protected
     fORM: TSynConnectionDefinition;
     fRoot: RawUTF8;
     fWrapperTemplateFolder: TFileName;
     fWrapperSourceFolders: TFileName;
-    fOptions: TRestSettingsOptions;
+    fOptions: TDDDRestSettingsOptions;
     fWrapperTemplateFolderFixed: TFileName;
     fWrapperSourceFolderFixed: TFileName;
   public
@@ -241,11 +243,11 @@ type
     // a local SQlite3 file database will be initiated
     // - will return nil if the supplied Definition is not correct
     // - note that the supplied Model.Root is expected to be the default root
-    // URI, which will be overriden with this TRestSettings.Root property
+    // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     // and publish the /wrapper HTML page if WrapperTemplateFolder is set
-    function NewRestInstance(aRootSettings: TApplicationSettingsFile;
-      aModel: TSQLModel; aOptions: TNewRestInstanceOptions;
+    function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
       aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
@@ -269,24 +271,24 @@ type
     property WrapperSourceFolders: TFileName
       read fWrapperSourceFolders write fWrapperSourceFolders;
     /// how the REST instance is to be initialized
-    property Options: TRestSettingsOptions read fOptions write fOptions;
+    property Options: TDDDRestSettingsOptions read fOptions write fOptions;
   end;
 
   /// parent class for storing REST-based application settings as a JSON file
   // - this class could be used for an application with a single REST server
   // running on a given HTTP port
-  TApplicationSettingsRestFile = class(TApplicationSettingsFile)
+  TDDDAppSettingsRestFile = class(TDDDAppSettingsFile)
   protected
-    fRest: TRestSettings;
+    fRest: TDDDRestSettings;
     fServerPort: RawUTF8;
   public
     /// to be called when the application starts, to access settings
-    // - will call inherited TApplicationSettingsFile.Initialize, and
+    // - will call inherited TDDDAppSettingsFile.Initialize, and
     // set ServerPort to a default 888/8888 value under Windows/Linux
     procedure Initialize(const aDescription: string); override;
   published
     /// allow to instantiate a REST instance from its JSON definition
-    property Rest: TRestSettings read fRest;
+    property Rest: TDDDRestSettings read fRest;
     /// the IP port to be used for the HTTP server associated with the application
     property ServerPort: RawUTF8 read fServerPort write fServerPort;
   end;
@@ -295,7 +297,7 @@ type
   // - the IAdministratedDaemon service will be published to administrate
   // this service/daemon instance
   // - those values should match the ones used on administrative tool side
-  TAdministratedDaemonSettings = class(TSynAutoCreateFields)
+  TDDDAdministratedDaemonSettings = class(TSynAutoCreateFields)
   protected
     FAuthRootURI: RawUTF8;
     FAuthHashedPassword: RawUTF8;
@@ -328,10 +330,10 @@ type
 
   /// parent class for storing a service/daemon settings as a JSON file
   // - under Windows, some Service* properties will handle installaiton as a
-  // regular Windows Service, thanks to TAbstractDaemon
-  TAdministratedDaemonSettingsFile = class(TApplicationSettingsFile)
+  // regular Windows Service, thanks to TDDDDaemon
+  TDDDAdministratedDaemonSettingsFile = class(TDDDAppSettingsFile)
   protected
-    FRemoteAdmin: TAdministratedDaemonSettings;
+    FRemoteAdmin: TDDDAdministratedDaemonSettings;
     FServiceDisplayName: string;
     FServiceName: string;
     FServiceAutoStart: boolean;
@@ -342,7 +344,7 @@ type
       const aDescription,aServiceName,aServiceDisplayName: string); reintroduce; virtual;
   published
     /// define how this administrated service/daemon is accessed via REST
-    property RemoteAdmin: TAdministratedDaemonSettings read FRemoteAdmin;
+    property RemoteAdmin: TDDDAdministratedDaemonSettings read FRemoteAdmin;
     /// under Windows, will define the Service internal name
     property ServiceName: string read FServiceName write FServiceName;
     /// under Windows, will define the Service displayed name
@@ -357,9 +359,9 @@ type
   // administrated daemon, or a console application, according to the command line
   // - you should inherit from this class, then override the abstract NewDaemon
   // protected method to launch and return a IAdministratedDaemon instance
-  TAbstractDaemon = class
+  TDDDDaemon = class
   protected
-    fSettings: TAdministratedDaemonSettingsFile;
+    fSettings: TDDDAdministratedDaemonSettingsFile;
     /// the service/daemon will be stopped when this interface is set to nil
     fDaemon: IAdministratedDaemon;
     /// this abstract method should be overriden to return a new service/daemon
@@ -371,10 +373,10 @@ type
     {$endif}
   public
     /// initialize the service/daemon application thanks to some information
-    // - actual settings would inherit from TAdministratedDaemonSettingsFile,
+    // - actual settings would inherit from TDDDAdministratedDaemonSettingsFile,
     // to define much more parameters, according to the service/daemon process
-    // - the supplied settings will be owned by this TAbstractDaemon instance
-    constructor Create(aSettings: TAdministratedDaemonSettingsFile); virtual;
+    // - the supplied settings will be owned by this TDDDDaemon instance
+    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); virtual;
     /// finalize the service/daemon application, and release its resources
     destructor Destroy; override;
     /// interprect the command line to run the application as expected
@@ -403,37 +405,117 @@ type
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a TThread
-  // - as hosted by TAbstractDaemon service/daemon application
-  TAbstractThreadDaemon = class(TDDDAdministratedThreadDaemon)
+  // - as hosted by TDDDDaemon service/daemon application
+  TDDDThreadDaemon = class(TDDDAdministratedThreadDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
   public
     /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
+    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
     /// finalize the service/daemon thread
     // - will call Halt() if the associated process is still running
     destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
-    // - may equal nil if TAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
+    // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a TSQLRestServer
-  // - as hosted by TAbstractDaemon service/daemon application
-  TAbstractRestDaemon = class(TDDDAdministratedRestDaemon)
+  // - as hosted by TDDDDaemon service/daemon application
+  TDDDRestDaemon = class(TDDDAdministratedRestDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
     // returns the current state from fRest.Stat() + T
     function InternalRetrieveState(var Status: variant): boolean; override;
   public
     /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TAdministratedDaemonSettingsFile); reintroduce;
+    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
     /// finalize the service/daemon thread
     // - will call Halt() if the associated process is still running
     destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
-    // - may equal nil if TAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
+    // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
+  end;
+
+  /// the current connection state of the TCP client associated to a
+  // TDDDThreadSocketProcess thread
+  TDDDThreadProcessState = (tpsDisconnected, tpsConnecting, tpsConnected);
+  
+  /// the monitoring information of a TDDDThreadSocketProcess thread
+  TDDDThreadProcessMonitoring = class(TDDDAdministratedDaemonMonitor)
+  private
+    FState: TDDDThreadProcessState;
+  published
+    /// how this thread is currently connected to its associated TCP server
+    property State: TDDDThreadProcessState read FState write FState;
+  end;
+
+  /// the settings of a TDDDThreadSocketProcess thread
+  // - defines how to connect (and reconnect) to the associated TCP server
+  TDDDThreadProcessSettings = class(TPersistentAutoCreateFields)
+  protected
+    fHost: RawUTF8;
+    fPort: integer;
+    fSocketTimeout: integer;
+    fConnectionAttemptsInterval: Integer;
+    fAutoReconnectAfterSocketError: boolean;
+    fMonitoringInterval: integer;
+  published
+    /// the associated TCP server host
+    property Host: RawUTF8 read FHost write FHost;
+    /// the associated TCP server port
+    property Port: integer read FPort write FPort;
+    /// the time out period, in milliseconds, for socket access
+    property SocketTimeout: integer read FSocketTimeout write FSocketTimeout;
+    /// the time, in seconds, between any reconnection attempt
+    property ConnectionAttemptsInterval: Integer
+      read fConnectionAttemptsInterval write fConnectionAttemptsInterval;
+    /// if TRUE, any communication error would try to reconnect the socket
+    property AutoReconnectAfterSocketError: boolean
+      read FAutoReconnectAfterSocketError write FAutoReconnectAfterSocketError;
+    /// the period, in milliseconds, on which Monitoring information is logged
+    property MonitoringLogInterval: integer read FMonitoringInterval write FMonitoringInterval;
+  end;
+
+  /// a generic TThread able to connect and reconnect to a TCP server
+  // - initialize and own a TCrtSocket instance for TCP transmission
+  // - allow automatic reconnection
+  // - inherit from TSQLRestThread, so should be associated with a REST instance
+  TDDDThreadSocketProcess = class(TSQLRestThread)
+  protected
+    fSettings: TDDDThreadProcessSettings;
+    fMonitoring: TDDDThreadProcessMonitoring;
+    fSocket: TCrtSocket;
+    fPerformConnection: boolean;
+    fHost, fPort: SockString;
+    fSocketInputBuffer: RawByteString;
+    fExecuteSocketLoopPeriod: integer;
+    procedure InternalExecute; override;
+    procedure ExecuteConnect;
+    procedure ExecuteDisconnect;
+    procedure ExecuteDisconnectAfterError;
+    procedure ExecuteSocket;
+    function TrySend(const aFrame: RawByteString): Boolean;
+    // inherited classes could override those methods for process customization
+    procedure InternalExecuteConnected; virtual;
+    procedure InternalExecuteDisconnect; virtual;
+    procedure InternalExecuteIdle; virtual;
+    procedure InternalExecuteSocket; virtual; abstract; // process FSocketInputBuffer
+  public
+    /// initialize the thread for a given REST instance
+    constructor Create(aSettings: TDDDThreadProcessSettings; aRest: TSQLRest;
+      aMonitoring: TDDDThreadProcessMonitoring;
+      const aDefaultHost,aDefaultPort: SockString);
+    /// finalize the thread process, and its associted REST instance
+    destructor Destroy; override;
+    /// the parameters used to setup this thread process
+    property Settings: TDDDThreadProcessSettings read fSettings;
+  published
+    /// the IP Host name used to connect with TCP
+    property Host: SockString read fHost;
+    /// the IP Port value used to connect with TCP
+    property Port: SockString read fPort;
   end;
 
 
@@ -442,9 +524,9 @@ type
 implementation
 
 
-{ TApplicationSettingsAbstract }
+{ TDDDAppSettingsAbstract }
 
-procedure TApplicationSettingsAbstract.SetJsonContent(
+procedure TDDDAppSettingsAbstract.SetJsonContent(
   JsonContent: PUTF8Char);
 var valid: boolean;
 begin
@@ -456,20 +538,20 @@ begin
     fInitialJsonContent := ObjectToJSON(self,[]);
 end;
 
-procedure TApplicationSettingsAbstract.SetProperties(Instance: TObject);
+procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
 begin
   CopyObject(self,Instance);
 end;
 
-function TApplicationSettingsAbstract.WasModified: Boolean;
+function TDDDAppSettingsAbstract.WasModified: Boolean;
 begin
   result := ObjectToJSON(self,[])<>fInitialJsonContent;
 end;
 
 
-{ TLogSettings }
+{ TDDDLogSettings }
 
-constructor TLogSettings.Create;
+constructor TDDDLogSettings.Create;
 begin
   inherited Create;
   fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
@@ -479,9 +561,9 @@ begin
 end;
 
 
-{ TApplicationSettings }
+{ TDDDAppSettings }
 
-constructor TApplicationSettingsFile.Create(
+constructor TDDDAppSettingsFile.Create(
   const aSettingsJsonFileName: TFileName);
 begin
   inherited Create;
@@ -492,7 +574,7 @@ begin
   SetJsonContent(Pointer(AnyTextFileToRawUTF8(fSettingsJsonFileName,true)));
 end;
 
-procedure TApplicationSettingsFile.UpdateFile;
+procedure TDDDAppSettingsFile.UpdateFile;
 var new: RawUTF8;
 begin
   if not WasModified then
@@ -502,13 +584,13 @@ begin
   FileFromString(new,fSettingsJsonFileName);
 end;
 
-destructor TApplicationSettingsFile.Destroy;
+destructor TDDDAppSettingsFile.Destroy;
 begin
   UpdateFile;
   inherited Destroy;
 end;
 
-procedure TApplicationSettingsFile.Initialize(const aDescription: string);
+procedure TDDDAppSettingsFile.Initialize(const aDescription: string);
 begin
   with SQLite3Log.Family do begin
     Level := Log.Levels-[sllNone]; // '*' would include sllNone
@@ -531,7 +613,7 @@ begin
   ChDir(ExtractFilePath(SettingsJsonFileName));
 end;
 
-function TApplicationSettingsFile.FileNameRelativeToSettingsFile(
+function TDDDAppSettingsFile.FileNameRelativeToSettingsFile(
   const aFileName: TFileName): TFileName;
 var path,settings: TFileName;
 begin
@@ -541,10 +623,10 @@ begin
 end;
 
 
-{ TRestSettings }
+{ TDDDRestSettings }
 
-function TRestSettings.NewRestInstance(aRootSettings: TApplicationSettingsFile;
-  aModel: TSQLModel; aOptions: TNewRestInstanceOptions;
+function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
@@ -569,14 +651,17 @@ begin
           aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
     end else
     if riDefaultInMemorySQLite3IfNone in aOptions then begin
-      fORM.Kind := 'TSQLRestServerDB'; 
+      fORM.Kind := 'TSQLRestServerDB';
       fORM.ServerName := SQLITE_MEMORY_DATABASE_NAME;
+    end else
+    if riDefaultFullMemoryIfNone in aOptions then begin
+      fORM.Kind := 'TSQLRestServerFullMemory';
     end;
   result := nil;
   try
     if fORM.Kind='' then
       exit;
-    if optEraseDBFileAtStartup in Options then
+    if (optEraseDBFileAtStartup in Options) and (fORM.ServerName<>'') then
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
         DeleteFile(UTF8ToString(fORM.ServerName));
@@ -609,7 +694,7 @@ begin
   end;
 end;
 
-function TRestSettings.WrapperSourceFolderFixed: TFileName;
+function TDDDRestSettings.WrapperSourceFolderFixed: TFileName;
 begin
   if fWrapperSourceFolders='' then
     result := '' else begin
@@ -619,7 +704,7 @@ begin
   end;
 end;
 
-function TRestSettings.WrapperTemplateFolderFixed: TFileName;
+function TDDDRestSettings.WrapperTemplateFolderFixed: TFileName;
 begin
   if fWrapperTemplateFolder='' then
     result := '' else begin
@@ -630,9 +715,9 @@ begin
 end;
 
 
-{ TApplicationSettingsRestFile }
+{ TDDDAppSettingsRestFile }
 
-procedure TApplicationSettingsRestFile.Initialize(const aDescription: string);
+procedure TDDDAppSettingsRestFile.Initialize(const aDescription: string);
 begin
   inherited Initialize(aDescription);
   if ServerPort='' then
@@ -640,9 +725,9 @@ begin
 end;
 
 
-{ TAdministratedDaemonSettings }
+{ TDDDAdministratedDaemonSettings }
 
-constructor TAdministratedDaemonSettings.Create;
+constructor TDDDAdministratedDaemonSettings.Create;
 begin
   inherited Create;
   AuthRootURI := 'admin';
@@ -650,9 +735,9 @@ begin
 end;
 
 
-{ TAdministratedDaemonSettingsFile }
+{ TDDDAdministratedDaemonSettingsFile }
 
-procedure TAdministratedDaemonSettingsFile.Initialize(
+procedure TDDDAdministratedDaemonSettingsFile.Initialize(
   const aDescription,aServiceName,aServiceDisplayName: string);
 begin
   inherited Initialize(aDescription);
@@ -663,9 +748,9 @@ begin
 end;
 
 
-{ TAbstractDaemon }
+{ TDDDDaemon }
 
-constructor TAbstractDaemon.Create(aSettings: TAdministratedDaemonSettingsFile);
+constructor TDDDDaemon.Create(aSettings: TDDDAdministratedDaemonSettingsFile);
 begin
   inherited Create;
   if aSettings=nil then
@@ -673,7 +758,7 @@ begin
   fSettings := aSettings;
 end;
 
-destructor TAbstractDaemon.Destroy;
+destructor TDDDDaemon.Destroy;
 begin
   inherited;
   fSettings.Free;
@@ -681,14 +766,14 @@ end;
 
 {$ifdef MSWINDOWS} // to support Windows Services
 
-procedure TAbstractDaemon.DoStart(Sender: TService);
+procedure TDDDDaemon.DoStart(Sender: TService);
 begin
   fDaemon := NewDaemon;
   SQLite3Log.Enter(self);
   fDaemon.Start;
 end;
 
-procedure TAbstractDaemon.DoStop(Sender: TService);
+procedure TDDDDaemon.DoStop(Sender: TService);
 begin
   SQLite3Log.Enter(self);
   fDaemon := nil; // will stop the daemon
@@ -701,7 +786,7 @@ type
     cNone,cInstall,cUninstall,cStart,cStop,cState,cVersion,cVerbose,
     cHelp,cConsole,cDaemon);
 
-procedure TAbstractDaemon.ExecuteCommandLine;
+procedure TDDDDaemon.ExecuteCommandLine;
 var name,param: RawUTF8;
     cmd: TExecuteCommandLineCmd;
     daemon: TDDDAdministratedDaemon;
@@ -791,8 +876,8 @@ begin
           if (daemon.AdministrationServer=nil) or
              not ({$ifdef MSWINDOWS}
                    daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or{$endif}
-                  (daemon.InheritsFrom(TAbstractThreadDaemon) and
-                   (TAbstractThreadDaemon(daemon).fAdministrationHTTPServer<>nil))) then
+                  (daemon.InheritsFrom(TDDDThreadDaemon) and
+                   (TDDDThreadDaemon(daemon).fAdministrationHTTPServer<>nil))) then
             daemon.LogClass.Add.Log(sllWarning,'ExecuteCommandLine as Daemon '+
               'without external admnistrator acccess',self);
         daemon.Execute(cmd=cDaemon);
@@ -865,10 +950,10 @@ end;
 {$I+}
 
 
-{ TAbstractThreadDaemon }
+{ TDDDThreadDaemon }
 
-constructor TAbstractThreadDaemon.Create(
-  aSettings: TAdministratedDaemonSettingsFile);
+constructor TDDDThreadDaemon.Create(
+  aSettings: TDDDAdministratedDaemonSettingsFile);
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
@@ -880,17 +965,17 @@ begin
       fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
 end;
 
-destructor TAbstractThreadDaemon.Destroy;
+destructor TDDDThreadDaemon.Destroy;
 begin
   FreeAndNil(fAdministrationHTTPServer);
   inherited;
 end;
 
 
-{ TAbstractRestDaemon }
+{ TDDDRestDaemon }
 
-constructor TAbstractRestDaemon.Create(
-  aSettings: TAdministratedDaemonSettingsFile);
+constructor TDDDRestDaemon.Create(
+  aSettings: TDDDAdministratedDaemonSettingsFile);
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
@@ -902,13 +987,13 @@ begin
       fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
 end;
 
-destructor TAbstractRestDaemon.Destroy;
+destructor TDDDRestDaemon.Destroy;
 begin
   FreeAndNil(fAdministrationHTTPServer);
   inherited Destroy;
 end;
 
-function TAbstractRestDaemon.InternalRetrieveState(
+function TDDDRestDaemon.InternalRetrieveState(
   var Status: variant): boolean;
 var mem: TSynMonitorMemory;
 begin                                     
@@ -923,6 +1008,183 @@ begin
     result := true;
   end else
     result := false;
+end;
+
+
+{ TDDDThreadSocketProcess }
+
+constructor TDDDThreadSocketProcess.Create(
+  aSettings: TDDDThreadProcessSettings; aRest: TSQLRest;
+  aMonitoring: TDDDThreadProcessMonitoring; const aDefaultHost, aDefaultPort: SockString);
+begin
+  if aSettings=nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(Settings=nil)',[self]);
+  fSettings := aSettings;
+  if aMonitoring=nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(aMonitoring=nil)',[self]);
+  fMonitoring := aMonitoring;
+  if fSettings.Host='' then
+    if aDefaultHost='' then
+      fHost := '127.0.0.1' else
+      fHost := aDefaultHost else
+    fHost := fSettings.Host;
+  if fSettings.Port=0 then
+    fPort := aDefaultPort else
+    fPort := UInt32ToUtf8(fSettings.Port);
+  fExecuteSocketLoopPeriod := 300;
+  if fSettings.SocketTimeout<fExecuteSocketLoopPeriod then
+    fSettings.SocketTimeout := 2000;
+  fPerformConnection := true;
+  inherited Create(aRest,true);
+end;
+
+destructor TDDDThreadSocketProcess.Destroy;
+var timeOut: Int64;
+begin
+  FLog.Enter(self);
+  Terminate;
+  timeOut := GetTickCount64+10000;
+  repeat // wait until properly disconnected from remote TCP server
+    Sleep(10);
+  until (FMonitoring.State=tpsDisconnected) or (GetTickCount64>timeOut);
+  inherited Destroy;
+  FreeAndNil(fMonitoring);
+end;
+
+procedure TDDDThreadSocketProcess.ExecuteConnect;
+var tix: Int64;
+begin
+  FLog.Enter(self);
+  if fSocket<>nil then
+    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: FSocket<>nil',[self]);
+  if FMonitoring.State<>tpsDisconnected then
+    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',[self,ord(FMonitoring.State)]);
+  fMonitoring.State := tpsConnecting;
+  FLog.Log(sllTrace,'ExecuteConnect: Connecting to %:%',[Host,Port],self);
+  try
+    FSocket := TCrtSocket.Open(Host,Port,cslTCP,fSettings.SocketTimeout);
+    FSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
+    InternalExecuteConnected;
+    FMonitoring.State := tpsConnected;
+    FLog.Log(sllTrace,'ExecuteConnect: Connected via Socket % - %',
+      [FSocket.Sock,FMonitoring],self);
+  except
+    on E: Exception do begin
+      FLog.Log(sllTrace,'ExecuteConnect: Impossible to Connect to %:% (%) %',
+        [Host,Port,E.ClassType,FMonitoring],self);
+      FreeAndNil(FSocket);
+      FMonitoring.State := tpsDisconnected;
+    end;
+  end;
+  if (FMonitoring.State<>tpsConnected) and not Terminated then
+    if fSettings.ConnectionAttemptsInterval>0 then begin // on error, retry
+      tix := GetTickCount64+fSettings.ConnectionAttemptsInterval*1000;
+      repeat
+        sleep(50);
+      until Terminated or (GetTickCount64>tix);
+      if Terminated then
+        FLog.Log(sllTrace,'ExecuteConnect: thread terminated',self) else
+        FLog.Log(sllTrace,'ExecuteConnect: wait finished -> retry connect',self);
+    end;
+end;
+
+procedure TDDDThreadSocketProcess.ExecuteDisconnect;
+begin
+  FLog.Enter(self);
+  try
+    fLock.Acquire;
+    try
+      FMonitoring.State := tpsDisconnected;
+      try
+        InternalExecuteDisconnect;
+      finally
+        FreeAndNil(FSocket);
+      end;
+      FLog.Log(sllTrace,'Socket disconnected %',[fMonitoring],self);
+    finally
+      fLock.Release;
+    end;
+  except
+    on E: Exception do
+      FLog.Log(sllTrace,'Socket disconnection error (%)',[E.ClassType],self);
+  end;
+end;
+
+procedure TDDDThreadSocketProcess.ExecuteDisconnectAfterError;
+begin
+  FLog.Log(sllError,'%.ExecuteDisconnectAfterError: Sock=% LastLowSocketError=%',
+    [ClassType,FSocket.Sock,FSocket.LastLowSocketError],self);
+  ExecuteDisconnect;
+  FSocketInputBuffer := '';
+  if fSettings.AutoReconnectAfterSocketError then
+    FPerformConnection := true;
+end;
+
+procedure TDDDThreadSocketProcess.ExecuteSocket;
+var pending, len: integer;
+begin
+  pending := FSocket.SockInPending(fExecuteSocketLoopPeriod);
+  if Terminated or (pending=0) then
+    exit;
+  if pending<0 then begin
+    ExecuteDisconnectAfterError;
+    exit;
+  end;
+  len := length(FSocketInputBuffer);
+  SetLength(FSocketInputBuffer,len+pending);
+  if FSocket.SockInRead(@PByteArray(FSocketInputBuffer)[len],pending)<>pending then begin
+    ExecuteDisconnectAfterError;
+    exit;
+  end;
+  InternalExecuteSocket;
+end;
+
+procedure TDDDThreadSocketProcess.InternalExecute;
+var PreviousMonitorTix: Int64;
+begin
+  PreviousMonitorTix := GetTickCount64;
+  try
+    repeat
+      if fMonitoring.State=tpsConnected then
+        ExecuteSocket else
+        if fPerformConnection then
+          ExecuteConnect else
+          sleep(200);
+      if Terminated then
+        break;
+      try
+        if Elapsed(PreviousMonitorTix,fSettings.MonitoringLogInterval) then
+          FLog.Log(sllMonitoring,'%',[FMonitoring],Self);
+        InternalExecuteIdle;
+      except
+        on E: Exception do
+          FLog.Log(sllWarning,'Skipped % exception in %.InternalExecuteIdle',[E,ClassType],self);
+      end;
+    until Terminated;
+  finally
+    ExecuteDisconnect;
+  end;
+end;
+
+procedure TDDDThreadSocketProcess.InternalExecuteConnected;
+begin
+end;
+
+procedure TDDDThreadSocketProcess.InternalExecuteDisconnect;
+begin
+end;
+
+procedure TDDDThreadSocketProcess.InternalExecuteIdle;
+begin
+end;
+
+function TDDDThreadSocketProcess.TrySend(
+  const aFrame: RawByteString): Boolean;
+begin
+  result := FSocket.TrySndLow(pointer(aFrame),length(aFrame));
+  if result then
+    FMonitoring.AddSize(0,length(aFrame)) else
+    ExecuteDisconnectAfterError;
 end;
 
 initialization
