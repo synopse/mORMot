@@ -10698,7 +10698,9 @@ type
     // - by default, the URI would be Root/Calculator or Root/InterfaceMangledURI
     // but you may use this property to use another value, e.g. if you are
     // accessign a non mORMot REST server (probably with aContractExpected set
-    // to SERVICE_CONTRACT_NONE_EXPECTED)
+    // to SERVICE_CONTRACT_NONE_EXPECTED, and running
+    // Client.ServerTimeStamp := TimeLogNowUTC to avoid an unsupported
+    // ServerTimeStampSynchronize call)
     property ForcedURI: RawUTF8 read fForcedURI write fForcedURI;
   end;
 
@@ -33093,10 +33095,10 @@ begin
 end;
 
 function TSQLRestServerURIContext.URIDecodeREST: boolean;
-var i,j: integer;
-    P,Par: PUTF8Char;
+var i,j,slash: integer;
+    Par: PUTF8Char;
 begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]' format
-  // compute URI and Parameters
+  // check root URI and Parameters
   i := 0;
   if (Call^.url<>'') and (Call^.url[1]='/') then
     inc(i); // URL may be '/path'
@@ -33106,7 +33108,6 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
     result := False;
     exit; // bad ModelRoot -> caller can try another TSQLRestServer
   end;
-  URI := copy(Call^.url,j+i+2,maxInt); // trim any '/root/' left side of Ctxt.URI
   ParametersPos := PosEx(RawUTF8('?'),Call^.url,1);
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1] else
@@ -33116,45 +33117,38 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       if IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
         Parameters := pointer(Call^.InBody);
     end;
+  // compute URI without any root nor parameter
+  inc(i,j+2);
+  if ParametersPos=0 then
+    URI := copy(Call^.url,i,maxInt) else
+    URI := copy(Call^.url,i,ParametersPos-i);
   // compute Table, TableID and URIBlobFieldName
-  i := PosEx(RawUTF8('/'),URI,1);
-  if i>0 then begin
-    URI[i] := #0;
-    InternalSetTableFromTableName(pointer(URI));
-    Par := @URI[i+1];
+  slash := PosEx(RawUTF8('/'),URI);
+  if slash>0 then begin
+    URI[slash] := #0;
+    Par := pointer(URI);
+    InternalSetTableFromTableName(Par);
+    inc(Par,slash);
     if (Table<>nil) and (Par^ in ['0'..'9']) then
       // "ModelRoot/TableName/TableID/URIBlobFieldName"
       TableID := GetNextItemInt64(Par,'/') else
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
-    if (Par<>nil) and (Par^<>#0) then begin
-      P := PosChar(Par,'?');
-      if P=nil then
-        URIBlobFieldName := Par else begin
-        SetString(URIBlobFieldName,PAnsiChar(Par),P-Par);
-        if Table<>nil then begin
-          j := PosEx('/',URIBlobFieldName);
-          if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
-            TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
-            SetLength(URIBlobFieldName,j-1);
-          end;
-        end;
+    URIBlobFieldName := Par;
+    if Table<>nil then begin
+      j := PosEx('/',URIBlobFieldName);
+      if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
+        TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
+        SetLength(URIBlobFieldName,j-1);
       end;
     end;
-    SetLength(URI,i-1);
-  end else begin
-    TableID := -1;
-    if ParametersPos>0 then begin // '?select=...&where=...' or '?where=...'
-      i := PosEx(RawUTF8('?'),URI);
-      if i>0 then
-        dec(i);
-      SetLength(URI,i); // trim Ctxt.URI to exclude any parameter
-    end;
-    InternalSetTableFromTableName(pointer(URI));
-  end;
+    SetLength(URI,slash-1);
+  end else
+    InternalSetTableFromTableName(pointer(URI)); // "ModelRoot/TableName"
   // compute URISessionSignaturePos and URIWithoutSignature
-  if (Parameters<>nil) and IdemPChar(Parameters,'SESSION_SIGNATURE=') then
-    URISessionSignaturePos := ParametersPos else
-    URISessionSignaturePos := PosEx('&session_signature=',Call^.url,ParametersPos+1);
+  if ParametersPos>0 then
+    if IdemPChar(Parameters,'SESSION_SIGNATURE=') then
+      URISessionSignaturePos := ParametersPos else
+      URISessionSignaturePos := PosEx('&session_signature=',Call^.url,ParametersPos+1);
   if URISessionSignaturePos=0 then
     URIWithoutSignature := Call^.Url else
     URIWithoutSignature := Copy(Call^.Url,1,URISessionSignaturePos-1);
