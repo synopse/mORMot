@@ -12401,6 +12401,45 @@ type
       const aOperators: TSQLQueryOperators);
   end;
 
+  {$M+}
+  /// a simple TThread for doing some process within the context of a REST instance
+  // - also define a Start method for compatibility with older versions of Delphi
+  // - inherited classes should override InternalExecute abstract method
+  TSQLRestThread = class(TThread)
+  protected
+    fRest: TSQLRest;
+    fOwnRest: boolean;
+    fLog: TSynLog;
+    fLock: TSynCriticalSection;
+    /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
+    procedure Execute; override;
+    /// you should override this method with the proper process
+    procedure InternalExecute; virtual; abstract;
+  public
+    /// initialize the thread
+    // - if aOwnRest is TRUE, the supplied REST instance would be
+    // owned by this thread
+    constructor Create(aRest: TSQLRest; aOwnRest: boolean);
+    {$ifndef HASTTHREADSTART}
+    /// method to be called when the thread was created as suspended
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature
+    // - we define here this method for older versions of Delphi
+    procedure Start;
+    {$endif}
+    /// finalize the thread
+    // - and the associated REST instance if OwnRest is TRUE
+    destructor Destroy; override;
+    /// read-only access to the associated REST instance
+    property Rest: TSQLRest read FRest;
+    /// TRUE if the associated REST instance would be owned by this thread
+    property OwnRest: boolean read fOwnRest;
+    /// a critical section is associated to this thread
+    // - could be used to protect shared resources within the internal process
+    property Lock: TSynCriticalSection read fLock;
+  end;
+  {$M-}
+
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
   TSQLRestServerNotifyCallback = function(aSender: TSQLRestServer;
@@ -30526,6 +30565,52 @@ begin
     if CacheEnable then
       RetrieveJSON(aID,result);
 end;
+
+
+{ TSQLRestThread }
+
+constructor TSQLRestThread.Create(aRest: TSQLRest;
+  aOwnRest: boolean);
+begin
+  if aRest=nil then
+    raise EORMException.CreateUTF8('%.Create(aRest=nil)',[self]);
+  fLock := TSynCriticalSection.Create;
+  fRest := aRest;
+  fOwnRest := aOwnRest;
+  inherited Create(True);
+end;
+
+destructor TSQLRestThread.Destroy;
+begin
+  inherited Destroy;
+  if fOwnRest then
+    FreeAndNil(fRest);
+  FreeAndNil(fLock);
+end;
+
+procedure TSQLRestThread.Execute;
+begin
+  fLog := FRest.LogClass.Add;
+  FRest.BeginCurrentThread(self);
+  try
+    SetCurrentThreadName('%',[self]);
+    try
+      InternalExecute;
+    finally
+      FRest.EndCurrentThread(self);
+    end;
+  except
+    on E: Exception do
+      fLog.Add.Log(sllError,'Unhandled % exception in %.Execute -> abort',[E,ClassType],self);
+  end;
+end;
+
+{$ifndef HASTTHREADSTART}
+procedure TSQLRestThread.Start;
+begin
+  Resume;
+end;
+{$endif}
 
 
 { TSQLRestClientCallbacks }
