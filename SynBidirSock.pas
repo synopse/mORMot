@@ -378,6 +378,12 @@ type
     // client to return its answer
     // - defaut is 30000, i.e. 30 seconds
     CallbackAnswerTimeOutMS: cardinal;
+    /// callback run when a WebSockets client is just connected
+    // - triggerred by TWebSocketProcess.ProcessStart 
+    OnClientConnected: TNotifyEvent;
+    /// callback run when a WebSockets client is just disconnected
+    // - triggerred by TWebSocketProcess.ProcessStop
+    OnClientDisconnected: TNotifyEvent;
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
@@ -445,6 +451,11 @@ type
     /// the settings currently used during the WebSockets process
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
+    /// the associated communication socket
+    // - on the server side, is a THttpServerSocket
+    property Socket: TCrtSocket read fSocket;
+    /// how many frames have been processed by this connection
+    property ProcessCount: integer read fProcessCount;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
@@ -702,6 +713,8 @@ begin
   CallbackAcquireTimeOutMS := 5000;
   CallbackAnswerTimeOutMS := 5000;
   LogDetails := [];
+  OnClientConnected := nil;
+  OnClientDisconnected := nil;
 end;
 
 procedure TWebSocketProcessSettings.SetFullLog;
@@ -1410,11 +1423,21 @@ end;
 
 procedure TWebSocketProcess.ProcessStart;
 begin
+  if Assigned(fSettings.OnClientConnected) then
+  try
+    fSettings.OnClientConnected(Self);
+  except
+  end;
   SetLastPingTicks;
 end;
 
 procedure TWebSocketProcess.ProcessStop;
-begin // nothing to do at this level
+begin 
+  if Assigned(fSettings.OnClientDisconnected) then
+  try
+    fSettings.OnClientDisconnected(Self);
+  except
+  end;
 end;
 
 function TWebSocketProcess.SendFrame(
@@ -1849,7 +1872,7 @@ end;
 procedure TWebSocketProcessServer.ProcessStart;
 var frame: TWebSocketFrame;
 begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
-  inherited;
+  inherited ProcessStart;
   frame.opcode := focContinuation;
   fProtocol.ProcessIncomingFrame(self,frame,'');
 end;
@@ -1859,7 +1882,7 @@ var frame: TWebSocketFrame;
 begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
   frame.opcode := focConnectionClose;
   fProtocol.ProcessIncomingFrame(self,frame,'');
-  inherited;
+  inherited ProcessStop;
 end;
 
 

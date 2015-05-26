@@ -11223,6 +11223,7 @@ type
     // - will use VariantToUTF8() to populate the result array: as a consequence,
     // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
     function ToRawUTF8DynArray: TRawUTF8DynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
