@@ -30593,15 +30593,15 @@ begin
   fLog := FRest.LogClass.Add;
   FRest.BeginCurrentThread(self);
   try
-    SetCurrentThreadName('%',[self]);
     try
+      SetCurrentThreadName('%',[self]);
       InternalExecute;
-    finally
-      FRest.EndCurrentThread(self);
+    except
+      on E: Exception do
+        fLog.Add.Log(sllError,'Unhandled % exception in %.Execute -> abort',[E,ClassType],self);
     end;
-  except
-    on E: Exception do
-      fLog.Add.Log(sllError,'Unhandled % exception in %.Execute -> abort',[E,ClassType],self);
+  finally
+    FRest.EndCurrentThread(self);
   end;
 end;
 
