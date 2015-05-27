@@ -10582,6 +10582,8 @@ type
     function RestServer: TSQLRestServer;
       {$ifdef HASINLINE}inline;{$endif}
 
+    /// the class type used to implement this interface
+    property ImplementationClass: TInterfacedClass read fImplementationClass;
     /// the instance life time-out, in seconds
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
     // - raise an exception for other kind of execution
@@ -12449,6 +12451,13 @@ type
     aConnectionID: Int64; aFakeCallID: integer;
     aResult, aErrorMsg: PRawUTF8): boolean of object;
 
+  /// event signature used by TSQLRestServer.OnServiceCreateInstance
+  // - as called by TServiceFactoryServer.CreateInstance
+  // - the actual Instance class can be quickly retrieved from
+  // Sender.ImplementationClass
+  TOnServiceCreateInstance = procedure(
+    Sender: TServiceFactoryServer; Instance: TInterfacedObject) of object;
+
 {$ifdef MSWINDOWS}
   /// Server thread accepting connections from named pipes
   TSQLRestServerNamedPipe = class(TThread)
@@ -13885,6 +13894,17 @@ type
     // a remote client, using a (fake) interface parameter
     // - is nil by default, but may point e.g. to TSQLHttpServer.NotifyCallback
     OnNotifyCallback: TSQLRestServerNotifyCallback;
+    /// this event will be executed by TServiceFactoryServer.CreateInstance
+    // - you may set a callback to customize a server-side service instance,
+    // i.e. inject class-level dependencies:
+    // !procedure TMyClass.OnCreateInstance(
+    // !  Sender: TServiceFactoryServer; Instance: TInterfacedObject);
+    // !begin
+    // !  if Sender.ImplementationClass=TLegacyStockQuery then
+    // !    TLegacyStockQuery(Instance).fDbConnection := fDbConnection;
+    // !end;
+    // - consider using a TInjectableObjectClass implementation for pure IoC/DI
+    OnServiceCreateInstance: TOnServiceCreateInstance;
     /// this property can be used to specify the URI parmeters to be used
     // for query paging
     // - is set by default to PAGINGPARAMETERS_YAHOO constant by
@@ -47469,10 +47489,13 @@ begin
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
   ickInjectable:
-    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(Rest.Services);
+    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(
+      Rest.Services);
   else
     result := fImplementationClass.Create;
   end;
+  if Assigned(TSQLRestServer(Rest).OnServiceCreateInstance) then
+    TSQLRestServer(Rest).OnServiceCreateInstance(self,result);
   if AndIncreaseRefCount then
     IInterface(result)._AddRef; // allow passing self to sub-methods
 end;
