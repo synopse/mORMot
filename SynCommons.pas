@@ -36881,6 +36881,7 @@ begin
   vtChar:         Add(@VChar,1,Escape);
   vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
   vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
+  vtInterface,
   vtPointer:      AddPointer(PtrUInt(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
   vtObject:       WriteObject(VObject,[woFullExpand]);
