@@ -116,6 +116,7 @@ uses
   dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
   dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
   dddInfraSettings in 'DDD\infra\dddInfraSettings.pas',
+  dddInfraApps in 'DDD\infra\dddInfraApps.pas',
   dddInfraEmail in 'DDD\infra\dddInfraEmail.pas',
   dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
   dddInfraRepoUser in 'DDD\infra\dddInfraRepoUser.pas',
