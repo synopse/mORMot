@@ -4205,7 +4205,7 @@ function TPdfWrite.Add(Value: Integer): TPdfWrite;
 var t: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  if B+16>Bend then
+  if BEnd-B<=16 then
     Save;
   if Cardinal(Value)<10 then begin
     B^ := AnsiChar(Value+48);
@@ -4227,7 +4227,7 @@ var L: integer;
 begin
   if PtrInt(Text)<>0 then begin
     L := PInteger(PtrInt(Text)-4)^; // fast L := length(Text)
-    if B+L>=Bend then begin
+    if BEnd-B<=L then begin
       Save;
       inc(fDestStreamPosition,L);
       fDestStream.Write(pointer(Text)^,L);
@@ -4241,7 +4241,7 @@ end;
 
 function TPdfWrite.Add(Text: PAnsiChar; Len: integer): TPdfWrite;
 begin
-  if B+Len>=Bend then begin
+  if BEnd-B<=Len then begin
     Save;
     inc(fDestStreamPosition,Len);
     fDestStream.Write(Text^,Len);
@@ -4257,7 +4257,7 @@ var t: array[0..15] of AnsiChar;
     i64: array[0..1] of Int64 absolute t;
 begin
 //  assert(DigitCount<high(t));
-  if B+16>Bend then
+  if BEnd-B<=16 then
     Save;
   i64[0] := $3030303030303030; // t[0..14]='0'
   i64[1] := $2030303030303030; // t[15]=' '
@@ -4274,7 +4274,7 @@ function TPdfWrite.Add(Value: TSynExtended): TPdfWrite;
 var Buffer: ShortString;
     L: integer;
 begin
-  if B+32>BEnd then
+  if BEnd-B<=32 then
     Save;
   str(Value:0:2,Buffer);
   L := ord(Buffer[0]);
@@ -4420,7 +4420,7 @@ begin
   PW := pointer(Bin);
   repeat
     L := Len;
-    if B+L*2>=BEnd then begin
+    if BEnd-B<=L*2 then begin
       Save;
       if L>high(Tmp) shr 1 then
         L := high(Tmp) shr 1;
@@ -4471,7 +4471,7 @@ function TPdfWrite.AddWithSpace(Value: TSynExtended): TPdfWrite;
 var Buffer: ShortString;
     L: integer;
 begin
-  if B+32>BEnd then
+  if BEnd-B<=32 then
     Save;
   // Value := Trunc(Value * 100 + 0.5) / 100; // 2 decim rounding done by str()
   if Abs(Value)<1E-2 then
@@ -4492,7 +4492,7 @@ end;
 function TPdfWrite.AddIntegerBin(value: integer; bytesize: cardinal): TPdfWrite;
 var i: cardinal;
 begin
-  if B+4>Bend then
+  if BEnd-B<=4 then
     Save;
   for i := 1 to bytesize do
     B[i-1] := PAnsiChar(@value)[bytesize-i];
@@ -4504,7 +4504,7 @@ function TPdfWrite.AddWithSpace(Value: TSynExtended; Decimals: cardinal): TPdfWr
 var Buffer: ShortString;
     L: integer;
 begin
-  if B+32>BEnd then
+  if BEnd-B<=32 then
     Save;
   str(Value:0:Decimals,Buffer);
   L := ord(Buffer[0])+1;
@@ -4564,7 +4564,7 @@ begin
 {$endif}
     repeat
       L := WideCharCount;
-      if B+L*4>=BEnd then begin
+      if BEnd-B<=L*4 then begin
         Save;
         if L>high(Tmp) shr 2 then
           L := high(Tmp) shr 2; // max WideCharCount allowed in Tmp[]
@@ -4888,7 +4888,7 @@ function TPdfWrite.AddWithSpace(Value: Integer): TPdfWrite;
 var t: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  if B+16>Bend then
+  if BEnd-B<=16 then
     Save;
   if Cardinal(Value)<10 then begin
     PWord(B)^ := Value+(48+32 shl 8);

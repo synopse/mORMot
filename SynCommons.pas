@@ -35158,7 +35158,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
-  if B+16>=BEnd then
+  if BEnd-B<=16 then
     FlushToStream;
   P := StrInt32(@tmp[23],value);
   Len := @tmp[23]-P;
@@ -35171,7 +35171,7 @@ var tmp: array[0..31] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
-  if B+31>=BEnd then
+  if BEnd-B<=31 then
     FlushToStream;
   P := StrCurr64(@tmp[31],Value);
   Len := @tmp[31]-P;
@@ -35195,7 +35195,7 @@ end;
 
 procedure TTextWriter.AddTimeLog(Value: PInt64);
 begin
-  if B+31>=BEnd then
+  if BEnd-B<=31 then
     FlushToStream;
   inc(B,PTimeLogBits(Value)^.Text(B+1,true,'T'));
 end;
@@ -35204,7 +35204,7 @@ procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar; QuoteCh
 begin
   if (Value^=0) and (QuoteChar=#0) then
     exit;
-  if B+21>=BEnd then
+  if BEnd-B<=21 then
     FlushToStream;
   inc(B);
   if QuoteChar<>#0 then
@@ -35232,7 +35232,7 @@ procedure TTextWriter.AddDateTime(const Value: TDateTime);
 begin
   if Value=0 then
     exit;
-  if B+19>=BEnd then
+  if BEnd-B<=19 then
     FlushToStream;
   inc(B);
   if trunc(Value)<>0 then begin
@@ -35251,7 +35251,7 @@ var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
-  if B+16>=BEnd then
+  if BEnd-B<=16 then
     FlushToStream;
   P := StrUInt32(@tmp[15],Value);
   Len := @tmp[15]-P;
@@ -35289,7 +35289,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
-  if B+24>=BEnd then
+  if BEnd-B<=24 then
     FlushToStream;
   P := StrInt64(@tmp[23],Value);
   Len := @tmp[23]-P;
@@ -35304,7 +35304,7 @@ begin
   L := StrLen(P);
   if (L=0) or (L>30) then
     Add('0') else begin
-    if B+31>=BEnd then
+    if BEnd-B<=31 then
       FlushToStream;
     inc(B);
     if PWord(P)^=ord('-')+ord('.')shl 8 then begin
@@ -35332,7 +35332,7 @@ end;
 
 procedure TTextWriter.Add(c1, c2: AnsiChar);
 begin
-  if B+1>=BEnd then
+  if BEnd-B<=1 then
     FlushToStream;
   B[1] := c1;
   B[2] := c2;
@@ -35341,7 +35341,7 @@ end;
 
 procedure TTextWriter.Add(const guid: TGUID);
 begin
-  if B+36>=BEnd then
+  if BEnd-B<=36 then
     FlushToStream;
   GUIDToText(B+1,@guid);
   inc(B,36);
@@ -35349,7 +35349,7 @@ end;
 
 procedure TTextWriter.AddCR;
 begin
-  if B+1>=BEnd then
+  if BEnd-B<=1 then
     FlushToStream;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
   inc(B,2);
@@ -35358,7 +35358,7 @@ end;
 procedure TTextWriter.AddEndOfLine(aLevel: TSynLogInfo=sllNone);
 var i: integer;
 begin
-  if B+1>=BEnd then
+  if BEnd-B<=1 then
     FlushToStream;
   if fEndOfLineCRLF then begin
     pWord(B+1)^ := 13+10 shl 8; // CR + LF
@@ -35387,7 +35387,7 @@ begin
   ntabs := fHumanReadableLevel;
   if ntabs>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
-  if B+ntabs+1>=BEnd then
+  if BEnd-B<=Integer(ntabs)+1 then
     FlushToStream;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
   fillchar(B[3],ntabs,9); // indentation using tabs
@@ -35398,7 +35398,7 @@ procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: integer);
 begin
   if cardinal(aCount-1)>=cardinal(fTempBufSize) then
     exit; // avoid buffer overflow
-  if B+aCount>=BEnd then
+  if BEnd-B<=aCount then
     FlushToStream;
   fillchar(B[1],aCount,ord(aChar));
   inc(B,aCount);
@@ -35406,7 +35406,7 @@ end;
 
 procedure TTextWriter.Add2(Value: integer);
 begin
-  if B+3>=BEnd then
+  if BEnd-B<=3 then
     FlushToStream;
   if cardinal(Value)>99 then
     pCardinal(B+1)^ := $3030+ord(',')shl 16 else     // '00,' if overflow
@@ -35416,7 +35416,7 @@ end;
 
 procedure TTextWriter.Add4(Value: integer);
 begin
-  if B+5>=BEnd then
+  if BEnd-B<=5 then
     FlushToStream;
   if cardinal(Value)>9999 then
     pCardinal(B+1)^ := $30303030 else // '0000,' if overflow
@@ -35432,7 +35432,7 @@ var // can be safely made global since timing is multi-thread safe
 procedure TTextWriter.AddCurrentLogTime;
 var Ticks: cardinal;
 begin
-  if B+17>=BEnd then
+  if BEnd-B<=17 then
     FlushToStream;
   inc(B);
   Ticks := GetTickCount; // this call is very fast (just one integer mul)
@@ -35462,7 +35462,7 @@ begin
   result := V div 1000;
 end;
 begin // 00.000.000
-  if B+17>=BEnd then
+  if BEnd-B<=17 then
     FlushToStream;
   B[3] := '.';
   B[7] := '.';
@@ -35476,7 +35476,7 @@ end;
 
 procedure TTextWriter.Add3(Value: integer);
 begin
-  if B+4>=BEnd then
+  if BEnd-B<=4 then
     FlushToStream;
   if cardinal(Value)>999 then
     pCardinal(B+1)^ := $303030 else // '0000,' if overflow
@@ -36171,7 +36171,7 @@ end;
 
 procedure TTextWriter.AddLine(const Text: shortstring);
 begin
-  if B+ord(Text[0])+2>=BEnd then
+  if BEnd-B<=ord(Text[0])+2 then
     FlushToStream;
   inc(B);
   move(Text[1],B[0],ord(Text[0]));
@@ -36182,7 +36182,7 @@ end;
 
 procedure TTextWriter.AddPointer(P: PtrUInt);
 begin
-  if B+sizeof(P)*2>=BEnd then
+  if BEnd-B<=sizeof(P)*2 then
     FlushToStream;
 {$ifdef CPU64}
   if P and $ffffffff00000000<>0 then begin
@@ -36209,7 +36209,7 @@ procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
 begin
   if cardinal(BinBytes*2-1)>=cardinal(fTempBufSize) then
     exit;
-  if B+BinBytes*2>=BEnd then
+  if BEnd-B<=BinBytes*2 then
     FlushToStream;
   BinToHexDisplay(Bin,PAnsiChar(B+1),BinBytes);
   inc(B,BinBytes*2);
@@ -36460,7 +36460,7 @@ end;
 
 procedure TTextWriter.AddByteToHex(Value: byte);
 begin
-  if B+1>=BEnd then
+  if BEnd-B<=1 then
     FlushToStream;
   B[1] := HexChars[Value shr 4];
   B[2] := HexChars[Value and $f];
@@ -36469,7 +36469,7 @@ end;
 
 procedure TTextWriter.AddInt18ToChars3(Value: cardinal);
 begin
-  if B+3>=BEnd then
+  if BEnd-B<=3 then
     FlushToStream;
   PCardinal(B+1)^ := ((Value shr 12) and $3f)+
                      ((Value shr 6) and $3f)shl 8+
@@ -36531,7 +36531,7 @@ begin
     repeat
       if B>=BMax then begin
         FlushToStream;
-        BMax := BEnd-7;
+        BMax := BEnd-7; // B may have been resized -> recompute BMax
       end;
       if WideChar^=0 then
         break;
@@ -36686,7 +36686,7 @@ begin
       end;
       end
     end else begin // no surrogate is expected in TSynAnsiFixedWidth charsets
-      if B+3>BEnd then
+      if BEnd-B<=3 then
         FlushToStream;
       c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
       if c>$7ff then begin
@@ -36738,10 +36738,10 @@ var PEnd: PtrUInt;
 begin
   if P=nil then exit;
   if Len=0 then
-    PEnd := PtrUInt(-1) else
+    PEnd := 0 else
     PEnd := PtrUInt(P)+PtrUInt(Len)*sizeof(WideChar);
-  while PtrUInt(P)<PEnd do begin
-    if B+7>=BEnd then
+  while (Len=0) or (PtrUInt(P)<PEnd) do begin
+    if BEnd-B<=7 then
       FlushToStream;
     // escape chars, so that all content will stay on the same text line
     case P^ of
@@ -36996,7 +36996,7 @@ procedure TTextWriter.AddPropName(const PropName: ShortString);
 begin
   if ord(PropName[0])=0 then
     exit;
-  if B+ord(PropName[0])+3>=BEnd then
+  if BEnd-B<=ord(PropName[0])+3 then
     FlushToStream;
   B[1] := '"';
   move(PropName[1],B[2],ord(PropName[0]));
@@ -37012,7 +37012,7 @@ end;
 
 procedure TTextWriter.AddFieldName(FieldName: PUTF8Char; FieldNameLen: integer);
 begin
-  if B+FieldNameLen+3>=BEnd then
+  if BEnd-B<=FieldNameLen+3 then
     FlushToStream;
   B[1] := '"';
   move(FieldName^,B[2],FieldNameLen);
@@ -37054,7 +37054,7 @@ procedure TTextWriter.AddShort(const Text: ShortString);
 begin
   if ord(Text[0])=0 then
     exit;
-  if B+ord(Text[0])>=BEnd then
+  if BEnd-B<=ord(Text[0]) then
     FlushToStream;
   move(Text[1],B[1],ord(Text[0]));
   inc(B,ord(Text[0]));
@@ -37108,7 +37108,7 @@ begin
     exit;
   L := PInteger(PtrInt(Text)-sizeof(integer))^;
   if L<fTempBufSize then begin
-    if B+L>=BEnd then
+    if BEnd-B<=L then
       FlushToStream;
     move(pointer(Text)^,B[1],L);
     inc(B,L);
@@ -37146,7 +37146,7 @@ begin
   if L*count>fTempBufSize then
     for i := 1 to count do
       AddString(Text) else begin
-    if B+L*count>BEnd then
+    if BEnd-B<=L*count then
       FlushToStream;
     for i := 1 to count do begin
       move(pointer(Text)^,B[1],L);
@@ -37330,7 +37330,7 @@ begin
     n := Len div 3;
     trailing := Len-n*3;
     dec(Len,trailing);
-    if B+(n+1) shl 2<BEnd then begin
+    if BEnd-B>integer(n+1) shl 2 then begin
       // will fit in available space in Buf -> fast in-buffer Base64 encoding
       n := Base64EncodeMain(@B[1],P,Len);
       inc(B,n*4);
@@ -41204,7 +41204,7 @@ begin
           end;
         end else begin
           len := PInteger(PI^[i]-sizeof(integer))^; // fast length(Values[])
-          if PtrUInt(P)+len>=PtrUInt(PEnd) then begin
+          if PtrUInt(PEnd)-PtrUInt(P)<=len then begin
             n := i;
             break; // avoid buffer overflow
           end;
@@ -41214,7 +41214,7 @@ begin
         end else
       // fixed size strings case
       for i := 0 to ValuesCount-1 do begin
-        if PtrUInt(P)+PtrUInt(fixedsize)>=PtrUInt(PEnd) then begin
+        if PtrInt(PEnd)-PtrInt(P)<=fixedsize then begin
           n := i;
           break; // avoid buffer overflow
         end;
