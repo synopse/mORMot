@@ -1833,6 +1833,7 @@ begin
     E,'{threadindex:?,daemon:?}',[fIndex,fDaemon.GetStatus]));
 end;
 
+
 { TDDDMonitoredDaemonProcessRest }
 
 procedure TDDDMonitoredDaemonProcessRest.ExecuteProcessFinalize;
@@ -2129,7 +2130,7 @@ end;
 procedure TDDDAdministratedDaemon.CallbackReleased(
   const callback: IInvokable; const interfaceName: RawUTF8);
 begin
-  if (interfaceName='ISynLogCallback') and (fRemoteLog<>nil) then
+  if IdemPropNameU(interfaceName,'ISynLogCallback') and (fRemoteLog<>nil) then
     fRemoteLog.Unsubscribe(ISynLogCallback(callback));
 end;
 

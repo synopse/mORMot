@@ -12437,6 +12437,8 @@ type
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
     property Lock: TSynCriticalSection read fLock;
+    /// read-only access to the TSynLog instance of the associated REST instance 
+    property Log: TSynLog read fLog;
   end;
   {$M-}
 

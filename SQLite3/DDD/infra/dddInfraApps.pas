@@ -183,38 +183,6 @@ type
     property State: TDDDSocketThreadState read FState write FState;
   end;
 
-  /// the settings of a TDDDSocketThread thread
-  // - defines how to connect (and reconnect) to the associated TCP server
-  TDDDSocketThreadSettings = class(TPersistentAutoCreateFields)
-  protected
-    fHost: RawUTF8;
-    fPort: integer;
-    fSocketTimeout: integer;
-    fConnectionAttemptsInterval: Integer;
-    fAutoReconnectAfterSocketError: boolean;
-    fMonitoringInterval: integer;
-  public
-    /// used to set the default values
-    constructor Create; override;
-  published
-    /// the associated TCP server host
-    property Host: RawUTF8 read FHost write FHost;
-    /// the associated TCP server port
-    property Port: integer read FPort write FPort;
-    /// the time out period, in milliseconds, for socket access
-    property SocketTimeout: integer read FSocketTimeout write FSocketTimeout;
-    /// the time, in seconds, between any reconnection attempt
-    // - default value is 5 - i.e. five seconds
-    property ConnectionAttemptsInterval: Integer
-      read fConnectionAttemptsInterval write fConnectionAttemptsInterval;
-    /// if TRUE, any communication error would try to reconnect the socket
-    property AutoReconnectAfterSocketError: boolean
-      read FAutoReconnectAfterSocketError write FAutoReconnectAfterSocketError;
-    /// the period, in milliseconds, on which Monitoring information is logged
-    // - default value is 30000, i.e. 30 seconds
-    property MonitoringLogInterval: integer read FMonitoringInterval write FMonitoringInterval;
-  end;
-
   /// a generic TThread able to connect and reconnect to a TCP server
   // - initialize and own a TCrtSocket instance for TCP transmission
   // - allow automatic reconnection
@@ -228,12 +196,14 @@ type
     fHost, fPort: SockString;
     fSocketInputBuffer: RawByteString;
     fExecuteSocketLoopPeriod: integer;
+    fShouldDisconnect: boolean;
     procedure InternalExecute; override;
     procedure ExecuteConnect;
     procedure ExecuteDisconnect;
     procedure ExecuteDisconnectAfterError;
     procedure ExecuteSocket;
-    function TrySend(const aFrame: RawByteString): Boolean;
+    function TrySend(const aFrame: RawByteString;
+      ImmediateDisconnectAfterError: boolean=true): Boolean;
     // inherited classes could override those methods for process customization
     procedure InternalExecuteConnected; virtual;
     procedure InternalExecuteDisconnect; virtual;
@@ -606,6 +576,7 @@ begin
   try
     fLock.Acquire;
     try
+      fShouldDisconnect := false;
       FMonitoring.State := tpsDisconnected;
       try
         InternalExecuteDisconnect;
@@ -648,6 +619,7 @@ begin
     ExecuteDisconnectAfterError;
     exit;
   end;
+  FMonitoring.AddSize(pending,0);
   InternalExecuteSocket;
 end;
 
@@ -688,25 +660,36 @@ end;
 
 procedure TDDDSocketThread.InternalExecuteIdle;
 begin
+  fLock.Acquire;
+  try
+    if fShouldDisconnect then
+      ExecuteDisconnectAfterError;
+  finally
+    fLock.Release;
+  end;
 end;
 
 function TDDDSocketThread.TrySend(
-  const aFrame: RawByteString): Boolean;
+  const aFrame: RawByteString; ImmediateDisconnectAfterError: boolean): Boolean;
 begin
+  fLock.Acquire;
+  result := (fSocket<>nil) and (fMonitoring.State=tpsConnected) and
+            not fShouldDisconnect;
+  fLock.Release;
+  if not result then
+    exit;
+  // here a GPF may occur if FSocket=nil after fLock.Release (very unlikely)
   result := FSocket.TrySndLow(pointer(aFrame),length(aFrame));
   if result then
     FMonitoring.AddSize(0,length(aFrame)) else
-    ExecuteDisconnectAfterError;
+    if ImmediateDisconnectAfterError then
+      ExecuteDisconnectAfterError else begin
+      fLock.Acquire;
+      fShouldDisconnect := true; // notify for InternalExecuteIdle
+      fLock.Release;
+    end;
 end;
 
-{ TDDDSocketThreadSettings }
-
-constructor TDDDSocketThreadSettings.Create;
-begin
-  inherited Create;
-  FConnectionAttemptsInterval := 5;
-  FMonitoringInterval := 30*1000; // log monitoring information every 30 seconds 
-end;
 
 initialization
   {$ifdef EnableMemoryLeakReporting}
