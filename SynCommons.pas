@@ -30188,10 +30188,16 @@ var LenBytes: integer;
     tmp: TVarData;
 begin
   with TVarData(Value) do
-    if VType=varVariant or varByRef then begin
-      result := VariantSave(PVariant(VPointer)^,Dest);
-      exit;
-    end else begin
+    if VType and varByRef<>0 then
+      if VType=varVariant or varByRef then begin
+        result := VariantSave(PVariant(VPointer)^,Dest);
+        exit;
+      end else
+      if SetVariantUnRefSimpleValue(Value,tmp) then begin
+        result := VariantSave(variant(tmp),Dest-sizeof(VType));
+        exit;
+      end;
+  with TVarData(Value) do begin
     PWord(Dest)^ := VType;
     inc(Dest,sizeof(VType));
     case VType of
@@ -30226,12 +30232,7 @@ begin
         inc(Dest,LenBytes);
       end;
     end;
-    else
-      if SetVariantUnRefSimpleValue(Value,tmp) then begin
-        result := VariantSave(variant(tmp),Dest-sizeof(VType));
-        exit;
-      end else // complex types are stored as JSON
-        ComplexType;
+    else ComplexType; // complex types are stored as JSON
     end;
   end;
   result := Dest;
@@ -30239,10 +30240,18 @@ end;
 
 function VariantSaveLength(const Value: variant): integer;
 var tmp: TVarData;
-begin
+begin // match VariantSave() storage 
   with TVarData(Value) do
-  if VType=varVariant or varByRef then
-    result := VariantSaveLength(PVariant(VPointer)^) else
+    if VType and varByRef<>0 then
+      if VType=varVariant or varByRef then begin
+        result := VariantSaveLength(PVariant(VPointer)^);
+        exit;
+      end else
+      if SetVariantUnRefSimpleValue(Value,tmp) then begin
+        result := VariantSaveLength(variant(tmp));
+        exit;
+      end;
+  with TVarData(Value) do
   case VType of
   varShortInt, varByte:
     result := sizeof(VByte)+sizeof(VType);
@@ -30265,14 +30274,12 @@ begin
         +sizeof(VType);
     {$endif}
   else
-    if SetVariantUnRefSimpleValue(Value,tmp) then
-      result := VariantSaveLength(variant(tmp)) else
-      try // complex types will be stored as JSON
-        result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+sizeof(VType);
-      except
-        on Exception do
-          result := 0; // notify invalid/unhandled variant content
-      end;
+    try // complex types will be stored as JSON
+      result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+sizeof(VType);
+    except
+      on Exception do
+        result := 0; // notify invalid/unhandled variant content
+    end;
   end;
 end;
 
@@ -30359,7 +30366,7 @@ end;
 procedure FromVarVariant(var Source: PByte; var Value: variant;
   CustomVariantOptions: TDocVariantOptions);
 begin
-  Source := PByte(VariantLoad(Value,PAnsiChar(Source)));
+  Source := PByte(VariantLoad(Value,PAnsiChar(Source),CustomVariantOptions));
 end;
 
 function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
@@ -30616,7 +30623,7 @@ begin
     exit;
   end else begin
     IntSet(V,Value,PropName);
-    result := True;
+    result := true;
     exit;
   end;
   ValueSet.VType := varString; // unpatched RTL do not like WideString values
