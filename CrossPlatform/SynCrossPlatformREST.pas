@@ -1267,7 +1267,7 @@ function GetOutHeader(const Call: TSQLRestURIParams; const Name: string): string
 
 const
   /// the first field in TSQLFieldBits is always ID/RowID
-  ID_SQLFIELD: TSQLFieldBit = 0;
+  ID_SQLFIELD: TSQLFieldBit = TSQLFieldBit(0);
   
 var
   /// contains no field bit set
@@ -1522,7 +1522,7 @@ begin
   PropCache := new JObject;
   for p := 0 to high(Props) do begin
     prop := Props[p];
-    prop.FieldIndex := p;
+    prop.FieldIndex := TSQLFieldBit(p);
     if (p>0) and (p<=length(PropKinds)) then
       prop.Kind := PropKinds[p-1] else
       prop.Kind := sftUnspecified;
