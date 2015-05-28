@@ -24951,9 +24951,11 @@ var a: array[0..3] of integer absolute guid1;
 {$endif}
 begin // faster implementation than in SysUtils.pas
 {$ifdef CPU64}
-  Result := (a[0]=b[0]) and (a[1]=b[1]);
+  result := (a[0]=b[0]) and (a[1]=b[1]);
 {$else}
-  Result := (a[0]=b[0]) and (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
+  if a[0]<>b[0] then
+    result := false else
+    result := (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
 {$endif}
 end;
 
@@ -34045,7 +34047,11 @@ begin
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal space for Add()
     end else begin
+      {$ifdef FPC}
       capa := DynArrayLength(fValue^);
+      {$else}
+      capa := PInteger(PtrInt(fValue^)-sizeof(PtrInt))^;
+      {$endif}
       if delta>0 then begin
         // size-up -> grow by chunks
         if capa>=fCountP^ then
@@ -34055,7 +34061,7 @@ begin
           aCount := fCountP^ else
           aCount := capa;
       end else
-      if aCount>0 then // aCount=0 should release memory (e.g. for TDynArray.Clear)
+      if aCount>0 then // aCount=0 should release memory (e.g. TDynArray.Clear)
         // size-down -> only if worth it (for faster Delete)
         if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
           exit;

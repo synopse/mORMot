@@ -9113,7 +9113,7 @@ type
     // TEXT_CONTENT_TYPE_HEADER or HTML_CONTENT_TYPE_HEADER constants or
     // GetMimeContentType() function
     // - in order to be handled as expected, this field SHALL be set to NOT ''
-    // (otherwise TServiceCustomAnswer will transmitted with as raw JSON)
+    // (otherwise TServiceCustomAnswer will be transmitted as raw JSON)
     Header: RawUTF8;
     /// the response body
     // - corresponding to the response type, as defined in Header
@@ -46881,7 +46881,7 @@ begin
         fFactory.fInterfaceIID) then
       UID[0] := nil; // mark TGUID implemented by this fake interface
   end else begin
-    C := aImplementationClass;
+    C := aImplementationClass; // search all implemented TGUID for this class
     repeat
       T := C.GetInterfaceTable;
       if T<>nil then
@@ -46894,10 +46894,6 @@ begin
             end;
       C := C.ClassParent;
     until C=nil;
-    for j := 0 to high(aInterfaces) do
-      if UID[j]<>nil then
-        raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
-          [self,aInterfaces[j]^.Name,aImplementationClass]);
   end;
   for j := 0 to high(aInterfaces) do
     if UID[j]<>nil then
