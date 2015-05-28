@@ -541,7 +541,7 @@ unit SynCommons;
   - fixed unexpected GPF in TSynCache.Find() e.g. when cache is disabled
   - handle variant serialization in/from JSON using new VariantLoadJSON(),
     VariantSaveJSON(), VariantSaveJSONLength() functions and corresponding
-    TTextWriter.AddVariantJSON() method
+    TTextWriter.AddVariant() method
   - handle variant serialization in/from our binary custom format, using new
     VariantLoad(), VariantSaveLength() and VariantSave() functions
   - added VariantToUTF8() overloaded functions for fast conversion
@@ -1736,6 +1736,8 @@ procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
 procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
 
 /// faster alternative to Finalize(aVariantDynArray)
+// - this function will take in account and optimize the release of a dynamic
+// array of custom variant types values
 // - for instance, an array of TDocVariant will be optimized for speed
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 
@@ -5938,7 +5940,7 @@ type
     procedure Add3(Value: integer);
     /// append a line of text with CR+LF at the end
     procedure AddLine(const Text: shortstring);
-    /// append an UTF-8  String
+    /// append an UTF-8 String, with no JSON escaping
     procedure AddString(const Text: RawUTF8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append several UTF-8 strings
@@ -6175,11 +6177,12 @@ type
     // handling this kind of records, or directly from TypeInfo() of the record
     procedure AddRecordJSON(const Rec; TypeInfo: pointer);
     {$ifndef NOVARIANTS}
-    /// append a variant content as JSON number or string
-    // - can be converted back to a variant value using VariantLoadJSON()
+    /// append a variant content as number or string
+    // - default Escape=twJSONEscape will create valid JSON content, which
+    // can be converted back to a variant value using VariantLoadJSON()
     // - note that before Delphi 2009, any varString value is expected to be
-    // a RawUTF8 instance - which does make sense in the mORMot area
-    procedure AddVariantJSON(const Value: variant; Escape: TTextWriterKind=twJSONEscape);
+    // a RawUTF8 instance - which does make sense in the mORMot context
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind=twJSONEscape);
     {$endif}
     /// append a void record content as UTF-8 encoded JSON or custom serialization
     // - this method will first create a void record (i.e. filled with #0 bytes)
@@ -10739,7 +10742,7 @@ function VariantLoad(const Bin: RawByteString;
   CustomVariantOptions: TDocVariantOptions=[dvoValueCopiedByReference]): variant; overload;
 
 /// retrieve a variant value from a JSON number or string
-// - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
 // (as RawUTF8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
@@ -10753,7 +10756,7 @@ function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
   EndOfObject: PUTF8Char=nil; TryCustomVariants: PDocVariantOptions=nil): PUTF8Char; overload;
 
 /// retrieve a variant value from a JSON number or string
-// - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
 // (as RawUTF8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
@@ -10766,7 +10769,7 @@ procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions=nil); overload;
 
 /// retrieve a variant value from a JSON number or string
-// - follows TTextWriter.AddVariantJSON() format (calls GetVariantFromJSON)
+// - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
 // - will instantiate either an Integer, Int64, currency, double or string value
 // (as RawUTF8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except TryCustomVariants points to some options
@@ -10779,7 +10782,7 @@ function VariantLoadJSON(const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions=nil): variant; overload;
 
 /// save a variant value into a JSON content
-// - follows the TTextWriter.AddVariantJSON() and VariantLoadJSON() format
+// - follows the TTextWriter.AddVariant() and VariantLoadJSON() format
 // - is able to handle simple and custom variant types, for instance:
 // !  VariantSaveJSON(1.5)='1.5'
 // !  VariantSaveJSON('test')='"test"'
@@ -10792,7 +10795,7 @@ function VariantLoadJSON(const JSON: RawUTF8;
 function VariantSaveJSON(const Value: variant; Escape: TTextWriterKind=twJSONEscape): RawUTF8; overload;
 
 /// save a variant value into a JSON content
-// - follows the TTextWriter.AddVariantJSON() and VariantLoadJSON() format
+// - follows the TTextWriter.AddVariant() and VariantLoadJSON() format
 // - is able to handle simple and custom variant types, for instance:
 // !  VariantSaveJSON(1.5)='1.5'
 // !  VariantSaveJSON('test')='"test"'
@@ -10806,7 +10809,7 @@ procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8); overload;
 
 /// compute the number of chars needed to save a variant value into a JSON content
-// - follows the TTextWriter.AddVariantJSON() and VariantLoadJSON() format
+// - follows the TTextWriter.AddVariant() and VariantLoadJSON() format
 // - this will be much faster than length(VariantSaveJSON()) for huge content
 // - note that before Delphi 2009, any varString value is expected to be
 // a RawUTF8 instance - which does make sense in the mORMot area
@@ -11244,6 +11247,17 @@ type
     // - will use VariantToUTF8() to populate the result array: as a consequence,
     // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
     function ToRawUTF8DynArray: TRawUTF8DynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// save a document as UTF-8 encoded Name=Value pairs
+    // - will follow by default the .INI format, but you can specify your
+    // own expected layout
+    procedure ToTextPairs(out result: RawUTF8; const NameValueSep: RawUTF8='=';
+      const ItemSep: RawUTF8=#13#10); overload;
+    /// save a document as UTF-8 encoded Name=Value pairs
+    // - will follow by default the .INI format, but you can specify your
+    // own expected layout
+    function ToTextPairs(const NameValueSep: RawUTF8='=';
+      const ItemSep: RawUTF8=#13#10): RawUTF8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
@@ -15299,7 +15313,8 @@ begin
 end;
 
 
-{ note: those VariantToInteger*() functions are expected to be there }
+{ note: those low-level VariantTo*() functions are expected to be there
+        even if NOVARIANTS conditional is defined (used e.g. by SynDB.TQuery) }
 
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 var tmp: TVarData;
@@ -29597,7 +29612,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptSingle:    aWriter.AddSingle(PSingle(Value)^);
     ptWord:      aWriter.AddU(PWord(Value)^);
     {$ifndef NOVARIANTS}
-    ptVariant:   aWriter.AddVariantJSON(PVariant(Value)^,twJSONEscape);
+    ptVariant:   aWriter.AddVariant(PVariant(Value)^,twJSONEscape);
     {$endif}
     ptRawByteString:
       aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
@@ -30425,7 +30440,7 @@ procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
 begin // not very optimized, but fast enough in practice, and creates valid JSON
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
-    AddVariantJSON(Value,Escape);
+    AddVariant(Value,Escape);
     SetText(result);
   finally
     Free;
@@ -30439,7 +30454,7 @@ begin // will avoid most memory allocations, except for one 2KB internal buffer
   try
     with DefaultTextWriterJSONClass.Create(Fake,2048) do
     try
-      AddVariantJSON(Value,Escape);
+      AddVariant(Value,Escape);
       FlushFinal;
       result := fTotalFileSize;
     finally
@@ -31845,6 +31860,41 @@ begin
   ToRawUTF8DynArray(result);
 end;
 
+procedure TDocVariantData.ToTextPairs(out result: RawUTF8; const NameValueSep: RawUTF8='=';
+  const ItemSep: RawUTF8=#13#10);
+var i: integer;
+begin
+  case VKind of
+  dvUndefined: exit; // leave result=''
+  dvObject: ;
+  else raise EDocVariant.Create('ToTextPairs expects a dvObject');
+  end;
+  if VCount=0 then
+    exit;
+  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+  try
+    i := 0;
+    repeat
+      AddString(VName[i]);
+      AddString(NameValueSep);
+      AddVariant(VValue[i]);
+      inc(i);
+      if i=VCount then
+        break;
+      AddString(ItemSep);
+    until false;
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
+  const ItemSep: RawUTF8=#13#10): RawUTF8;
+begin
+  ToTextPairs(result,NameValueSep,ItemSep);
+end;
+
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
 var i: integer;
 begin
@@ -32005,7 +32055,7 @@ begin
         W.Add('"');
         W.AddJSONEscape(pointer(VName[i]),Length(VName[i]));
         W.Add('"',':');
-        W.AddVariantJSON(VValue[i],twJSONEscape);
+        W.AddVariant(VValue[i],twJSONEscape);
         W.Add(',');
       end;
       W.CancelLastComma;
@@ -32014,7 +32064,7 @@ begin
     dvArray: begin
       W.Add('[');
       for i := 0 to VCount-1 do begin
-        W.AddVariantJSON(VValue[i],twJSONEscape);
+        W.AddVariant(VValue[i],twJSONEscape);
         W.Add(',');
       end;
       W.CancelLastComma;
@@ -35743,7 +35793,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-procedure TTextWriter.AddVariantJSON(const Value: variant; Escape: TTextWriterKind);
+procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
 var CustomVariantType: TCustomVariantType;
 begin
   with TVarData(Value) do
@@ -35763,43 +35813,51 @@ begin
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
   varBoolean:  AddString(JSON_BOOLEAN[VBoolean]);
-  varVariant:  AddVariantJSON(PVariant(VPointer)^,Escape);
+  varVariant:  AddVariant(PVariant(VPointer)^,Escape);
   varString: begin
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
     {$ifdef UNICODE}
-    AddAnyAnsiString(RawByteString(VString),twJSONEscape);
-    {$else}
-    AddJSONEscape(VString); // VString is expected to be a RawUTF8
+    AddAnyAnsiString(RawByteString(VString),Escape);
+    {$else}  // VString is expected to be a RawUTF8
+    Add(VAny,length(RawUTF8(VAny)),Escape);
     {$endif}
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
   end;
   varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
     AddW(VAny,0,Escape);
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
   end;
   else
   if VType=varVariant or varByRef then
-    AddVariantJSON(PVariant(VPointer)^,Escape) else
+    AddVariant(PVariant(VPointer)^,Escape) else
   if VType=varByRef or varString then begin
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
     {$ifdef UNICODE}
-    AddAnyAnsiString(PRawByteString(VAny)^,twJSONEscape);
-    {$else}
-    AddJSONEscape(PPointer(VAny)^); // VString is expected to be a RawUTF8
+    AddAnyAnsiString(PRawByteString(VAny)^,Escape);
+    {$else}  // VString is expected to be a RawUTF8
+    Add(PPointer(VAny)^,length(PRawUTF8(VAny)^),Escape);
     {$endif}
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
   end else
   if {$ifdef HASVARUSTRING}(VType=varByRef or varUString) or {$endif}
      (VType=varByRef or varOleStr) then begin
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
     AddW(PPointer(VAny)^,0,Escape);
-    Add('"');
+    if Escape=twJSONEscape then
+      Add('"');
   end else
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
     TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
-    raise ESynException.CreateUTF8('%.AddVariantJSON(VType=%)',[self,VType]);
+    raise ESynException.CreateUTF8('%.AddVariant(VType=%)',[self,VType]);
   end;
 end;
 {$endif NOVARIANTS}
@@ -35838,7 +35896,7 @@ begin
       AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
 {$ifndef NOVARIANTS}
     tkVariant:
-      AddVariantJSON(variant(aValue),twJSONEscape);
+      AddVariant(variant(aValue),twJSONEscape);
 {$endif}
     else
       AddShort('null');
@@ -36077,7 +36135,7 @@ begin // code below must match TDynArray.LoadFromJSON
   {$ifndef NOVARIANTS}
   djVariant:
     for i := 0 to n do begin
-      AddVariantJSON(PVariantArray(P)^[i],twJSONEscape);
+      AddVariant(PVariantArray(P)^[i],twJSONEscape);
       Add(',');
     end;
   {$endif}
@@ -36879,7 +36937,7 @@ begin
     vtCurrency: AddCurr64(VInt64^);
     vtObject:   WriteObject(VObject);
     {$ifndef NOVARIANTS}
-    vtVariant:  AddVariantJSON(VVariant^,twJSONEscape);
+    vtVariant:  AddVariant(VVariant^,twJSONEscape);
     {$endif}
   end;
 end;
@@ -36915,7 +36973,7 @@ begin
     Add(VInt64^);
   {$ifndef NOVARIANTS}
   vtVariant:
-    AddVariantJSON(VVariant^,Escape);
+    AddVariant(VVariant^,Escape);
   {$endif}
   {$ifdef UNICODE}
   vtUnicodeString:
@@ -36927,7 +36985,7 @@ end;
 {$ifndef NOVARIANTS}
 procedure TTextWriter.AddJSON(const Format: RawUTF8; const Args,Params: array of const);
 begin
-  AddVariantJSON(_JsonFastFmt(Format,Args,Params),twJSONEscape);
+  AddVariant(_JsonFastFmt(Format,Args,Params),twJSONEscape);
 end;
 {$endif}
 

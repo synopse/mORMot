@@ -5109,15 +5109,15 @@ begin
     {$ifndef NOVARIANTS}
     with TTextWriter.CreateOwnedStream do
     try
-      AddVariantJSON(a);
+      AddVariant(a);
       Add(',');
-      AddVariantJSON(r);
+      AddVariant(r);
       Add(',');
       PInt64(@c)^ := a;
-      AddVariantJSON(c);
+      AddVariant(c);
       Add(',');
       U := Int32ToUTF8(a);
-      AddVariantJSON(U);
+      AddVariant(U);
       J := Text;
       Check(J=U+','+DoubleToStr(r)+','+DoubleToStr(c)+',"'+U+'"');
       P := UniqueRawUTF8(J);

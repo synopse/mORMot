@@ -2975,7 +2975,7 @@ begin
 end;
 begin
   if TVarData(Value).VType<$10F then
-    W.AddVariantJSON(Value,twJSONEscape) else
+    W.AddVariant(Value,twJSONEscape) else
     AddCustom;
 end;
 

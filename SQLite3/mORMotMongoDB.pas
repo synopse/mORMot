@@ -746,7 +746,7 @@ begin
         raise EORMMongoDBException.CreateUTF8(
           '%.JSONFromDoc: Unknown field "%" for %',[self,doc.Names[i],fStoredClass]);
       W.AddFieldName(pointer(name),Length(name));
-      W.AddVariantJSON(doc.Values[i],twJSONEscape);
+      W.AddVariant(doc.Values[i],twJSONEscape);
       W.Add(',');
     end;
     W.CancelLastComma;

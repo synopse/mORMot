@@ -1137,7 +1137,7 @@ var ValueText: RawUTF8;
 begin
   if TVarData(Value).VType>varNull then
     if VarIsNumeric(Value) then // avoid RawUTF8 conversion for plain numbers
-      fWriter.AddVariantJSON(Value,twNone) else begin
+      fWriter.AddVariant(Value,twNone) else begin
       if fEscapeInvert then
         UnEscape := not UnEscape;
       VariantToUTF8(Value,ValueText,wasString);

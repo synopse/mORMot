@@ -565,7 +565,7 @@ begin
           W.Add('"');
         end;
         ftVariant:
-          W.AddVariantJSON(AsVariant);
+          W.AddVariant(AsVariant);
         ftBytes, ftVarBytes, ftBlob, ftGraphic, ftOraBlob, ftOraClob: begin
           blob := TRawByteStringStream.Create;
           try

@@ -19304,7 +19304,7 @@ procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
 var value: Variant;
 begin
   fPropInfo.GetVariantProp(Instance,value);
-  W.AddVariantJSON(value,twJSONEscape);
+  W.AddVariant(value,twJSONEscape);
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetValueVar(Instance: TObject;
@@ -22791,7 +22791,7 @@ begin
   if r<0 then
     r := TSQLTableRowVariantData(Value).VTable.fStepRow;
   TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
-  W.AddVariantJSON(tmp,Escape);
+  W.AddVariant(tmp,Escape);
 end;
 
 {$endif NOVARIANTS}
@@ -42326,7 +42326,7 @@ begin
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
           HR(P);
           P^.GetVariantProp(Value,VVariant);
-          AddVariantJSON(VVariant,twJSONEscape);
+          AddVariant(VVariant,twJSONEscape);
         end;
         {$endif}
         tkClass: begin
@@ -45745,7 +45745,7 @@ begin
       for i := 0 to fMethod^.ArgsOutputValuesCount-1 do begin
         if TVarData(fOutput[i]).VType=varEmpty then
           raise EInterfaceStub.Create(fSender,fMethod^,'Output[%] not set',[i]);
-        AddVariantJSON(fOutput[i],twJSONEscape);
+        AddVariant(fOutput[i],twJSONEscape);
         Add(',');
       end;
       CancelLastComma;
@@ -47888,7 +47888,7 @@ begin
   smvInterface:  ; // already written by TInterfacedObjectFake.InterfaceWrite
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
-  smvVariant:    WR.AddVariantJSON(PVariant(V)^,twJSONEscape);
+  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
   {$endif}
   smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
   end;
