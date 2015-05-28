@@ -4603,7 +4603,12 @@ type
     procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TConvertRawUTF8=nil;
       OnAdd: TSynNameValueNotify=nil);
     /// search for a Name, return the index in List
+    // - using fast O(1) hash algoritm
     function Find(const aName: RawUTF8): integer;
+    /// search for the first chars of a Name, return the index in List
+    // - using O(n) calls of IdemPChar() function
+    // - here aUpperName should be already uppercase, as expected by IdemPChar()
+    function FindStart(const aUpperName: RawUTF8): integer;
     /// search for a Name, and delete it in the List if it exists
     function Delete(const aName: RawUTF8): boolean;
     /// search for a Name, return the associated Value as a UTF-8 string
@@ -45326,6 +45331,14 @@ end;
 function TSynNameValue.Find(const aName: RawUTF8): integer;
 begin
   result := fDynArray.FindHashed(aName);
+end;
+
+function TSynNameValue.FindStart(const aUpperName: RawUTF8): integer;
+begin
+  for result := 0 to Count-1 do
+    if IdemPChar(pointer(List[result].Name),pointer(aUpperName)) then
+      exit;
+  result := -1;
 end;
 
 function TSynNameValue.Delete(const aName: RawUTF8): boolean;
