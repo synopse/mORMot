@@ -216,6 +216,10 @@ type
       const aDefaultHost,aDefaultPort: SockString);
     /// finalize the thread process, and its associted REST instance
     destructor Destroy; override;
+    /// returns the Monitoring and Rest statistics as a JSON object
+    // - resulting format is
+    // $ {...MonitoringProperties...,"Rest":{...RestStats...}}
+    function StatsAsJson: RawUTF8;
     /// the parameters used to setup this thread process
     property Settings: TDDDSocketThreadSettings read fSettings;
   published
@@ -666,6 +670,23 @@ begin
       ExecuteDisconnectAfterError;
   finally
     fLock.Release;
+  end;
+end;
+
+function TDDDSocketThread.StatsAsJson: RawUTF8;
+begin
+  with TJSONSerializer.CreateOwnedStream do
+  try
+    WriteObject(FMonitoring);
+    if FRest.InheritsFrom(TSQLRestServer) then begin
+      CancelLastChar('}');
+      AddShort(',"Rest":');
+      AddNoJSONEscapeUTF8(TSQLRestServer(FRest).FullStatsAsJson);
+      Add('}');
+    end;
+    SetText(result);
+  finally
+    Free;
   end;
 end;
 
