@@ -993,15 +993,15 @@ const
     'ORACLE','MICROSOFT SQL','ACCESS','MYSQL','SQLITE','FIREBIRD','INTERBASE','POSTGRE');
   DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSQLDBDefinition = (
     dDefault,dOracle,dMSSQL,dJet,dMySQL,dSQLite,dFirebird,dFirebird,dPostgreSql);
-  DRIVER_NAMES: array[0..19] of PAnsiChar = (
+  DRIVER_NAMES: array[0..20] of PAnsiChar = (
     'SQLSRV','LIBTDSODBC','IVSS','IVMSSS','PBSS',
-    'DB2CLI','LIBDB2','IVDB2','PBDB2','MSDB2', 'MYODBC',
+    'DB2CLI','LIBDB2','IVDB2','PBDB2','MSDB2','CWBODBC', 'MYODBC',
     'SQORA','MSORCL','PBOR','IVOR', 'ODBCFB','IB', 'SQLITE',
     'PSQLODBC','NXODBCDRIVER'
     );
   DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSQLDBDefinition = (
     dDefault, dMSSQL,dMSSQL,dMSSQL,dMSSQL,dMSSQL,
-    dDB2,dDB2,dDB2,dDB2,dDB2, dMySQL,
+    dDB2,dDB2,dDB2,dDB2,dDB2,dDB2, dMySQL,
     dOracle,dOracle,dOracle,dOracle, dFirebird,dFirebird, dSQLite,
     dPostgreSQL, dNexusDB);
   DRIVERCOMPLETION: array[boolean] of SqlUSmallint = (
