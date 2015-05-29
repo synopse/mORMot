@@ -24953,9 +24953,13 @@ begin // faster implementation than in SysUtils.pas
 {$ifdef CPU64}
   result := (a[0]=b[0]) and (a[1]=b[1]);
 {$else}
+  {$ifdef HASINLINE}
+  result := (a[0]=b[0]) and (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
+  {$else}
   if a[0]<>b[0] then
     result := false else
     result := (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
+  {$endif}
 {$endif}
 end;
 
@@ -32254,7 +32258,9 @@ begin
     raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
 end;
 
-const // will be in code section of the exe, so will be read-only by design
+const
+  // will be in code section of the exe, so will be read-only by design
+  // VKind=dvUndefined and VCount=0
   DocVariantDataFake: TDocVariantData = ();
 
 function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
