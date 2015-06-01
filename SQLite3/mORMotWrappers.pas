@@ -629,6 +629,8 @@ procedure RegisterType(var list: TDocVariantData);
 var info: variant;
     item: PTypeInfo;
     itemSize: integer;
+    objArrayClass: TClass;
+    objArrayType: TWrapperType;
     parser: TJSONRecordAbstract;
 begin
   if list.SearchItemByProp('name',typName,false)>=0 then
@@ -647,8 +649,20 @@ begin
   end;
   wArray: begin
     item := typInfo^.DynArrayItemType(@itemSize);
-    if item=nil then
-      info := ContextFromInfo(TYPES_SIZE[itemSize]) else
+    if item=nil then begin
+      if itemSize=SizeOf(pointer) then begin
+        objArrayClass := TJSONSerializer.RegisterObjArrayFindType(typInfo);
+        if objArrayClass=nil then
+          info := ContextFromInfo(TYPES_SIZE[itemSize]) else begin
+          if objArrayClass.InheritsFrom(TSQLRecord) then
+            objArrayType := wSQLRecord else
+            objArrayType := wObject;
+          info := ContextFromInfo(objArrayType,'',objArrayClass.ClassInfo);
+          _ObjAddProps(['isObjArray',true],info);
+        end;
+      end else
+        info := ContextFromInfo(TYPES_SIZE[itemSize]);
+    end else
       info := ContextFromInfo(wUnknown,'',item);
     info.name := typName;
   end;
