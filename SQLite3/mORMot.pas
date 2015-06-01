@@ -3605,6 +3605,10 @@ type
     // ! TJSONSerializer.RegisterObjArrayForJSON([
     // !     TypeInfo(TAddressObjArray),TAddress, TypeInfo(TUserObjArray),TUser]);
     class procedure RegisterObjArrayForJSON(const aDynArrayClassPairs: array of const); overload;
+    /// retrieve the class type associated with a T*ObjArray dynamic array
+    // - the T*ObjArray dynamic array should have been previously registered
+    // via RegisterObjArrayForJSON() overloaded methods
+    class function RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
   end;
 
 
@@ -33562,7 +33566,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     end;
     if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceMethodIndex>=0) and
        (SessionGroup-1 in Service.fExecution[ServiceMethodIndex].Denied) then begin
-      Error('Unauthorized method');
+      Error('Unauthorized method',HTML_NOTALLOWED);
       exit;
     end;
     // if we reached here, we have to run the service method
@@ -39749,6 +39753,18 @@ begin
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
   if not InternalIsObjArray(aDynArray) then
     EModelException.CreateUTF8('% ObjArray?',[self]);
+end;
+
+class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
+var ndx: integer;
+begin
+  result := nil;
+  if ObjArraySerializers=nil then
+    exit;
+  ndx := FastFindPointerSorted(pointer(ObjArrayTypes),
+    ObjArraySerializers.Count-1,aDynArray);
+  if ndx>=0 then
+    result := TObjArraySerializer(ObjArraySerializers.Items[ndx]).ItemClass;
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
@@ -47497,13 +47513,13 @@ begin
 end;
 
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
-procedure Error(const Msg: RawUTF8);
+procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
 var method: RawUTF8;
 begin
   if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
     method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
   Ctxt.Error('% % for %%',[ToText(InstanceCreation),Msg,
-    fInterface.fInterfaceTypeInfo^.Name,method]);
+    fInterface.fInterfaceTypeInfo^.Name,method],Status);
 end;
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
@@ -47540,7 +47556,7 @@ begin
           sicPerUser:    Inst.InstanceID := Ctxt.SessionUser;
           sicPerGroup:   Inst.InstanceID := Ctxt.SessionGroup;
           end else begin
-            Error('mode expects an authenticated session');
+            Error('mode expects an authenticated session',HTML_UNAUTHORIZED);
             exit;
           end;
       end;
@@ -47592,7 +47608,7 @@ begin
              Ctxt.ForceServiceResultAsJSONObject,
              {$ifdef LVCL}nil{$else}fBackgroundThread{$endif},
              Ctxt.ExecuteCallback) then begin
-          Error('execution failed (probably due to bad input parameters)');
+          Error('execution failed (probably due to bad input parameters)',HTML_NOTACCEPTABLE);
           exit; // wrong request
         end;
       finally
@@ -48615,8 +48631,19 @@ begin
   status := fClient.URI(uri,'POST',@resp,@head,@sent).Lo;
   if status<>HTML_SUCCESS then begin
     if aErrorMsg<>nil then begin
-      if resp='' then
-        aErrorMsg^ := FormatUTF8('URI % % returned status %',[uri,sent,status]) else
+      if resp='' then begin
+        StatusCodeToErrorMsg(status,resp);
+        case status of
+        HTML_UNAVAILABLE: head := ' - Check the communication parameters';
+        HTML_NOTIMPLEMENTED: head := ' - Server not reachable';
+        HTML_NOTALLOWED: head := '-  Method forbidden for this User group';
+        HTML_UNAUTHORIZED: head := ' - No active session';
+        HTML_NOTACCEPTABLE: head := ' - Invalid input parameters';
+        else head := '';
+        end;
+        aErrorMsg^ := FormatUTF8('URI % % returned status ''%'' (%%)',
+          [uri,sent,resp,status,head]);
+      end else
         aErrorMsg^ := resp;
     end;
     exit;
