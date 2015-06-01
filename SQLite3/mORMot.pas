@@ -3605,6 +3605,10 @@ type
     // ! TJSONSerializer.RegisterObjArrayForJSON([
     // !     TypeInfo(TAddressObjArray),TAddress, TypeInfo(TUserObjArray),TUser]);
     class procedure RegisterObjArrayForJSON(const aDynArrayClassPairs: array of const); overload;
+    /// retrieve the class type associated with a T*ObjArray dynamic array
+    // - the T*ObjArray dynamic array should have been previously registered
+    // via RegisterObjArrayForJSON() overloaded methods
+    class function RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
   end;
 
 
@@ -39749,6 +39753,18 @@ begin
     aDynArray,serializer.CustomReader,serializer.CustomWriter);
   if not InternalIsObjArray(aDynArray) then
     EModelException.CreateUTF8('% ObjArray?',[self]);
+end;
+
+class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
+var ndx: integer;
+begin
+  result := nil;
+  if ObjArraySerializers=nil then
+    exit;
+  ndx := FastFindPointerSorted(pointer(ObjArrayTypes),
+    ObjArraySerializers.Count-1,aDynArray);
+  if ndx>=0 then
+    result := TObjArraySerializer(ObjArraySerializers.Items[ndx]).ItemClass;
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
