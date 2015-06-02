@@ -1049,7 +1049,7 @@ unit mORMot;
       ADODB.recordset format - thanks mpv and Vadim Orel for the input!
     - added TSQLTable.GetODSDocument method, to return a document readable by
       Office applications - thanks esmond for the idea and patch
-    - fixed ticket [5a8ec14e25] about TSQLTable.DeleteColumnValues
+    - fixed ticket [5a8ec14e25] about potential GPF in TSQLTable.DeleteColumnValues
     - added TSQLRecord.CreateAndFillPrepare(aJSON) overloaded method
     - introducing TSQLRecordInterfaced class, if your TSQLRecord definition
       should be able to implement interfaces

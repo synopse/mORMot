@@ -4278,7 +4278,7 @@ type
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found
     // - this method will use hashing for fast retrieval
-    // - ELem should be of the same exact type than the dynamic array, or at
+    // - Elem should be of the same exact type than the dynamic array, or at
     // least matchs the fields used by both the hash function and Equals method:
     // e.g. if the searched/hashed field in a record is a string as first field,
     // you may use a string variable as Elem: other fields will be ignored

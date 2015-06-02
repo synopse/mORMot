@@ -12064,7 +12064,7 @@ begin
     Check(Ask('ToTextFunc','777','value=777','{result:"abc",value=777}',200)='777');
     if rout=0 then
       Check(fClient.URI('root/ComplexCalculator.GetCustomer?CustomerId=John%20Doe',
-        'POST',@resp,nil,nil).Lo=400,'incorrect input');
+        'POST',@resp,nil,nil).Lo=406,'incorrect input');
   end;
   fClient.ServicesRouting := TSQLRestRoutingREST; // back to default
   fClient.Server.ServicesRouting := TSQLRestRoutingREST;
