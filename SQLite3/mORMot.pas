@@ -6676,6 +6676,10 @@ type
     // those fields don't contain any data, but a TSQLRecordMany instance
     // which allow to access to the pivot table data)
     procedure FillFrom(aRecord: TSQLRecord); overload;
+    /// fill the specified properties of this object from another object
+    // - source object must be a parent or of the same class as the current record
+    // - copy the fields, as specified by their bit index in the source record
+    procedure FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits); overload;
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
     // - use this method to fill a BLOB property, i.e. a property defined with
@@ -25973,6 +25977,7 @@ end;
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord);
 var i, f: integer;
     S, D: TSQLRecordProperties;
+    SP: TSQLPropInfo;
     wasString: boolean;
     tmp: RawUTF8;
 begin
@@ -25985,16 +25990,52 @@ begin
       S.CopiableFields[f].CopyValue(aRecord,self);
     exit;
   end;
-  D := RecordProps;
+  D := RecordProps; // here we are on two diverse tables -> don't copy ID
   for i := 0 to high(S.CopiableFields) do begin
-    f := D.Fields.IndexByName(S.CopiableFields[i].Name);
+    SP := S.CopiableFields[i];
+    if D.Fields.List[SP.PropertyIndex].Name=SP.Name then // optimistic match
+      f := SP.PropertyIndex else
+      f := D.Fields.IndexByName(S.CopiableFields[i].Name);
     if f>=0 then
-      if S.CopiableFields[i].ClassType=D.Fields.List[f].ClassType then
-        S.CopiableFields[f].CopyValue(aRecord,self) else begin
-        S.CopiableFields[i].GetValueVar(aRecord,False,tmp,@wasString);
+      if SP.ClassType=D.Fields.List[f].ClassType then
+        SP.CopyValue(aRecord,self) else begin
+        SP.GetValueVar(aRecord,False,tmp,@wasString);
         D.Fields.List[f].SetValueVar(Self,tmp,wasString);
       end;
     end;
+end;
+
+procedure TSQLRecord.FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits);
+var i, f: integer;
+    S, D: TSQLRecordProperties;
+    SP: TSQLPropInfo;
+    wasString: boolean;
+    tmp: RawUTF8;
+begin
+  if (self=nil) or (aRecord=nil) or not InheritsFrom(aRecord.ClassType) then
+    exit;
+  S := aRecord.RecordProps;
+  if PSQLRecordClass(aRecord)^=PSQLRecordClass(Self)^ then begin
+    fID := aRecord.fID; // same class -> ID values will match
+    for f := 0 to S.Fields.Count-1 do
+      if f in aRecordFieldBits then
+        S.Fields.List[f].CopyValue(aRecord,self);
+    exit;
+  end;
+  D := RecordProps; // here we are on two diverse tables -> don't copy ID
+  for i := 0 to S.Fields.Count-1 do
+  if i in aRecordFieldBits then begin
+    SP := S.Fields.List[i];
+    if D.Fields.List[i].Name=SP.Name then // optimistic match
+      f := i else
+      f := D.Fields.IndexByName(SP.Name);
+    if f>=0 then
+      if SP.ClassType=D.Fields.List[f].ClassType then
+        SP.CopyValue(aRecord,self) else begin
+        SP.GetValueVar(aRecord,False,tmp,@wasString);
+        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+      end;
+  end;
 end;
 
 procedure TSQLRecord.FillFrom(Table: TSQLTable; Row: integer);
