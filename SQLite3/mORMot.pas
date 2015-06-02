@@ -32738,7 +32738,7 @@ end;
 
 function TSQLRestServer.RecordVersionSynchronizeSlaveStart(Table: TSQLRecordClass;
   MasterRemoteAccess: TSQLRestClientURI; OnNotify: TOnBatchWrite): boolean;
-var res,previous: TRecordVersion;
+var current,previous: TRecordVersion;
     tableIndex: integer;
     tableName: RawUTF8;
     service: IServiceRecordVersion;
@@ -32762,26 +32762,30 @@ begin
       exit else
     if not MasterRemoteAccess.Services.Resolve(nfo,service) then
       exit;
-  res := 0;
-  retry := 0;
+  current := 0;
+  retry := 0;            
   repeat
     repeat // retrieve all pending versions (may retry up to 5 times)
-      previous := res;
-      res := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
-      if res<0 then begin
+      previous := current;
+      current := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
+      if current<0 then begin
         InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',[self,Table],sllError);
         exit;
       end;
-    until res=previous;
+    until current=previous;
+    // subscribe for any further modification
     if callback=nil then
       callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table,OnNotify);
-    if service.Subscribe(tableName,res,callback) then begin // push notifications
+    if service.Subscribe(tableName,current,callback) then begin // push notifications
       if fRecordVersionSlaveCallbacks=nil then
         SetLength(fRecordVersionSlaveCallbacks,Model.TablesMax+1);
       fRecordVersionSlaveCallbacks[tableIndex] := callback;
+      InternalLog('%.RecordVersionSynchronizeSlaveStart(%): started from revision %',
+        [self,Table,current],sllDebug);
       result := true;
       exit;
     end;
+    // some modifications since version (i.e. last RecordVersionSynchronizeSlave)
     inc(retry);
   until retry=5; // avoid endless loop (most of the time, not needed)
   InternalLog('%.RecordVersionSynchronizeSlaveStart(%): retry failure',[self,Table],sllError);
