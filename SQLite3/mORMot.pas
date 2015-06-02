@@ -6795,13 +6795,6 @@ type
   // - will be implemented as TSQLTableJSON for remote access through optimized
   // JSON content
   TSQLTable = class
-  private
-    fQueryTables: TSQLRecordClassDynArray;
-    fQueryColumnTypes: array of TSQLFieldType;
-    fQuerySQL: RawUTF8;
-    fFieldNames: TRawUTF8DynArray;
-    fFieldLengthMean: TIntegerDynArray;
-    fFieldLengthMeanSum: integer;
   protected
     fRowCount: integer;
     fFieldCount: integer;
@@ -6820,6 +6813,8 @@ type
       TableIndex: integer;
     end;
     fFieldTypeAllRows: boolean;
+    /// the field names
+    fFieldNames: TRawUTF8DynArray;
     /// used by FieldIndex() for fast binary search
     fFieldNameOrder: TCardinalDynArray;
     /// contain the fResults[] pointers, after a IDColumnHide() call
@@ -6836,13 +6831,20 @@ type
     fOwnerMustFree: Boolean;
     /// current cursor row (1..RowCount), as set by the Step() method
     fStepRow: integer;
+    /// information about the Query sourcing this result set
+    fQueryTables: TSQLRecordClassDynArray;
+    fQueryColumnTypes: array of TSQLFieldType;
+    fQuerySQL: RawUTF8;
+    /// field length information
+    fFieldLengthMean: TIntegerDynArray;
+    fFieldLengthMeanSum: integer;
     /// column bit set at parsing to mark a string value (e.g. "..." in JSON)
     fFieldParsedAsString: set of 0..255;
     /// avoid GPF when TSQLTable is nil
     function GetRowCount: integer; {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
     procedure InitFieldTypes;
-    /// fill the fFieldNames[] array
+    /// fill the internal fFieldNames[] array
     procedure InitFieldNames;
   public
     /// initialize the result table
@@ -13648,7 +13650,11 @@ type
   TServicesPublishedInterfacesList = class(TSynCriticalSection)
   private
     fDynArray: TDynArray;
+    fDynArrayTimeoutTix: TDynArray;
+    fTimeoutTix: TInt64DynArray;
+    fTimeoutTixCount: integer;
     fLastPublishedJson: cardinal;
+    fTimeOut: integer;
   public
     /// the internal list of published services
     // - the list is stored in-order, i.e. it will follow the RegisterFromJSON()
@@ -13657,33 +13663,51 @@ type
     /// how many items are actually stored in List[]
     Count: Integer;
     /// initialize the storage
-    constructor Create;
+    constructor Create(aTimeoutMS: integer);
     /// add the JSON serialized TServicesPublishedInterfaces to the list
     // - called by TSQLRestServerURIContext.InternalExecuteSOAByInterface when
-    // the client provides its own services
-    procedure RegisterFromJSON(const PublishedJson: RawUTF8);
+    // the client provides its own services as _contract_ HTTP body
+    // - warning: supplied PublishedJson would be parsed in place, so modified
+    procedure RegisterFromClientJSON(var PublishedJson: RawUTF8);
+    /// set the list from JSON serialized TServicesPublishedInterfacesDynArray
+    // - may be used to duplicate the whole TSQLRestServer.AssociatedServices
+    // content, as returned from /root/Stat?findservice=*
+    // - warning: supplied PublishedJson would be parsed in place, so modified
+    procedure RegisterFromServerJSON(var PublishedJson: RawUTF8);
+    /// set the list from a remote TSQLRestServer
+    // - will call /root/Stat?findservice=* URI, then RegisterFromServerJSON()
+    function RegisterFromServer(Client: TSQLRestClientURI): boolean;
     /// search for a public URI in the registration list
     function FindURI(const aPublicURI: TSQLRestServerURI): integer;
     /// search for the latest registration of a service, by name
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    // - if the service name has been registered several times, the latest
-    // registration would be returned
-    function FindService(const aServiceName: RawUTF8): integer;
+    // - if the service name has been registered several times, all
+    // registration would be returned, the latest in first position
+    function FindService(const aServiceName: RawUTF8): TSQLRestServerURIDynArray;
     /// return all services URI by name, from the registration list, as URIs
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
     // - the returned string would contain all matching server URI, the latest
     // registration being the first to appear, e.g.
-    // ['addresslast:port/root','addressprevious:port/root','addressfirst:port/root']
+    // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
     function FindServiceAll(const aServiceName: RawUTF8): TRawUTF8DynArray; overload;
     /// return all services URI by name, from the registration list, as JSON
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    // - the returned JSON array will would contain all matching server URI, the
-    // latest registration being the first to appear, e.g.
-    // ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
+    // - the returned JSON array would contain all matching server URI, encoded as
+    // a TSQLRestServerURI JSON array, the latest registration being
+    // the first to appear, e.g.
+    // $ [{"Address":"addresslast","Port":"port","Root":"root"},...]
+    // - if aServiceName='*', it will return ALL registration items, encoded as
+    // a TServicesPublishedInterfaces JSON array, e.g.
+    // $ [{"PublicURI":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
     procedure FindServiceAll(const aServiceName: RawUTF8; aWriter: TTextWriter); overload;
+    /// the number of milliseconds after which an entry expires
+    // - is 0 by default, meaning no expiration
+    // - you can set it to a value so that any service URI registered with
+    // RegisterFromJSON() AFTER this property modification may expire
+    property TimeOut: integer read fTimeOut write fTimeOut;
   end;
 
   /// class-reference type (metaclass) of a REST server
@@ -32109,7 +32133,7 @@ begin
   SetLength(fTrackChangesHistoryTableIndex,fTrackChangesHistoryTableIndexCount);
   for t := 0 to fTrackChangesHistoryTableIndexCount-1 do
     fTrackChangesHistoryTableIndex[t] := -1;
-  fAssociatedServices := TServicesPublishedInterfacesList.Create;
+  fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   // abstract MVC initalization
   inherited Create(aModel);
   fAfterCreation := true;
@@ -33591,7 +33615,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     ord(imContract): begin
       // "method":"_contract_" to retrieve the implementation contract
       if (Call^.InBody<>'') and (Call^.InBody<>'[]') then
-        Server.AssociatedServices.RegisterFromJSON(Call^.InBody);
+        Server.AssociatedServices.RegisterFromClientJSON(Call^.InBody);
       ServiceResult('contract',Service.ContractExpected);
       exit; // "id":0 for this method -> no instance was created
     end;
@@ -36838,20 +36862,25 @@ end;
 
 { TServicesPublishedInterfacesList }
 
-constructor TServicesPublishedInterfacesList.Create;
+constructor TServicesPublishedInterfacesList.Create(aTimeoutMS: integer);
 begin
   inherited Create;
+  fTimeOut := aTimeoutMS;
   fDynArray.Init(TypeInfo(TServicesPublishedInterfacesDynArray),List,@Count);
+  fDynArrayTimeoutTix.Init(TypeInfo(TInt64DynArray),fTimeoutTix,@fTimeoutTixCount);
 end;
 
 function TServicesPublishedInterfacesList.FindURI(
   const aPublicURI: TSQLRestServerURI): integer;
+var tix: Int64;
 begin
+  tix := GetTickCount64;
   Enter;
   try
     for result := 0 to Count-1 do
       if List[result].PublicURI.Equals(aPublicURI) then
-        exit;
+        if (fTimeOut=0) or (fTimeoutTix[result]<tix) then
+          exit;
     result := -1;
   finally
     Leave;
@@ -36859,14 +36888,22 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindService(
-  const aServiceName: RawUTF8): integer;
+  const aServiceName: RawUTF8): TSQLRestServerURIDynArray;
+var i,n: integer;
+    tix: Int64;
 begin
+  tix := GetTickCount64;
+  result := nil;
   Enter;
   try
-    for result := Count-1 downto 0 do // downwards to return the latest found
-      if FindRawUTF8(List[result].Names,length(List[result].Names),aServiceName,true)>=0 then
-        exit;
-    result := -1;
+    n := 0;
+    for i := Count-1 downto 0 do // downwards to return the latest first
+      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+        if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
+          SetLength(result,n+1);
+          result[n] := List[i].PublicURI;
+          inc(n);
+        end;
   finally
     Leave;
   end;
@@ -36875,14 +36912,17 @@ end;
 function TServicesPublishedInterfacesList.FindServiceAll(
   const aServiceName: RawUTF8): TRawUTF8DynArray;
 var i,n: integer;
+    tix: Int64;
 begin
+  tix := GetTickCount64;
   result := nil;
   n := 0;
   Enter;
   try
     for i := Count-1 downto 0 do // downwards to return the latest first
       if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
-        AddRawUTF8(result,n,List[i].PublicURI.URI);
+        if (fTimeOut=0) or (fTimeoutTix[i]<tix) then
+          AddRawUTF8(result,n,List[i].PublicURI.URI);
   finally
     Leave;
   end;
@@ -36892,16 +36932,27 @@ end;
 procedure TServicesPublishedInterfacesList.FindServiceAll(
   const aServiceName: RawUTF8; aWriter: TTextWriter);
 var i: integer;
+    tix: Int64;
 begin
+  tix := GetTickCount64;
   Enter;
   try
     aWriter.Add('[');
+    if aServiceName='*' then begin
+      for i := 0 to Count-1 do
+        with List[i] do
+          if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
+            aWriter.AddRecordJSON(List[i],TypeInfo(TServicesPublishedInterfaces));
+            aWriter.Add(',');
+          end;
+    end else
     for i := Count-1 downto 0 do // downwards to return the latest first
       with List[i] do
-      if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then begin
-        aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
-        aWriter.Add(',');
-      end;
+        if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then
+          if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
+            aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
+            aWriter.Add(',');
+          end;
     aWriter.CancelLastComma;
     aWriter.Add(']');
   finally
@@ -36909,18 +36960,42 @@ begin
   end;
 end;
 
-procedure TServicesPublishedInterfacesList.RegisterFromJSON(
-  const PublishedJson: RawUTF8);
-var ndx: integer;
+function TServicesPublishedInterfacesList.RegisterFromServer(Client: TSQLRestClientURI): boolean;
+var json: RawUTF8;
+begin
+  result := Client.CallBackGet('stat',['findservice','*'],json)=HTML_SUCCESS;
+  if result and (json<>'') then
+    RegisterFromServerJSON(json);
+end;
+
+procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
+  var PublishedJson: RawUTF8);
+var tix: Int64;
+    i: integer;
+begin
+  fDynArray.LoadFromJSON(pointer(PublishedJson));
+  fDynArrayTimeoutTix.Count := Count;
+  tix := GetTickCount64;
+  if fTimeout=0 then
+    inc(tix,maxInt) else
+    inc(tix,fTimeout);
+  for i := 0 to Count-1 do
+    fTimeoutTix[i] := tix;
+end;
+
+procedure TServicesPublishedInterfacesList.RegisterFromClientJSON(
+  var PublishedJson: RawUTF8);
+var i: integer;
     nfo: TServicesPublishedInterfaces;
     crc: cardinal;
+    tix: Int64;
     P: PUTF8Char;
 begin
   if PublishedJson='' then
     exit;
   crc := crc32c(0,pointer(PublishedJson),length(PublishedJson));
   if (self=nil) or ((fLastPublishedJson<>0) and (crc=fLastPublishedJson)) then
-    exit; // rough but working good in practice
+    exit; // rough but working good in practice, when similar _contract_ 
   P := Pointer(PublishedJson);
   if P^='[' then
     inc(P);
@@ -36929,11 +37004,20 @@ begin
     exit; // invalid supplied JSON content
   Enter;
   try // store so that the latest updated version is always at the end
-    ndx := FindURI(nfo.PublicURI);
-    if ndx>=0 then
-      fDynArray.Delete(ndx);
-    if nfo.Names<>nil then
+    for i := 0 to Count-1 do
+      if List[i].PublicURI.Equals(nfo.PublicURI) then begin // ignore Timeout
+        fDynArray.Delete(i);
+        fDynArrayTimeoutTix.Delete(i);
+        break;
+      end;
+    if nfo.Names<>nil then begin
       fDynArray.Add(nfo);
+      tix := GetTickCount64;
+      if fTimeout=0 then
+        inc(tix,maxInt) else
+        inc(tix,fTimeout);
+      fDynArrayTimeoutTix.Add(tix);
+    end;
     fLastPublishedJson := crc;
   finally
     Leave;
@@ -37041,7 +37125,7 @@ begin
     with fStoredClassRecordProps do
     for F := 0 to Fields.Count-1 do
       if F in fIsUnique then
-        // CaseInsensitive=true just like
+        // CaseInsensitive=true just like in SQlite3 (but slower)
         fUniqueFields.Add(TListFieldHash.Create(fValue,Fields.List[F],true));
   end;
   ReloadFromFile;
@@ -37087,7 +37171,7 @@ begin
   if needSort then
     fValue.Sort(TSQLRecordCompare);
   if fUniqueFields<>nil then
-    for i := 0 to fUniqueFields.Count-1 do
+    for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
     if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
       fValue.List[ndx] := nil; // avoid GPF within Delete()
       fValue.Delete(ndx);
@@ -37864,7 +37948,7 @@ begin
     if i<0 then
       result := nil else begin
       result := fStoredClass.Create;
-      CopyObject(fValue.List[i],Result);
+      CopyObject(fValue.List[i],result);
       result.fID := aID;
     end;
   finally
@@ -49059,9 +49143,8 @@ initialization
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   TJSONSerializer.RegisterCustomJSONSerializerFromText(
-    TypeInfo(TServicesPublishedInterfaces),_TServicesPublishedInterfaces);
-  TJSONSerializer.RegisterCustomJSONSerializerFromText(
-    TypeInfo(TSQLRestServerURI),_TSQLRestServerURI);
+    [TypeInfo(TServicesPublishedInterfaces),_TServicesPublishedInterfaces,
+     TypeInfo(TSQLRestServerURI),_TSQLRestServerURI]);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   InitializeCriticalSection(GlobalInterfaceResolutionLock);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);
