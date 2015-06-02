@@ -210,7 +210,9 @@ type
   // - riOwnModel will set ModelInstance.Owner := RestInstance
   // - riHandleAuthentication will set the corresponding parameter to true
   // - riDefaultLocalSQlite3IfNone will create a SQLite3 engine with a local
-  // file, if TDDDRestSettings.Kind is not set
+  // file, if TDDDRestSettings.ORM.Kind is not set
+  // - TSQLRestServerFullMemory will create a TSQLRestServerFullMemory
+  // storage, if TDDDRestSettings.ORM.Kind is not set
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
   TDDDNewRestInstanceOptions = set of (
     riOwnModel,
