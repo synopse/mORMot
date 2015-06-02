@@ -11301,6 +11301,11 @@ type
     /// find an item in this document, and returns its value
     // - return null if aName is not found, or if the instance is not a TDocVariant
     function GetValueOrNull(const aName: RawUTF8): variant;
+    /// returns a TDocVariant array containing all properties matching the
+    // first characters of the supplied property name
+    // - returns null if the document is not a dvObject
+    // - will use IdemPChar(), so search would be case-insensitive 
+    function GetValuesByStartName(const aStartName: RawUTF8): variant;
     /// find an item in this document, and returns its value as TVarData
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -31743,6 +31748,25 @@ begin
     TVarData(result).VType := varNull else
     // copy found value
     result := PVariant(found)^;
+end;
+
+function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8): variant;
+var upper: RawUTF8;
+    i: integer;
+begin
+  if aStartName='' then begin
+    result := Variant(self);
+    exit;
+  end;
+  if (Kind<>dvObject) or (VCount=0) then begin
+    SetVariantNull(result);
+    exit;
+  end;
+  TDocVariant.NewFast(result);
+  upper := UpperCase(aStartName);
+  for i := 0 to VCount-1 do
+    if IdemPChar(Pointer(VName[i]),pointer(upper)) then
+      TDocVariantData(result).AddValue(VName[i],VValue[i]);
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
