@@ -5335,7 +5335,7 @@ type
     // - expects Status to be either HTML_SUCCESS or HTML_CREATED
     // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTML_SUCCESS;
-      Handle304NotModified: boolean=false); overload;
+      Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
     procedure Returns(Value: TObject; Status: integer=HTML_SUCCESS;
@@ -34360,9 +34360,10 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Returns(const NameValuePairs: array of const;
-  Status: integer; Handle304NotModified: boolean);
+  Status: integer; Handle304NotModified,HandleErrorAsRegularResult: boolean);
 begin
-  Returns(JSONEncode(NameValuePairs),Status,'',Handle304NotModified);
+  Returns(JSONEncode(NameValuePairs),Status,'',Handle304NotModified,
+    HandleErrorAsRegularResult);
 end;
 
 procedure TSQLRestServerURIContext.Results(const Values: array of const;
