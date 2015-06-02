@@ -14666,8 +14666,6 @@ type
     // - default FALSE means to return the main TSQLRestServer.InternalState
     // - TRUE indicates that OutInternalState := cardinal(-1) will be returned
     fOutInternalStateForcedRefresh: boolean;
-    procedure StorageLock(WillModifyContent: boolean); virtual;
-    procedure StorageUnLock; virtual;
     procedure RecordVersionFieldHandle(Occasion: TSQLOccasion;
       var Decoder: TJSONObjectDecoder);
     /// override this method if you want to update the refresh state
@@ -14687,6 +14685,12 @@ type
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); reintroduce; virtual;
     /// finalize the storage instance
     destructor Destroy; override;
+    /// should be called before any access to the storage content
+    // - and protected with a try ... finally StorageUnLock; end section
+    procedure StorageLock(WillModifyContent: boolean); virtual;
+    /// should be called after any StorageLock-protected access to the content
+    // - e.g. protected with a try ... finally StorageUnLock; end section
+    procedure StorageUnLock; virtual;
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
     // - this overridden method will do nothing (should have been already made
@@ -14748,7 +14752,12 @@ type
     property Owner: TSQLRestServer read fOwner;
   end;
 
-  /// event prototype called by FindWhereEqual() method
+  /// event prototype called by TSQLRestStorageInMemory.FindWhereEqual() or
+  // TSQLRestStorageInMemory.ForEach() methods
+  // - aDest is an opaque pointer, as supplied to FindWhereEqual(), which may
+  // point e.g. to a result list, or a shared variable to apply the process
+  // - aRec will point to the corresponding item
+  // - aIndex will identify the item index in the internal list
   TFindWhereEqualEvent = procedure(aDest: pointer; aRec: TSQLRecord; aIndex: integer) of object;
 
   /// abstract REST storage exposing some internal TSQLRecord-based methods
@@ -14860,9 +14869,6 @@ type
     function GetItem(Index: integer): TSQLRecord;
       {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
-    // optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
-    function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt;
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
@@ -14969,6 +14975,9 @@ type
     // - method available since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
     function UpdateOne(ID: TID; const Values: TSQLVarDynArray): boolean; override;
+    /// direct deletion of a TSQLRecord, from its index in Values[]
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    function DeleteOne(aIndex: integer): boolean; virtual;
     /// overridden method for direct in-memory database engine call
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
@@ -14992,12 +15001,27 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; override;
+    /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
+    // - will use fast O(1) hash for fUniqueFields[] fields
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt; overload;
+    /// optimized search of WhereValue in a field, specified by name
+    // - will use fast O(1) hash for fUniqueFields[] fields
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    function FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt; overload;
+    /// execute a method on every TSQLRecord item
+    // - the loop execution will be protected via StorageLock/StorageUnlock 
+    procedure ForEach(WillModifyContent: boolean;
+      OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
     /// read-only access to the number of TSQLRecord values
     property Count: integer read GetCount;
     /// read-only access to the TSQLRecord values, storing the data
     // - this returns directly the item class instance stored in memory: if you
     // change the content, it will affect the internal data - so for instance
     // DO NOT change the ID values, unless you may have unexpected behavior
+    // - warning: this method should be protected via StorageLock/StorageUnlock
     property Items[Index: integer]: TSQLRecord read GetItem; default;
     /// read-only access to the ID of a TSQLRecord values
     property ID[Index: integer]: TID read GetID;
@@ -37196,7 +37220,7 @@ begin
       for i := 0 to Count-1 do begin
         ndx := TListFieldHash(List[i]).Find(aRec);
         if (ndx>=0) and (ndx<>aUpdateIndex) then
-          exit; // duplicate found at another entry
+          exit; // duplicate value found at another entry
       end;
   end;
   result := true;
@@ -37217,29 +37241,33 @@ begin
 end;
 
 function TSQLRestStorageInMemory.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
-var i,F: integer;
 begin
   if (self=nil) or (ID<=0) or (TableModelIndex<0) or
-     (Model.Tables[TableModelIndex]<>fStoredClass) then begin
-    result := false;
-    exit;
-  end;
-  StorageLock(True);
-  try
-    i := IDToIndex(ID);
-    if i<0 then
-      result := false else begin
-      if fUniqueFields<>nil then
-        for F := 0 to fUniqueFields.Count-1 do
-          TListFieldHash(fUniqueFields.List[F]).Invalidate;
-      if Owner<>nil then // notify BEFORE deletion
-         Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,ID,'',nil);
-      fValue.Delete(i);  // TObjectList.Delete() will Free record
-      fModified := true;
-      result := true;
+     (Model.Tables[TableModelIndex]<>fStoredClass) then
+    result := false else begin
+    StorageLock(True);
+    try
+      result := DeleteOne(IDToIndex(ID));
+    finally
+      StorageUnLock;
     end;
-  finally
-    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageInMemory.DeleteOne(aIndex: integer): boolean;
+var F: integer;
+begin
+  if cardinal(aIndex)>=cardinal(fValue.Count) then
+    result := false else begin
+    if fUniqueFields<>nil then
+      for F := 0 to fUniqueFields.Count-1 do
+        TListFieldHash(fUniqueFields.List[F]).Invalidate;
+    if Owner<>nil then // notify BEFORE deletion
+       Owner.InternalUpdateEvent(seDelete,fStoredClassProps.TableIndex,
+         TSQLRecord(fValue.List[aIndex]).fID,'',nil);
+    fValue.Delete(aIndex);  // TObjectList.Delete() will Free record
+    fModified := true;
+    result := true;
   end;
 end;
 
@@ -37386,6 +37414,23 @@ begin
     result := true; // properly ended the WHERE clause as 'FIELDNAME=value'
 end;
 
+function TSQLRestStorageInMemory.FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
+  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt;
+var WhereFieldIndex: integer;
+begin
+  result := 0;
+  if (Self=nil) or not Assigned(OnFind) then
+    exit;
+  if IsRowID(pointer(WhereFieldName)) then
+    WhereFieldIndex := 0 else begin
+    WhereFieldIndex := fStoredClassRecordProps.Fields.IndexByName(WhereFieldName);
+    if WhereFieldIndex<0 then
+      exit;
+    inc(WhereFieldIndex); // FindWhereEqual() expects index = RTTI+1
+  end;
+  result := FindWhereEqual(WhereFieldIndex,WhereValue,Onfind,Dest,FoundLimit,FoundOffset);
+end;
+
 function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: integer): PtrInt;
@@ -37496,6 +37541,21 @@ begin
         if result>=FoundLimit then
           exit;
       end;
+  end;
+end;
+
+procedure TSQLRestStorageInMemory.ForEach(WillModifyContent: boolean;
+  OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
+var i: integer;
+begin
+  if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
+    exit;
+  StorageLock(WillModifyContent);
+  try
+    for i := 0 to fValue.Count-1 do
+      OnEachProcess(Dest,fValue.List[i],i);
+  finally
+    StorageUnLock;
   end;
 end;
 
