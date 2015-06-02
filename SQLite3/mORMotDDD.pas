@@ -135,10 +135,8 @@ type
   // - cqrsNoPriorQuery for a I*Command.Update/Delete method with no prior
   // call to SelectBy*()
   // - cqrsNoPriorCommand for a I*Command.Commit with no prior Add/Update/Delete
+  // - cqrsNoMatch will notify that a command did not have any match
   // - cqrsUnspecifiedError will be used for any other kind of error
-  // - cqrsVPSTooManyEvents is returned by a VPS subscribe method when the
-  // subscribal is not possible unless information is first to be retrieved with
-  // regular REST requests
   TCQRSResult =
     (cqrsSuccess, cqrsSuccessWithMoreData,
      cqrsUnspecifiedError, cqrsBadRequest,
@@ -146,7 +144,7 @@ type
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand,
-     cqrsVPSTooManyEvents);
+     cqrsNoMatch);
 
   /// generic interface, to be used for CQRS I*Query and I*Command types definition
   // - TCQRSService class will allow to easily implement LastError* members
@@ -272,11 +270,11 @@ type
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
     procedure CqrsSetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
     procedure CqrsSetResultMsg(Error: TCQRSResult;
-      ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const); overload;
+      const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const); overload;
     procedure CqrsSetResultString(Error: TCQRSResult; const ErrorMessage: string);
     procedure CqrsSetResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
     procedure CqrsSetResultJSON(Error: TCQRSResult;
-      JSONFmt: PUTF8Char; const Args,Params: array of const);
+      const JSONFmt: RawUTF8; const Args,Params: array of const);
     function GetLastError: TCQRSResult;
     function GetLastErrorInfo: variant; virtual;
     procedure InternalCqrsSetResult(Error: TCQRSResult); virtual;
@@ -981,7 +979,7 @@ begin
 end;
 
 procedure TCQRSService.CqrsSetResultJSON(Error: TCQRSResult;
-  JSONFmt: PUTF8Char; const Args,Params: array of const);
+  const JSONFmt: RawUTF8; const Args,Params: array of const);
 begin
   CqrsSetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
 end;
@@ -1003,7 +1001,7 @@ begin
 end;
 
 procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
-  ErrorMsgFmt: PUTF8Char; const ErrorMsgArgs: array of const);
+  const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const);
 begin
   CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
 end;
