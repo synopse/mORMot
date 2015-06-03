@@ -151,6 +151,7 @@ unit SynSQLite3;
   - now TSQLRequest.Bind(col,'') will bind '' void text instead of null value
   - added TSQLDataBase.CacheSize, PageSize and LockingMode properties
   - added TSQLDataBase.MemoryMappedMB for optional Memory-Mapped I/O process
+  - added TSQLDataBase.TotalChangeCount method as requested by [5fc09264d19fe]
   - added TSQLDatabase.LogResultMaximumSize property to reduce logged extend
   - added TSQLDataBase.Log property to customize the logging class (e.g. to
     match the one used by TSQLRestServerDB)
@@ -1807,8 +1808,8 @@ type
     // completed (when the statement handle is passed to sqlite3.reset()
     // or sqlite3.finalize()).
     // - If a separate thread makes changes on the same database connection while
-    // sqlite3.total_changes() is running then the value returned is unpredictable and not
-    // meaningful.
+    // sqlite3.total_changes() is running then the value returned is unpredictable
+    // and not meaningful.
     total_changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Returns a pointer to a block of memory at least N bytes in length
@@ -2745,6 +2746,10 @@ type
     // are directly specified by the INSERT, UPDATE, or DELETE statement are counted.
     // - wrapper around the sqlite3.changes() low-level function
     function LastChangeCount: integer;
+    /// return the number of row changes caused by INSERT, UPDATE or
+    // DELETE statements since the database connection was opened
+    // - wrapper around the sqlite3.total_changes() low-level function
+    function TotalChangeCount: integer;
 
     /// get all table names contained in this database file
     procedure GetTableNames(var Names: TRawUTF8DynArray);
@@ -3712,6 +3717,18 @@ begin
     try
       Lock;
       result := sqlite3.changes(DB);
+    finally
+      UnLock;
+    end;
+end;
+
+function TSQLDataBase.TotalChangeCount: integer;
+begin
+  if (self=nil) or (DB=0) or not Assigned(sqlite3.total_changes) then
+    result := 0 else
+    try
+      Lock;
+      result := sqlite3.total_changes(DB);
     finally
       UnLock;
     end;
