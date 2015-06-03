@@ -552,8 +552,9 @@ unit SynCommons;
   - added VariantDynArrayToJSON/JSONToVariantDynArray/ValuesToVariantDynArray()
   - added VariantDynArrayClear() function (faster e.g. for array of TDocVariant)
   - added VariantToInlineValue() and VarRecToInlineValue() functions
-  - added VarRecAsChar() and overloaded Int32ToUTF8() Int64ToStr() Curr64ToStr()
-    ExtendedToStr() PointerToHex() UInt32ToUtf8() procedures
+  - added VarRecToInt64(), VarRecToDouble() and VarRecAsChar() functions
+  - added overloaded Int32ToUTF8() Int64ToStr() Curr64ToStr() ExtendedToStr()
+    PointerToHex() UInt32ToUtf8() procedures
   - handle binary serialization of variant via FromVarVariant() procedure and
     TFileBufferWriter.Write() method
   - added ToVarString(), FromVarInt64Value() and FromVarBlob() functions
@@ -1922,6 +1923,13 @@ function VarRecToUTF8IsString(const V: TVarRec; out value: RawUTF8): boolean;
 // - returns TRUE and set Value if the supplied argument is a vtInteger or vtInt64
 // - returns FALSE if the argument is not an integer
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
+
+/// convert an open array (const Args: array of const) argument to a floating
+// point value
+// - returns TRUE and set Value if the supplied argument is a number (e.g.
+// vtInteger, vtCurrency or vtExtended)
+// - returns FALSE if the argument is not a number
+function VarRecToDouble(const V: TVarRec; out value: double): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
 // encoded as with :(..:) inlined parameters in FormatUTF8(Format,Args,Params)
@@ -10664,7 +10672,8 @@ type
 
   /// set of options for a TDocVariant storage
   // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
-  // local document
+  // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
+  // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
   TDocVariantOptions = set of TDocVariantOption;
 
   /// pointer to a set of options for a TDocVariant storage
@@ -10880,13 +10889,23 @@ var
 
 type
   /// pointer to a TDocVariant storage
+  // - since variants may be stored by reference (i.e. as varByRef), it may
+  // be a good idea to use such a pointer via DocVariantData(aVariant)^ or
+  // DocVariantDataSafe(aVariant)^ instead of TDocVariantData(aVariant),
+  // if you are not sure how aVariant was allocated (may be not _Obj/_Json)
   PDocVariantData = ^TDocVariantData;
 
   /// a custom variant type used to store any JSON/BSON document-based content
   // - i.e. name/value pairs for objects, or an array of values (including
-  // nested documents)
-  // - you can use _Obj() _Arr() and _Json()/_JsonFast() functions to create
-  // instances of this kind of variants
+  // nested documents), stored in a TDocVariantData memory structure
+  // - you can use _Obj()/_ObjFast() _Arr()/_ArrFast() _Json()/_JsonFast() or
+  // _JsonFmt()/_JsonFastFmt() functions to create instances of such variants
+  // - property access may be done via late-binding - with some restrictions
+  // for older versions of FPC, e.g. allowing to write:
+  // ! TDocVariant.NewFast(aVariant);
+  // ! aVariant.Name := 'John';
+  // ! aVariant.Age := 35;
+  // ! writeln(aVariant.Name,' is ',aVariant.Age,' years old');
   // - it also supports a small set of pseudo-properties or pseudo-methods:
   // ! aVariant._Count = DocVariantData(aVariant).Count
   // ! aVariant._Kind = ord(DocVariantData(aVariant).Kind)
@@ -10922,11 +10941,22 @@ type
     class procedure New(out aValue: variant;
       aOptions: TDocVariantOptions=[]); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// initialize a variant instance to store some document-based content
+    /// initialize a variant instance to store per-reference document-based content
     // - same as New(aValue,JSON_OPTIONS[true]);
+    // - to be used e.g. as
+    // !var v: variant;
+    // !begin
+    // !  TDocVariant.NewFast(v);
+    // !  ...
     class procedure NewFast(out aValue: variant); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize several variant instances to store document-based content
+    // - replace several calls to TDocVariantData.InitFast
+    // - to be used e.g. as
+    // !var v1,v2,v3: TDocVariantData;
+    // !begin
+    // !  TDocVariant.NewFast([@v1,@v2,@v3]);
+    // !  ...
     class procedure NewFast(const aValues: array of PDocVariantData); overload;
     /// initialize a variant instance to store some document-based content
     // - you can use this function to create a variant, which can be nested into
@@ -10937,8 +10967,8 @@ type
     // properties can be slow - if you expect the data to be read-only or not
     // propagated into another place, set Options=[dvoValueCopiedByReference]
     // will increase the process speed a lot
-    // - in practice, you should better use either the function _Obj() or _Arr()
-    // which is a wrapper around this class method
+    // - in practice, you should better use _Obj()/_ObjFast() _Arr()/_ArrFast()
+    // functions or TDocVariant.NewFast()
     class function New(Options: TDocVariantOptions=[]): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
@@ -11075,17 +11105,25 @@ type
   // document-based content as variant
   // - i.e. name/value pairs for objects, or an array of values (including
   // nested documents)
+  // - you can use _Obj()/_ObjFast() _Arr()/_ArrFast() _Json()/_JsonFast() or
+  // _JsonFmt()/_JsonFastFmt() functions to create instances of such variants
   // - you can transtype such an allocated variant into TDocVariantData
-  // to access directly to its internals (like Count or Values[]/Names[]):
+  // to access directly its internals (like Count or Values[]/Names[]):
+  // ! aVariantObject := TDocVariant.NewObject(['name','John','year',1972]);
+  // ! aVariantObject := _ObjFast(['name','John','year',1972]);
   // ! with TDocVariantData(aVariantObject) do
   // !   for i := 0 to Count-1 do
   // !     writeln(Names[i],'=',Values[i]); // for an object
+  // ! aVariantArray := TDocVariant.NewArray(['one',2,3.0]);
+  // ! aVariantArray := _JsonFast('["one",2,3.0]');
   // ! with TDocVariantData(aVariantArray) do
   // !   for i := 0 to Count-1 do
   // !     writeln(Values[i]); // for an array
   // here, using "with TDocVariantData(...) do" syntax can be very convenient
-  // - you can use _Obj() _Arr() and _Json()/_JsonFast() or
-  // _JsonFmt()/_JsonFastFmt() functions to create instances of such variants
+  // - since variants may be stored by reference (i.e. as varByRef), it may
+  // be a good idea to use DocVariantData(aVariant)^ or
+  // DocVariantDataSafe(aVariant)^ instead of TDocVariantData(aVariant),
+  // if you are not sure how aVariant was allocated (may be not _Obj/_Json)
   {$ifdef UNICODE}
   TDocVariantData = record
   private
@@ -11128,6 +11166,20 @@ type
     // !end;
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure Init(aOptions: TDocVariantOptions=[]; aKind: TDocVariantKind=dvUndefined);
+    /// initialize a TDocVariantData to store per-reference document-based content
+    // - same as Doc.Init(JSON_OPTIONS[true]);
+    // - can be used with a stack-allocated TDocVariantData variable:
+    // !var Doc: TDocVariantData; // stack-allocated variable
+    // !begin
+    // !  Doc.InitFast;
+    // !  Doc.AddValue('name','John');
+    // !  assert(Doc.Value['name']='John');
+    // !  assert(variant(Doc).name='John');
+    // !end;
+    // - see also TDocVariant.NewFast() if you want to initialize several
+    // TDocVariantData variable instances at once
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure InitFast;
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
@@ -14322,6 +14374,24 @@ begin
     vtBoolean: if V.VBoolean then
                  value := 1 else
                  value := 0;
+    else begin
+      result := false;
+      exit;
+    end;
+  end;
+  result := true;
+end;
+
+function VarRecToDouble(const V: TVarRec; out value: double): boolean;
+begin
+  case V.VType of
+    vtInteger: value := V.VInteger;
+    vtInt64:   value := V.VInt64^;
+    vtBoolean: if V.VBoolean then
+                 value := 1 else
+                 value := 0;
+    vtExtended: value := V.VExtended^;
+    vtCurrency: value := V.VCurrency^;
     else begin
       result := false;
       exit;
@@ -31195,6 +31265,15 @@ begin
   VKind := aKind;
 end;
 
+procedure TDocVariantData.InitFast;
+begin
+  if DocVariantType=nil then
+    DocVariantType := SynRegisterCustomVariantType(TDocVariant);
+  ZeroFill(TVarData(self));
+  VType := DocVariantType.VarType;
+  VOptions := JSON_OPTIONS[true];
+end;
+
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
   aOptions: TDocVariantOptions=[]);
 begin
@@ -32204,14 +32283,14 @@ end;
 
 class procedure TDocVariant.NewFast(out aValue: variant);
 begin
-  TDocVariantData(aValue).Init(JSON_OPTIONS[true]);
+  TDocVariantData(aValue).InitFast;
 end;
 
 class procedure TDocVariant.NewFast(const aValues: array of PDocVariantData);
 var i: integer;
 begin
   for i := 0 to high(aValues) do
-    aValues[i]^.Init(JSON_OPTIONS[true]);
+    aValues[i]^.InitFast;
 end;
 
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
@@ -32301,7 +32380,7 @@ function DocVariantDataSafe(const DocVariant: variant; ExpectedKind: TDocVariant
 begin
   result := DocVariantDataSafe(DocVariant);
   if result^.Kind<>ExpectedKind then
-    raise EDocVariant.CreateUTF8('DocVariantSafe(%)<>%',
+    raise EDocVariant.CreateUTF8('DocVariantDataSafe(%)<>%',
       [ord(result^.Kind),ord(ExpectedKind)]);
 end;
 

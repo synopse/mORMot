@@ -417,7 +417,7 @@ begin
   interfaces := TInterfaceFactory.GetUsedInterfaces;
   if interfaces=nil then
     exit;
-  services.Init(JSON_OPTIONS[true]);
+  services.InitFast;
   for i := 0 to interfaces.Count-1 do begin
     fact := interfaces.List[i];
     services.AddItem(_ObjFast([

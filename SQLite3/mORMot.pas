@@ -33152,7 +33152,7 @@ begin
   fPublicURI.Root := Model.Root;
 end;
 
-const
+const // text definition registered in unit's initialization block below
   _TSQLRestServerURI = 'Address,Port,Root RawUTF8';
   _TServicesPublishedInterfaces =
     'PublicURI{Address,Port,Root RawUTF8} Names array of RawUTF8';
@@ -34241,7 +34241,7 @@ begin
   FillInput;
   if fInput<>nil then begin
     with TDocVariantData(result) do begin
-      Init(JSON_OPTIONS[true]);
+      InitFast;
       for i := 0 to (length(fInput) shr 1)-1 do begin
         GetVariantFromJSON(pointer(fInput[i*2+1]),false,v,@JSON_OPTIONS[true]);
         AddValue(fInput[i*2],v);
@@ -34250,7 +34250,7 @@ begin
   end else
   if InputAsMultiPart(MultiPart) then
     with TDocVariantData(result) do begin
-      Init(JSON_OPTIONS[true]);
+      InitFast;
       for i := 0 to high(MultiPart) do
         with MultiPart[i] do
           if ContentType=TEXT_CONTENT_TYPE then begin
@@ -37026,7 +37026,7 @@ begin
     exit; // rough but working good in practice, when similar _contract_ 
   P := Pointer(PublishedJson);
   if P^='[' then
-    inc(P);
+    inc(P); // when transmitted as parameters in a _contract_ HTTP body content
   if (RecordLoadJSON(nfo,P,TypeInfo(TServicesPublishedInterfaces))=nil) or
      (nfo.PublicURI.Address='') then
     exit; // invalid supplied JSON content

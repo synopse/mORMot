@@ -6092,6 +6092,17 @@ begin
   Doc.Value['name'] := 'John';
   Check(Doc.Value['name']='John');
   CheckDoc(Doc);
+  Doc.Clear;
+  Doc.InitFast;
+  Check(Doc.Kind=dvUndefined);
+  Check(variant(Doc)._kind=ord(dvUndefined));
+  Doc.AddValue('name','Jonas');
+  Doc.AddValue('birthyear',1972);
+  Check(Doc.Value['name']='Jonas');
+  Check(Doc.Value['birthyear']=1972);
+  Doc.Value['name'] := 'John';
+  Check(Doc.Value['name']='John');
+  CheckDoc(Doc);
   Doc2.InitJSON(Doc.ToJSON);
   CheckDoc(Doc2);
   Doc.Clear;
