@@ -10320,7 +10320,7 @@ type
     property InterfaceIID: TGUID read GetInterfaceIID;
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
+    // 'Calculator' for ICalculator 
     property InterfaceURI: RawUTF8 read fInterfaceURI;
     /// the registered Interface mangled URI
     // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
@@ -13604,6 +13604,11 @@ type
   // - you could use TSQLRestServerURI record to store and process it
   TSQLRestServerURIString = type RawUTF8;
 
+  /// a list of UTF-8 strings, used for TSQLRestServerURI storage
+  // - URI format is 'address:port/root', but port or root are optional
+  // - you could use TSQLRestServerURI record to store and process each item
+  TSQLRestServerURIStringDynArray = array of TSQLRestServerURIString;
+
   /// used to access a TSQLRestServer from its TSQLRestServerURIString URI
   // - URI format is 'address:port/root', and may be transmitted as
   // TSQLRestServerURIString text instances
@@ -13679,22 +13684,22 @@ type
     function RegisterFromServer(Client: TSQLRestClientURI): boolean;
     /// search for a public URI in the registration list
     function FindURI(const aPublicURI: TSQLRestServerURI): integer;
-    /// search for the latest registration of a service, by name
-    // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
+    /// search for the latest registrations of a service, by name
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - if the service name has been registered several times, all
     // registration would be returned, the latest in first position
     function FindService(const aServiceName: RawUTF8): TSQLRestServerURIDynArray;
     /// return all services URI by name, from the registration list, as URIs
-    // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - the returned string would contain all matching server URI, the latest
     // registration being the first to appear, e.g.
     // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
-    function FindServiceAll(const aServiceName: RawUTF8): TRawUTF8DynArray; overload;
+    function FindServiceAll(const aServiceName: RawUTF8): TSQLRestServerURIStringDynArray; overload;
     /// return all services URI by name, from the registration list, as JSON
-    // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - the returned JSON array would contain all matching server URI, encoded as
     // a TSQLRestServerURI JSON array, the latest registration being
     // the first to appear, e.g.
@@ -15901,8 +15906,8 @@ type
     procedure ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
     /// return all REST server URI associated to this client, for a given
     // service name, the latest registered in first position
-    // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
     // to guess an associated REST server which may implement a given service 
     function ServiceRetrieveAssociated(const aServiceName: RawUTF8;
@@ -36938,7 +36943,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindServiceAll(
-  const aServiceName: RawUTF8): TRawUTF8DynArray;
+  const aServiceName: RawUTF8): TSQLRestServerURIStringDynArray;
 var i,n: integer;
     tix: Int64;
 begin
@@ -36950,7 +36955,7 @@ begin
     for i := Count-1 downto 0 do // downwards to return the latest first
       if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then
-          AddRawUTF8(result,n,List[i].PublicURI.URI);
+          AddRawUTF8(TRawUTF8DynArray(result),n,List[i].PublicURI.URI);
   finally
     Leave;
   end;
@@ -36967,20 +36972,22 @@ begin
   try
     aWriter.Add('[');
     if aServiceName='*' then begin
+      // for RegisterFromServer: return all TServicesPublishedInterfaces
       for i := 0 to Count-1 do
         with List[i] do
           if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
             aWriter.AddRecordJSON(List[i],TypeInfo(TServicesPublishedInterfaces));
             aWriter.Add(',');
           end;
-    end else
-    for i := Count-1 downto 0 do // downwards to return the latest first
-      with List[i] do
-        if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then
-          if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
-            aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
-            aWriter.Add(',');
-          end;
+    end else // from SQLRestClientURI.ServiceRetrieveAssociated
+      // search matching (and non deprecated) services as TSQLRestServerURI
+      for i := Count-1 downto 0 do // downwards to return the latest first
+        with List[i] do
+          if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then
+            if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
+              aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
+              aWriter.Add(',');
+            end;
     aWriter.CancelLastComma;
     aWriter.Add(']');
   finally
@@ -37001,14 +37008,19 @@ procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
 var tix: Int64;
     i: integer;
 begin
-  fDynArray.LoadFromJSON(pointer(PublishedJson));
-  fDynArrayTimeoutTix.Count := Count;
-  tix := GetTickCount64;
-  if fTimeout=0 then
-    inc(tix,maxInt) else
-    inc(tix,fTimeout);
-  for i := 0 to Count-1 do
-    fTimeoutTix[i] := tix;
+  Enter;
+  try
+    fDynArray.LoadFromJSON(pointer(PublishedJson));
+    fDynArrayTimeoutTix.Count := Count;
+    tix := GetTickCount64;
+    if fTimeout=0 then
+      inc(tix,maxInt) else
+      inc(tix,fTimeout);
+    for i := 0 to Count-1 do
+      fTimeoutTix[i] := tix;
+  finally
+    Leave;
+  end;
 end;
 
 procedure TServicesPublishedInterfacesList.RegisterFromClientJSON(
