@@ -1909,32 +1909,37 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
 // - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// the signed integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
-// encoded text, returning FALSE on error
-function VarRecToUTF8IsString(const V: TVarRec; out value: RawUTF8): boolean;
+// encoded text, returning FALSE if the argument was not a string value
+function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an open array (const Args: array of const) argument to an Int64
-// - returns TRUE and set Value if the supplied argument is a vtInteger or vtInt64
+// - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
+// or vtBoolean
 // - returns FALSE if the argument is not an integer
+// - note that cardinal values should be type-casted to Int64() (otherwise
+// the signed integer mapped value will be transmitted, therefore wrongly)
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 
 /// convert an open array (const Args: array of const) argument to a floating
 // point value
 // - returns TRUE and set Value if the supplied argument is a number (e.g.
-// vtInteger, vtCurrency or vtExtended)
+// vtInteger, vtInt64, vtCurrency or vtExtended)
 // - returns FALSE if the argument is not a number
+// - note that cardinal values should be type-casted to Int64() (otherwise
+// the signed integer mapped value will be transmitted, therefore wrongly)
 function VarRecToDouble(const V: TVarRec; out value: double): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
-// encoded as with :(..:) inlined parameters in FormatUTF8(Format,Args,Params)
+// encoded as with :(...): inlined parameters in FormatUTF8(Format,Args,Params)
 // - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// the signed integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 
@@ -11353,11 +11358,16 @@ type
     /// find an item in this document, and returns its value
     // - return null if aName is not found, or if the instance is not a TDocVariant
     function GetValueOrNull(const aName: RawUTF8): variant;
-    /// returns a TDocVariant array containing all properties matching the
+    /// returns a TDocVariant object containing all properties matching the
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
     // - will use IdemPChar(), so search would be case-insensitive 
     function GetValuesByStartName(const aStartName: RawUTF8): variant;
+    /// returns a JSON object containing all properties matching the
+    // first characters of the supplied property name
+    // - returns null if the document is not a dvObject
+    // - will use IdemPChar(), so search would be case-insensitive
+    function GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
     /// find an item in this document, and returns its value as TVarData
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -14471,7 +14481,7 @@ begin
     wasString^ := isString;
 end;
 
-function VarRecToUTF8IsString(const V: TVarRec; out value: RawUTF8): boolean;
+function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
 begin
   VarRecToUTF8(V,value,@result);
 end;
@@ -19401,11 +19411,11 @@ function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer;
 begin
   if CaseSensitive then begin
-    for result := 0 to high(Values) do
+    for result := 0 to length(Values)-1 do
       if Values[result]=Value then
         exit;
   end else
-    for result := 0 to high(Values) do
+    for result := 0 to length(Values)-1 do
       if UTF8IComp(pointer(Values[result]),pointer(Value))=0 then
         exit;
   result := -1;
@@ -19463,7 +19473,7 @@ var capacity: integer;
 begin
   capacity := Length(Values);
   if ValuesCount=capacity then begin
-    inc(capacity,64+capacity shr 3);
+    inc(capacity,32+capacity shr 3);
     SetLength(Values,capacity);
   end;
   Values[ValuesCount] := Value;
@@ -31827,6 +31837,35 @@ begin
     TVarData(result).VType := varNull else
     // copy found value
     result := PVariant(found)^;
+end;
+
+function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
+var upper: RawUTF8;
+    i: integer;
+    W: TTextWriter;
+begin
+  if (Kind<>dvObject) or (VCount=0) then begin
+    result := 'null';
+    exit;
+  end;
+  upper := UpperCase(aStartName);
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  try
+    W.Add('{');
+    for i := 0 to VCount-1 do
+    if IdemPChar(Pointer(VName[i]),pointer(upper)) then begin
+      W.Add('"');
+      W.AddJSONEscape(pointer(VName[i]),Length(VName[i]));
+      W.Add('"',':');
+      W.AddVariant(VValue[i],twJSONEscape);
+      W.Add(',');
+    end;
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8): variant;
