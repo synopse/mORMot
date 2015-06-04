@@ -30,6 +30,7 @@ unit SynCrossPlatformREST;
 
   Contributor(s):
   - hanspi
+  - warleyalex
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -994,13 +995,17 @@ type
 
     /// wrapper to the protected URI method to call a method on the server
     // - perform a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
+    // - if no Table is expected, set aTable=nil (we do not define nil as
+    // default parameter, since the SMS compiler is sometimes confused) 
     procedure CallBackGet(const aMethodName: string;
       const aNameValueParameters: array of const; var Call: TSQLRestURIParams;
-      aTable: TSQLRecordClass=nil; aID: TID=0);
+      aTable: TSQLRecordClass; aID: TID=0);
     /// decode "result":... content as returned by CallBackGet()
+    // - if no Table is expected, set aTable=nil (we do not define nil as
+    // default parameter, since the SMS compiler is sometimes confused) 
     function CallBackGetResult(const aMethodName: string;
       const aNameValueParameters: array of const;
-      aTable: TSQLRecordClass=nil; aID: TID=0): string;
+      aTable: TSQLRecordClass; aID: TID=0): string;
     /// authenticate an User to the current connected Server
     // - using TSQLRestServerAuthenticationDefault or TSQLRestServerAuthenticationNone
     // - will set Authentication property on success
@@ -2411,7 +2416,7 @@ var Call: TSQLRestURIParams;
 begin
   LogClose;
   fLogClient := TSQLRestClientHTTP.Create(aServer,aPort,TSQLModel.Create([],aRoot),true);
-  fLogClient.CallBackGet('TimeStamp',[],Call); // synchronous connection
+  fLogClient.CallBackGet('TimeStamp',[],Call,nil); // synchronous connection
   if Call.OutStatus=HTML_SUCCESS then begin
     fLogLevel := LogLevel;
     OnLog := LogToRemoteServerText;
@@ -2792,8 +2797,7 @@ begin
 end;
 
 function TSQLRestClientURI.CallBackGetResult(const aMethodName: string;
-  const aNameValueParameters: array of const; aTable: TSQLRecordClass;
-  aID: TID): string;
+  const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: TID): string;
 var Call: TSQLRestURIParams;
     dummyID: integer;
 begin
@@ -2886,7 +2890,7 @@ begin
   lambda
     result := (Call.OutStatus=HTML_SUCCESS) and SetServerTimeStamp(Call.OutBody);
   end);
-  CallBackGet('TimeStamp',[],Call); // asynchronous call
+  CallBackGet('TimeStamp',[],Call,nil); // asynchronous call
 end;
 
 procedure TSQLRestClientURI.CallRemoteServiceASynch(aCaller: TServiceClientAbstract;
@@ -2976,7 +2980,7 @@ function TSQLRestClientURI.Connect: boolean;
 var Call: TSQLRestURIParams;
 begin
   Log(sllInfo,'Connect',self);
-  CallBackGet('TimeStamp',[],Call);
+  CallBackGet('TimeStamp',[],Call,nil);
   result := Call.OutStatus=HTML_SUCCESS;
   if not result then
     exit;
@@ -3106,7 +3110,7 @@ begin
   if (self<>nil) and (fAuthentication<>nil) then
     try // notify Server to end of session
       CallBackGet('Auth',['UserName',fAuthentication.User.LogonName,
-        'Session',fAuthentication.SessionID],Call);
+        'Session',fAuthentication.SessionID],Call,nil);
     finally
       fAuthentication.Free;
       fAuthentication := nil;
@@ -3308,15 +3312,14 @@ var aServerNonce, aClientNonce, aPassHash: string;
 begin
   if fUser.LogonName='' then
     exit;
-  aServerNonce := Sender.CallBackGetResult('Auth',
-    ['UserName',User.LogonName]);
+  aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName],nil);
   if aServerNonce='' then
     exit;
   aClientNonce := SHA256Compute([Copy(NowToIso8601,1,16)]);
   aPassHash := Sha256Compute([Sender.Model.Root,aServerNonce,aClientNonce,
     User.LogonName,User.PasswordHashHexa]);
-  result := Sender.CallBackGetResult('Auth',
-     ['UserName',User.LogonName,'Password',aPassHash,'ClientNonce',aClientNonce]);
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName,
+    'Password',aPassHash,'ClientNonce',aClientNonce],nil);
   fSessionPrivateKey := crc32ascii(crc32ascii(0,result),fUser.fPasswordHashHexa);
 end;
 
@@ -3334,7 +3337,7 @@ end;
 function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
   Sender: TSQLRestClientURI): string;
 begin
-  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
+  result := Sender.CallBackGetResult('Auth',['UserName',User.LogonName],nil);
 end;
 
 function TSQLRestServerAuthenticationNone.ClientSessionComputeSignature(

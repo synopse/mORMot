@@ -88,6 +88,7 @@ interface
 uses
   SmartCL.System,
   System.Types,
+  System.Date,
   w3c.date;
 {$else}
 uses
