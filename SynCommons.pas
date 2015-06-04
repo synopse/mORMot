@@ -14965,20 +14965,21 @@ begin
 end;
 {$endif}
 
-procedure Exchg(P1,P2: PAnsiChar; count: integer);
+procedure Exchg(P1,P2: PAnsiChar; count: cardinal);
 {$ifdef PUREPASCAL}
-var i,c: integer;
+var i: Integer;
+    c: PtrInt;
     u: AnsiChar;
 begin
-  for i := 1 to count shr 2 do begin
-    c := PInteger(P1)^;
-    PInteger(P1)^ := PInteger(P2)^;
-    PInteger(P2)^ := c;
-    inc(P1,4);
-    inc(P2,4);
+  for i := 1 to count div sizeof(c) do begin
+    c := PPtrInt(P1)^;
+    PPtrInt(P1)^ := PPtrInt(P2)^;
+    PPtrInt(P2)^ := c;
+    inc(P1,SizeOf(c));
+    inc(P2,SizeOf(c));
   end;
-  if count and 3<>0 then
-    for i := 0 to (count and 3)-1 do begin
+  if count and pred(sizeof(c))<>0 then
+    for i := 0 to (count and pred(sizeof(c)))-1 do begin
       u := P1[i];
       P1[i] := P2[i];
       P2[i] := u;
@@ -31622,7 +31623,11 @@ begin
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
         Tmp := names[J]; names[J] := names[I]; names[I] := Tmp;
+        {$ifdef CPU64}
+        Exchg(@values[I],@values[J],sizeof(TVarData));
+        {$else}
         Exchg16(@values[I],@values[J]);
+        {$endif}
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
