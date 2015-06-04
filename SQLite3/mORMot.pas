@@ -14871,8 +14871,8 @@ type
     function UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
     function UniqueFieldHash(aFieldIndex: integer): TListFieldHash;
     function GetCount: integer;
-    function GetItem(Index: integer): TSQLRecord;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetItem(Index: integer): TSQLRecord; {$ifdef HASINLINE}inline;{$endif}
+    function GetListPtr: PPointerArray; {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
@@ -15028,6 +15028,11 @@ type
     // DO NOT change the ID values, unless you may have unexpected behavior
     // - warning: this method should be protected via StorageLock/StorageUnlock
     property Items[Index: integer]: TSQLRecord read GetItem; default;
+    /// direct access to the memory of the internal fValues[] array
+    // - Items[] is preferred, since it would check the index, but is slightly
+    // slower, e.g. in a loop
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    property ListPtr: PPointerArray read GetListPtr;
     /// read-only access to the ID of a TSQLRecord values
     property ID[Index: integer]: TID read GetID;
     /// read only access to the file name specified by constructor
@@ -37352,6 +37357,11 @@ begin
         raise EORMException.CreateUTF8('%.GetItem(%) out of range',[self,Index]) else
         result := List[Index] else
     result := nil;
+end;
+
+function TSQLRestStorageInMemory.GetListPtr: PPointerArray;
+begin
+  result := pointer(fValue.List);
 end;
 
 procedure TSQLRestStorageInMemory.GetJSONValuesEvent(aDest: pointer;
