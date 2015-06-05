@@ -40143,6 +40143,7 @@ begin
     {$elseif defined(VER270)}'Delphi XE6'
     {$elseif defined(VER280)}'Delphi XE7'
     {$elseif defined(VER290)}'Delphi XE8'
+    {$elseif defined(VER300)}'Delphi XE9'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
