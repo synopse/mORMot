@@ -165,7 +165,6 @@ function JSONToDataSet(aOwner: TComponent; const aJSON: RawUTF8
 function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
   const Tables: array of TSQLRecordClass
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; 
- {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a JSON result into a VCL DataSet, with a given set of column types
 // - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()
@@ -196,8 +195,7 @@ end;
 
 function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
   const Tables: array of TSQLRecordClass
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; overload;
- {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet;
 begin
   result := TSynSQLTableDataSet.CreateFromJSON(
     aOwner,aJSON,Tables{$ifndef UNICODE},aForceWideString{$endif});
