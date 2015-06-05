@@ -14956,9 +14956,11 @@ type
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it
+    // - warning: this method should be protected via StorageLock/StorageUnlock
     function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; override;
     /// manual Retrieval of a TSQLRecord field values
-    // - an instance of the associated static class is created
+    // - an instance of the associated static class is created, and filled with
+    // the actual properties values
     // - and all its properties are filled from the Items[] values
     // - caller can modify these properties, then use UpdateOne() if the changes
     // have to be stored inside the Items[] list

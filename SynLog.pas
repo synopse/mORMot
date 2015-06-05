@@ -299,6 +299,7 @@ type
     function Instance: TSynLog;
   end;
 
+  {$ifndef DELPHI5OROLDER}
   /// a mORMot-compatible calback definition
   // - used to notify a remote mORMot server via interface-based serivces
   // for any incoming event
@@ -345,6 +346,7 @@ type
     /// how many registrations are currently defined
     property Count: integer read fCount;
   end;
+  {$endif}
 
   /// this event can be set for a TSynLogFamily to archive any deprecated log
   // into a custom compressed format
@@ -4156,6 +4158,8 @@ begin // aDestinationPath = 'ArchivePath\log\YYYYMM\'
 end;
 
 
+{$ifndef DELPHI5OROLDER} // IInvokable was introduced with Delphi 6
+
 { TSynLogCallbacks }
 
 constructor TSynLogCallbacks.Create(aTrackedLog: TSynLogFamily);
@@ -4223,6 +4227,7 @@ begin
   end;
 end;
 
+{$endif DELPHI5OROLDER}
 
 initialization
   InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process

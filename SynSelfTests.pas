@@ -4475,7 +4475,9 @@ var J,U,U2: RawUTF8;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
+    {$ifndef DELPHI5OROLDER}
     peop: TSQLRecordPeople;
+    {$endif}
     Parser: TJSONRecordTextDefinition;
     JR,JR2: TTestCustomJSONRecord;
     JA,JA2: TTestCustomJSONArray;
@@ -4993,6 +4995,7 @@ begin
   Check(IsStringJSON('1.23E'));
   Check(IsStringJSON('+'));
   Check(IsStringJSON('-'));
+  {$ifndef DELPHI5OROLDER}
   Check(UTF8ContentType('null')=sftUnknown);
   Check(UTF8ContentType('0')=sftInteger);
   Check(UTF8ContentType('123')=sftInteger);
@@ -5023,6 +5026,7 @@ begin
   Check(UTF8ContentNumberType('123.1a')=sftUTF8Text);
   Check(UTF8ContentNumberType('123.1234a')=sftUTF8Text);
   Check(UTF8ContentNumberType('123-2')=sftUTF8Text);
+  {$endif}
   J := JSONEncode(['name','john','year',1982,'pi',3.14159]);
   Check(J='{"name":"john","year":1982,"pi":3.14159}');
   JSONDecode(J,['year','pi','john','name'],V);
@@ -5063,6 +5067,7 @@ begin
   // for virtual function TryJSONToVariant
   Check(J=JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']));
 {$endif}
+{$ifndef DELPHI5OROLDER}
   peop := TSQLRecordPeople.Create;
   try
     peop.IDValue := 1234;
@@ -5085,6 +5090,7 @@ begin
   finally
     peop.Free;
   end;
+{$endif}
   for i := 1 to 100 do begin
     a := Random(maxInt);
     r := Random;

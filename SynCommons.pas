@@ -8437,17 +8437,17 @@ function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-
 
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
-// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
-// - uses RawByteString for binary content hashing, whatever the codepage is
-function Hash32(const Text: RawByteString): cardinal; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-// our custom hash function, specialized for Text comparaison
-// - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
 // Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 3.7 GB/s (SSE4.2)
 // - overloaded version for direct binary content hashing
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
+
+// our custom hash function, specialized for Text comparaison
+// - has less colision than Adler32 for short strings
+// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
+// - uses RawByteString for binary content hashing, whatever the codepage is
+function Hash32(const Text: RawByteString): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
@@ -26963,7 +26963,9 @@ var FieldTable: PFieldTable absolute TypeInfo;
     Field: ^TFieldInfo;
     Diff: cardinal;
     A, B: PAnsiChar;
+    {$ifndef DELPHI5OROLDER}
     DynA, DynB: TDynArray;
+    {$endif}
 begin
   A := @RecA;
   B := @RecB;
@@ -27014,6 +27016,7 @@ begin
           Diff := sizeof(variant) else
           exit;
       {$endif}
+      {$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
       tkDynArray: begin
         DynA.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},A^);
         DynB.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},B^);
@@ -27021,6 +27024,7 @@ begin
           Diff := sizeof(pointer) else
           exit;
       end;
+      {$endif}
       tkInterface:
         if PPointer(A)^=PPointer(B)^ then
           Diff := sizeof(pointer) else
@@ -45016,7 +45020,7 @@ begin
 end;
 
 function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream;
-var S,D: pointer;
+var S,D: PAnsiChar;
     sourcePosition,resultSize: PtrInt;
     sourceSize: Int64;
     Head: TSynLZHead;
@@ -45084,12 +45088,12 @@ begin
     result.Size := resultSize+Head.UnCompressedSize;
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
-    if (SynLZdecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize) or
-       (Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed) then begin
+    if {$ifdef DELPHI5OROLDER}SynLZDecompress1asm // circumvent Internal Error C11715
+       {$else}SynLZdecompress1{$endif}(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
+      FreeAndNil(result) else 
+    if Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed then
       FreeAndNil(result);
-      break;
-    end;
-  until sourcePosition>=sourceSize;
+  until (result=nil) or (sourcePosition>=sourceSize);
 end;
 
 const
