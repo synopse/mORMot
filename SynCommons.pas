@@ -6180,6 +6180,13 @@ type
     // - to be used e.g. for custom record JSON serialization, within a
     // TDynArrayJSONCustomWriter callback
     procedure AddDynArrayJSON(aTypeInfo: pointer; var aValue); overload;
+    {$ifdef UNDIRECTDYNARRAY}
+    /// append a dynamic array content as UTF-8 encoded JSON array
+    // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
+    // - this method is needed by the fact that "object" is buggy under
+    // newest versions of the Delphi compiler
+    procedure AddDynArrayJSON(const aDynArray: TDynArrayHashed); overload; inline;
+    {$endif}
     /// same as AddDynArrayJSON(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
@@ -36031,6 +36038,13 @@ begin
   DynArray.Init(aTypeInfo,aValue);
   AddDynArrayJSON(DynArray);
 end;
+
+{$ifdef UNDIRECTDYNARRAY}
+procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArrayHashed);
+begin
+  AddDynArrayJson(aDynArray.InternalDynArray);
+end;
+{$endif}
 
 procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
 begin

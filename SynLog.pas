@@ -198,6 +198,12 @@ type
     // write to the executable of a running process
     // - this method will work for .exe and for .dll (or .ocx)
     procedure SaveToExe(const aExeName: TFileName);
+    /// save all debugging information as JSON content
+    // - may be useful from debugging purposes
+    procedure SaveToJson(W: TTextWriter); overload;
+    /// save all debugging information as a JSON file
+    // - may be useful from debugging purposes
+    procedure SaveToJson(const aJsonFile: TFileName; aHumanReadable: Boolean=false); overload;
     /// add some debugging information about the supplied absolute memory address
     // - will create a global TSynMapFile instance for the current process, if
     // necessary
@@ -1488,7 +1494,9 @@ begin
       LoadMab(MabFile);
     // 3. search for an embedded compressed .mab file appended to the .exe/.dll
     if SymCount=0 then
-      LoadMab(GetModuleName(hInstance));
+      if aExeName='' then
+        LoadMab(GetModuleName(hInstance)) else
+        LoadMab(aExeName);
     // finalize symbols
     if SymCount>0 then begin
       for i := 1 to SymCount-1 do
@@ -1561,6 +1569,45 @@ begin
   finally
     MS.Free;
     W.Free;
+  end;
+end;
+
+procedure TSynMapFile.SaveToJson(W: TTextWriter);
+begin
+  W.AddShort('{"Symbols":');
+  W.AddDynArrayJSON(fSymbols);
+  W.AddShort(',"Units":');
+  W.AddDynArrayJSON(fUnits);
+  W.Add('}');
+end;
+
+procedure TSynMapFile.SaveToJson(const aJsonFile: TFileName; aHumanReadable: Boolean);
+var S: TFileStream;
+    W: TTextWriter;
+    json: RawUTF8;
+begin
+  if aHumanReadable then begin
+    W := TTextWriter.CreateOwnedStream(65536);
+    try
+      SaveToJson(W);
+      W.SetText(json);
+      JSONBufferReformatToFile(pointer(json),aJsonFile)
+    finally
+      W.Free;
+    end;
+  end else begin
+    S := TFileStream.Create(aJsonFile,fmCreate);
+    try
+      W := TTextWriter.Create(S,65536);
+      try
+        SaveToJson(W);
+        W.FlushToStream;
+      finally
+        W.Free;
+      end;
+    finally
+      S.Free;
+    end;
   end;
 end;
 
@@ -4229,10 +4276,17 @@ end;
 
 {$endif DELPHI5OROLDER}
 
+const
+  _TSynMapSymbol = 'Name:RawUTF8 Start,Stop:integer';
+  _TSynMapUnit = 'Symbol TSynMapSymbol FileName RawUTF8 Line array of integer '+
+    'Addr array of integer';
+
 initialization
   InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
-
+  TTextWriter.RegisterCustomJSONSerializerFromText([
+    TypeInfo(TSynMapSymbol),_TSynMapSymbol,
+    TypeInfo(TSynMapUnit),_TSynMapUnit]);
 end.

@@ -13668,6 +13668,9 @@ type
     /// how many items are actually stored in List[]
     Count: Integer;
     /// initialize the storage
+    // - an optional time out period, in milliseconds, may be defined - but the
+    // clients should ensure that RegisterFromClientJSON() is called in order
+    // to refresh the list (e.g. from _contract_ HTTP body)
     constructor Create(aTimeoutMS: integer);
     /// add the JSON serialized TServicesPublishedInterfaces to the list
     // - called by TSQLRestServerURIContext.InternalExecuteSOAByInterface when
@@ -37045,7 +37048,7 @@ begin
     exit; // rough but working good in practice, when similar _contract_ 
   P := Pointer(PublishedJson);
   if P^='[' then
-    inc(P); // when transmitted as parameters in a _contract_ HTTP body content
+    inc(P); // when transmitted as [params] in a _contract_ HTTP body content
   if (RecordLoadJSON(nfo,P,TypeInfo(TServicesPublishedInterfaces))=nil) or
      (nfo.PublicURI.Address='') then
     exit; // invalid supplied JSON content
@@ -37062,7 +37065,7 @@ begin
       tix := GetTickCount64;
       if fTimeout=0 then
         inc(tix,maxInt) else
-        inc(tix,fTimeout);
+        inc(tix,fTimeout); 
       fDynArrayTimeoutTix.Add(tix);
     end;
     fLastPublishedJson := crc;
