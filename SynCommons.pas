@@ -45051,7 +45051,6 @@ begin
       sourcePosition := sourceSize-Trailer.HeaderRelativeOffset;
       Source.Position := sourcePosition;
       Source.Read(Head,sizeof(Head));
-      inc(sourcePosition,sizeof(Head));
       if Head.Magic<>Magic then
         exit;
     end;
