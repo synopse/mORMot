@@ -231,7 +231,6 @@ type
 
 
 
-
 implementation
 
 { TDDDDaemon }

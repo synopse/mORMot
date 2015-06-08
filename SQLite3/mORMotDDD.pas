@@ -2106,6 +2106,7 @@ end;
 
 procedure TDDDAdministratedDaemon.Execute(RemotelyAdministrated: boolean);
 var name: string;
+    msg: RawUTF8;
 begin
   fLogClass.Enter(self);
   name := ClassName;
@@ -2115,8 +2116,14 @@ begin
     WaitUntilHalted;
   end else begin
     if Start=cqrsSuccess then
-      writeln(name,' is running') else
+      writeln(name,' is running') else begin
       writeln(name,' failed to Start');
+      if DocVariantDataSafe(LastErrorInfo)^.GetAsRawUTF8('Exception',msg) then begin
+        TextColor(ccRed);
+        writeln(msg);
+        TextColor(ccLightGray);
+      end;
+    end;
     writeln('Press [Enter] to quit');
     readln;
   end;

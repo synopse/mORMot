@@ -32393,9 +32393,10 @@ function TSQLRestServer.StaticDataCreate(aClass: TSQLRecordClass;
   aServerClass: TSQLRestStorageInMemoryClass): TSQLRestStorage;
 begin
   result := TSQLRestStorage(GetStaticDataServer(aClass));
-  if result<>nil then
+  if result<>nil then begin
     // class already registered -> update file name
-    (result as aServerClass).fFileName := aFileName else begin
+    (result as aServerClass).fFileName := aFileName;
+  end else begin
     // class not already registered -> register now
     if aServerClass=nil then
       aServerClass := TSQLRestStorageInMemory; // default in-memory engine

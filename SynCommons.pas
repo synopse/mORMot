@@ -12573,7 +12573,7 @@ const
 { TSynAnsiConvert }
 
 const
-  DefaultChar: AnsiChar = '?';
+  DefaultCharVar: AnsiChar = '?';
 
 function TSynAnsiConvert.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal): PWideChar;
@@ -12894,11 +12894,11 @@ begin
     result := Dest else begin
     {$ifdef MSWINDOWS}
     result := Dest+WideCharToMultiByte(
-      fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
+      fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultCharVar,nil);
     {$else}
     {$ifdef ISDELPHIXE} // use cross-platform wrapper for WideCharToMultiByte()
     result := Dest+System.LocaleCharsFromUnicode(
-      fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultChar,nil);
+      fCodePage,0,Source,SourceChars,Dest,SourceChars*3,@DefaultCharVar,nil);
     {$else}
     {$ifdef FPC}
     widestringmanager.Unicode2AnsiMoveProc(Source,tmp,
