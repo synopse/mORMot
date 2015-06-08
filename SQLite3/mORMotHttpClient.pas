@@ -199,6 +199,11 @@ type
   public
     /// connect to TSQLHttpServer on aServer:aPort
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; overload; virtual;
+    /// connect to TSQLHttpServer via 'address:port/root' URI format
+    // - if port is not specified, aDefaultPort is used
+    // - if root is not specified, aModel.Root is used
+    constructor Create(const aServer: TSQLRestServerURIString; aModel: TSQLModel;
+      aDefaultPort: integer); reintroduce; overload; 
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
@@ -537,6 +542,18 @@ begin
       fExtendedOptions.IgnoreSSLCertificateErrors := Boolean(V);
   end;
   inherited RegisteredClassCreateFrom(aModel,aDefinition); // call SetUser()
+end;
+
+constructor TSQLHttpClientGeneric.Create(const aServer: TSQLRestServerURIString;
+  aModel: TSQLModel; aDefaultPort: integer);
+var URI: TSQLRestServerURI;
+begin
+  URI.URI := aServer;
+  if URI.Root<>'' then
+    aModel.Root := URI.Root;
+  if URI.Port='' then
+    URI.Port := Int32ToUtf8(aDefaultPort);
+  Create(SockString(URI.Address),SockString(URI.Port),aModel);
 end;
 
 
