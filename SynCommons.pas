@@ -30799,7 +30799,7 @@ begin
     result := false else
     if TVarData(V).VType=varByRef or varVariant then
       result := IsOfType(PVariant(TVarData(V).VPointer)^) else
-      result := (self<>nil) and (TVarData(V).VType=VarType);
+      result := TVarData(V).VType=VarType;
 end;
 
 

@@ -2543,8 +2543,10 @@ type
     // must have already checked that PropType^^.Kind=tkDynArray
     procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
     /// return TRUE if this dynamic array has been registered as a T*ObjArray
-    function DynArrayIsObjArray: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function DynArrayIsObjArray: boolean; overload;
+    /// return TRUE if this dynamic array has been registered as a T*ObjArray
+    // - and set the item class to a variable
+    function DynArrayIsObjArray(out aItemClass: TClass): boolean; overload;
     /// return TRUE if the the property has no getter but direct field read
     function GetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3609,6 +3611,7 @@ type
     /// retrieve the class type associated with a T*ObjArray dynamic array
     // - the T*ObjArray dynamic array should have been previously registered
     // via RegisterObjArrayForJSON() overloaded methods
+    // - returns nil if the supplied type is not a registered T*ObjArray
     class function RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
   end;
 
@@ -9278,8 +9281,9 @@ type
   // - once created, the framework will call AddResolver() member, so that its
   // Resolve*() methods could be used to inject any needed dependency for lazy
   // dependency resolution (e.g. within a public property getter)
-  // - any interface published property could be automatically injected; see
-  // e.g. how TServiceFactoryServer.CreateInstance() initialize them
+  // - any interface published property would also be automatically injected
+  // - if you implement a SOA service with this class, TSQLRestServer.Services
+  // will be auto-injected via TServiceFactoryServer.CreateInstance()
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
   protected
     fResolver: TInterfaceResolver;
@@ -23927,7 +23931,16 @@ end;
 function TPropInfo.DynArrayIsObjArray: boolean;
 begin
   if PropType^.Kind=tkDynArray then
-    result := SynCommons.DynArrayIsObjArray(PropType{$ifndef FPC}^{$endif}) else
+    result := InternalIsObjArray(PropType{$ifndef FPC}^{$endif}) else
+    result := false;
+end;
+
+function TPropInfo.DynArrayIsObjArray(out aItemClass: TClass): boolean;
+begin
+  if PropType^.Kind=tkDynArray then begin
+    aItemClass := TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif});
+    result := aItemClass<>nil;
+  end else
     result := false;
 end;
 
@@ -39980,8 +39993,8 @@ begin
   result := nil;
   if ObjArraySerializers=nil then
     exit;
-  ndx := FastFindPointerSorted(pointer(ObjArrayTypes),
-    ObjArraySerializers.Count-1,aDynArray);
+  ndx := FastFindPointerSorted(
+    pointer(ObjArrayTypes),ObjArraySerializers.Count-1,aDynArray);
   if ndx>=0 then
     result := TObjArraySerializer(ObjArraySerializers.Items[ndx]).ItemClass;
 end;
@@ -47720,8 +47733,8 @@ begin
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
   ickInjectable:
-    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(
-      Rest.Services);
+    result := TInjectableObjectClass(fImplementationClass).
+      CreateWithResolver(Rest.Services,true);
   else
     result := fImplementationClass.Create;
   end;
