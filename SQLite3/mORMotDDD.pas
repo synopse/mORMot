@@ -602,12 +602,17 @@ type
   protected
     fRest: TSQLRest;
   public
+    /// this constructor would identify a TServiceContainer SOA resolver
+    // and set the Rest property
+    // - when called e.g. by TServiceFactoryServer.CreateInstance()
+    constructor CreateWithResolver(aResolver: TInterfaceResolver;
+      aRaiseEServiceExceptionIfNotFound: boolean); overload; override;
     /// reintroduced constructor, allowing to specify the associated REST instance
     constructor Create(aRest: TSQLRest); reintroduce; virtual;
     /// reintroduced constructor, associating a REST instance with the supplied
     // IoC resolvers
     constructor CreateWithResolver(aRest: TSQLRest; aResolver: TInterfaceResolver;
-      aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce;
+      aRaiseEServiceExceptionIfNotFound: boolean=true); reintroduce; overload;
     /// reintroduced constructor, associating a REST instance with the supplied
     // IoC resolvers (may be stubs/mocks, resolver classes or single instances)
     constructor CreateInjected(aRest: TSQLRest;
@@ -1750,6 +1755,14 @@ begin
   if not Assigned(aRest) then
     raise ECQRSException.CreateUTF8('%.CreateWithResolver(Rest=nil)',[self]);
   fRest := aRest;
+  inherited CreateWithResolver(aResolver,aRaiseEServiceExceptionIfNotFound);
+end;
+
+constructor TCQRSQueryObjectRest.CreateWithResolver(
+  aResolver: TInterfaceResolver; aRaiseEServiceExceptionIfNotFound: boolean);
+begin
+  if (aResolver<>nil) and aResolver.InheritsFrom(TServiceContainer) then
+    fRest := TServiceContainer(aResolver).Rest;
   inherited CreateWithResolver(aResolver,aRaiseEServiceExceptionIfNotFound);
 end;
 
