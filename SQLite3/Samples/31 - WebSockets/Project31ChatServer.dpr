@@ -33,14 +33,18 @@ end;
 procedure TChatService.BlaBla(const pseudo,msg: string);
 var i: integer;
 begin
-  for i := 0 to high(fConnected) do
-    fConnected[i].BlaBla(pseudo,msg);
+  for i := high(fConnected) downto 0 do // downwards for InterfaceArrayDelete()
+    try
+      fConnected[i].NotifyBlaBla(pseudo,msg);
+    except
+      InterfaceArrayDelete(fConnected,i); // unsubscribe the callback on failure
+    end;
 end;
 
 procedure TChatService.CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 begin
-  assert(interfaceName='IChatCallback');
-  InterfaceArrayDelete(fConnected,callback);
+  if interfaceName='IChatCallback' then
+    InterfaceArrayDelete(fConnected,callback);
 end;
 
 

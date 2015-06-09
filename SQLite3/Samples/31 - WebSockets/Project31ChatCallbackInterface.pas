@@ -10,7 +10,7 @@ uses
 type
   IChatCallback = interface(IInvokable)
     ['{EA7EFE51-3EBA-4047-A356-253374518D1D}']
-    procedure BlaBla(const pseudo, msg: string);
+    procedure NotifyBlaBla(const pseudo, msg: string);
   end;
 
   IChatService = interface(IServiceWithCallbackReleased)

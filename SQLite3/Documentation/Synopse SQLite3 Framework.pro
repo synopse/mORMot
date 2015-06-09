@@ -10033,19 +10033,21 @@ So you first define the callback interface, and the service interface:
 !type
 !  IChatCallback = interface(IInvokable)
 !    ['{EA7EFE51-3EBA-4047-A356-253374518D1D}']
-!    procedure BlaBla(const pseudo, msg: string);
+!    procedure NotifyBlaBla(const pseudo, msg: string);
 !  end;
 !
 !  IChatService = interface(IInvokable)
 !    ['{C92DCBEA-C680-40BD-8D9C-3E6F2ED9C9CF}']
 !    procedure Join(const pseudo: string; const callback: IChatCallback);
 !    procedure BlaBla(const pseudo,msg: string);
-!    procedure CallbackReleased(const callback: IInvokable);
+!    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 !  end;
-Those interface types will be shared by both server and client sides, in the common {\f1\fs20 Project31ChatCallbackInterface.pas} unit. The definition is pretty close to what we wrote when @152@.
+The main command of the {\f1\fs20 IChatService} service is {\f1\fs20 BlaBla()}, which should be propagated to all client instance having {\f1\fs20 Join}ed the conversation, via {\f1\fs20 IChatCallback.NotifyBlabla()} events.
+Those interface types will be shared by both server and client sides, in the common {\f1\fs20 Project31ChatCallbackInterface.pas} unit. The definition is pretty close to what we wrote when @152@. For instance, if 3 people did join the chat room, the following process should take place:
 \graph PublishSubscribeChat Chat Application using Publish-Subscribe
-\IChatService\IChatCallback 1\BlaBla()
-\IChatService\IChatCallback 2\BlaBla()
+\Any Joined Client\IChatService\BlaBla()
+\IChatService\IChatCallback 1\NotifyBlaBla()
+\IChatService\IChatCallback 2\NotifyBlaBla()
 \IChatService\IChatCallback 3
 \
 The only additional method is {\f1\fs20 IChatServer.CallbackReleased()}, which, by convention, will be called on the server side when any {\f1\fs20 callback} interface instance is released on the client side.
@@ -10059,7 +10061,7 @@ On the server side, each call to {\f1\fs20 IChatService.Join()} would {\i subscr
 !  public
 !    procedure Join(const pseudo: string; const callback: IChatCallback);
 !    procedure BlaBla(const pseudo,msg: string);
-!    procedure CallbackReleased(const callback: IInvokable);
+!    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 !  end;
 !
 !procedure TChatService.Join(const pseudo: string;
@@ -10073,33 +10075,47 @@ Then a remote call to the {\f1\fs20 IChatService.BlaBla()} method should be broa
 !var i: integer;
 !begin
 !  for i := 0 to high(fConnected) do
-!!    fConnected[i].BlaBla(pseudo,msg);
+!!    fConnected[i].NotifyBlaBla(pseudo,msg);
 !end;
 Note that every call to {\f1\fs20 IChatCallback.BlaBla()} within the loop would be made via {\i @*WebSockets@}, in an asynchronous and non blocking way, so that even in case of huge number of clients, the {\f1\fs20 IChatService.BlaBla()} method won't block. In case of high numbers of messages, the framework is even able to {\i gather} push notification messages into a single bigger message, to reduce the resource use.
+If you are a bit paranoid, you may ensure that the notification process would continue, if any of the event failed:
+!procedure TChatService.BlaBla(const pseudo,msg: string);
+!var i: integer;
+!begin
+!!  for i := high(fConnected) downto 0 do // downwards for InterfaceArrayDelete()
+!    try
+!      fConnected[i].NotifyBlaBla(pseudo,msg);
+!!    except
+!!      InterfaceArrayDelete(fConnected,i); // unsubscribe the callback on failure
+!    end;
+!end;
+This safer implementation would unregister any failing callback. If the notification raised an exception, it would ensure that this particular invalid subscriber won't be notified any more. Note that since we may reduce the {\f1\fs20 fConnected[]} array size on the fly, the loop is processed {\i downwards}, to avoid any access violation.
 On the server side, the service implementation has been registered as such:
 !  Server.ServiceDefine(TChatService,[IChatService],sicShared).
 !    SetOptions([],[optExecLockedPerInterface]);
 Here, the {\f1\fs20 optExecLockedPerInterface} option has been set, so that all method calls would be made thread-safe: concurrent access to the internal {\f1\fs20 fConnected[]} list would be protected by a lock. Since a global list of connections is to be maintained, the service life time has been defined as {\f1\fs20 sicShared} - see @92@.
 The following method will be called by the server, when a client callback instance is released (either explicitly, or if the connection is broken), so could be used to {\i unsubscribe} to the notification, simply by deleting the callback from the internal {\f1\fs20 fConnected[]} array:
-!procedure TChatService.CallbackReleased(const callback: IInvokable);
+!procedure TChatService.CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
 !begin
-!!  InterfaceArrayDelete(fConnected,callback);
+!!  if interfaceName='IChatCallback' then
+!!    InterfaceArrayDelete(fConnected,callback);
 !end;
-The framework will in fact recognize the following method definition in any {\f1\fs20 interface} type for a service:
-!   procedure CallbackReleased(const callback: IInvokable);
-When a callback {\f1\fs20 interface} parameter (in our case, {\f1\fs20 IChatCallback}) will be released on the client side, this method will be called with the corresponding {\f1\fs20 interface} instance as parameter. You do not have to call explicitly any method on the client side to {\i unsubscribe} a service: assigning {\i nil} to a callback variable, or freeing the {\f1\fs20 class} instance owning it as a field on the {\i subscriber} side, will automatically unregister it on the {\i publisher} side.
+The framework will in fact recognize the following method definition in any {\f1\fs20 interface} type for a service (it would check the method name, and the method parameters):
+!   procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
+When a callback {\f1\fs20 interface} parameter (in our case, {\f1\fs20 IChatCallback}) will be released on the client side, this method will be called with the corresponding {\f1\fs20 interface} instance and type name as parameters. You do not have to call explicitly any method on the client side to {\i unsubscribe} a service: assigning {\i nil} to a callback variable, or freeing the {\f1\fs20 class} instance owning it as a field on the {\i subscriber} side, will automatically unregister it on the {\i publisher} side.
 :   Consuming the service from the Subscriber side
 On the client side, you implement the {\f1\fs20 IChatCallback} callback interface:
 !type
 !  TChatCallback = class(TInterfacedCallback,IChatCallback)
 !  protected
-!    procedure BlaBla(const pseudo, msg: string);
+!    procedure NotifyBlaBla(const pseudo, msg: string);
 !  end;
 !
-!procedure TChatCallback.BlaBla(const pseudo, msg: string);
+!procedure TChatCallback.NotifyBlaBla(const pseudo, msg: string);
 !begin
 !  writeln(#13'@',pseudo,' ',msg);
 !end;
+The {\f1\fs20 TInterfacedCallback} type defines a {\f1\fs20 TInterfacedObject} class which would automatically notify the REST server when it is released. By providing the client {\f1\fs20 TSQLRest} instance to the {\f1\fs20 TChatCallback.Create()} constructor, you would ensure that the {\f1\fs20 IChatService.CallbackReleased} method would be executed on the server side, when the {\f1\fs20 TChatCallback}/{\f1\fs20 IChatCallback} instance would be released on the client side.
 Then you subscribe to your remote service as such:
 !!var Service: IChatService;
 !!    callback: IChatCallback;
@@ -10122,7 +10138,7 @@ Then you subscribe to your remote service as such:
 !!      callback := nil; // will unsubscribe from the remote publisher
 !      Service := nil;  // release the service local instance BEFORE Client.Free
 !    end;
-You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
+You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s - see @48@, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
 If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with. Most {\i Events Oriented} solutions do use a set of dedicated classes, with a centralized Message Bus, or in P2P (see e.g. {\i ZeroMQ} or {\i NanoMsg}). Here, the method parameters define the message values, and itegration with the Delphi language is clearly implementation agnostic.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and binary/JSON marshalling over TCP/IP). We will see @172@ how it may help implementing DDD's {\i @*Event-Driven@} pattern.
 \page
 : Implementation details

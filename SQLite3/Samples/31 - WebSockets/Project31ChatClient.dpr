@@ -15,10 +15,10 @@ uses
 type
   TChatCallback = class(TInterfacedCallback,IChatCallback)
   protected
-    procedure BlaBla(const pseudo, msg: string);
+    procedure NotifyBlaBla(const pseudo, msg: string);
   end;
 
-procedure TChatCallback.BlaBla(const pseudo, msg: string);
+procedure TChatCallback.NotifyBlaBla(const pseudo, msg: string);
 begin
   TextColor(ccLightBlue);
   writeln(#13'@',pseudo,' ',msg);
