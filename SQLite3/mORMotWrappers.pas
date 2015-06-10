@@ -631,6 +631,7 @@ var info: variant;
     itemSize: integer;
     objArrayClass: TClass;
     objArrayType: TWrapperType;
+    objArrayClassInstance: TClassInstanceCreate;
     parser: TJSONRecordAbstract;
 begin
   if list.SearchItemByProp('name',typName,false)>=0 then
@@ -651,7 +652,8 @@ begin
     item := typInfo^.DynArrayItemType(@itemSize);
     if item=nil then begin
       if itemSize=SizeOf(pointer) then begin
-        objArrayClass := TJSONSerializer.RegisterObjArrayFindType(typInfo);
+        objArrayClass := TJSONSerializer.RegisterObjArrayFindType(
+          typInfo,objArrayClassInstance);
         if objArrayClass=nil then
           info := ContextFromInfo(TYPES_SIZE[itemSize]) else begin
           if objArrayClass.InheritsFrom(TSQLRecord) then

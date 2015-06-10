@@ -1978,6 +1978,13 @@ function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
 
 { ************ some RTTI and SQL mapping routines }
 
+type
+  /// the class kind as handled by ClassInstanceCreate() functions
+  TClassInstanceCreate = (
+    cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
+    cicTSynPersistent,cicTInterfacedCollection,cicTInterfacedObjectWithCustomCreate,
+    cicTCollection,cicTObject);
+
 { type definitions below were adapted from TypInfo.pas
  - this implementation doesn't require to include Variant.pas any more (which
   allow easy server-side compile with LVCL, e.g.)
@@ -2148,7 +2155,7 @@ type
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
-    // - if EnumName does not start with lowercases 'a'..'z', they will be ignored:
+    // - if Value does not start with lowercases 'a'..'z', they will be ignored:
     // e.g. GetEnumNameValue('Warning') will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameValue(const EnumName: ShortString): Integer; overload;
@@ -2164,10 +2171,12 @@ type
     /// get the corresponding enumeration ordinal value, from its name
     // - if Value does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
-    // - if Value does not start with lowercases 'a'..'z', they will be ignored:
-    // e.g. GetEnumNameValue('Warning') will find sllWarning item
+    // - if AlsoTrimLowerCase is TRUE, and EnumName does not start with
+    // lowercases 'a'..'z', they will be ignored: e.g. GetEnumNameValue('Warning')
+    // will find sllWarning item
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameValue(Value: PUTF8Char; ValueLen: integer): Integer; overload;
+    function GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
+      AlsoTrimLowerCase: boolean=true): Integer; overload;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -2545,8 +2554,9 @@ type
     /// return TRUE if this dynamic array has been registered as a T*ObjArray
     function DynArrayIsObjArray: boolean; overload;
     /// return TRUE if this dynamic array has been registered as a T*ObjArray
-    // - and set the item class to a variable
-    function DynArrayIsObjArray(out aItemClass: TClass): boolean; overload;
+    // - and set the item class and creation information to a variable
+    function DynArrayIsObjArray(out aItemClass: TClass;
+      out aClassInstance: TClassInstanceCreate): boolean; overload;
     /// return TRUE if the the property has no getter but direct field read
     function GetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3141,6 +3151,8 @@ type
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
     fIsObjArray: boolean;
+    fObjArrayItemClass: TClass;
+    fObjArrayClassInstance: TClassInstanceCreate;
     function GetDynArray(Instance: TObject): TDynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
@@ -3180,6 +3192,9 @@ type
     // - as previously registered via TJSONSerializer.RegisterObjArrayForJSON()
     // - if the field is a T*ObjArray, the column will be stored as text
     property DynArrayIsObjArray: boolean read fIsObjArray;
+    /// compute a new item to be stored in a T*ObjArray
+    // - returns nil if this dynamic array is not a T*ObjArray
+    function DynArrayNewObjArrayItem: TObject;
   end;
 
   TSQLPropInfoRTTIDynArrayObjArray = array of TSQLPropInfoRTTIDynArray;
@@ -3612,7 +3627,8 @@ type
     // - the T*ObjArray dynamic array should have been previously registered
     // via RegisterObjArrayForJSON() overloaded methods
     // - returns nil if the supplied type is not a registered T*ObjArray
-    class function RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
+    class function RegisterObjArrayFindType(aDynArray: PTypeInfo;
+      out aClassInstance: TClassInstanceCreate): TClass;
   end;
 
 
@@ -3693,13 +3709,6 @@ function ClassInstanceCreate(aClass: TClass): TObject; overload;
 // - will handle the custom virtual constructors of TSQLRecord or
 // TCollection classes as expected, so is to be preferred to aClass.Create
 function ClassInstanceCreate(const aClassName: RawUTF8): TObject; overload;
-
-type
-  /// the class kind as handled by ClassInstanceCreate() functions
-  TClassInstanceCreate = (
-    cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
-    cicTSynPersistent,cicTInterfacedCollection,cicTInterfacedObjectWithCustomCreate,
-    cicTCollection,cicTObject);
 
 /// compute the class kind of a given class
 // - as handled by ClassInstanceCreate() functions
@@ -19149,7 +19158,7 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
   aPropIndex: integer; aSQLFieldType: TSQLFieldType);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  fIsObjArray := aPropInfo^.DynArrayIsObjArray;
+  fIsObjArray := aPropInfo^.DynArrayIsObjArray(fObjArrayItemClass,fObjArrayClassInstance);
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
@@ -19160,6 +19169,13 @@ end;
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
   fPropInfo^.GetDynArray(Instance,result);
+end;
+
+function TSQLPropInfoRTTIDynArray.DynArrayNewObjArrayItem: TObject;
+begin
+  if (self=nil) or not fIsObjArray then
+    result := nil else
+    result := ClassInstanceCreate(fObjArrayItemClass,fObjArrayClassInstance);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
@@ -19210,13 +19226,17 @@ end;
 {$ifndef NOVARIANTS}
 
 procedure TSQLPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Variant);
+var json: RawUTF8;
 begin
-  DynArrayToVariant(Dest,GetFieldAddr(Instance),fPropType);
+  json := GetDynArray(Instance).SaveToJSON;
+  _Json(JSON,Dest,JSON_OPTIONS[true]);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
+var json: RawUTF8;
 begin
-  DynArrayFromVariant(PPointer(GetFieldAddr(Instance))^,Source,fPropType);
+  VariantSaveJSON(Source,twJSONEscape,json);
+  GetDynArray(Instance).LoadFromJSON(pointer(json));
 end;
 
 {$endif NOVARIANTS}
@@ -20213,7 +20233,7 @@ end;
 
 function TSynMonitor.ComputeDetails: variant;
 begin
-  result := _JsonFast(ComputeDetailsJSON);
+  _Json(ComputeDetailsJSON,result,JSON_OPTIONS[true]);
 end;
 
 
@@ -23935,10 +23955,12 @@ begin
     result := false;
 end;
 
-function TPropInfo.DynArrayIsObjArray(out aItemClass: TClass): boolean;
+function TPropInfo.DynArrayIsObjArray(out aItemClass: TClass;
+  out aClassInstance: TClassInstanceCreate): boolean;
 begin
   if PropType^.Kind=tkDynArray then begin
-    aItemClass := TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif});
+    aItemClass := TJSONSerializer.RegisterObjArrayFindType(
+      PropType{$ifndef FPC}^{$endif},aClassInstance);
     result := aItemClass<>nil;
   end else
     result := false;
@@ -25526,7 +25548,8 @@ asm // eax=PEnumType edx=Value
 end;
 {$endif}
 
-function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer): Integer;
+function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
+  AlsoTrimLowerCase: boolean): Integer;
 var PS: PShortString;
     P: PUTF8Char;
     PLen: integer;
@@ -25540,18 +25563,20 @@ begin
           exit else
           inc(PtrUInt(PS),ord(PS^[0])+1);
     end;
-    // e.g. 'Warning'
-    PS := @NameList;
-    for result := 0 to MaxValue do begin
-      PLen := Length(PS^);
-      P := @PS^[1];
-      while (PLen>0) and (P^ in ['a'..'z']) do begin
-        inc(P);
-        dec(PLen);
+    if AlsoTrimLowerCase then begin
+      // e.g. 'Warning'
+      PS := @NameList;
+      for result := 0 to MaxValue do begin
+        PLen := Length(PS^);
+        P := @PS^[1];
+        while (PLen>0) and (P^ in ['a'..'z']) do begin
+          inc(P);
+          dec(PLen);
+        end;
+        if (PLen>0) and IdemPropName(Value,P,ValueLen,PLen) then
+          exit else
+          inc(PtrUInt(PS),ord(PS^[0])+1);
       end;
-      if (PLen>0) and IdemPropName(Value,P,ValueLen,PLen) then
-        exit else
-        inc(PtrUInt(PS),ord(PS^[0])+1);
     end;
   end;
   result := -1;
@@ -34915,7 +34940,7 @@ end;
 
 function TSQLRestServer.FullStatsAsDocVariant: variant;
 begin
-  result := _JsonFast(FullStatsAsJson);
+  _Json(FullStatsAsJson,result,JSON_OPTIONS[true]);
 end;
 
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
@@ -39716,24 +39741,26 @@ end;
 
 function ObjectToVariant(Value: TObject): variant;
 begin
-  result := _JsonFast(ObjectToJSON(Value));
+  _Json(ObjectToJSON(Value),result,JSON_OPTIONS[true]);
 end;
 
 function ObjectToVariantDebug(Value: TObject): variant;
 begin
-  result := _JsonFast(ObjectToJSONDebug(Value));
+  _Json(ObjectToJSONDebug(Value),result,JSON_OPTIONS[true]);
 end;
 
 procedure _ObjAddProps(Value: TObject; var Obj: variant);
+var v: variant;
 begin
-  _ObjAddProps(_JsonFast(ObjectToJSON(Value)),Obj);
+  _Json(ObjectToJSON(Value),v,JSON_OPTIONS[true]);
+  _ObjAddProps(v,Obj);
 end;
 
 function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8): variant;
 begin
-  result := _JsonFast(ObjectToJSONDebug(Value));
+  _Json(ObjectToJSONDebug(Value),result,JSON_OPTIONS[true]);
   if ContextFormat<>'' then
     if ContextFormat[1]='{' then
       _ObjAddProps([ContextName,_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
@@ -39987,16 +40014,23 @@ begin
     EModelException.CreateUTF8('% ObjArray?',[self]);
 end;
 
-class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo): TClass;
+class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo;
+  out aClassInstance: TClassInstanceCreate): TClass;
 var ndx: integer;
+    obj: ^TObjArraySerializer;
 begin
+  if ObjArraySerializers<>nil then begin
+    // ObjArrayTypes[] order <> ObjArraySerializers[] -> brute force search
+    obj := pointer(ObjArraySerializers.List);
+    for ndx := 1 to ObjArraySerializers.Count do
+      if obj^.DynArray=aDynArray then begin
+        aClassInstance := obj^.ClassInstance;
+        result := obj^.ItemClass;
+        exit;
+      end else
+      inc(obj);
+  end;
   result := nil;
-  if ObjArraySerializers=nil then
-    exit;
-  ndx := FastFindPointerSorted(
-    pointer(ObjArrayTypes),ObjArraySerializers.Count-1,aDynArray);
-  if ndx>=0 then
-    result := TObjArraySerializer(ObjArraySerializers.Items[ndx]).ItemClass;
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
@@ -40728,8 +40762,16 @@ end;
 
 procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
   Options: TTextWriterWriteObjectOptions);
+var humanread: boolean;
+    json: RawUTF8;
 begin
-  FileFromString(ObjectToJSON(Value,Options),JSONFile);
+  humanread := woHumanReadable in Options; 
+  Exclude(Options,woHumanReadable);
+  json := ObjectToJSON(Value,Options);
+  if humanread then
+    // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
+    JSONBufferReformatToFile(pointer(json),JSONFile) else
+    FileFromString(json,JSONFile);
 end;
 
 procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8=''); overload;
