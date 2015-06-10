@@ -48225,12 +48225,16 @@ end;
 
 type // use AutoTable VMT entry to store a cache of the needed fields RTTI
   TAutoCreateFields = class
+  public
     ClassesCount: integer;
     ObjArraysCount: integer;
     Classes: array of record
       Prop: PPropInfo;
       InstanceClass: TClass;
       InstanceCreate: TClassInstanceCreate;
+      {$ifndef LVCL}
+      InstanceCollection: TCollectionItemClass;
+      {$endif}
     end;
     ObjArrays: array of PPropInfo;
     constructor Create(aClass: TClass);
@@ -48251,7 +48255,8 @@ begin
         with Classes[ClassesCount] do begin
           Prop := P;
           InstanceClass := P^.PropType^.ClassType^.ClassType;
-          InstanceCreate := ClassToTClassInstanceCreate(InstanceClass);
+          InstanceCreate := ClassToTClassInstanceCreate(InstanceClass
+            {$ifndef LVCL},InstanceCollection{$endif});
         end;
         inc(ClassesCount);
       end;
@@ -48273,13 +48278,7 @@ procedure AutoCreateFields(self: TObject);
 var field: TAutoCreateFields;
     PVMT: PPointer;
     i: integer;
-{$ifndef LVCL}
-    dummy: TCollectionItemClass;
 begin
-  dummy := nil;
-{$else}
-begin
-{$endif}
   PVMT := pointer(PPtrInt(self)^+vmtAutoTable);
   field := PVMT^;
   if field=nil then begin
@@ -48291,8 +48290,8 @@ begin
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
   for i := 0 to field.ClassesCount-1 do
     with field.Classes[i] do
-      PObject(Prop^.GetterAddr(self))^ :=
-        ClassInstanceCreate(InstanceClass,InstanceCreate{$ifndef LVCL},dummy{$endif});
+      PObject(Prop^.GetterAddr(self))^ := ClassInstanceCreate(InstanceClass,
+        InstanceCreate{$ifndef LVCL},InstanceCollection{$endif});
 end;
 
 procedure AutoDestroyFields(self: TObject);
