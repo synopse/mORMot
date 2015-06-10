@@ -48221,68 +48221,95 @@ begin
 end;
 
 
-{ TPersistentAutoCreateFields }
+{ TAutoCreateFields }
 
-procedure AutoCreateFields(self: TObject);
+type // use AutoTable VMT entry to store a cache of the needed fields RTTI
+  TAutoCreateFields = class
+    ClassesCount: integer;
+    ObjArraysCount: integer;
+    Classes: array of record
+      Prop: PPropInfo;
+      InstanceClass: TClass;
+      InstanceCreate: TClassInstanceCreate;
+    end;
+    ObjArrays: array of PPropInfo;
+    constructor Create(aClass: TClass);
+  end;
+
+constructor TAutoCreateFields.Create(aClass: TClass);
 var i: integer;
-    CT: TClass;
     P: PPropInfo;
 begin
-  CT := {$ifdef FPC}self.ClassType{$else}PPointer(self)^{$endif};
   repeat
-    for i := 1 to InternalClassPropInfo(CT,P) do begin
-      if P^.PropType^.Kind=tkClass then
+    for i := 1 to InternalClassPropInfo(aClass,P) do begin
+      case P^.PropType^.Kind of
+      tkClass: begin
         if (P^.SetProc<>0) or not P^.GetterIsField then
-          raise EModelException.CreateUTF8('%.% is an auto-created instance '+
-            'so should not have any "write" defined',[self,P^.Name]) else
-          PObject(P^.GetterAddr(self))^ :=
-            ClassInstanceCreate(P^.PropType^.ClassType^.ClassType);
-      {$ifdef HASINLINE}
+          raise EModelException.CreateUTF8('%.%: % is an auto-created instance '+
+            'so should not have any "write" defined',[aClass,P^.Name,P^.PropType^.Name]);
+        SetLength(Classes,ClassesCount+1);
+        with Classes[ClassesCount] do begin
+          Prop := P;
+          InstanceClass := P^.PropType^.ClassType^.ClassType;
+          InstanceCreate := ClassToTClassInstanceCreate(InstanceClass);
+        end;
+        inc(ClassesCount);
+      end;
+      tkDynArray:
+        if InternalIsObjArray(P^.PropType{$ifndef FPC}^{$endif})
+           and P^.GetterIsField then begin
+          SetLength(ObjArrays,ObjArraysCount+1);
+          ObjArrays[ObjArraysCount] := P;
+          inc(ObjArraysCount);
+        end;
+      end;
       P := P^.Next;
-      {$else}
-      P := @P^.Name[ord(P^.Name[0])+1];
-      {$endif}
     end;
-    {$ifdef FPC}
-    CT := CT.ClassParent;
-    {$else}
-    if PPointer(PtrInt(CT)+vmtParent)^=nil then
-      break else
-      CT := PPointer(PPointer(PtrInt(CT)+vmtParent)^)^;
-    {$endif}
-  until CT=TObject;
+    aClass := aClass.ClassParent;
+  until aClass=TObject;
+end;
+
+procedure AutoCreateFields(self: TObject);
+var field: TAutoCreateFields;
+    PVMT: PPointer;
+    i: integer;
+{$ifndef LVCL}
+    dummy: TCollectionItemClass;
+begin
+  dummy := nil;
+{$else}
+begin
+{$endif}
+  PVMT := pointer(PPtrInt(self)^+vmtAutoTable);
+  field := PVMT^;
+  if field=nil then begin
+    field := TAutoCreateFields.Create(PPointer(self)^);
+    PatchCodePtrUInt(pointer(PVMT),PtrUInt(field),true);
+    GarbageCollectorFreeAndNil(PVMT^,field);
+  end else
+    if PPointer(field)^<>TAutoCreateFields then
+      raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
+  for i := 0 to field.ClassesCount-1 do
+    with field.Classes[i] do
+      PObject(Prop^.GetterAddr(self))^ :=
+        ClassInstanceCreate(InstanceClass,InstanceCreate{$ifndef LVCL},dummy{$endif});
 end;
 
 procedure AutoDestroyFields(self: TObject);
 var i: integer;
-    CT: TClass;
-    P: PPropInfo;
+    PVMT: TAutoCreateFields;
 begin
-  CT := {$ifdef FPC}self.ClassType{$else}PPointer(self)^{$endif};
-  repeat
-    for i := 1 to InternalClassPropInfo(CT,P) do begin
-      case P^.PropType^.Kind of
-      tkClass:
-        P^.GetObjProp(self).Free;
-      tkDynArray:
-        if InternalIsObjArray(P^.PropType{$ifndef FPC}^{$endif}) then
-          ObjArrayClear(P^.GetFieldAddr(self)^);
-      end;
-      {$ifdef HASINLINE}
-      P := P^.Next;
-      {$else}
-      P := @P^.Name[ord(P^.Name[0])+1];
-      {$endif}
-    end;
-    {$ifdef FPC}
-    CT := CT.ClassParent;
-    {$else}
-    if PPointer(PtrInt(CT)+vmtParent)^=nil then
-      break else
-      CT := PPointer(PPointer(PtrInt(CT)+vmtParent)^)^;
-    {$endif}
-  until CT=nil;
+  PVMT := PPointer(PPtrInt(self)^+vmtAutoTable)^;
+  if PVMT=nil then
+    raise EModelException.CreateUTF8('%.AutoTable VMT entry not set',[self]);
+  for i := 0 to PVMT.ClassesCount-1 do
+    PObject(PVMT.Classes[i].Prop^.GetterAddr(self))^.Free;
+  for i := 0 to PVMT.ObjArraysCount-1 do
+    ObjArrayClear(PVMT.ObjArrays[i]^.GetterAddr(self)^);
 end;
+
+
+{ TPersistentAutoCreateFields }
 
 constructor TPersistentAutoCreateFields.Create;
 begin
