@@ -1785,6 +1785,13 @@ begin
   AIP.Reverse;
   for i := 0 to 50000 do
     Check(AI[i]=50000-i);
+  SetLength(AI,AIcount);
+  AIP.Init(TypeInfo(TIntegerDynArray),AI);
+  AIP.Compare := SortDynArrayInteger;
+  AIP.Sort;
+  Test := AIP.SaveTo;
+  Check(Hash32(Test)=$B9F2502A);
+  AIP.Reverse;
   AIP.Slice(AI2,2000,1000);
   Check(length(AI2)=2000);
   for i := 0 to 1999 do
