@@ -40572,9 +40572,13 @@ begin
         P^.SetOrdProp(Value,V);
       end else
       if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+
-        From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,P^.PropType{$ifndef FPC}^{$endif});
+        From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,
+          P^.PropType{$ifndef FPC}^{$endif},@EndOfObject);
         if From=nil then
           exit; // invalid '{record}' content
+        if EndOfObject='}' then
+          break else
+          continue;
       end else begin
         if Kind<>tkClass then
           exit; // true nested object should begin with '[' or '{'
