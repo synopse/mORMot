@@ -48287,7 +48287,7 @@ begin
     PatchCodePtrUInt(pointer(PVMT),PtrUInt(field),true);
     GarbageCollectorFreeAndNil(PVMT^,field);
   end else
-    if PPointer(field)^<>TAutoCreateFields then
+    if PClass(field)^<>TAutoCreateFields then
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
   for i := 0 to field.ClassesCount-1 do
     with field.Classes[i] do
