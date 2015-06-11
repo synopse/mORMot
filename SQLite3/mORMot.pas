@@ -47018,7 +47018,7 @@ var i: integer;
 begin
   if (self=nil) or (fResolver=nil) then
     raise EServiceException.CreateUTF8('%.AutoResolve with no prior registration',[self]);
-  CT := {$ifdef FPC}ClassType{$else}PPointer(self)^{$endif};
+  CT := ClassType;
   if CT<>TInjectableObject then
   repeat
     for i := 1 to InternalClassPropInfo(CT,P) do begin
@@ -48282,7 +48282,7 @@ begin
   PVMT := pointer(PPtrInt(self)^+vmtAutoTable);
   field := PVMT^;
   if field=nil then begin
-    field := TAutoCreateFields.Create(PPointer(self)^);
+    field := TAutoCreateFields.Create(PClass(self)^);
     PatchCodePtrUInt(pointer(PVMT),PtrUInt(field),true);
     GarbageCollectorFreeAndNil(PVMT^,field);
   end else
