@@ -26342,6 +26342,8 @@ begin
     if not LeaveUnprotected then
       VirtualProtect(Old, Size, RestoreProtection, Ignore);
     FlushInstructionCache(GetCurrentProcess, Old, Size);
+    if not CompareMem(Old,New,Size) then
+      raise ESynException.Create('PatchCode?');
   end;
 end;
 {$else}
