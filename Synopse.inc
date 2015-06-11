@@ -254,7 +254,6 @@
     {$define CPU64DELPHI}
     {$undef CPU32}
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
-    {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$undef CPU64}
@@ -278,18 +277,25 @@
       Kylix1/2 are unsupported
       {$ifend}
     {$else}
-      {$ifdef VER140} // Delphi 6
+      {$ifdef VER140} 
+        {$define ISDELPHI6ANDUP} // Delphi 6 or newer
         {$define DELPHI6OROLDER}
         {$define NOVARCOPYPROC}
         {$undef ENHANCEDRTL} // Delphi 6 doesn't have our Enhanced Runtime library
       {$else}
-        {$define WITHUXTHEME} // Delphi 7 and up handle UI theming
+        {$define ISDELPHI7ANDUP} // Delphi 7 or newer
+        {$define WITHUXTHEME}   // VCL handle UI theming
+        {$warn UNSAFE_CODE OFF} // Delphi for .Net does not exist any more!
+        {$warn UNSAFE_TYPE OFF}
+        {$warn UNSAFE_CAST OFF}
+        {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
       {$endif}
     {$endif LINUX}
     {$if CompilerVersion >= 17}
     {$ifend}
     {$if CompilerVersion >= 18}
-      {$define HASNEWFILEAGE} // Delphi 2006 or newer
+      {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
+      {$define HASNEWFILEAGE} 
       {$define HASINLINE}
       {$define HASREGION}
       {$define HASFASTMM4}
