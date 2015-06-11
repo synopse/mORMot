@@ -282,6 +282,7 @@ type
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
     class procedure EnumTrim(const Value: variant; out result: variant);
+    class procedure EnumTrimRight(const Value: variant; out result: variant);
     class procedure PowerOfTwo(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
@@ -329,8 +330,8 @@ type
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
-    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, PowerOfTwo
-    // and WikiToHtml
+    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
+    // PowerOfTwo and WikiToHtml
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -391,7 +392,7 @@ type
     // !   html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
-    function RenderJSON(JSON: PUTF8Char; const Args,Params: array of const;
+    function RenderJSON(const JSON: RawUTF8; const Args,Params: array of const;
       Partials: TSynMustachePartials=nil; Helpers: TSynMustacheHelpers=nil;
       OnTranslate: TOnStringTranslate=nil;
       EscapeInvert: boolean=false): RawUTF8; overload;
@@ -822,7 +823,7 @@ begin
   result := Render(context,Partials,Helpers,OnTranslate,EscapeInvert);
 end;
 
-function TSynMustache.RenderJSON(JSON: PUTF8Char; const Args,
+function TSynMustache.RenderJSON(const JSON: RawUTF8; const Args,
   Params: array of const; Partials: TSynMustachePartials;
   Helpers: TSynMustacheHelpers; OnTranslate: TOnStringTranslate;
   EscapeInvert: boolean): RawUTF8;
@@ -900,9 +901,9 @@ begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','PowerOfTwo'],
+       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo'],
       [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,PowerOfTwo]);
+       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo]);
   result := HelpersStandardList;
 end;
 
@@ -996,6 +997,21 @@ begin
   VariantToUTF8(Value,tmp,wasString);
   short := TrimLeftLowerCase(tmp);
   RawUTF8ToVariant(short,StrLen(short),result);
+end;
+
+class procedure TSynMustache.EnumTrimRight(const Value: variant; out result: variant);
+var tmp: RawUTF8;
+    wasString: boolean;
+    i,L: integer;
+begin
+  VariantToUTF8(Value,tmp,wasString);
+  L := length(tmp);
+  for i := 1 to L do
+    if not (tmp[i] in ['a'..'z']) then begin
+      L := i-1;
+      break;
+    end;
+  RawUTF8ToVariant(Pointer(tmp),L,result);
 end;
 
 class procedure TSynMustache.PowerOfTwo(const Value: variant; out result: variant);
