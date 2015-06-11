@@ -7700,6 +7700,7 @@ const
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
 
 
+
 { ************ filtering and validation classes and functions }
 
 /// return TRUE if the supplied content is a valid email address
@@ -11406,6 +11407,14 @@ type
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
     function GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
+    /// find an item in this document, and returns its value as a TDocVariantData
+    // - returns a void TDocVariant if aName is not a document 
+    function GetAsDocVariantSafe(const aName: RawUTF8): PDocVariantData; overload;
+    /// find returns a document value as a TDocVariantData, from its index
+    // - returns a void TDocVariant if the suplied index is out of range, or
+    // if the value is not a document
+    function GetAsDocVariantSafe(aIndex: integer): PDocVariantData; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - it will return Unassigned if the path does not match the data
@@ -11475,6 +11484,15 @@ type
     /// delete a value/item in this document, from its name
     // - return TRUE on success, FALSE if the supplied name does not exist
     function Delete(const aName: RawUTF8): boolean; overload;
+    /// delete a value in this document, by property name match
+    // - {aPropName:aPropValue} will be searched within the stored array,
+    // and the corresponding item will be deleted, on match
+    // - returns FALSE if no match is found, TRUE if as deleted
+    function DeleteByProp(const aPropName,aPropValue: RawUTF8;
+      aCaseSensitive: boolean): boolean;
+    /// delete a value/item in this document, from its value
+    // - return TRUE on success, FALSE if the supplied value does not exist
+    function DeleteByValue(const aValue: Variant): boolean;
     /// search a property match in this document, handled as array
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item index will be returned, on match
@@ -11491,6 +11509,8 @@ type
     // - will follow case-insensitive order (@StrIComp) by default, but you
     // can specify @StrComp as comparer function for case-sensitive ordering
     procedure SortByName(Compare: TUTF8Compare=nil);
+    /// reverse the order of the document object or array items 
+    procedure Reverse;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -11585,6 +11605,7 @@ type
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
 
+
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
 // instance, which may be of kind varByRef (e.g. when retrieved by late binding)
@@ -11594,6 +11615,12 @@ type
 // - so you can write the following:
 // ! DocVariantData(aVarDoc.ArrayProp).AddItem('new item');
 function DocVariantData(const DocVariant: variant): PDocVariantData;
+
+const
+  /// constant used e.g. by DocVariantDataSafe() overloaded functions
+  // - will be in code section of the exe, so will be read-only by design
+  // VKind=dvUndefined and VCount=0
+  DocVariantDataFake: TDocVariantData = ();
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
@@ -31682,6 +31709,23 @@ begin
   QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
 end;
 
+procedure TDocVariantData.Reverse;
+var arr: TDynArray;
+begin
+  if (VKind=dvUndefined) or (VCount=0) then
+    exit;
+  if VName<>nil then begin
+    SetLength(VName,VCount);
+    arr.Init(TypeInfo(TRawUTF8DynArray),VName);
+    arr.Reverse;
+  end;
+  if VValue<>nil then begin
+    SetLength(VValue,VCount);
+    arr.Init(TypeInfo(TVariantDynArray),VValue);
+    arr.Reverse;
+  end;
+end;
+
 function TDocVariantData.Delete(Index: integer): boolean;
 begin
   if cardinal(Index)>=cardinal(VCount) then
@@ -31705,6 +31749,17 @@ end;
 function TDocVariantData.Delete(const aName: RawUTF8): boolean;
 begin
   result := Delete(GetValueIndex(aName));
+end;
+
+function TDocVariantData.DeleteByProp(const aPropName,aPropValue: RawUTF8;
+  aCaseSensitive: boolean): boolean;
+begin
+  result := Delete(SearchItemByProp(aPropName,aPropValue,aCaseSensitive));
+end;
+
+function TDocVariantData.DeleteByValue(const aValue: Variant): boolean;
+begin
+  result := Delete(SearchItemByValue(aValue));
 end;
 
 function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
@@ -31806,6 +31861,22 @@ begin
     aValue := VariantToUTF8(PVariant(found)^);
     result := true;
   end;
+end;
+
+function TDocVariantData.GetAsDocVariantSafe(const aName: RawUTF8): PDocVariantData;
+var found: PVarData;
+begin
+  found := GetVarData(aName);
+  if found=nil then
+    result := @DocVariantDataFake else
+    result := DocVariantDataSafe(PVariant(found)^);
+end;
+
+function TDocVariantData.GetAsDocVariantSafe(aIndex: integer): PDocVariantData;
+begin
+  if cardinal(aIndex)>=cardinal(VCount) then
+    result := @DocVariantDataFake else
+    result := DocVariantDataSafe(VValue[aIndex]);
 end;
 
 function TDocVariantData.GetVarData(const aName: RawUTF8;
@@ -32439,11 +32510,6 @@ begin
       result := DocVariantData(PVariant(VPointer)^) else
     raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
 end;
-
-const
-  // will be in code section of the exe, so will be read-only by design
-  // VKind=dvUndefined and VCount=0
-  DocVariantDataFake: TDocVariantData = ();
 
 function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
 begin
