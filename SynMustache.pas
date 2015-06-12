@@ -197,7 +197,8 @@ type
     function AppendSection(const ValueName: RawUTF8): TSynMustacheSectionType; override;
     function GotoNextListItem: boolean; override;
     function GetDocumentType(const aDoc: TVarData): TSynInvokeableVariantType;
-    procedure GetValueFromContext(const ValueName: RawUTF8; var Value: TVarData);
+    function GetValueFromContext(const ValueName: RawUTF8; var Value: TVarData): TSynMustacheSectionType;
+    function GetValueCopyFromContext(const ValueName: RawUTF8): variant;
     procedure AppendVariant(const Value: variant; UnEscape: boolean);
   public
     /// initialize the context from a custom variant document
@@ -275,6 +276,7 @@ type
     fSectionMaxCount: Integer;
     class procedure DateTimeToText(const Value: variant; out result: variant);
     class procedure DateToText(const Value: variant; out result: variant);
+    class procedure DateFmt(const Value: variant; out result: variant);
     class procedure TimeLogToText(const Value: variant; out result: variant);
     class procedure BlobToBase64(const Value: variant; out result: variant);
     class procedure ToJSON(const Value: variant; out result: variant);
@@ -284,6 +286,8 @@ type
     class procedure EnumTrim(const Value: variant; out result: variant);
     class procedure EnumTrimRight(const Value: variant; out result: variant);
     class procedure PowerOfTwo(const Value: variant; out result: variant);
+    class procedure Equals_(const Value: variant; out result: variant);
+    class procedure If_(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -329,9 +333,14 @@ type
     class function HelperFind(const Helpers: TSynMustacheHelpers;
       aName: PUTF8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
-    // - registered helpers are DateTimeToText, DateToText, TimeLogToText,
+    // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
-    // PowerOfTwo and WikiToHtml
+    // PowerOfTwo, Equals (expecting two parameters) and WikiToHtml
+    // - an additional #if helper is also registered, which would allow runtime
+    // view logic, via = < > <= >= <> operators over two values:
+    // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
+    // which may be shortened as such:
+    // $ {{#if .=123}}  {{#if Total>1000}}  {{#if info<>""}}
     class function HelpersGetStandardList: TSynMustacheHelpers; overload;
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
@@ -544,6 +553,16 @@ begin
   end;
 end;
 
+function SectionNameMatch(const start,finish: RawUTF8): boolean;
+var i: integer;
+begin
+  if start=finish then
+    result := true else begin
+    i := PosEx(' ',start);
+    result := (i>0) and IdemPropNameU(finish,pointer(start),i-1);
+  end;
+end;
+
 procedure TSynMustacheParser.Parse(P, PEnd: PUTF8Char);
 var Kind: TSynMustacheTagKind;
     Symbol: AnsiChar;
@@ -610,7 +629,7 @@ begin
         mtSectionEnd: begin
           dec(secLevel);
           if secLevel=0 then
-            if fTemplate.fTags[j].Value=Value then begin
+            if SectionNameMatch(Value,fTemplate.fTags[j].Value) then begin
               fTemplate.fTags[j].SectionOppositeIndex := i;
               SectionOppositeIndex := j;
               if Kind=mtSetPartial then begin
@@ -750,7 +769,7 @@ begin
           while Context.GotoNextListItem do
             RenderContext(Context,TagStart+1,SectionOppositeIndex-1,Partials,true);
           TagStart := SectionOppositeIndex;
-          continue; // ignore whole section
+          continue; // ignore whole section since we just rendered it as a list
         end;
         // msSingle,msSinglePseudo: process the section once with current context
         end;
@@ -761,7 +780,7 @@ begin
         end;
       mtSectionEnd:
         if (fTags[SectionOppositeIndex].Kind in [mtSection,mtInvertedSection]) and
-           (Value[1]<>'-') then
+           (Value[1]<>'-') and (PosEx(' ',fTags[SectionOppositeIndex].Value)=0) then
           Context.PopContext;
       mtComment:
         ; // just ignored
@@ -900,10 +919,12 @@ class function TSynMustache.HelpersGetStandardList: TSynMustacheHelpers;
 begin
   if HelpersStandardList=nil then
     HelperAdd(HelpersStandardList,
-      ['DateTimeToText','DateToText','TimeLogToText','JSONQuote','JSONQuoteURI',
-       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo'],
-      [DateTimeToText,DateToText,TimeLogToText,JSONQuote,JSONQuoteURI,
-       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo]);
+      ['DateTimeToText','DateToText','DateFmt','TimeLogToText','JSONQuote','JSONQuoteURI',
+       'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo',
+       'Equals','If'],
+      [DateTimeToText,DateToText,DateFmt,TimeLogToText,JSONQuote,JSONQuoteURI,
+       ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo,
+       Equals_,If_]);
   result := HelpersStandardList;
 end;
 
@@ -932,6 +953,14 @@ begin
     result := Time.i18nText;
   end else
     SetVariantNull(result);
+end;
+
+class procedure TSynMustache.DateFmt(const Value: variant; out result: variant);
+begin // {{DateFmt DateValue,"dd/mm/yyy"}}
+  with DocVariantDataSafe(Value)^ do
+    if (Kind=dvArray) and (Count=2) and (TVarData(Values[0]).VType=varDate) then
+      result := FormatDateTime(Values[1],TVarData(Values[0]).VDate) else
+      SetVariantNull(result);
 end;
 
 class procedure TSynMustache.TimeLogToText(const Value: variant; out result: variant);
@@ -1022,6 +1051,39 @@ begin
       result := Int64(1) shl V;
 end;
 
+class procedure TSynMustache.Equals_(const Value: variant; out result: variant);
+begin // {{#Equals .,12}}
+  with DocVariantDataSafe(Value)^ do
+    if (Kind=dvArray) and (Count=2) and
+       (SortDynArrayVariant(Values[0],Values[1])=0) then
+      result := true else
+      SetVariantNull(result);
+end;
+
+class procedure TSynMustache.If_(const Value: variant; out result: variant);
+var cmp: integer;
+    oper: RawUTF8;
+    wasString: boolean;
+begin // {{#if .<>""}} or {{#if .,"=",123}}
+  SetVariantNull(result);
+  with DocVariantDataSafe(Value)^ do
+    if (Kind=dvArray) and (Count=3) then begin
+      VariantToUTF8(Values[1],oper,wasString);
+      if wasString and (oper<>'') then begin
+        cmp := SortDynArrayVariant(Values[0],Values[2]);
+        case PWord(oper)^ of
+        ord('='): if cmp=0 then result := True;
+        ord('>'): if cmp>0 then result := True;
+        ord('<'): if cmp<0 then result := True;
+        ord('>')+ord('=')shl 8: if cmp>=0 then result := True;
+        ord('<')+ord('=')shl 8: if cmp<=0 then result := True;
+        ord('<')+ord('>')shl 8: if cmp<>0 then result := True else
+          SetVariantNull(result);
+        end;
+      end;
+    end;
+end;
+
 
 { TSynMustacheContext }
 
@@ -1088,12 +1150,80 @@ begin
     dec(fContextCount);
 end;
 
-procedure TSynMustacheContextVariant.GetValueFromContext(
-  const ValueName: RawUTF8; var Value: TVarData);
-var i,helper,n: Integer;
-    Name: PUTF8Char;
-    temp: TVarData;
+function TSynMustacheContextVariant.GetValueCopyFromContext(
+  const ValueName: RawUTF8): variant;
+var tmp: TVarData;
 begin
+  if (ValueName='') or (ValueName[1] in ['1'..'9','"','{','[']) or
+     (ValueName='true') or (ValueName='false') or (ValueName='null') then
+    VariantLoadJSON(result,pointer(ValueName),nil,@JSON_OPTIONS[true]) else begin
+    GetValueFromContext(ValueName,tmp);
+    SetVariantByValue(variant(tmp),result); // copy value
+  end;
+end;
+
+function TSynMustacheContextVariant.GetValueFromContext(
+  const ValueName: RawUTF8; var Value: TVarData): TSynMustacheSectionType;
+var i,helper: Integer;
+
+  procedure ProcessHelper;
+  var nam: RawUTF8;
+      names: TRawUTF8DynArray;
+      val: TVarData;
+      valArr: TDocVariantData absolute val;
+      valFree: boolean;
+      res: PVarData;
+      j,k,n: integer;
+  begin
+    nam := Copy(ValueName,i+1,maxInt);
+    if nam='' then
+      exit;
+    valFree := false;
+    if nam='.' then
+      GetValueFromContext(nam,val) else
+    if (nam[1] in ['1'..'9','"','{','[']) or
+       (nam='true') or (nam='false') or (nam='null') then begin
+      // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
+      val.VType := varEmpty;
+      VariantLoadJson(variant(val),pointer(nam),nil,@JSON_OPTIONS[true]);
+      valFree := true;
+    end else begin
+      for j := 1 to length(nam) do
+        case nam[j] of
+        ' ':  break; // allows {{helper1 helper2 value}} recursive calls
+        ',': begin // {{helper value,123,"constant"}}
+          CSVToRawUTF8DynArray(Pointer(nam),names); // TODO: handle 123,"a,b,c"
+          valArr.InitFast;
+          for k := 0 to High(names) do
+            valArr.AddItem(GetValueCopyFromContext(names[k]));
+          valFree := true;
+          break;
+        end;
+        '<','>','=': begin // {{#if .=123}} -> {{#if .,"=",123}}
+          k := j+1;
+          if nam[k] in ['=','>'] then
+            inc(k);
+          valArr.InitArray([GetValueCopyFromContext(Copy(nam,1,j-1)),
+            Copy(nam,j,k-j),GetValueCopyFromContext(Copy(nam,k+1,maxInt))],JSON_OPTIONS[true]);
+          valFree := true;
+          break;
+        end;
+        end;
+      if not valFree then
+        GetValueFromContext(nam,val);
+    end;
+    n := fContextCount+4;
+    if length(fTempGetValueFromContextHelper)<n then
+      SetLength(fTempGetValueFromContextHelper,n);
+    res := @fTempGetValueFromContextHelper[fContextCount-1];
+    Helpers[helper].Event(variant(val),variant(res^));
+    Value := res^;
+    if valFree then
+      VarClear(variant(val));
+  end;
+
+begin
+  result := msNothing;
   if ValueName='.' then
     with fContext[fContextCount-1] do begin
       if ListCount>0 then
@@ -1101,18 +1231,12 @@ begin
         Value := Document;
       exit;
     end;
-  Name := pointer(ValueName);
   i := PosEx(' ',ValueName);
-  if i>1 then begin
+  if i>1 then begin // {{helper value}}
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),i-1);
     if helper>=0 then begin
-      inc(Name,i);
-      GetValueFromContext(Name,temp); // allows {{helper1 helper2 value}} call
-      n := fContextCount+4;
-      if length(fTempGetValueFromContextHelper)<n then
-        SetLength(fTempGetValueFromContextHelper,n);
-      Helpers[helper].Event(variant(temp),fTempGetValueFromContextHelper[fContextCount-1]);
-      Value := TVarData(fTempGetValueFromContextHelper[fContextCount-1]);
+      ProcessHelper;
+      result := msSinglePseudo;
       exit;
     end; // if helper not found, will return the unprocessed value
   end;
@@ -1120,19 +1244,19 @@ begin
     with fContext[i] do
       if DocumentType<>nil then
         if ListCount<0 then begin // single item context
-          DocumentType.Lookup(Value,Document,Name);
+          DocumentType.Lookup(Value,Document,pointer(ValueName));
           if Value.VType>=varNull then
             exit;
         end else
-        if IdemPChar(Name,'-INDEX') then begin
+        if IdemPChar(pointer(ValueName),'-INDEX') then begin
           Value.VType := varInteger;
-          if Name[6]='0' then
+          if ValueName[7]='0' then
             Value.VInteger := ListCurrent else
             Value.VInteger := ListCurrent+1;
           exit;
         end else
         if (ListCurrent<ListCount) and (ListCurrentDocumentType<>nil) then begin
-          ListCurrentDocumentType.Lookup(Value,ListCurrentDocument,Name);
+          ListCurrentDocumentType.Lookup(Value,ListCurrentDocument,pointer(ValueName));
           if Value.VType>=varNull then
             exit;
         end;
@@ -1177,7 +1301,13 @@ begin
           result := msSinglePseudo;
         exit;
       end;
-  GetValueFromContext(ValueName,Value);
+  result := GetValueFromContext(ValueName,Value);
+  if result<>msNothing then begin
+    if (Value.VType<=varNull) or
+       ((Value.VType=varBoolean) and (not Value.VBoolean)) then
+      result := msNothing;
+    exit;
+  end;
   PushContext(Value);
   if (Value.VType<=varNull) or
      ((Value.VType=varBoolean) and (not Value.VBoolean)) then
@@ -1185,9 +1315,9 @@ begin
   with fContext[fContextCount-1] do
       if ListCount<0 then
         result := msSingle else // single item
-        if ListCount=0 then // empty list will not display the section
+        if ListCount=0 then     // empty list will not display the section
           exit else
-          result := msList;       // non-empty list
+          result := msList;     // non-empty list
 end;
 
 function TSynMustacheContextVariant.GotoNextListItem: boolean;

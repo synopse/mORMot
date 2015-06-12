@@ -11498,7 +11498,7 @@ In addition to those standard markers, the {\i mORMot} implementation of {\i Mus
 |\b Marker|Description\b0
 |{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
 |{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
-|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1
+|{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1 ({\f1\fs20 \{\{-index0\}\}} would start counting at 0)
 |{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
 |{\f1\fs20 \{\{#-last\}\}}\line ...\line {\f1\fs20 \{\{/-last\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-last\}\}} - for the {\i last} item when iterating over lists
 |{\f1\fs20 \{\{#-odd\}\}}\line ...\line {\f1\fs20 \{\{/-odd\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-odd\}\}} - for the {\i odd} item number when iterating over lists: it can be very useful e.g. to display a list with alternating row colors
@@ -11678,8 +11678,57 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 !  // now html='1'#$A'234','internal partials'
 :    Expression Helpers
 {\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
-{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+The mustache tag syntax is  {\f1\fs20 \{\{helpername value\}\}}. The supplied {\f1\fs20 value} parameter may be a variable name in the current context, or could be a constant number ({\f1\fs20 \{\{helpername 123\}\}}), a constant JSON string ({\f1\fs20 \{\{helpername "constant text"\}\}}), a JSON array ({\f1\fs20 \{\{helpername [1,2,3]\}\}}) or a JSON object ({\f1\fs20 \{\{helpername \{name:"john",age:24\}\}\}}). The value could be also a comma-seperated set of values, which would be translated into a corresponding JSON array, the values being extracted from the current context, as with {\f1\fs20 \{\{DateFmt DateValue,"dd/mm/yyy"\}\}}.
+You could call recursively the helpers, just like you nest functions: {\f1\fs20 \{\{helper1 helper2 value\}\}} will call {\f1\fs20 helper2} with the supplied {\f1\fs20 value}, which result will be passed as value to {\f1\fs20 helper1}.
 But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.
+The helper should be implemented with such a method:
+!class procedure TSynMustache.JSONQuote(const Value: variant; out result: variant);
+!var json: RawUTF8;
+!begin
+!  QuotedStrJSON(VariantToUTF8(Value),json);
+!  RawUTF8ToVariant(json,result);
+!end;
+Here, the supplied {\f1\fs20 Value} parameter would be either from a variable of the context, or a constant, from JSON number, string, array or object - encoded as a @80@.
+If the parameters were supplied as a comma-separated list, you may write multi-parameter functions as such:
+!class procedure TSynMustache.DateFmt(const Value: variant; out result: variant);
+!begin
+!  with DocVariantDataSafe(Value)^ do
+!    if (Kind=dvArray) and (Count=2) and (TVarData(Values[0]).VType=varDate) then
+!      result := FormatDateTime(Values[1],TVarData(Values[0]).VDate) else
+!      SetVariantNull(result);
+!end;
+So you could use such expression helper this way:
+$ La date courante en France est : {{DateFmt DateValue,"dd/mm/yyyy"}}
+The {\f1\fs20 Equals} helper is defined as such:
+!class procedure TSynMustache.Equals_(const Value: variant; out result: variant);
+!begin // {{#Equals .,12}}
+!  with DocVariantDataSafe(Value)^ do
+!    if (Kind=dvArray) and (Count=2) and
+!       (SortDynArrayVariant(Values[0],Values[1])=0) then
+!      result := true else
+!      SetVariantNull(result);
+!end;
+You may use it in your template to provide additional view logic:
+${{#Equals Category,"Admin"}}
+$Welcome, Mister Administrator!
+${{/Equals Category,"Admin"}}
+The section ending may optionally only contain the helper name, so the following syntax is also correct, and perhaps less error-prone:
+${{#Equals Category,"Admin"}}
+$Welcome, Mister Administrator!
+${{/Equals}}
+The {\f1\fs20 #If} helper is even more powerful, since it allows to define some view logic, via {\f1\fs20 = < > <= >= <>} operators set between two values:
+${{#if .,"=",6}} Welcome, number six! {{/if}}
+${{#if Total,">",1000}} Thanks for your income: your loyalty will be rewarded. {{/if}}
+${{#if info,"<>",""}} Warning: {{info}} {{/if}}
+As an alternative, you could just put the operator without a string parameter:
+${{#if .=6}} Welcome, number six! {{/if}}
+${{#if Total>1000}} Thanks for your income: your loyalty will be rewarded. {{/if}}
+${{#if info<>""}} Warning: {{info}} {{/if}}
+This latest syntax may it pretty convenient to work with. Of course, since {\i Mustache} is expected to be a {\i logic-less} templating engine, you should better not use the {\f1\fs20 #if} helper in most cases, but rather add some dedicated flags in the supplied data context:
+${{#isNumber6}} Welcome, number six! {{/isNumber6}}
+${{#showLoyaltyMessage}} Thanks for your income: your loyalty will be rewarded. {{/#showLoyaltyMessage}}
+${{#showWarning}} Warning: {{info}} {{/#showWarning}}
 The framework also offers some built-in optional {\i Helpers} tied to its @*ORM@, if you create a MVC @*web application@ using {\f1\fs20 mORMotMVC.pas} - see @108@ - you can register a set of {\i Expression Helpers} to let your {\i Mustache} view retrieve a given {\f1\fs20 TSQLRecord}, from its ID, or display a given instance fields in an auto-generated table.
 For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
