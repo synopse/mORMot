@@ -32905,22 +32905,70 @@ end;
 
 {$ifndef NOVARIANTS}
 
+const ICMP: array[TVariantRelationship] of integer = (0,-1,1,1);
+
 function SortDynArrayVariant(const A,B): integer;
 begin
-  if variant(A)=variant(B) then
-    result := 0 else
-  if variant(A)>variant(B) then
-    result := 1 else
-    result := -1;
+  if TVarData(A).VType=varVariant or varByRef then
+    result := SortDynArrayVariant(TVarData(A).VPointer^,B) else
+  if TVarData(B).VType=varVariant or varByRef then
+    result := SortDynArrayVariant(A,TVarData(B).VPointer^) else
+  if TVarData(A).VType=TVarData(B).VType then
+    case TVarData(A).VType of // optimized value comparison
+    varNull,varEmpty:
+      result := 0;
+    varString: // RawUTF8 most of the time (e.g. from TDocVariant)
+      result := StrComp(TVarData(A).VAny,TVarData(B).VAny);
+    varInteger:
+      result := TVarData(A).VInteger-TVarData(B).VInteger;
+    varInt64:
+      result := TVarData(A).VInt64-TVarData(B).VInt64;
+    varBoolean:
+      if TVarData(A).VBoolean=TVarData(B).VBoolean then
+        result := 0 else
+        result := 1;
+    else result := ICMP[VarCompareValue(variant(A),variant(B))];
+    end else
+    result := ICMP[VarCompareValue(variant(A),variant(B))];
 end;
 
 function SortDynArrayVariantI(const A,B): integer;
-var UA,UB: RawUTF8;
-    wasString: boolean;
+  procedure CompareAsString;
+  var UA,UB: RawUTF8;
+      wasString: boolean;
+  begin
+    VariantToUTF8(variant(A),UA,wasString);
+    VariantToUTF8(variant(B),UB,wasString);
+    result := StrIComp(pointer(UA),pointer(UB));
+  end;
 begin
-  VariantToUTF8(variant(A),UA,wasString);
-  VariantToUTF8(variant(B),UB,wasString);
-  result := StrIComp(pointer(UA),pointer(UB));
+  if TVarData(A).VType=varVariant or varByRef then
+    result := SortDynArrayVariant(TVarData(A).VPointer^,B) else
+  if TVarData(B).VType=varVariant or varByRef then
+    result := SortDynArrayVariant(A,TVarData(B).VPointer^) else
+  if TVarData(A).VType=TVarData(B).VType then
+    case TVarData(A).VType of // optimized value comparison
+    varNull,varEmpty:
+      result := 0;
+    varString: // RawUTF8 most of the time (e.g. from TDocVariant)
+      result := StrIComp(TVarData(A).VAny,TVarData(B).VAny);
+    varInteger:
+      result := TVarData(A).VInteger-TVarData(B).VInteger;
+    varInt64:
+      result := TVarData(A).VInt64-TVarData(B).VInt64;
+    varBoolean:
+      if TVarData(A).VBoolean=TVarData(B).VBoolean then
+        result := 0 else
+        result := 1;
+    else
+      if TVarData(A).VType and VTYPE_STATIC=0 then
+        result := ICMP[VarCompareValue(variant(A),variant(B))] else
+        CompareAsString;
+    end else
+    if (TVarData(A).VType and VTYPE_STATIC=0) and
+       (TVarData(B).VType and VTYPE_STATIC=0) then
+      result := ICMP[VarCompareValue(variant(A),variant(B))] else
+      CompareAsString;
 end;
 
 {$endif}

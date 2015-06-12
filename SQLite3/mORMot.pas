@@ -19428,8 +19428,6 @@ end;
 function TSQLPropInfoRTTIVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var V1,V2: variant;
-    u1,u2: RawUTF8;
-    wasString: boolean;
 begin
   if Item1=Item2 then
     result := 0 else
@@ -19439,19 +19437,9 @@ begin
     result := 1 else begin
     fPropInfo.GetVariantProp(Item1,V1);
     fPropInfo.GetVariantProp(Item2,V2);
-    if (TVarData(V1).VType=TVarData(V2).VType) and // fast simple type compare
-       (TVarData(V1).VType in VTYPE_STATIC) then
-      if V1>V2 then
-        result := 1 else
-      if V1=V2 then
-        result := 0 else
-        result := -1 else begin // slow but always working string-based compare
-      VariantToUTF8(V1,u1,wasString);
-      VariantToUTF8(V2,u2,wasString);
-      if CaseInsensitive then
-        result := StrIComp(pointer(u1),pointer(u2)) else
-        result := StrComp(pointer(u1),pointer(u2));
-    end;
+    if CaseInsensitive then
+      result := SortDynArrayVariant(V1,V2) else
+      result := SortDynArrayVariantI(V1,V2);
   end;
 end;
 
@@ -24978,8 +24966,7 @@ end;
 begin
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    result := PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^
-  else
+    SetVariantByRef(PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^,result) else
     ByMethod;
 end;
 
