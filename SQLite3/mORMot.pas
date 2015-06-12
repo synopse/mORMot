@@ -17528,7 +17528,7 @@ const
 var tempCopy: RawByteString;
     err: integer;
 begin
-  if not (result.VType in VTYPE_STATIC) then
+  if result.VType and VTYPE_STATIC<>0 then
     VarClear(variant(result));
   result.VType := SQL_ELEMENTTYPES[fieldType];
   case fieldType of
@@ -17590,7 +17590,7 @@ end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
 begin
-  SetValueVar(Instance,VariantToUTF8(Source),not(TVarData(Source).VType in VTYPE_STATIC));
+  SetValueVar(Instance,VariantToUTF8(Source),TVarData(Source).VType and VTYPE_STATIC<>0);
 end;
 
 {$endif NOVARIANTS}
@@ -19412,7 +19412,7 @@ begin
   VariantToUTF8(value,result,wasString);
   if wasSQLString<>nil then
     // from SQL point of view, variant columns are TEXT or null
-    wasSQLString^ := TVarData(value).VType>varNull;
+    wasSQLString^ := not VarIsEmptyOrNull(value);
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetVariant(Instance: TObject;

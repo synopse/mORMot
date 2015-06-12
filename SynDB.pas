@@ -3527,7 +3527,7 @@ begin
   fValue := aValue;
   {$else}
   with TVarData(fValue) do begin
-    if not(VType in VTYPE_STATIC) then
+    if VType and VTYPE_STATIC<>0 then
       VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
@@ -6326,7 +6326,7 @@ begin
   ColumnToSQLVar(Col,V,tmp);
   result := V.VType;
   with TVarData(Value) do begin
-    if not(VType in VTYPE_STATIC) then
+    if VType and VTYPE_STATIC<>0 then
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[V.VType];
     case result of
@@ -7003,7 +7003,7 @@ begin
   if SQLDBRowVariantType=nil then
     SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
   with TVarData(result) do begin
-    if not(VType in VTYPE_STATIC) then
+    if VType and VTYPE_STATIC<>0 then
       VarClear(result);
     VType := SQLDBRowVariantType.VarType;
     VPointer := self;

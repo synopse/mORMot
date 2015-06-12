@@ -1401,7 +1401,7 @@ begin // dedicated version to avoid as much memory allocation than possible
     result := ftNull else
     result := C^.ColumnType;
   with TVarData(Value) do begin
-    if not(VType in VTYPE_STATIC) then
+    if VType and VTYPE_STATIC<>0 then
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
