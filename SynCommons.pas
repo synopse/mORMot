@@ -11513,6 +11513,27 @@ type
     procedure SortByName(Compare: TUTF8Compare=nil);
     /// reverse the order of the document object or array items 
     procedure Reverse;
+    /// create a TDocVariant object, from a selection of properties of this
+    // document, by property name
+    // - if the document is a dvObject, to reduction will be applied to all
+    // its properties  
+    // - if the document is a dvArray, the reduction will be applied to each
+    // stored item, if it is a document
+    procedure Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean;
+      out result: TDocVariantData); overload;
+    /// create a TDocVariant object, from a selection of properties of this
+    // document, by property name
+    // - always returns a TDocVariantData, even if no property name did match
+    // (in this case, it is dvUndefined)
+    function Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean): variant; overload;
+    /// create a TDocVariant array, from the values of a single properties of
+    // this document, specified by name
+    procedure ReduceAsArray(const aPropName: RawUTF8; out result: TDocVariantData); overload;
+    /// create a TDocVariant array, from the values of a single properties of
+    // this document, specified by name
+    // - always returns a TDocVariantData, even if no property name did match
+    // (in this case, it is dvUndefined)
+    function ReduceAsArray(const aPropName: RawUTF8): variant; overload;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -31729,6 +31750,63 @@ begin
     arr.Init(TypeInfo(TVariantDynArray),VValue);
     arr.Reverse;
   end;
+end;
+
+function TDocVariantData.Reduce(const aPropNames: array of RawUTF8;
+  aCaseSensitive: boolean): variant;
+begin
+  VarClear(result);
+  Reduce(aPropNames,aCaseSensitive,PDocVariantData(@result)^);
+end;
+
+procedure TDocVariantData.Reduce(const aPropNames: array of RawUTF8;
+  aCaseSensitive: boolean; out result: TDocVariantData);
+var i,j: integer;
+    reduced: TDocVariantData;
+begin
+  result.InitFast;
+  if (VCount=0) or (high(aPropNames)<0) then
+    exit;
+  case VKind of
+  dvObject:
+    if aCaseSensitive then begin
+      for i := 0 to VCount-1 do
+        for j := 0 to high(aPropNames) do
+          if VName[i]=aPropNames[j] then
+            result.AddValue(VName[i],VValue[i]);
+    end else
+      for i := 0 to VCount-1 do
+        for j := 0 to high(aPropNames) do
+          if IdemPropNameU(VName[i],aPropNames[j]) then
+            result.AddValue(VName[i],VValue[i]);
+  dvArray:
+    for i := 0 to VCount-1 do begin
+      DocVariantDataSafe(VValue[i])^.Reduce(aPropNames,aCaseSensitive,reduced);
+      if reduced.VKind=dvObject then
+        result.AddItem(variant(reduced));
+    end;
+  end;
+end;
+
+function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8): variant;
+begin
+  VarClear(result);
+  ReduceAsArray(aPropName,PDocVariantData(@result)^);
+end;
+
+procedure TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
+  out result: TDocVariantData);
+var i,j: integer;
+begin
+  result.InitFast;
+  if (VCount=0) or (aPropName='') or (VKind<>dvArray) then
+    exit;
+  for i := 0 to VCount-1 do
+    with DocVariantDataSafe(VValue[i])^ do begin
+      j := GetValueIndex(aPropName);
+      if j>=0 then
+        result.AddItem(VValue[j]);
+    end;
 end;
 
 function TDocVariantData.Delete(Index: integer): boolean;
