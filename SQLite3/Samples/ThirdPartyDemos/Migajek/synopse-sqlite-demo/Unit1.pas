@@ -179,10 +179,10 @@ end;
 procedure TForm1.LoadTasksForCustomer(const ACustomer: TSQLCustomer; const AList: TStrings);
 var
  task: TSQLTask;
- fIds: TIntegerDynArray;
+ fIds: TIDDynArray;
 begin
   ACustomer.Tasks.DestGet(globalClient, ACustomer.ID, fIds);
-  task:= TSQLTask.CreateAndFillPrepare(globalClient, fIds);
+  task:= TSQLTask.CreateAndFillPrepare(globalClient, TInt64DynArray(fIds));
   AList.BeginUpdate();
   AList.Clear();
   try
@@ -297,7 +297,7 @@ procedure TForm1.lbTasksClick(Sender: TObject);
 var
   task: TSQLTask;
   cust: TSQLCustomer;
-  clientsIds: TIntegerDynArray;
+  clientsIds: TIDDynArray;
   i, j: integer;
 begin
   gbEditTask.Visible:= lbTasks.ItemIndex <> -1;
