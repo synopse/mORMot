@@ -19096,9 +19096,8 @@ end;
 { TObjArraySerializer}
 
 type
-  TObjArraySerializer = class
+  TObjArraySerializer = class(TPointerClassHashed)
   public
-    DynArray: PTypeInfo;
     Instance: TClassInstance;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
@@ -19119,16 +19118,12 @@ begin
 end;
 
 var
-  ObjArraySerializers: TObjectList;
-  ObjArrayTypes: TPointerDynArray;
+  ObjArraySerializers: TPointerClassHash;
 
 function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  if ObjArraySerializers=nil then
-    result := false else
-    result := FastFindPointerSorted(pointer(ObjArrayTypes),
-      ObjArraySerializers.Count-1,aDynArrayTypeInfo)>=0;
+  result := ObjArraySerializers.Find(aDynArrayTypeInfo)<>nil;
 end;
 
 
@@ -39943,48 +39938,31 @@ end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
   aItem: TClass);
-var serializer: TObjArraySerializer;
-    n: integer;
+var serializer: ^TObjArraySerializer;
 begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>sizeof(TObject)) then
     raise EModelException.CreateUTF8(
       'Invalid %.RegisterObjArrayForJSON(TypeInfo(%),%)',[self,aDynArray^.Name,aItem]);
-  if InternalIsObjArray(aDynArray) then
-    exit; // ignore duplicates
-  serializer := TObjArraySerializer.Create;
-  serializer.DynArray := aDynArray;
-  serializer.Instance.Init(aItem);
   if ObjArraySerializers=nil then begin
-    ObjArraySerializers := TObjectList.Create(true);
+    ObjArraySerializers := TPointerClassHash.Create;
     GarbageCollector.Add(ObjArraySerializers);
   end;
-  n := length(ObjArrayTypes);
-  if ObjArraySerializers.Count>=n then
-    SetLength(ObjArrayTypes,n+256);
-  ObjArrayTypes[ObjArraySerializers.Count] := aDynArray;
-  QuickSortPointer(Pointer(ObjArrayTypes),0,ObjArraySerializers.Count);
-  ObjArraySerializers.Add(serializer);
+  serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
+  if serializer=nil then
+    exit; // avoid duplicate
+  serializer^ := TObjArraySerializer.Create(aDynArray);
+  serializer^.Instance.Init(aItem);
   TTextWriter.RegisterCustomJSONSerializer(
-    aDynArray,serializer.CustomReader,serializer.CustomWriter);
-  if not InternalIsObjArray(aDynArray) then
-    EModelException.CreateUTF8('% ObjArray?',[self]);
+    aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
 
 class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo): PClassInstance;
-var ndx: integer;
-    obj: ^TObjArraySerializer;
+var serializer: TPointerClassHashed;
 begin
-  if ObjArraySerializers<>nil then begin
-    // ObjArrayTypes[] order <> ObjArraySerializers[] -> brute force search
-    obj := pointer(ObjArraySerializers.List);
-    for ndx := 1 to ObjArraySerializers.Count do
-      if obj^.DynArray=aDynArray then begin
-        result := @obj^.Instance;
-        exit;
-      end else
-      inc(obj);
-  end;
-  result := nil;
+  serializer := ObjArraySerializers.Find(aDynArray);
+  if serializer=nil then
+    result := nil else
+    result := @TObjArraySerializer(serializer).Instance;
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(

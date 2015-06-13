@@ -528,6 +528,8 @@ unit SynCommons;
   - added TRawUTF8List.CaseSensitive property as requested by [806332d296]
   - added TRawUTF8MethodList class (based on TRawUTF8ListHashed)
   - added TRawUTF8ListHashedLocked class (based on TRawUTF8ListHashed)
+  - added TPointerClassHash and TPointerClassHashLocked classes (used e.g.
+    to store RTTI cache, for T*ObjArray process)
   - added TAutoLocker/IAutoLocker and TLockedDocVariant/ILockedDocVariant types
   - added TAutoFree class, for automatic local variable lifetime management
   - added JSON_CONTENT_TYPE_HEADER and XML_CONTENT_TYPE[_HEADER] constants
@@ -6722,6 +6724,73 @@ type
     /// retrieve an object index within the list, using a fast hash table
     // - returns -1 if not found
     function IndexOf(aObject: TObject): integer; override;
+  end;
+
+  /// abstract class stored by a TPointerClassHash list
+  TPointerClassHashed = class
+  protected
+    fInfo: pointer;
+  public
+    /// initialize the instance
+    constructor Create(aInfo: pointer);
+    /// the associated information of this instance
+    // - may be a PTypeInfo value, when caching RTTI information
+    property Info: pointer read fInfo write fInfo;
+  end;
+  /// a reference to a TPointerClassHashed instance
+  PPointerClassHashed = ^TPointerClassHashed;
+
+  /// handle a O(1) hashed-based storage of TPointerClassHashed, from a pointer
+  // - used e.g. to store RTTI information from its PTypeInfo value
+  // - if not thread safe, but could be used to store RTTI, since all type
+  // information should have been initialized before actual process
+  TPointerClassHash = class(TObjectListPropertyHashed)
+  public
+    /// initialize the storage list
+    constructor Create;
+    /// try to add an entry to the storage
+    // - returns nil if the supplied information is already in the list
+    // - returns a pointer to where a newly created TPointerClassHashed
+    // instance should be stored
+    // - this method is not thread-safe
+    function TryAdd(aInfo: pointer): PPointerClassHashed;
+    /// search for a stored instance, from its supplied pointer reference
+    // - returns nil if aInfo was not previously added by FindOrAdd()
+    // - this method is not thread-safe
+    function Find(aInfo: pointer): TPointerClassHashed;
+  end;
+
+  /// handle a O(1) hashed-based storage of TPointerClassHashed, from a pointer
+  // - this inherited class add a mutex to be thread-safe
+  TPointerClassHashLocked = class(TPointerClassHash)
+  protected
+    fLock: TRTLCriticalSection;
+  public
+    /// initialize the storage list
+    constructor Create;
+    /// finalize the storage list
+    destructor Destroy; override;
+    /// try to add an entry to the storage
+    // - returns false if the supplied information is already in the list
+    // - returns true, and a pointer to where a newly created TPointerClassHashed
+    // instance should be stored: in this case, you should call UnLock once set
+    // - could be used as such:
+    // !var entry: PPointerClassHashed;
+    // !...
+    // !  if HashList.TryAddLocked(aTypeInfo,entry) then
+    // !  try
+    // !    entry^ := TMyCustomPointerClassHashed.Create(aTypeInfo,...);
+    // !  finally
+    // !    HashList.Unlock;
+    // !  end;
+    // !...
+    function TryAddLocked(aInfo: pointer; out aNewEntry: PPointerClassHashed): boolean;
+    /// release the lock after a previous TryAddLocked()=true call
+    procedure Unlock;
+    /// search for a stored instance, from its supplied pointer reference
+    // - returns nil if aInfo was not previously added by FindOrAdd()
+    // - this overriden method is thread-safe
+    function FindLocked(aInfo: pointer): TPointerClassHashed;
   end;
 
   /// add locking methods to a standard TObjectList
@@ -23472,8 +23541,12 @@ var i: integer;
 begin
   result := false;
   for i := 1 to Length shr 4 do // 16 bytes (4 DWORD) by loop - aligned read
+    {$ifdef CPU64}
+    if (PInt64Array(P)^[0]<>0) or (PInt64Array(P)^[1]<>0) then
+    {$else}
     if (PCardinalArray(P)^[0]<>0) or (PCardinalArray(P)^[1]<>0) or
        (PCardinalArray(P)^[2]<>0) or (PCardinalArray(P)^[3]<>0) then
+    {$endif}
       exit else
       inc(PtrUInt(P),16);
   for i := 1 to (Length shr 2)and 3 do // 4 bytes (1 DWORD) by loop
@@ -41104,7 +41177,7 @@ end;
 
 function TObjectListPropertyHashed.IndexOf(aObject: TObject): integer;
 begin
-  if (self<>nil) and (fCount>0) then
+  if fCount>0 then
     if fHashed then begin
       if not fHashValid then
         IntHashValid;
@@ -41116,6 +41189,107 @@ begin
       if IntComp(fList[result],aObject)=0 then
         exit;
   result := -1;
+end;
+
+
+{ TPointerClassHashed }
+
+constructor TPointerClassHashed.Create(aInfo: pointer);
+begin
+  fInfo := aInfo;
+end;
+
+
+{ TPointerClassHash }
+
+function PointerClassHashProcess(aObject: TPointerClassHashed): pointer;
+begin
+  result := aObject.Info;
+end;
+
+constructor TPointerClassHash.Create;
+begin
+  inherited Create(@PointerClassHashProcess);
+end;
+
+function TPointerClassHash.TryAdd(aInfo: pointer): PPointerClassHashed;
+var wasAdded: boolean;
+    i: integer;
+begin
+  i := inherited Add(aInfo,wasAdded);
+  if wasAdded then
+    result := @List[i] else
+    result := nil;
+end;
+
+function TPointerClassHash.Find(aInfo: pointer): TPointerClassHashed;
+var i: integer;
+begin
+  if self<>nil then begin
+    if fHashed then begin
+      i := IndexOf(aInfo);
+      if i>=0 then
+        result := TPointerClassHashed(List[i]) else
+        result := nil;
+    end else begin
+      for i := 0 to fCount-1 do // Count<TOBJECTLISTHASHED_START_HASHING_COUNT
+        if TPointerClassHashed(List[i]).Info=aInfo then begin
+          result := TPointerClassHashed(List[i]);
+          exit;
+        end;
+      result := nil;
+    end;
+  end else
+    result := nil;
+end;
+
+
+{ TPointerClassHashLocked }
+
+constructor TPointerClassHashLocked.Create;
+begin
+  inherited Create;
+  InitializeCriticalSection(fLock);
+end;
+
+destructor TPointerClassHashLocked.Destroy;
+begin
+  DeleteCriticalSection(fLock);
+  inherited Destroy;
+end;
+
+function TPointerClassHashLocked.FindLocked(aInfo: pointer): TPointerClassHashed;
+begin
+  if self=nil then
+    result := nil else begin
+    EnterCriticalSection(fLock);
+    try
+      result := inherited Find(aInfo);
+    finally
+      LeaveCriticalSection(fLock);
+    end;
+  end;
+end;
+
+function TPointerClassHashLocked.TryAddLocked(aInfo: pointer;
+  out aNewEntry: PPointerClassHashed): boolean;
+var wasAdded: boolean;
+    i: integer;
+begin
+  EnterCriticalSection(fLock);
+  i := inherited Add(aInfo,wasAdded);
+  if wasAdded then begin
+    aNewEntry := @List[i];
+    result := true; // caller should call Unlock
+  end else begin
+    LeaveCriticalSection(fLock);
+    result := false;
+  end;
+end;
+
+procedure TPointerClassHashLocked.Unlock;
+begin
+  LeaveCriticalSection(fLock);
 end;
 
 
