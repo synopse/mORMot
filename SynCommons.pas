@@ -4238,6 +4238,7 @@ type
     fHashElement: TDynArrayHashOne;
     fHasher: THasher;
     fHashs: TSynHashDynArray;
+    fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
     function HashOneFromTypeInfo(const Elem): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
@@ -35148,30 +35149,31 @@ begin
 end;
 
 procedure TDynArrayHashed.HashInit;
-var cap, PO2: integer;
+var cap: integer;
 begin
   fHashs := nil; // any previous hash is invalid
   // find nearest power of two for new fHashs[] size
-  cap := Capacity+Capacity shr 3+64; // Capacity is faster than Count
-  PO2 := 256;
-  while PO2<cap do
-    PO2 := PO2 shl 1;
-  SetLength(fHashs,PO2); // fill all fHashs[]=HASH_VOID
+  cap := Capacity;
+  inc(cap,cap shr 3+64); // Capacity is faster than Count
+  fHashsCount := 256;
+  while fHashsCount<cap do
+    fHashsCount := fHashsCount shl 1;
+  SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
 end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
 
 function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
-var n, first: integer;
+var first,last: integer;
     looped: boolean;
 begin
   looped := false;
   if fHashs=nil then
     HashInit;
-  n := length(fHashs);
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  result := (aHashCode-1) and (n-1); // fHashs[] has a power of 2 length
+  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  last := fHashsCount;
   first := result;
   repeat
     with fHashs[result] do
@@ -35198,14 +35200,14 @@ begin
       exit; // not found -> returns void index in fHashs[] as negative
     end;
     // hash collision -> search next item
-//    inc(TDynArrayHashedCollisionCount);
+    //inc(TDynArrayHashedCollisionCount);
     inc(result);
-    if result=n then
+    if result=last then
       // reached the end -> search once from fHash[0] to fHash[first-1]
       if looped then
         break else begin
         result := 0;
-        n := first;
+        last := first;
         looped := true;
       end;
   until false;
@@ -46835,4 +46837,5 @@ finalization
   GarbageCollectorFree;
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
+  //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
 end.

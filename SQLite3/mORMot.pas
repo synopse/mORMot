@@ -2577,11 +2577,13 @@ type
     // - the T*ObjArray dynamic array should have been previously registered
     // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
     function DynArrayIsObjArray: boolean;
-    /// return class instance creation information about a T*ObjArray 
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return class instance creation information about a T*ObjArray
     // - the T*ObjArray dynamic array should have been previously registered
     // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
     // - returns nil if the supplied type is not a registered T*ObjArray
     function DynArrayIsObjArrayInstance: PClassInstance;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the the property has no getter but direct field read
     function GetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3739,6 +3741,11 @@ function GetEnumCaption(aTypeInfo: PTypeInfo; const aIndex): string;
 // - this will return the code-based English text; use GetEnumCaption() to
 // retrieve the enumeration display text
 function GetEnumNameTrimed(aTypeInfo: PTypeInfo; const aIndex): RawUTF8;
+
+var
+  /// a shared list of T*ObjArray registered serializers
+  // - you should not access this variable, but via inline methods
+  ObjArraySerializers: TPointerClassHash;
 
 
 { ************ cross-cutting classes and types }
@@ -19117,11 +19124,7 @@ begin
   result := JSONToObject(aValue,P,aValid);
 end;
 
-var
-  ObjArraySerializers: TPointerClassHash;
-
 function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := ObjArraySerializers.Find(aDynArrayTypeInfo)<>nil;
 end;
@@ -23907,7 +23910,7 @@ end;
 function TPropInfo.DynArrayIsObjArray: boolean;
 begin
   if PropType^.Kind=tkDynArray then
-    result := InternalIsObjArray(PropType{$ifndef FPC}^{$endif}) else
+    result := ObjArraySerializers.Find(PropType{$ifndef FPC}^{$endif})<>nil else
     result := false;
 end;
 
@@ -23958,28 +23961,43 @@ begin
 end;
 
 procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
-var tmp: RawByteString;
-    cp: integer;
+  procedure HandleAnsiString(Instance: TObject; const Value: RawUTF8; cp: integer);
+  var tmp: RawByteString;
+  begin
+    if cp=CP_SQLRAWBLOB then
+      tmp := BlobToTSQLRawBlob(Value) else
+      tmp := TSynAnsiConvert.Engine(cp).UTF8ToAnsi(Value);
+    SetLongStrProp(Instance,tmp);
+  end;
+  {$ifdef UNICODE}
+  procedure HandleUnicode(Instance: TObject; const Value: RawUTF8);
+  begin
+    SetUnicodeStrProp(Instance,UTF8ToString(Value));
+  end;
+  {$endif}
+  procedure HandleWideString(Instance: TObject; const Value: RawUTF8);
+  begin
+    SetWideStrProp(Instance,UTF8ToWideString(Value));
+  end;
+var cp: integer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
   {$ifdef FPC}tkAString,{$endif}tkLString: begin
     if Value<>'' then begin
       cp := PropType^.AnsiStringCodePage;
-      case cp of
-        CP_UTF8:       tmp := Value;
-        CP_SQLRAWBLOB: tmp := BlobToTSQLRawBlob(Value);
-        else           tmp := TSynAnsiConvert.Engine(cp).UTF8ToAnsi(Value);
-      end;
-    end;
-    SetLongStrProp(Instance,tmp);
+      if cp=CP_UTF8 then
+        SetLongStrProp(Instance,Value) else
+        HandleAnsiString(Instance,Value,cp);
+    end else
+      SetLongStrProp(Instance,'');
   end;
   {$ifdef UNICODE}
   tkUString:
-    SetUnicodeStrProp(Instance,UTF8ToString(Value));
+    HandleUnicode(Instance,Value);
   {$endif}
   tkWString:
-    SetWideStrProp(Instance,UTF8ToWideString(Value));
+    HandleWideString(Instance,Value);
   end;
 end;
 
@@ -24112,7 +24130,7 @@ begin
       GetDynArray(Source,daS);
       DestInfo^.GetDynArray(Dest,daD);
       if daS.Count=daD.Count then
-        if InternalIsObjArray(PropType{$ifndef FPC}^{$endif}) and
+        if DynArrayIsObjArray and
            ((@self=DestInfo) or DestInfo^.DynArrayIsObjArray) then begin
           for i := 0 to daS.Count-1 do
             if not ObjectEquals(PObjectArray(daS.Value)[i],PObjectArray(daD.Value)[i]) then
@@ -40689,7 +40707,7 @@ procedure TClassInstance.Init(C: TClass);
 begin
   ItemClass := C;
   if C<>nil then
-  repeat
+  repeat // this unrolled loop is much faster than cascaded if C.InheritsFrom()
     if C<>TSQLRecord then
     if C<>TObjectList then
     if C<>TInterfacedObjectWithCustomCreate then
@@ -45216,7 +45234,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       include(ArgsUsed,ValueType);
       if ValueType in [smvRawUTF8..smvWideString] then
         Include(ValueKindAsm,vIsString);
-      if (ValueType=smvDynArray) and InternalIsObjArray(ArgTypeInfo) then
+      if (ValueType=smvDynArray) and (ObjArraySerializers.Find(ArgTypeInfo)<>nil) then
         Include(ValueKindAsm,vIsObjArray);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
           {$ifdef FPC},smvDynArray{$endif}]) or
@@ -47704,8 +47722,8 @@ begin
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
   ickInjectable:
-    result := TInjectableObjectClass(fImplementationClass).
-      CreateWithResolver(Rest.Services,true);
+    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(
+      Rest.Services,true);
   else
     result := fImplementationClass.Create;
   end;
@@ -48180,7 +48198,7 @@ begin
         inc(ClassesCount);
       end;
       tkDynArray:
-        if InternalIsObjArray(P^.PropType{$ifndef FPC}^{$endif})
+        if (ObjArraySerializers.Find(P^.PropType{$ifndef FPC}^{$endif})<>nil)
            and P^.GetterIsField then begin
           SetLength(ObjArrays,ObjArraysCount+1);
           ObjArrays[ObjArraysCount] := P;
