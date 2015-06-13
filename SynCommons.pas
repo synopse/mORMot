@@ -10505,6 +10505,8 @@ const
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef LVCL}
+
 /// convert a raw binary buffer into a variant RawByteString varString
 // - you can then use VariantToRawByteString() to retrieve the binary content
 procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant); overload;
@@ -10521,6 +10523,8 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 /// same as Value := Null, but slightly faster
 procedure SetVariantNull(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
+
+{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
@@ -30173,6 +30177,8 @@ begin
     result := false;
 end;
 
+{$ifndef LVCL}
+
 procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
 begin
   with TVarData(Value) do begin
@@ -30222,6 +30228,8 @@ begin // slightly faster than Value := Null
       PPtrUInt(@VType)^ := varNull;
     end;
 end;
+
+{$endif LVCL}
 
 function VarIsEmptyOrNull(const V: Variant): Boolean;
 var VD: PVarData;
