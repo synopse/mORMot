@@ -1246,7 +1246,7 @@ uses
   {$ifndef NOVARIANTS}
     Variants,
   {$endif}
-{$endif}
+{$endif LVCL}
   SysUtils,
 {$ifdef SSPIAUTH}
   SynSSPIAuth,
@@ -1979,11 +1979,33 @@ function JSONFileToObject(const JSONFile: TFileName; var ObjectInstance;
 { ************ some RTTI and SQL mapping routines }
 
 type
-  /// the class kind as handled by ClassInstanceCreate() functions
-  TClassInstanceCreate = (
+  /// the class kind as handled by TClassInstance object
+  TClassInstanceItemCreate = (
     cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
     cicTSynPersistent,cicTInterfacedCollection,cicTInterfacedObjectWithCustomCreate,
-    cicTCollection,cicTObject);
+    cicTCollection,cicTComponent,cicTObject);
+
+  /// store information about a class, able to easily create new instances
+  // - using this temporary storage would speed up the creation process
+  // - any virtual constructor would be used, including for TCollection types
+  TClassInstance = object
+  public
+    /// the class type itself
+    ItemClass: TClass;
+    // how the class instance is expected to be created
+    ItemCreate: TClassInstanceItemCreate;
+    {$ifndef LVCL}
+    /// for TCollection instances, the associated TCollectionItem class
+    CollectionItemClass: TCollectionItemClass;
+    {$endif}
+    /// fill the internal information fields for a given class type
+    procedure Init(C: TClass);
+    /// create a new instance of the registered class
+    function CreateNew: TObject;
+  end;
+  /// points to information about a class, able to create new instances
+  PClassInstance = ^TClassInstance;
+
 
 { type definitions below were adapted from TypInfo.pas
  - this implementation doesn't require to include Variant.pas any more (which
@@ -2552,11 +2574,14 @@ type
     // must have already checked that PropType^^.Kind=tkDynArray
     procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
     /// return TRUE if this dynamic array has been registered as a T*ObjArray
-    function DynArrayIsObjArray: boolean; overload;
-    /// return TRUE if this dynamic array has been registered as a T*ObjArray
-    // - and set the item class and creation information to a variable
-    function DynArrayIsObjArray(out aItemClass: TClass;
-      out aClassInstance: TClassInstanceCreate): boolean; overload;
+    // - the T*ObjArray dynamic array should have been previously registered
+    // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
+    function DynArrayIsObjArray: boolean;
+    /// return class instance creation information about a T*ObjArray 
+    // - the T*ObjArray dynamic array should have been previously registered
+    // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
+    // - returns nil if the supplied type is not a registered T*ObjArray
+    function DynArrayIsObjArrayInstance: PClassInstance;
     /// return TRUE if the the property has no getter but direct field read
     function GetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3150,9 +3175,7 @@ type
   /// information about a dynamic array published property
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
   protected
-    fIsObjArray: boolean;
-    fObjArrayItemClass: TClass;
-    fObjArrayClassInstance: TClassInstanceCreate;
+    fObjArray: PClassInstance;
     function GetDynArray(Instance: TObject): TDynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
@@ -3188,13 +3211,13 @@ type
     property DynArrayIndex: integer read fFieldWidth;
     /// read-only access to the low-level type information the array item type
     property DynArrayElemType: PTypeInfo read GetDynArrayElemType;
-    /// equals TRUE if this dynamic array is in fact a storage of T*ObjArray
-    // - as previously registered via TJSONSerializer.RegisterObjArrayForJSON()
-    // - if the field is a T*ObjArray, the column will be stored as text
-    property DynArrayIsObjArray: boolean read fIsObjArray;
-    /// compute a new item to be stored in a T*ObjArray
-    // - returns nil if this dynamic array is not a T*ObjArray
-    function DynArrayNewObjArrayItem: TObject;
+    /// dynamic array item information for a T*ObjArray
+    // - equals nil if this dynamic array was not previously registered via
+    // TJSONSerializer.RegisterObjArrayForJSON()
+    // - note that if the field is a T*ObjArray, you could create a new item
+    // by calling ObjArrayClassInstance^.CreateNew
+    // - T*ObjArray database column will be stored as text
+    property ObjArray: PClassInstance read fObjArray;
   end;
 
   TSQLPropInfoRTTIDynArrayObjArray = array of TSQLPropInfoRTTIDynArray;
@@ -3623,12 +3646,11 @@ type
     // ! TJSONSerializer.RegisterObjArrayForJSON([
     // !     TypeInfo(TAddressObjArray),TAddress, TypeInfo(TUserObjArray),TUser]);
     class procedure RegisterObjArrayForJSON(const aDynArrayClassPairs: array of const); overload;
-    /// retrieve the class type associated with a T*ObjArray dynamic array
+    /// retrieve TClassInstance information for a T*ObjArray dynamic array type
     // - the T*ObjArray dynamic array should have been previously registered
-    // via RegisterObjArrayForJSON() overloaded methods
+    // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
     // - returns nil if the supplied type is not a registered T*ObjArray
-    class function RegisterObjArrayFindType(aDynArray: PTypeInfo;
-      out aClassInstance: TClassInstanceCreate): TClass;
+    class function RegisterObjArrayFindType(aDynArray: PTypeInfo): PClassInstance;
   end;
 
 
@@ -3696,45 +3718,6 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !  end;
 // such a loop is much faster than using the RTL's TypeInfo or RTTI units
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
-
-/// create an instance of the given class
-// - will handle the custom virtual constructors of TSQLRecord, TCollection,
-// TSynPersistent, TPersistentWithCustomCreate, classes as expected, so is to
-// be preferred to aClass.Create
-function ClassInstanceCreate(aClass: TClass): TObject; overload;
-
-/// create an instance of the given class from its registered class name
-// - the class shall have been registered via TJSONSerializer.RegisterClassForJSON()
-// or via the standard RegisterClass() function of Classes.pas unit
-// - will handle the custom virtual constructors of TSQLRecord or
-// TCollection classes as expected, so is to be preferred to aClass.Create
-function ClassInstanceCreate(const aClassName: RawUTF8): TObject; overload;
-
-/// compute the class kind of a given class
-// - as handled by ClassInstanceCreate() functions
-function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
-  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate; overload;
-
-{$ifndef LVCL}
-/// compute the class kind of a given class
-// - as handled by ClassInstanceCreate() functions
-function ClassToTClassInstanceCreate(aClass: TClass): TClassInstanceCreate; overload;
-{$endif}
-
-/// create an instance of the given class, from its kind as previously
-// recognized by ClassToTClassInstanceCreate()
-// - will handle the custom virtual constructors of TSQLRecord or
-// TCollection classes as expected, so is to be preferred to aClass.Create
-function ClassInstanceCreate(aClass: TClass;
-  aClassInstanceCreate: TClassInstanceCreate{$ifndef LVCL};
-  aCollectionItemClass: TCollectionItemClass{$endif}): TObject; overload;
-
-{$ifndef LVCL}
-/// create an instance of the given class, from its kind as previously
-// recognized by ClassToTClassInstanceCreate()
-function ClassInstanceCreate(aClass: TClass;
-  aClassInstanceCreate: TClassInstanceCreate): TObject; overload;
-{$endif}
 
 /// retrieve a method RTTI information for a specific class
 function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString): PMethodInfo;
@@ -18460,6 +18443,7 @@ end;
 procedure TSQLPropInfoRTTIObject.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 var S,D: TObject;
+    DInst: TClassInstance;
 begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
@@ -18472,7 +18456,8 @@ begin
     CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous instance
     try
-      D := ClassInstanceCreate(S.ClassType); // create new child instance
+      DInst.Init(S.ClassType);
+      D := DInst.CreateNew;
       CopyObject(S,D); // copy child content
     except
       FreeAndNil(D); // avoid memory leak if error during new instance copy
@@ -19114,11 +19099,7 @@ type
   TObjArraySerializer = class
   public
     DynArray: PTypeInfo;
-    ItemClass: TClass;
-    ClassInstance: TClassInstanceCreate;
-    {$ifndef LVCL}
-    CollectionItemClass: TCollectionItemClass;
-    {$endif}
+    Instance: TClassInstance;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   end;
@@ -19132,9 +19113,8 @@ end;
 function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 begin
-  FreeAndNil(TObject(aValue));
-  TObject(aValue) := ClassInstanceCreate(ItemClass,ClassInstance
-    {$ifndef LVCL},CollectionItemClass{$endif});
+  if TObject(aValue)=nil then
+    TObject(aValue) := Instance.CreateNew;
   result := JSONToObject(aValue,P,aValid);
 end;
 
@@ -19158,7 +19138,7 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
   aPropIndex: integer; aSQLFieldType: TSQLFieldType);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
-  fIsObjArray := aPropInfo^.DynArrayIsObjArray(fObjArrayItemClass,fObjArrayClassInstance);
+  fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
@@ -19171,18 +19151,11 @@ begin
   fPropInfo^.GetDynArray(Instance,result);
 end;
 
-function TSQLPropInfoRTTIDynArray.DynArrayNewObjArrayItem: TObject;
-begin
-  if (self=nil) or not fIsObjArray then
-    result := nil else
-    result := ClassInstanceCreate(fObjArrayItemClass,fObjArrayClassInstance);
-end;
-
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
   var data: RawByteString);
 begin
   with GetDynArray(Instance) do
-    if fIsObjArray then
+    if fObjArray<>nil then
       data := SaveToJSON else
       data := SaveTo;
 end;
@@ -19193,7 +19166,7 @@ var SourceArray,DestArray: TDynArray;
 begin
   GetDynArray(Source,SourceArray);
   TSQLPropInfoRTTIDynArray(DestInfo).GetDynArray(Dest,DestArray);
-  if fIsObjArray or TSQLPropInfoRTTIDynArray(DestInfo).fIsObjArray or
+  if (fObjArray<>nil) or (TSQLPropInfoRTTIDynArray(DestInfo).fObjArray<>nil) or
      (SourceArray.ArrayType<>DestArray.ArrayType) then
     DestArray.LoadFromJSON(pointer(SourceArray.SaveToJSON)) else
     DestArray.Copy(SourceArray);
@@ -19203,7 +19176,7 @@ procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TFileBufferWr
 var Value: RawByteString;
 begin
   Serialize(Instance,Value);
-  if fIsObjArray then
+  if fObjArray<>nil then
     W.Write(Value) else
     W.WriteBinary(Value);
 end;
@@ -19219,7 +19192,7 @@ procedure TSQLPropInfoRTTIDynArray.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
   Serialize(Instance,RawByteString(result));
-  if not fIsObjArray then
+  if fObjArray=nil then
     BinaryToText(result,ToSQL,wasSQLString);
 end;
 
@@ -19262,7 +19235,7 @@ function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P: PAnsiChar): PA
 var tmp: RawByteString; // LoadFromJSON() may change the input buffer
 begin
   with GetDynArray(Instance) do
-  if fIsObjArray then begin
+  if fObjArray<>nil then begin
     tmp := FromVarString(PByte(P));
     LoadFromJSON(pointer(tmp));
     result := P;
@@ -19276,7 +19249,7 @@ var blob: RawByteString;
     wrapper: TDynArray;
 begin
   GetDynArray(Instance,wrapper);
-  if fIsObjArray then begin
+  if fObjArray<>nil then begin
     ObjArrayClear(wrapper.Value^);
     wrapper.LoadFromJSON(Value);
     exit;
@@ -19302,7 +19275,7 @@ procedure TSQLPropInfoRTTIDynArray.GetJSONValues(Instance: TObject;
   W: TJSONSerializer);
 var tmp: RawByteString;
 begin
-  if fIsObjArray then
+  if fObjArray<>nil then
     W.AddDynArrayJSONAsString(fPropType,GetFieldAddr(Instance)^) else begin
     Serialize(Instance,tmp);
     W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
@@ -19313,7 +19286,7 @@ procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   Serialize(Instance,temp);
-  if fIsObjArray then begin
+  if fObjArray<>nil then begin
     aValue.VType := ftUTF8;
     aValue.VText := pointer(temp);
   end else begin
@@ -23943,15 +23916,11 @@ begin
     result := false;
 end;
 
-function TPropInfo.DynArrayIsObjArray(out aItemClass: TClass;
-  out aClassInstance: TClassInstanceCreate): boolean;
+function TPropInfo.DynArrayIsObjArrayInstance: PClassInstance;
 begin
-  if PropType^.Kind=tkDynArray then begin
-    aItemClass := TJSONSerializer.RegisterObjArrayFindType(
-      PropType{$ifndef FPC}^{$endif},aClassInstance);
-    result := aItemClass<>nil;
-  end else
-    result := false;
+  if PropType^.Kind<>tkDynArray then
+    result := nil else
+    result := TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif});
 end;
 
 procedure TPropInfo.GetLongStrValue(Instance: TObject; var result: RawUTF8);
@@ -24181,16 +24150,16 @@ begin
 end;
 
 function TPropInfo.CopyToNewObject(aFrom: TObject): TObject;
-var aClassInstanceCreate: TClassInstanceCreate;
-    aClass: TClass;
+var aClass: TClass;
+    aInstance: TClassInstance;
 begin
   if aFrom=nil then begin
     result := nil;
     exit;
   end;
   aClass := PropType^.ClassType^.ClassType;
-  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass);
-  result := ClassInstanceCreate(aClass,aClassInstanceCreate);
+  aInstance.Init(aClass);
+  result := aInstance.CreateNew;
   try
     CopyObject(ClassFieldPropInstanceMatchingClass(aFrom,aClass),result);
   except
@@ -25060,8 +25029,10 @@ end;
 {$endif}
 
 function TTypeInfo.ClassCreate: TObject;
+var instance: TClassInstance;
 begin
-  result := ClassInstanceCreate(ClassType^.ClassType);
+  instance.Init(ClassType^.ClassType);
+  result := instance.CreateNew;
 end;
 
 function TTypeInfo.RecordType: PRecordType;
@@ -26876,7 +26847,7 @@ begin
   // free any registered T*ObjArray
   if props.DynArrayFieldsHasObjArray then
     for i := 0 to high(props.DynArrayFields) do
-      if props.DynArrayFields[i].fIsObjArray then
+      if props.DynArrayFields[i].ObjArray<>nil then
         ObjArrayClear(props.DynArrayFields[i].fPropInfo^.GetFieldAddr(self)^);
   inherited;
 end;
@@ -39982,9 +39953,7 @@ begin
     exit; // ignore duplicates
   serializer := TObjArraySerializer.Create;
   serializer.DynArray := aDynArray;
-  serializer.ItemClass := aItem;
-  serializer.ClassInstance := ClassToTClassInstanceCreate(aItem
-    {$ifndef LVCL},serializer.CollectionItemClass{$endif});
+  serializer.Instance.Init(aItem);
   if ObjArraySerializers=nil then begin
     ObjArraySerializers := TObjectList.Create(true);
     GarbageCollector.Add(ObjArraySerializers);
@@ -40001,8 +39970,7 @@ begin
     EModelException.CreateUTF8('% ObjArray?',[self]);
 end;
 
-class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo;
-  out aClassInstance: TClassInstanceCreate): TClass;
+class function TJSONSerializer.RegisterObjArrayFindType(aDynArray: PTypeInfo): PClassInstance;
 var ndx: integer;
     obj: ^TObjArraySerializer;
 begin
@@ -40011,8 +39979,7 @@ begin
     obj := pointer(ObjArraySerializers.List);
     for ndx := 1 to ObjArraySerializers.Count do
       if obj^.DynArray=aDynArray then begin
-        aClassInstance := obj^.ClassInstance;
-        result := obj^.ItemClass;
+        result := @obj^.Instance;
         exit;
       end else
       inc(obj);
@@ -40038,144 +40005,10 @@ begin
         aDynArrayClassPairs[i*2].VPointer,aDynArrayClassPairs[i*2+1].VClass);
 end;
 
-{$ifndef LVCL}
-function ClassToTClassInstanceCreate(aClass: TClass): TClassInstanceCreate;
-var dummy: TCollectionItemClass;
-begin
-  result := ClassToTClassInstanceCreate(aClass,dummy);
-end;
-
-function ClassInstanceCreate(aClass: TClass;
-  aClassInstanceCreate: TClassInstanceCreate): TObject;
-var dummy: TCollectionItemClass;
-begin
-  dummy := nil; // makes compiler happy
-  result := ClassInstanceCreate(aClass,aClassInstanceCreate,dummy);
-end;
-{$endif}
-
-function ClassToTClassInstanceCreate(aClass: TClass{$ifndef LVCL};
-  out aCollectionItemClass: TCollectionItemClass{$endif}): TClassInstanceCreate;
-var C: TClass;
-begin
-  C := aClass;
-  if C<>nil then
-  repeat
-    if C<>TSQLRecord then
-    if C<>TObjectList then
-    if C<>TInterfacedObjectWithCustomCreate then
-    if C<>TPersistentWithCustomCreate then
-    if C<>TSynPersistent then
-  {$ifndef LVCL}
-    if C<>TInterfacedCollection then
-    if C<>TCollection then
-  {$endif}
-  {$ifdef FPC}
-    if C.ClassParent<>nil then begin
-      C := C.ClassParent;
-  {$else}
-    if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
-      C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
-  {$endif}
-      if C<>nil then
-        continue else begin
-        result := cicTObject;
-        exit;
-      end;
-    end else begin
-      result := cicTObject;
-      exit;
-    end else
-  {$ifndef LVCL} begin // plain TCollection shall have been registered
-      aCollectionItemClass := JSONSerializerRegisteredCollection.Find(TCollectionClass(aClass));
-      if aCollectionItemClass<>nil then begin
-        result := cicTCollection;
-        exit;
-      end else
-        raise EParsingException.CreateUTF8('% shall inherit from TInterfacedCollection'+
-         ' or call TJSONSerializer.RegisterCollectionForJSON()',[aClass]);
-    end else begin
-      result := cicTInterfacedCollection;
-      exit;
-    end else
-  {$endif} begin
-      result := cicTSynPersistent;
-      exit;
-    end else begin
-      result := cicTPersistentWithCustomCreate;
-      exit;
-    end else begin
-      result := cicTInterfacedObjectWithCustomCreate;
-      exit;
-    end else begin
-      result := cicTObjectList;
-      exit;
-    end else begin
-      result := cicTSQLRecord;
-      exit;
-    end;
-  until false;
-  result := cicUnknown;
-end;
-
-function ClassInstanceCreate(aClass: TClass;
-  aClassInstanceCreate: TClassInstanceCreate{$ifndef LVCL};
-  aCollectionItemClass: TCollectionItemClass{$endif}): TObject;
-begin
-  case aClassInstanceCreate of
-    cicTSQLRecord:
-      result := TSQLRecordClass(aClass).Create;
-    cicTObjectList:
-      result := TObjectList.Create;
-    cicTPersistentWithCustomCreate:
-      result := TPersistentWithCustomCreateClass(aClass).Create;
-    cicTSynPersistent:
-      result := TSynPersistentClass(aClass).Create;
-    cicTInterfacedObjectWithCustomCreate:
-      result := TInterfacedObjectWithCustomCreateClass(aClass).Create;
-    {$ifndef LVCL}
-    cicTInterfacedCollection:
-      result := TInterfacedCollectionClass(aClass).Create;
-    cicTCollection:
-      result := TCollectionClass(aClass).Create(aCollectionItemClass);
-    {$endif}
-    cicTObject:
-      result := aClass.Create;
-    else
-      result := nil;
-  end;
-end;
-
-function ClassInstanceCreate(aClass: TClass): TObject;
-var aClassInstanceCreate: TClassInstanceCreate;
-{$ifdef LVCL}
-begin
-  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass);
-  result := ClassInstanceCreate(aClass,aClassInstanceCreate);
-{$else}
-var aCollectionItemClass: TCollectionItemClass;
-begin
-  aClassInstanceCreate := ClassToTClassInstanceCreate(aClass,aCollectionItemClass);
-  result := ClassInstanceCreate(aClass,aClassInstanceCreate,aCollectionItemClass);
-{$endif}
-end;
-
-function ClassInstanceCreate(const aClassName: RawUTF8): TObject;
-var C: TClass;
-begin
-  if JSONSerializerRegisteredClass=nil then
-    C := nil else
-    C := JSONSerializerRegisteredClass.Find(Pointer(aClassName),length(aClassName));
-  {$ifndef LVCL}
-  if C=nil then
-    C := FindClass(UTF8ToString(aClassName));
-  {$endif}
-  result := ClassInstanceCreate(C);
-end;
-
 function JSONToNewObject(var From: PUTF8Char; var Valid: boolean;
   Options: TJSONToObjectOptions=[]): TObject;
 var ItemClass: TClass;
+    ItemInstance: TClassInstance;
 begin
   Valid := false;
   result := nil;
@@ -40191,7 +40024,8 @@ begin
   ItemClass := JSONSerializerRegisteredClass.Find(From,true);
   if ItemClass=nil then
     exit; // unknown type
-  result := ClassInstanceCreate(ItemClass);
+  ItemInstance.Init(ItemClass);
+  result := ItemInstance.CreateNew;
   From := JSONToObject(result,From,Valid,nil,Options);
   if not Valid then
     FreeAndNil(result); // avoid memory leak
@@ -40291,6 +40125,7 @@ var P: PPropInfo;
     Utf: TRawUTF8List absolute ObjectInstance;
     Lst: TObjectList absolute ObjectInstance;
     Item: TObject;
+    ItemInstance: TClassInstance;
     ValueClass, ItemClass: TClass;
     V: PtrInt;
     ndx,err: integer;
@@ -40349,6 +40184,7 @@ begin
     case IsObj of
     oObjectList: begin // TList leaks memory, but TObjectList uses "ClassName":..
       Lst.Clear;
+      ItemInstance.ItemClass := nil;
       repeat
         while From^ in [#1..' '] do inc(From);
         case From^ of
@@ -40364,10 +40200,12 @@ begin
           if TObjectListItemClass=nil then begin // recognize "ClassName":...
             ItemClass := JSONSerializerRegisteredClass.Find(From,true);
             if ItemClass=nil then
-              exit; // unknown type
-            Item := ClassInstanceCreate(ItemClass);
+              exit; // unknown "ClassName":.. type
           end else
-            Item := ClassInstanceCreate(TObjectListItemClass);
+            ItemClass := TObjectListItemClass;
+          if ItemInstance.ItemClass<>ItemClass then
+            ItemInstance.Init(ItemClass);
+          Item := ItemInstance.CreateNew;
           From := JSONToObject(Item,From,NestedValid,nil,Options);
           if not NestedValid then begin
             result := From;
@@ -40865,6 +40703,128 @@ begin
     P := P^.Next;
   end;
 end;
+
+
+{ TClassInstance }
+
+procedure TClassInstance.Init(C: TClass);
+begin
+  ItemClass := C;
+  if C<>nil then
+  repeat
+    if C<>TSQLRecord then
+    if C<>TObjectList then
+    if C<>TInterfacedObjectWithCustomCreate then
+    if C<>TPersistentWithCustomCreate then
+    if C<>TSynPersistent then
+    if C<>TComponent then
+  {$ifndef LVCL}
+    if C<>TInterfacedCollection then
+    if C<>TCollection then
+  {$endif}
+  {$ifdef FPC}
+    if C.ClassParent<>nil then begin
+      C := C.ClassParent;
+  {$else}
+    if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
+      C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
+  {$endif}
+      if C<>nil then
+        continue else begin
+        ItemCreate := cicTObject;
+        exit;
+      end;
+    end else begin
+      ItemCreate := cicTObject;
+      exit;
+    end else
+  {$ifndef LVCL} begin // plain TCollection shall have been registered
+      CollectionItemClass := JSONSerializerRegisteredCollection.Find(TCollectionClass(ItemClass));
+      if CollectionItemClass<>nil then begin
+        ItemCreate := cicTCollection;
+        exit;
+      end else
+        raise EParsingException.CreateUTF8('% shall inherit from TInterfacedCollection'+
+         ' or call TJSONSerializer.RegisterCollectionForJSON()',[ItemClass]);
+    end else begin
+      ItemCreate := cicTInterfacedCollection;
+      exit;
+    end else
+  {$endif} begin
+      ItemCreate := cicTComponent;
+      exit;
+    end else begin
+      ItemCreate := cicTSynPersistent;
+      exit;
+    end else begin
+      ItemCreate := cicTPersistentWithCustomCreate;
+      exit;
+    end else begin
+      ItemCreate := cicTInterfacedObjectWithCustomCreate;
+      exit;
+    end else begin
+      ItemCreate := cicTObjectList;
+      exit;
+    end else begin
+      ItemCreate := cicTSQLRecord;
+      exit;
+    end;
+  until false;
+  ItemCreate := cicUnknown;
+end;
+
+function TClassInstance.CreateNew: TObject;
+begin
+  if @self<>nil then
+  case ItemCreate of
+    cicTSQLRecord: begin
+      result := TSQLRecordClass(ItemClass).Create;
+      exit;
+    end;
+    cicTObjectList: begin
+      result := TObjectList.Create;
+      exit;
+    end;
+    cicTPersistentWithCustomCreate: begin
+      result := TPersistentWithCustomCreateClass(ItemClass).Create;
+      exit;
+    end;
+    cicTComponent: begin
+      result := TComponentClass(ItemClass).Create(nil);
+      exit;
+    end;
+    cicTSynPersistent: begin
+      result := TSynPersistentClass(ItemClass).Create;
+      exit;
+    end;
+    cicTInterfacedObjectWithCustomCreate: begin
+      result := TInterfacedObjectWithCustomCreateClass(ItemClass).Create;
+      exit;
+    end;
+    {$ifndef LVCL}
+    cicTInterfacedCollection: begin
+      result := TInterfacedCollectionClass(ItemClass).Create;
+      exit;
+    end;
+    cicTCollection: begin
+      result := TCollectionClass(ItemClass).Create(CollectionItemClass);
+      exit;
+    end;
+    {$endif}
+    cicTObject: begin
+      result := ItemClass.Create;
+      exit;
+    end;
+    else begin
+      result := nil;
+      exit;
+    end;
+  end else begin
+    result := nil;
+    exit;
+  end;
+end;
+
 
 {$ifdef MSWINDOWS}
 
@@ -41819,7 +41779,7 @@ begin
             raise EModelException.CreateUTF8('dup index % for %.% and %.% properties',
               [DynArrayIndex,Table,Name,Table,DynArrayFields[j].Name]);
         DynArrayFields[nDynArray] := TSQLPropInfoRTTIDynArray(F);
-        if TSQLPropInfoRTTIDynArray(F).fIsObjArray then
+        if TSQLPropInfoRTTIDynArray(F).ObjArray<>nil then
           fDynArrayFieldsHasObjArray := true;
         inc(nDynArray);
         goto Simple;
@@ -48217,11 +48177,7 @@ type // use AutoTable VMT entry to store a cache of the needed fields RTTI
     ObjArraysCount: integer;
     Classes: array of record
       Prop: PPropInfo;
-      InstanceClass: TClass;
-      InstanceCreate: TClassInstanceCreate;
-      {$ifndef LVCL}
-      InstanceCollection: TCollectionItemClass;
-      {$endif}
+      Instance: TClassInstance;
     end;
     ObjArrays: array of PPropInfo;
     constructor Create(aClass: TClass);
@@ -48241,9 +48197,7 @@ begin
         SetLength(Classes,ClassesCount+1);
         with Classes[ClassesCount] do begin
           Prop := P;
-          InstanceClass := P^.PropType^.ClassType^.ClassType;
-          InstanceCreate := ClassToTClassInstanceCreate(InstanceClass
-            {$ifndef LVCL},InstanceCollection{$endif});
+          Instance.Init(P^.PropType^.ClassType^.ClassType);
         end;
         inc(ClassesCount);
       end;
@@ -48277,8 +48231,7 @@ begin
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
   for i := 0 to field.ClassesCount-1 do
     with field.Classes[i] do
-      PObject(Prop^.GetterAddr(self))^ := ClassInstanceCreate(InstanceClass,
-        InstanceCreate{$ifndef LVCL},InstanceCollection{$endif});
+      PObject(Prop^.GetterAddr(self))^ := Instance.CreateNew;
 end;
 
 procedure AutoDestroyFields(self: TObject);

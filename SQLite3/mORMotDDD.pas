@@ -352,8 +352,7 @@ type
     fInterface: TInterfaceFactory;
     fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
-    fAggregate: TClass;
-    fAggregateCreate: TClassInstanceCreate;
+    fAggregate: TClassInstance;
     fTable: TSQLRecordClass;
     fAggregateRTTI: TSQLPropInfoList;
     // stored in fGarbageCollector, following fAggregateProp[]
@@ -454,7 +453,7 @@ type
     /// clear all properties of a given DDD Aggregate
     procedure AggregateClear(aAggregate: TObject);
     /// create a new DDD Aggregate instance
-    function AggregateCreate: TObject;
+    function AggregateCreate: TObject; {$ifdef HASINLINE}inline;{$endif}
     /// perform filtering and validation on a supplied DDD Aggregate
     // - all logic defined by AddFilterOrValidate() will be processed
     function AggregateFilterAndValidate(aAggregate: TObject;
@@ -475,7 +474,7 @@ type
     property Owner: TDDDRepositoryRestManager read fOwner;
     /// the DDD's Entity class handled by this factory
     // - may be any TPersistent, but very likely a TSynAutoCreateFields class
-    property Aggregate: TClass read fAggregate;
+    property Aggregate: TClass read fAggregate.ItemClass;
     /// the ORM's TSQLRecord used for actual storage
     property Table: TSQLRecordClass read fTable;
     /// the mapped DDD's Entity class published properties RTTI
@@ -1042,15 +1041,14 @@ begin
   fOwner := aOwner;
   fImplementation := aImplementation;
   fRest := aRest;
-  fAggregate := aAggregate;
-  fAggregateCreate := ClassToTClassInstanceCreate(fAggregate);
+  fAggregate.Init(aAggregate);
   fTable := aTable;
-  if (fAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
+  if (aAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
-  fPropsMapping.Init(aTable,RawUTF8(fAggregate.ClassName),aRest,false);
+  fPropsMapping.Init(aTable,RawUTF8(Aggregate.ClassName),aRest,false);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
-  fAggregateRTTI := TSQLPropInfoList.Create(fAggregate,
+  fAggregateRTTI := TSQLPropInfoList.Create(Aggregate,
     [pilAllowIDFields,pilSubClassesFlattening,pilIgnoreIfGetter]);
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
@@ -1181,7 +1179,7 @@ begin
   if agg.SQLDBFieldType<>rec.SQLDBFieldType then
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
-      fAggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName,
+      Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName,
       fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName]);
 end;
 var i,ndx: integer;
@@ -1234,7 +1232,7 @@ end;
 
 function TDDDRepositoryRestFactory.AggregateCreate: TObject;
 begin
-  result := ClassInstanceCreate(fAggregate,fAggregateCreate);
+  result := fAggregate.CreateNew;
 end;
 
 procedure TDDDRepositoryRestFactory.AggregateToJSON(aAggregate: TObject;
@@ -1307,7 +1305,7 @@ begin
   if fPropsMapping.MappingVersion<>fPropsMappingVersion then
     ComputeMapping;
   if aAggregate=nil then
-    raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,fAggregate]);
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,Aggregate]);
   if aSource=nil then
     AggregateClear(aAggregate) else
     for i := 0 to high(fAggregateProp) do
@@ -1323,9 +1321,9 @@ end;
 
 function TDDDRepositoryRestFactory.GetAggregateName: string;
 begin
-  if (self=nil) or (fAggregate=nil) then
+  if (self=nil) or (Aggregate=nil) then
     result := '' else
-    result := fAggregate.ClassName;
+    result := string(Aggregate.ClassName);
 end;
 
 function TDDDRepositoryRestFactory.GetTableName: string;
@@ -1371,10 +1369,10 @@ var f,i: integer;
     msg: string;
     str: boolean;
 begin
-  if (aAggregate=nil) or (aAggregate.ClassType<>fAggregate) then
+  if (aAggregate=nil) or (aAggregate.ClassType<>Aggregate) then
     raise EDDDRepository.CreateUTF8(self,
       '%.AggregateFilterAndValidate(%) expected a % instance',
-      [self,aAggregate,fAggregate]);
+      [self,aAggregate,Aggregate]);
   // first process all filters
   SetLength(Value,fAggregateRTTI.Count);
   for f := 0 to high(fFilter) do
@@ -1403,8 +1401,7 @@ begin
           if msg='' then
             // no custom message -> show a default message
             msg := format(sValidationFailed,[GetCaptionFromClass(fValidate[f,i].ClassType)]);
-          result := FormatUTF8('%.%: %',
-            [fAggregate,fAggregateProp[f].NameUnflattened,msg]);
+          result := FormatUTF8('%.%: %',[Aggregate,fAggregateProp[f].NameUnflattened,msg]);
           exit;
         end;
     end;
@@ -1573,7 +1570,7 @@ begin
     i := 0;
     if fCurrentORMInstance.FillRewind then
     while fCurrentORMInstance.FillOne do begin
-      res[i] := Factory.AggregateCreate;
+      res[i] := Factory.fAggregate.CreateNew;
       Factory.AggregateFromTable(fCurrentORMInstance,res[i]);
       inc(i);
     end;

@@ -4499,6 +4499,7 @@ var J,U,U2: RawUTF8;
     K: RawUTF8;
     Valid: boolean;
 {$ifndef LVCL}
+    Instance: TClassInstance;
     Coll, C2: TCollTst;
     MyItem: TCollTest;
     Comp: TComplexNumber;
@@ -5286,8 +5287,8 @@ begin
      end;
      TJSONSerializer.RegisterCollectionForJSON(TMyCollection,TCollTest);
      TestMyColl(TMyCollection.Create(TCollTest));
-     TestMyColl(ClassInstanceCreate(TMyCollection) as TMyCollection);
-     TestMyColl(ClassInstanceCreate('TMyCollection') as TMyCollection);
+     Instance.Init(TMyCollection);
+     TestMyColl(Instance.CreateNew as TMyCollection);
      C2.Coll.Clear;
      U := ObjectToJSON(C2);
      Check(Hash32(U)=$CE2C2DED);
