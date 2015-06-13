@@ -48669,7 +48669,7 @@ begin
       for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
         with DynArrays[i] do
           if IsObjArray then
-            ObjArrayClear(Value^) else
+            ObjArrayClear(Value) else // a bit faster than Wrapper.Clear
             Wrapper.Clear;
       if Records<>nil then begin
         i := 0;
