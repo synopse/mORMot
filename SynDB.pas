@@ -3504,7 +3504,7 @@ begin
   CheckExists;
 {$ifdef DELPHI5OROLDER}
   with TVarData(fValue) do begin
-    if not(VType in VTYPE_STATIC) then
+    if VType and VTYPE_STATIC<>0 then
       VarClear(fValue);
     VType := varInt64;
     VInt64 := aValue;
