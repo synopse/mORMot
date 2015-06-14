@@ -17388,11 +17388,13 @@ begin
   if wasString then begin
     W.Add('"');
     if PtrUInt(tmp)<>0 then
-      W.AddJSONEscape(pointer(tmp),PInteger(PtrUInt(tmp)-4)^);
+      W.AddJSONEscape(pointer(tmp),
+        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
     W.Add('"');
   end else
     if PtrUInt(tmp)<>0 then
-      W.AddNoJSONEscape(pointer(tmp),PInteger(PtrUInt(tmp)-4)^);
+      W.AddNoJSONEscape(pointer(tmp),
+        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
 end;
 
 function TSQLPropInfo.GetValue(Instance: TObject; ToSQL: boolean;
@@ -18677,7 +18679,8 @@ begin
   W.Add('"');
   fPropInfo.GetLongStrProp(Instance,tmp);
   if PtrUInt(tmp)<>0 then
-    W.AddJSONEscape(pointer(tmp),PInteger(PtrUInt(tmp)-4)^);
+    W.AddJSONEscape(pointer(tmp),
+      {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
   W.Add('"');
 end;
 
@@ -26143,7 +26146,7 @@ var tmp: pointer; // FillFrom() modifies the buffer memory: work on a copy
 begin
   P := pointer(JSONRecord);
   if P<>nil then begin
-    L := PInteger(P-4)^+1; // +1 for last #0
+    L := {$ifdef FPC}length(JSONRecord){$else}PInteger(P-4)^{$endif}+1; // +1 for last #0
     if L<=sizeof(buf) then
       tmp := @buf else
       getmem(tmp,L);

@@ -2145,7 +2145,6 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // - warning: the Buffer should contain enough space to store the Text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast version of StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
@@ -14143,7 +14142,7 @@ function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode; overload;
 begin
   if S='' then
     result := '' else
-    result := Utf8DecodeToRawUnicode(pointer(S),PInteger(PtrInt(S)-sizeof(integer))^);
+    result := Utf8DecodeToRawUnicode(pointer(S),length(S));
 end;
 
 function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger=nil): RawUnicode;
@@ -14161,7 +14160,7 @@ begin
     result := 0;
     exit;
   end;
-  result := PInteger(PtrInt(S)-sizeof(integer))^;
+  result := length(S);
   SetLength(Dest,result*2+2);
   result := UTF8ToWideChar(pointer(Dest),Pointer(S),result);
 end;
@@ -15210,7 +15209,7 @@ type
     {$endif}
     refCnt: SizeInt;
     length: SizeInt;
-{$else}
+{$else FPC}
 {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
@@ -15461,8 +15460,11 @@ function DynArrayLength(Value: Pointer): integer;
 begin
   if Value=nil then
     result := 0 else begin
-    dec(PtrUInt(Value),SizeOf(TDynArrayRec));
-    result := PDynArrayRec(Value)^.length;
+    {$ifdef FPC}
+    result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.length;
+    {$else}
+    result := PInteger(PtrUInt(Value)-sizeof(PtrInt))^;
+    {$endif}
   end;
 end;
 
@@ -16374,10 +16376,14 @@ begin;
     Result := 0;
     goto Exit;
   end;
-  lenSub := pinteger(pSub-4)^;
-  dec(lenSub);
-  len := pinteger(p-4)^;
-  if (len<lenSub+Offset) or (lenSub<0) then begin
+  {$ifdef FPC}
+  len := PStrRec(Pointer(PtrInt(p)-STRRECSIZE))^.length;
+  lenSub := PStrRec(Pointer(PtrInt(pSub)-STRRECSIZE))^.length-1;
+  {$else}
+  len := PInteger(p-4)^;
+  lenSub := PInteger(pSub-4)^-1;
+  {$endif}
+  if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then begin
     Result := 0;
     goto Exit;
   end;
@@ -16672,7 +16678,7 @@ begin
     exit;
   L := PtrInt(Text);
   if L<>0 then
-    L := pInteger(L-sizeof(integer))^; // L := length(Text)
+    L := PStrRec(Pointer(L-STRRECSIZE))^.length;
   SetLength(Text,L+BufferLen);
   move(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
@@ -16705,7 +16711,7 @@ var L: PtrInt;
 begin
   L := PtrInt(Text);
   if L<>0 then begin
-    L := pInteger(L-sizeof(integer))^; // L := length(Text)
+    L := PStrRec(Pointer(L-STRRECSIZE))^.length;
     Move(Pointer(Text)^,Buffer^,L);
     inc(Buffer,L);
   end;
@@ -17438,7 +17444,11 @@ Txt:  len := F-FDeb;
       PWord(F)^ := ord(':')+ord('(')shl 8;
       inc(F,2);
     end;
+    {$ifdef FPC}
+    L := PStrRec(Pointer(PtrInt(tmp[i])-STRRECSIZE))^.length;
+    {$else}
     L := PInteger(PtrInt(tmp[i])-sizeof(integer))^;
+    {$endif}
     move(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if i in inlin then begin
@@ -22222,7 +22232,7 @@ end;
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 var i, L: integer;
 begin
-  L := length(source);
+  L := PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length;
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
@@ -22236,7 +22246,7 @@ end;
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 var i, L: integer;
 begin
-  L := length(source);
+  L := PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length;
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
@@ -23193,7 +23203,7 @@ begin
   result := '';
   if s='' then
     exit;
-  L := PInteger(PtrInt(s)-sizeof(integer))^;
+  L := PStrRec(Pointer(PtrInt(s)-STRRECSIZE))^.length;
   if len<0 then
     len := L;
   if i>L then
@@ -25614,7 +25624,7 @@ begin
   result := '';
   if S='' then
     exit;
-  SetLength(result,PInteger(PtrInt(S)-sizeof(integer))^*2); // max length
+  SetLength(result,length(S)*2); // max length
 {$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
   PWord(PtrInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
 {$endif}
@@ -27228,12 +27238,12 @@ begin
       tkLString, tkWString: // length stored within WideString is in bytes
         if P^=0 then
           dec(result,sizeof(PtrUInt)-1) else
-          inc(result,ToVarUInt32LengthWithData(PInteger(P^-sizeof(integer))^)-sizeof(PtrUInt));
+          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length)-sizeof(PtrUInt));
       {$ifdef UNICODE}
       tkUString:
         if P^=0 then
           dec(result,sizeof(PtrUInt)-1) else
-          inc(result,ToVarUInt32LengthWithData(PInteger(P^-sizeof(integer))^*2)-sizeof(PtrUInt));
+          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2)-sizeof(PtrUInt));
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         Len := RecordSaveLength(P^,Field.TypeInfo{$ifndef FPC}^{$endif});
@@ -27310,7 +27320,7 @@ begin
     tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}: begin
       if PPtrUInt(R)^=0 then
         LenBytes := 0 else
-        LenBytes := PInteger(PPtrUInt(R)^-sizeof(integer))^; // inlined length()
+        LenBytes := PStrRec(Pointer(PPtrUInt(R)^-STRRECSIZE))^.length;
       {$ifdef UNICODE} // WideString has length in bytes, UnicodeString in WideChars
       if Kind=tkUString then
         LenBytes := LenBytes*2;
@@ -30484,9 +30494,9 @@ begin
       inc(Dest,sizeof(VInt64));
     end;
     varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
-      if VAny=nil then
+      if PtrUInt(VAny)=0 then
         LenBytes := 0 else begin
-        LenBytes := PInteger(PtrUInt(VAny)-sizeof(integer))^; // fast length() of string type
+        LenBytes := PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length;
         {$ifdef HASVARUSTRING}
         if VType=varUString then
           LenBytes := LenBytes*2; // stored length is in bytes, not (wide)chars
@@ -30528,15 +30538,15 @@ begin // match VariantSave() storage
   varInt64, varWord64, varDouble, varDate, varCurrency:
     result := sizeof(VInt64)+sizeof(VType);
   varString, varOleStr:
-    if VAny=nil then
+    if PtrUInt(VAny)=0 then
       result := 1+sizeof(VType) else
-      result := ToVarUInt32LengthWithData(PInteger(PtrUInt(VAny)-sizeof(integer))^)
+      result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length)
         +sizeof(VType);
    {$ifdef HASVARUSTRING}
    varUString:
-    if VAny=nil then // stored length is in bytes, not (wide)chars
+    if PtrUInt(VAny)=0 then // stored length is in bytes, not (wide)chars
       result := 1+sizeof(VType) else
-      result := ToVarUInt32LengthWithData(PInteger(PtrUInt(VAny)-sizeof(integer))^*2)
+      result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length*2)
         +sizeof(VType);
     {$endif}
   else
@@ -33130,7 +33140,7 @@ begin
       exit;
   end else
     {$ifdef FPC}
-    if cardinal(aIndex)>=cardinal(DynArrayLength(Value^)) then
+    if cardinal(aIndex)>=cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length) then
     {$else}
     if cardinal(aIndex)>=PCardinal(PtrUInt(fValue^)-sizeof(PtrInt))^ then
     {$endif}
@@ -33144,7 +33154,7 @@ begin
     if fCountP=nil then
       if PtrInt(fValue^)<>0 then
         {$ifdef FPC}
-        result := DynArrayLength(Value^) else
+        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
         {$else}
         result := PInteger(PtrUInt(fValue^)-sizeof(PtrInt))^ else
         {$endif}
@@ -33288,7 +33298,7 @@ begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           LenBytes := 0 else begin
-          LenBytes := PInteger(PPtrUInt(P)^-sizeof(integer))^; // fast length()
+          LenBytes := PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length;
           {$ifdef UNICODE} // WideString length in bytes, UnicodeString in WideChars
           if PTypeKind(ElemType)^=tkUString then
             LenBytes := LenBytes*2;
@@ -33370,7 +33380,7 @@ begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           inc(result) else
-          inc(result,ToVarUInt32LengthWithData(PInteger(PPtrUInt(P)^-sizeof(integer))^));
+          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length));
         inc(P,sizeof(PtrUInt));
       end;
     {$ifdef UNICODE}
@@ -33378,7 +33388,7 @@ begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           inc(result) else
-          inc(result,ToVarUInt32LengthWithData(PInteger(PPtrUInt(P)^-sizeof(integer))^*2));
+          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length*2));
         inc(P,sizeof(PtrUInt));
       end;
     {$endif}
@@ -34515,7 +34525,7 @@ begin
         aCount := MINIMUM_SIZE; // reserve some minimal space for Add()
     end else begin
       {$ifdef FPC}
-      capa := DynArrayLength(fValue^);
+      capa := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length;
       {$else}
       capa := PInteger(PtrInt(fValue^)-sizeof(PtrInt))^;
       {$endif}
@@ -34541,7 +34551,7 @@ end;
 function TDynArray.GetCapacity: integer;
 begin // capacity := length(DynArray)
   if (fValue<>nil) and (PtrInt(fValue^)<>0) then
-    result := DynArrayLength(fValue^) else
+    result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
     result := 0;
 end;
 
@@ -34716,10 +34726,32 @@ begin
 end;
 
 function TDynArray.ElemSave(const Elem): RawByteString;
+{$ifdef FPC}
+var LenBytes: integer;
+{$endif}
 begin
   if ElemType=nil then
     SetString(result,PAnsiChar(@Elem),ElemSize) else
     case PTypeKind(ElemType)^ of
+      {$ifdef FPC}
+      tkLString, tkWString:
+        if PPtrInt(@Elem)^=0 then
+          SetString(result,PAnsiChar(@Elem),4) else begin
+          LenBytes := PStrRec(Pointer(PPtrInt(@Elem)^-STRRECSIZE))^.length;
+          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes+sizeof(integer));
+          PInteger(result)^ := LenBytes;
+        end;
+      {$ifdef UNICODE}
+      tkUString:
+        if PPtrInt(@Elem)^=0 then
+          SetString(result,PAnsiChar(@Elem),4) else begin
+          LenBytes := PStrRec(Pointer(PPtrInt(@Elem)^-STRRECSIZE))^.length;
+          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes*2+sizeof(integer));
+          PInteger(result)^ := LenBytes;
+        end;
+      end;
+      {$endif}
+      {$else FPC}
       tkLString, tkWString: // WideString internal length is in bytes
         if PPtrInt(@Elem)^=0 then
           SetString(result,PAnsiChar(@Elem),4) else
@@ -34732,6 +34764,7 @@ begin
           SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),
             PInteger(PPtrInt(@Elem)^-sizeof(integer))^*2+sizeof(integer));
       {$endif}
+      {$endif FPC}
       {$ifndef NOVARIANTS}
       tkVariant:
         result := VariantSave(variant(Elem));
@@ -34983,7 +35016,9 @@ function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),PInteger(PtrUInt(Elem)-sizeof(integer))^);
+    result := Hasher(0,Pointer(PtrUInt(Elem)),
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif});
 end;
 
 function HashAnsiStringI(const Elem; Hasher: THasher): cardinal;
@@ -35000,7 +35035,9 @@ function HashUnicodeString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),PInteger(PtrUInt(Elem)-sizeof(integer))^*2);
+    result := Hasher(0,Pointer(PtrUInt(Elem)),
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif}*2);
 end;
 
 function HashUnicodeStringI(const Elem; Hasher: THasher): cardinal;
@@ -35018,7 +35055,9 @@ begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
     result := Hasher(0,Pointer(PtrUInt(Elem)),
-      PInteger(PtrUInt(Elem)-sizeof(integer))^{$ifdef UNICODE}*sizeof(WideChar){$endif});
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif}
+      {$ifdef UNICODE}*sizeof(WideChar){$endif});
       // WideString internal size is in bytes, UnicodeString is in WideChars
 end;
 
@@ -35034,7 +35073,9 @@ function HashWideString(const Elem; Hasher: THasher): cardinal;
 begin // WideString internal size is in bytes, not WideChar
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),PInteger(PtrUInt(Elem)-sizeof(integer))^);
+    result := Hasher(0,Pointer(PtrUInt(Elem)),
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif});
 end;
 
 function HashWideStringI(const Elem; Hasher: THasher): cardinal;
@@ -35093,7 +35134,9 @@ begin
   VariantToUTF8(variant(Elem),U,wasString);
   if PtrUInt(U)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(U)),PInteger(PtrUInt(U)-sizeof(integer))^);
+    result := Hasher(0,Pointer(PtrUInt(U)),
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(U)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(U)-sizeof(integer))^{$endif});
 end;
 
 function HashVariantI(const Elem; Hasher: THasher): cardinal;
@@ -37657,7 +37700,11 @@ var L: integer;
 begin
   if PtrInt(Text)=0 then
     exit;
+  {$ifdef FPC}
+  L := PStrRec(Pointer(PtrInt(Text)-STRRECSIZE))^.length;
+  {$else}
   L := PInteger(PtrInt(Text)-sizeof(integer))^;
+  {$endif}
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
@@ -37675,7 +37722,12 @@ begin
   if start<0 then
     start := 0 else
     dec(start);
-  L := PInteger(PtrInt(Text)-sizeof(integer))^-start;
+  {$ifdef FPC}
+  L := PStrRec(Pointer(PtrInt(Text)-STRRECSIZE))^.length;
+  {$else}
+  L := PInteger(PtrInt(Text)-sizeof(integer))^;
+  {$endif}
+  dec(L,start);
   if L>0 then begin
     if len<L then
       L := len;
@@ -41834,7 +41886,9 @@ begin
   fixedsize := length(Values[0]);
   if fixedsize>0 then
     for i := 1 to ValuesCount-1 do
-      if (PI^[i]=0) or (PInteger(PI^[i]-sizeof(integer))^<>fixedsize) then begin
+      if (PI^[i]=0) or
+         ({$ifdef FPC}PStrRec(Pointer(PI^[i]-STRRECSIZE))^.length
+          {$else}PInteger(PI^[i]-sizeof(integer))^{$endif}<>fixedsize) then begin
         fixedsize := 0;
         break;
       end;
@@ -41856,7 +41910,8 @@ begin
             break; // avoid buffer overflow
           end;
         end else begin
-          len := PInteger(PI^[i]-sizeof(integer))^; // fast length(Values[])
+          len := {$ifdef FPC}PStrRec(Pointer(PI^[i]-STRRECSIZE))^.length
+                 {$else}PInteger(PI^[i]-sizeof(integer))^{$endif};
           if PtrUInt(PEnd)-PtrUInt(P)<=len then begin
             n := i;
             break; // avoid buffer overflow
@@ -44127,7 +44182,8 @@ var tmp: array[0..15] of AnsiChar;
 begin
   if PtrUInt(Value)=0 then
     Result := #0 else begin
-    Len := PInteger(PtrUInt(Value)-sizeof(integer))^; // inlined length(Value)
+    Len := {$ifdef FPC}PStrRec(Pointer(PtrUInt(Value)-STRRECSIZE))^.length
+                {$else}PInteger(PtrUInt(Value)-sizeof(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
     Move(tmp,PByteArray(Result)[0],Head);
