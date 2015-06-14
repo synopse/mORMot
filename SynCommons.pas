@@ -397,6 +397,7 @@ unit SynCommons;
   - UTF-8 process will now handle UTF-16 surrogates - see ticket [4a0382367d] -
     UnicodeCharToUTF8/NextUTF8Char are renamed WideCharToUTF8/NextUTF8UCS4 and
     new UTF16CharToUTF8/UCS4ToUTF8 functions have been introduced
+  - introducing TSynTimeZone class, for cross-platform local time handling 
   - added TextColor() and TextBackground() functions - will initialize internal
     console process after any manual AllocConsole call
   - added ConsoleWaitForEnterKey function, able to handle Synchronize() calls
@@ -726,6 +727,9 @@ uses
 {$ifdef MSWINDOWS}
   Windows,
   Messages,
+  {$ifndef LVCL}
+  Registry,
+  {$endif}
 {$endif}
 {$ifdef KYLIX3}
   Types,
@@ -9285,6 +9289,98 @@ function DateTimeToUnixMSTime(const AValue: TDateTime): Int64;
 // expressed in Coordinated Universal Time (UTC)
 function NowUTC: TDateTime;
 
+type
+  {$A-}
+  /// used to store a Date/Time in TSynTimeZone internal structures
+  // - map Windows.TSystemTime, since it is how it is stored in the Registry
+  TTimeZoneValue = object
+    wYear: Word;
+    wMonth: Word;
+    wDayOfWeek: Word;
+    wDay: Word;
+    wHour: Word;
+    wMinute: Word;
+    wSecond: Word;
+    wMilliseconds: Word;
+    function IsZero: boolean;
+    function EncodeForTimeChange(const year: word): TDateTime;
+  end;
+  /// used to store Time Zone bias in TSynTimeZone
+  // - map how low-level information is stored in the Windows Registry
+  TTimeZoneInfo = record
+    Bias: LongInt;
+    bias_std: LongInt;
+    bias_dlt: LongInt;
+    change_time_std: TTimeZoneValue;
+    change_time_dlt: TTimeZoneValue;
+  end;
+  /// used to store Time Zone information for a single area in TSynTimeZone
+  TTimeZoneData = record
+    id: RawUTF8;
+    display: RawUTF8;
+    tzi: TTimeZoneInfo;
+    dyn: array of packed record
+      year: integer;
+      tzi: TTimeZoneInfo;
+    end;
+  end;
+  /// used to store the Time Zone information of a TSynTimeZone class
+  TTimeZoneDataDynArray = array of TTimeZoneData;
+  {$A+}
+
+  /// handle cross-platform time zone information
+  // - is able to retrieve accurate information from the Windows registry,
+  // or from a binary compressed file on other platforms (which should have been
+  // saved from an updated Windows system first) 
+  // - each time zone will be idendified by its TzId string, as defined by
+  // Microsoft for its Windows Operating system
+  TSynTimeZone = class
+  protected
+    fZone: TTimeZoneDataDynArray;
+    fZones: TDynArrayHashed;
+  public
+    /// will retrieve the default shared TSynTimeZone instance
+    // - locally created via the CreateDefault constructor
+    // - this is the usual entry point for time zone process, calling e.g.
+    // $ aLocalTime := TSynTimeZone.Info.NowTz(aTimeZoneID);
+    class function Info: TSynTimeZone;
+    /// initialize the internal storage
+    // - but no data is available, until Load* methods are called
+    constructor Create;
+    /// retrieve the time zones from Windows registry, or from a local file
+    // - under Linux, the file should be located with the executable, renamed
+    // with a .tz extension - may have been created via SaveToFile('')
+    constructor CreateDefault;
+    {$ifdef MSWINDOWS}
+    {$ifndef LVCL}
+    /// read time zone information from the Windows registry
+    procedure LoadFromRegistry;
+    {$endif}
+    {$endif MSWINDOWS}
+    /// read time zone information from a compressed file
+    // - if no file name is supplied, a ExecutableName.tz file would be used
+    procedure LoadFromFile(const FileName: TFileName='');
+    /// read time zone information from a compressed memory buffer
+    procedure LoadFromBuffer(const Buffer: RawByteString);
+    /// write then time zone information into a compressed file
+    // - if no file name is supplied, a ExecutableName.tz file would be created
+    procedure SaveToFile(const FileName: TFileName);
+    /// write then time zone information into a compressed memory buffer
+    function SaveToBuffer: RawByteString;
+    /// retrieve the time bias (in minutes) for a given date/time on a TzId
+    function GetBiasForDateTime(const Value: TDateTime; const TzId: RawUTF8;
+      out Bias: integer; out HaveDaylight: boolean): boolean;
+    /// retrieve the display text corresponding to a TzId
+    function GetDisplay(const TzId: RawUTF8): RawUTF8;
+    /// compute the UTC date/time corrected for a given TzId
+    function UtcTz(const UtcDateTime: TDateTime; const TzId: RawUTF8): TDateTime;
+    /// compute the current date/time corrected for a given TzId
+    function NowTz(const TzId: RawUTF8): TDateTime;
+    /// direct access to the low-level time zone information
+    property Zone: TTimeZoneDataDynArray read fZone;
+    /// direct access to the wrapper over the time zone information array
+    property Zones: TDynArrayHashed read fZones;
+  end;
 
 var
   /// custom date to ready to be displayed text function
@@ -15227,18 +15323,18 @@ type
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
-    {$ifdef FPC}
-    {$ifdef ISFPC27}
+{$ifdef FPC}
+  {$ifdef ISFPC27}
     codePage: Word;
     elemSize: Word;
-    {$endif}
-    {$ifdef CPU64}
+  {$endif}
+  {$ifdef CPU64}
     _Padding: LongInt;
-    {$endif}
+  {$endif}
     refCnt: SizeInt;
     length: SizeInt;
 {$else FPC}
-{$ifdef UNICODE}
+  {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
     _Padding: LongInt;
@@ -15253,7 +15349,7 @@ type
     /// either 1 (for AnsiString) or 2 (for UnicodeString)
     // - exist only since Delphi 2009
     elemSize: Word;
-{$endif UNICODE}
+  {$endif UNICODE}
     /// string reference count (basic garbage memory mechanism)
     refCnt: Longint;
     /// length in characters
@@ -25092,6 +25188,245 @@ end;
 function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 begin
   PTimeLogBits(@result)^.From(DateTime);
+end;
+
+
+{ TTimeZoneValue }
+
+function TryEncodeDayOfWeekInMonth(const AYear, AMonth,
+  ANthDayOfWeek, ADayOfWeek: Word; out AValue: TDateTime): Boolean;
+var LStartOfMonth, LDay: Word;
+begin // from DateUtils
+  LStartOfMonth := (DateTimeToTimeStamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
+  if LStartOfMonth<=ADayOfWeek then
+    LDay := (ADayOfWeek-LStartOfMonth+1)+7*(ANthDayOfWeek-1) else
+    LDay := (7-LStartOfMonth+1)+ADayOfWeek+7*(ANthDayOfWeek-1);
+  result := TryEncodeDate(AYear,AMonth,LDay,AValue);
+end;
+
+function TTimeZoneValue.EncodeForTimeChange(const year: word): TDateTime;
+var dow,day: word;
+begin
+  if wDayOfWeek=0 then
+    dow := 7 else // Delphi Sunday = 7
+    dow := wDayOfWeek;
+  // Encoding the day of change
+  day := wDay;
+  while not TryEncodeDayOfWeekInMonth(year,wMonth,day,dow,Result) do begin
+    // if wDay = 5 then try it and if needed decrement to find the last
+    // occurence of the day in this month
+    if day=0 then begin
+      TryEncodeDayOfWeekInMonth(year,wMonth,1,7,Result);
+      break;
+    end;
+    dec(day);
+  end;
+  // finally add the time when change is due
+  result := result+EncodeTime(wHour,wMinute,wSecond,wMilliseconds);
+end;
+
+function TTimeZoneValue.IsZero: boolean;
+begin
+  result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
+end;
+
+
+{ TTimeZoneInformation }
+
+constructor TSynTimeZone.Create;
+begin
+  fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),fZone,djRawUTF8);
+end;
+
+constructor TSynTimeZone.CreateDefault;
+begin
+  Create;
+  {$ifdef LVCL}
+  LoadFromFile;
+  {$else}
+  {$ifdef MSWINDOWS}
+  LoadFromRegistry;
+  {$else}
+  LoadFromFile;
+  {$endif}
+  {$endif}
+end;
+
+var
+  SharedSynTimeZone: TSynTimeZone;
+
+class function TSynTimeZone.Info: TSynTimeZone;
+begin
+  if SharedSynTimeZone=nil then begin
+    SharedSynTimeZone := TSynTimeZone.CreateDefault;
+    GarbageCollector.Add(SharedSynTimeZone);
+  end;
+  result := SharedSynTimeZone;
+end;
+
+function TSynTimeZone.SaveToBuffer: RawByteString;
+begin
+  result := SynLZCompress(fZones.SaveTo);
+end;
+
+procedure TSynTimeZone.SaveToFile(const FileName: TFileName);
+var FN: TFileName;
+begin
+  if FileName='' then
+    FN := ChangeFileExt(ExeVersion.ProgramFileName,'.tz') else
+    FN := FileName;
+  FileFromString(SaveToBuffer,FN);
+end;
+
+procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
+begin
+  fZones.LoadFrom(pointer(SynLZDecompress(Buffer)));
+  fZones.ReHash;
+end;
+
+procedure TSynTimeZone.LoadFromFile(const FileName: TFileName);
+var FN: TFileName;
+begin
+  if FileName='' then
+    FN := ChangeFileExt(ExeVersion.ProgramFileName,'.tz') else
+    FN := FileName;
+  LoadFromBuffer(StringFromFile(FN));
+end;
+
+{$ifdef MSWINDOWS}
+{$ifndef LVCL}
+procedure TSynTimeZone.LoadFromRegistry;
+const REGKEY = '\Software\Microsoft\Windows NT\CurrentVersion\Time Zones\';
+var Reg: TRegistry;
+    Keys: TStringList;
+    i,first,last,year,n: integer;
+    item: TTimeZoneData;
+begin
+  fZones.Clear;
+  Keys := TStringList.Create;
+  Reg := TRegistry.Create;
+  try
+    Reg.RootKey := HKEY_LOCAL_MACHINE;
+    if Reg.OpenKeyReadOnly(REGKEY) then
+    try
+      Reg.GetKeyNames(Keys);
+    finally
+      Reg.CloseKey;
+    end;
+    for i := 0 to Keys.Count-1 do begin
+      Finalize(item);
+      fillchar(item.tzi,SizeOf(item.tzi),0);
+      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then
+      try
+        StringToUTF8(Keys[i],item.id);
+        StringToUTF8(Reg.ReadString('Display'),item.Display);
+        Reg.ReadBinaryData('TZI', item.tzi, SizeOf(item.tzi));
+      finally
+        Reg.CloseKey;
+      end;
+      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]+'\Dynamic DST') then
+      try
+        first := Reg.ReadInteger('FirstEntry');
+        last := Reg.ReadInteger('LastEntry');
+        n := 0;
+        SetLength(item.dyn,last-first+1);
+        for year := first to last do
+        if Reg.ReadBinaryData(IntToStr(year),item.dyn[n].tzi,
+            SizeOf(TTimeZoneInfo))=SizeOf(TTimeZoneInfo) then begin
+          item.dyn[n].year := year;
+          inc(n);
+        end;
+        SetLength(item.dyn,n);
+      finally
+        Reg.CloseKey;
+      end;
+      fZones.Add(item);
+    end;
+  finally
+    Reg.Free;
+    Keys.Free;
+  end;
+  fZones.ReHash;
+end;
+{$endif LVCL}
+{$endif MSWINDOWS}
+
+function TSynTimeZone.GetDisplay(const TzId: RawUTF8): RawUTF8;
+var ndx: integer;
+begin
+  if self=nil then
+    ndx := -1 else
+    ndx := fZones.FindHashed(TzID);
+  if ndx<0 then
+    result := TzId else
+    result := fZone[ndx].display;
+end;
+
+function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
+  const TzId: RawUTF8; out Bias: integer; out HaveDaylight: boolean): boolean;
+var ndx,i: integer;
+    item: ^TTimeZoneData;
+    y,m,d: word;
+    tzi: ^TTimeZoneInfo;
+    std,dlt: TDateTime;
+begin
+  if self=nil then
+    ndx := -1 else
+    ndx := fZones.FindHashed(TzID);
+  if ndx<0 then begin
+    Bias := 0;
+    HaveDayLight := false;
+    result := false;
+    exit;
+  end;
+  item := @fZone[ndx];
+  DecodeDate(Value,y,m,d);
+  tzi := nil;
+  if item^.dyn<>nil then
+    if y<=item^.dyn[0].year then
+      tzi := @item^.dyn[0].tzi else
+    if y>=item^.dyn[high(item^.dyn)].year then
+      tzi := @item^.dyn[high(item^.dyn)].tzi else
+      for i := 1 to high(item^.dyn) do
+        if item^.dyn[i].year>y then begin
+          tzi := @item^.dyn[i-1].tzi;
+          break;
+        end;
+  if tzi=nil then
+    tzi := @item^.tzi;
+  if tzi.change_time_std.IsZero then begin
+    HaveDaylight := false;
+    Bias := tzi.Bias+tzi.bias_std;
+  end else begin
+    HaveDaylight := true;
+    std := tzi.change_time_std.EncodeForTimeChange(y);
+    dlt := tzi.change_time_dlt.EncodeForTimeChange(y);
+    if std<dlt then
+      if (std<=Value) and (Value<dlt) then
+        Bias := tzi.Bias+tzi.bias_std else
+        Bias := tzi.Bias+tzi.bias_dlt else
+      if (dlt<=Value) and (Value<std) then
+        Bias := tzi.Bias+tzi.bias_dlt else
+        Bias := tzi.Bias+tzi.bias_std;
+  end;
+  result := true;
+end;
+
+function TSynTimeZone.UtcTz(const UtcDateTime: TDateTime;
+  const TzId: RawUTF8): TDateTime;
+var Bias: integer;
+    HaveDaylight: boolean;
+begin
+  if self=nil then
+    result := UtcDateTime else begin
+    GetBiasForDateTime(UtcDateTime,TzId,Bias,HaveDaylight);
+    result := ((UtcDateTime*MinsPerDay)-Bias)/MinsPerDay;
+  end;
+end;
+
+function TSynTimeZone.NowTz(const TzId: RawUTF8): TDateTime;
+begin
+  result := UtcTz(NowUtc,TzId);
 end;
 
 
@@ -41124,7 +41459,7 @@ end;
 { TObjectListHashed }
 
 const
-  // hashing will start only when List[] reachs 32 items (not worth it before)
+  // hashing will start only when List[] reaches 32 items (not worth it before)
   TOBJECTLISTHASHED_START_HASHING_COUNT = 32;
 
 function TObjectListHashed.Add(aObject: TObject; out wasAdded: boolean): integer;
