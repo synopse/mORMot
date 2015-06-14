@@ -34,6 +34,7 @@ unit SynCommons;
    - BigStar
    - itSDS
    - mazinsw
+   - Marius Maximus (mariuszekpl)
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -3341,6 +3342,33 @@ function GetCaptionFromClass(C: TClass): string;
 
 /// UnCamelCase and translate the enumeration item
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+
+{$ifdef LINUX}
+const
+  ANSI_CHARSET = 0;
+  DEFAULT_CHARSET = 1;
+  SYMBOL_CHARSET = 2;
+  SHIFTJIS_CHARSET = $80;
+  HANGEUL_CHARSET = 129;
+  GB2312_CHARSET = 134;
+  CHINESEBIG5_CHARSET = 136;
+  OEM_CHARSET = 255;
+  JOHAB_CHARSET = 130;
+  HEBREW_CHARSET = 177;
+  ARABIC_CHARSET = 178;
+  GREEK_CHARSET = 161;
+  TURKISH_CHARSET = 162;
+  VIETNAMESE_CHARSET = 163;
+  THAI_CHARSET = 222;
+  EASTEUROPE_CHARSET = 238;
+  RUSSIAN_CHARSET = 204;
+  BALTIC_CHARSET = 186;
+{$else}
+{$ifdef FPC}
+const
+  VIETNAMESE_CHARSET = 163;
+{$endif}
+{$endif}
 
 /// convert a char set to a code page
 function CharSetToCodePage(CharSet: integer): cardinal;
@@ -25770,33 +25798,6 @@ begin
   move(PS^,tmp,L);
   GetCaptionFromPCharLen(tmp,result);
 end;
-
-{$ifdef LINUX}
-const
-  ANSI_CHARSET = 0;
-  DEFAULT_CHARSET = 1;
-  SYMBOL_CHARSET = 2;
-  SHIFTJIS_CHARSET = $80;
-  HANGEUL_CHARSET = 129;
-  GB2312_CHARSET = 134;
-  CHINESEBIG5_CHARSET = 136;
-  OEM_CHARSET = 255;
-  JOHAB_CHARSET = 130;
-  HEBREW_CHARSET = 177;
-  ARABIC_CHARSET = 178;
-  GREEK_CHARSET = 161;
-  TURKISH_CHARSET = 162;
-  VIETNAMESE_CHARSET = 163;
-  THAI_CHARSET = 222;
-  EASTEUROPE_CHARSET = 238;
-  RUSSIAN_CHARSET = 204;
-  BALTIC_CHARSET = 186;
-{$else}
-{$ifdef FPC}
-const
-  VIETNAMESE_CHARSET = 163;
-{$endif}
-{$endif}
 
 function CharSetToCodePage(CharSet: integer): cardinal;
 begin

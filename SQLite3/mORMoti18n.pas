@@ -61,7 +61,7 @@ unit mORMoti18n;
      (if the ENHANCEDRTL conditional is not defined - see above)
    - CR/LF consistent replacement (#13->'|', #10->'~')
 
-   uses ini-compatible plain text messages language file format (*.msg):
+   uses ini-compatible plain text *.msg messages language file format:
    - Ansi, UTF8 or Unicode .msg files are translated into appropriate CharSet
    - messages translations before first [FormName] section of .msg file
       used for resourcestring and _()
@@ -621,7 +621,7 @@ type
     function TimeToText(const Time: TTimeLog): string; overload; {$ifdef HASINLINE}inline;{$endif}
   end;
 
-(*
+{
 /// export the translation file into a .PO format
 // - the .PO format is used by the GNU gettext tool, and allow to use some
 // very useful translation tools
@@ -633,7 +633,7 @@ type
 // - if not SourceMsgPath is supplied, the current directory is used (not
 // necessary the executable directory)
 procedure POExport(const SourceMsgPath, POFileName: TFileName; SourceLanguage: TLanguages);
-*)
+}
 
 /// generic US/English date/time to VCL text conversion
 // - not to be used in your programs: it's just here to allow inlining of
@@ -2101,7 +2101,7 @@ begin
     DateTimeToString(Result,TimeFmt,TTimeLogBits(Time).ToTime);
 {$endif}
 end;
-(*
+{
 procedure POExport(const SourceMsgPath, POFileName: TFileName; SourceLanguage: TLanguages);
 var English, Source: TLanguageFile;
     SourceDir: TFileName;
@@ -2135,7 +2135,7 @@ begin
     Dest.Free;
   end;
 end;
-*)
+}
 
 
 { TLanguage }

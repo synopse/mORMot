@@ -1853,7 +1853,7 @@ begin
     Check(RawUTF8DynArrayLoadFromContains(pointer(Test),pointer(U),length(U),true)=i);
   end;
   for i := 0 to 1000 do begin
-    U := Int32ToUtf8(i+1000);
+    U := UInt32ToUtf8(i+1000);
     Test2 := AUP.ElemSave(U);
     Check(length(Test2)>4);
     U := '';
