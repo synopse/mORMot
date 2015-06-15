@@ -9341,12 +9341,16 @@ type
   protected
     fZone: TTimeZoneDataDynArray;
     fZones: TDynArrayHashed;
+    fLastZone: RawUTF8;
+    fLastIndex: integer;
+    fIds: TStringList;
+    fDisplays: TStringList;
   public
     /// will retrieve the default shared TSynTimeZone instance
     // - locally created via the CreateDefault constructor
     // - this is the usual entry point for time zone process, calling e.g.
-    // $ aLocalTime := TSynTimeZone.Info.NowTz(aTimeZoneID);
-    class function Info: TSynTimeZone;
+    // $ aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
+    class function Default: TSynTimeZone;
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
     constructor Create;
@@ -9354,6 +9358,8 @@ type
     // - under Linux, the file should be located with the executable, renamed
     // with a .tz extension - may have been created via SaveToFile('')
     constructor CreateDefault;
+    /// finalize the instance
+    destructor Destroy; override;
     {$ifdef MSWINDOWS}
     {$ifndef LVCL}
     /// read time zone information from the Windows registry
@@ -9389,6 +9395,12 @@ type
     property Zone: TTimeZoneDataDynArray read fZone;
     /// direct access to the wrapper over the time zone information array
     property Zones: TDynArrayHashed read fZones;
+    /// returns a TStringList of all TzID values
+    // - could be used to fill any VCL component to select the time zone
+    function Ids: TStrings;
+    /// returns a TStringList of all Display text values
+    // - could be used to fill any VCL component to select the time zone
+    function Displays: TStrings;
   end;
 
 var
@@ -25284,10 +25296,17 @@ begin
   {$endif}
 end;
 
+destructor TSynTimeZone.Destroy;
+begin
+  inherited Destroy;
+  fIds.Free;
+  fDisplays.Free;
+end;
+
 var
   SharedSynTimeZone: TSynTimeZone;
 
-class function TSynTimeZone.Info: TSynTimeZone;
+class function TSynTimeZone.Default: TSynTimeZone;
 begin
   if SharedSynTimeZone=nil then begin
     SharedSynTimeZone := TSynTimeZone.CreateDefault;
@@ -25401,9 +25420,14 @@ var ndx: integer;
     tzi: PTimeZoneInfo;
     std,dlt: TDateTime;
 begin
-  if self=nil then
+  if (self=nil) or (TzId='') then
     ndx := -1 else
-    ndx := fZones.FindHashed(TzID);
+    if TzID=fLastZone then
+      ndx := fLastIndex else begin
+      ndx := fZones.FindHashed(TzID);
+      fLastZone := TzID;
+      flastIndex := ndx;
+    end;
   if ndx<0 then begin
     Bias := 0;
     HaveDayLight := false;
@@ -25435,7 +25459,7 @@ function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
 var Bias: integer;
     HaveDaylight: boolean;
 begin
-  if self=nil then
+  if (self=nil) or (TzId='') then
     result := UtcDateTime else begin
     GetBiasForDateTime(UtcDateTime,TzId,Bias,HaveDaylight);
     result := ((UtcDateTime*MinsPerDay)-Bias)/MinsPerDay;
@@ -25451,11 +25475,33 @@ function TSynTimeZone.LocalToUtc(const LocalDateTime: TDateTime; const TzID: Raw
 var Bias: integer;
     HaveDaylight: boolean;
 begin
-  if self=nil then
+  if (self=nil) or (TzId='') then
     result := LocalDateTime else begin
     GetBiasForDateTime(LocalDateTime,TzId,Bias,HaveDaylight);
     result := ((LocalDateTime*MinsPerDay)+Bias)/MinsPerDay;
   end;
+end;
+
+function TSynTimeZone.Ids: TStrings;
+var i: integer;
+begin
+  if fIDs=nil then begin
+    fIDs := TStringList.Create;
+    for i := 0 to high(fZone) do
+      fIDs.Add(UTF8ToString(fZone[i].id));
+  end;
+  result := fIDs;
+end;
+
+function TSynTimeZone.Displays: TStrings;
+var i: integer;
+begin
+  if fDisplays=nil then begin
+    fDisplays := TStringList.Create;
+    for i := 0 to high(fZone) do
+      fDisplays.Add(UTF8ToString(fZone[i].Display));
+  end;
+  result := fDisplays;
 end;
 
 
