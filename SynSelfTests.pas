@@ -314,6 +314,8 @@ type
     /// the ISO-8601 date and time encoding
     // - test especially the conversion to/from text
     procedure Iso8601DateAndTime;
+    /// test the TSynTimeZone class and its cross-platform local time process
+    procedure TimeZones;
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
     procedure UrlDecoding;
@@ -3099,6 +3101,98 @@ begin
   Check(not Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
 end;
 
+procedure TTestLowLevelCommon.TimeZones;
+var tz: TSynTimeZone;
+    d: TTimeZoneData;
+    i,bias: integer;
+    hdl,reload: boolean;
+    buf: RawByteString;
+    dt,local: TDateTime;
+procedure testBias(year,expected: integer);
+begin
+  check(tz.GetBiasForDateTime(EncodeDate(year,10,30),'1',bias,hdl));
+  check(bias=expected);
+end;
+begin
+  tz := TSynTimeZone.Create;
+  try
+    check(tz.Zone=nil);
+    fillchar(d,sizeof(d),0);
+    for i := 0 to 40 do begin
+      UInt32ToUTF8(i,d.id);
+      d.display := 'displayed '+d.id;
+      d.tzi.Bias := i;
+      check(tz.Zones.Add(d)=i,'add some zones');
+    end;
+    tz.Zones.ReHash;
+    dt := nowutc;
+    for reload := false to true do begin
+      check(tz.Zone<>nil);
+      check(tz.Zones.Count=41);
+      for i := 0 to 40 do begin
+        UInt32ToUTF8(i,d.id);
+        check(tz.GetDisplay(d.id)='displayed '+d.id);
+        hdl := true;
+        check(tz.GetBiasForDateTime(dt,d.id,bias,hdl));
+        check(bias=i);
+        check(not hdl);
+      end;
+      check(not tz.GetBiasForDateTime(dt,'fail',bias,hdl));
+      buf := tz.SaveToBuffer;
+      tz.Zones.Clear;
+      check(tz.Zone=nil);
+      tz.LoadFromBuffer(buf);
+    end;
+    with tz.Zone[1] do begin
+      SetLength(dyn,4);
+      dyn[0].year := 2000;
+      dyn[0].tzi.bias := 3600;
+      dyn[1].year := 2003;
+      dyn[1].tzi.bias := 3601;
+      dyn[2].year := 2005;
+      dyn[2].tzi.bias := 3602;
+      dyn[3].year := 2006;
+      dyn[3].tzi.bias := 3603;
+    end;
+    testBias(1990,3600);
+    testBias(2000,3600);
+    testBias(2001,3600);
+    testBias(2002,3600);
+    testBias(2003,3601);
+    testBias(2004,3601);
+    testBias(2005,3602);
+    testBias(2006,3603);
+    testBias(2007,3603);
+    testBias(2008,3603);
+  finally
+    tz.Free;
+  end;
+  {$ifdef MSWINDOWS}
+  tz := TSynTimeZone.CreateDefault;
+  try
+    local := tz.UtcToLocal(dt,'UTC');
+    check(SameValue(local,dt));
+    check(tz.GetBiasForDateTime(dt,'UTC',bias,hdl));
+    check(bias=0);
+    check(not hdl);
+    local := tz.UtcToLocal(dt,'Romance Standard Time');
+    check(not SameValue(local,dt),'Paris never aligns with London');
+    check(tz.GetBiasForDateTime(dt,'Romance Standard Time',bias,hdl));
+    check(hdl);
+    buf := tz.SaveToBuffer;
+  finally
+    tz.Free;
+  end;
+  tz := TSynTimeZone.Create;
+  try
+    tz.LoadFromBuffer(buf);
+    CheckSame(local,tz.UtcToLocal(dt,'Romance Standard Time'));
+  finally
+    tz.Free;
+  end;
+  {$endif}
+end;
+
 procedure TTestLowLevelCommon._IdemPropName;
 const abcde: PUTF8Char = 'ABcdE';
       abcdf: PUTF8Char = 'ABcdF';
@@ -4477,14 +4571,11 @@ const // convention may be to use __ before the type name
   discogsFileName = 'discogs.json';
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
-var J,U,U2: RawUTF8;
+var J,U: RawUTF8;
     binary,zendframeworkJson,discogsJson: RawByteString;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
-    {$ifndef DELPHI5OROLDER}
-    peop: TSQLRecordPeople;
-    {$endif}
     Parser: TJSONRecordTextDefinition;
     JR,JR2: TTestCustomJSONRecord;
     JA,JA2: TTestCustomJSONArray;
@@ -4496,7 +4587,8 @@ var J,U,U2: RawUTF8;
     Disco: TTestCustomDiscogs;
     Cache: TSQLRestCacheEntryValue;
 {$ifndef DELPHI5OROLDER}
-    K: RawUTF8;
+    peop: TSQLRecordPeople;
+    K,U2: RawUTF8;
     Valid: boolean;
 {$ifndef LVCL}
     Instance: TClassInstance;

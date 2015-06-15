@@ -9303,6 +9303,7 @@ type
     wSecond: Word;
     wMilliseconds: Word;
     function IsZero: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function EncodeForTimeChange(const year: word): TDateTime;
   end;
   /// used to store Time Zone bias in TSynTimeZone
@@ -9314,8 +9315,9 @@ type
     change_time_std: TTimeZoneValue;
     change_time_dlt: TTimeZoneValue;
   end;
+  PTimeZoneInfo = ^TTimeZoneInfo;
   /// used to store Time Zone information for a single area in TSynTimeZone
-  TTimeZoneData = record
+  TTimeZoneData = object
     id: RawUTF8;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
@@ -9323,15 +9325,16 @@ type
       year: integer;
       tzi: TTimeZoneInfo;
     end;
+    function GetTziFor(year: integer): PTimeZoneInfo;
   end;
   /// used to store the Time Zone information of a TSynTimeZone class
   TTimeZoneDataDynArray = array of TTimeZoneData;
   {$A+}
 
-  /// handle cross-platform time zone information
+  /// handle cross-platform time conversions, following Microsoft time zones 
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
-  // saved from an updated Windows system first) 
+  // saved from a Windows system first) 
   // - each time zone will be idendified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
   TSynTimeZone = class
@@ -9371,11 +9374,17 @@ type
     function GetBiasForDateTime(const Value: TDateTime; const TzId: RawUTF8;
       out Bias: integer; out HaveDaylight: boolean): boolean;
     /// retrieve the display text corresponding to a TzId
+    // - returns '' if the supplied TzId is not recognized
     function GetDisplay(const TzId: RawUTF8): RawUTF8;
     /// compute the UTC date/time corrected for a given TzId
-    function UtcTz(const UtcDateTime: TDateTime; const TzId: RawUTF8): TDateTime;
+    function UtcToLocal(const UtcDateTime: TDateTime; const TzId: RawUTF8): TDateTime;
     /// compute the current date/time corrected for a given TzId
-    function NowTz(const TzId: RawUTF8): TDateTime;
+    function NowToLocal(const TzId: RawUTF8): TDateTime;
+    /// compute the UTC date/time for a given local TzId value
+    // - by definition, a local time may correspond to two UTC times, during the
+    // time biais period, so the returned value is informative only, and any
+    // stored value should be following UTC
+    function LocalToUtc(const LocalDateTime: TDateTime; const TzID: RawUTF8): TDateTime;
     /// direct access to the low-level time zone information
     property Zone: TTimeZoneDataDynArray read fZone;
     /// direct access to the wrapper over the time zone information array
@@ -25193,14 +25202,14 @@ end;
 
 { TTimeZoneValue }
 
-function TryEncodeDayOfWeekInMonth(const AYear, AMonth,
-  ANthDayOfWeek, ADayOfWeek: Word; out AValue: TDateTime): Boolean;
-var LStartOfMonth, LDay: Word;
-begin // from DateUtils
+function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: integer;
+  out AValue: TDateTime): Boolean;
+var LStartOfMonth, LDay: integer;
+begin // adapted from DateUtils
   LStartOfMonth := (DateTimeToTimeStamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
   if LStartOfMonth<=ADayOfWeek then
-    LDay := (ADayOfWeek-LStartOfMonth+1)+7*(ANthDayOfWeek-1) else
-    LDay := (7-LStartOfMonth+1)+ADayOfWeek+7*(ANthDayOfWeek-1);
+    dec(ANthDayOfWeek);
+  LDay := (ADayOfWeek-LStartOfMonth+1)+7*ANthDayOfWeek;
   result := TryEncodeDate(AYear,AMonth,LDay,AValue);
 end;
 
@@ -25228,6 +25237,29 @@ end;
 function TTimeZoneValue.IsZero: boolean;
 begin
   result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
+end;
+
+
+{ TTimeZoneData }
+
+function TTimeZoneData.GetTziFor(year: integer): PTimeZoneInfo;
+var i,last: integer;
+begin
+  if dyn=nil then
+    result := @tzi else
+    if year<=dyn[0].year then
+      result := @dyn[0].tzi else begin
+      last := high(dyn);
+      if year>=dyn[last].year then
+        result := @dyn[last].tzi else begin
+        for i := 1 to last do
+          if year<dyn[i].year then begin
+            result := @dyn[i-1].tzi;
+            exit;
+          end;
+        result := @tzi; // should never happen, but makes compiler happy
+      end;
+    end;
 end;
 
 
@@ -25358,16 +25390,15 @@ begin
     ndx := -1 else
     ndx := fZones.FindHashed(TzID);
   if ndx<0 then
-    result := TzId else
+    result := '' else
     result := fZone[ndx].display;
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
   const TzId: RawUTF8; out Bias: integer; out HaveDaylight: boolean): boolean;
-var ndx,i: integer;
-    item: ^TTimeZoneData;
+var ndx: integer;
     y,m,d: word;
-    tzi: ^TTimeZoneInfo;
+    tzi: PTimeZoneInfo;
     std,dlt: TDateTime;
 begin
   if self=nil then
@@ -25379,21 +25410,8 @@ begin
     result := false;
     exit;
   end;
-  item := @fZone[ndx];
   DecodeDate(Value,y,m,d);
-  tzi := nil;
-  if item^.dyn<>nil then
-    if y<=item^.dyn[0].year then
-      tzi := @item^.dyn[0].tzi else
-    if y>=item^.dyn[high(item^.dyn)].year then
-      tzi := @item^.dyn[high(item^.dyn)].tzi else
-      for i := 1 to high(item^.dyn) do
-        if item^.dyn[i].year>y then begin
-          tzi := @item^.dyn[i-1].tzi;
-          break;
-        end;
-  if tzi=nil then
-    tzi := @item^.tzi;
+  tzi := fZone[ndx].GetTziFor(y);
   if tzi.change_time_std.IsZero then begin
     HaveDaylight := false;
     Bias := tzi.Bias+tzi.bias_std;
@@ -25412,7 +25430,7 @@ begin
   result := true;
 end;
 
-function TSynTimeZone.UtcTz(const UtcDateTime: TDateTime;
+function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
   const TzId: RawUTF8): TDateTime;
 var Bias: integer;
     HaveDaylight: boolean;
@@ -25424,10 +25442,22 @@ begin
   end;
 end;
 
-function TSynTimeZone.NowTz(const TzId: RawUTF8): TDateTime;
+function TSynTimeZone.NowToLocal(const TzId: RawUTF8): TDateTime;
 begin
-  result := UtcTz(NowUtc,TzId);
+  result := UtcToLocal(NowUtc,TzId);
 end;
+
+function TSynTimeZone.LocalToUtc(const LocalDateTime: TDateTime; const TzID: RawUTF8): TDateTime;
+var Bias: integer;
+    HaveDaylight: boolean;
+begin
+  if self=nil then
+    result := LocalDateTime else begin
+    GetBiasForDateTime(LocalDateTime,TzId,Bias,HaveDaylight);
+    result := ((LocalDateTime*MinsPerDay)+Bias)/MinsPerDay;
+  end;
+end;
+
 
 
 procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
