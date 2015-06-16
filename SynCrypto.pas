@@ -1326,13 +1326,15 @@ begin
   if not result then exit;
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
   result := Comparemem(@Digest,@D3,sizeof(Digest));
-  {$ifdef CPUX64}
+  {$ifdef CPU64}
+  {$ifdef CPUINTEL}
   if cfSSE41 in CpuFeatures then begin
     Exclude(CpuFeatures,cfSSE41);
     result := result and SingleTest('abc', D1) and
        SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
     Include(CpuFeatures,cfSSE41);
-  end
+  end;
+  {$endif}
   {$endif}
 end;
 
@@ -2163,7 +2165,7 @@ begin
   end;
   Nk := KeySize div 32;
   Move(Key, ctx.RK, 4*Nk);
-  {$ifdef NOTPUREPASCALNORCPU64DELPHI}
+  {$ifdef CPUINTEL}
   ctx.AesNi := cfAESNI in CpuFeatures;
   {$else}
   ctx.AesNi := false;
@@ -3033,14 +3035,19 @@ const
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
-  {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // rcx=input_data rdx=digest r8=num_blks
-        {$ifdef CPUX64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .NOFRAME
-        {$endif}
+{$endif FPC}
         push    rbx
-        {$ifndef LINUX}
-        push    rsi
+        {$ifdef LINUX}
+        mov rcx,rdi
+        mov r8,rdx
+        mov rdx,rsi
+        {$else}
+        push    rsi   // Win64 expects those registers to be preserved
         push    rdi
         {$endif}
         push    rbp
@@ -3988,7 +3995,7 @@ var H: TSHAHash;
     t1, t2: cardinal;
     {$endif}
 begin
-  {$ifdef CPUX64}
+  {$ifdef CPU64}
   if cfSSE41 in CpuFeatures then begin
     if K256Aligned='' then
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));

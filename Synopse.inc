@@ -212,11 +212,13 @@
 
   {$ifdef CPU64}
     {$define PUREPASCAL}
+    {$define CPUINTEL}
   {$else}
     {$ifdef CPUARM}
     {$define PUREPASCAL}
     {$else}
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
+    {$define CPUINTEL}
     {$endif}
     // FPC has its own RTTI layout only since late 3.x
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
@@ -249,6 +251,7 @@
 
 {$else FPC}
 
+  {$define CPUINTEL} // no NextGen support yet
   {$ifdef CPUX64}
     {$define CPU64} // Delphi compiler for 64 bit CPU
     {$define CPU64DELPHI}
@@ -366,11 +369,7 @@
   {$define NODELPHIASM}
   {$define FPC_OR_PUREPASCAL}
   {$undef DOPATCHTRTL}
-  {$ifdef CPU64DELPHI}
-    {$define NOTPUREPASCALNORCPU64DELPHI}
-  {$endif CPU64DELPHI}
 {$else}
-  {$define NOTPUREPASCALNORCPU64DELPHI}
 {$endif PUREPASCAL}
 
 {$R-} // disable Range checking in our code

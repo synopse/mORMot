@@ -8584,7 +8584,7 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
-{$ifdef NOTPUREPASCALNORCPU64DELPHI}
+{$ifdef CPUINTEL}
 var
   /// the available CPU features, as recognized at program startup
   CpuFeatures: set of
@@ -8605,7 +8605,7 @@ var
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$endif}
+{$endif CPUINTEL}
 
 /// naive symmetric encryption scheme using a 32 bit key
 // - fast, but not very secure
@@ -14953,9 +14953,17 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-{$ifdef CPU64DELPHI}
-asm // rcx=P, rdx=val
+{$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=P, rdx=val (Linux: rdi,rsi)
     .NOFRAME
+{$endif FPC}
+    {$ifndef win64}
+    mov rcx,rdi
+    mov rdx,rsi
+    {$endif win64}
     mov r10,rdx
     sar r10,63                  // r10=0 if val>=0 or -1 if val<0
     xor rdx,r10
@@ -15055,9 +15063,17 @@ end;
 {$endif PUREPASCAL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef CPU64DELPHI}
-asm // rcx=P, rdx=val
+{$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=P, rdx=val (Linux: rdi,rsi)
     .NOFRAME
+{$endif FPC}
+    {$ifndef win64}
+    mov rcx,rdi
+    mov rdx,rsi
+    {$endif win64}
     cmp rdx,10; jb @3           // direct process of common val<10
     mov rax,rdx
     lea r8,TwoDigitLookupW
@@ -15385,9 +15401,6 @@ type
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
-    {$ifdef CPUX64}
-    _Padding: LongInt; // Delphi XE2+ expects 16 byte alignment
-    {$endif}
     /// dynamic array reference count (basic garbage memory mechanism)
     {$ifdef FPC}
     refCnt: PtrInt;
@@ -15396,6 +15409,9 @@ type
     procedure SetLength(len: sizeint); inline;
     property length: sizeint read GetLength write SetLength;
     {$else}
+    {$ifdef CPUX64}
+    _Padding: LongInt; // Delphi XE2+ expects 16 byte alignment
+    {$endif}
     refCnt: Longint;
     /// length in element count
     // - size in bytes = length*ElemSize
@@ -16026,20 +16042,19 @@ end;
 {$endif UNICODE}
 
 {$ifdef CPU64}
-function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe; assembler;{$endif}
+function bswap32(a: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;
 asm
-  {$ifdef FPC} // see function SwapEndian() in x86_64.inc
+{$else}
+asm
+  .NOFRAME // eax=a (Linux: edi)
+{$endif FPC}
   {$ifdef win64}
-  mov %eax,%ecx
-  {$else}
-  mov %eax,%edi
-  {$endif win64}
-  bswap %eax
-  {$else}
-  .NOFRAME
   mov eax,ecx
+  {$else}
+  mov eax,edi
+  {$endif win64} 
   bswap eax
-  {$endif}
 end;
 {$else}
 {$ifdef PUREPASCAL}
@@ -24094,18 +24109,28 @@ asm // eax=crc, edx=buf, ecx=len
 end;
 {$endif}
 
+{$ifdef CPUINTEL}
 type
  TRegisters = record
    eax,ebx,ecx,edx: cardinal;
  end;
 
-{$ifdef CPU64DELPHI}
+{$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
+{$ifdef FPC}nostackframe; assembler;
 asm
+{$else}
+asm // ecx=param, rdx=Registers (Linux: edi,rsi)
   .NOFRAME
+{$endif FPC}
+  {$ifdef win64}
   mov eax,ecx
   mov r9,rdx
-  mov r10,rbx
+  {$else}
+  mov eax,edi
+  mov r9,rsi
+  {$endif win64}
+  mov r10,rbx // preserve rbx
   xor ebx,ebx
   xor ecx,ecx
   xor edx,edx
@@ -24118,8 +24143,19 @@ asm
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-asm // ecx=crc, rdx=buf, r8=len
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
+  .NOFRAME
+{$endif FPC}
+    {$ifdef win64}
     mov eax,ecx
+    {$else}
+    mov eax,edi
+    mov r8,rdx
+    mov rdx,rsi
+    {$endif win64}
     not eax
     test r8,r8;   jz @0
     test rdx,rdx; jz @0
@@ -24149,7 +24185,8 @@ asm // ecx=crc, rdx=buf, r8=len
     crc32 dword ptr eax,byte ptr [rdx+2]
 @0: not eax
 end;
-{$endif CPU64DELPHI}
+{$endif CPU64}
+{$endif CPUINTEL}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
@@ -27510,9 +27547,7 @@ end;
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 asm
 {$ifdef CPU64}
-  {$ifdef CPUX64}
   .NOFRAME
-  {$endif}
   jmp System.@CopyArray
 {$else}
   push dword ptr [EBP+8]
@@ -27853,9 +27888,7 @@ procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
 {$else}
 asm
 {$ifdef CPU64}
-        {$ifdef CPUX64}
         .NOFRAME
-        {$endif}
         mov r8,1 // rcx=p rdx=typeInfo r8=ElemCount
         jmp System.@FinalizeArray
 {$else} // much faster than FinalizeArray(Data,TypeInfo,1)
@@ -28029,17 +28062,17 @@ end;
 {$ifdef EXPECTSDELPHIRTLRECORDCOPYCLEAR}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
-{$ifdef CPUX64}
+  {$ifdef CPU64}
   .NOFRAME
-{$endif}
+  {$endif}
   jmp System.@CopyRecord
 end;
 
 procedure RecordClear(var Dest; TypeInfo: pointer);
 asm
-{$ifdef CPUX64}
+  {$ifdef CPU64}
   .NOFRAME
-{$endif}
+  {$endif}
   jmp System.@FinalizeRecord
 end;
 {$endif EXPECTSDELPHIRTLRECORDCOPYCLEAR}
@@ -34823,7 +34856,7 @@ procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
   [external name 'FPC_DYNARRAY_CLEAR'];
 {$else}
 asm
-{$ifdef CPUX64}
+{$ifdef CPU64}
   .NOFRAME
 {$endif}
   jmp System.@DynArrayClear
@@ -34835,7 +34868,7 @@ procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
   [external name 'FPC_FINALIZE_ARRAY'];
 {$else}
 asm
-{$ifdef CPUX64}
+{$ifdef CPU64}
   .NOFRAME
 {$endif}
   jmp System.@FinalizeArray
@@ -47183,7 +47216,7 @@ procedure InitSynCommonsConversionTables;
 var i,n: integer;
     v: byte;
     crc: cardinal;
-{$ifdef NOTPUREPASCALNORCPU64DELPHI}
+{$ifdef CPUINTEL}
   regs: TRegisters;
 {$endif}
 {$ifdef OWNNORMTOUPPER}
@@ -47261,14 +47294,14 @@ begin
       crc32ctab[n,i] := crc;
     end;
   end;
-  {$ifdef NOTPUREPASCALNORCPU64DELPHI}
+  {$ifdef CPUINTEL}
   fillchar(regs,sizeof(regs),0);
   GetCPUID(1,regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
   if cfSSE42 in CpuFeatures then
     crc32c := @crc32csse42 else
-  {$endif}
+  {$endif CPUINTEL}
     crc32c := @crc32cfast;
   DefaultHasher := crc32c;
 end;

@@ -2542,14 +2542,9 @@ begin
   end;
   Test(crc32cpas,'pas');
   Test(crc32cfast,'fast');
-  {$ifdef CPU64DELPHI}
+  {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
-  {$else}
-  {$ifndef PUREPASCAL}
-  if cfSSE42 in CpuFeatures then
-    Test(crc32csse42,'sse42');
-  {$endif}
   {$endif}
   exit; // code below is speed informative only, without any test
   Timer.Start;
@@ -7651,7 +7646,7 @@ begin
         AES.outStreamCreated.Free;
       end;
     end;
-    {$ifndef NOTPUREPASCALNORCPU64DELPHI}
+    {$ifndef CPUINTEL}
     break;
     {$else}
     if noaesni then begin
@@ -7662,7 +7657,7 @@ begin
     if A.UsesAESNI then
       Exclude(CpuFeatures,cfAESNI) else
       break;
-    {$endif}
+    {$endif CPUINTEL}
   end;
 end;
 
