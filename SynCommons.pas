@@ -16047,7 +16047,7 @@ function bswap32(a: cardinal): cardinal;
 asm
 {$else}
 asm
-  .NOFRAME // eax=a (Linux: edi)
+  .NOFRAME // ecx=a (Linux: edi)
 {$endif FPC}
   {$ifdef win64}
   mov eax,ecx

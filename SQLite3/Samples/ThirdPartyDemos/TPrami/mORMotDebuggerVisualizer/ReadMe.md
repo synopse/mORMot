@@ -18,7 +18,7 @@ Helped me to track some bugs in my project.
 
 # Installation
 
-Ensure your *mORMot* source code folders is in your general IDE settings, or add them in package `mORMotDebuggerVisualizer.dpk', compile and install.
+Ensure your *mORMot* source code folders is in your general IDE settings, or add them in package `mORMotDebuggerVisualizer.dpk`, compile and install.
 
 # Forum Thread
 
