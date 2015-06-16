@@ -5347,7 +5347,8 @@ type
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
     procedure ReturnsJson(const Value: variant; Status: integer=HTML_SUCCESS;
-      Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape);
+      Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape;
+      MakeHumanReadable: boolean=false);
     /// uses this method to send back directly any binary content to the caller
     // - the exact MIME type will be retrieved using GetMimeContentTypeHeader()
     // - by default, the HTML_NOTMODIFIED process will take place, to minimize
@@ -34414,10 +34415,14 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ReturnsJson(const Value: Variant; Status: integer;
-  Handle304NotModified: boolean; Escape: TTextWriterKind);
-var json: RawUTF8;
+  Handle304NotModified: boolean; Escape: TTextWriterKind; MakeHumanReadable: boolean);
+var json,tmp: RawUTF8;
 begin
   VariantSaveJSON(Value,Escape,json);
+  if MakeHumanReadable and (json<>'') and (json[1] in ['{','[']) then begin
+    tmp := json;
+    JSONBufferReformat(pointer(tmp),json);
+  end;
   Returns(json,Status,'',Handle304NotModified);
 end;
 
