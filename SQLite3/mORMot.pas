@@ -3943,10 +3943,12 @@ type
     fThroughput: TSynMonitorThroughput;
     procedure FillPerSecProperties; override;
   public
+    {$ifndef CPU64}
     /// increase the internal size counter
     procedure AddSize(const Bytes: QWord); overload; {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
     /// increase the internal size counter
-    procedure AddSize(Bytes: integer); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure AddSize(Bytes: PtrInt); overload; {$ifdef HASINLINE}inline;{$endif}
     /// could be used to manage information average or sums
     procedure Sum(another: TSynMonitor); override;
   published
@@ -20207,12 +20209,14 @@ begin
   fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
 end;
 
+{$ifndef CPU64}
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
   fSize.Bytes := fSize.Bytes+Bytes;
 end;
+{$endif}
 
-procedure TSynMonitorWithSize.AddSize(Bytes: integer);
+procedure TSynMonitorWithSize.AddSize(Bytes: PtrInt);
 begin
   fSize.Bytes := fSize.Bytes+Bytes;
 end;

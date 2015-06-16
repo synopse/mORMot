@@ -14972,16 +14972,16 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     mov rax,rdx
     lea r8,TwoDigitLookupW
 @s: cmp rax,100
-    lea rcx,rcx-2
+    lea rcx,[rcx-2]
     jb @2
-    lea r9,rax*2
+    lea r9,[rax*2]
     shr rax,2
     mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
     mul rdx
     shr rdx,2
     mov rax,rdx
     imul rdx,-200
-    lea rdx,rdx+r8
+    lea rdx,[rdx+r8]
     movzx rdx,word ptr [rdx+r9]
     mov [rcx],dx
     cmp rax,10
@@ -15078,16 +15078,16 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     mov rax,rdx
     lea r8,TwoDigitLookupW
 @s: cmp rax,100
-    lea rcx,rcx-2
+    lea rcx,[rcx-2]
     jb @2
-    lea r9,rax*2
+    lea r9,[rax*2]
     shr rax,2
     mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
     mul rdx
     shr rdx,2
     mov rax,rdx
     imul rdx,-200
-    lea rdx,rdx+r8
+    lea rdx,[rdx+r8]
     movzx rdx,word ptr [rdx+r9]
     mov [rcx],dx
     cmp rax,10
@@ -24160,29 +24160,29 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
     test r8,r8;   jz @0
     test rdx,rdx; jz @0
 @7: test rdx,7;   jz @8 // align to 8 bytes boundary
-    crc32 dword ptr eax,byte ptr [rdx]
+    crc32 eax,byte ptr [rdx]
     inc rdx
     dec r8;     jz @0
     test rdx,7; jnz @7
 @8: mov rcx,r8
     shr r8,3
     jz @2
-@1: crc32 dword ptr eax,dword ptr [rdx]
-    crc32 dword ptr eax,dword ptr [rdx+4]
+@1: crc32 eax,dword ptr [rdx]
+    crc32 eax,dword ptr [rdx+4]
     dec r8
-    lea rdx,rdx+8
+    lea rdx,[rdx+8]
     jnz @1
 @2: and rcx,7; jz @0
     cmp rcx,4; jb @4
-    crc32 dword ptr eax,dword ptr [rdx]
+    crc32 eax,dword ptr [rdx]
     sub rcx,4
-    lea rdx,rdx+4
+    lea rdx,[rdx+4]
     jz @0
-@4: crc32 dword ptr eax,byte ptr [rdx]
+@4: crc32 eax,byte ptr [rdx]
     dec rcx; jz @0
-    crc32 dword ptr eax,byte ptr [rdx+1]
+    crc32 eax,byte ptr [rdx+1]
     dec rcx; jz @0
-    crc32 dword ptr eax,byte ptr [rdx+2]
+    crc32 eax,byte ptr [rdx+2]
 @0: not eax
 end;
 {$endif CPU64}

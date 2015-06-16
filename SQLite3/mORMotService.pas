@@ -745,17 +745,20 @@ begin
 end;
 
 procedure JumpToService;
-asm
 {$ifdef CPU64}
-  {$ifdef CPUX64}
-  .NOFRAME
-  {$endif}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm
+  .NOFRAME 
+{$endif FPC}
   pop  rax
   mov  rax,[rax] // !!! THIS WON'T WORK!
   mov  rdx,[esp+8]
   call TService.CtrlHandle
   ret  8
 {$else}
+asm
   pop  eax
   mov  eax, [eax]           // retrieve self value
   mov  edx, [esp+4]
