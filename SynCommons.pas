@@ -14316,22 +14316,22 @@ var c: Cardinal;
     i,j: integer;
 begin
   result := PtrInt(Dest);
+  inc(DestLen,PtrInt(Dest));
   if (Source<>nil) and (Dest<>nil) then begin
     // first handle 7 bit ASCII WideChars, by pairs (Sha optimization)
     SourceLen := SourceLen*2+PtrInt(Source);
     Tail := PWideChar(SourceLen)-2;
-    if Source<=Tail then
-    repeat
-      c := PCardinal(Source)^;
-      if c and $ff80ff80<>0 then
-        break; // break on first non ASCII pair
-      inc(Source,2);
-      c := c shr 8 or c;
-      pWord(Dest)^ := c;
-      inc(Dest,2);
-    until Source>Tail;
+    if (PtrInt(Dest)<DestLen) and (Source<=Tail) then
+      repeat
+        c := PCardinal(Source)^;
+        if c and $ff80ff80<>0 then
+          break; // break on first non ASCII pair
+        inc(Source,2);
+        c := c shr 8 or c;
+        pWord(Dest)^ := c;
+        inc(Dest,2);
+      until (Source>Tail) or (PtrInt(Dest)>=DestLen);
     // generic loop, handling one UCS4 char per iteration
-    Inc(DestLen,PtrInt(Dest));
     if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then
     repeat
       // inlined UTF16CharToUtf8()
@@ -14345,12 +14345,12 @@ begin
       end;
       UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX: begin
         if PtrInt(Source)>=SourceLen then break;
-        c := ((c-$D7C0)shl 10)+(ord(Source^) xor UTF16_LOSURROGATE_MIN);
+        c := ((c-$D7C0)shl 10)+(cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
       UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX: begin
         if PtrInt(Source)>=SourceLen then break;
-        c := ((cardinal(ord(Source^))-$D7C0)shl 10)+(c xor UTF16_LOSURROGATE_MIN);
+        c := ((cardinal(Source^)-$D7C0)shl 10)+(c xor UTF16_LOSURROGATE_MIN);
         inc(Source);
       end;
       end; // now c is the UTF-32/UCS4 code point
