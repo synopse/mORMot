@@ -2721,6 +2721,12 @@ procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUp
 // - if ToUpperCase is TRUE, then LeftStr and result will be made uppercase
 function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
 
+/// split a RawUTF8 string into several strings, according to SepStr separator
+// - this overloaded function will fill a DestPtr[] array of PRawUTF8
+// - if any DestPtr[]=nil, the item will be skipped
+procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8); overload;
+
 /// fast replacement of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
@@ -16759,6 +16765,34 @@ begin
   Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
 
+procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8);
+var s,i,j,n: integer;
+begin
+  j := 1;
+  n := 0;
+  s := 0;
+  if high(SepStr)>=0 then
+    while n<=high(DestPtr) do begin
+      i := PosEx(SepStr[s],Str,j);
+      if i=0 then begin
+        if DestPtr[n]<>nil then
+          DestPtr[n]^ := copy(Str,j,MaxInt);
+        inc(n);
+        break;
+      end;
+      if DestPtr[n]<>nil then
+        DestPtr[n]^ := copy(Str,j,i-j);
+      inc(n);
+      if s<high(SepStr) then
+        inc(s);
+      j := i+1;
+    end;
+  for i := n to high(DestPtr) do
+    if DestPtr[i]<>nil then
+      DestPtr[i]^ := '';
+end;
+
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 procedure Process(j: integer);
 var i: integer;
@@ -26518,7 +26552,7 @@ end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
 var L,i,cmp: PtrInt;
-begin
+begin // fast binary search
   if R<0 then
     result := 0 else begin
     L := 0;
@@ -26540,7 +26574,7 @@ end;
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 var L,i,cmp: PtrInt;
-begin
+begin // fast binary search 
   if not Assigned(Compare) or (R<0) then
     result := 0 else begin
     L := 0;
@@ -26562,7 +26596,7 @@ end;
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 var L, cmp: PtrInt;
-begin
+begin // fast binary search
   L := 0;
   if Assigned(Compare) and (0<=R) then
   repeat
@@ -26578,9 +26612,8 @@ begin
 end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
-// very fast find using a binary search
 var L, cmp: PtrInt;
-begin
+begin// fast binary search
   L := 0;
   if 0<=R then
   repeat
@@ -26598,9 +26631,8 @@ end;
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
   var SortedIndexes: TCardinalDynArray; Value: PUTF8Char;
   ItemComp: TUTF8Compare): PtrInt;
-// very fast find using a binary search
 var L, cmp: PtrInt;
-begin
+begin // fast binary search
   L := 0;
   if 0<=R then
   repeat
@@ -36123,7 +36155,7 @@ begin
     H := Hash(O);
     ndx := HashFind(H,O);
     if ndx>=0 then
-      raise ESynException.CreateUTF8('%.HashInit found dup',[self]);
+      raise ESynException.CreateUTF8('%.HashInit found dup at index %',[self,ndx]);
     with fHashs[-ndx-1] do begin
       Hash := H;
       Index := i;
