@@ -24040,7 +24040,9 @@ const null_vardata: TVarData = (VType: varNull);
 
 procedure TPropInfo.SetDefaultValue(Instance: TObject);
 var Item: TObject;
+    {$ifdef PUBLISHRECORD}
     rec: pointer;
+    {$endif}
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
@@ -24068,7 +24070,7 @@ begin
       Item.Free;
     end;
   end;
-  {$ifndef PUBLISHRECORD}
+  {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
     rec := GetFieldAddr(Instance);
     RecordClear(rec^,PropType{$ifndef FPC}^{$endif});
