@@ -4269,8 +4269,10 @@ type
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the property class instance
     procedure SetInstance(Instance, Value: TObject);
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the property class
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
@@ -9168,8 +9170,10 @@ type
   // - this will implement factory pattern, as a safe and thread-safe DI/IoC
   TInterfaceResolver = class
   protected
-    /// override this method to check if this instance implements aInterface
+    /// override this method to resolve an interface from this instance 
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; virtual; abstract;
+    /// override this method check if this instance implements aInterface
+    function Implements(aInterface: PTypeInfo): boolean; virtual; abstract;
   end;
   {$M-}
 
@@ -9183,6 +9187,7 @@ type
     fImplementationClass: TInterfacedObjectClass;
     fImplementationClassIsCustomCreate: boolean;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    function Implements(aInterface: PTypeInfo): boolean; override;
     function CreateInstance: TInterfacedObject; virtual;
   public
     /// this overriden constructor will check and store the supplied class
@@ -9219,6 +9224,8 @@ type
     fResolversToBeReleased: TInterfaceResolverObjArray;
     fDependencies: TInterfacedObjectObjArray;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    function TryResolveInternal(aInterface: PTypeInfo; out Obj): boolean;
+    function Implements(aInterface: PTypeInfo): boolean; override;
     class function RegisterGlobalCheck(aInterface: PTypeInfo;
       aImplementationClass: TClass): PInterfaceEntry;
   public
@@ -9887,6 +9894,7 @@ type
     fLogCount: integer;
     fInterfaceExpectedTraceHash: cardinal;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
+    function Implements(aInterface: PTypeInfo): boolean; override;
     procedure InternalGetInstance(out aStubbedInterface); virtual;
     function InternalCheck(aValid,aExpectationFailed: boolean;
       const aErrorMsgFmt: RawUTF8; const aErrorMsgArgs: array of const): boolean; virtual;
@@ -10435,7 +10443,8 @@ type
     fInstanceLock: TRTLCriticalSection;
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
-    fImplementationClassKind: (ickBlank, ickWithCustomCreate, ickInjectable);
+    fImplementationClassKind: (ickBlank,
+      ickWithCustomCreate, ickInjectable, ickFromInjectedResolver);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
@@ -22903,14 +22912,14 @@ function GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
   EndOfObject: PUTF8Char): RawUTF8;
 var Beg: PUTF8Char;
 begin
-  assert(EndOfObject<>nil);
   result := '';
   PDest := nil;
   Beg := P;
   P := GotoNextJSONObjectOrArray(P); // quick go to end of array of object
   if P=nil then
     exit;
-  EndOfObject^ := P^;
+  if EndOfObject<>nil then
+    EndOfObject^ := P^;
   P^ := #0; // so Beg will be a valid ASCIIZ string
   PDest := P+1;
   result := QuotedStr(Beg,'''');
@@ -24046,9 +24055,10 @@ var Item: TObject;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
-  tkInteger,tkChar,tkWChar,tkEnumeration,tkSet,tkInt64
-  {$ifdef FPC},tkBool,tkQWord{$endif}:
-    SetInt64Value(Instance,0);
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    SetOrdProp(Instance,0);
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    SetInt64Prop(Instance,0);
   tkLString{$ifdef FPC},tkAString{$endif}:
     SetLongStrProp(Instance,'');
   {$ifdef UNICODE}
@@ -27124,7 +27134,6 @@ var aSQLFields, aSQLFrom, aSQLWhere: RawUTF8;
       field := Props.Fields.List[i];
       if field.SQLFieldType=sftMany then begin
         M := TSQLPropInfoRTTIInstance(field).GetInstance(self) as TSQLRecordMany;
-        assert(M<>nil);
         for i := 0 to n-1 do
         if Objects[i*2+1]=M then begin
           if IdemPChar(P,'.DEST.') then begin // special case of Many.Dest.*
@@ -27167,13 +27176,17 @@ begin
   SetLength(fFill.fTableMapRecordManyInstances,n);  // fFill.UnMap will release memory
   for f := 0 to n-1 do begin
     M := TSQLRecordMany(Props.ManyFields[f].GetInstance(self));
-    assert(M<>nil,'TSQLRecord.Create should have created TSQLRecordMany instances');
+    if M=nil then
+      raise EORMException.CreateUTF8('%.Create should have created %:% for EnginePrepareMany',
+        [self,Props.ManyFields[f].Name,Props.ManyFields[f].ObjectClass]);
     fFill.fTableMapRecordManyInstances[f] := M;
     Objects[f*2+1] := M;
     ObjectsClass[f*2+1] := PSQLRecordClass(M)^;
     with M.RecordProps do begin
-      Assert((fRecordManySourceProp.ObjectClass=PClass(self)^)
-         and (fRecordManyDestProp.ObjectClass<>nil));
+      if (fRecordManySourceProp.ObjectClass<>PClass(self)^) or
+         (fRecordManyDestProp.ObjectClass=nil) then
+        raise EORMException.CreateUTF8('%.EnginePrepareMany %:% mismatch',
+          [self,Props.ManyFields[f].Name,Props.ManyFields[f].ObjectClass]);
       ObjectsClass[f*2+2] := TSQLRecordClass(fRecordManyDestProp.ObjectClass);
       D := TSQLRecordClass(fRecordManyDestProp.ObjectClass).Create;
       // let TSQLRecordMany.Source and Dest point to real instances
@@ -27995,7 +28008,8 @@ begin
   SQL.TableSimpleFields[false,true] := IntSQLTableSimpleFields(false,true);
   SQL.TableSimpleFields[true,false] := IntSQLTableSimpleFields(true,false);
   SQL.TableSimpleFields[true,true] := IntSQLTableSimpleFields(true,true);
-  assert(Props.SQLTableSimpleFieldsNoRowID=SQL.TableSimpleFields[false,false]);
+  if Props.SQLTableSimpleFieldsNoRowID<>SQL.TableSimpleFields[false,false] then
+    raise EModelException.CreateUTF8('SetKind(%)',[Props.Table]);
   SQL.SelectAllWithRowID := SQLFromSelectWhere('*','');
   SQL.SelectAllWithID := SQL.SelectAllWithRowID;
   if IdemPChar(PUTF8Char(pointer(SQL.SelectAllWithID))+7,'ROWID') then
@@ -28064,7 +28078,8 @@ begin
   end;
 end;
 begin
-  assert((cardinal(aIndex)<=cardinal(fTablesMax)) and (fTableProps[aIndex]=nil));
+  if (cardinal(aIndex)>cardinal(fTablesMax)) or (fTableProps[aIndex]<>nil) then
+    raise EModelException.Create('TSQLModel.SetTableProps');
   Table := fTables[aIndex];
   if Table.InheritsFrom(TSQLRecordFTS4) then
     Kind := rFTS4 else
@@ -29250,6 +29265,7 @@ end;
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause, Separator: RawUTF8): RawUTF8;
 var i, Len, SepLen, L: integer;
+    Lens: TIntegerDynArray;
     T: TSQLTableJSON;
     P: PUTF8Char;
 begin
@@ -29260,16 +29276,19 @@ begin
     if (T.FieldCount<>1) or (T.fRowCount<=0) then
       exit;
     // calculate row values CSV needed memory
+    SetLength(Lens,T.fRowCount);
     SepLen := length(Separator);
     Len := 0;
-    for i := 1 to T.fRowCount do // ignore fResults[0] i.e. field name
-      inc(Len,StrLen(T.fResults[i])+SepLen);
+    for i := 0 to T.fRowCount-1 do begin // ignore fResults[0] i.e. field name
+      Lens[i] := StrLen(T.fResults[i]);
+      inc(Len,Lens[i]+SepLen);
+    end;
     dec(Len,SepLen);
     SetLength(result,Len);
     // add row values as CSV
     P := pointer(result);
-    for i := 1 to T.fRowCount do begin // ignore fResults[0] i.e. field name
-      L := StrLen(T.fResults[i]);
+    for i := 1 to T.fRowCount do begin
+      L := Lens[i-1];
       if L<>0 then begin
         move(T.fResults[i]^,P^,L);
         inc(P,L);
@@ -29279,7 +29298,7 @@ begin
       move(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
     end;
-    assert(P-pointer(result)=Len);
+    //assert(P-pointer(result)=Len);
   finally
     T.Free;
   end;
@@ -31111,7 +31130,8 @@ begin
     raise ECommunicationException.CreateUTF8(
       'Connection to RemoteLog server impossible'#13#10'%',[LastErrorMessage]);
   {$ifndef LVCL}
-  assert(fRemoteLogThread=nil);
+  if fRemoteLogThread<>nil then
+    raise ECommunicationException.CreateUTF8('%.ServerRemoteLogStart twice',[self]);
   fRemoteLogThread := TRemoteLogThread.Create(self);
   {$endif}
   fRemoteLogClass := aLogClass.Add;
@@ -37693,7 +37713,9 @@ var i,KnownRowsCount: integer;
 label err;
 begin // exact same format as TSQLTable.GetJSONValues()
   result := 0;
-  assert(length(Stmt.Where)<=1);
+  if length(Stmt.Where)>1 then
+    raise EORMException.CreateUTF8('%.GetJSONValues on % with Stmt.Where[]=%',
+      [self,fStoredClass,length(Stmt.Where)]);
   if Stmt.Where=nil then // no WHERE statement -> get all rows -> set rows count
     if (Stmt.Limit>0) and (fValue.Count>Stmt.Limit) then
       KnownRowsCount := Stmt.Limit else
@@ -38671,7 +38693,8 @@ end;
 destructor TSQLRestStorage.Destroy;
 begin
   inherited;
-  assert(fStorageCriticalSectionCount=0);
+  if fStorageCriticalSectionCount<>0 then
+    raise EORMException.CreateUTF8('%.Destroy with CS=%',[self,fStorageCriticalSectionCount]);
   DeleteCriticalSection(fStorageCriticalSection);
 end;
 
@@ -38726,7 +38749,9 @@ end;
 procedure TSQLRestStorage.StorageUnLock;
 begin
   dec(fStorageCriticalSectionCount);
-  assert(fStorageCriticalSectionCount>=0);
+  if fStorageCriticalSectionCount<0 then
+    raise EORMException.CreateUTF8('%.StorageUnLock with CS=%',
+      [self,fStorageCriticalSectionCount]);
   LeaveCriticalSection(fStorageCriticalSection);
 end;
 
@@ -41741,7 +41766,7 @@ procedure TSQLRecordProperties.InternalRegisterModel(aModel: TSQLModel;
   aTableIndex: integer; aProperties: TSQLModelRecordProperties);
 var i: integer;
 begin
-  assert(aTableIndex>=0);
+  //assert(aTableIndex>=0);
   EnterCriticalSection(fLock); // may be called from several threads at once
   try
     for i := 0 to fModelMax do
@@ -41772,7 +41797,8 @@ var i,j, nProps: integer;
 label Simple, Small;
 begin
   InitializeCriticalSection(fLock);
-  assert(aTable<>nil); // should not be called directly, but via PropsCreate()
+  if aTable=nil then
+    raise EModelException.Create('TSQLRecordProperties.Create(nil)');
   // register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
   // (should have been done before in TSQLModel.Create/AddTable)
   TJSONSerializer.RegisterClassForJSON(aTable);
@@ -41785,7 +41811,6 @@ begin
   // add properties to internal Fields list
   fClassType := PTypeInfo(aTable.ClassInfo)^.ClassType;
   fClassProp := InternalClassProp(aTable);
-  assert(fClassProp<>nil);
   nProps := ClassFieldCountWithParents(aTable);
   if nProps>MAX_SQLFIELDS_INCLUDINGID then
     raise EModelException.CreateUTF8('% has too many fields: %>=%',
@@ -41942,15 +41967,16 @@ Simple: SimpleFields[nSimple] := F;
       exclude(SimpleFieldsBits[soUpdate],i);
       dec(SimpleFieldsCount[soUpdate]);
     end;
-  Assert(SmallFieldsBits=SimpleFieldsBits[soSelect]-FieldBits[sftVariant]-
-    FieldBits[sftBlobDynArray]-FieldBits[sftBlobCustom]-FieldBits[sftUTF8Custom]);
+  if SmallFieldsBits<>SimpleFieldsBits[soSelect]-FieldBits[sftVariant]-
+    FieldBits[sftBlobDynArray]-FieldBits[sftBlobCustom]-FieldBits[sftUTF8Custom] then
+    raise EModelException.CreateUTF8('TSQLRecordProperties.Create(%) Bits?',[Table]);
   if isTSQLRecordMany then begin
     fRecordManySourceProp := Fields.ByRawUTF8Name('Source') as TSQLPropInfoRTTIInstance;
     if fRecordManySourceProp=nil then
-      raise EORMException.CreateUTF8('% expects a SOURCE field',[Table]) else
+      raise EModelException.CreateUTF8('% expects a SOURCE field',[Table]) else
     fRecordManyDestProp := Fields.ByRawUTF8Name('Dest') as TSQLPropInfoRTTIInstance;
     if fRecordManyDestProp=nil then
-      raise EORMException.CreateUTF8('% expects a DEST field',[Table]);
+      raise EModelException.CreateUTF8('% expects a DEST field',[Table]);
   end;
 end;
 
@@ -44754,7 +44780,7 @@ begin
         end;
       end;
       with method^.Args[arg] do begin
-        assert(ValueDirection in [smdVar,smdOut,smdResult]);
+        //assert(ValueDirection in [smdVar,smdOut,smdResult]);
         V := Value[arg];
         case ValueType of
         smvObject: begin
@@ -45407,7 +45433,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         dec(offs,SizeInStack);
         InStackOffset := offs;
       end;
-    assert(offs=0);
+    //assert(offs=0);
     {$endif}
   end;
   WR := TJSONSerializer.CreateOwnedStream;
@@ -46565,6 +46591,11 @@ begin
   end;
 end;
 
+function TInterfaceStub.Implements(aInterface: PTypeInfo): boolean;
+begin
+  result := fInterface.fInterfaceTypeInfo=aInterface;
+end;
+
 
 { TInterfaceMock }
 
@@ -46745,7 +46776,7 @@ function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
 begin
   if self=nil then
     result := false else
-    // here we now that CreateInstance will implement the interface 
+    // here we now that CreateInstance will implement the interface
     result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
 end;
 
@@ -46754,13 +46785,29 @@ function TInterfaceResolverForSingleInterface.TryResolve(
 var i: integer;
 begin
   if fInterfaceTypeInfo=aInterface then
-    result := GetOneInstance(Obj) else begin
+    result := GetInterfaceFromEntry(
+      CreateInstance,fImplementationEntry,Obj) else begin
     // if not found exact interface, try any parent/ancestor interface
     for i := 0 to length(fInterfaceAncestors)-1 do
       if fInterfaceAncestors[i]=aInterface then begin
-        // here we now that CreateInstance will implement fInterfaceAncestors[]
+        // here we know that CreateInstance will implement fInterfaceAncestors[]
         result := GetInterfaceFromEntry(
           CreateInstance,fInterfaceAncestorsImplementationEntry[i],Obj);
+        exit;
+      end;
+    result := false;
+  end;
+end;
+
+function TInterfaceResolverForSingleInterface.Implements(aInterface: PTypeInfo): boolean;
+var i: integer;
+begin
+  if fInterfaceTypeInfo=aInterface then
+    result := true else begin
+    // if not found exact interface, try any parent/ancestor interface
+    for i := 0 to length(fInterfaceAncestors)-1 do
+      if fInterfaceAncestors[i]=aInterface then begin
+        result := true;
         exit;
       end;
     result := false;
@@ -46909,6 +46956,28 @@ begin
       LeaveCriticalSection(GlobalInterfaceResolutionLock);
     end;
   end;
+  result := false;
+end;
+
+function TInterfaceResolverInjected.TryResolveInternal(aInterface: PTypeInfo; out Obj): boolean;
+var i: integer;
+begin
+  result := true;
+  if (self<>nil) and (aInterface<>nil) and (fResolvers<>nil) then
+    for i := 0 to length(fResolvers)-1 do
+      if fResolvers[i].TryResolve(aInterface,Obj) then
+        exit;
+  result := false;
+end;
+
+function TInterfaceResolverInjected.Implements(aInterface: PTypeInfo): boolean;
+var i: integer;
+begin
+  result := true;
+  if (self<>nil) and (aInterface<>nil) and (fResolvers<>nil) then
+    for i := 0 to length(fResolvers)-1 do
+      if fResolvers[i].Implements(aInterface) then
+        exit;
   result := false;
 end;
 
@@ -47591,6 +47660,8 @@ begin
     raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
       [self,InterfaceURI,fRest]) else
   fImplementationClass := aImplementationClass;
+  if aRestServer.Services.Implements(fInterface.fInterfaceTypeInfo) then
+    fImplementationClassKind := ickFromInjectedResolver else
   if fImplementationClass.InheritsFrom(TInjectableObject) then
     fImplementationClassKind := ickInjectable else
   if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
@@ -47815,6 +47886,7 @@ begin
 end;
 
 function TServiceFactoryServer.CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
+var dummyObj: pointer;
 begin
   case fImplementationClassKind of
   ickWithCustomCreate:
@@ -47822,6 +47894,17 @@ begin
   ickInjectable:
     result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(
       Rest.Services,true);
+  ickFromInjectedResolver: begin
+    dummyObj := nil;
+    if not TSQLRestServer(Rest).Services.TryResolveInternal(
+       fInterface.fInterfaceTypeInfo,dummyObj) then
+      raise EInterfaceFactoryException.CreateUTF8('ickFromResolver(%): TryResolve=false',
+        [fInterface.fInterfaceTypeInfo^.Name]);
+    result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
+    if AndIncreaseRefCount then // already done
+      AndIncreaseRefCount := false else
+      TInterfacedObjectHooked(result).FRefCount := 0;
+  end;
   else
     result := fImplementationClass.Create;
   end;

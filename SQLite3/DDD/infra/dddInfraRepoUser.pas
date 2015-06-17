@@ -237,8 +237,7 @@ begin
 end;
 
 class procedure TInfraRepoUserFactory.RegressionTests(test: TSynTestCase);
-var Rest: TSQLRestServer;
-procedure TestOne;
+procedure TestOne(Rest: TSQLRest);
 const MAX=1000;
       MOD_EMAILVALID=ord(high(TDomUserEmailValidation))+1;
 var cmd: IDomUserCommand;
@@ -330,13 +329,34 @@ begin
     user.Free;
   end;
 end;
+var RestServer: TSQLRestServerFullMemory;
+    RestClient: TSQLRestClientURI;
 begin
-  Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUser]);
-  try
-    Rest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(Rest)],true);
-    TestOne; // sub function to ensure that all I*Command are released
+  RestServer := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUser]);
+  try // first try directly on server side
+    RestServer.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(RestServer)],true);
+    TestOne(RestServer); // sub function will ensure that all I*Command are released
   finally
-    Rest.Free;
+    RestServer.Free;
+  end;
+  RestServer := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUser]);
+  try // then try from a client-server process
+    RestServer.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(RestServer)],true);
+    RestServer.ServiceDefine(TInfraRepoUser,[IDomUserCommand,IDomUserQuery],sicClientDriven);
+    test.Check(RestServer.ExportServer);
+    RestClient := TSQLRestClientURIDll.Create(TSQLModel.Create(RestServer.Model),@URIRequest);
+    try
+      RestClient.Model.Owner := RestClient;
+      RestClient.ServiceDefine([IDomUserCommand],sicClientDriven);
+      TestOne(RestServer);
+      RestServer.DropDatabase;
+      USEFASTMM4ALLOC := true; // for slightly faster process
+      TestOne(RestClient);
+    finally
+      RestClient.Free;
+    end;
+  finally
+    RestServer.Free;
   end;
 end;
 

@@ -643,6 +643,14 @@ class procedure TPersonContactable.RegressionTests(test: TSynTestCase);
 var p: TPersonContactable;
     json: RawUTF8;
     valid: boolean;
+procedure TestP;
+begin
+  test.Check(p.Phone2='123456');
+  test.Check(p.Name.Last='Smith');
+  test.Check(p.Name.First='John');
+  test.Check(p.Birth.Age(Iso8601ToDateTime('19821030'))=10);
+  test.Check(p.Address.Country.Alpha3='FRA');
+end;
 begin
   p := TPersonContactable.Create;
   with test do
@@ -664,11 +672,7 @@ begin
   try
     // FileFromString(JSONReformat(json),'person.json');
     Check(ObjectLoadJSON(p,json));
-    Check(p.Phone2='123456');
-    Check(p.Name.Last='Smith');
-    Check(p.Name.First='John');
-    Check(p.Birth.Age(Iso8601ToDateTime('19821030'))=10);
-    Check(p.Address.Country.Alpha3='FRA');
+    TestP;
   finally
     p.Free;
   end;
@@ -677,11 +681,7 @@ begin
   try
     Check(JSONToObject(p,pointer(json),valid)^='*');
     Check(valid);
-    Check(p.Phone2='123456');
-    Check(p.Name.Last='Smith');
-    Check(p.Name.First='John');
-    Check(p.Birth.Age(Iso8601ToDateTime('19821030'))=10);
-    Check(p.Address.Country.Alpha3='FRA');
+    TestP;
   finally
     p.Free;
   end;
