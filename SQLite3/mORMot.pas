@@ -14911,9 +14911,12 @@ type
     function GetItem(Index: integer): TSQLRecord; {$ifdef HASINLINE}inline;{$endif}
     function GetListPtr: PPointerArray; {$ifdef HASINLINE}inline;{$endif}
     function GetID(Index: integer): TID;
+    procedure SetFileName(const aFileName: TFileName);
+    procedure SetBinaryFile(aBinary: boolean);
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
     // - returns the number of data row added (excluding field names)
@@ -14955,7 +14958,7 @@ type
     function SaveToJSON(Expand: Boolean): RawUTF8; overload;
     /// save the values into JSON data
     procedure SaveToJSON(Stream: TStream; Expand: Boolean); overload;
-    /// load the values from binary data
+    /// load the values from binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage
     // - the binary content is first checked for consistency, before loading
@@ -14963,15 +14966,22 @@ type
     // for instance, it won't be able to read a file content with a renamed
     // or modified field type
     // - will return false if the binary content is invalid
-    function LoadFromBinary(Stream: TStream): boolean;
-    /// save the values into binary data
+    function LoadFromBinary(Stream: TStream): boolean; overload;
+    /// load the values from binary data
+    // - uses the same compressed format as the overloaded stream/file method
+    // - will return false if the binary content is invalid
+    function LoadFromBinary(const Buffer: RawByteString): boolean; overload;
+    /// save the values into a binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage: e.g. a 27 KB
     // Dali1.json content is stored into a 6 KB Dali2.data file
     // (this data has a text redundant field content in its FirstName field);
     // 502 KB People.json content is stored into a 92 KB People.data file
     // - returns the number of bytes written into Stream
-    function SaveToBinary(Stream: TStream): integer;
+    function SaveToBinary(Stream: TStream): integer; overload;
+    /// save the values into a binary buffer
+    // - uses the same compressed format as the overloaded stream/file method
+    function SaveToBinary: RawByteString; overload;
     /// if file was modified, the file is updated on disk
     // - this method is called automaticaly when the TSQLRestStorage
     // instance is destroyed: should should want to call in in some cases,
@@ -15045,6 +15055,18 @@ type
     // - faster than OneFieldValues method, which creates a temporary JSON content
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; override;
+    /// search for a field value, according to its SQL content representation
+    // - return a copy of the found TSQLRecord on success, nil if it was not found
+    function SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
+    /// search and count for a field value, according to its SQL content representation
+    // - return the number of found entries on success, 0 if it was not found
+    function SearchCount(const FieldName, FieldValue: RawUTF8): integer;
+    /// search for a field value, according to its SQL content representation
+    // - call the supplied OnFind event on match
+    // - returns the number of found entries
+    // - is just a wrapper around FindWhereEqual() with StorageLock protection
+    function SearchEvent(const FieldName, FieldValue: RawUTF8;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): integer;
     /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     // - will use fast O(1) hash for fUniqueFields[] fields
     // - warning: this method should be protected via StorageLock/StorageUnlock
@@ -15077,12 +15099,16 @@ type
     /// read only access to the file name specified by constructor
     // - you can call the TSQLRestServer.StaticDataCreate method to
     // update the file name of an already instanciated static table
-    property FileName: TFileName read fFileName write fFileName;
+    // - if you change manually the file name from this property, the storage
+    // would be marked as "modified" so that UpdateFile would save the content
+    property FileName: TFileName read fFileName write SetFileName;
     /// if set to true, file content on disk will expect binary format
     // - default format on disk is JSON but can be overridden at constructor call
     // - binary format should be more efficient in term of speed and disk usage,
     // but can be proprietary
-    property BinaryFile: boolean read fBinaryFile write fBinaryFile;
+    // - if you change manually the file format from this property, the storage
+    // would be marked as "modified" so that UpdateFile would save the content
+    property BinaryFile: boolean read fBinaryFile write SetBinaryFile;
     // JSON writing, can set if the format should be expanded or not
     // - by default, the JSON will be in the custom non-expanded format,
     // to save disk space and time
@@ -38004,6 +38030,21 @@ begin
   end;
 end;
 
+function TSQLRestStorageInMemory.SaveToBinary: RawByteString;
+var MS: TRawByteStringStream;
+begin
+  if self=nil then
+    result := '' else begin
+    MS := TRawByteStringStream.Create;
+    try
+      SaveToBinary(MS);
+      result := MS.DataString;
+    finally
+      MS.Free;
+    end;
+  end;
+end;
+
 const
   TSQLRestStorageINMEMORY_MAGIC = $A5ABA5A5;
 
@@ -38063,6 +38104,17 @@ begin
   finally
     R.Close;
     MS.Free;
+  end;
+end;
+
+function TSQLRestStorageInMemory.LoadFromBinary(const Buffer: RawByteString): boolean;
+var S: TStream;
+begin
+  S := TRawByteStringStream.Create(Buffer);
+  try
+    result := LoadFromBinary(S);
+  finally
+    S.Free;
   end;
 end;
 
@@ -38474,6 +38526,22 @@ begin
     [fStoredClassRecordProps.SQLTableName,Timer.Stop],sllDB);
 end;
 
+procedure TSQLRestStorageInMemory.SetFileName(const aFileName: TFileName);
+begin
+  if aFileName=fFileName then
+    exit;
+  fFileName := aFileName;
+  fModified := true;
+end;
+
+procedure TSQLRestStorageInMemory.SetBinaryFile(aBinary: boolean);
+begin
+  if aBinary=fBinaryFile then
+    Exit;
+  fBinaryFile := aBinary;
+  fModified := true;
+end;
+
 procedure TSQLRestStorageInMemory.ReloadFromFile;
 var JSON: RawUTF8;
     Stream: TStream;
@@ -38530,6 +38598,38 @@ begin
   finally
     Where.Free;
   end;
+end;
+
+function TSQLRestStorageInMemory.SearchEvent(const FieldName, FieldValue: RawUTF8;
+  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): integer;
+begin
+  result := 0;
+  if (self=nil) or (fValue.Count=0) or (FieldName='') then
+    exit;
+  StorageLock(false);
+  try
+    result := FindWhereEqual(FieldName,FieldValue,OnFind,Dest,FoundLimit,FoundOffset);
+  finally
+    StorageUnlock;
+  end;
+end;
+
+procedure TSQLRestStorageInMemory.DoCopyEvent(
+  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+begin
+  if aDest<>nil then
+    PPointer(aDest)^ := aRec.CreateCopy;
+end;
+
+function TSQLRestStorageInMemory.SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
+begin
+  if SearchEvent(FieldName,FieldValue,DoCopyEvent,@result,1,0)=0 then
+    result := nil;
+end;
+
+function TSQLRestStorageInMemory.SearchCount(const FieldName, FieldValue: RawUTF8): integer;
+begin
+  result := SearchEvent(FieldName,FieldValue,DoNothingEvent,nil,0,0);
 end;
 
 
@@ -48393,35 +48493,35 @@ begin
 end;
 
 procedure AutoCreateFields(self: TObject);
-var field: TAutoCreateFields;
+var fields: TAutoCreateFields;
     PVMT: PPointer;
     i: integer;
 begin
   PVMT := pointer(PPtrInt(self)^+vmtAutoTable);
-  field := PVMT^;
-  if field=nil then begin
-    field := TAutoCreateFields.Create(PClass(self)^);
-    PatchCodePtrUInt(pointer(PVMT),PtrUInt(field),true);
-    GarbageCollectorFreeAndNil(PVMT^,field);
+  fields := PVMT^;
+  if fields=nil then begin
+    fields := TAutoCreateFields.Create(PClass(self)^);
+    PatchCodePtrUInt(pointer(PVMT),PtrUInt(fields),true);
+    GarbageCollectorFreeAndNil(PVMT^,fields);
   end else
-    if PClass(field)^<>TAutoCreateFields then
+    if PClass(fields)^<>TAutoCreateFields then
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
-  for i := 0 to field.ClassesCount-1 do
-    with field.Classes[i] do
+  for i := 0 to fields.ClassesCount-1 do
+    with fields.Classes[i] do
       PObject(Prop^.GetterAddr(self))^ := Instance.CreateNew;
 end;
 
 procedure AutoDestroyFields(self: TObject);
 var i: integer;
-    PVMT: TAutoCreateFields;
+    fields: TAutoCreateFields;
 begin
-  PVMT := PPointer(PPtrInt(self)^+vmtAutoTable)^;
-  if PVMT=nil then
+  fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
+  if fields=nil then
     raise EModelException.CreateUTF8('%.AutoTable VMT entry not set',[self]);
-  for i := 0 to PVMT.ClassesCount-1 do
-    PObject(PVMT.Classes[i].Prop^.GetterAddr(self))^.Free;
-  for i := 0 to PVMT.ObjArraysCount-1 do
-    ObjArrayClear(PVMT.ObjArrays[i]^.GetterAddr(self)^);
+  for i := 0 to fields.ClassesCount-1 do
+    PObject(fields.Classes[i].Prop^.GetterAddr(self))^.Free;
+  for i := 0 to fields.ObjArraysCount-1 do
+    ObjArrayClear(fields.ObjArrays[i]^.GetterAddr(self)^);
 end;
 
 
