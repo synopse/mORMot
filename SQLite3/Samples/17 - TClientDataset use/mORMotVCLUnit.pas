@@ -126,6 +126,7 @@ begin
       ds1.DataSet := TSynDBDataSet.Create(self);
       TSynDBDataSet(ds1.DataSet).Connection := fProps;
       TSynDBDataSet(ds1.DataSet).CommandText := SQL_PEOPLE;
+      TSynDBDataSet(ds1.DataSet).IgnoreColumnDataSize := true;
       ds1.DataSet.Open;
     end else begin
       ds1.DataSet := TSynDBSQLDataSet.Create(self);

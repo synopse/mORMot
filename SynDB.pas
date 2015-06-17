@@ -2662,7 +2662,7 @@ type
     function IntColumnType(Col: integer; out Data: PByte): TSQLDBFieldType;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IntHeaderProcess(Data: PByte; DataLen: integer);
-    procedure IntFillDataCurrent(var Reader: PByte);
+    procedure IntFillDataCurrent(var Reader: PByte; IgnoreColumnDataSize: boolean);
   public
     /// the Column type of the current Row
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType; override;
@@ -2796,8 +2796,12 @@ type
     fRowData: TCardinalDynArray;
   public
     /// initialize the internal structure from a given memory buffer
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
+    // field as ftDefaultMemo)
     constructor Create(Data: PByte; DataLen: integer;
-      DataRowPosition: PCardinalDynArray=nil); reintroduce;
+      DataRowPosition: PCardinalDynArray=nil; IgnoreColumnDataSize: boolean=false); reintroduce;
 
     /// Execute a prepared SQL statement
     // - this unexpected overridden method will raise a ESQLDBException
@@ -7799,7 +7803,8 @@ begin
   raise ESQLDBException.CreateUTF8('Invalid %.IntHeaderProcess',[self]);
 end;
 
-procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte);
+procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
+  IgnoreColumnDataSize: boolean);
 var F,Len: Integer;
 begin // format match TSQLDBStatement.FetchAllToBinary()
   if fDataCurrentRowNullLen>0 then
@@ -7828,8 +7833,9 @@ begin // format match TSQLDBStatement.FetchAllToBinary()
         inc(Reader,SizeOf(Int64));
       ftUTF8, ftBlob: begin
         Len := FromVarUInt32(Reader);
-        if Len>fColumns[F].ColumnDataSize then
-          fColumns[F].ColumnDataSize := Len;
+        if not IgnoreColumnDataSize then
+          if Len>fColumns[F].ColumnDataSize then
+            fColumns[F].ColumnDataSize := Len;
         inc(Reader,Len); // jump string/blob content
       end;
       else raise ESQLDBException.CreateUTF8('%.IntStep: Invalid ColumnType(%)=%',
@@ -8086,7 +8092,7 @@ begin // retrieve one row of data from TSQLDBStatement.FetchAllToBinary() format
     fDataRowReader := fDataRowReaderOrigin;     // rewind TFileBufferReader
     fDataCurrentRowNullLen := fDataRowNullSize; // reset null
   end;
-  IntFillDataCurrent(fDataRowReader);
+  IntFillDataCurrent(fDataRowReader,false);
   inc(fCurrentRow);
   result := true;
 end;
@@ -8095,7 +8101,7 @@ end;
 { TSQLDBProxyStatementRandomAccess }
 
 constructor TSQLDBProxyStatementRandomAccess.Create(Data: PByte; DataLen: integer;
-  DataRowPosition: PCardinalDynArray);
+  DataRowPosition: PCardinalDynArray; IgnoreColumnDataSize: boolean);
 var i,f: integer;
     Reader: PByte;
 begin
@@ -8104,12 +8110,13 @@ begin
   Reader := fDataRowReaderOrigin;
   if (DataRowPosition<>nil) and (DataRowPosition^<>nil) then begin
     fRowData := DataRowPosition^; // fast copy-on-write
+    if not IgnoreColumnDataSize then
     for f := 0 to fColumnCount-1 do
       with fColumns[f] do
       if ColumnType in [ftUTF8,ftBlob] then
         if ColumnValueDBSize=0 then begin // unknown size -> compute
           for i := 0 to DataRowCount-1 do
-            IntFillDataCurrent(Reader); // will compute ColumnDataSize
+            IntFillDataCurrent(Reader,false); // will compute ColumnDataSize
           break;
         end else
           ColumnDataSize := ColumnValueDBSize; // use declared maximum size
@@ -8117,7 +8124,7 @@ begin
     SetLength(fRowData,DataRowCount);
     for i := 0 to DataRowCount-1 do begin
       fRowData[i] := PtrUInt(Reader)-PtrUInt(fDataRowReaderOrigin);
-      IntFillDataCurrent(Reader); // will also compute ColumnDataSize
+      IntFillDataCurrent(Reader,IgnoreColumnDataSize); // will also compute ColumnDataSize
     end;
   end;
 end;
@@ -8133,7 +8140,7 @@ begin
       exit;
   if fDataCurrentRowIndex<>Index then begin // compute only if changed :)
     Reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
-    IntFillDataCurrent(Reader);
+    IntFillDataCurrent(Reader,false);
     fDataCurrentRowIndex := Index;
   end;
 end;

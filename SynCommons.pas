@@ -9397,9 +9397,11 @@ type
     property Zones: TDynArrayHashed read fZones;
     /// returns a TStringList of all TzID values
     // - could be used to fill any VCL component to select the time zone
+    // - order in Ids[] array follows the Zone[].id information
     function Ids: TStrings;
     /// returns a TStringList of all Display text values
     // - could be used to fill any VCL component to select the time zone
+    // - order in Displays[] array follows the Zone[].display information
     function Displays: TStrings;
   end;
 
@@ -25370,6 +25372,8 @@ procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
   fZones.LoadFrom(pointer(SynLZDecompress(Buffer)));
   fZones.ReHash;
+  FreeAndNil(fIds);
+  FreeAndNil(fDisplays);
 end;
 
 procedure TSynTimeZone.LoadFromFile(const FileName: TFileName);
@@ -25435,6 +25439,8 @@ begin
     Keys.Free;
   end;
   fZones.ReHash;
+  FreeAndNil(fIds);
+  FreeAndNil(fDisplays);
 end;
 {$endif LVCL}
 {$endif MSWINDOWS}

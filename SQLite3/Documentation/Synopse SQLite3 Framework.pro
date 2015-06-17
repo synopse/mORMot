@@ -1809,6 +1809,54 @@ In fact, whenever a dynamic {\i schema-less} storage structure is needed, you ma
 - If you use our {\f1\fs20 SynMongoDB.pas mORMotMongoDB.pas} units to access a {\i @*MongoDB@} server, {\f1\fs20 TDocVariant} will be the native storage to create or access nested @*BSON@ arrays or objects documents - that is, it will allow proper @*ODM@ storage;
 - Cross-cutting features (like logging or {\f1\fs20 record} / {\i dynamic array} enhancements) will also benefit from this {\f1\fs20 TDocVariant} custom type.
 We are pretty convinced that when you will start playing with {\f1\fs20 TDocVariant}, you won't be able to live without it any more. It introduces the full power of @*late-binding@ and dynamic schema-less patterns to your application code, which can be pretty useful for prototyping or in Agile development. You do not need to use scripting engines like {\i Python} or {\i JavaScript}: {\i Delphi} is perfectly able to handle dynamic coding!
+: Cross-cutting functions
+:175  Iso8601 time and date
+For date/time storage as text, the framework will use {\i @**ISO 8601@} encoding. Dates could be encoded as {\f1\fs20 YYYY-MM-DD} or {\f1\fs20 YYYYMMDD}, time as {\f1\fs20 hh:mm:ss} or {\f1\fs20 hhmmss}, and combined date and time representations as {\f1\fs20 <date>T<time>}, i.e. {\f1\fs20 YYYY-MM-DDThh:mm:ss} or {\f1\fs20 YYYYMMDDThhmmss}.
+The {\i lexicographical order} of the representation thus corresponds to chronological order, except for date representations involving negative years. This allows dates to be naturally sorted by, for example, file systems, or grid lists.
+The {\f1\fs20 SynCommons.pas} unit defines some functions able to convert to/from regular {\f1\fs20 TDateTime} values, or from a dedicated {\f1\fs20 @**TTimeLog@} type:
+!type
+!  TTimeLog = type Int64;
+This integer storage is encoded as a series of bits, which will map the {\f1\fs20 @**TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
+The resolution of such values is one second. In fact, it uses internally for computation an abstract "year" of 16 months of 32 days of 32 hours of 64 minutes of 64 seconds.\line As a consequence, any date/time information can be retrieved from its internal bit-level representation:
+- 0..5 bits will map {\i seconds},
+- 6..11 bits will map {\i minutes},
+- 12..16 bits will map {\i hours},
+- 17..21 bits will map {\i days} (minus one),
+- 22..25 bits will map {\i months} (minus one),
+- 26..38 bits will map {\i years}.
+The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and an integer storage, so is not able to handle such resolution.
+Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimeStamp} property is computed:
+!function TSQLRest.GetServerTimeStamp: TTimeLog;
+!begin
+!  PTimeLogBits(@result)^.From(Now+fServerTimeStampOffset);
+!end;
+!
+!procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
+!begin
+!  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
+!end;
+But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
+Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you would have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
+! function TimeLogNow: TTimeLog;
+! function TimeLogNowUTC: TTimeLog;
+! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
+! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
+! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
+See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} types.
+:176  Time Zones
+One common problem when handling dates and times, is that common time is shown and entered as {\i local}, whereas the computer should better use non-geographic information - especially on a Client-Server architecture, where both ends may not be on the same physical region.
+A {\i @**time zone@} is a region that observes a uniform standard time for legal, commercial, and social purposes. Time zones tend to follow the boundaries of countries and their subdivisions because it is convenient for areas in close commercial or other communication to keep the same time. Most of the time zones on land are offset from {\i Coordinated Universal Time} (@**UTC@) by a whole number of hours, or minutes. Even worse, some countries use daylight saving time for part of the year, typically by changing clocks by an hour, twice every year.
+The main rule is that any date and time stored should be stored in UTC, or with an explicit Zone identifier (i.e. an explicit offset to the UTC value). Our framework expects this behavior: every date/time value stored and handled by the ORM, SOA, or any other part of it, is expected to be UTC-encoded. At presentation layer (e.g. the User Interface), conversion to/from local times should take place, so that the end-user is provided with friendly clock-wall compatible timing.
+As you may guess, handling time zones is a complex task, which should be managed by the Operating System itself. Since this cultural material is constantly involving, it is updated as part of the OS.
+In practice, current local time could be converted from UTC from the current system-wide time zone. One of the only parameters you have to set when installing an Operating System is to pickup the keyboard layout... and the current time zone to be used. But in a client-server environment, you may have to manage several time zones on the server side: so you can't rely on this global setting.
+One sad - but predictable - disappointment is that there is no common way of encoding time zone information. Under {\i Windows}, the registry contains a list of time zones, and the associated time bias data. Most POSIX systems (including {\i Linux} and Mac OSX) do rely on the IANA database, also called {\f1\fs20 tzdata} - you may have noticed that this particular package is often updated with your system. Both zone identifiers do not map, so our framework needed something to be shared on all systems.
+The {\f1\fs20 SynCommons.pas} unit features the {\f1\fs20 @**TSynTimeZone@} class, which is able to retrieve the information from the {\i Windows} registry into memory via {\f1\fs20 TSynTimeZone.LoadFromRegistry}, or into a compressed file via {\f1\fs20 TSynTimeZone.SaveToFile}. Later on, this file could be reloaded on any system, including any {\i Linux} flavor, via {\f1\fs20 TSynTimeZone.LoadFromFile}, and returns the very same results. The compressed file is pretty small, thanks to its optimized layout, and use of our {\f1\fs20 SynLZ} compression algorithm: the full information is stored in a 7 KB file - the same flattened information as JSON is around 130 KB, and you may compare with the official @http://www.iana.org content, which weighted as a 280KB {\f1\fs20 tar.gz}... Of course, {\f1\fs20 tzdata} stores potentially a lot more information than we need.
+In practice, you may use {\f1\fs20 TSynTimeZone.Default}, which would return an instance read from the current version of the registry under {\i Windows}, and would attempt to load the information named after the executable file name (appended as a {\f1\fs20 .tz} extension) on other Operating Systems.\line You may therefore write:
+! aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
+Similarly, you may use {\f1\fs20 TSynTimeZone.UtcToLocal} or {\f1\fs20 TSynTimeZone.LocalToUtc} methods, with the proper {\f1\fs20 TZ} identifier.
+You would have to create the needed {\f1\fs20 .tz} compressed file under a Windows machine, then provide this file together with any {\i Linux} server executable, in its very same folder. On a cloud-like system, you may store this information in a centralized server, e.g. via a dedicated service - see @63@ - generated from a single reference {\i Windows} system via {\f1\fs20 TSynTimeZone.SaveToBuffer}, and later on use {\f1\fs20 TSynTimeZone.LoadFromBuffer} to decode it from all your cloud nodes. The main benefit is that the time information would stay consistent whatever system it runs on, as you may expect.
+Your User Interface could retrieve the IDs and ready to be displayed text from {\f1\fs20 TSynTimeZone.Ids} and {\f1\fs20 TSynTimeZone.Displays} properties, as plain {\f1\fs20 TStrings} instance, which index would follow the {\f1\fs20 TSynTimeZone.Zone[]} internal information.
+As a nice side effect, the {\f1\fs20 TSynTimeZone} binary internal storage has been found out to be very efficient, and much faster than a manual reading of the {\i Windows} registry. Complex local time calculation could be done on the server side, with no fear of breaking down your processing performances.
 \page
 :3Object-Relational Mapping
 %cartoon02.png
@@ -1877,7 +1925,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*SynUnicode@}|TEXT|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|TEXT|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time
-|{\f1\fs20 TTimeLog}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
+|{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TSQLRecord@}|INTEGER|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64 bit under {\i Win64}
@@ -1934,35 +1982,11 @@ Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are no
 \Data Tier=  RawUTF8
 \
 For additional information about @*UTF-8@ handling in the framework, see @32@.
-:  Date and time fields
-{\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database.
-As alternatives,  {\f1\fs20 @**TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 TTimeLogBits} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
-The resolution of such values is one second. In fact, it uses internally for computation an abstract "year" of 16 months of 32 days of 32 hours of 64 minutes of 64 seconds.\line As a consequence, any date/time information can be retrieved from its internal bit-level representation:
-- 0..5 bits will map seconds,
-- 6..11 bits will map minutes,
-- 12..16 bits will map hours,
-- 17..21 bits will map days (minus one),
-- 22..25 bits will map months (minus one),
-- 26..38 bits will map years.
+:174  Date and time fields
+{\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database. See @175@ for details about this text encoding.
+As alternatives,  {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 This format will be very fast for comparing dates or convert into/from text, and will be stored as INTEGER in the database, therefore more efficiently than plain ISO 8601 text as for {\f1\fs20 TDateTime} fields.
-Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimeStamp} property is computed:
-!function TSQLRest.GetServerTimeStamp: TTimeLog;
-!begin
-!  PTimeLogBits(@result)^.From(Now+fServerTimeStampOffset);
-!end;
-!
-!procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
-!begin
-!  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
-!end;
-But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
-Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you would have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above. But in most case, you should better use the following functions to manage such timestamps:
-! function TimeLogNow: TTimeLog;
-! function TimeLogNowUTC: TTimeLog;
-! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
-! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
-! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
-In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}.
+In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}. They are just handled with a special care by the ORM, so that their associated field value would be updated with the current UTC timestamp, for every {\f1\fs20 TSQLRecord} modification (for {\f1\fs20 TModTime}), or at entry creation (for {\f1\fs20 TCreateTime}). The time value stored is in fact the UTC timestamp, as returned from the current REST Server: in fact, when any REST client perform a connection, it will retrieve any time offset from the REST Server, which would be used to store a consistent time value across all Clients.
 :  Enumeration fields
 {\i Enumerations} should be mapped as INTEGER, i.e. via {\f1\fs20 ord(aEnumValue)} or {\f1\fs20 TEnum(aIntegerValue)}.
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
@@ -5988,7 +6012,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|UTF-8|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
-|{\f1\fs20 TTimeLog}|int64|as proprietary fast {\f1\fs20 Int64} date time
+|{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TSQLRecord@}|int32|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64 bit on {\i Win64}
@@ -6436,7 +6460,7 @@ The following types are handled by this feature:
 |{\f1\fs20 boolean}|Serialized as JSON boolean
 |{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@}|Serialized as JSON number
 |{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
-|{\f1\fs20 DateTime TTimeLog}|Serialized as JSON text, encoded as @*ISO 8601@
+|{\f1\fs20 DateTime @*TTimeLog@}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
 |{\f1\fs20 RawJSON}|Stored as un-serialized raw JSON content\line (e.g. any value, object or array)
 |{\f1\fs20 TGUID}|@*GUID@ serialized as JSON text
@@ -11496,7 +11520,7 @@ All those tags will be identified with mustaches, i.e. {\f1\fs20 \{\{...\}\}}. A
 In addition to those standard markers, the {\i mORMot} implementation of {\i Mustache} features:
 |%20%80
 |\b Marker|Description\b0
-|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values.
+|{\f1\fs20 \{\{helperName value\}\}}|{\i @*Expression Helper@}, able to change the value on the fly, before rendering. It could be used e.g. to display dates as text from {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values.
 |{\f1\fs20 \{\{.\}\}}|This pseudo-variable refers to the context object itself instead of one of its members. This is particularly useful when iterating over lists.
 |{\f1\fs20 \{\{-index\}\}}|This pseudo-variable returns the current item number when iterating over lists, starting counting at 1 ({\f1\fs20 \{\{-index0\}\}} would start counting at 0)
 |{\f1\fs20 \{\{#-first\}\}}\line ...\line {\f1\fs20 \{\{/-first\}\}}|Defines a block of text (pseudo-section), which will be rendered - or {\i not} rendered for inverted {\f1\fs20 \{\{^-first\}\}} - for the {\i first} item when iterating over lists
@@ -11678,7 +11702,7 @@ Internal partials (one of the {\f1\fs20 SynMustache} extensions), can be defined
 !  // now html='1'#$A'234','internal partials'
 :    Expression Helpers
 {\i @**Expression Helper@s} are an extension to the standard {\i Mustache} definition. They allow to define your own set of functions which would be called during the rendering, to transform one value from the context into a value to be rendered.
-{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
+{\f1\fs20 TSynMustache.HelpersGetStandardList} will return a list of standard static helpers, able to convert {\f1\fs20 @*TDateTime@} or {\f1\fs20 @*TTimeLog@} values into text, or convert any value into its @*JSON@ representation. The current list of registered helpers are {\f1\fs20 DateTimeToText}, {\f1\fs20 DateToText}, {\f1\fs20 DateFmt}, {\f1\fs20 TimeLogToText}, {\f1\fs20 BlobToBase64}, {\f1\fs20 JSONQuote}, {\f1\fs20 JSONQuoteURI}, {\f1\fs20 ToJSON}, {\f1\fs20 EnumTrim}, {\f1\fs20 EnumTrimRight}, {\f1\fs20 PowerOfTwo} , {\f1\fs20 Equals}, {\f1\fs20 If} and {\f1\fs20 WikiToHtml}. For instance, {\f1\fs20 \{\{TimeLogToText CreatedAt\}\}} will convert a {\f1\fs20 TCreateTime} field value into ready-to-be-displayed text.
 The mustache tag syntax is  {\f1\fs20 \{\{helpername value\}\}}. The supplied {\f1\fs20 value} parameter may be a variable name in the current context, or could be a constant number ({\f1\fs20 \{\{helpername 123\}\}}), a constant JSON string ({\f1\fs20 \{\{helpername "constant text"\}\}}), a JSON array ({\f1\fs20 \{\{helpername [1,2,3]\}\}}) or a JSON object ({\f1\fs20 \{\{helpername \{name:"john",age:24\}\}\}}). The value could be also a comma-seperated set of values, which would be translated into a corresponding JSON array, the values being extracted from the current context, as with {\f1\fs20 \{\{DateFmt DateValue,"dd/mm/yyy"\}\}}.
 You could call recursively the helpers, just like you nest functions: {\f1\fs20 \{\{helper1 helper2 value\}\}} will call {\f1\fs20 helper2} with the supplied {\f1\fs20 value}, which result will be passed as value to {\f1\fs20 helper1}.
 But you can create your own list of registered {\i Expression Helpers}, even including some business logic, to compute any data during rendering, via {\f1\fs20 TSynMustache.HelperAdd} methods.

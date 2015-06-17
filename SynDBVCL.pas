@@ -88,12 +88,21 @@ type
       out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
   public
     /// initialize the virtual TDataSet from a FetchAllToBinary() buffer
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
+    // field as ftDefaultMemo)
     procedure From(const BinaryData: RawByteString;
-      DataRowPosition: PCardinalDynArray=nil); overload; virtual;
+      DataRowPosition: PCardinalDynArray=nil; IgnoreColumnDataSize: boolean=false); overload; virtual;
     /// initialize the virtual TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied ISQLDBRows instance can safely be freed by the caller,
     // since a private binary copy will be owned by this instance (in Data)
-    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0); overload; virtual;
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
+    // field as ftDefaultMemo)
+    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0;
+      IgnoreColumnDataSize: boolean=false); overload; virtual;
     /// finalize the class instance
     destructor Destroy; override;
     /// read-only access to the internal binary buffer
@@ -138,7 +147,12 @@ type
     /// initialize the internal TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied TSQLDBStatement can then be freed by the caller, since
     // a private binary copy will be owned by this instance (in fDataSet.Data)
-    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0); override;
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
+    // field as ftDefaultMemo)
+    procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0;
+      IgnoreColumnDataSize: boolean=false); override;
     /// the associated connection properties
     property Connection: TSQLDBConnectionProperties read fConnection write fConnection;
   published
@@ -222,21 +236,22 @@ end;
 { TSynBinaryDataSet }
 
 procedure TSynBinaryDataSet.From(const BinaryData: RawByteString;
-  DataRowPosition: PCardinalDynArray);
+  DataRowPosition: PCardinalDynArray; IgnoreColumnDataSize: boolean);
 begin
   fData := BinaryData;
   fDataAccess := TSQLDBProxyStatementRandomAccess.Create(
-    pointer(fData),length(fData),DataRowPosition);
+    pointer(fData),length(fData),DataRowPosition,IgnoreColumnDataSize);
 end;
 
-procedure TSynBinaryDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
+procedure TSynBinaryDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal;
+  IgnoreColumnDataSize: boolean);
 var DataStream: TRawByteStringStream;
     DataRowPosition: TCardinalDynArray;
 begin
   DataStream := TRawByteStringStream.Create;
   try
     Statement.FetchAllToBinary(DataStream,MaxRowCount,@DataRowPosition);
-    From(DataStream.DataString,@DataRowPosition);
+    From(DataStream.DataString,@DataRowPosition,IgnoreColumnDataSize);
   finally
     DataStream.Free;
   end;
@@ -306,9 +321,10 @@ end;
 
 { TSynDBSQLDataSet }
 
-procedure TSynDBSQLDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
+procedure TSynDBSQLDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal;
+  IgnoreColumnDataSize: boolean);
 begin
-  inherited From(Statement,MaxRowCount);
+  inherited From(Statement,MaxRowCount,IgnoreColumnDataSize);
   fConnection := Statement.Connection.Properties;
 end;
 

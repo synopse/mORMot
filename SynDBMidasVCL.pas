@@ -107,6 +107,7 @@ type
   protected
     fDataSet: TSynDBSQLDataSet;
     fProvider: TDataSetProvider;
+    fIgnoreColumnDataSize: boolean;
     function GetConnection: TSQLDBConnectionProperties; virtual;
     procedure SetConnection(Value: TSQLDBConnectionProperties); virtual;
     // from TDataSet
@@ -118,11 +119,18 @@ type
   public
     /// initialize the instance
     constructor Create(AOwner: TComponent); override;
+    procedure FetchParams; 
     /// initialize the internal TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied TSQLDBStatement can then be freed by the caller, since
     // a private binary copy will be owned by this instance (in fDataSet.Data)
     procedure From(Statement: TSQLDBStatement; MaxRowCount: cardinal=0);
-    procedure FetchParams;
+    /// if field sizes should be left unset, allowing further filling with
+    // any data length
+    // - by default, ColumnDataSize would be computed from the supplied data,
+    // unless you set IgnoreColumnDataSize=true to set the value to 0 (and
+    // force e.g. SynDBVCL TSynBinaryDataSet.InternalInitFieldDefs define the
+    // field as ftDefaultMemo)
+    property IgnoreColumnDataSize: boolean read fIgnoreColumnDataSize write fIgnoreColumnDataSize;
   published
     property CommandText;
     property Active;
@@ -455,7 +463,7 @@ end;
 
 procedure TSynDBDataSet.From(Statement: TSQLDBStatement; MaxRowCount: cardinal);
 begin
-  fDataSet.From(Statement,MaxRowCount);
+  fDataSet.From(Statement,MaxRowCount,fIgnoreColumnDataSize);
   fDataSet.CommandText := ''; // ensure no SQL execution
   Open;
   fDataSet.CommandText := UTF8ToString(Statement.SQL); // assign it AFTER Open
