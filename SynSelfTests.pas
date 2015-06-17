@@ -3271,6 +3271,7 @@ var W: TFileBufferWriter;
     i: integer;
     V: double;
     u: SynUnicode;
+    a: WinAnsiString;
     {$endif NOVARIANTS}
 begin
   T := TSynTable.Create('Test');
@@ -3321,8 +3322,9 @@ begin
         u := RandomUnicode(i*2);
         data.Field['text'] := u;
         check(data.Field['text']=u);
-        data.Field['ansi'] := u;
-        check(data.Field['ansi']=u);
+        a := RandomAnsi7(i*2);
+        data.Field['ansi'] := a;
+        check(data.Field['ansi']=a);
         // here, ansi is more efficent than text for storage size
       end;
       check(data.Field['bool']=true);
@@ -3338,7 +3340,7 @@ begin
       end;
       check(data.Field['bool']=true);
       check(data.Field['text']=u);
-      check(data.Field['ansi']=u);
+      check(data.Field['ansi']=a);
       check(data.Field['ID']=1);
       // test TSynTableVariantType
       rec := T.Data;

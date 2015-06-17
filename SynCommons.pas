@@ -43987,6 +43987,7 @@ begin
     VType := SynTableVariantType.VarType;
     VID := aID;
     VTable := self;
+    PtrInt(VValue) := 0; // avoid GPF
     if RecordBuffer=nil then
       VValue := DefaultRecordData else begin
       if RecordBufferLen=0 then
