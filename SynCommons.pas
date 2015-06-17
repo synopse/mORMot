@@ -11461,13 +11461,21 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
       aOptions: TDocVariantOptions=[]);
-    /// initialize a variant instance to store some document-based array content
-    // - array will be initialized with data supplied as variant dynamic array
-    // - if Items is [], the variant will be set as null
-    // - will be almost immediate, since TVariantDynArray is reference-counted
+    /// initialize a variant instance to store some document-based object content
+    // - object will be initialized with names and values supplied as dynamic arrays
+    // - if aNames and aValues are [] or do have matching sizes, the variant
+    // will be set as null
+    // - will be almost immediate, since Names and Values are reference-counted
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObjectFromVariants(const aNames: TRawUTF8DynArray;
        const aValues: TVariantDynArray; aOptions: TDocVariantOptions=[]);
+    /// initialize a variant instance to store a document-based object with a
+    // single property
+    // - the supplied path could be 'Main.Second.Third', to create nested
+    // objects, e.g. {"Main":{"Second":{"Third":value}}}
+    // - if you call Init*() methods in a row, ensure you call Clear in-between
+    procedure InitObjectFromPath(const aPath: RawUTF8; const aValue: variant;
+      aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - warning: the incoming JSON buffer will be modified in-place: so you
@@ -23257,13 +23265,15 @@ var
 
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
-  try
-    WriteObject(Value,Options);
-    SetText(result);
-  finally
-    Free;
-  end;
+  if Value=nil then
+    result := 'null' else
+    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    try
+      WriteObject(Value,Options);
+      SetText(result);
+    finally
+      Free;
+    end;
 end;
 
 function UrlEncode(const svar: RawUTF8): RawUTF8;
@@ -31990,6 +32000,23 @@ begin
     VCount := length(aNames);
     VName := aNames; // direct by-reference copy
     VValue := aValues;
+  end;
+end;
+
+procedure TDocVariantData.InitObjectFromPath(const aPath: RawUTF8; const aValue: variant;
+  aOptions: TDocVariantOptions=[]);
+var right: RawUTF8;
+begin
+  if aPath='' then
+    VType := varNull else begin
+    Init(aOptions,dvObject);
+    VCount := 1;
+    SetLength(VName,1);
+    SetLength(VValue,1);
+    split(aPath,'.',VName[0],right);
+    if right='' then
+      VValue[0] := aValue else
+      PDocVariantData(@VValue[0])^.InitObjectFromPath(right,aValue,aOptions);
   end;
 end;
 
