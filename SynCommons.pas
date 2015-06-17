@@ -14956,6 +14956,15 @@ end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef CPU64}
+{$ifdef FPC}
+begin // fallback to pure pascal version, since asm version below make GPFs for FPC
+  if val<0 then begin
+    result := StrUInt32(P,PtrUInt(-val))-1;
+    result^ := '-';
+  end else
+    result := StrUInt32(P,val);
+end;
+{$else}
 {$ifdef FPC}nostackframe; assembler;
 asm
 {$else}
@@ -14972,7 +14981,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     sub rdx,r10                 // rdx=abs(val)
     cmp rdx,10; jb @3           // direct process of common val<10
     mov rax,rdx
-    lea r8,TwoDigitLookupW
+    lea r8,TwoDigitLookup
 @s: cmp rax,100
     lea rcx,[rcx-2]
     jb @2
@@ -15003,6 +15012,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     mov [rcx-1],dl
     lea rax,[rcx+r10-1]         // includes '-' if val<0
 end;
+{$endif FPC}
 {$else}
 {$ifdef PUREPASCAL}
 begin // this code is faster than the Borland's original str() or IntToStr()
@@ -15033,7 +15043,7 @@ asm // eax=P, edx=val
     shr	edx,5          // now edx=eax div 100
     mov eax,edx
     imul edx,-200
-    movzx edx,word ptr [TwoDigitLookupW+ecx*2+edx]
+    movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
     mov [edi],dx
     cmp eax,10
     jae @s
@@ -15046,7 +15056,7 @@ asm // eax=P, edx=val
     pop ecx
     lea eax,[eax+ecx] // includes '-' if val<0
     ret
-@2: movzx eax,word ptr [TwoDigitLookupW+eax*2]
+@2: movzx eax,word ptr [TwoDigitLookup+eax*2]
     mov byte ptr [edi-1],'-'
     mov [edi],ax
     mov eax,edi
@@ -15066,6 +15076,30 @@ end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef CPU64}
+{$ifdef FPC}
+var c100: PtrUInt;
+begin // fallback to pure pascal version, since asm version below make GPFs for FPC
+  repeat
+    if val<10 then begin
+      dec(P);
+      P^ := AnsiChar(val+ord('0'));
+      break;
+    end else
+    if val<100 then begin
+      dec(P,2);
+      PWord(P)^ := TwoDigitLookupW[val];
+      break;
+    end;
+    dec(P,2);
+    c100 := val div 100;
+    dec(val,c100*100);
+    PWord(P)^ := TwoDigitLookupW[val];
+    val := c100;
+    if c100=0 then break;
+  until false;
+  result := P;
+end;
+{$else}
 {$ifdef FPC}nostackframe; assembler;
 asm
 {$else}
@@ -15078,7 +15112,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     {$endif win64}
     cmp rdx,10; jb @3           // direct process of common val<10
     mov rax,rdx
-    lea r8,TwoDigitLookupW
+    lea r8,TwoDigitLookup
 @s: cmp rax,100
     lea rcx,[rcx-2]
     jb @2
@@ -15107,6 +15141,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
     or dl,'0'
     mov [rax],dl
 end;
+{$endif FPC}
 {$else}
 {$ifdef PUREPASCAL}
 var c100: PtrUInt;
@@ -15147,7 +15182,7 @@ asm // eax=P, edx=val
     shr	edx,5          // now edx=eax div 100
     mov eax,edx
     imul edx,-200
-    movzx edx,word ptr [TwoDigitLookupW+ecx*2+edx]
+    movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
     mov [edi],dx
     cmp eax,10
     jae @s
@@ -15157,7 +15192,7 @@ asm // eax=P, edx=val
     mov eax,edi
     pop edi
     ret
-@2: movzx eax,word ptr [TwoDigitLookupW+eax*2]
+@2: movzx eax,word ptr [TwoDigitLookup+eax*2]
     mov [edi],ax
     mov eax,edi
     pop edi
