@@ -5182,6 +5182,10 @@ begin
     J := ObjectToJSON(peop);
     Check(J='{"ID":1234,"FirstName":"FN","LastName":"LN",'+
       '"Data":"","YearOfBirth":1000,"YearOfDeath":0}');
+    ClearObject(peop);
+    J := ObjectToJSON(peop);
+    Check(J='{"ID":1234,"FirstName":"","LastName":"",'+
+      '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
   finally
     peop.Free;
   end;
@@ -6366,6 +6370,12 @@ begin
   RawUTF8ToVariant('def',v2);
   v1.Add(v2);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
+  Doc.Clear;
+  Doc.InitObjectFromPath('name','toto');
+  check(Doc.ToJSON='{"name":"toto"}');
+  Doc.Clear;
+  Doc.InitObjectFromPath('people.age',31);
+  check(Doc.ToJSON='{"people":{"age":31}}');
 end;
 
 {$endif LVCL}

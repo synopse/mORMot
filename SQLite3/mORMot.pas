@@ -1840,10 +1840,20 @@ procedure CopyCollection(Source, Dest: TCollection);
 {$endif}
 
 /// set any default integer or enumerates (including boolean) published
-// properties values for a TPersistent
-// - reset only the published properties of the current class level (do NOT
-// reset the properties content published in the parent classes)
-procedure SetDefaultValuesObject(Value: TPersistent);
+// properties values for a TPersistent/TSynPersistent
+// - set only the values set as "property ... default ..." at class type level
+// - will also reset the published properties of the nested classes
+procedure SetDefaultValuesObject(Value: TObject);
+
+/// will reset all the object properties to their default
+// - strings would be set to '', numbers to 0
+// - if FreeAndNilNestedObjects is the default FALSE, will recursively reset
+// all nested class properties values
+// - if FreeAndNilNestedObjects is TRUE, will FreeAndNil() all the nested
+// class properties
+// - for a TSQLRecord, use its ClearProperties method instead, which will
+// handle the ID property, and any nested JOINed instances 
+procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
 
 /// persist a class instance into a JSON file
 procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
@@ -1859,7 +1869,12 @@ function ObjectToJSONDebug(Value: TObject): RawUTF8;
 
 /// will serialize any TObject into a TDocVariant document
 // - just a wrapper around _JsonFast(ObjectToJSON())
-function ObjectToVariant(Value: TObject): variant;
+function ObjectToVariant(Value: TObject): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// will serialize any TObject into a TDocVariant document
+// - just a wrapper around _JsonFast(ObjectToJSON())
+procedure ObjectToVariant(Value: TObject; out result: variant); overload;
 
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
@@ -2416,7 +2431,7 @@ type
     {$endif}
     function GetCurrencyProp(Instance: TObject): currency;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    procedure SetCurrencyProp(Instance: TObject; Value: Currency);
+    procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
      {$ifdef HASINLINE}inline;{$endif}
     function GetDoubleProp(Instance: TObject): double;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -2603,6 +2618,10 @@ type
     // - return NIL if both getter and setter are methods
     function GetFieldAddr(Instance: TObject): pointer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// low-level setter of the property value as its default
+    // - this method will check the property type, e.g. setting '' for strings,
+    // and 0 for numbers, or running FreeAndNil() on any nested object
+    procedure SetDefaultValue(Instance: TObject);
     /// read an TObject published property, as saved by ObjectToJSON() function
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
@@ -14874,7 +14893,7 @@ type
     fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
     fExpandedJSON: boolean;
-    fSearchRec: TSQLRecord;
+    fSearchRec: TSQLRecord; // temporary record to store the searched value 
     fBasicUpperSQLSelect: array[boolean] of RawUTF8;
     fUniqueFields: TObjectList;
     function UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
@@ -18243,8 +18262,10 @@ end;
 
 procedure TSQLPropInfoRTTICurrency.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
+var tmp: Int64;
 begin
-  fPropInfo.SetCurrencyProp(Instance,StrToCurrency(Value));
+  tmp := StrToCurr64(Value,nil);
+  fPropInfo.SetCurrencyProp(Instance,PCurrency(@tmp)^);
 end;
 
 function TSQLPropInfoRTTICurrency.CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt;
@@ -18996,7 +19017,8 @@ procedure TSQLPropInfoRTTIWide.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var Wide: WideString;
 begin
-  UTF8ToWideString(Value,StrLen(Value),Wide);
+  if Value<>nil then
+    UTF8ToWideString(Value,StrLen(Value),Wide);
   fPropInfo.SetWideStrProp(Instance,Wide);
 end;
 
@@ -19071,8 +19093,11 @@ end;
 
 procedure TSQLPropInfoRTTIUnicode.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
+var tmp: UnicodeString;
 begin
-  fPropInfo.SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(Value,StrLen(Value)));
+  if Value<>nil then
+    UTF8DecodeToUnicodeString(Value,StrLen(Value),tmp);
+  fPropInfo.SetUnicodeStrProp(Instance,tmp);
 end;
 
 procedure TSQLPropInfoRTTIUnicode.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
@@ -19433,8 +19458,10 @@ procedure TSQLPropInfoRTTIVariant.SetValue(Instance: TObject; Value: PUTF8Char;
 var V: Variant;
     ValueLocalCopy: RawUTF8;
 begin
-  ValueLocalCopy := Value; // private copy since the buffer will be modified
-  GetVariantFromJSON(pointer(ValueLocalCopy),wasString,V,@DocVariantOptions);
+  if Value<>nil then begin
+    ValueLocalCopy := Value; // private copy since the buffer will be modified
+    GetVariantFromJSON(pointer(ValueLocalCopy),wasString,V,@DocVariantOptions);
+  end;
   fPropInfo.SetVariantProp(Instance,V);
 end;
 
@@ -23875,9 +23902,9 @@ function TPropInfo.GetInt64Value(Instance: TObject): Int64;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
-    tkInteger,tkEnumeration,tkSet,{$ifdef FPC}tkBool,{$endif}tkClass:
+    tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkClass{$ifdef FPC},tkBool{$endif}:
       result := GetOrdProp(Instance);
-    tkInt64{$ifdef FPC}, tkQWord{$endif}:
+    tkInt64{$ifdef FPC},tkQWord{$endif}:
       result := GetInt64Prop(Instance);
     else result := 0;
   end else
@@ -24009,6 +24036,48 @@ begin
   end;
 end;
 
+const null_vardata: TVarData = (VType: varNull);
+
+procedure TPropInfo.SetDefaultValue(Instance: TObject);
+var Item: TObject;
+    rec: pointer;
+begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  tkInteger,tkChar,tkWChar,tkEnumeration,tkSet,tkInt64
+  {$ifdef FPC},tkBool,tkQWord{$endif}:
+    SetInt64Value(Instance,0);
+  tkLString{$ifdef FPC},tkAString{$endif}:
+    SetLongStrProp(Instance,'');
+  {$ifdef UNICODE}
+  tkUString:
+    SetUnicodeStrProp(Instance,'');
+  {$endif}
+  tkWString:
+    SetWideStrProp(Instance,'');
+  tkFloat:
+    SetFloatProp(Instance,0);
+  {$ifndef NOVARIANTS}
+  tkVariant:
+    SetVariantProp(Instance,variant(null_vardata));
+  {$endif}
+  tkClass: begin // mimic FreeAndNil()
+    Item := GetObjProp(Instance);
+    if Item<>nil then begin
+      SetOrdProp(Instance,0); // set nil
+      Item.Free;
+    end;
+  end;
+  {$ifndef PUBLISHRECORD}
+  tkRecord{$ifdef FPC},tkObject{$endif}: begin
+    rec := GetFieldAddr(Instance);
+    RecordClear(rec^,PropType{$ifndef FPC}^{$endif});
+    FillChar(rec^,PropType^.RecordType^.Size,0);
+  end;
+  {$endif}
+  end;
+end;
+
 function TPropInfo.GetGenericStringValue(Instance: TObject): string;
 var tmp: RawUTF8;
 begin
@@ -24067,7 +24136,7 @@ procedure TPropInfo.SetInt64Value(Instance: TObject; Value: Int64);
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
-    tkInteger,tkEnumeration,tkSet,{$ifdef FPC}tkBool,{$endif}tkClass:
+    tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkClass{$ifdef FPC},tkBool{$endif}:
       SetOrdProp(Instance,Value);
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
       SetInt64Prop(Instance,Value);
@@ -24475,7 +24544,7 @@ begin
     result := TypInfo.GetFloatProp(Instance,@self);
 end;
 
-procedure TPropInfo.SetCurrencyProp(Instance: TObject; Value: Currency);
+procedure TPropInfo.SetCurrencyProp(Instance: TObject; const Value: Currency);
 begin
   if SetterIsField then
     PCurrency(SetterAddr(Instance))^ := Value else
@@ -24819,7 +24888,7 @@ begin // faster code by AB
   end;
 end;
 
-procedure TPropInfo.SetCurrencyProp(Instance: TObject; Value: Currency);
+procedure TPropInfo.SetCurrencyProp(Instance: TObject; const Value: Currency);
 begin
   if SetterIsField then
     PCurrency(SetterAddr(Instance))^ := Value else
@@ -37503,30 +37572,29 @@ begin
         ndx := IDToIndex(aID); // use fast binary search
         if ndx>=0 then begin
           OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
-          result := 1;
+          inc(result);
         end;
       end;
     end;
   end else
   if cardinal(WhereField)<=cardinal(fStoredClassRecordProps.Fields.Count) then begin
     dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
+    P := fStoredClassRecordProps.Fields.List[WhereField];
     // use fUniqueFields[] hash array for O(1) search if available
     Hash := UniqueFieldHash(WhereField);
     if Hash<>nil then
       if FoundOffset>0 then // omit first FoundOffset rows, for ID unique field
-        exit else
-      with Hash do begin
-        Field.SetValueVar(fSearchRec,WhereValue,false);
-        ndx := Find(fSearchRec);
+        exit else begin
+        P.SetValueVar(fSearchRec,WhereValue,false);
+        ndx := Hash.Find(fSearchRec);
         if ndx>=0 then begin
           OnFind(Dest,fValue.List[ndx],ndx);
-          result := 1;
+          inc(result);
         end;
         exit;
       end;
     // generic code below is as fast as possible, and works for all field types
     currentRow := 0;
-    P := fStoredClassRecordProps.Fields.List[WhereField];
     if not (P.SQLFieldType in COPIABLE_FIELDS) then
       exit; // nothing to search (e.g. sftUnknown or sftMany)
     if ((P.SQLFieldType in [sftBoolean,sftEnumerate,sftSet,sftID,sftRecord
@@ -39724,18 +39792,28 @@ end;
 
 function ObjectToVariant(Value: TObject): variant;
 begin
-  _Json(ObjectToJSON(Value),result,JSON_OPTIONS[true]);
+  ObjectToVariant(Value,result);  
+end;
+
+procedure ObjectToVariant(Value: TObject; out result: variant); overload;
+var json: RawUTF8;
+begin
+  json := ObjectToJSON(Value);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS[true]);
 end;
 
 function ObjectToVariantDebug(Value: TObject): variant;
+var json: RawUTF8;
 begin
-  _Json(ObjectToJSONDebug(Value),result,JSON_OPTIONS[true]);
+  VarClear(result);
+  json := ObjectToJSONDebug(Value);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS[true]);
 end;
 
 procedure _ObjAddProps(Value: TObject; var Obj: variant);
 var v: variant;
 begin
-  _Json(ObjectToJSON(Value),v,JSON_OPTIONS[true]);
+  ObjectToVariant(Value,v);
   _ObjAddProps(v,Obj);
 end;
 
@@ -40389,19 +40467,10 @@ begin
     while From^ in [#1..' '] do inc(From);
     result := From;
     if PInteger(From)^=NULL_LOW then begin
-      {$ifndef NOVARIANTS}
-      if Kind=tkVariant then
-        P^.SetVariantProp(Value,null) else
-      {$endif} begin
-        // nested null object -> FreeAndNil(Value.Item)
-        if (IsObj in [oSQLRecord,oSQLMany]) or (Kind<>tkClass) then
+      // null value should set the default value, or free nested object 
+      if (Kind=tkClass) and (IsObj in [oSQLRecord,oSQLMany]) then
           exit; // null expects a plain TSynPersistent/TPersistent
-        Item := P^.GetObjProp(Value);
-        if Item<>nil then begin
-          P^.SetOrdProp(Value,0);
-          Item.Free;
-        end;
-      end;
+      P^.SetDefaultValue(Value); // will set 0,'' or FreeAndNil(NestedObject)
       inc(From,4);
       while From^ in [#1..' '] do inc(From);
       EndOfObject := From^;
@@ -40528,7 +40597,7 @@ begin
       tkRecord{$ifdef FPC},tkObject{$endif}:
         if not wasString then
           exit else
-          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.PropType^);
+          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.PropType{$ifndef FPC}^{$endif});
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: begin
@@ -40691,24 +40760,39 @@ begin
     ReadObject(Value,source,SubCompName);
 end;
 
-procedure SetDefaultValuesObject(Value: TPersistent);
+procedure SetDefaultValuesObject(Value: TObject);
 var P: PPropInfo;
     i: integer;
-    Obj: TPersistent;
 begin
   if Value<>nil then
   for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
     case P^.PropType^.Kind of
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
       if P^.Default<>longint($80000000) then
-        P^.SetOrdProp(Value,P^.Default); // pointer() to call typinfo
-      tkClass: begin
-        Obj := TPersistent(P^.GetObjProp(Value));
-        if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
-          SetDefaultValuesObject(Obj);
-      end;
+        P^.SetOrdProp(Value,P^.Default);
+      tkClass:
+        SetDefaultValuesObject(P^.GetObjProp(Value));
     end;
     P := P^.Next;
+  end;
+end;
+
+procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
+var P: PPropInfo;
+    i: integer;
+begin
+  if Value<>nil then
+  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
+    if P^.PropType^.Kind=tkClass then
+      if FreeAndNilNestedObjects then
+        P^.SetDefaultValue(Value) else
+        ClearObject(P^.GetObjProp(Value),false) else
+      P^.SetDefaultValue(Value);
+    {$ifdef HASINLINE}
+    P := P^.Next;
+    {$else}
+    P := @P^.Name[ord(P^.Name[0])+1];
+    {$endif}
   end;
 end;
 
