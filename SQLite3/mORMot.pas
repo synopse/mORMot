@@ -11056,18 +11056,48 @@ type
 
   /// TInterfacedObject class which would notify a REST server when it is released
   // - could be used when implementing event callbacks as interfaces, so that
-  // the other side instance would
-  TInterfacedCallback = class(TInterfacedObject)
+  // the other side instance would be notified when it is destroyed
+  TInterfacedCallback = class(TInterfacedObjectLocked)
   protected
     fRest: TSQLRest;
     fInterface: TGUID;
   public
     /// initialize the instance for a given REST and callback interface
-    constructor Create(aRest: TSQLRest; const aGUID: TGUID);
+    constructor Create(aRest: TSQLRest; const aGUID: TGUID); reintroduce;
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
     // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
     destructor Destroy; override;
+  end;
+
+  /// the current state of a TBlockingCallback instance
+  TBlockingCallbackEvent = (evNone,evWaiting,evTimeout,evRaised);
+
+  /// asynchrounous callback to emulate a synchronous/blocking process
+  TBlockingCallback = class(TInterfacedCallback)
+  protected
+    fEvent: TBlockingCallbackEvent;
+    fTimeOutMs: integer;
+    fEventNotifier: TEvent;
+  public
+    /// initialize the callback instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - you can optionally set a REST and callback interface for automatic
+    // notification when this TInterfacedCallback would be released
+    constructor Create(aTimeOutMs: integer;
+      aRest: TSQLRest; const aGUID: TGUID); reintroduce;
+    /// finalize the callback instance
+    destructor Destroy; override;
+    /// called to wait for the callback to be processed, or trigger timeout
+    procedure WaitFor;
+    /// should be called by the callback when the process is finished
+    // - would optionally log all published properties values to the log class
+    // of the supplied REST instance
+    procedure CallbackFinished(aRestForLog: TSQLRest);
+  published
+    /// the current state of process
+    property Event: TBlockingCallbackEvent read fEvent write fEvent;
   end;
 
   /// this class implements a callback interface, able to write all remote ORM
@@ -47580,8 +47610,7 @@ begin
     fRest.fAcquireExecution[execORMWrite].Enter;
     try
       arr := @fRecordVersionCallback[TableIndex];
-      for i := length(arr^)-1 downto 0 do
-        // downto for InterfaceArrayDelete() below
+      for i := length(arr^)-1 downto 0 do // downto: InterfaceArrayDelete() below
         if CallbackReleasedOnClientSide(arr^[i]) then
           // automatic removal of any released callback
           InterfaceArrayDelete(arr^,i) else
@@ -48964,6 +48993,60 @@ begin
     if GetInterface(fInterface,Obj) then
       fRest.Services.CallBackUnRegister(IInvokable(Obj));
   inherited Destroy;
+end;
+
+
+{ TBlockingCallback }
+
+constructor TBlockingCallback.Create(aTimeOutMs: integer;
+   aRest: TSQLRest; const aGUID: TGUID);
+begin
+  inherited Create(aRest,aGUID);
+  fEventNotifier := TEvent.Create(nil,false,false,'');
+  if aTimeOutMs=0 then
+    fTimeOutMs := 3000 else // some minimal timeout is mandatory
+    fTimeOutMs := aTimeOutMs;
+end;
+
+destructor TBlockingCallback.Destroy;
+begin
+  FreeAndNil(fEventNotifier);
+  inherited Destroy;
+end;
+
+procedure TBlockingCallback.CallbackFinished(aRestForLog: TSQLRest);
+begin
+  Lock;
+  try
+    if fEvent in [evRaised,evTimeout] then
+      exit; // ignore if already notified
+    fEvent := evRaised;
+    if aRestForLog<>nil then
+      aRestForLog.LogClass.Add.Log(sllTrace,self);
+    fEventNotifier.SetEvent; // notify caller
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TBlockingCallback.WaitFor;
+begin
+  Lock;
+  try
+    if fEvent in [evRaised,evTimeOut] then
+      exit;
+    fEvent := evWaiting;
+  finally
+    UnLock;
+  end;
+  FixedWaitFor(fEventNotifier,fTimeOutMs);
+  Lock;
+  try
+    if fEvent<>evRaised then
+      fEvent := evTimeout;
+  finally
+    UnLock;
+  end;
 end;
 
 
