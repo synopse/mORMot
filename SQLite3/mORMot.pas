@@ -48486,10 +48486,10 @@ type // use AutoTable VMT entry to store a cache of the needed fields RTTI
     ClassesCount: integer;
     ObjArraysCount: integer;
     Classes: array of record
-      Prop: PPropInfo;
+      Offset: cardinal;
       Instance: TClassInstance;
     end;
-    ObjArrays: array of PPropInfo;
+    ObjArraysOffset: array of cardinal;
     constructor Create(aClass: TClass);
   end;
 
@@ -48506,7 +48506,7 @@ begin
             'so should not have any "write" defined',[aClass,P^.Name,P^.PropType^.Name]);
         SetLength(Classes,ClassesCount+1);
         with Classes[ClassesCount] do begin
-          Prop := P;
+          Offset := PtrUInt(P^.GetterAddr(nil));
           Instance.Init(P^.PropType^.ClassType^.ClassType);
         end;
         inc(ClassesCount);
@@ -48514,8 +48514,8 @@ begin
       tkDynArray:
         if (ObjArraySerializers.Find(P^.PropType{$ifndef FPC}^{$endif})<>nil)
            and P^.GetterIsField then begin
-          SetLength(ObjArrays,ObjArraysCount+1);
-          ObjArrays[ObjArraysCount] := P;
+          SetLength(ObjArraysOffset,ObjArraysCount+1);
+          ObjArraysOffset[ObjArraysCount] := PtrUInt(P^.GetterAddr(nil));
           inc(ObjArraysCount);
         end;
       end;
@@ -48541,7 +48541,7 @@ begin
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
   for i := 0 to fields.ClassesCount-1 do
     with fields.Classes[i] do
-      PObject(Prop^.GetterAddr(self))^ := Instance.CreateNew;
+      PObject(PtrUInt(self)+Offset)^ := Instance.CreateNew;
 end;
 
 procedure AutoDestroyFields(self: TObject);
@@ -48550,11 +48550,11 @@ var i: integer;
 begin
   fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
   if fields=nil then
-    raise EModelException.CreateUTF8('%.AutoTable VMT entry not set',[self]);
+    exit; // may happen in a weird finalization code
   for i := 0 to fields.ClassesCount-1 do
-    PObject(fields.Classes[i].Prop^.GetterAddr(self))^.Free;
+    PObject(PtrUInt(self)+fields.Classes[i].Offset)^.Free;
   for i := 0 to fields.ObjArraysCount-1 do
-    ObjArrayClear(fields.ObjArrays[i]^.GetterAddr(self)^);
+    ObjArrayClear(pointer(PtrUInt(self)+fields.ObjArraysOffset[i])^);
 end;
 
 
@@ -48577,7 +48577,6 @@ end;
 
 constructor TSynAutoCreateFields.Create;
 begin
-  inherited;
   AutoCreateFields(self);
 end;
 
