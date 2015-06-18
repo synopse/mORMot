@@ -40246,22 +40246,22 @@ end;
 
 type
   TJSONObject =
-    (oNone, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
+    (oNone, oException, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
      oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
      oSynMonitor, oCustom);
 
 function JSONObject(aClassType: TClass; out aCustomIndex: integer;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
 const
-  MAX = {$ifdef LVCL}11{$else}12{$endif};
-  TYP: array[0..MAX] of TClass = (
-    TObject,TList,TObjectList,TPersistent,TSynPersistentWithPassword,
-    TSynPersistent,TInterfacedObjectWithCustomCreate,
+  MAX = {$ifdef LVCL}13{$else}14{$endif};
+  TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
+    TObject,Exception,ESynException,TList,TObjectList,TPersistent,
+    TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
     TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List
     {$ifndef LVCL},TCollection{$endif});
   OBJ: array[0..MAX] of TJSONObject = (
-    oNone,oList,oObjectList,oPersistent,oPersistentPassword,
-    oPersistent,oPersistent,
+    oNone,oException,oPersistent,oList,oObjectList,oPersistent,
+    oPersistentPassword,oPersistent,oPersistent,
     oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs
     {$ifndef LVCL},oCollection{$endif});
 var i: integer;
@@ -40930,7 +40930,7 @@ procedure TClassInstance.Init(C: TClass);
 begin
   ItemClass := C;
   if C<>nil then
-  repeat // this unrolled loop is much faster than cascaded if C.InheritsFrom()
+  repeat // this unrolled loop is faster than cascaded if C.InheritsFrom()
     if C<>TSQLRecord then
     if C<>TObjectList then
     if C<>TInterfacedObjectWithCustomCreate then
@@ -42651,18 +42651,27 @@ begin
   if IsObj in [oSQLRecord,oSQLMany] then begin
     // manual handling of TSQLRecord.ID property serialization
     HR;
-    AddPropName('ID');
+    AddShort('"ID":');
     if woHumanReadable in Options then
       Add(' ');
     Add(TSQLRecord(Value).fID);
     Add(',');
-  end else
+  end else begin
     if woStorePointer in Options then begin // "Address":"0431298a" field
       HR;
       AddShort('"Address":"');
       AddPointer(PtrUInt(Value));
       Add('"',',');
     end;
+    case IsObj of
+    oException: begin
+      HR;
+      AddShort('"Message":"');
+      AddJSONEscapeString(Exception(Value).Message);
+      Add('"',',');
+    end;
+    end;
+  end;
   repeat
     for i := 1 to InternalClassPropInfo(aClassType,P) do begin
       if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
@@ -45191,8 +45200,7 @@ begin
     if ClassHasPublishedFields(ClassType) or
        (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-          oSQLRecord,oSQLMany,oPersistent,oPersistentPassword,
-          oSynMonitor,oCustom]) then
+          oException,oCustom]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
   {$ifdef FPC}tkObject,{$endif} tkRecord:
     // Base64 encoding of our RecordLoad / RecordSave binary format
