@@ -1953,11 +1953,7 @@ begin
       Check(A=i);
       Check(B=byte(i+1));
       CheckSame(C,i*2.2);
-      {$ifdef CPUARM}
       CheckSame(D,i*3.25);
-      {$else}
-      Check(D=i*3.25);
-      {$endif}
     end;
     R.A := i;
     R.B := i+1;
@@ -1980,11 +1976,7 @@ begin
       Check(A=i);
       Check(B=byte(i+1));
       CheckSame(C,i*2.2);
-      {$ifdef CPUARM}
       CheckSame(D,i*3.25);
-      {$else}
-      Check(D=i*3.25);
-      {$endif}
     end;
   // validate packed record with strings inside
   AFP.Init(TypeInfo(TFVs),AF);

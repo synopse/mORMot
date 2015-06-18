@@ -48031,12 +48031,13 @@ begin
     dummyObj := nil;
     if not TSQLRestServer(Rest).Services.TryResolveInternal(
        fInterface.fInterfaceTypeInfo,dummyObj) then
-      raise EInterfaceFactoryException.CreateUTF8('ickFromResolver(%): TryResolve=false',
+      raise EInterfaceFactoryException.CreateUTF8(
+        'ickFromInjectedResolver: TryResolveInternal(%)=false',
         [fInterface.fInterfaceTypeInfo^.Name]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-    if AndIncreaseRefCount then // already done
+    if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal() 
       AndIncreaseRefCount := false else
-      TInterfacedObjectHooked(result).FRefCount := 0;
+      dec(TInterfacedObjectHooked(result).FRefCount);
   end;
   else
     result := fImplementationClass.Create;

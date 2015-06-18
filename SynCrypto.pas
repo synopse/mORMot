@@ -359,7 +359,7 @@ type
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
-  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
+  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   TAESAbstract = class
   protected
     fKeySize: cardinal;
@@ -384,26 +384,30 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); virtual; abstract;
 
     /// encrypt a memory buffer using a PKCS7 padding pattern
-    // - PKCS7 is described in RFC 5652 - it will add up to 16 bytes to
-    // the input buffer
+    // - PKCS7 padding is described in RFC 5652 - it will add up to 16 bytes to
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     function EncryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString; overload;
     /// decrypt a memory buffer using a PKCS7 padding pattern
-    // - PKCS7 is described in RFC 5652 - it will trim up to 16 bytes from
-    // the input buffer
+    // - PKCS7 padding is described in RFC 5652 - it will trim up to 16 bytes from
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
     // - if IVAtBeginning is TRUE, the Initialization Vector will be taken
     // from the beginning of the input binary buffer
     function DecryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString; overload;
     /// encrypt a memory buffer using a PKCS7 padding pattern
-    // - PKCS7 is described in RFC 5652 - it will add up to 16 bytes to
-    // the input buffer
+    // - PKCS7 padding is described in RFC 5652 - it will add up to 16 bytes to
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     function EncryptPKCS7(const Input: TBytes; IVAtBeginning: boolean=false): TBytes; overload;
     /// decrypt a memory buffer using a PKCS7 padding pattern
-    // - PKCS7 is described in RFC 5652 - it will trim up to 16 bytes from
-    // the input buffer
+    // - PKCS7 padding is described in RFC 5652 - it will trim up to 16 bytes from
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
     // - if IVAtBeginning is TRUE, the Initialization Vector will be taken
     // from the beginning of the input binary buffer
     function DecryptPKCS7(const Input: TBytes; IVAtBeginning: boolean=false): TBytes; overload;
@@ -411,12 +415,16 @@ type
     /// compute how many bytes would be needed in the output buffer, when
     // encrypte using a PKCS7 padding pattern
     // - could be used to pre-compute the OutputLength for EncryptPKCS7Buffer()
+    // - PKCS7 padding is described in RFC 5652 - it will add up to 16 bytes to
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
     function EncryptPKCS7Length(InputLen: cardinal; IVAtBeginning: boolean): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     /// encrypt a memory buffer using a PKCS7 padding pattern
-    // - PKCS7 is described in RFC 5652 - it will add up to 16 bytes to
-    // the output buffer (+ 16 additional bytes if IVAtBeginning is true): use
-    // EncryptPKCS7Length() function to compute the actual needed length
+    // - PKCS7 padding is described in RFC 5652 - it will add up to 16 bytes to
+    // the input buffer; note this method uses the padding only, not the whole
+    // PKCS#7 Cryptographic Message Syntax
+    // - use EncryptPKCS7Length() function to compute the actual needed length
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     // - returns TRUE on success, FALSE if OutputLen is not correct - you should
@@ -442,7 +450,7 @@ type
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
-  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
+  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - this class will use AES-NI hardware instructions, if available
   // - those classes are re-entrant, i.e. that you can call the Encrypt*
   // or Decrypt* methods on the same instance several times
@@ -960,7 +968,7 @@ var
   /// the AES-256 encoding class used by CompressShaAes() global function
   // - use any of the implementation classes, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
-  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7 padding)
+  // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - set to the secure and efficient CFB mode by default
   CompressShaAesClass: TAESAbstractClass = TAESCFB;
 

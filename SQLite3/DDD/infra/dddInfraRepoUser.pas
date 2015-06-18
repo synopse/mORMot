@@ -243,6 +243,7 @@ begin
 end;
 
 class procedure TInfraRepoUserFactory.RegressionTests(test: TSynTestCase);
+
 procedure TestOne(Rest: TSQLRest);
 const MAX=1000;
       MOD_EMAILVALID=ord(high(TDomUserEmailValidation))+1;
@@ -317,6 +318,7 @@ begin
       for i := 0 to high(users) do begin
         test.Check(users[i].LogonName=users[i].Phone1);
         test.Check(users[i].Name.First='First'+users[i].LogonName);
+        test.Check(users[i].Address.Country.Iso=250);
       end;
     finally
       ObjArrayClear(users);
@@ -331,6 +333,7 @@ begin
       while cmd.GetNext(user)=cqrsSuccess do begin
         test.Check(user.EmailValidated=v);
         test.Check(user.Name.First='First'+user.LogonName);
+        test.Check(user.Address.Country.Iso=250);
         inc(i);
       end;
       test.Check(i=cmd.GetCount);
@@ -345,6 +348,7 @@ begin
     user.Free;
   end;
 end;
+
 var RestServer: TSQLRestServerFullMemory;
     RestClient: TSQLRestClientURI;
 begin

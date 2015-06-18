@@ -96,7 +96,7 @@ type
   TCountry = class(TSynPersistent)
   protected
     fIso: TCountryIsoNumeric;
-    fCache: record
+    fCache: packed record
       Identifier: TCountryIdentifier;
       Iso: TCountryIsoNumeric;
     end;
