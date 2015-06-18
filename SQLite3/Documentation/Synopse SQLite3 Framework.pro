@@ -13587,8 +13587,33 @@ or if you want to maintain the factory instance life-time (e.g. to share it with
 !  end;
 This single {\f1\fs20 TInfraRepoUserFactory} would allow to implement both {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} contracts.
 Of course, having the ability to let {\f1\fs20 aServer} own the factory, via the {\f1\fs20 InjectResolver([...],true)} parameter, sounds easier to work with.
+In practice, for a Client/Server environment, you may write:
+!  // Server side
+!  RestServer := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUser]);
+!  ...
+!  RestServer.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(RestServer)],true);
+!  RestServer.ServiceDefine(TInfraRepoUser,[IDomUserCommand,IDomUserQuery],sicClientDriven);
+!  // now you can use the services on the Server side
+!  if RestServer.Services.Resolve(IDomUserCommand,cmd) then
+!    ... use cmd
+!  if RestServer.Services.Resolve(IDomUserQuery,qry) then
+!    ... use qry
+!  ...
+!  // Client side
+!  RestClient := TSQLRestClientURIDll.Create(TSQLModel.Create(...),@URIRequest);
+!  ...
+!  RestClient.ServiceDefine([IDomUserCommand],sicClientDriven);
+!  // now you can use the services on the Client side
+!  if RestServer.Services.Resolve(IDomUserCommand,cmd) then
+!    ... use cmd
+!  if RestServer.Services.Resolve(IDomUserQuery,qry) then
+!    ... use qry
+Note that {\f1\fs20 InjectResolver()} should be called {\i before} {\f1\fs20 ServiceDefine()}, otherwise the @*IoC@ won't take place as expected, and the {\f1\fs20 TInfraRepoUserFactory} class will be {\f1\fs20 nil}.
+The CQRS services should be defined as {\f1\fs20 sicClientDriven} - and not as {\f1\fs20 sicSingle} or {\f1\fs20 sicShared}, since their lifetime is expected to be synchronized by the consumer side, i.e. the interface variable use on the client side.
+On the client side, defining {\f1\fs20 IDomUserCommand} is enough to be able to use both {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} services, but on the server side you would have to explicitly define both interfaces, otherwise the Client/Server contracts won't match and you would not be able to use {\f1\fs20 IDomUserQuery} from the client side.
+You could check the {\f1\fs20 TInfraRepoUserFactory.RegressionTests} method, as defined in {\f1\fs20 dddInfraRepoUser.pas}, to find out how such services may be defined and consumed.
 :     Implement the CQRS methods
-Then we define the needed methods of {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} in our custom class:
+We have defined the factory, and registered the services.\line Now we define the needed methods of {\f1\fs20 IDomUserCommand} and {\f1\fs20 IDomUserQuery} in our custom class:
 !type
 !  TInfraRepoUser = class(TDDDRepositoryRestCommand,IDomUserCommand,IDomUserQuery)
 !  public
@@ -13666,7 +13691,7 @@ If you expect your DDD's objects to be {\i schema-less} or with an evolving stru
 In practice, {\i mORMot}'s Client-Server architecture may be used as such:
 - {\i @*Service@s via methods} - see @49@ - can be used to publish methods corresponding to your aggregate roots defined as {\f1\fs20 TSQLRecord}.\line This will make it pretty @*REST@ful compatible.
 - {\i Services via interfaces} - see @63@ - can be used to publish all your processes.\line Dedicated factories can be used on both Client and Server side, to define your repositories and/or domain operations.
-@49@ may be preferred if you expect your service to be consummed in a truly @*REST@ful way. But since in DDD you should better protect your {\i Domain} via a dedicated @*Adapter@ layer, such compatibility should be an implementation smell. In practice, @63@ would offer better integration and automation of its process, e.g. parameter type validation (with @*JSON@ marshalling), @*session@ handling, {\f1\fs20 interface}-level @*multi-thread@ing and @*security@ abilities, @*log@ging, ability to be emulated via @166@, and - last but not least - @173@.
+@49@ may be preferred if you expect your service to be consumed in a truly @*REST@ful way. But since in DDD you should better protect your {\i Domain} via a dedicated @*Adapter@ layer, such compatibility should be an implementation smell. In practice, @63@ would offer better integration and automation of its process, e.g. parameter type validation (with @*JSON@ marshalling), @*session@ handling, {\f1\fs20 interface}-level @*multi-thread@ing and @*security@ abilities, @*log@ging, ability to be emulated via @166@, and - last but not least - @173@.
 :  Event-Driven Design
 {\i @**Event-Driven@} could be implemented in {\i mORMot} by at least two ways:
 - Using {\f1\fs20 interface} callbacks of the framework @63@;
