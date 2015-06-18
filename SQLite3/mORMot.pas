@@ -6496,7 +6496,7 @@ type
     procedure SetFieldVariant(const PropName: string; const Source: Variant);
     {$endif}
 
-    // prepare to get values from a TSQLTable result
+    /// prepare to get values from a TSQLTable result
     // - then call FillRow(1..Table.RowCount) to get any row value
     // - or you can also loop through all rows with
     // ! while Rec.FillOne do
@@ -6556,7 +6556,7 @@ type
     // safely used after FillPrepare (will set only ID, TModTime and mapped fields)
     function FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
-    // / prepare to get values using a specified WHERE clause with '%' and '?' parameters
+    /// prepare to get values using a specified WHERE clause with '%' and '?' parameters
     // - returns true in case of success, false in case of an error during SQL request
     // - then call FillRow(1..Table.RowCount) to get any row value
     // - or you can also loop through all rows with
@@ -26379,20 +26379,16 @@ end;
 function TSQLRecord.FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean;
 begin
-  if (FormatSQLWhere='') or (high(BoundsSQLWhere)<0) then
-    result := false else
-    result := FillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
-      aCustomFieldsCSV);
+  result := FillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
+    aCustomFieldsCSV);
 end;
 
 function TSQLRecord.FillPrepare(aClient: TSQLRest;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
 begin
-  if (FormatSQLWhere='') or ((high(ParamsSQLWhere)<0)and(high(BoundsSQLWhere)<0)) then
-    result := false else
-    result := FillPrepare(aClient,
-      FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
+  result := FillPrepare(aClient,
+    FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
 end;
 
 function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: array of Int64;

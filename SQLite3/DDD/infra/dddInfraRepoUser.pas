@@ -78,6 +78,7 @@ type
     function SelectByLogonName(const aLogonName: RawUTF8): TCQRSResult;
     function SelectByEmailValidation(aValidationState: TDomUserEmailValidation): TCQRSResult;
     function SelectByLastName(const aName: TLastName; aStartWith: boolean): TCQRSResult;
+    function SelectAll: TCQRSResult;
     function Get(out aAggregate: TUser): TCQRSResult;
     function GetAll(out aAggregates: TUserObjArray): TCQRSResult;
     function GetNext(out aAggregate: TUser): TCQRSResult;
@@ -192,6 +193,11 @@ begin
     result := ORMSelectAll('Name_Last=?',[aName],(aName=''));
 end;
 
+function TInfraRepoUser.SelectAll: TCQRSResult;
+begin
+  result := ORMSelectAll('',[]);
+end;
+
 function TInfraRepoUser.Get(out aAggregate: TUser): TCQRSResult;
 begin
   result := ORMGetAggregate(aAggregate);
@@ -244,7 +250,7 @@ var cmd: IDomUserCommand;
     qry: IDomUserQuery;
     user: TUser;
     users: TUserObjArray;
-    i: integer;
+    i,usersCount: integer;
     itext: RawUTF8;
     v: TDomUserEmailValidation;
     count: array[TDomUserEmailValidation] of integer;
@@ -288,12 +294,14 @@ begin
     end;
     test.Check(Rest.Services.Resolve(IDomUserCommand,cmd));
     try
+      usersCount := 0;
       for v := low(TDomUserEmailValidation) to high(TDomUserEmailValidation) do begin
         test.Check(cmd.SelectByEmailValidation(v)=cqrsSuccess);
         ObjArrayClear(users); // should be done, otherwise memory leak
         test.Check(cmd.GetAll(users)=cqrsSuccess);
         test.Check(length(users)>=MAX div MOD_EMAILVALID);
         count[v] := length(users);
+        inc(usersCount,length(users));
         for i := 0 to high(users) do begin
           test.Check(users[i].EmailValidated=v);
           test.Check(users[i].LogonName=users[i].Phone1);
@@ -302,6 +310,14 @@ begin
       end;
       test.Check(cmd.DeleteAll=cqrsSuccess,'delete all evFailed');
       test.check(cmd.Commit=cqrsSuccess);
+      ObjArrayClear(users);
+      test.Check(cmd.SelectAll=cqrsSuccess);
+      test.Check(cmd.GetAll(users)=cqrsSuccess);
+      test.Check(length(users)=usersCount-count[evFailed]);
+      for i := 0 to high(users) do begin
+        test.Check(users[i].LogonName=users[i].Phone1);
+        test.Check(users[i].Name.First='First'+users[i].LogonName);
+      end;
     finally
       ObjArrayClear(users);
     end;
@@ -359,6 +375,7 @@ begin
     RestServer.Free;
   end;
 end;
+
 
 
 end.

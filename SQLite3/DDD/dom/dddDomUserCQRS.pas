@@ -82,6 +82,11 @@ type
     // it would search for the beginning characters
     // - then use GetCount, GetAll() or GetNext() methods to retrieve the items
     function SelectByLastName(const aName: TLastName; aStartWith: boolean): TCQRSResult;
+    /// would select all TUser instances
+    // - you should not use this search criteria, since it may return a huge
+    // number of values
+    // - then use GetCount, GetAll() or GetNext() methods to retrieve the items
+    function SelectAll: TCQRSResult;
     /// retrieve a single TUser
     function Get(out aAggregate: TUser): TCQRSResult;
     /// retrieve all matching TUser instances
