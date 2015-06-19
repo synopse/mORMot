@@ -1979,6 +1979,11 @@ procedure RawByteStringToBytes(const buf: RawByteString; out bytes: TBytes);
 procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// creates a RawByteString memory buffer from an embedded resource
+// - returns '' if the resource is not found
+// - warning: resources size may be rounded up to alignment
+procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
+  out buf: RawByteString);
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
 
@@ -9371,7 +9376,8 @@ type
     constructor Create;
     /// retrieve the time zones from Windows registry, or from a local file
     // - under Linux, the file should be located with the executable, renamed
-    // with a .tz extension - may have been created via SaveToFile('')
+    // with a .tz extension - may have been created via SaveToFile(''), or
+    // from a 'TSynTimeZone' bound resource
     constructor CreateDefault;
     /// finalize the instance
     destructor Destroy; override;
@@ -9386,6 +9392,15 @@ type
     procedure LoadFromFile(const FileName: TFileName='');
     /// read time zone information from a compressed memory buffer
     procedure LoadFromBuffer(const Buffer: RawByteString);
+    /// read time zone information from a 'TSynTimeZone' resource
+    // - the resource should contain the SaveToBuffer compressed binary content
+    // - is no resource matching the TSynTimeZone class name and ResType=10
+    // do exist, nothing would be loaded
+    // - the resource could be created as such, from a Windows system:
+    // ! TSynTimeZone.Default.SaveToFile('TSynTimeZone.data');
+    // then compile the resource as expected, with a brcc32 .rc entry:
+    // ! TSynTimeZone 10 "TSynTimeZone.data"
+    procedure LoadFromResource;
     /// write then time zone information into a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be created
     procedure SaveToFile(const FileName: TFileName);
@@ -15065,7 +15080,7 @@ asm // eax=P, edx=val
     push edi
     mov edi,eax
     mov eax,edx
-    nop; nop           // for loop alignment
+    //nop; nop           // for loop alignment
 @s: cmp eax,100
     lea edi,[edi-2]
     jb @2
@@ -17744,6 +17759,19 @@ end;
 procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
 begin
   SetString(buf,PAnsiChar(pointer(bytes)),Length(bytes));
+end;
+
+procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
+  out buf: RawByteString);
+var HResInfo: THandle;
+    HGlobal: THandle;
+begin
+  HResInfo := FindResource(HInstance,PChar(ResName),ResType);
+  if HResInfo=0 then
+    exit;
+  HGlobal := LoadResource(HInstance,HResInfo);
+  if HGlobal<>0 then
+    SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(HInstance,HResInfo));
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -25421,6 +25449,8 @@ begin
   LoadFromRegistry;
   {$else}
   LoadFromFile;
+  if fZones.Count=0 then
+    LoadFromResource; // if no .tz file is available, try from registry
   {$endif}
   {$endif}
 end;
@@ -25473,6 +25503,14 @@ begin
     FN := ChangeFileExt(ExeVersion.ProgramFileName,'.tz') else
     FN := FileName;
   LoadFromBuffer(StringFromFile(FN));
+end;
+
+procedure TSynTimeZone.LoadFromResource;
+var buf: RawByteString;
+begin
+  ResourceToRawByteString(ClassName,PAnsiChar(10),buf);
+  if buf<>'' then
+    LoadFromBuffer(buf);
 end;
 
 {$ifdef MSWINDOWS}

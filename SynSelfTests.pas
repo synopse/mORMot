@@ -3206,6 +3206,7 @@ begin
     check(not SameValue(local,dt),'Paris never aligns with London');
     check(tz.GetBiasForDateTime(dt,'Romance Standard Time',bias,hdl));
     check(hdl);
+    check(bias<0);
     buf := tz.SaveToBuffer;
   finally
     tz.Free;
