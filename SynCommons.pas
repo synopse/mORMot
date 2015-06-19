@@ -475,7 +475,7 @@ unit SynCommons;
   - added TDynArray.ElemPtr() low-level method
   - let TDynArray.LoadFrom() accept Win32/Win64 cross platform binary content
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
-  - TDynArray will now recognize TVariantDynArray or variant fields
+  - TDynArray will now recognize variant/interface fields
   - code refactoring of TTextWriter to simplify flushing mechanism, and
     allow internal buffer auto-grow if it was found out to be too small (see
     FlushToStream / FlushFinal methods and FlushToStreamNoAutoResize property)
@@ -610,7 +610,8 @@ unit SynCommons;
     even if they do not follow the RFC 3986 specifications
   - fixed potential GPF in serveral functions, when working with WideString
     (WideString aka OleStr do store their length in bytes, not WideChars)
-  - fixed TDynArray.AddArray() method when Count parameter is not specified
+  - fixed TDynArray.AddArray() method when Count parameter is not specified,
+    and introducing TDynArray.AddDynArray() method
   - fixed ticket [ad55566b10] about JSON string escape parsing
   - fixed ticket [cce54e98ca], [388c2768b6] and [355249a9d1] about overflow in
     TTextWriter.AddJSONEscapeW()
@@ -3923,12 +3924,20 @@ type
     /// add an element to the dynamic array
     // - this version add a void element to the array, and returns its index
     function New: integer;
-    /// add elements from a given dynamic array
+    /// add elements from a given dynamic array variable
     // - the supplied source DynArray MUST be of the same exact type as the
-    // current used for this TDynArray
+    // current used for this TDynArray - warning: pass here a reference to
+    // a "array of ..." variable, not another TDynArray instance; if you
+    // want to add another TDynArray, use AddDynArray() method
     // - you can specify the start index and the number of items to take from
     // the source dynamic array (leave as -1 to add till the end)
     procedure AddArray(const DynArray; aStartIndex: integer=0; aCount: integer=-1);
+    /// add elements from a given TDynArray
+    // - the supplied source TDynArray MUST be of the same exact type as the
+    // current used for this TDynArray, otherwise it won't do anything
+    // - you can specify the start index and the number of items to take from
+    // the source dynamic array (leave as -1 to add till the end)
+    procedure AddDynArray(const Source: TDynArray; aStartIndex: integer=0; aCount: integer=-1);
     /// add an element to the dynamic array at the position specified by Index
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Insert(10,i+10) e.g.)
@@ -15680,7 +15689,7 @@ function DynArrayLength(Value: Pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   if Value=nil then
-    result := 0 else begin
+    result := PtrInt(Value) else begin
     {$ifdef FPC}
     result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.length;
     {$else}
@@ -33702,15 +33711,23 @@ function TDynArray.GetCount: integer;
 begin
   if fValue<>nil then
     if fCountP=nil then
-      if PtrInt(fValue^)<>0 then
+      if PtrInt(fValue^)<>0 then begin
         {$ifdef FPC}
-        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
+        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length;
         {$else}
-        result := PInteger(PtrUInt(fValue^)-sizeof(PtrInt))^ else
+        result := PInteger(PtrUInt(fValue^)-sizeof(PtrInt))^;
         {$endif}
-        result := 0 else
-      result := fCountP^ else
+        exit;
+      end else begin
+        result := 0;
+        exit;
+      end else begin
+      result := fCountP^;
+      exit;
+    end else begin
     result := 0; // avoid GPF if void
+    exit;
+  end;
 end;
 
 procedure TDynArray.Reverse;
@@ -35153,9 +35170,7 @@ var DynArrayCount, n: integer;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  if pointer(DynArray)=nil then  // inline GetCount
-    DynArrayCount := 0 else
-    DynArrayCount := DynArrayLength(pointer(DynArray));
+  DynArrayCount := DynArrayLength(pointer(DynArray));
   if aStartIndex>=DynArrayCount then
     exit; // nothing to copy
   if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(DynArrayCount)) then
@@ -35169,6 +35184,17 @@ begin
   if ElemType=nil then
     move(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ArrayType,aCount);
+end;
+
+procedure TDynArray.AddDynArray(const Source: TDynArray; aStartIndex,aCount: integer);
+var SourceCount: integer;
+begin
+  if (Source.fValue<>nil) and (ArrayType=Source.ArrayType) then begin
+    SourceCount := Source.Count;
+    if (aCount<0) or (aCount>SourceCount) then
+      aCount := SourceCount; // force use of external Source.Count, if any
+    AddArray(Source.fValue^,aStartIndex,aCount);
+  end;
 end;
 
 procedure TDynArray.ElemClear(var Elem);

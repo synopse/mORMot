@@ -1653,7 +1653,7 @@ var AI, AI2: TIntegerDynArray;
     Province: TProvince;
     AV: TSynValidates;
     V: TSynValidate;
-    AIP, AUP, ARP, AFP, ACities, AVP: TDynArray;
+    AIP, AI2P, AUP, ARP, AFP, ACities, AVP: TDynArray;
     Test, Test2: RawByteString;
     ST: TCustomMemoryStream;
     Index: TIntegerDynArray;
@@ -1817,6 +1817,14 @@ begin
     for i := 0 to Count-1 do
       Check(AI[i]=i);
   end;
+  Check(AIP.Count=50001);
+  AI2P.Init(TypeInfo(TIntegerDynArray),AI2);
+  AIP.AddDynArray(AI2P);
+  Check(AIP.Count=52001);
+  for i := 0 to 50000 do
+    Check(AI[i]=i);
+  for i := 0 to 1999 do
+    Check(AI[i+50001]=49000-i);
   // validate TSynValidates (an array of classes is an array of PtrInt)
   AVP.Init(TypeInfo(TSynValidates),AV);
   for i := 0 to 1000 do begin
