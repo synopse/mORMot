@@ -13328,6 +13328,15 @@ begin
   result := Dest;
 end;
 
+{$ifdef CPUARM} // circumvent FPC issue on ARM
+function ToByte(value: cardinal): cardinal; inline;
+begin
+  result := value and $ff;
+end;
+{$else}
+type ToByte = byte;
+{$endif}
+
 function TSynAnsiFixedWidth.AnsiBufferToUTF8(Dest: PUTF8Char;
   Source: PAnsiChar; SourceChars: Cardinal): PUTF8Char;
 var EndSource, EndSourceBy4: PAnsiChar;
@@ -13405,7 +13414,7 @@ const
   // the Ansi Code page 1252 (i.e. WinAnsi), which unicode value are > 255
   // - values taken from MultiByteToWideChar(1252,0,@Tmp,256,@WinAnsiTable,256)
   // so these values are available outside the Windows platforms (e.g. Linux/BSD)
-  // and if even if registry has been tweaked as such:
+  // and even if registry has been tweaked as such:
   // http://www.fas.harvard.edu/~chgis/data/chgis/downloads/v4/howto/cyrillic.html
   WinAnsiUnicodeChars: packed array[128..159] of word =
     (8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
@@ -13811,7 +13820,7 @@ begin
     Dest[j] := AnsiChar((c and $3f)+$80);
     c := c shr 6;
   end;
-  Dest^ := AnsiChar(byte(c) or UTF8_FIRSTBYTE[result]);
+  Dest^ := AnsiChar(ToByte(c) or UTF8_FIRSTBYTE[result]);
 end;
 
 function UCS4ToUTF8(ucs4: cardinal; Dest: PUTF8Char): integer;
@@ -13833,7 +13842,7 @@ begin
     Dest[j] := AnsiChar((ucs4 and $3f)+$80);
     ucs4 := ucs4 shr 6;
   end;
-  Dest^ := AnsiChar(byte(ucs4) or UTF8_FIRSTBYTE[result]);
+  Dest^ := AnsiChar(ToByte(ucs4) or UTF8_FIRSTBYTE[result]);
 end;
 
 procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8);
@@ -14383,7 +14392,7 @@ begin
         Dest[j] := AnsiChar((c and $3f)+$80);
         c := c shr 6;
       end;
-      Dest^ := AnsiChar(byte(c) or UTF8_FIRSTBYTE[i]);
+      Dest^ := AnsiChar(ToByte(c) or UTF8_FIRSTBYTE[i]);
       inc(Dest,i);
       if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
     until false;
@@ -15158,7 +15167,7 @@ end;
 {$endif FPC}
 {$else}
 {$ifdef PUREPASCAL}
-var c100: PtrUInt;
+var c100: cardinal;
 begin // this code is faster than the Borland's original str() or IntToStr()
   repeat
     if val<10 then begin
@@ -23813,6 +23822,7 @@ begin
 end;
 
 {$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
+
 function IsZero(const Fields: TSQLFieldBits): boolean; overload;
 begin
   if MAX_SQLFIELDS=64 then
@@ -24291,35 +24301,27 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
   result := not crc;
   if (buf<>nil) and (len>0) then begin
-   {$ifdef CPUARM} // circumvent FPC issue on ARM
-    while len>0 do begin
-      result := crc32ctab[0,(result xor PByte(buf)^) and $ff] xor (result shr 8);
-      dec(len);
-      inc(buf);
-    end;
-    {$else}
     repeat
       if PtrUInt(buf) and 3=0 then // align to 4 bytes boundary
         break;
-      result := crc32ctab[0,byte(result xor ord(buf^))] xor (result shr 8);
+      result := crc32ctab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     until len=0;
     while len>=4 do begin
       result := result xor PCardinal(buf)^;
       inc(buf,4);
-      result := crc32ctab[3,byte(result)] xor
-                crc32ctab[2,byte(result shr 8)] xor
-                crc32ctab[1,byte(result shr 16)] xor
+      result := crc32ctab[3,ToByte(result)] xor
+                crc32ctab[2,ToByte(result shr 8)] xor
+                crc32ctab[1,ToByte(result shr 16)] xor
                 crc32ctab[0,result shr 24];
       dec(len,4);
     end;
     while len>0 do begin
-      result := crc32ctab[0,byte(result xor ord(buf^))] xor (result shr 8);
+      result := crc32ctab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     end;
-   {$endif CPUARM}
   end;
   result := not result;
 end;
@@ -24519,7 +24521,7 @@ end;
 type TWordRec = packed record YDiv100, YMod100: byte; end;
 
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
-function Div100(Y: PtrUInt): TWordRec; {$ifdef HASINLINE}inline;{$endif}
+function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
   result.YDiv100 := Y div 100;
   result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
@@ -27657,7 +27659,7 @@ begin
     exit;
   end;
   result := false;
-  if  not (FieldTable^.Kind in tkRecordTypes) then
+  if not (FieldTable^.Kind in tkRecordTypes) then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   FieldTable := GetFPCAlignPtr(FieldTable);
@@ -27675,7 +27677,7 @@ begin
       inc(B,Diff);
     end;
     case Field^.TypeInfo^.Kind of
-      tkLString:
+      tkLString{$ifdef FPC},tkLStringOld{$endif}:
         if PAnsiString(A)^=PAnsiString(B)^ then
           Diff := sizeof(pointer) else
           exit;
@@ -27765,7 +27767,8 @@ begin
         DynArray.Init(Field.TypeInfo{$ifndef FPC}^{$endif},P^);
         inc(result,DynArray.SaveToLength-sizeof(PtrUInt));
       end;
-      tkLString, tkWString: // length stored within WideString is in bytes
+      tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
+        // length stored within WideString is in bytes
         if P^=0 then
           dec(result,sizeof(PtrUInt)-1) else
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length)-sizeof(PtrUInt));
@@ -27847,7 +27850,8 @@ begin
       Dest := DynArray.SaveTo(Dest);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}: begin
+    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    {$ifdef FPC}, tkLStringOld{$endif}: begin
       if PPtrUInt(R)^=0 then
         LenBytes := 0 else
         LenBytes := PStrRec(Pointer(PPtrUInt(R)^-STRRECSIZE))^.length;
@@ -28058,10 +28062,11 @@ begin
       Source := DynArray.LoadFrom(Source);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}: begin
+    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    {$ifdef FPC}, tkLStringOld{$endif}: begin
       LenBytes := FromVarUInt32(PByte(Source));
       case Kind of
-        tkLString: begin
+        tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
           SetString(PRawByteString(R)^,Source,LenBytes);
           {$ifdef UNICODE}
           { Delphi 2009+: set Code page for this AnsiString }
@@ -29928,7 +29933,7 @@ begin
   if Info=nil then
     exit;
   case Item^.Kind of
-  tkLString: result := ptRawUTF8;
+  tkLString{$ifdef FPC},tkLStringOld{$endif}: result := ptRawUTF8;
   tkWString: result := ptWideString;
   {$ifdef UNICODE}
   tkUString: result := ptSynUnicode;
@@ -33839,7 +33844,8 @@ begin
       inc(Dest,n);
     end else
     case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}: begin
+    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    {$ifdef FPC}, tkLStringOld{$endif}: begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           LenBytes := 0 else begin
@@ -33921,7 +33927,7 @@ begin
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of
-    tkLString, tkWString:
+    tkLString, tkWString{$ifdef FPC}, tkLStringOld{$endif}:
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           inc(result) else
@@ -34135,7 +34141,7 @@ Bin:  case ElemSize of
       else fKnownSize := ElemSize;
       end else
     case PTypeKind(ElemType)^ of
-      tkLString: fKnownType := djRawUTF8;
+      tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
       tkWString: fKnownType := djWideString;
       {$ifdef UNICODE}
       tkUString: fKnownType := djString;
@@ -34155,7 +34161,7 @@ rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
         with FieldTable^.ManagedFields[0] do
         case Offset of
         0: case TypeInfo^.Kind of
-            tkLString: fKnownType := djRawUTF8;
+            tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
             tkWString: fKnownType := djWideString;
             {$ifdef UNICODE}
             tkUString: fKnownType := djString;
@@ -34409,11 +34415,12 @@ begin
     inc(Source,n);
   end else
   case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}:
+    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    {$ifdef FPC}, tkLStringOld{$endif}:
     for i := 1 to n do begin
       LenBytes := FromVarUInt32(PByte(Source));
       case PTypeKind(ElemType)^ of
-      tkLString: begin
+      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
         SetString(PRawByteString(P)^,Source,LenBytes);
         {$ifdef UNICODE}
         { Delphi 2009+: set Code page for this AnsiString }
@@ -34730,7 +34737,7 @@ begin
     case PTypeKind(ElemType)^ of
     tkRecord{$ifdef FPC},tkObject{$endif}:
       result := RecordEquals(A,B,ElemType);
-    tkLString:
+    tkLString{$ifdef FPC},tkLStringOld{$endif}:
       result := AnsiString(A)=AnsiString(B);
     tkWString:
       result := WideString(A)=WideString(B);
@@ -34782,7 +34789,7 @@ begin
         inc(P1,ElemSize);
         inc(P2,ElemSize);
       end;
-  tkLString:
+  tkLString{$ifdef FPC},tkLStringOld{$endif}:
     for i := 0 to n-1 do
       if AnsiString(A1^[i])<>AnsiString(A2^[i]) then
         exit;
@@ -34860,7 +34867,7 @@ begin
         inc(PtrUInt(P),ElemSize);
   end else
   case PTypeKind(ElemType)^ of
-  tkLString:
+  tkLString{$ifdef FPC},tkLStringOld{$endif}:
     for result := 0 to max do
       if AnsiString(PPtrIntArray(P)^[result])=AnsiString(Elem) then exit;
   tkWString:
@@ -35142,15 +35149,13 @@ end;
 
 procedure TDynArray.AddArray(const DynArray; aStartIndex: integer=0; aCount: integer=-1);
 var DynArrayCount, n: integer;
-    D: PPointer;
     PS,PD: pointer;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  D := @DynArray;
-  if D^=nil then  // inline GetCount
+  if pointer(DynArray)=nil then  // inline GetCount
     DynArrayCount := 0 else
-    DynArrayCount := DynArrayLength(D^);
+    DynArrayCount := DynArrayLength(pointer(DynArray));
   if aStartIndex>=DynArrayCount then
     exit; // nothing to copy
   if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(DynArrayCount)) then
@@ -35159,7 +35164,7 @@ begin
     exit;
   n := Count;
   SetCount(n+aCount);
-  PS := pointer(PtrUInt(D^)+cardinal(aStartIndex)*ElemSize);
+  PS := pointer(PtrUInt(DynArray)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
     move(PS^,PD^,cardinal(aCount)*ElemSize) else
@@ -35170,7 +35175,7 @@ procedure TDynArray.ElemClear(var Elem);
 begin
   if ElemType<>nil then
     case PTypeKind(ElemType)^ of // release reference counted
-      tkLString:
+      tkLString{$ifdef FPC},tkLStringOld{$endif}:
         RawByteString(Elem) := '';
       tkWString:
         WideString(Elem) := '';
@@ -35195,15 +35200,50 @@ end;
 
 procedure TDynArray.ElemCopy(const A; var B);
 begin
-  if ElemType=nil then
-    move(A,B,ElemSize) else begin
-    {$ifdef FPC}
-    RecordClear(B,ElemType); // inlined CopyArray()
-    move(A,B,RTTIManagedSize(ElemType));
-    RecordAddRef(B,ElemType);
-    {$else}
-    CopyArray(@B,@A,ElemType,1);
-    {$endif}
+  if ElemType=nil then begin
+    move(A,B,ElemSize);
+    exit;
+  end else begin
+    case PTypeKind(ElemType)^ of
+      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
+        RawByteString(B) := RawByteString(A);
+        exit;
+      end;
+      tkWString: begin
+        WideString(B) := WideString(A);
+        exit;
+      end;
+      tkInterface: begin
+        IUnknown(B) := IUnknown(A);
+        exit;
+      end;
+      {$ifdef UNICODE}
+      tkUString: begin
+        UnicodeString(B) := UnicodeString(A);
+        exit;
+      end;
+      {$endif}
+      tkRecord{$ifdef FPC},tkObject{$endif}: begin
+        RecordCopy(B,A,ElemType);
+        exit;
+      end;
+      {$ifndef NOVARIANTS}
+      tkVariant: begin
+        variant(B) := variant(A);
+        exit;
+      end;
+      {$endif}
+      else begin
+        {$ifdef FPC}
+        RecordClear(B,ElemType); // inlined CopyArray()
+        move(A,B,RTTIManagedSize(ElemType));
+        RecordAddRef(B,ElemType);
+        {$else}
+        CopyArray(@B,@A,ElemType,1);
+        {$endif}
+        exit;
+      end;
+    end;
   end;
 end;
 
@@ -35224,7 +35264,7 @@ begin
   if ElemType=nil then
     move(Source^,Elem,ElemSize) else
     case PTypeKind(ElemType)^ of
-    tkLString: begin
+    tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
       SetString(RawByteString(Elem),Source+4,PInteger(Source)^);
       {$ifdef UNICODE}
       { Delphi 2009+: set Code page for this AnsiString }
@@ -35252,7 +35292,7 @@ procedure TDynArray.ElemLoadClear(var ElemLoaded: RawByteString);
 begin
   if (ElemType<>nil) and (length(ElemLoaded)=integer(ElemSize)) then
   case PTypeKind(ElemType)^ of
-    tkLString:
+    tkLString{$ifdef FPC},tkLStringOld{$endif}:
       PRawByteString(pointer(ElemLoaded))^ := '';
     tkWString:
       PWideString(pointer(ElemLoaded))^ := '';
@@ -35279,7 +35319,7 @@ begin
     SetString(result,PAnsiChar(@Elem),ElemSize) else
     case PTypeKind(ElemType)^ of
       {$ifdef FPC}
-      tkLString, tkWString:
+      tkLString, tkWString, tkLStringOld:
         if PPtrInt(@Elem)^=0 then
           SetString(result,PAnsiChar(@Elem),4) else begin
           LenBytes := PStrRec(Pointer(PPtrInt(@Elem)^-STRRECSIZE))^.length;
@@ -47391,7 +47431,7 @@ begin
   for i := 0 to 255 do begin
     crc := crc32ctab[0,i];
     for n := 1 to high(crc32ctab) do begin
-      crc := (crc shr 8) xor crc32ctab[0,byte(crc)];
+      crc := (crc shr 8) xor crc32ctab[0,ToByte(crc)];
       crc32ctab[n,i] := crc;
     end;
   end;
