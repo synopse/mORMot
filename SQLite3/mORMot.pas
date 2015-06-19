@@ -1755,7 +1755,7 @@ function isBlobHex(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SQL corresponding to a WHERE clause
-// - returns directly the Where value if it starts by ORDER/GROUP/LIMIT
+// - returns directly the Where value if it starts by ORDER/GROUP/LIMIT/OFFSET/JOIN
 // - otherwise, append ' WHERE '+Where
 function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 
@@ -25902,10 +25902,8 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 begin
   if Where='' then
     result := '' else
-  if IdemPChar(pointer(Where),'ORDER BY ') or
-     IdemPChar(pointer(Where),'GROUP BY ') or
-     IdemPChar(pointer(Where),'LIMIT ') or
-     IdemPChar(pointer(Where),'JOIN ') then
+  if IdemPCharArray(pointer(Where),['ORDER BY ','GROUP BY ','LIMIT ','OFFSET ',
+      'LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0 then
     result := ' '+Where else
     result := ' WHERE '+Where;
 end;
@@ -27081,8 +27079,7 @@ begin
     raise EORMException.CreateUTF8('No nested TSQLRecord to JOIN in %',[self]);
   SQL := props.SQL.SelectAllJoined;
   if aFormatSQLJoin<>'' then
-    SQL := SQL+FormatUTF8(SQLFromWhere(aFormatSQLJoin),
-      aParamsSQLJoin,aBoundsSQLJoin);
+    SQL := SQL+FormatUTF8(SQLFromWhere(aFormatSQLJoin),aParamsSQLJoin,aBoundsSQLJoin);
   T := aClient.ExecuteList(props.props.JoinedFieldsTable,SQL);
   if T=nil then
     exit;
