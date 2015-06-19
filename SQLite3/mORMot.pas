@@ -16792,6 +16792,7 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 // - for sftObject, sftVariant, sftBlobDynArray and sftUTF8Custom, the
 // JSON buffer may be an array or an object, so createValueTempCopy can
 // create a temporary copy before parsing it in-place, to preserve the buffer
+// - sftUnknown and sftMany would set a varEmpty (Unassigned) value
 // - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
   var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer);
@@ -17631,8 +17632,6 @@ begin
   sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion,
   sftTimeLog, sftModTime, sftCreateTime:
     SetInt64(Value,result.VInt64);
-  sftMany:
-    exit;
   sftAnsiText, sftUTF8Text: begin
     pointer(result.VAny) := nil;
     RawUTF8(result.VAny) := Value;
@@ -17656,7 +17655,6 @@ begin
     end;
     GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
   end;
-  else raise ESQLTableException.CreateUTF8('Unexpected type %',[ord(fieldType)]);
   end;
 end;
 
