@@ -1630,7 +1630,12 @@ type
   end;
   TFV2s = array of TFV2;
   TSynValidates = array of TSynValidate;
-
+  TDataItem = record
+    Modified: TDateTime;
+    Data: string;
+  end;
+  TDataItems = array of TDataItem;
+   
 function FVSort(const A,B): integer;
 begin
   result := SysUtils.StrComp(PChar(pointer(TFV(A).Detailed)),PChar(pointer(TFV(B).Detailed)));
@@ -1653,7 +1658,9 @@ var AI, AI2: TIntegerDynArray;
     Province: TProvince;
     AV: TSynValidates;
     V: TSynValidate;
-    AIP, AI2P, AUP, ARP, AFP, ACities, AVP: TDynArray;
+    AIP, AI2P, AUP, ARP, AFP, ACities, AVP, dyn1,dyn2: TDynArray;
+    dp: TDataItem;
+    dyn1Array,dyn2Array: TDataItems;
     Test, Test2: RawByteString;
     ST: TCustomMemoryStream;
     Index: TIntegerDynArray;
@@ -2143,6 +2150,27 @@ begin
   Check(AFP.LoadFrom(pointer(Test))<>nil);
   Check(AFP.Count=1001);
   TestAF2;
+  // validate http://synopse.info/forum/viewtopic.php?pid=16581#p16581
+  DP.Modified := Now;
+  DP.Data := '1';
+  dyn1.Init(TypeInfo(TDataItems),dyn1Array);
+  dyn1.Add(DP);
+  DP.Modified := Now;
+  DP.Data := '2';
+  dyn2.Init(TypeInfo(TDataItems),dyn2Array);
+  check(dyn2.count=0);
+  dyn2.Add(DP);
+  check(length(dyn2Array)=1);
+  check(dyn2.count=1);
+  dyn2.AddArray(dyn1Array);
+  check(dyn2.count=2);
+  check(dyn2.ElemEquals(dyn2Array[0],DP));
+  check(dyn2.ElemEquals(dyn2Array[1],dyn1Array[0]));
+  dyn2.AddDynArray(dyn1);
+  check(dyn2.count=3);
+  check(dyn2.ElemEquals(dyn2Array[0],DP));
+  check(dyn2.ElemEquals(dyn2Array[1],dyn1Array[0]));
+  check(dyn2.ElemEquals(dyn2Array[2],dyn1Array[0]));
   // valide generic-like features
   // see http://docwiki.embarcadero.com/CodeExamples/en/Generics_Collections_TDictionary_(Delphi)
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);

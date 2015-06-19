@@ -35160,7 +35160,7 @@ begin
     P := PAnsiChar(fValue^)+aFirstIndex*ElemSize;
     if ElemType=nil then
       move(P^,D^^,aCount*ElemSize) else
-      CopyArray(D^,P,ArrayType,aCount);
+      CopyArray(D^,P,ElemType,aCount);
   end;
 end;
 
@@ -35183,7 +35183,7 @@ begin
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
     move(PS^,PD^,cardinal(aCount)*ElemSize) else
-    CopyArray(PD,PS,ArrayType,aCount);
+    CopyArray(PD,PS,ElemType,aCount);
 end;
 
 procedure TDynArray.AddDynArray(const Source: TDynArray; aStartIndex,aCount: integer);
