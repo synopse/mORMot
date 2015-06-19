@@ -190,7 +190,7 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); override;
     /// process low-level HTTP/1.1 request
-    // - call by URI() public method
+    // - called by InternalURI(), therefore by URI() public method
     // - returns 200,202,204 if OK, http status error otherwise in result.Lo
     // - returns Server-InternalState in result.Hi
     function InternalRequest(const url, method: RawUTF8;
@@ -200,7 +200,12 @@ type
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// connect to TSQLHttpServer on aServer:aPort
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); reintroduce; overload; virtual;
+    // - you can customize the default client timeouts by setting appropriate
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms)
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
+      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
+      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
+      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); reintroduce; overload; virtual;
     /// connect to TSQLHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
@@ -322,7 +327,15 @@ type
     procedure InternalSetClass; virtual; abstract;
   public
     /// connect to TSQLHttpServer on aServer:aPort with the default settings
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel); overload; override;
+    // - you can customize the default client timeouts by setting appropriate
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - note
+    // that after creation of this instance, the connection is tied to those
+    // initial parameters, so we won't publish any properties to change those
+    // initial values once created
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
+      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
+      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
+      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); overload; override;
     /// connect to TSQLHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
@@ -480,16 +493,16 @@ begin
 end;
 
 constructor TSQLHttpClientGeneric.Create(const aServer, aPort: AnsiString;
-  aModel: TSQLModel);
+  aModel: TSQLModel; SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
 begin
   inherited Create(aModel);
   fServer := aServer;
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ];
-  fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT;
-  fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
-  fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
+  fConnectTimeout := ConnectTimeout;
+  fSendTimeout := SendTimeout;
+  fReceiveTimeout := ReceiveTimeout;
 end;
 
 constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
@@ -516,7 +529,7 @@ begin
   Definition.ServerName := FormatUTF8('%%:%',[Definition.ServerName,fServer,fPort]);
   Definition.DatabaseName := UrlEncode([
    'IgnoreSSLCertificateErrors',ord(fExtendedOptions.IgnoreSSLCertificateErrors),
-   'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout,
+   'ConnectTimeout',fConnectTimeout,'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout,
    'ProxyName',fProxyName,'ProxyByPass',fProxyByPass]);
   Definition.DatabaseName := copy(Definition.DatabaseName,2,MaxInt); // trim leading '?'
 end;
@@ -533,6 +546,8 @@ begin
   fHttps := URI.Https;
   P := Pointer(aDefinition.DataBaseName);
   while P<>nil do begin
+    if UrlDecodeCardinal(P,'CONNECTTIMEOUT',V) then
+      fConnectTimeout := V else
     if UrlDecodeCardinal(P,'SENDTIMEOUT',V) then
       fSendTimeout := V else
     if UrlDecodeCardinal(P,'RECEIVETIMEOUT',V) then
@@ -565,7 +580,7 @@ end;
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
 begin
   if fSocket<>nil then begin
-    result := true;
+    result := true; // already connected
     exit;
   end;
   EnterCriticalSection(fMutex);
@@ -574,6 +589,10 @@ begin
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
       fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+      if fSendTimeout>0 then
+        fSocket.SendTimeout := fSendTimeout;
+      if fReceiveTimeout>0 then
+        fSocket.ReceiveTimeout := fReceiveTimeout;
       {$ifdef USETCPPREFIX}
       fSocket.TCPPrefix := 'magic';
       {$endif}
@@ -623,7 +642,7 @@ end;
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
   if fSocket<>nil then begin
-    result := true;
+    result := true; // already connected
     exit;
   end;
   if fSocketClass=nil then
@@ -805,16 +824,16 @@ begin
 end;
 
 constructor TSQLHttpClientRequest.Create(const aServer,
-  aPort: AnsiString; aModel: TSQLModel);
+  aPort: AnsiString; aModel: TSQLModel; SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
 begin
-  Create(aServer,aPort,aModel,false); // will use default settings
+  Create(aServer,aPort,aModel,false,'','',SendTimeout,ReceiveTimeout,ConnectTimeout);
 end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
-  result := false;
   if fRequest=nil then
   try
+    result := false;
     EnterCriticalSection(fMutex);
     try
       InternalSetClass;
@@ -841,7 +860,7 @@ begin
   finally
     LeaveCriticalSection(fMutex);
   end else
-    result := true;
+    result := true; // already connected
 end;
 
 procedure TSQLHttpClientRequest.InternalClose;
