@@ -33,6 +33,7 @@ unit SynCrtSock;
   - EMartin
   - Eric Grange
   - EvaF
+  - Maciej Izak (hnb)
   - Pavel (mpv)
 
   Alternatively, the contents of this file may be used under the terms of
@@ -2503,8 +2504,37 @@ begin
   end;
 end;
 
+procedure SetInt32Option(Sock: TSocket; OptName, OptVal: integer);
+{$ifndef MSWINDOWS}
+var timeval: TTimeval;
+{$endif}
+begin
+  if Sock<=0 then
+    raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
+  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) then begin
+    {$ifndef MSWINDOWS} // POSIX expects a timeval parameter for time out values
+    timeval.tv_sec := OptVal div 1000;
+    timeval.tv_usec := (OptVal mod 1000)*1000;
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))=0 then
+    {$else}             // WinAPI expects the time out directly as ms integer
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
+    {$endif}
+      exit;
+  end else
+  if OptName=SO_KEEPALIVE then begin // boolean (0/1) value
+    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
+      exit;
+  end else
+  if OptName=TCP_NODELAY then begin // boolean (0/1) value
+    if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
+      exit;
+  end;
+  raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
+    [WSAGetLastError,OptName,OptVal]);
+end;
+
 function CallServer(const Server, Port: SockString; doBind: boolean;
-   aLayer: TCrtSocketLayer): TSocket;
+   aLayer: TCrtSocketLayer; ConnectTimeout: DWORD): TSocket;
 var Sin: TVarSin;
     IP: SockString;
     SOCK_TYPE, IPPROTO: integer;
@@ -2580,10 +2610,15 @@ begin
       CloseSocket(result);
       result := -1;
     end;
-  end else
-  if Connect(result,Sin)<>0 then begin
-     CloseSocket(result);
-     result := -1;
+  end else begin
+    if ConnectTimeout>0 then begin
+      SetInt32Option(result, SO_RCVTIMEO, ConnectTimeout);
+      SetInt32Option(result, SO_SNDTIMEO, ConnectTimeout);
+    end;
+    if Connect(result,Sin)<>0 then begin
+       CloseSocket(result);
+       result := -1;
+    end;
   end;
 end;
 
@@ -2713,32 +2748,8 @@ begin
 end;
 
 procedure TCrtSocket.SetInt32OptionByIndex(OptName, OptVal: integer);
-{$ifndef MSWINDOWS}
-var timeval: TTimeval;
-{$endif}
 begin
-  if (self=nil) or (Sock<=0) then
-    raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
-  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) then begin
-    {$ifndef MSWINDOWS} // POSIX expects a timeval parameter for time out values
-    timeval.tv_sec := OptVal div 1000;
-    timeval.tv_usec := (OptVal mod 1000)*1000;
-    if SetSockOpt(Sock,SOL_SOCKET,OptName,@timeval,sizeof(timeval))=0 then
-    {$else}             // WinAPI expects the time out directly as ms integer
-    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
-    {$endif}
-      exit;
-  end else
-  if OptName=SO_KEEPALIVE then begin // boolean (0/1) value
-    if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
-      exit;
-  end else
-  if OptName=TCP_NODELAY then begin // boolean (0/1) value
-    if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
-      exit;
-  end;
-  raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
-    [WSAGetLastError,OptName,OptVal]);
+  SetInt32Option(Sock,OptName,OptVal);
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
@@ -2750,7 +2761,7 @@ begin
       fPort := '80' else // default port is 80 (HTTP)
       fPort := aPort;
     fServer := aServer;
-    fSock := CallServer(aServer,Port,doBind,aLayer); // OPEN or BIND
+    fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
     if fSock<0 then
       raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
         [BINDTXT[doBind],aServer,Port,WSAGetLastError]);

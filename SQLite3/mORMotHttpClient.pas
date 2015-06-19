@@ -29,6 +29,7 @@ unit mORMotHttpClient;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -115,6 +116,7 @@ unit mORMotHttpClient;
        not consistent in practice among clients
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
+     - added ConnectTimeout optional parameter (thanks hnb for the patch!)
      - added TSQLHttpClientGeneric.CreateForRemoteLogging() constructor for
        easy remote logging to our LogView tool, running as server process
      - added TSQLHttpClientWinGeneric.IgnoreSSLCertificateErrors property
@@ -181,7 +183,7 @@ type
     fServer, fPort: AnsiString;
     fHttps: boolean;
     fProxyName, fProxyByPass: AnsiString;
-    fSendTimeout, fReceiveTimeout: DWORD;
+    fSendTimeout, fReceiveTimeout, fConnectTimeout: DWORD;
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TSQLHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -326,15 +328,16 @@ type
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy
     // - you can customize the default client timeouts by setting appropriate
-    // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
-    // creation of this instance, the connection is tied to those initial
-    // parameters, so we won't publish any properties to change those
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - note
+    // that after creation of this instance, the connection is tied to those
+    // initial parameters, so we won't publish any properties to change those
     // initial values once created
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
       aHttps: boolean; const aProxyName: AnsiString='';
       const aProxyByPass: AnsiString='';
       SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); reintroduce; overload;
+      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
+      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); reintroduce; overload;
     /// internal class instance used for the connection
     // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
     property Request: THttpRequest read fRequest;
@@ -484,6 +487,7 @@ begin
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ];
+  fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT;
   fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
   fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
 end;
@@ -510,7 +514,6 @@ begin
   if fHttps then
     Definition.ServerName := 'https://';
   Definition.ServerName := FormatUTF8('%%:%',[Definition.ServerName,fServer,fPort]);
-  if fExtendedOptions.IgnoreSSLCertificateErrors then
   Definition.DatabaseName := UrlEncode([
    'IgnoreSSLCertificateErrors',ord(fExtendedOptions.IgnoreSSLCertificateErrors),
    'SendTimeout',fSendTimeout,'ReceiveTimeout',fReceiveTimeout,
@@ -570,7 +573,7 @@ begin
     try
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
-      fSocket := fSocketClass.Open(fServer,fPort,cslTCP,60000); // 60 sec timeout
+      fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
       {$ifdef USETCPPREFIX}
       fSocket.TCPPrefix := 'magic';
       {$endif}
@@ -790,7 +793,7 @@ end;
 
 constructor TSQLHttpClientRequest.Create(const aServer, aPort: AnsiString;
   aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
-  SendTimeout,ReceiveTimeout: DWORD);
+  SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
 begin
   inherited Create(aServer,aPort,aModel);
   fHttps := aHttps;
@@ -798,6 +801,7 @@ begin
   fProxyByPass := aProxyByPass;
   fSendTimeout := SendTimeout;
   fReceiveTimeout := ReceiveTimeout;
+  fConnectTimeout := ConnectTimeout;
 end;
 
 constructor TSQLHttpClientRequest.Create(const aServer,
@@ -817,7 +821,7 @@ begin
       if fRequestClass=nil then
         raise ECommunicationException.CreateUTF8('fRequestClass=nil for %',[self]);
       fRequest := fRequestClass.Create(fServer,fPort,fHttps,
-        fProxyName,fProxyByPass,fSendTimeout,fReceiveTimeout);
+        fProxyName,fProxyByPass,fConnectTimeout,fSendTimeout,fReceiveTimeout);
       fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
