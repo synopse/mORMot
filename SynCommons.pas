@@ -27645,7 +27645,7 @@ asm
   jmp System.@CopyArray
 {$else}
   push dword ptr [EBP+8]
-  call System.@CopyArray
+  call System.@CopyArray // RTL is fast enough for this
 {$endif}
 end;
 

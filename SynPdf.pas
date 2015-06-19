@@ -35,6 +35,7 @@ unit SynPdf;
    Damien (ddemars)
    David Mead (MDW)
    FalconB
+   Florian Grummel
    Harald Simon
    Ondrej (reddwarf)
    Sinisa (sinisav)
@@ -227,6 +228,8 @@ unit SynPdf;
   - fixed potential GPF issue in TPdfWrite.AddUnicodeHex and TPdfWrite.AddHex
   - fixed compilation warnings regarding Delphi XE3 regressions
   - fixed text color process in TPdfEnum
+  - handle inverted y-axis for TPdfEnum.TextOut (used e.g. for MM_LOMETRIC
+    compatible rendering as reported by [52c37cc5a14] and fixed by Florian)
   - fixed mixed portrait/landscape page rendering within a same document
   - fixed invalid ScriptShape() API error when UniScribe is true
   - use TSynAnsiConvert class for internal multi-byte conversion (better speed)
@@ -10134,8 +10137,12 @@ begin
     end else begin
       acos := 0;
       asin := 0;
-      PosX := Posi.X-W;
-      PosY := Posi.Y-H;
+      if Canvas.fViewSize.cx>0 then
+        PosX := Posi.X-W else // zero point left
+        PosX := Posi.X+W;     //            right
+      if Canvas.fViewSize.cy>0 then
+        PosY := Posi.Y-H else // zero point beyond
+        PosY := Posi.Y+H;     //            above
       Canvas.MoveTextPoint(Canvas.I2X(PosX),Canvas.I2Y(PosY));
     end;
     if (R.emrtext.fOptions and ETO_GLYPH_INDEX)<>0 then
