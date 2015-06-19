@@ -15001,6 +15001,11 @@ type
     // - uses the same compressed format as the overloaded stream/file method
     // - will return false if the binary content is invalid
     function LoadFromBinary(const Buffer: RawByteString): boolean; overload;
+    /// load the values from binary resource
+    // - the resource name is expected to be the TSQLRecord class name,
+    // with a resource type of 10
+    // - uses the same compressed format as the overloaded stream/file method
+    procedure LoadFromResource;
     /// save the values into a binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage: e.g. a 27 KB
@@ -38134,6 +38139,19 @@ begin
   S := TRawByteStringStream.Create(Buffer);
   try
     result := LoadFromBinary(S);
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TSQLRestStorageInMemory.LoadFromResource;
+var S: TStream;
+begin
+  S := TResourceStream.Create(HInstance,fStoredClass.ClassName,pointer(10));
+  try
+    if not LoadFromBinary(S) then
+      raise EORMException.CreateUTF8('%.LoadFromResource with invalid % content',
+        [self,fStoredClass]);
   finally
     S.Free;
   end;
