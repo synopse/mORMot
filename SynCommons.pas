@@ -34875,13 +34875,14 @@ end;
 procedure TDynArray.Copy(const Source: TDynArray);
 var n: Cardinal;
 begin
-  if (fValue=nil) or (Source.fValue=nil) or (ArrayType<>Source.ArrayType) then
-    Exit;
+  if (fValue=nil) or (ArrayType<>Source.ArrayType) then
+    exit;
   SetCapacity(Source.Capacity);
   n := Source.Count;
-  if ElemType=nil then
-    move(Source.fValue^^,fValue^^,n*ElemSize) else
-    CopyArray(fValue^,Source.fValue^,ElemType,n);
+  if n<>0 then
+    if ElemType=nil then
+      move(Source.fValue^^,fValue^^,n*ElemSize) else
+      CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
 procedure TDynArray.CopyFrom(const Source; MaxElem: integer);
