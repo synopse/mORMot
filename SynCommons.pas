@@ -3924,20 +3924,6 @@ type
     /// add an element to the dynamic array
     // - this version add a void element to the array, and returns its index
     function New: integer;
-    /// add elements from a given dynamic array variable
-    // - the supplied source DynArray MUST be of the same exact type as the
-    // current used for this TDynArray - warning: pass here a reference to
-    // a "array of ..." variable, not another TDynArray instance; if you
-    // want to add another TDynArray, use AddDynArray() method
-    // - you can specify the start index and the number of items to take from
-    // the source dynamic array (leave as -1 to add till the end)
-    procedure AddArray(const DynArray; aStartIndex: integer=0; aCount: integer=-1);
-    /// add elements from a given TDynArray
-    // - the supplied source TDynArray MUST be of the same exact type as the
-    // current used for this TDynArray, otherwise it won't do anything
-    // - you can specify the start index and the number of items to take from
-    // the source dynamic array (leave as -1 to add till the end)
-    procedure AddDynArray(const Source: TDynArray; aStartIndex: integer=0; aCount: integer=-1);
     /// add an element to the dynamic array at the position specified by Index
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Insert(10,i+10) e.g.)
@@ -4129,7 +4115,21 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
+    /// add elements from a given dynamic array variable
+    // - the supplied source DynArray MUST be of the same exact type as the
+    // current used for this TDynArray - warning: pass here a reference to
+    // a "array of ..." variable, not another TDynArray instance; if you
+    // want to add another TDynArray, use AddDynArray() method
+    // - you can specify the start index and the number of items to take from
+    // the source dynamic array (leave as -1 to add till the end)
+    procedure AddArray(const DynArrayVar; aStartIndex: integer=0; aCount: integer=-1);
     {$ifndef DELPHI5OROLDER}
+    /// add elements from a given TDynArray
+    // - the supplied source TDynArray MUST be of the same exact type as the
+    // current used for this TDynArray, otherwise it won't do anything
+    // - you can specify the start index and the number of items to take from
+    // the source dynamic array (leave as -1 to add till the end)
+    procedure AddDynArray(const aSource: TDynArray; aStartIndex: integer=0; aCount: integer=-1);
     /// compare the content of the two arrays, returning TRUE if both match
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -35164,13 +35164,13 @@ begin
   end;
 end;
 
-procedure TDynArray.AddArray(const DynArray; aStartIndex: integer=0; aCount: integer=-1);
+procedure TDynArray.AddArray(const DynArrayVar; aStartIndex,aCount: integer);
 var DynArrayCount, n: integer;
     PS,PD: pointer;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  DynArrayCount := DynArrayLength(pointer(DynArray));
+  DynArrayCount := DynArrayLength(pointer(DynArrayVar));
   if aStartIndex>=DynArrayCount then
     exit; // nothing to copy
   if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(DynArrayCount)) then
@@ -35179,23 +35179,25 @@ begin
     exit;
   n := Count;
   SetCount(n+aCount);
-  PS := pointer(PtrUInt(DynArray)+cardinal(aStartIndex)*ElemSize);
+  PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
     move(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
 
-procedure TDynArray.AddDynArray(const Source: TDynArray; aStartIndex,aCount: integer);
+{$ifndef DELPHI5OROLDER} // don't know why Delphi 5 does not like this signature
+procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
 var SourceCount: integer;
 begin
-  if (Source.fValue<>nil) and (ArrayType=Source.ArrayType) then begin
-    SourceCount := Source.Count;
+  if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
+    SourceCount := aSource.Count;
     if (aCount<0) or (aCount>SourceCount) then
       aCount := SourceCount; // force use of external Source.Count, if any
-    AddArray(Source.fValue^,aStartIndex,aCount);
+    AddArray(aSource.fValue^,aStartIndex,aCount);
   end;
 end;
+{$endif DELPHI5OROLDER}
 
 procedure TDynArray.ElemClear(var Elem);
 begin

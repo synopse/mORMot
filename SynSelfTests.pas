@@ -1825,6 +1825,7 @@ begin
       Check(AI[i]=i);
   end;
   Check(AIP.Count=50001);
+  {$ifndef DELPHI5OROLDER}
   AI2P.Init(TypeInfo(TIntegerDynArray),AI2);
   AIP.AddDynArray(AI2P);
   Check(AIP.Count=52001);
@@ -1832,6 +1833,7 @@ begin
     Check(AI[i]=i);
   for i := 0 to 1999 do
     Check(AI[i+50001]=49000-i);
+  {$endif}
   // validate TSynValidates (an array of classes is an array of PtrInt)
   AVP.Init(TypeInfo(TSynValidates),AV);
   for i := 0 to 1000 do begin
@@ -2166,11 +2168,13 @@ begin
   check(dyn2.count=2);
   check(dyn2.ElemEquals(dyn2Array[0],DP));
   check(dyn2.ElemEquals(dyn2Array[1],dyn1Array[0]));
+  {$ifndef DELPHI5OROLDER}
   dyn2.AddDynArray(dyn1);
   check(dyn2.count=3);
   check(dyn2.ElemEquals(dyn2Array[0],DP));
   check(dyn2.ElemEquals(dyn2Array[1],dyn1Array[0]));
   check(dyn2.ElemEquals(dyn2Array[2],dyn1Array[0]));
+  {$endif}
   // valide generic-like features
   // see http://docwiki.embarcadero.com/CodeExamples/en/Generics_Collections_TDictionary_(Delphi)
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);
