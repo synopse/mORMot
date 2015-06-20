@@ -66,7 +66,6 @@
   - added DOPATCHTRTL conditional (not set by default, for compatibility)
 
   Version 1.18
-  - added NOX64PATCHRTL conditional (unset by default, for better speed)
   - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     http://synopse.info/forum/viewtopic.php?id=1394
@@ -116,11 +115,6 @@
 // if defined, the low-level patches made to RecordCopy() low-level function
 // as defined in SynCommons.pas will be applied (if applicable to your Delphi
 // version) - you should better use it, but we have unset it by default
-
-{.$define NOX64PATCHRTL}
-// if defined, with Win64 Delphi XE2+ compilers, FillChar() and Move() WON'T use
-// optimized x64 assembler implementation instead of slower purepascal version
-// - is not defined by default, since speed gain is noticeable
 
 {.$define NEWRTTINOTUSED}
 // if defined, the new RTTI (available since Delphi 2010) won't be linked to
@@ -192,8 +186,8 @@
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define NOX64PATCHRTL} // official FPC's RTL already includes this x64 asm
   {$define HASTTHREADSTART}
+  {$define FPC_OR_UNICODE}
 
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -310,10 +304,12 @@
     {$if CompilerVersion = 20}
       {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
       // for Delphi 2009 and up, use UNICODE conditional :)
+      {$define FPC_OR_UNICODE}
     {$ifend}
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
       {$define ISDELPHI2010}
+      {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
       {$ifdef NEWRTTINOTUSED}
         {$WEAKLINKRTTI ON}

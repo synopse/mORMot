@@ -3803,7 +3803,7 @@ type
     /// this overriden constructor will instantiate all its nested
     // TPersistent class published properties
     constructor Create(Collection: TCollection); override;
-    /// this overriden constructor will release all its nested
+    /// this overriden destructor will release all its nested
     // TPersistent class published properties
     destructor Destroy; override;
   end;
@@ -3824,7 +3824,7 @@ type
     /// this overriden constructor will instantiate all its nested
     // TPersistent class published properties
     constructor Create; override;
-    /// this overriden constructor will release all its nested
+    /// this overriden destructor will release all its nested
     // TPersistent class and T*ObjArray published properties
     destructor Destroy; override;
   end;
@@ -19696,7 +19696,7 @@ procedure TSQLPropInfoRecordFixedSize.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 begin
   if TSQLPropInfoRecordFixedSize(DestInfo).fTypeInfo=fTypeInfo then
-    move(GetFieldAddr(Source)^,
+    MoveFast(GetFieldAddr(Source)^,
       TSQLPropInfoRecordFixedSize(DestInfo).GetFieldAddr(Dest)^,fRecordSize) else
     inherited CopySameClassProp(Source,DestInfo,Dest);
 end;
@@ -19751,8 +19751,8 @@ procedure TSQLPropInfoRecordFixedSize.SetVariant(Instance: TObject;
   const Source: Variant);
 begin
   if TVarData(Source).VType=varString then
-    move(TVarData(Source).VAny^,GetFieldAddr(Instance)^,fRecordSize) else
-    fillchar(GetFieldAddr(Instance)^,fRecordSize,0);
+    MoveFast(TVarData(Source).VAny^,GetFieldAddr(Instance)^,fRecordSize) else
+    FillcharFast(GetFieldAddr(Instance)^,fRecordSize,0);
 end;
 {$endif NOVARIANTS}
 
@@ -19785,8 +19785,8 @@ end;
 function TSQLPropInfoRecordFixedSize.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 begin
   if P=nil then
-    fillchar(GetFieldAddr(Instance)^,fRecordSize,0) else
-    move(P^,GetFieldAddr(Instance)^,fRecordSize);
+    FillcharFast(GetFieldAddr(Instance)^,fRecordSize,0) else
+    MoveFast(P^,GetFieldAddr(Instance)^,fRecordSize);
   result := P+fRecordSize;
 end;
 
@@ -19797,8 +19797,8 @@ begin
   TextToBinary(Value,data);
   Value := pointer(data);
   if Value=nil then
-    fillchar(GetFieldAddr(Instance)^,fRecordSize,0) else
-    move(Value^,GetFieldAddr(Instance)^,fRecordSize);
+    FillcharFast(GetFieldAddr(Instance)^,fRecordSize,0) else
+    MoveFast(Value^,GetFieldAddr(Instance)^,fRecordSize);
 end;
 
 function TSQLPropInfoRecordFixedSize.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -19806,7 +19806,7 @@ begin
   if aValue.VType=ftBlob then begin
     result := aValue.VBlobLen=fRecordSize;
     if result then
-      move(aValue.VBlob^,GetFieldAddr(Instance)^,fRecordSize)
+      MoveFast(aValue.VBlob^,GetFieldAddr(Instance)^,fRecordSize)
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
 end;
@@ -20505,11 +20505,11 @@ begin
   if fIDColumn<>nil then begin
     n := length(fIDColumn);
     SetLength(oldIDColumn,n);
-    move(fIDColumn[0],oldIDColumn[0],n*sizeof(PUTF8Char));
+    MoveFast(fIDColumn[0],oldIDColumn[0],n*sizeof(PUTF8Char));
   end;
   i := (fRowCount+1)*FieldCount;
   SetLength(oldResults,i);
-  move(fResults[0],oldResults[0],i*sizeof(PUTF8Char));
+  MoveFast(fResults[0],oldResults[0],i*sizeof(PUTF8Char));
   // put marked IDs first
   n := 1; // copy row data (first row=0 i.e. idents is left as it is)
   R := @fResults[FieldCount];
@@ -20518,7 +20518,7 @@ begin
     if GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
-      move(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
+      MoveFast(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
       inc(n);
       inc(R,FieldCount);
     end;
@@ -20531,7 +20531,7 @@ begin
     if not GetBit(Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
-      move(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
+      MoveFast(oldResults[j],R^,FieldCount*sizeof(PUTF8Char));
       inc(n);
       inc(R,FieldCount);
     end;
@@ -20539,7 +20539,7 @@ begin
   end;
   assert(n-1=fRowCount);
   // recalcultate Bits[]
-  fillchar(Bits,(fRowCount shr 3)+1,0);
+  FillcharFast(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
     SetBit(Bits,i); // slow but accurate
 end;
@@ -20659,10 +20659,10 @@ var i,FID: integer;
 //    AllID: : TIDDynArray;
 begin
   if length(IDs)=RowCount then begin
-    fillchar(Bits,(RowCount shr 3)+1,255); // all selected -> all bits set to 1
+    FillcharFast(Bits,(RowCount shr 3)+1,255); // all selected -> all bits set to 1
     exit;
   end;
-  fillchar(Bits,(RowCount shr 3)+1,0);
+  FillcharFast(Bits,(RowCount shr 3)+1,0);
   if IDs=nil then
     exit; // no selected -> all bits left to 0
   // we sort IDs to use FastFindIntegerSorted() and its fast binary search
@@ -20731,10 +20731,10 @@ begin
     exit; // out of range
   if Assigned(fIDColumn) then
     if Row<fRowCount then
-      move(fIDColumn[Row+1],fIDColumn[Row],(fRowCount-Row)*sizeof(PUTF8Char));
+      MoveFast(fIDColumn[Row+1],fIDColumn[Row],(fRowCount-Row)*sizeof(PUTF8Char));
   if Row<fRowCount then begin
     Row := Row*FieldCount; // convert row index into position in fResults[]
-    move(fResults[Row+FieldCount],fResults[Row],(fRowCount*FieldCount-Row)*sizeof(pointer));
+    MoveFast(fResults[Row+FieldCount],fResults[Row],(fRowCount*FieldCount-Row)*sizeof(pointer));
   end;
   dec(fRowCount);
 end;
@@ -21210,7 +21210,7 @@ begin
   end;
   // TEXT format
   SetLength(Result,Len);
-  Move(P^,pointer(Result)^,Len);
+  MoveFast(P^,pointer(Result)^,Len);
 end;
 
 function TSQLRawBlobToBlob(const RawBlob: TSQLRawBlob): RawUTF8;
@@ -21339,7 +21339,7 @@ begin
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   for i := 1 to fRowCount do begin
     L := StrLen(U^);
-    move(U^^,P^,L);
+    MoveFast(U^^,P^,L);
     if i=fRowCount then // don't add a last ','
       break;
     P[L] := Sep;
@@ -22185,7 +22185,7 @@ begin
   n := length(Tables);
   if n>0 then begin
     SetLength(fQueryTables,n);
-    move(Tables[0],fQueryTables[0],n*sizeof(TClass));
+    MoveFast(Tables[0],fQueryTables[0],n*sizeof(TClass));
   end;
 end;
 
@@ -22194,7 +22194,7 @@ constructor TSQLTable.CreateWithColumnTypes(const ColumnTypes: array of TSQLFiel
 begin
   Create(aSQL);
   SetLength(fQueryColumnTypes,length(ColumnTypes));
-  Move(ColumnTypes[0],fQueryColumnTypes[0],length(ColumnTypes)*sizeof(TSQLFieldType));
+  MoveFast(ColumnTypes[0],fQueryColumnTypes[0],length(ColumnTypes)*sizeof(TSQLFieldType));
 end;
 
 destructor TSQLTable.Destroy;
@@ -22453,7 +22453,7 @@ var R,F,n: integer;
 begin
   SetLength(aResult,FieldCount);
   if FromDisplay and (length(fFieldLengthMean)=FieldCount) then begin
-    move(fFieldLengthMean[0],aResult[0],FieldCount*sizeof(integer));
+    MoveFast(fFieldLengthMean[0],aResult[0],FieldCount*sizeof(integer));
     result := fFieldLengthMeanSum;
     exit;
   end;
@@ -23088,7 +23088,7 @@ var FieldName: RawUTF8;
 begin
   FieldCount := 0;
   DecodedRowID := 0;
-  FillChar(FieldTypeApproximation,sizeof(FieldTypeApproximation),0);
+  FillcharFast(FieldTypeApproximation,sizeof(FieldTypeApproximation),0);
   InlinedParams := Params=pInlined;
   if pointer(Fields)=nil then begin
     // get "COL1"="VAL1" pairs, stopping at '}' or ']'
@@ -24143,7 +24143,7 @@ begin
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
     rec := GetFieldAddr(Instance);
     RecordClear(rec^,PropType{$ifndef FPC}^{$endif});
-    FillChar(rec^,PropType^.RecordType^.Size,0);
+    FillcharFast(rec^,PropType^.RecordType^.Size,0);
   end;
   {$endif}
   end;
@@ -25814,7 +25814,7 @@ begin
           P := @V^[1];
         end;
         Line[L] := #0; // GetCaptionFromPCharLen() expect it as ASCIIZ
-        move(P^,Line,L);
+        MoveFast(P^,Line,L);
         GetCaptionFromPCharLen(Line,s);
         Strings.AddObject(s,pointer(i));
       end;
@@ -26294,7 +26294,7 @@ begin
       tmp := @buf else
       getmem(tmp,L);
     try
-      move(P^,tmp^,L); // make a working copy of the JSON text (including #0)
+      MoveFast(P^,tmp^,L); // make a working copy of the JSON text (including #0)
       FillFrom(tmp,FieldBits); // now we can safely call FillFrom()
     finally
       if tmp<>@buf then
@@ -27783,7 +27783,7 @@ begin
   fConnectionProperties := MappedConnection;
   fRowIDFieldName := 'ID';
   fProps.Fields.NamesToRawUTF8DynArray(fFieldNames);
-  FillChar(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
+  FillcharFast(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
   fAutoComputeSQL := AutoComputeSQL;
   fMappingVersion := 1;
   if fAutoComputeSQL then
@@ -28317,7 +28317,7 @@ begin
   // set the Tables to be associated with this Model, as TSQLRecord classes
   fTablesMax := N-1;
   SetLength(fTables,N);
-  move(Tables[0],fTables[0],N*Sizeof(Tables[0]));
+  MoveFast(Tables[0],fTables[0],N*Sizeof(Tables[0]));
   for i := 0 to N-1 do
     // first register for JSONToObject() and for TSQLPropInfoRTTITID.Create()
     TJSONSerializer.RegisterClassForJSON(Tables[i]);
@@ -28771,7 +28771,7 @@ begin
         for j := 0 to fModelMax do
           if fModel[j].Model=self then begin
             // un-associate this TSQLRecord with this model
-            Move(fModel[j+1],fModel[j],(fModelMax-j)*sizeof(fModel[j]));
+            MoveFast(fModel[j+1],fModel[j],(fModelMax-j)*sizeof(fModel[j]));
             dec(fModelMax);
             break;
           end;
@@ -29342,12 +29342,12 @@ begin
     for i := 1 to T.fRowCount do begin
       L := Lens[i-1];
       if L<>0 then begin
-        move(T.fResults[i]^,P^,L);
+        MoveFast(T.fResults[i]^,P^,L);
         inc(P,L);
       end;
       if i=T.fRowCount then
         break;
-      move(pointer(Separator)^,P^,SepLen);
+      MoveFast(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
     end;
     //assert(P-pointer(result)=Len);
@@ -30935,7 +30935,7 @@ begin
     end;
   dec(Count);
   if index<Count then
-    Move(List[index+1],List[index],(Count-index)*sizeof(List[index]));
+    MoveFast(List[index+1],List[index],(Count-index)*sizeof(List[index]));
   result := true;
 end;
 
@@ -31572,7 +31572,7 @@ begin
       Int64(result) := HTML_UNAVAILABLE;
       exit; // if /TimeStamp is not available, server is down!
     end;
-  fillchar(Call,sizeof(Call),0);
+  FillcharFast(Call,sizeof(Call),0);
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -32010,7 +32010,7 @@ begin
       result := pointer(GlobalAlloc(GMEM_FIXED,L)) else
     {$endif}
       GetMem(result,L);
-    move(pointer(s)^,result^,L);
+    MoveFast(pointer(s)^,result^,L);
   end;
 end;
 var call: TSQLRestURIParams;
@@ -32019,7 +32019,7 @@ begin
     Int64(result) := HTML_NOTIMPLEMENTED; // 501
     exit;
   end;
-  fillchar(call,SizeOf(call),0);
+  FillcharFast(call,SizeOf(call),0);
   call.Url := url;
   call.Method := method;
   call.LowLevelConnectionID := PtrInt(GlobalURIRequestServer);
@@ -32132,7 +32132,7 @@ begin
   inc(P,4);
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
   Msg.Result := HTML_SUCCESS; // Send something back
-  fillchar(call,SizeOf(call),0);
+  FillcharFast(call,SizeOf(call),0);
   call.Url := GetNextItem(P,#1);
   call.Method := GetNextItem(P,#1);
   call.InHead := GetNextItem(P,#1);
@@ -36534,7 +36534,7 @@ var pSidAnonymous, pSidOwner: PSID;
     ACLP: PACL;
     Token: THandle;
 begin
-  fillchar(SD,SECURITY_DESCRIPTOR_MIN_LENGTH,0);
+  FillcharFast(SD,SECURITY_DESCRIPTOR_MIN_LENGTH,0);
   // Initialize the new security descriptor
   if InitializeSecurityDescriptor(@SD, SECURITY_DESCRIPTOR_REVISION) and
       GetUserSid(pSidOwner,Token) then begin
@@ -36568,7 +36568,7 @@ begin
       CloseHandle(Token);
     end;
   end;
-  fillchar(SA,sizeof(SA),0); // mark error: no security
+  FillcharFast(SA,sizeof(SA),0); // mark error: no security
 end;
 
 {$else}
@@ -36584,7 +36584,7 @@ function SetSecurityDescriptorDacl(pSecurityDescriptor: PSecurityDescriptor;
 
 procedure InitializeSecurity(var SA: TSecurityAttributes; var SD);
 begin
-  fillchar(SD,SECURITY_DESCRIPTOR_MIN_LENGTH,0);
+  FillcharFast(SD,SECURITY_DESCRIPTOR_MIN_LENGTH,0);
   // Initialize the new security descriptor
   if InitializeSecurityDescriptor(@SD, SECURITY_DESCRIPTOR_REVISION) then begin
      // Add a NULL descriptor ACL to the security descriptor
@@ -36596,7 +36596,7 @@ begin
         exit; // mark OK
      end;
   end;
-  fillchar(SA,sizeof(SA),0); // mark error: no security
+  FillcharFast(SA,sizeof(SA),0); // mark error: no security
 end;
 
 {$endif NOSECURITYFORNAMEDPIPECLIENTS}
@@ -36726,7 +36726,7 @@ begin
   SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
   Header := 'RemoteIP: 127.0.0.1';
   fServer.BeginCurrentThread(self);
-  fillchar(call,sizeof(call),0);
+  FillcharFast(call,sizeof(call),0);
   call.LowLevelConnectionID := fPipe;
   Ticks64 := 0;
   Sleeper64 := 0;
@@ -38628,7 +38628,7 @@ begin
       exit;
     SetLength(ResultID,n);
     {$ifdef CPU64} // on x64 TList[]=Pointer does map an TID/Int64
-    move(Where.List[0],ResultID[0],n*sizeof(TID));
+    MoveFast(Where.List[0],ResultID[0],n*sizeof(TID));
     {$else}
     with Where do
       for i := 0 to Count-1 do
@@ -40359,7 +40359,7 @@ begin
   if len>sizeof(buf) then
     GetMem(tmp,len) else
     tmp := @buf;
-  move(pointer(JSON)^,tmp^,len);
+  MoveFast(pointer(JSON)^,tmp^,len);
   JSONToObject(ObjectInstance,tmp,result,nil,[]);
   if tmp<>@buf then
     Freemem(tmp);
@@ -41035,6 +41035,10 @@ function TClassInstance.CreateNew: TObject;
 begin
   if @self<>nil then
   case ItemCreate of
+    cicUnknown: begin
+      result := nil;
+      exit;
+    end;
     cicTSQLRecord: begin
       result := TSQLRecordClass(ItemClass).Create;
       exit;
@@ -41408,7 +41412,7 @@ end;
 class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
   var OutCoord: TSQLRecordTreeCoords);
 begin // direct memory copy with no memory check
-  move(InBlob,OutCoord,(RecordProps.Fields.Count shr 1)*sizeof(double));
+  MoveFast(InBlob,OutCoord,(RecordProps.Fields.Count shr 1)*sizeof(double));
 end;
 
 class function TSQLRecordRTree.ContainedIn(const BlobA,BlobB): boolean;
@@ -41714,7 +41718,7 @@ begin
   if FieldNames='' then
     Fields := fStoredClassRecordProps.SimpleFieldsBits[soUpdate] else
   if FieldNames='*' then
-    FillChar(Fields,sizeof(Fields),255) else
+    FillcharFast(Fields,sizeof(Fields),255) else
     if not fStoredClassRecordProps.FieldBitsFromCSV(FieldNames,Fields) then begin
       result := false; // invalid FieldNames content
       exit;
@@ -43606,7 +43610,7 @@ end;
 
 procedure TSQLAccessRights.FromString(P: PUTF8Char);
 begin
-  fillchar(self,sizeof(self),0);
+  FillcharFast(self,sizeof(self),0);
   if P=nil then
     exit;
   AllowRemoteExecute := TSQLAllowRemoteExecute(byte(GetNextItemCardinal(P)));
@@ -43651,7 +43655,7 @@ end;
 function TSQLAuthGroup.GetSQLAccessRights: TSQLAccessRights;
 begin
   if self=nil then
-    fillchar(result,sizeof(result),0) else
+    FillcharFast(result,sizeof(result),0) else
     result.FromString(pointer(AccessRights));
 end;
 
@@ -43698,9 +43702,9 @@ begin
           UserID := Server.Add(G,true);
           G.Ident := 'Guest';
           A.AllowRemoteExecute := [];
-          fillchar(A.POST,sizeof(TSQLFieldTables),0); // R/O access
-          fillchar(A.PUT,sizeof(TSQLFieldTables),0);
-          fillchar(A.DELETE,sizeof(TSQLFieldTables),0);
+          FillcharFast(A.POST,sizeof(TSQLFieldTables),0); // R/O access
+          FillcharFast(A.PUT,sizeof(TSQLFieldTables),0);
+          FillcharFast(A.DELETE,sizeof(TSQLFieldTables),0);
           G.SQLAccessRights := A;
           G.SessionTimeout := 60;
           Server.Add(G,true);
@@ -44850,7 +44854,7 @@ begin
   Params := TJSONSerializer.CreateOwnedStream;
   try
     // create the parameters
-    FillChar(I64s,method^.ArgsUsedCount[smvv64]*sizeof(Int64),0);
+    FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*sizeof(Int64),0);
     for arg := 1 to high(method^.Args) do
     with method^.Args[arg] do
     if ValueType>smvSelf then begin
@@ -45001,7 +45005,7 @@ begin
           resultType := ValueType;
           if ValueType in [smvBoolean..smvCurrency] then
             // ordinal/real result values to CPU/FPU registers
-            Move(V^,Result,SizeInStorage);
+            MoveFast(V^,Result,SizeInStorage);
         end;
       end;
       if R=nil then
@@ -48207,7 +48211,7 @@ var m: integer;
 begin
   if self<>nil then
     for m := 0 to fInterface.fMethodsCount-1 do
-      fillchar(fExecution[m].Denied,sizeof(fExecution[m].Denied),0);
+      FillcharFast(fExecution[m].Denied,sizeof(fExecution[m].Denied),0);
   result := self;
 end;
 
@@ -48236,7 +48240,7 @@ var m: integer;
 begin
   if self<>nil then
     for m := 0 to fInterface.fMethodsCount-1 do
-      fillchar(fExecution[m].Denied,sizeof(fExecution[m].Denied),255);
+      FillcharFast(fExecution[m].Denied,sizeof(fExecution[m].Denied),255);
   result := self;
 end;
 
@@ -48265,7 +48269,7 @@ var m: integer;
 begin
   if self<>nil then
     for m := 0 to high(aMethod) do
-      fillchar(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
         sizeof(fExecution[0].Denied),0);
   result := self;
 end;
@@ -48297,7 +48301,7 @@ var m: integer;
 begin
   if self<>nil then
     for m := 0 to high(aMethod) do
-      fillchar(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
+      FillcharFast(fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
         sizeof(fExecution[0].Denied),255);
   result := self;
 end;
@@ -48730,11 +48734,11 @@ begin
   if ArgsUsedCount[smvvRecord]>0 then
     SetLength(Records,ArgsUsedCount[smvvRecord]);
   if ArgsUsedCount[smvvObject]>0 then
-    fillchar(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0);
+    FillcharFast(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0);
   if ArgsUsedCount[smvvInterface]>0 then
-    fillchar(Interfaces,ArgsUsedCount[smvvInterface]*sizeof(pointer),0);
+    FillcharFast(Interfaces,ArgsUsedCount[smvvInterface]*sizeof(pointer),0);
   if ArgsUsedCount[smvvDynArray]>0 then
-    fillchar(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
+    FillcharFast(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
   try
     // 1. validate input parameters
     if (ArgsInputValuesCount<>0) and (Par<>nil) then begin
@@ -48745,7 +48749,7 @@ begin
       '{': begin // retrieve parameters values from JSON object
         inc(Par);
         SetLength(ParObjValues,ArgsInLast+1); // nil will set default value
-        fillchar(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0); // set default
+        FillcharFast(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0); // set default
         a1 := ArgsInFirst;
         repeat
           Name := GetJSONPropName(Par);
@@ -48789,7 +48793,7 @@ begin
       end;
     // 3. decode input parameters (if any)
     if (Par=nil) and (ParObjValues=nil) then // set default if no input parameter
-      fillchar(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0) else
+      FillcharFast(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0) else
       for a := ArgsInFirst to ArgsInLast do
       with Args[a] do
       if ValueDirection<>smdOut then begin
@@ -48878,11 +48882,11 @@ begin
          (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then
         // pass by reference
         if RegisterIdent=0 then
-          move(Value,Stack[InStackOffset],SizeInStack) else
+          MoveFast(Value,Stack[InStackOffset],SizeInStack) else
           call.Regs[RegisterIdent] := PtrInt(Value) else
         // pass by value
         if RegisterIdent=0 then
-          move(Value^,Stack[InStackOffset],SizeInStack) else
+          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else
           call.Regs[RegisterIdent] := PPtrInt(Value)^;
     end;
     // 5. execute the method

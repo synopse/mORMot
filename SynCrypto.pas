@@ -1096,7 +1096,7 @@ end;
 
 function memset(dest: Pointer; val: Integer; count: integer): Pointer; cdecl;
 begin
-  FillChar(dest^, count, val);
+  FillcharFast(dest^, count, val);
   Result := dest;
 end;
 
@@ -4126,11 +4126,11 @@ begin
   // Message padding
   // 1. append bit '1' after Buffer
   Data.Buffer[Data.Index]:= $80;
-  fillchar(Data.Buffer[Data.Index+1],63-Data.Index,0);
+  FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // 2. Compress if more than 448 bits, (no room for 64 bit length
   if Data.Index>=56 then begin
     Compress;
-    fillchar(Data.Buffer,56,0);
+    FillcharFast(Data.Buffer,56,0);
   end;
   // Write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
@@ -4164,7 +4164,7 @@ procedure TSHA256.Init;
 // initialize context
 var Data: TSHAContext absolute Context;
 begin
-  fillchar(Data,sizeof(Data),0);
+  FillcharFast(Data,sizeof(Data),0);
   Data.Hash.A := $6a09e667;
   Data.Hash.B := $bb67ae85;
   Data.Hash.C := $3c6ef372;
@@ -4206,7 +4206,7 @@ begin
   L := length(s);
   p := pointer(s);
   if L<sizeof(tmp) then begin
-    fillchar(tmp,sizeof(tmp),L); // add some salt to unweak password
+    FillcharFast(tmp,sizeof(tmp),L); // add some salt to unweak password
     if L>0 then
       move(p^,tmp,L);
     SHA.Full(@tmp,sizeof(tmp),Digest);
@@ -4492,7 +4492,7 @@ begin
       // 3. Last block
       if LastLen<>0 then
       if Encrypt then begin
-        fillchar(Last,AESBlockSize,0);
+        FillcharFast(Last,AESBlockSize,0);
         Read(@Last,LastLen);
         Crypt.Encrypt(Last);
         Write(@Last,AESBlockSize);
@@ -5002,12 +5002,12 @@ begin
   // Bytes of padding needed to make 56 bytes (-8..55)
   count := 56 - 1 - count;
   if count < 0 then begin  //  Padding forces an extra block
-    FillChar(p^,count + 8, 0);
+    FillcharFast(p^,count + 8, 0);
     MD5Transform(buf,in_);
     p := @in_;
     count := 56;
   end;
-  FillChar(p^, count, 0);
+  FillcharFast(p^, count, 0);
   // Append length in bits and transform
   in_[14] := bytes[0] shl 3;
   in_[15] := (bytes[1] shl 3) or (bytes[0] shr 29);
@@ -5251,11 +5251,11 @@ var Data: TSHAContext absolute Context;
 begin
   // 1. append bit '1' after Buffer
   Data.Buffer[Data.Index]:= $80;
-  fillchar(Data.Buffer[Data.Index+1],63-Data.Index,0);
+  FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // 2. Compress if more than 448 bits, (no room for 64 bit length
   if Data.Index>=56 then begin
     Compress;
-    fillchar(Data.Buffer,56,0);
+    FillcharFast(Data.Buffer,56,0);
   end;
   // Write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
@@ -5289,7 +5289,7 @@ procedure TSHA1.Init;
 // initialize context
 var Data: TSHAContext absolute Context;
 begin
-  fillchar(Data,sizeof(Data),0);
+  FillcharFast(Data,sizeof(Data),0);
   Data.Hash.A := $67452301;
   Data.Hash.B := $EFCDAB89;
   Data.Hash.C := $98BADCFE;
@@ -5429,7 +5429,7 @@ begin
     PAESBlock(Output)^ := fIV;
   end;
   move(Input^,PByteArray(Output)^[iv],InputLen);
-  FillChar(PByteArray(Output)^[iv+InputLen],padding,padding);
+  FillcharFast(PByteArray(Output)^[iv+InputLen],padding,padding);
   Inc(PByte(Output),iv);
   Encrypt(Output,Output,InputLen+padding);
   result := true;
@@ -6101,7 +6101,7 @@ end;
 procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractClass);
 begin
   if Key='' then
-    FillChar(CompressShaAesKey,sizeof(CompressShaAesKey),0) else
+    FillcharFast(CompressShaAesKey,sizeof(CompressShaAesKey),0) else
     SHA256Weak(Key,CompressShaAesKey);
 end;
 

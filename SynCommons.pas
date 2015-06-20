@@ -422,7 +422,9 @@ unit SynCommons;
     and introduced GetMimeContentTypeHeader() function
   - added MultiPartFormDataDecode() to decode multipart/form-data POST requests
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
-    patched at startup, unless the NOX64PATCHRTL conditional is defined
+    patched at startup, if the DOPATCHTRTL conditional is defined
+  - introduced FillcharFast() and MoveFast() global function variables,
+    pointing to optimized asm versions, depending on the CPU abilities 
   - FastCode-based x86 asm Move() procedure will handle source=dest
   - faster x86/x64 asm versions of StrUInt32() StrInt32() StrInt64() functions
   - new StrUInt64(), UniqueRawUTF8(), FastNewRawUTF8() and SetRawUTF8() functions
@@ -2172,7 +2174,9 @@ function StrLenPas(S: pointer): PtrInt;
 {$ifdef FPC}
 /// FPC will use its internal optimized implementation
 function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillChar;
 {$else}
+
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms: please note that in this case, it may read up to 15 bytes
@@ -2180,7 +2184,19 @@ function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
 // generate a protection violation (e.g. when used over mapped files) - in this
 // case, you can use the slightly slower StrLenPas() function instead
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
-{$endif}
+
+/// our fast version of FillChar()
+// - this version will use fast SSE2 instructions (if available), on both Win32
+// and Win64 platforms, or an optimized X86 revision on older CPUs
+var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
+
+{$endif FPC}
+
+
+/// our fast version of move()
+// - this version will use fast SSE2 instructions (if available), on both Win32
+// and Win64 platforms, or an optimized X86 revision on older CPUs
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = System.Move;
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -12941,7 +12957,7 @@ begin
     {$ifdef FPC}
     widestringmanager.Ansi2UnicodeMoveProc(Source,
       {$ifdef ISFPC27}fCodePage,{$endif}tmp,SourceChars);
-    move(Pointer(tmp)^,Dest^,length(tmp)*2);
+    MoveFast(Pointer(tmp)^,Dest^,length(tmp)*2);
     result := Dest+SourceChars;
     {$else}
     {$ifdef KYLIX3}
@@ -13217,7 +13233,7 @@ begin
     {$ifdef FPC}
     widestringmanager.Unicode2AnsiMoveProc(Source,tmp,
       {$ifdef ISFPC27}fCodePage,{$endif}SourceChars);
-    move(Pointer(tmp)^,Dest^,length(tmp));
+    MoveFast(Pointer(tmp)^,Dest^,length(tmp));
     result := Dest+length(tmp);
     {$else}
     {$ifdef KYLIX3}
@@ -13465,16 +13481,16 @@ begin
   end else begin // from Operating System returned values
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
-    fillchar(U256,sizeof(U256),0);
+    FillcharFast(U256,sizeof(U256),0);
     if PtrUInt(inherited AnsiBufferToUnicode(U256,A256,256))-PtrUInt(@U256)>512 then
       // ESynException.CreateUTF8() uses UTF8ToString() -> use CreateFmt() here
       raise ESynException.CreateFmt('OS error for %s.Create(%d)',[ClassName,aCodePage]);
-    move(U256[0],fAnsiToWide[0],512);
+    MoveFast(U256[0],fAnsiToWide[0],512);
   end;
   SetLength(fWideToAnsi,65536);
   for i := 1 to 126 do
     fWideToAnsi[i] := i;
-  fillchar(fWideToAnsi[127],65536-127,ord('?')); // '?' for unknown char
+  FillcharFast(fWideToAnsi[127],65536-127,ord('?')); // '?' for unknown char
   for i := 127 to 255 do
     if (fAnsiToWide[i]<>0) and (fAnsiToWide[i]<>ord('?')) then
       fWideToAnsi[fAnsiToWide[i]] := i;
@@ -13691,7 +13707,7 @@ end;
 function TSynAnsiUTF8.AnsiBufferToUTF8(Dest: PUTF8Char; Source: PAnsiChar;
   SourceChars: Cardinal): PUTF8Char;
 begin
-  move(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -13723,7 +13739,7 @@ end;
 function TSynAnsiUTF8.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
   SourceChars: Cardinal): PAnsiChar;
 begin
-  move(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -13754,7 +13770,7 @@ end;
 function TSynAnsiUTF16.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal): PWideChar;
 begin
-  move(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Pointer(PtrUInt(Dest)+SourceChars);
   result^ := #0;
 end;
@@ -13783,7 +13799,7 @@ function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   SourceChars := SourceChars shl 1; // from WideChar count to byte count
-  move(Source^,Dest^,SourceChars);
+  MoveFast(Source^,Dest^,SourceChars);
   result := Dest+SourceChars;
 end;
 
@@ -15623,7 +15639,7 @@ begin
       pointer(Dest) := pointer(PAnsiChar(P)+STRRECSIZE);
       PByteArray(Dest)[len] := 0;
     end;
-    Move(pointer(text)^,pointer(Dest)^,len);
+    MoveFast(pointer(text)^,pointer(Dest)^,len);
   end;
 end;
 {$else}
@@ -16952,7 +16968,7 @@ begin
   if L<>0 then
     L := PStrRec(Pointer(L-STRRECSIZE))^.length;
   SetLength(Text,L+BufferLen);
-  move(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
+  MoveFast(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
 
 procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
@@ -16973,7 +16989,7 @@ begin
   inc(P,TextLen);
   for i := 0 to high(Buffers) do
   if Buffers[i]<>nil then begin
-    move(Buffers[i]^,P^,lens[i]);
+    MoveFast(Buffers[i]^,P^,lens[i]);
     inc(P,lens[i]);
   end;
 end;
@@ -16984,7 +17000,7 @@ begin
   L := PtrInt(Text);
   if L<>0 then begin
     L := PStrRec(Pointer(L-STRRECSIZE))^.length;
-    Move(Pointer(Text)^,Buffer^,L);
+    MoveFast(Pointer(Text)^,Buffer^,L);
     inc(Buffer,L);
   end;
   result := Buffer;
@@ -17038,10 +17054,10 @@ begin
   P^ := Quote;
   inc(P);
   if n=0 then begin
-    Move(Text^,P^,L);
+    MoveFast(Text^,P^,L);
     inc(P,L);
   end else begin
-    Move(Text^,P^,first);
+    MoveFast(Text^,P^,first);
     n := first;
     L := first;
     goto quot;
@@ -17381,7 +17397,7 @@ var ppBeg: integer;
     wasNull: boolean;
 begin
   maxParam := 0;
-  fillchar(Nulls,sizeof(Nulls),0);
+  FillcharFast(Nulls,sizeof(Nulls),0);
   ppBeg := PosEx(RawUTF8(':('),SQL,1);
   if (ppBeg=0) or (PosEx(RawUTF8('):'),SQL,ppBeg+2)=0) then begin
     // SQL code with no valid :(...): internal parameters -> leave maxParam=0
@@ -17494,7 +17510,7 @@ begin
         '9': begin
           S[prec] := '0';
           if ((prec=2) and (S[1]='-')) or (prec=1) then begin
-            Move(S[prec],S[prec+1],result);
+            MoveFast(S[prec],S[prec+1],result);
             S[prec] := '1';
             break;
           end;
@@ -17613,7 +17629,7 @@ begin
   F := pointer(result);
   for i := 0 to blocksN-1 do
   with blocks[i] do begin
-    move(Text^,F^,Len);
+    MoveFast(Text^,F^,Len);
     inc(F,Len);
   end;
 end;
@@ -17642,7 +17658,7 @@ begin
   end;
   result := '';
   tmpN := 0;
-  FillChar(inlin,SizeOf(inlin),0);
+  FillcharFast(inlin,SizeOf(inlin),0);
   L := 0;
   A := 0;
   P := 0;
@@ -17721,7 +17737,7 @@ Txt:  len := F-FDeb;
     {$else}
     L := PInteger(PtrInt(tmp[i])-sizeof(integer))^;
     {$endif}
-    move(pointer(tmp[i])^,F^,L);
+    MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if i in inlin then begin
       PWord(F)^ := ord(')')+ord(':')shl 8;
@@ -17741,7 +17757,7 @@ begin
   P := pointer(Result);
   for i := 0 to high(Values) do begin
     L := length(Values[i]);
-    move(pointer(Values[i])^,P^,L);
+    MoveFast(pointer(Values[i])^,P^,L);
     inc(P,L);
   end;
 end;
@@ -17752,7 +17768,7 @@ begin
   L := Length(buf);
   if L<>0 then begin
     SetLength(bytes,L);
-    move(pointer(buf)^,pointer(bytes)^,L);
+    MoveFast(pointer(buf)^,pointer(bytes)^,L);
   end;
 end;
 
@@ -18145,7 +18161,7 @@ begin
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
     IsWow64Process(GetCurrentProcess,Res) and Res;
-  fillchar(SystemInfo,sizeof(SystemInfo),0);
+  FillcharFast(SystemInfo,sizeof(SystemInfo),0);
   if IsWow64 then // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
     GetNativeSystemInfo := GetProcAddress(Kernel,'GetNativeSystemInfo') else
     @GetNativeSystemInfo := nil;
@@ -18720,7 +18736,7 @@ begin
       S := P-1;
       inc(P,extra);
       inc(extra);
-      Move(S^,D[result],extra);
+      MoveFast(S^,D[result],extra);
       inc(result,extra);
     end;
   until false;
@@ -19387,7 +19403,7 @@ procedure InitConvertBase64ToBin;
 var i: integer;
 begin
   SetLength(ConvertBase64ToBin,256);
-  fillchar(ConvertBase64ToBin[0],256,255); // invalid value set to -1
+  FillcharFast(ConvertBase64ToBin[0],256,255); // invalid value set to -1
   for i := 0 to high(b64) do
     ConvertBase64ToBin[ord(b64[i])] := i;
   ConvertBase64ToBin[ord('=')] := -2; // special value for '='
@@ -21091,7 +21107,7 @@ begin
     exit; // wrong Index
   dec(n);
   if n>Index then
-    move(Values[Index+1],Values[Index],(n-Index)*sizeof(Integer));
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*sizeof(Integer));
   SetLength(Values,n);
 end;
 
@@ -21103,7 +21119,7 @@ begin
     exit; // wrong Index
   dec(n,Index+1);
   if n>0 then
-    move(Values[Index+1],Values[Index],n*sizeof(Integer));
+    MoveFast(Values[Index+1],Values[Index],n*sizeof(Integer));
   dec(ValuesCount);
 end;
 
@@ -21199,15 +21215,15 @@ begin
     SetLength(result,Len);
     P := pointer(result);
     if Prefix<>'' then begin
-      move(pointer(Prefix)^,P^,length(Prefix));
+      MoveFast(pointer(Prefix)^,P^,length(Prefix));
       inc(P,length(Prefix));
     end;
     for i := 0 to ValuesCount do begin
-      Move(ints[i][1],P^,ord(ints[i][0]));
+      MoveFast(ints[i][1],P^,ord(ints[i][0]));
       inc(P,ord(ints[i][0]));
     end;
     if Suffix<>'' then
-      move(pointer(Suffix)^,P^,length(Suffix));
+      MoveFast(pointer(Suffix)^,P^,length(Suffix));
   finally
     FreeMem(ints);
   end;
@@ -21243,15 +21259,15 @@ begin
     SetLength(result,Len);
     P := pointer(result);
     if Prefix<>'' then begin
-      move(pointer(Prefix)^,P^,length(Prefix));
+      MoveFast(pointer(Prefix)^,P^,length(Prefix));
       inc(P,length(Prefix));
     end;
     for i := 0 to ValuesCount do begin
-      Move(ints[i][1],P^,ord(ints[i][0]));
+      MoveFast(ints[i][1],P^,ord(ints[i][0]));
       inc(P,ord(ints[i][0]));
     end;
     if Suffix<>'' then
-      move(pointer(Suffix)^,P^,length(Suffix));
+      MoveFast(pointer(Suffix)^,P^,length(Suffix));
   finally
     FreeMem(ints);
   end;
@@ -21499,7 +21515,7 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 begin
   if ValuesCount>length(Dest) then
     SetLength(Dest,ValuesCount);
-  move(Values^[0],Dest[0],ValuesCount*sizeof(Integer));
+  MoveFast(Values^[0],Dest[0],ValuesCount*sizeof(Integer));
   QuickSortInteger(pointer(Dest),0,ValuesCount-1);
 end;
 
@@ -21601,9 +21617,9 @@ begin
   n := ValuesCount;
   if PtrUInt(result)<PtrUInt(n) then begin
     n := (n-result)*sizeof(Integer);
-    move(Values[result],Values[result+1],n);
+    MoveFast(Values[result],Values[result+1],n);
     if CoValues<>nil then
-      move(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
   end else
     result := n;
   Values[result] := Value;
@@ -22592,7 +22608,7 @@ Set1:   inc(Dest);
         S := Source-1; // leave UTF-8 encoding untouched
         inc(Source,extra);
         inc(extra);
-        Move(S^,Dest^,extra);
+        MoveFast(S^,Dest^,extra);
         inc(Dest,extra);
         if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
         if Source<endSource then continue else break;
@@ -23039,11 +23055,11 @@ begin // CSVOfValue('?',3)='?,?,?'
   P := pointer(result);
   i := 1;
   repeat
-    move(Pointer(Value)^,P^,ValueLen);
+    MoveFast(Pointer(Value)^,P^,ValueLen);
     inc(P,ValueLen);
     if i=Count then
       break;
-    move(Pointer(Sep)^,P^,SepLen);
+    MoveFast(Pointer(Sep)^,P^,SepLen);
     inc(P,SepLen);
     inc(i);
   until false;
@@ -23307,13 +23323,13 @@ begin
   repeat
     L := length(Values[i]);
     if L>0 then begin
-      move(pointer(Values[i])^,P^,L);
+      MoveFast(pointer(Values[i])^,P^,L);
       inc(P,L);
     end;
     if i=high(Values) then
       Break;
     if seplen>0 then begin
-      Move(pointer(Sep)^,P^,seplen);
+      MoveFast(pointer(Sep)^,P^,seplen);
       inc(P,seplen);
     end;
     inc(i);
@@ -23913,7 +23929,7 @@ begin
     PInt64Array(@Fields)^[2] := 0;
     PInt64Array(@Fields)^[3] := 0;
   end else
-    FillChar(Fields,sizeof(Fields),0);
+    FillcharFast(Fields,sizeof(Fields),0);
 end;
 
 {$WARNINGS ON}
@@ -23958,7 +23974,7 @@ end;
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
 var i: integer;
 begin
-  fillchar(Fields,sizeof(Fields),0);
+  FillcharFast(Fields,sizeof(Fields),0);
   for i := 0 to Length(Index)-1 do
     if Index[i]>=0 then
       include(Fields,Index[i]);
@@ -25508,7 +25524,7 @@ end;
 procedure TSynTimeZone.LoadFromResource;
 var buf: RawByteString;
 begin
-  ResourceToRawByteString(ClassName,PAnsiChar(10),buf);
+  ResourceToRawByteString(ClassName,PChar(10),buf);
   if buf<>'' then
     LoadFromBuffer(buf);
 end;
@@ -25535,7 +25551,7 @@ begin
     end;
     for i := 0 to Keys.Count-1 do begin
       Finalize(item);
-      fillchar(item.tzi,SizeOf(item.tzi),0);
+      FillcharFast(item.tzi,SizeOf(item.tzi),0);
       if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then
       try
         StringToUTF8(Keys[i],item.id);
@@ -25925,7 +25941,7 @@ function RawUTF8ToGUID(const text: RawByteString): TGUID;
 begin
   if (length(text)<>38) or (text[1]<>'{') or (text[38]<>'}') or
      (TextToGUID(@text[2],@result)=nil) then
-    fillchar(result,sizeof(result),0);
+    FillcharFast(result,sizeof(result),0);
 end;
 
 function StringToGUID(const text: string): TGUID;
@@ -25944,7 +25960,7 @@ begin
     {$endif}
       exit; // conversion OK
   end;
-  fillchar(result,sizeof(result),0);
+  FillcharFast(result,sizeof(result),0);
 end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
@@ -26054,7 +26070,7 @@ begin
     if Decim and $ffff0000=ord('0')shl 16+ord('0')shl 24 then
       dec(result,2); // 2 decimals
   end;
-  move(P^,Dest^,result);
+  MoveFast(P^,Dest^,result);
 end;
 
 function StrToCurr64(P: PUTF8Char; NoDecimal: PBoolean=nil): Int64;
@@ -26377,7 +26393,7 @@ begin
   inc(PS);
   while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
   tmp[L] := #0; // GetCaptionFromPCharLen expect
-  move(PS^,tmp,L);
+  MoveFast(PS^,tmp,L);
   GetCaptionFromPCharLen(tmp,result);
 end;
 
@@ -26721,11 +26737,11 @@ begin
   n := ValuesCount;
   if result<n then begin
     n := (n-result)*sizeof(pointer);
-    move(Pointer(Values[result]),Pointer(Values[result+1]),n);
+    MoveFast(Pointer(Values[result]),Pointer(Values[result+1]),n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues<>nil then begin
       {$ifdef CPU64}n := n shr 1;{$endif} // 64 bit pointer size is twice an integer
-      move(CoValues^[result],CoValues^[result+1],n);
+      MoveFast(CoValues^[result],CoValues^[result+1],n);
     end;
   end else
     result := n;
@@ -26803,8 +26819,8 @@ begin
     dec(n,Index);
     if n>0 then begin
       if CoValues<>nil then
-        move(CoValues^[Index+1],CoValues^[Index],n*sizeof(Integer));
-      move(pointer(Values[Index+1]),pointer(Values[Index]),n*sizeof(pointer));
+        MoveFast(CoValues^[Index+1],CoValues^[Index],n*sizeof(Integer));
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),n*sizeof(pointer));
       PtrUInt(Values[ValuesCount]) := 0; // avoid GPF
     end;
     result := true;
@@ -26867,7 +26883,7 @@ begin
   result := 0;
   if GetClassInfo(HInstance, pointer(aWindowName), TempClass) then
     exit; // class name already registered -> fail
-  fillchar(TempClass,sizeof(TempClass),0);
+  FillcharFast(TempClass,sizeof(TempClass),0);
   TempClass.hInstance := HInstance;
   TempClass.lpfnWndProc := @DefWindowProc;
   TempClass.lpszClassName :=  pointer(aWindowName);
@@ -27201,7 +27217,7 @@ begin
   if Count=length(Values) then
     SetLength(Values,Count+100);
   if result<Count then
-    move(Values[result],Values[result+1],(Count-result)*2) else
+    MoveFast(Values[result],Values[result+1],(Count-result)*2) else
     result := Count;
   Values[result] := aValue;
   inc(Count);
@@ -27564,7 +27580,7 @@ begin
   Len := Length(Value);
   Dest := ToVarUInt32(Len,Dest);
   if Len>0 then begin
-    Move(pointer(Value)^,Dest^,Len);
+    MoveFast(pointer(Value)^,Dest^,Len);
     result := pointer(PAnsiChar(Dest)+Len);
   end else
     result := Dest;
@@ -27656,7 +27672,7 @@ procedure RecordAddRef(var Data; TypeInfo : pointer);
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin // external name 'FPC_COPY' does not work as we need
   RecordClear(Dest,TypeInfo);
-  move(Source,Dest,RTTIManagedSize(TypeInfo));
+  MoveFast(Source,Dest,RTTIManagedSize(TypeInfo));
   RecordAddRef(Dest,TypeInfo);
 end;
 
@@ -27667,7 +27683,7 @@ begin
   if size>0 then
     for i := 1 to cnt do begin
       RecordClear(dest^,TypeInfo); // inlined RecordCopy()
-      move(source^,dest^,size);
+      MoveFast(source^,dest^,size);
       RecordAddRef(dest^,TypeInfo);
       inc(PByte(source),size);
       inc(PByte(dest),size);
@@ -27886,7 +27902,7 @@ begin
   for F := 1 to FieldTable^.ManagedCount do begin
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
-      move(R^,Dest^,Diff);
+      MoveFast(R^,Dest^,Diff);
       inc(R,Diff);
       inc(Dest,Diff);
     end;
@@ -27908,7 +27924,7 @@ begin
       {$endif}
       Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
       if LenBytes>0 then begin
-        move(pointer(PPtrUInt(R)^)^,Dest^,LenBytes);
+        MoveFast(pointer(PPtrUInt(R)^)^,Dest^,LenBytes);
         inc(Dest,LenBytes);
       end;
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
@@ -27944,7 +27960,7 @@ begin
           if F=FieldTable^.ManagedCount then
             Diff := FieldTable.Size-Field^.Offset else
             Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
-          move(R^,Dest^,Diff);
+          MoveFast(R^,Dest^,Diff);
           inc(Dest,Diff);
         end;
     {$else}
@@ -27962,7 +27978,7 @@ begin
   if integer(Diff)<0 then
     raise ESynException.Create('RecordSave diff') else
   if Diff<>0 then begin
-    move(R^,Dest^,Diff);
+    MoveFast(R^,Dest^,Diff);
     result := Dest+Diff;
   end else
     result := Dest;
@@ -28098,7 +28114,7 @@ begin
   for F := 1 to FieldTable^.ManagedCount do begin
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
-      move(Source^,R^,Diff);
+      MoveFast(Source^,R^,Diff);
       inc(Source,Diff);
       inc(R,Diff);
     end;
@@ -28155,7 +28171,7 @@ begin
           if F=FieldTable^.ManagedCount then
             Diff := FieldTable.Size-Field^.Offset else
             Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
-          move(Source^,R^,Diff);
+          MoveFast(Source^,R^,Diff);
           inc(Source,Diff);
         end;
     {$else}
@@ -28173,7 +28189,7 @@ begin
   if integer(Diff)<0 then
     raise ESynException.Create('RecordLoad diff') else
   if Diff<>0 then begin
-    move(Source^,R^,Diff);
+    MoveFast(Source^,R^,Diff);
     result := Source+Diff;
   end else
     result := Source;
@@ -28296,7 +28312,7 @@ asm // faster version by AB
         pop ebx
 end;
 
-{$ifndef UNICODE} // TMonitor.Destroy is not available ! -> no simple patch
+{$ifndef UNICODE} // TMonitor.Destroy is not available ! -> apply to D2007 only
 procedure TObjectCleanupInstance;
 asm // faster version by AB
         push ebx
@@ -28305,22 +28321,20 @@ asm // faster version by AB
         mov edx,[ebx].vmtInitTable
         mov ebx,[ebx].vmtParent
         test edx,edx
-        jne @@fin
+        jnz @@clr
         test ebx,ebx
         jz @@end
         mov ebx,[ebx]
         mov edx,[ebx].vmtInitTable
         mov ebx,[ebx].vmtParent
         test edx,edx
-        jne @@fin
+        jnz @@clr
         test ebx,ebx
-        jne @@loop
+        jnz @@loop
 @@end:  pop ebx
         ret
-@@fin:  call RecordClear // eax=data edx=typeinfo
-        test ebx,ebx
-        jne @@loop
-        pop ebx
+@@clr:  call RecordClear // eax=data edx=typeinfo
+        jmp @@loop // TObject has no field -> safe to guess that ebx<>nil
 end;
 {$endif}
 
@@ -29203,45 +29217,33 @@ end;
 {$endif CPU64}
 
 procedure InitRedirectCode;
-{$ifdef DOPATCHTRTL}
-var FillCharAddr, MoveAddr: pointer;
-{$endif}
 begin
   {$ifdef DELPHI5OROLDER}
   StrLen := @StrLenX86;
+  FillcharFast := @FillCharX87;
+  MoveFast := @MoveX87;
   {$else}
   {$ifdef CPU64}
   StrLen := @StrLenSSE2;
+  //FillcharFast := @FillCharSSE2;
+  Pointer(@FillCharFast) := SystemFillCharAddress;
+  MoveFast := @MoveSSE2;
   {$else}
-  if SupportsSSE2 then
-    StrLen := @StrLenSSE2 else
+  if SupportsSSE2 then begin
+    StrLen := @StrLenSSE2;
+    FillcharFast := @FillCharSSE2;
+  end else begin
     StrLen := @StrLenX86;
+    FillcharFast := @FillCharX87;
+  end;
+  MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
   {$ifdef DOPATCHTRTL}
   if DebugHook=0 then begin // patch only outside debugging
-    {$ifdef DELPHI5OROLDER}
-    FillCharAddr := @FillCharX87;
-    MoveAddr := @MoveX87;
-    {$else}
-    {$ifdef CPU64}
-    {$ifdef NOX64PATCHRTL}
-    FillCharAddr := nil;
-    MoveAddr := nil;
-    {$else}
-    FillCharAddr := @FillCharSSE2;
-    MoveAddr := @MoveSSE2;
-    {$endif NOX64PATCHRTL}
-    {$else}
-    MoveAddr := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
-    if SupportsSSE2 then
-      FillCharAddr := @FillCharSSE2 else
-      FillCharAddr := @FillCharX87;
-    {$endif CPU64}
-    {$endif DELPHI5OROLDER}
-    RedirectCode(SystemFillCharAddress,FillCharAddr);
-    RedirectCode(@System.Move,MoveAddr);
+    RedirectCode(SystemFillCharAddress,@FillcharFast);
+    RedirectCode(@System.Move,@MoveFast);
     RedirectCode(SystemRecordCopyAddress,@RecordCopy);
     RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
     RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
@@ -29497,7 +29499,7 @@ var added: boolean;
 begin
   if (aTypeInfo=nil) or (self=nil) then
     raise ESynException.CreateUTF8('%.Search(%)',[self,aTypeInfo]);
-  fillchar(Reg,sizeof(Reg),0);
+  FillcharFast(Reg,sizeof(Reg),0);
   case PDynArrayTypeInfo(aTypeInfo)^.kind of
   tkDynArray: begin
     Reg.DynArrayTypeInfo := aTypeInfo;
@@ -29738,7 +29740,7 @@ begin
   *)
   ktEnumeration, ktSet: begin
     int := 0;
-    move(aValue,int,fDataSize);
+    MoveFast(aValue,int,fDataSize);
     aWriter.AddU(int); // storing the value as binary/integer is safe and fast
     //aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
   end;
@@ -29805,7 +29807,7 @@ begin
         V := GetInteger(PropValue);
       if V<0 then
         exit;
-      Move(V,aValue,fDataSize);
+      MoveFast(V,aValue,fDataSize);
       result := P;
     end;
     ktFixedArray:
@@ -30202,7 +30204,7 @@ begin
   ReAllocMem(pointer(Data),sizeof(TDynArrayRec)+fNestedDataSize*NewLength);
   OldLength := PDynArrayRec(Data)^.length;
   if NewLength>OldLength then
-    fillchar(PByteArray(Data)[sizeof(TDynArrayRec)+fNestedDataSize*OldLength],
+    FillcharFast(PByteArray(Data)[sizeof(TDynArrayRec)+fNestedDataSize*OldLength],
       fNestedDataSize*(NewLength-OldLength),0);
   PDynArrayRec(Data)^.length := NewLength;
   inc(Data,sizeof(TDynArrayRec));
@@ -31084,7 +31086,7 @@ begin
       end;
       Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
       if LenBytes>0 then begin
-        move(PPtrUInt(VAny)^,Dest^,LenBytes); // direct raw copy
+        MoveFast(PPtrUInt(VAny)^,Dest^,LenBytes); // direct raw copy
         inc(Dest,LenBytes);
       end;
     end;
@@ -32195,7 +32197,7 @@ begin
   if L<sizeof(buf) then
     tmp := @buf else
     GetMem(tmp,L+1); // +1 to include ending #0
-  Move(Pointer(JSON)^,tmp^,L+1); // make private copy
+  MoveFast(Pointer(JSON)^,tmp^,L+1); // make private copy
   try
     result := InitJSONInPlace(tmp,aOptions)<>nil;
   finally
@@ -32508,10 +32510,10 @@ begin
     VarClear(VValue[Index]);
     if Index<VCount then begin
       if VName<>nil then begin
-        move(VName[Index+1],VName[Index],(VCount-Index)*sizeof(pointer));
+        MoveFast(VName[Index+1],VName[Index],(VCount-Index)*sizeof(pointer));
         PtrUInt(VName[VCount]) := 0; // avoid GPF
       end;
-      move(VValue[Index+1],VValue[Index],(VCount-Index)*sizeof(variant));
+      MoveFast(VValue[Index+1],VValue[Index],(VCount-Index)*sizeof(variant));
       TVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
     end;
     result := true;
@@ -33689,9 +33691,9 @@ begin
   SetCount(n+1);
   if cardinal(Index)<cardinal(n) then begin
     P := pointer(PtrUInt(fValue^)+PtrUInt(Index)*ElemSize);
-    Move(P[0],P[ElemSize],cardinal(n-Index)*ElemSize);
+    MoveFast(P[0],P[ElemSize],cardinal(n-Index)*ElemSize);
     if ElemType<>nil then
-      fillchar(P[0],ElemSize,0); // avoid GPF in ElemCopy() below
+      FillcharFast(P[0],ElemSize,0); // avoid GPF in ElemCopy() below
   end else
     // Index>=Count -> add at the end
     P := pointer(PtrUInt(fValue^)+PtrUInt(n)*ElemSize);
@@ -33720,9 +33722,9 @@ begin
       FreeAndNil(PObject(P)^);
   if n>aIndex then begin
     len := cardinal(n-aIndex)*ElemSize;
-    move(P[ElemSize],P[0],len);
+    MoveFast(P[ElemSize],P[0],len);
     if ElemType<>nil then // avoid GPF
-      fillchar(P[len],ElemSize,0);
+      FillcharFast(P[len],ElemSize,0);
   end;
   SetCount(n);
 end;
@@ -33895,7 +33897,7 @@ begin
         [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
       // binary types: store as once
       n := n*integer(ElemSize);
-      move(P^,Dest^,n);
+      MoveFast(P^,Dest^,n);
       inc(Dest,n);
     end else
     case PTypeKind(ElemType)^ of
@@ -33912,7 +33914,7 @@ begin
         end;
         Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
         if LenBytes>0 then begin
-          move(pointer(PPtrUInt(P)^)^,Dest^,LenBytes);
+          MoveFast(pointer(PPtrUInt(P)^)^,Dest^,LenBytes);
           inc(Dest,LenBytes);
         end;
         inc(P,sizeof(PtrUInt));
@@ -33938,7 +33940,7 @@ begin
         assert(FieldTable^.Size=ElemSize);
         {$endif}
         n := n*integer(ElemSize);
-        move(P^,Dest^,n);
+        MoveFast(P^,Dest^,n);
         inc(Dest,n);
       end else begin
         for i := 1 to n do begin
@@ -34466,7 +34468,7 @@ begin
       [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
     // binary type was stored as once
     n := n*integer(ElemSize);
-    move(Source^,P^,n);
+    MoveFast(Source^,P^,n);
     inc(Source,n);
   end else
   case PTypeKind(ElemType)^ of
@@ -34506,7 +34508,7 @@ begin
         assert(FieldTable^.Size=ElemSize);
         {$endif}
         n := n*integer(ElemSize);
-        move(Source^,P^,n);
+        MoveFast(Source^,P^,n);
         inc(Source,n);
       end else begin
         for i := 1 to n do begin
@@ -34881,7 +34883,7 @@ begin
   n := Source.Count;
   if n<>0 then
     if ElemType=nil then
-      move(Source.fValue^^,fValue^^,n*ElemSize) else
+      MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
       CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
@@ -35094,10 +35096,10 @@ begin // this method is faster than default System.DynArraySetLength() function
       minLength := newLength;
     if ElemType<>nil then begin
       pp := pa+Sizeof(TDynArrayRec);
-      FillChar(pp^,minLength*elemSize,0);
+      FillcharFast(pp^,minLength*elemSize,0);
       CopyArray(pp,fValue^,ElemType,minLength)
     end else
-      Move(fValue^,pa[Sizeof(TDynArrayRec)],minLength*elemSize);
+      MoveFast(fValue^,pa[Sizeof(TDynArrayRec)],minLength*elemSize);
   end;
   // set refCnt=1 and new length to the heap memory structure
   with p^ do begin
@@ -35200,7 +35202,7 @@ begin
   if aCount>0 then begin
     P := PAnsiChar(fValue^)+aFirstIndex*ElemSize;
     if ElemType=nil then
-      move(P^,D^^,aCount*ElemSize) else
+      MoveFast(P^,D^^,aCount*ElemSize) else
       CopyArray(D^,P,ElemType,aCount);
   end;
 end;
@@ -35223,7 +35225,7 @@ begin
   PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
   if ElemType=nil then
-    move(PS^,PD^,cardinal(aCount)*ElemSize) else
+    MoveFast(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
 
@@ -35264,13 +35266,13 @@ begin
       {$endif}
       else exit;
     end;
-  fillchar(Elem,ElemSize,0); // always fill with zero binary content
+  FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
 end;
 
 procedure TDynArray.ElemCopy(const A; var B);
 begin
   if ElemType=nil then begin
-    move(A,B,ElemSize);
+    MoveFast(A,B,ElemSize);
     exit;
   end else begin
     case PTypeKind(ElemType)^ of
@@ -35305,7 +35307,7 @@ begin
       else begin
         {$ifdef FPC}
         RecordClear(B,ElemType); // inlined CopyArray()
-        move(A,B,RTTIManagedSize(ElemType));
+        MoveFast(A,B,RTTIManagedSize(ElemType));
         RecordAddRef(B,ElemType);
         {$else}
         CopyArray(@B,@A,ElemType,1);
@@ -35321,7 +35323,7 @@ begin
   if (Source<>nil) and (ElemType=nil) then
     SetString(result,Source,ElemSize) else begin
     SetString(result,nil,ElemSize);
-    FillChar(pointer(result)^,ElemSize,0);
+    FillcharFast(pointer(result)^,ElemSize,0);
     ElemLoad(Source,pointer(result)^);
   end;
 end;
@@ -35331,7 +35333,7 @@ begin
   if Source=nil then
     exit; // avoid GPF
   if ElemType=nil then
-    move(Source^,Elem,ElemSize) else
+    MoveFast(Source^,Elem,ElemSize) else
     case PTypeKind(ElemType)^ of
     tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
       SetString(RawByteString(Elem),Source+4,PInteger(Source)^);
@@ -35624,7 +35626,7 @@ begin
     // copy from dynamic array found entry into Elem = Fill
     P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
     if ElemType=nil then
-      move(P^,Elem,ElemSize) else
+      MoveFast(P^,Elem,ElemSize) else
       CopyArray(@Elem,P,ElemType,1);
   end;
 end;
@@ -35643,14 +35645,14 @@ begin
       HashAdd(Elem,aHashCode,result); // ReHash only if necessary
       P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
       if ElemType=nil then
-        move(Elem,P^,ElemSize) else
+        MoveFast(Elem,P^,ElemSize) else
         CopyArray(P,@Elem,ElemType,1);
     end else
       result := -1 else begin
     // copy from Elem into dynamic array found entry = Update
     P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
     if ElemType=nil then
-      move(Elem,P^,ElemSize) else
+      MoveFast(Elem,P^,ElemSize) else
       CopyArray(P,@Elem,ElemType,1);
     ReHash;
   end;
@@ -36010,7 +36012,7 @@ begin
   TObjectDynArray(fValue^)[Index].Free;
   dec(fCount);
   if fCount>Index then
-    move(TObjectDynArray(fValue^)[Index+1],TObjectDynArray(fValue^)[Index],
+    MoveFast(TObjectDynArray(fValue^)[Index+1],TObjectDynArray(fValue^)[Index],
       (fCount-Index)*sizeof(pointer));
 end;
 
@@ -36102,7 +36104,7 @@ begin
   a[aItemIndex].Free;
   dec(n);
   if n>aItemIndex then
-    Move(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(TObject));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(TObject));
   SetLength(a,n);
 end;
 
@@ -36176,7 +36178,7 @@ begin
   a[aItemIndex] := nil;
   dec(n);
   if n>aItemIndex then
-    Move(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(IInterface));
+    MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(IInterface));
   TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
   SetLength(a,n);
 end;
@@ -36395,7 +36397,7 @@ begin
     FlushToStream;
   P := StrInt32(@tmp[23],value);
   Len := @tmp[23]-P;
-  move(P[0],B[1],Len);
+  MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
 
@@ -36417,7 +36419,7 @@ begin
             dec(Len,3) else
           dec(Len,2) else
         dec(Len);
-  move(P[0],B[1],Len);
+  MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
 
@@ -36488,7 +36490,7 @@ begin
     FlushToStream;
   P := StrUInt32(@tmp[15],Value);
   Len := @tmp[15]-P;
-  move(P[0],B[1],Len);
+  MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
 
@@ -36526,7 +36528,7 @@ begin
     FlushToStream;
   P := StrInt64(@tmp[23],Value);
   Len := @tmp[23]-P;
-  move(P[0],B[1],Len);
+  MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
 {$endif}
@@ -36550,7 +36552,7 @@ begin
       B^ := '0'; // '.5' -> '0.5'
       inc(B);
     end;
-    move(P^,B^,L);
+    MoveFast(P^,B^,L);
     inc(B,L-1);
   end;
 end;
@@ -36623,7 +36625,7 @@ begin
   if BEnd-B<=Integer(ntabs)+1 then
     FlushToStream;
   pWord(B+1)^ := 13+10 shl 8; // CR + LF
-  fillchar(B[3],ntabs,9); // indentation using tabs
+  FillcharFast(B[3],ntabs,9); // indentation using tabs
   inc(B,ntabs+2);
 end;
 
@@ -36633,7 +36635,7 @@ begin
     exit; // avoid buffer overflow
   if BEnd-B<=aCount then
     FlushToStream;
-  fillchar(B[1],aCount,ord(aChar));
+  FillcharFast(B[1],aCount,ord(aChar));
   inc(B,aCount);
 end;
 
@@ -37422,7 +37424,7 @@ begin
   if BEnd-B<=ord(Text[0])+2 then
     FlushToStream;
   inc(B);
-  move(Text[1],B[0],ord(Text[0]));
+  MoveFast(Text[1],B[0],ord(Text[0]));
   inc(B,ord(Text[0]));
   pWord(B)^ := 13+10 shl 8; // CR + LF
   inc(B);
@@ -37749,7 +37751,7 @@ begin
       if Len<i then
         i := Len;
       // add UTF-8 bytes
-      move(P^,B^,i);
+      MoveFast(P^,B^,i);
       inc(B,i);
       if i=Len then
         break;
@@ -38247,7 +38249,7 @@ begin
   if BEnd-B<=ord(PropName[0])+3 then
     FlushToStream;
   B[1] := '"';
-  move(PropName[1],B[2],ord(PropName[0]));
+  MoveFast(PropName[1],B[2],ord(PropName[0]));
   inc(B,ord(PropName[0])+2);
   PWord(B)^ := ord('"')+ord(':')shl 8;
   inc(B);
@@ -38263,7 +38265,7 @@ begin
   if BEnd-B<=FieldNameLen+3 then
     FlushToStream;
   B[1] := '"';
-  move(FieldName^,B[2],FieldNameLen);
+  MoveFast(FieldName^,B[2],FieldNameLen);
   inc(B,FieldNameLen+2);
   PWord(B)^ := ord('"')+ord(':')shl 8;
   inc(B);
@@ -38304,7 +38306,7 @@ begin
     exit;
   if BEnd-B<=ord(Text[0]) then
     FlushToStream;
-  move(Text[1],B[1],ord(Text[0]));
+  MoveFast(Text[1],B[1],ord(Text[0]));
   inc(B,ord(Text[0]));
 end;
 
@@ -38362,7 +38364,7 @@ begin
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
-    move(pointer(Text)^,B[1],L);
+    MoveFast(pointer(Text)^,B[1],L);
     inc(B,L);
   end else
     AddNoJSONEscape(pointer(Text),L);
@@ -38406,7 +38408,7 @@ begin
     if BEnd-B<=L*count then
       FlushToStream;
     for i := 1 to count do begin
-      move(pointer(Text)^,B[1],L);
+      MoveFast(pointer(Text)^,B[1],L);
       inc(B,L);
     end;
   end;
@@ -38643,7 +38645,7 @@ begin
     dec(L);
   LI := length(fEchoBuf); // faster append to fEchoBuf
   SetLength(fEchoBuf,LI+L);
-  Move(P^,PByteArray(fEchoBuf)[LI],L);
+  MoveFast(P^,PByteArray(fEchoBuf)[LI],L);
 end;
 
 procedure TTextWriter.EchoReset;
@@ -38750,7 +38752,7 @@ begin
   if P=nil then exit; // unexpected end
   // trim first row data
   if P^<>#0 then
-    move(P^,PBegin^,PEnd-P); // erase content
+    MoveFast(P^,PBegin^,PEnd-P); // erase content
   fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
 end;
 
@@ -38868,7 +38870,7 @@ begin
   NewValues := pointer(Values)=nil;
   SetLength(Values,n);
   if not NewValues then
-    fillchar(Values[0],n*sizeof(PUTF8Char),0); // SetLength() could leave it not void
+    FillcharFast(Values[0],n*sizeof(PUTF8Char),0); // SetLength() could leave it not void
   dec(n);
   if P=nil then
     exit;
@@ -40223,7 +40225,7 @@ begin
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
-    fillchar(Min,sizeof(Min),0);
+    FillcharFast(Min,sizeof(Min),0);
     L := length(Value);
     for i := 1 to L do
     case Value[i] of
@@ -40539,12 +40541,12 @@ end;
 
 procedure TPrecisionTimer.Init;
 begin
-  FillChar(self,sizeof(self),0);
+  FillcharFast(self,sizeof(self),0);
 end;
 
 procedure TPrecisionTimer.Start;
 begin
-  FillChar(self,sizeof(self),0);
+  FillcharFast(self,sizeof(self),0);
   QueryPerformanceCounter(iStart);
   iLast := iStart;
 end;
@@ -40803,7 +40805,7 @@ procedure RetrieveInfo;
 {$ifdef MSWINDOWS}
 var MemoryStatus: TMemoryStatusEx;
 begin
-  FillChar(MemoryStatus,SizeOf(MemoryStatus),0);
+  FillcharFast(MemoryStatus,SizeOf(MemoryStatus),0);
   MemoryStatus.dwLength := SizeOf(MemoryStatus);
   GlobalMemoryStatusEx(MemoryStatus);
   FMemoryLoadPercent := MemoryStatus.dwMemoryLoad;
@@ -41383,10 +41385,10 @@ begin
   if (fObjects<>nil) and fObjectsOwned then
     FreeAndNil(fObjects[Index]);
   if Index<fCount then begin
-    move(fList[Index+1],fList[Index],(fCount-Index)*sizeof(fList[0]));
+    MoveFast(fList[Index+1],fList[Index],(fCount-Index)*sizeof(fList[0]));
     PPointer(@fList[fCount])^ := nil; // avoid GPF
     if fObjects<>nil then begin
-      move(fObjects[Index+1],fObjects[Index],(fCount-Index)*sizeof(fObjects[0]));
+      MoveFast(fObjects[Index+1],fObjects[Index],(fCount-Index)*sizeof(fObjects[0]));
       fObjects[fCount] := nil; // avoid GPF if fObjectsOwned is set
     end;
   end;
@@ -41496,13 +41498,13 @@ begin
   repeat
     Len := length(fList[i]);
     if Len>0 then begin
-      Move(pointer(fList[i])^,P^,Len);
+      MoveFast(pointer(fList[i])^,P^,Len);
       inc(P,Len);
     end;
     inc(i);
     if i>=fCount then
       Break;
-    Move(pointer(Delimiter)^,P^,DelimLen);
+    MoveFast(pointer(Delimiter)^,P^,DelimLen);
     inc(P,DelimLen);
   until false;
 end;
@@ -41934,18 +41936,18 @@ function TPointerClassHash.Find(aInfo: pointer): TPointerClassHashed;
 var i: integer;
 begin
   if self<>nil then begin
-    if fHashed then begin
+    if not fHashed then begin // Count<TOBJECTLISTHASHED_START_HASHING_COUNT
+      for i := 0 to fCount-1 do begin
+        result := TPointerClassHashed(List[i]);
+        if result.Info=aInfo then
+          exit;
+      end;
+      result := nil;
+    end else begin
       i := IndexOf(aInfo);
       if i>=0 then
         result := TPointerClassHashed(List[i]) else
         result := nil;
-    end else begin
-      for i := 0 to fCount-1 do // Count<TOBJECTLISTHASHED_START_HASHING_COUNT
-        if TPointerClassHashed(List[i]).Info=aInfo then begin
-          result := TPointerClassHashed(List[i]);
-          exit;
-        end;
-      result := nil;
     end;
   end else
     result := nil;
@@ -42136,7 +42138,7 @@ procedure TRawUTF8MethodList.Delete(Index: PtrInt);
 begin
   inherited Delete(Index);
   if Index<length(fEvents) then
-    move(fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*sizeof(TMethod));
+    MoveFast(fEvents[Index+1],fEvents[Index],(length(fEvents)-Index)*sizeof(TMethod));
 end;
 
 function TRawUTF8MethodList.GetEvent(aIndex: PtrInt;
@@ -42404,7 +42406,7 @@ begin
       exit;
     end;
   end;
-  move(Data^,PByteArray(fBuf)^[fPos],DataLen);
+  MoveFast(Data^,PByteArray(fBuf)^[fPos],DataLen);
   inc(fPos,DataLen);
   inc(fTotalWritten,PtrUInt(DataLen));
 end;
@@ -42420,7 +42422,7 @@ begin
       fStream.Write(pointer(fBuf)^,fPos);
       fPos := 0;
     end;
-    FillChar(PByteArray(fBuf)^[fPos],len,Data);
+    FillcharFast(PByteArray(fBuf)^[fPos],len,Data);
     inc(fPos,len);
     inc(fTotalWritten,len);
     dec(Count,len);
@@ -42571,7 +42573,7 @@ begin
             break; // avoid buffer overflow
           end;
           P := ToVarUInt32(len,P);
-          Move(pointer(PI^[i])^,P^,len);
+          MoveFast(pointer(PI^[i])^,P^,len);
           inc(P,len);
         end else
       // fixed size strings case
@@ -42580,7 +42582,7 @@ begin
           n := i;
           break; // avoid buffer overflow
         end;
-        Move(pointer(PI^[i])^,P^,fixedsize);
+        MoveFast(pointer(PI^[i])^,P^,fixedsize);
         inc(P,fixedsize);
       end;
       len := PAnsiChar(P)-PBeg; // format: Isize+varUInt32s*strings
@@ -42791,7 +42793,7 @@ begin
         n := (fBufLen-fPos)shr 2;
         if ValuesCount<n then
           n := ValuesCount;
-        Move(PI^,P^,n*4);
+        MoveFast(PI^,P^,n*4);
         inc(P,n*4);
       end;
       wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI: begin
@@ -43008,7 +43010,7 @@ begin
       if len>DataLen then
         len := DataLen;
       if Data<>nil then
-        move(fMap.fBuf[fCurrentPos],Data^,len);
+        MoveFast(fMap.fBuf[fCurrentPos],Data^,len);
       inc(fCurrentPos,len);
       result := len;
     end else
@@ -43820,9 +43822,9 @@ begin
   OldSize :=  F.GetLength(Dest);
   dec(RecordBufferLen,OldSize);
   SetLength(Result,RecordBufferLen+NewSize);
-  move(RecordBuffer^,PByteArray(result)[0],DestOffset);
-  move(NewData^,PByteArray(result)[DestOffset],NewSize);
-  move(Dest[OldSize],PByteArray(result)[DestOffset+NewSize],RecordBufferLen-DestOffset);
+  MoveFast(RecordBuffer^,PByteArray(result)[0],DestOffset);
+  MoveFast(NewData^,PByteArray(result)[DestOffset],NewSize);
+  MoveFast(Dest[OldSize],PByteArray(result)[DestOffset+NewSize],RecordBufferLen-DestOffset);
 end;
 
 constructor TSynTable.Create(const aTableName: RawUTF8);
@@ -44080,10 +44082,10 @@ begin
       dec(Offs);
     end;
     SetLength(fDefaultFieldData,fDefaultFieldLength);
-    FillChar(pointer(fDefaultFieldData)^,fDefaultFieldLength,0);
+    FillcharFast(pointer(fDefaultFieldData)^,fDefaultFieldLength,0);
   end;
   SetLength(fDefaultRecordData,fDefaultRecordLength);
-  FillChar(pointer(fDefaultRecordData)^,fDefaultRecordLength,0);
+  FillcharFast(pointer(fDefaultRecordData)^,fDefaultRecordLength,0);
 end;
 
 procedure TSynTable.FieldIndexModify(aOldIndex, aNewIndex: integer;
@@ -44207,11 +44209,11 @@ begin
   with TSynTableFieldProperties(fField.List[F]) do
     if F in AvailableFields then begin
       Len := Lens[F];
-      move(P^,Dest^,Len);
+      MoveFast(P^,Dest^,Len);
       inc(P,Len);
       inc(Dest,Len);
     end else begin
-      FillChar(Dest^,fDefaultFieldLength,0);
+      FillcharFast(Dest^,fDefaultFieldLength,0);
       inc(Dest,fDefaultFieldLength);
     end;
   Assert(PtrUInt(Dest)-PtrUInt(result)=PtrUInt(TotalLen));
@@ -44482,7 +44484,7 @@ begin
       // void OrderedIndexReverse[]
       nrev := MaxInteger(OrderedIndex,OrderedIndexCount,n)+1;
       SetLength(OrderedIndexReverse,nrev);
-      FillChar(OrderedIndexReverse[0],nrev*4,255); // all to -1
+      FillcharFast(OrderedIndexReverse[0],nrev*4,255); // all to -1
       Reverse(OrderedIndex,OrderedIndexCount,pointer(OrderedIndexReverse));
     end;
   if PtrUInt(aOrderedIndex)>=PtrUInt(OrderedIndexCount) then
@@ -44841,8 +44843,8 @@ begin
                 {$else}PInteger(PtrUInt(Value)-sizeof(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
-    Move(tmp,PByteArray(Result)[0],Head);
-    Move(pointer(Value)^,PByteArray(Result)[Head],Len);
+    MoveFast(tmp,PByteArray(Result)[0],Head);
+    MoveFast(pointer(Value)^,PByteArray(Result)[Head],Len);
   end;
 end;
 
@@ -44868,8 +44870,8 @@ begin
     result := #0 else begin // inlined ToSBFStr() code
     Head := PAnsiChar(ToVarUInt32(ValueLen,@tmp))-tmp;
     SetString(Result,nil,ValueLen+Head);
-    Move(tmp,PByteArray(Result)[0],Head);
-    Move(Value^,PByteArray(Result)[Head],ValueLen);
+    MoveFast(tmp,PByteArray(Result)[0],Head);
+    MoveFast(Value^,PByteArray(Result)[Head],ValueLen);
   end;
 end;
 
@@ -45338,7 +45340,7 @@ begin
           cmp := high(SoundExtTmp) else
           cmp := L;
         SoundExtTmp[cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
-        move(SBF^,SoundExtTmp,cmp);
+        MoveFast(SBF^,SoundExtTmp,cmp);
         case FieldType of
         tftWinAnsi:
           if PSynSoundEx(Value)^.Ansi(SoundExtTmp) then
@@ -45463,7 +45465,7 @@ function SetFields: boolean;
 var select: TSynTableStatementSelect;
 begin
   result := false;
-  fillchar(select,sizeof(select),0);
+  FillcharFast(select,sizeof(select),0);
   select.Field := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
   if select.Field<0 then begin
     if P^<>'(' then // Field not found -> try function(field)
@@ -45794,7 +45796,7 @@ end;
 procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
 var i: integer;
 begin
-  fillchar(Fields,sizeof(Fields),0);
+  FillcharFast(Fields,sizeof(Fields),0);
   withID := false;
   for i := 0 to Length(Select)-1 do
     if Select[i].Field=0 then
@@ -45860,7 +45862,7 @@ begin
   VTable := aTable;
   VID := aID;
   VValue := VTable.DefaultRecordData;
-  {$ifdef UNICODE}FillChar(Filler,sizeof(Filler),0);{$endif}
+  {$ifdef UNICODE}FillcharFast(Filler,sizeof(Filler),0);{$endif}
 end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer;
@@ -45904,7 +45906,7 @@ begin
   CheckVTableInitialized;
   if (aField.FieldSize>0) and (VValue<>'') then begin
     // fixed size content: fast in-place update
-    Move(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
+    MoveFast(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
     // VValue[F.Offset+1] above will call UniqueString(VValue), even under FPC
   end else begin
     // variable-length update
@@ -46250,7 +46252,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := SYNLZCOMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    move(P^,R[9],PLen);
+    MoveFast(P^,R[9],PLen);
   end else begin
     SetString(result,nil,SynLZcompressdestlen(PLen)+9);
     R := pointer(result);
@@ -46307,7 +46309,7 @@ begin
     PCardinal(R)^ := crc;
     R[4] := SYNLZCOMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    move(P^,R[9],PLen);
+    MoveFast(P^,R[9],PLen);
   end else begin
     SetLength(result,SynLZcompressdestlen(PLen)+9);
     R := pointer(result);
@@ -46580,7 +46582,7 @@ begin
     Result := Length(fDataString)-fPosition;
     if Result>Count then
       Result := Count;
-    move(PByteArray(fDataString)[fPosition],Buffer,Result);
+    MoveFast(PByteArray(fDataString)[fPosition],Buffer,Result);
     inc(fPosition, Result);
   end;
 end;
@@ -46612,7 +46614,7 @@ begin
     Result := 0 else begin
     Result := Count;
     SetLength(fDataString,(fPosition+Result));
-    move(Buffer,PByteArray(fDataString)[fPosition],Result);
+    MoveFast(Buffer,PByteArray(fDataString)[fPosition],Result);
     inc(FPosition,Result);
   end;
 end;
@@ -46674,7 +46676,7 @@ procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   List := nil;
   fDynArray.fHashs := nil;
-  fillchar(self,sizeof(self),0);
+  FillcharFast(self,sizeof(self),0);
   fDynArray.Init(
     TypeInfo(TSynNameValueItemDynArray),List,nil,nil,nil,@Count,not aCaseSensitive);
 end;
@@ -47364,7 +47366,7 @@ begin
   max := length(Events);
   if cardinal(index)<cardinal(max) then begin
     dec(max);
-    move(Events[index+1],Events[index],(max-index)*sizeof(Events[index]));
+    MoveFast(Events[index+1],Events[index],(max-index)*sizeof(Events[index]));
     SetLength(Events,max);
   end;
 end;
@@ -47465,8 +47467,8 @@ begin
     dec(NormToUpperAnsi7Byte[i],32);
 {$ifdef OWNNORMTOUPPER}
   // initialize custom NormToUpper[] and NormToLower[] arrays
-  move(NormToUpperAnsi7,NormToUpper,138);
-  move(n2u,NormToUpperByte[138],sizeof(n2u));
+  MoveFast(NormToUpperAnsi7,NormToUpper,138);
+  MoveFast(n2u,NormToUpperByte[138],sizeof(n2u));
   for i := 0 to 255 do begin
     d := NormToUpperByte[i];
     if d in [ord('A')..ord('Z')] then
@@ -47475,7 +47477,7 @@ begin
   end;
 {$endif OWNNORMTOUPPER}
   // code below is 55 bytes long, therefore shorter than a const array
-  fillchar(ConvertHexToBin[0],sizeof(ConvertHexToBin),255); // all to 255
+  FillcharFast(ConvertHexToBin[0],sizeof(ConvertHexToBin),255); // all to 255
   v := 0;
   for i := ord('0') to ord('9') do begin
     ConvertHexToBin[i] := v;
@@ -47505,7 +47507,7 @@ begin
     end;
   end;
   {$ifdef CPUINTEL}
-  fillchar(regs,sizeof(regs),0);
+  FillcharFast(regs,sizeof(regs),0);
   GetCPUID(1,regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
@@ -47521,9 +47523,15 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
-  {$ifndef FPC}
-  {$ifndef CPUARM}
-  {$ifndef USEPACKAGES}
+  {$ifdef FPC}
+  FillCharFast := @System.FillChar;
+  {$else}
+  {$ifdef CPUARM}
+  FillCharFast := @System.FillChar;
+  {$else}
+  {$ifdef USEPACKAGES}
+  Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$else}
   InitRedirectCode;
   {$endif USEPACKAGES}
   {$endif CPUARM}
