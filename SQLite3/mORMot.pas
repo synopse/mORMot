@@ -3850,10 +3850,22 @@ type
   public
     /// this overriden constructor will instantiate all its nested
     // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    {$ifdef FPC_OR_UNICODE}
     constructor Create; override;
-    /// this overriden constructor will release all its nested persistent
+    {$else}
+    // - older versions of Delphi and Kylix, without the TMonitor overhead,
+    // would benefit from an optimized initialization code
+    class function NewInstance: TObject; override;
+    {$endif}
+    /// this overriden destructor will release all its nested persistent
     // classes and T*ObjArray published properties
+    {$ifdef FPC_OR_UNICODE}
     destructor Destroy; override;
+    {$else}
+    // - older versions of Delphi and Kylix, without the TMonitor overhead,
+    // would benefit from an optimized finalization code
+    procedure FreeInstance; override;
+    {$endif}
   end;
 
   /// abstract TInterfacedObject class, which will instantiate all its nested
@@ -48593,6 +48605,9 @@ end;
 
 { TSynAutoCreateFields }
 
+{$ifdef FPC_OR_UNICODE}
+// TMonitor.Destroy is not available ! -> do not apply on Delphi 2009+
+
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
@@ -48604,6 +48619,60 @@ begin
   inherited Destroy;
 end;
 
+{$else}
+
+class function TSynAutoCreateFields.NewInstance: TObject;
+asm 
+        push eax  // class
+        mov eax,[eax].vmtInstanceSize
+        push eax  // size
+        call System.@GetMem
+        pop edx   // size
+        push eax  // self
+        mov cl,0
+        call dword ptr [FillcharFast]
+        pop eax   // self
+        pop edx   // class
+        mov [eax],edx // store VMT
+        push eax
+        call AutoCreateFields
+        pop eax
+end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
+
+procedure TSynAutoCreateFields.FreeInstance;
+asm
+        push ebx
+        mov ebx,eax
+        call AutoDestroyFields // done before T*ObjArray cleared
+        mov eax,ebx
+@@loop: mov ebx,[ebx] // handle four VMT levels per iteration
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jz @@end
+        mov ebx,[ebx]
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jz @@end
+        mov ebx,[ebx]
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jnz @@loop
+@@end:  pop ebx
+        jmp System.@FreeMem
+@@clr:  call RecordClear // eax=self edx=typeinfo
+        jmp @@loop // TSynAutoCreateFields has no vmtInitTable -> safe to continue
+end;
+
+{$endif}
 
 { TInterfacedObjectAutoCreateFields }
 
