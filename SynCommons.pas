@@ -4586,6 +4586,19 @@ type
     // - this constructor does nothing, but is declared as virtual so that
     // inherited classes may safely override this default void implementation
     constructor Create; virtual;
+    {$ifndef FPC_OR_PUREPASCAL}
+    /// optimized x86 asm initialization code
+    // - warning: this optimized version won't initialize the vmtIntfTable
+    // for this class hierarchy: as a result, you would NOT be able to
+    // implement an interface with a TSynPersistent descendent (but you should
+    // not need to, but inherit from TInterfacedObject)
+    class function NewInstance: TObject; override;
+    /// optimized x86 asm finalization code
+    // - warning: this version won't release either any allocated TMonitor
+    // (as available since Delphi 2009) - do not use TMonitor with
+    // TSynPersistent, but rather the faster TSynPersistentLocked class
+    procedure FreeInstance; override;
+    {$endif}
   end;
   {$M-}
 
@@ -28317,7 +28330,14 @@ procedure TObjectCleanupInstance;
 asm // faster version by AB
         push ebx
         mov ebx,eax
-@@loop: mov ebx,[ebx] // handle two VMT levels per iteration
+@@loop: mov ebx,[ebx] // handle three VMT levels per iteration
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jz @@end
+        mov ebx,[ebx]
         mov edx,[ebx].vmtInitTable
         mov ebx,[ebx].vmtParent
         test edx,edx
@@ -28333,8 +28353,8 @@ asm // faster version by AB
         jnz @@loop
 @@end:  pop ebx
         ret
-@@clr:  call RecordClear // eax=data edx=typeinfo
-        jmp @@loop // TObject has no field -> safe to guess that ebx<>nil
+@@clr:  push offset @@loop // TObject has no vmtInitTable -> safe
+        jmp RecordClear // eax=self edx=typeinfo
 end;
 {$endif}
 
@@ -36357,6 +36377,56 @@ end;
 constructor TSynPersistent.Create;
 begin // nothing to do by default - overridden constructor may add custom code
 end;
+
+{$ifndef FPC_OR_PUREPASCAL}
+
+class function TSynPersistent.NewInstance: TObject;
+asm
+        push eax  // class
+        mov eax,[eax].vmtInstanceSize
+        push eax  // size
+        call System.@GetMem
+        pop edx   // size
+        push eax  // self
+        mov cl,0
+        call dword ptr [FillcharFast]
+        pop eax   // self
+        pop edx   // class
+        mov [eax],edx // store VMT
+end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
+
+procedure TSynPersistent.FreeInstance;
+asm
+        push ebx
+        mov ebx,eax
+@@loop: mov ebx,[ebx] // handle three VMT levels per iteration
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jz @@end
+        mov ebx,[ebx]
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jz @@end
+        mov ebx,[ebx]
+        mov edx,[ebx].vmtInitTable
+        mov ebx,[ebx].vmtParent
+        test edx,edx
+        jnz @@clr
+        test ebx,ebx
+        jnz @@loop
+@@end:  pop ebx
+        jmp System.@FreeMem
+@@clr:  push offset @@loop // TSynPersistent has no vmtInitTable -> safe
+        jmp RecordClear // eax=self edx=typeinfo
+end;
+
+{$endif FPC_OR_PUREPASCAL}
 
 
 { TSynPersistentLocked }
