@@ -35110,8 +35110,10 @@ begin // this method is faster than default System.DynArraySetLength() function
   end;
   Inc(PtrUInt(p),Sizeof(p^));
   // reset new allocated elements content to zero
-  OldLength := OldLength*elemSize;
-  FillChar(pa[OldLength],neededSize-OldLength-Sizeof(TDynArrayRec),0);
+  if NewLength>OldLength then begin
+    OldLength := OldLength*elemSize;
+    FillcharFast(pa[OldLength],neededSize-OldLength-Sizeof(TDynArrayRec),0);
+  end;
   fValue^ := p;
 end;
 
