@@ -3866,11 +3866,12 @@ type
     fTypeInfo: pointer;
     fElemSize: PtrUInt;
     fElemType: pointer;
-    fCompare: TDynArraySortCompare;
     fCountP: PInteger;
+    fCompare: TDynArraySortCompare;
+    fKnownSize: integer;
     fSorted: boolean;
     fKnownType: TDynArrayKind;
-    fKnownSize: integer;
+    fIsObjArray: (oaUnknown, oaTrue, oaFalse);
     function GetCount: integer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: integer);
     function GetCapacity: integer;
@@ -27659,7 +27660,7 @@ end;
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
-  case TTypeKind(PByte(typeinfo)^) of
+  case PTypeKind(typeinfo)^ of
     tkLString,tkLStringOld,tkWString,tkUString,
     tkInterface,tkDynarray:
       result := sizeof(Pointer);
@@ -34974,37 +34975,37 @@ begin
 end;
 
 procedure TDynArray.Init(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil);
-var Typ: PDynArrayTypeInfo absolute aTypeInfo;
 begin
-  fTypeInfo := aTypeInfo;
   fValue := @aValue;
-  if Typ^.Kind<>tkDynArray then
-    raise ESynException.CreateUTF8('Not a dynamic array: %',[PShortString(@Typ^.NameLen)^]);
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Typ := GetFPCAlignPtr(Typ);
-  {$else}
-  inc(PtrUInt(Typ),Typ^.NameLen);
-  {$endif}
-  with Typ^ do begin
-    fElemSize := elSize;
-    if elType=nil then
-      fElemType := nil else
-      {$ifndef FPC}
-      fElemType := elType^;
-      {$else} begin
-      if TTypeKind(PByte(elType)^) in tkManagedTypes then
-        fElemType := elType else
-        fElemType := nil;
-      end;
-      {$endif}
+  fTypeInfo := aTypeInfo;
+  with PDynArrayTypeInfo(aTypeInfo)^ do begin
+    if kind<>tkDynArray then
+      raise ESynException.CreateUTF8('Not a dynamic array: %',[PShortString(@NameLen)^]);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    aTypeInfo := GetFPCAlignPtr(aTypeInfo);
+    {$else}
+    inc(PtrUInt(aTypeInfo),NameLen);
+    {$endif}
   end;
-  fSorted := false;
-  fCompare := nil;
-  fKnownType := djNone;
-  fKnownSize := 0;
+  with PDynArrayTypeInfo(aTypeInfo)^ do begin
+    fElemSize := elSize;
+    fElemType := elType;
+  end;
+  if fElemType<>nil then
+    {$ifndef FPC}
+    fElemType := PPointer(fElemType)^;
+    {$else} 
+    if not (PTypeKind(fElemType)^ in tkManagedTypes) then
+      fElemType := nil; // as with Delphi
+    {$endif}
   fCountP := aCountPointer;
   if fCountP<>nil then
     fCountP^ := 0;
+  fCompare := nil;
+  fKnownSize := 0;
+  fSorted := false;
+  fKnownType := djNone;
+  fIsObjArray := oaUnknown;
 end;
 
 procedure TDynArray.InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
@@ -35061,8 +35062,12 @@ end;
 
 function TDynArray.IsObjArray: boolean;
 begin
-  result := Assigned(DynArrayIsObjArray) and (fElemSize=sizeof(pointer)) and
-    (fElemType=nil) and DynArrayIsObjArray(fTypeInfo);
+  if fIsObjArray=oaUnknown then
+    if (fElemSize=sizeof(pointer)) and (fElemType=nil) and
+       Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo) then
+      fIsObjArray := oaTrue else
+      fIsObjArray := oaFalse;
+  result := fIsObjArray=oaTrue;
 end;
 
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
@@ -36587,7 +36592,7 @@ begin
     AddNoJSONEscape(@S[1],ExtendedToString(S,Value,SINGLE_PRECISION));
 end;
 
-{$ifndef CPU64}
+{$ifndef CPU64} // Add(Value: PtrInt) already implemented it
 procedure TTextWriter.Add(Value: Int64);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
@@ -36595,10 +36600,32 @@ var tmp: array[0..23] of AnsiChar;
 begin
   if BEnd-B<=24 then
     FlushToStream;
-  P := StrInt64(@tmp[23],Value);
-  Len := @tmp[23]-P;
-  MoveFast(P[0],B[1],Len);
-  inc(B,Len);
+  case Value of
+  0..9: begin
+    inc(B);
+    PByte(B)^ := byte(Value) or 48;
+  end;
+  10..99: begin
+    PWord(B+1)^ := TwoDigitLookupW[Value];
+    inc(B,2);
+  end;
+  {$ifndef PUREPASCAL}
+  {$ifndef HASINLINE}
+  100..maxInt: begin
+    P := StrInt32(@tmp[23],Value);
+    Len := @tmp[23]-P;
+    MoveFast(P[0],B[1],Len);
+    inc(B,Len);
+  end;
+  {$endif}
+  {$endif}
+  else begin
+    P := StrInt64(@tmp[23],Value);
+    Len := @tmp[23]-P;
+    MoveFast(P[0],B[1],Len);
+    inc(B,Len);
+  end;
+  end;
 end;
 {$endif}
 
