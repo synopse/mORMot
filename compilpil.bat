@@ -1,25 +1,43 @@
 @echo off
 
-if not "%DelphiVersion%"=="" goto AlreadySet
-rem ** Default compiler is Delphi 7
-set DCC=c:\progs\delphi7\bin\dcc32.exe
-set DelphiVersion=Delphi 7 %LVCL%
-if exist \dev\lib\RTL7\Classes.pas goto EnhancedRTL
-set Switches=-B -Q -DLVCL;INCLUDE_FTS3 -GD -U\dev\lib\LVCL;\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra -I\dev\lib\LVCL\;\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
-if not "%LVCL%"=="" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
-goto AllSet
-:EnhancedRTL
-set Switches=-B -Q -DENHANCEDRTL;INCLUDE_FTS3;USEZEOS -GD -U\dev\lib\RTL7;\dev\lib;\dev\lib\sqlite3;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra;\dev\lib\syndbdataset;\dev\lib\crossplatform;\dev\zeos\src\core;\dev\zeos\src\dbc;\dev\zeos\src\parsesql;\dev\zeos\src\plain -I\dev\lib;\dev\lib\crossplatform;\dev\zeos\src -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
-goto AllSet
-:AlreadySet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi5\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
-if "%DelphiVersion%"=="Delphi 5" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi6\lib;\dev\lib;\dev\lib\sqlite3;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib  -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu
-if "%DelphiVersion%"=="Delphi 6" goto AllSet
-set Switches=-B -Q -DINCLUDE_FTS3 -GD -U\dev\lib;\dev\lib\sqlite3;\dev\lib\sqlite3\DDD\dom;\dev\lib\sqlite3\DDD\infra;\dev\lib\syndbdataset;\dev\lib\crossplatform -I\dev\lib;\dev\lib\crossplatform -R\dev\lib -O\dev\lib\sqlite3 -E\dev\lib\tempbuild\exe -N\dev\lib\tempbuild\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
-:AllSet
+rem Caller may have defined the following variables:
+rem   set DCC=...\bin\dcc32.exe
+rem   set DelphiVersion=Delphi ##
+rem   set mORMot=... root framework  source folder
+rem   set bin=... compilation output folder
+rem   call compilpil.bat
 
+
+if "%mORMot%"=="" set mORMot=\dev\lib
+if "%bin%"==""    set bin=\dev\lib\tempbuild
+
+set defaultFolders=%mORMot%;%mORMot%\sqlite3;%mORMot%\syndbdataset;%mORMot%\crossplatform;%mORMot%\sqlite3\DDD\dom;%mORMot%\sqlite3\DDD\infra -I%mORMot%;%mORMot%\crossplatform
+if "%DelphiVersion%"=="" (
+	rem ** Default compiler is Delphi 7
+	set DCC=c:\progs\delphi7\bin\dcc32.exe
+	set DelphiVersion=Delphi 7 %LVCL%
+	if exist %mORMot%\RTL7\Classes.pas (
+		set Switches=-DENHANCEDRTL;INCLUDE_FTS3;USEZEOS -U%mORMot%\RTL7;\dev\zeos\src\core;\dev\zeos\src\dbc;\dev\zeos\src\parsesql;\dev\zeos\src\plain;%defaultFolders%;\dev\zeos\src
+	) else (
+		if "%LVCL%"=="" (
+			set Switches=-DINCLUDE_FTS3 -U%mORMot%\RTL7;%defaultFolders%
+		) else (
+			set Switches=-DLVCL;INCLUDE_FTS3 -U%mORMot%\LVCL;%mORMot%\RTL7;%defaultFolders%
+		)
+	)
+) else (
+	if "%DelphiVersion%"=="Delphi 5" (
+		set Switches=-DINCLUDE_FTS3 -GD -Uc:\progs\delphi5\lib;%defaultFolders%
+	) else (
+		if "%DelphiVersion%"=="Delphi 6" (
+			set Switches=-B -Q -DINCLUDE_FTS3 -GD -Uc:\progs\delphi6\lib;%defaultFolders%
+		) else (
+			rem e.g. Delphi 2007, Delphi XE8
+			set Switches=-B -Q -DINCLUDE_FTS3 -GD -U%defaultFolders% -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+		)
+	)
+)
+set Switches=-B -Q -GD -O%mORMot%\SQLite3 -R%mORMot% -E%bin%\exe -N%bin%\dcu %Switches%
 if not exist %DCC% goto NoDCCCompiler
 
 echo.
@@ -29,29 +47,22 @@ echo.
 echo Switches=%Switches%
 echo.
 
-cd  \dev\lib
-mkdir tempbuild
-mkdir tempbuild\exe
-del tempbuild\exe\*.exe
-del tempbuild\exe\*.drc
-del tempbuild\exe\*.map
-del tempbuild\exe\*.db3
-del tempbuild\exe\*.ini
-del tempbuild\exe\*.data
-del tempbuild\exe\*.mdb
-del tempbuild\exe\TestSQL3.*
-mkdir tempbuild\dcu
-del tempbuild\dcu\*.dcu
+if not exist %bin% (
+	mkdir %bin%\exe
+	mkdir %bin%\dcu
+)
+cd %bin%\exe
+del /q *.exe *.drc *.map *.db3 *.ini *.data *.mdb TestSQL3.* ..\dcu\*.dcu
 
-cd \dev\lib\sqlite3
-copy TestSQL3.cfg TestSQL3.cfg.bak /Y
+cd %mORMot%\sqlite3
+copy TestSQL3.cfg TestSQL3.cfg.bak /Y> nul
 del TestSQL3.cfg
 
-echo - TestSQL3*
+echo %CD%
 %DCC% TestSQL3.dpr %Switches%
 @if errorlevel 1 pause
 
-copy TestSQL3.cfg.bak TestSQL3.cfg /Y
+copy TestSQL3.cfg.bak TestSQL3.cfg /Y> nul
 
 if "%DelphiVersion%"=="Delphi 5" goto SKIPSYNPROJECT
 
@@ -65,25 +76,31 @@ if "%LVCL%"=="LVCL" goto NoDCCCompiler
 %DCC% TestOleDB.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\01 - In Memory ORM"
-echo - Sample 01
+set samples=%mORMot%\sqlite3\Samples\
+
+cd "%samples%01 - In Memory ORM"
+echo.
+echo %CD%
 %DCC% Project01.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\02 - Embedded SQLite3 ORM"
-echo - Sample 02
+cd "%samples%02 - Embedded SQLite3 ORM"
+echo.
+echo %CD%
 %DCC% Project02.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\03 - NamedPipe Client-Server"
-echo - Sample 03
+cd "%samples%03 - NamedPipe Client-Server"
+echo.
+echo %CD%
 %DCC% Project03Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project03Server.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\04 - HTTP Client-Server"
-echo - Sample 04
+cd "%samples%04 - HTTP Client-Server"
+echo.
+echo %CD%
 %DCC% Project04Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project04Server.dpr %Switches%
@@ -93,40 +110,47 @@ echo - Sample 04
 %DCC% Project04ServerStatic.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\05 - Report created from code"
-echo - Sample 05
+cd "%samples%05 - Report created from code"
+echo.
+echo %CD%
 %DCC% TestSQLite3Pages.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\06 - Remote JSON REST Service"
-echo - Sample 06
+cd "%samples%06 - Remote JSON REST Service"
+echo.
+echo %CD%
 %DCC% Project06Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project06Server.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\07 - SynTest"
-echo - Sample 07
+cd "%samples%07 - SynTest"
+echo.
+echo %CD%
 %DCC% SynTest.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\08 - TaskDialog"
-echo - Sample 08
+cd "%samples%08 - TaskDialog"
+echo.
+echo %CD%
 %DCC% TaskDialogTest.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\09 - HttpApi web server"
-echo - Sample 09
+cd "%samples%09 - HttpApi web server"
+echo.
+echo %CD%
 %DCC% HttpApiServer.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\10 - Background Http service"
-echo - Sample 10
+cd "%samples%10 - Background Http service"
+echo.
+echo %CD%
 %DCC% httpservice.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\11 - Exception logging"
-echo - Sample 11
+cd "%samples%11 - Exception logging"
+echo.
+echo %CD%
 %DCC% LibraryTest.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% LoggingTest.dpr %Switches%
@@ -140,20 +164,23 @@ echo - Sample 11
 %DCC% UnSynLz.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\Dev\Lib\SQLite3\Samples\12 - SynDB Explorer"
-echo - Sample 12
+cd "%samples%12 - SynDB Explorer"
+echo.
+echo %CD%
 %DCC% SynDBExplorer.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\13 - StandAlone JSON SQL server"
-echo - Sample 13
+cd "%samples%13 - StandAlone JSON SQL server"
+echo.
+echo %CD%
 %DCC% JSONSQLClient.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% JSONSQLServer.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\14 - Interface based services"
-echo - Sample 14
+cd "%samples%14 - Interface based services"
+echo.
+echo %CD%
 %DCC% Project14Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project14Server.dpr %Switches%
@@ -167,77 +194,90 @@ echo - Sample 14
 %DCC% Project14ServerInMemory.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\15 - External DB performance"
-echo - Sample 15
+cd "%samples%15 - External DB performance"
+echo.
+echo %CD%
 %DCC% PerfTest.dpr %Switches% -DNONET;NOSTATIC -I\dev\UniDac\Source;\dev\zeos\src -U\dev\UniDac\Source;D:\Dev\UniDAC\Source\UniProviders\Oracle;D:\Dev\UniDAC\Source\UniProviders\InterBase;D:\Dev\UniDAC\Source\UniProviders\SQLite;D:\Dev\UniDAC\Source\UniProviders\SQLServer;\Dev\Zeos\packages\delphi7\build;\Dev\Zeos\src;\Dev\Zeos\src\core;\Dev\Zeos\src\dbc;\Dev\Zeos\src\parsesql;\Dev\Zeos\src\plain
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\16 - Execute SQL via services"
-echo - Sample 16
+cd "%samples%16 - Execute SQL via services"
+echo.
+echo %CD%
 %DCC% Project16Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project16ServerHttp.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\17 - TClientDataset use"
-echo - Sample 17
+cd "%samples%17 - TClientDataset use"
+echo.
+echo %CD%
 %DCC% mORMotVCLTest.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\18 - AJAX ExtJS Grid"
-echo - Sample 18
+cd "%samples%18 - AJAX ExtJS Grid"
+echo.
+echo %CD%
 %DCC% Project18Server.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\19 - AJAX ExtJS FishFacts"
-echo - Sample 19
+cd "%samples%19 - AJAX ExtJS FishFacts"
+echo.
+echo %CD%
 %DCC% Project19Server.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\20 - DTO interface based service"
-echo - Sample 20
+cd "%samples%20 - DTO interface based service"
+echo.
+echo %CD%
 %DCC% Project20Client.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project20ServerInMemory.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\21 - HTTP Client-Server performance"
-echo - Sample 21
+cd "%samples%21 - HTTP Client-Server performance"
+echo.
+echo %CD%
 %DCC% Project21HttpClient.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% Project21HttpServer.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\22 - JavaScript HTTPApi web server"
-echo - Sample 22
+cd "%samples%22 - JavaScript HTTPApi web server"
+echo.
+echo %CD%
 %DCC% JSHttpApiServer.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\23 - JavaScript Tests"
-echo - Sample 23
+cd "%samples%23 - JavaScript Tests"
+echo.
+echo %CD%
 %DCC% TestSynSM.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% TestMustache.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\24 - MongoDB"
-echo - Sample 24
+cd "%samples%24 - MongoDB"
+echo.
+echo %CD%
 %DCC% MongoDBTests.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\25 - JSON performance"
-echo - Sample 25
+cd "%samples%25 - JSON performance"
+echo.
+echo %CD%
 %DCC% JSONPerfTests.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\26 - RESTful ORM"
-echo - Sample 26
+cd "%samples%26 - RESTful ORM"
+echo.
+echo %CD%
 %DCC% RESTserver.dpr %Switches%
 %DCC% RESTClient.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\27 - CrossPlatform Clients"
-echo - Sample 27
+cd "%samples%27 - CrossPlatform Clients"
+echo.
+echo %CD%
 %DCC% RegressionTests.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% RegressionTestsServer.dpr %Switches%
@@ -247,54 +287,60 @@ echo - Sample 27
 %DCC% Project14ServerHttpWrapper.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\28 - Simple RESTful ORM Server"
-echo - Sample 28
+cd "%samples%28 - Simple RESTful ORM Server"
+echo.
+echo %CD%
 %DCC% RESTserver.dpr %Switches%
 @if errorlevel 1 pause
 %DCC% RESTclient.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\30 - MVC Server"
-echo - Sample 30
+cd "%samples%30 - MVC Server"
+echo.
+echo %CD%
 %DCC% MVCServer.dpr %Switches%
 rem %DCC% MVCServerMongoDB.dpr %Switches%
 @if errorlevel 1 pause
 
-cd "\dev\lib\sqlite3\Samples\31 - WebSockets"
-echo - Sample 31
+cd "%samples%31 - WebSockets"
+echo.
+echo %CD%
 %DCC% Project31SimpleEchoServer.dpr %Switches%
 %DCC% Project31LongWorkClient.dpr %Switches%
 %DCC% Project31LongWorkServer.dpr %Switches%
 @if errorlevel 1 pause
 
 
-cd "\dev\lib\sqlite3\Samples\MainDemo"
-echo - Sample MainDemo
+cd "%samples%MainDemo"
+echo.
+echo %CD%
 call FileMainRes.bat
 %DCC% SynFile.dpr %Switches%
 @if errorlevel 1 pause
 
 goto SKIPSYNPROJECT
 
-cd "\dev\lib\SynProject"
+cd "%mORMot%\SynProject"
 brcc32 FileMain.rc
 %DCC% SynProject.dpr %Switches%
 @if errorlevel 1 pause
 
 :SKIPSYNPROJECT
 
-cd \dev\lib\tempbuild\exe
-Map2Mab.exe *.exe
+echo.
+echo Appending .map information into all generated .exe
+cd %bin%\exe
+if exist Map2Map.exe Map2Mab.exe *.exe
+del /q *.map *.drc
 
+echo.
 echo Running automated tests for mORMot
 TestSQL3 "%DelphiVersion% "
 
 :NoDCCCompiler
-cd \dev\lib\tempbuild\exe
-del *.map
-del *.drc
-
-cd \dev\lib
+cd %mORMot%
 set DCC=
 set DelphiVersion=
+set mORMot=
+set bin=
 rem pause

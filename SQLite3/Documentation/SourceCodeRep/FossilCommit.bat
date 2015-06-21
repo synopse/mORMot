@@ -1,4 +1,4 @@
-del *.bak /s
+del *.bak /s> nul
 
 fossil ci -M %1
 
