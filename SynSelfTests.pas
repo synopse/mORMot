@@ -5221,6 +5221,10 @@ begin
     J := ObjectToJSON(peop);
     Check(J='{"ID":1234,"FirstName":"","LastName":"",'+
       '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
+    peop.IDValue := -1234;
+    J := ObjectToJSON(peop);
+    Check(J='{"ID":-1234,"FirstName":"","LastName":"",'+
+      '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
   finally
     peop.Free;
   end;

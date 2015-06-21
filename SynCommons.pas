@@ -5446,8 +5446,6 @@ type
     out aValid: Boolean): PUTF8Char of object;
 
   /// the kind of variables handled by TJSONCustomParser
-  // - note that this list is expected to be sorted by alphabetic order
-  // following the TEXT type recognized at parsing
   // - the last item should be ptCustom, for non simple types
   TJSONCustomParserRTTIType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
@@ -15168,7 +15166,7 @@ begin // fallback to pure pascal version, since asm version below make GPFs for 
       break;
     end;
     dec(P,2);
-    c100 := val div 100;
+    c100 := val div 100; // FPC will use power of 2 reciprocal here :)
     dec(val,c100*100);
     PWord(P)^ := TwoDigitLookupW[val];
     val := c100;
@@ -29946,33 +29944,37 @@ begin
   fPropertyType := aPropertyType;
 end;
 
-class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
-  TypeName: PUTF8Char; TypeNameLen: Integer; var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType;
-const // we rely on TJSONCustomParserRTTIType enumeration to be sorted by name
-  JSONCUSTOMPARSERRTTITYPE_NAMES: array[TJSONCustomParserRTTIType] of PUTF8Char =
-    ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY','DOUBLE','INT64','INTEGER',
-     'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE','STRING','SYNUNICODE',
-     'TDATETIME','TGUID','TID','TTIMELOG',{$ifndef NOVARIANTS}'VARIANT',{$endif}
-     'WIDESTRING','WORD',nil); // latest ptCustom=nil
+class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(TypeName: PUTF8Char;
+  TypeNameLen: Integer; var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType;
+const
+  SORTEDMAX = {$ifdef NOVARIANTS}29{$else}30{$endif};
+  SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char =
+    ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY',
+     'DOUBLE','INT64','INTEGER','PTRINT','PTRUINT',
+     'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE',
+     'STRING','SYNUNICODE','TCREATETIME','TDATETIME','TGUID',
+     'TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED',
+     'TRECORDVERSION','TSQLRAWBLOB','TTIMELOG','UTF8STRING',
+     {$ifndef NOVARIANTS}'VARIANT',{$endif}
+     'WIDESTRING','WORD');
+   // warning: recognized types should match at binary storage level!
+   SORTEDTYPES: array[0..SORTEDMAX] of TJSONCustomParserRTTIType =
+     (ptArray,ptBoolean,ptByte,ptCardinal,ptCurrency,
+      ptDouble,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,
+      ptRawByteString,ptRawJSON,ptRawUTF8,ptRecord,ptSingle,
+      ptString,ptSynUnicode,ptTimeLog,ptDateTime,ptGUID,
+      ptID,ptTimeLog,ptInt64,ptInt64,
+      ptInt64,ptRawByteString,ptTimeLog,ptRawUTF8,
+      {$ifndef NOVARIANTS}ptVariant,{$endif}
+      ptWideString,ptWord);
 var ndx: integer;
 begin
   UpperCaseCopy(TypeName,TypeNameLen,ItemTypeName);
-  ndx := FastFindPUTF8CharSorted(@JSONCUSTOMPARSERRTTITYPE_NAMES,
-    ord(pred(ptCustom)),pointer(ItemTypeName));
+//for ndx := 1 to SORTEDMAX do assert(StrComp(SORTEDNAMES[ndx],SORTEDNAMES[ndx-1])>0,SORTEDNAMES[ndx]);
+  ndx := FastFindPUTF8CharSorted(@SORTEDNAMES,SORTEDMAX,pointer(ItemTypeName));
   if ndx>=0 then
-    result := TJSONCustomParserRTTIType(ndx) else
-    // recognize some simple type aliases (.. = type ..) as defined in mORMot.pas
-    case IdemPCharArray(pointer(ItemTypeName),['TSQLRAWBLOB','TRECORDREFERENCE',
-      'TRECORDREFERENCETOBEDELETED','TMODTIME','TCREATETIME','PTRINT','PTRUINT']) of
-      // see also PT_COMPLEXTYPES
-      0:   result := ptRawByteString;
-      1,2: result := ptPtrUInt;
-      3,4: result := ptTimeLog;
-      5:   result := ptPtrInt;
-      6:   result := ptPtrUInt;
-      else result := ptCustom;
-      // warning: recognized types should match at binary storage level!
-    end;
+    result := SORTEDTYPES[ndx] else
+    result := ptCustom;
 end;
 
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
@@ -30134,8 +30136,8 @@ const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCust
   JSONRTTI_SIZE: array[TJSONCustomParserRTTIType] of byte = (
     SizeOf(PtrUInt),SizeOf(Boolean),SizeOf(Byte),SizeOf(Cardinal),SizeOf(Currency),
     SizeOf(Double),SizeOf(Int64),SizeOf(Integer),SizeOf(RawByteString),
-    SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single), SizeOf(String),SizeOf(SynUnicode),
-    SizeOf(TDateTime),SizeOf(TGUID),SizeOf(Int64), SizeOf(TTimeLog),
+    SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single),SizeOf(String),SizeOf(SynUnicode),
+    SizeOf(TDateTime),SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
     SizeOf(WideString),SizeOf(Word),0);
 var i: integer;
@@ -36600,32 +36602,14 @@ var tmp: array[0..23] of AnsiChar;
 begin
   if BEnd-B<=24 then
     FlushToStream;
-  case Value of
-  0..9: begin
-    inc(B);
-    PByte(B)^ := byte(Value) or 48;
-  end;
-  10..99: begin
-    PWord(B+1)^ := TwoDigitLookupW[Value];
-    inc(B,2);
-  end;
-  {$ifndef PUREPASCAL}
-  {$ifndef HASINLINE}
-  100..maxInt: begin
-    P := StrInt32(@tmp[23],Value);
-    Len := @tmp[23]-P;
-    MoveFast(P[0],B[1],Len);
-    inc(B,Len);
-  end;
-  {$endif}
-  {$endif}
-  else begin
-    P := StrInt64(@tmp[23],Value);
-    Len := @tmp[23]-P;
-    MoveFast(P[0],B[1],Len);
-    inc(B,Len);
-  end;
-  end;
+  if Value<0 then begin
+    P := StrUInt64(@tmp[23],-Value)-1;
+    P^ := '-';
+  end else
+    P := StrUInt64(@tmp[23],Value);
+  Len := @tmp[23]-P;
+  MoveFast(P[0],B[1],Len);
+  inc(B,Len);
 end;
 {$endif}
 

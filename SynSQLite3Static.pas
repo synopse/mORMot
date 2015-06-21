@@ -247,14 +247,14 @@ extern int winRead(
   sqlite3.file *id,          /* File to read from */
   void *pBuf,                /* Write content into this buffer */
   int amt,                   /* Number of bytes to read */
-  sqlite3.int64 offset       /* Begin reading at this offset */
+  sqlite3_int64 offset       /* Begin reading at this offset */
 );
 
 extern int winWrite(
-  sqlite3.file *id,         /* File to write into */
+  sqlite3_file *id,         /* File to write into */
   const void *pBuf,         /* The bytes to be written */
   int amt,                  /* Number of bytes to write */
-  sqlite3.int64 offset      /* Offset into the file to begin writing at */
+  sqlite3_int64 offset      /* Offset into the file to begin writing at */
 );
 
 Under Linux (thanks Alf for the patch!), change the following lines of sqlite3.c:

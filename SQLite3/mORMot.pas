@@ -42604,7 +42604,7 @@ begin
     AddShort('null'); // return void object
     exit;
   end;
-  aClassType := Value.ClassType;
+  aClassType := PClass(Value)^;
   IsObj := JSONObject(aClassType,IsObjCustomIndex,[cpWrite]);
   if woFullExpand in Options then
     if IsObj=oSynMonitor then begin // nested values do not need extended info
@@ -48438,7 +48438,7 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvObject:     WR.WriteObject(PPointer(V)^,[]);
+  smvObject:     WR.WriteObject(PPointer(V)^,[woStoreStoredFalse]);
   smvInterface:  ; // already written by TInterfacedObjectFake.InterfaceWrite
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
@@ -48447,7 +48447,7 @@ begin
   smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
   end;
   if vIsString in ValueKindAsm then
-    WR.AddShort('",') else
+    WR.Add('"',',') else
     WR.Add(',');
 end;
 
@@ -48456,7 +48456,7 @@ begin
   if vIsString in ValueKindAsm then begin
     WR.Add('"');
     WR.AddJSONEscape(pointer(Value),length(Value));
-    WR.AddShort('",');
+    WR.Add('"',',');
   end else begin
     WR.AddString(Value);
     WR.Add(',');
