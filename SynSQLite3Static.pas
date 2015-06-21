@@ -631,6 +631,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
+
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
   {$ifdef FPC}alias : '__beginthreadex';{$endif}
@@ -647,6 +648,7 @@ end;
 {$else MSWINDOWS}
 
 {$ifdef FPC}
+
 function newstat64(path: pchar; buf: PStat): cint; cdecl;
   alias: 'stat64'; export;
 begin
@@ -658,6 +660,7 @@ function newfstat64(fd: cint; buf: PStat): cint; cdecl;
 begin
   result := fpfstat(fd,buf^);
 end;
+
 {$endif FPC}
 
 {$ifdef KYLIX3}
@@ -676,7 +679,7 @@ begin
     result := round(a);
 end;
 
-{$endif}
+{$endif KYLIX3}
 
 {$endif MSWINDOWS}
 
@@ -969,7 +972,9 @@ begin
         dec(buflen,nCopy);
         inc(off,nCopy);
       end else
-      raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
+      raise ESynException.CreateUTF8(
+        'sqlite3_key() expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
+        [off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
@@ -1049,7 +1054,9 @@ begin
         dec(buflen,nCopy);
         inc(off,nCopy);
       end else
-      raise ESynException.Create('sqlite3_key() expects PRAGMA mmap_size=0');
+      raise ESynException.CreateUTF8(
+        'sqlite3_key() expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
+        [off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
