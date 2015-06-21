@@ -19824,8 +19824,8 @@ end;
 procedure YearToPChar(Y: Word; P: PUTF8Char);
 {$ifdef PUREPASCAL}
 begin
-  PWord(P  )^ := TwoDigitLookupW[Y div 100];
-  PWord(P+2)^ := TwoDigitLookupW[Y mod 100];
+  PWordArray(P)[0] := TwoDigitLookupW[Y div 100];
+  PWordArray(P)[1] := TwoDigitLookupW[Y mod 100];
 end;
 {$else}
 asm
@@ -29245,8 +29245,7 @@ begin
   {$else}
   {$ifdef CPU64}
   StrLen := @StrLenSSE2;
-  //FillcharFast := @FillCharSSE2;
-  Pointer(@FillCharFast) := SystemFillCharAddress;
+  FillcharFast := @FillCharSSE2;
   MoveFast := @MoveSSE2;
   {$else}
   if SupportsSSE2 then begin

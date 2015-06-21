@@ -48651,7 +48651,7 @@ end;
 
 constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
 begin
-  inherited;
+  inherited Create(Collection);
   AutoCreateFields(self);
 end;
 
