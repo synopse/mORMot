@@ -8289,6 +8289,7 @@ begin
   Check(Hash32(JS)=$40C1649A,'Expected ExecuteJSON result not retrieved');
   {$ifndef NOSQLITE3ENCRYPT}
   if password<>'' then begin // check file encryption password change
+    Check(Demo.MemoryMappedMB=0,'mmap pragma disallowed');
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
     ChangeSQLEncryptTablePassWord(TempFileName,'password1','');
     ChangeSQLEncryptTablePassWord(TempFileName,'','NewPass');
@@ -8298,7 +8299,9 @@ begin
     Demo.UseCache := true; // use the cache for the JSON requests
     Demo.WALMode := InheritsFrom(TTestFileBasedWAL); // test Write-Ahead Logging
     Check(Demo.WALMode=InheritsFrom(TTestFileBasedWAL));
+    Check(Demo.MemoryMappedMB=0,'mmap pragma disallowed');
     Check(Hash32(Demo.ExecuteJSON(Req))=$40C1649A,'ExecuteJSON crypted');
+    Check(Demo.MemoryMappedMB=0,'mmap pragma disallowed');
   end else
   {$endif}
   if ClassType=TTestFileBasedMemoryMap then begin // force re-open to test reading

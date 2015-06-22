@@ -846,7 +846,8 @@ type
     UnixUnusedFd : pointer;     // unused
     zPath: PAnsiChar;           // Name of the file
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
-    szChunk, nFetchOut: cint;
+    szChunk: cint;
+    nFetchOut: cint;
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
     pMapRegion: PAnsiChar;
   end;
@@ -973,8 +974,8 @@ begin
         inc(off,nCopy);
       end else
       raise ESynException.CreateUTF8(
-        'sqlite3_key() expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
-        [off,Int64(F.mmapSize),bufLen]);
+        'sqlite3_key(%) expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
+        [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
@@ -1055,8 +1056,8 @@ begin
         inc(off,nCopy);
       end else
       raise ESynException.CreateUTF8(
-        'sqlite3_key() expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
-        [off,Int64(F.mmapSize),bufLen]);
+        'sqlite3_key(%) expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
+        [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
