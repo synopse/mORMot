@@ -2529,7 +2529,7 @@ procedure TSMVariantData.Init(aCx: PJSContext; aObj: PJSObject);
 begin
   if SMVariantType=nil then
     SMVariantType := SynRegisterCustomVariantType(TSMVariant);
-  ZeroFill(TVarData(self));
+  ZeroFill(@self);
   VType := SMVariantType.VarType;
   VObject.fCx := aCx;
   VObject.fObj := aObj;
