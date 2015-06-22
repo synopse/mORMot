@@ -1172,16 +1172,20 @@ procedure TDDDRepositoryRestFactory.ComputeMapping;
   -> TSQLOrder.Lines as variant? (JSON) -> this is the current implementation
   -> TSQLOrder.Lines as JSON dynarray? (new feature request)
   -> TSQLOrder.Lines as binary dynarray?
-
 }
-procedure EnsureCompatible(agg,rec: TSQLPropInfo);
-begin
-  if agg.SQLDBFieldType<>rec.SQLDBFieldType then
+  procedure EnsureCompatible(agg,rec: TSQLPropInfo);
+  begin
+    if agg.SQLDBFieldType=rec.SQLDBFieldType then
+      exit; // very same type at DB level 
+    if (agg.SQLFieldType=sftBlobDynArray) and (rec.SQLFieldType=sftVariant) and
+       ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) then
+      exit; // we allow T*ObjArray <-> JSON <-> variant <-> TEXT marshalling
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
-      Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName,
-      fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName]);
-end;
+      Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName^,
+      fTable,rec.Name,rec.SQLFieldRTTITypeName,rec.SQLDBFieldTypeName^]);
+  end;
+
 var i,ndx: integer;
     ORMProps: TSQLPropInfoObjArray;
 begin

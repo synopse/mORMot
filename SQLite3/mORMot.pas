@@ -2584,10 +2584,12 @@ type
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
     function GetDynArray(Instance: TObject): TDynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of a dynamic array wrapper
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
     procedure GetDynArray(Instance: TObject; var result: TDynArray); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if this dynamic array has been registered as a T*ObjArray
     // - the T*ObjArray dynamic array should have been previously registered
     // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
@@ -2597,6 +2599,7 @@ type
     // - the T*ObjArray dynamic array should have been previously registered
     // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
     // - returns nil if the supplied type is not a registered T*ObjArray
+    // - you can create a new item instance just by calling result^.CreateNew
     function DynArrayIsObjArrayInstance: PClassInstance;
       {$ifdef HASINLINE}inline;{$endif}
     /// return TRUE if the the property has no getter but direct field read
@@ -3254,6 +3257,9 @@ type
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
       aSQLFieldType: TSQLFieldType); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
+    procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
+    procedure SetValuePtr(Instance: TObject; Value: PUTF8Char; ValueLen: integer;
+      wasString: boolean);
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
@@ -3839,7 +3845,8 @@ type
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
   TSynAutoCreateFields = class(TSynPersistent)
   public
     /// this overriden constructor will instantiate all its nested
@@ -17684,13 +17691,15 @@ begin
 end;
 
 procedure TSQLPropInfo.CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject);
-procedure GenericCopy;
-var tmp: RawUTF8;
-    wasString: boolean;
-begin
-  GetValueVar(Source,false,tmp,@wasString);
-  DestInfo.SetValueVar(Dest,tmp,wasString);
-end;
+
+  procedure GenericCopy;
+  var tmp: RawUTF8;
+      wasString: boolean;
+  begin
+    GetValueVar(Source,false,tmp,@wasString);
+    DestInfo.SetValueVar(Dest,tmp,wasString);
+  end;
+
 var i: integer;
 begin
   if (Source=nil) or (DestInfo=nil) or (Dest=nil) then
@@ -19229,12 +19238,13 @@ end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
 begin
-  fPropInfo^.GetDynArray(Instance,result);
+  GetDynArray(Instance,result);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
   fPropInfo^.GetDynArray(Instance,result);
+  result.IsObjArray := fObjArray<>nil; // no need to search
 end;
 
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
@@ -19336,7 +19346,6 @@ var blob: RawByteString;
 begin
   GetDynArray(Instance,wrapper);
   if fObjArray<>nil then begin
-    ObjArrayClear(wrapper.Value^);
     wrapper.LoadFromJSON(Value);
     exit;
   end;
@@ -19419,14 +19428,14 @@ function TSQLPropInfoRTTIVariant.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var Up: array[byte] of AnsiChar; // avoid slow heap allocation
     value: Variant;
-procedure ComplexType;
-var tmp: RawUTF8;
-begin // slow but always working conversion to string
-  tmp := VariantSaveJSON(value,twNone);
-  if CaseInsensitive then
-    result := crc32c(0,Up,UTF8UpperCopy255(Up,tmp)-Up) else
-    result := crc32c(0,pointer(tmp),length(tmp));
-end;
+  procedure ComplexType;
+  var tmp: RawUTF8;
+  begin // slow but always working conversion to string
+    tmp := VariantSaveJSON(value,twNone);
+    if CaseInsensitive then
+      result := crc32c(0,Up,UTF8UpperCopy255(Up,tmp)-Up) else
+      result := crc32c(0,pointer(tmp),length(tmp));
+  end;
 begin
   fPropInfo.GetVariantProp(Instance,value);
   with TVarData(value) do
@@ -19512,14 +19521,37 @@ end;
 
 procedure TSQLPropInfoRTTIVariant.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
-var V: Variant;
-    ValueLocalCopy: RawUTF8;
 begin
-  if Value<>nil then begin
-    ValueLocalCopy := Value; // private copy since the buffer will be modified
-    GetVariantFromJSON(pointer(ValueLocalCopy),wasString,V,@DocVariantOptions);
-  end;
-  fPropInfo.SetVariantProp(Instance,V);
+  SetValuePtr(Instance,Value,StrLen(Value),wasString);
+end;
+
+procedure TSQLPropInfoRTTIVariant.SetValueVar(Instance: TObject;
+  const Value: RawUTF8; wasString: boolean);
+begin
+  SetValuePtr(Instance,pointer(Value),length(Value),wasString);
+end;
+
+procedure TSQLPropInfoRTTIVariant.SetValuePtr(Instance: TObject; Value: PUTF8Char;
+  ValueLen: integer; wasString: boolean);
+var tmp: pointer;
+    buf: array[0..4095] of AnsiChar; // avoid memory allocation in most cases
+    V: Variant;
+begin
+  if ValueLen>0 then begin
+    inc(ValueLen);
+    if ValueLen<=sizeof(buf) then
+      tmp := @buf else
+      GetMem(tmp,ValueLen);
+    MoveFast(Value^,tmp^,ValueLen); // make private copy
+    try
+      GetVariantFromJSON(tmp,wasString,V,@DocVariantOptions);
+      fPropInfo.SetVariantProp(Instance,V);
+    finally
+      if tmp<>@buf then
+        FreeMem(tmp);
+    end;
+  end else
+    fPropInfo.SetVariantProp(Instance,V);
 end;
 
 procedure TSQLPropInfoRTTIVariant.SetVariant(Instance: TObject;
@@ -24022,7 +24054,8 @@ begin
   case PropType^.Kind of
   {$ifdef FPC}tkAString,{$endif} tkLString: begin
     GetLongStrProp(Instance,tmp);
-    if tmp<>'' then begin
+    if tmp='' then
+      result := '' else begin
       cp := PropType^.AnsiStringCodePage;
       case cp of
         CP_UTF8:       result := tmp;
@@ -24204,22 +24237,24 @@ begin
 end;
 
 function TPropInfo.SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
-{$ifndef NOVARIANTS}
-function CompareVariants: boolean;
-var VS,VD: Variant;
-begin
-  GetVariantProp(Source,VS);
-  DestInfo^.GetVariantProp(Dest,VD);
-  result := VS=VD; // rely on Variants.pas comparison
-end;
-function CompareStrings: Boolean;
-var US,UD: RawUTF8;
-begin
-  GetLongStrValue(Source,US);
-  DestInfo^.GetLongStrValue(Dest,UD);
-  result := US=UD;
-end;
-{$endif}
+
+  {$ifndef NOVARIANTS}
+  function CompareVariants: boolean;
+  var VS,VD: Variant;
+  begin
+    GetVariantProp(Source,VS);
+    DestInfo^.GetVariantProp(Dest,VD);
+    result := VS=VD; // rely on Variants.pas comparison
+  end;
+  {$endif}
+  function CompareStrings: Boolean;
+  var US,UD: RawUTF8;
+  begin
+    GetLongStrValue(Source,US);
+    DestInfo^.GetLongStrValue(Dest,UD);
+    result := US=UD;
+  end;
+
 var kS,kD: TTypeKind;
     daS,daD: TDynArray;
     i: integer;
@@ -48664,7 +48699,6 @@ type
   TDynArrayFake = record
     Value: Pointer;
     Wrapper: TDynArray;
-    IsObjArray: boolean;
   end;
 
 function TServiceMethod.ArgResultIndex(ArgName: PUTF8Char; ArgNameLen: integer): integer;
@@ -48775,7 +48809,7 @@ begin
       smvDynArray:
         with DynArrays[IndexVar] do begin
           Wrapper.Init(ArgTypeInfo,Value);
-          IsObjArray := vIsObjArray in ValueKindAsm;
+          Wrapper.IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
         end;
       smvRecord:
         SetLength(Records[IndexVar],ArgTypeInfo^.RecordType^.Size);
@@ -48940,10 +48974,7 @@ begin
       for i := 0 to ArgsUsedCount[smvvInterface]-1 do
         IUnknown(Interfaces[i]) := nil;
       for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
-        with DynArrays[i] do
-          if IsObjArray then
-            ObjArrayClear(Value) else // a bit faster than Wrapper.Clear
-            Wrapper.Clear;
+        DynArrays[i].Wrapper.Clear;
       if Records<>nil then begin
         i := 0;
         for a := ArgsManagedFirst to ArgsManagedLast do
@@ -49650,3 +49681,4 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+
