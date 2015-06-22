@@ -4806,18 +4806,29 @@ begin
     Check(git[0].owner.login='zendframework');
     Check(git[0].owner.id=296074);
   end;
-  for i := 0 to high(git) do begin
+  for i := 0 to high(git) do
+  with git[i] do begin
     item := JSONArrayItem(Pointer(U),i);
     Check(item<>nil);
     value := JsonObjectItem(item,'name');
     check(value<>nil);
-    check(trim(GetJSONItemAsRawJSON(value))='"'+git[i].name+'"');
-    check(GetInteger(JsonObjectByPath(item,'owner.id'))=git[i].owner.id);
+    check(trim(GetJSONItemAsRawJSON(value))='"'+name+'"');
+    check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
+    check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
+    check(JsonObjectByPath(item,'owner.name')='');
     check(JsonObjectsByPath(item,'toto')='');
     check(JsonObjectsByPath(item,'toto,titi')='');
-    check(JsonObjectsByPath(item,'toto,name')='["'+git[i].name+'"]');
+    check(JsonObjectsByPath(item,'toto,name')='{"name":"'+name+'"}');
+    check(JsonObjectsByPath(item,'toto,n*')='{"name":"'+name+'"}');
     check(JsonObjectsByPath(item,'fork,toto,owner.id,name')=
-      FormatUTF8('[%,%,"%"]',[JSON_BOOLEAN[git[i].fork],git[i].owner.id,git[i].name]));
+      FormatUTF8('{"fork":%,"owner.id":%,"name":"%"}',
+      [JSON_BOOLEAN[fork],owner.id,name]));
+    check(JsonObjectsByPath(item,'owner.i*')=FormatUTF8('{"owner.id":%}',[owner.id]));
+    check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
+      '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
+    value := JsonObjectByPath(item,'owner');
+    check(JSONReformat(GetJSONItemAsRawJSON(value),jsonCompact)=FormatUTF8(
+      '{"login":"%","id":%}',[owner.login,owner.id]));
   end;
   Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
   if not CheckFailed(length(git)=Length(git2)) then

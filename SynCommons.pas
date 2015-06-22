@@ -2542,7 +2542,10 @@ function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
-function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
+function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overload;
+
+/// copy source into dest^ with 7 bits upper case conversion
+function UpperCopy255(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar; overload;
 
 /// copy source into dest^ with WinAnsi 8 bits upper case conversion
 // - returns final dest pointer
@@ -7812,7 +7815,8 @@ function JSONObjectPropCount(P: PUTF8Char): integer;
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
-function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8): PUTF8Char;
+function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8;
+  PropNameFound: PRawUTF8=nil): PUTF8Char;
 
 /// go to a property of a JSON object, by its full path, e.g. 'parent.child'
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
@@ -7824,11 +7828,11 @@ function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8): PUTF8Char;
 // - incoming P^ should point to the first initial '{' char
 function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
 
-/// return all mathinc properties of a JSON object as a JSON array
+/// return all matching properties of a JSON object
 // - here the PropPath could be a comma-separated list of full paths,
 // e.g. 'Prop1,Prop2' or 'Obj1.Obj2.Prop1,Obj1.Prop2'
 // - returns '' if no property did match
-// - returns a JSON array of all matching properties
+// - returns a JSON object of all matching properties
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
@@ -22654,14 +22658,21 @@ begin
 end;
 
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
-var i, L: integer;
 begin
-  L := PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length;
-  if L>0 then begin
-    if L>250 then
-      L := 250; // avoid buffer overflow
-    result := dest+L;
-    for i := 0 to L-1 do
+  if source<>'' then
+    result := UpperCopy255(dest,pointer(source),
+      PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length) else
+    result := dest;
+end;
+
+function UpperCopy255(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+var i: integer;
+begin
+  if sourceLen>0 then begin
+    if sourceLen>250 then
+      sourceLen := 250; // avoid buffer overflow
+    result := dest+sourceLen;
+    for i := 0 to sourceLen-1 do
       dest[i] := AnsiChar(NormToUpperAnsi7Byte[PByteArray(source)[i]]);
   end else
     result := dest;
@@ -34309,18 +34320,36 @@ begin
     result := n;
 end;
 
-function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8): PUTF8Char;
+function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8;
+  PropNameFound: PRawUTF8): PUTF8Char;
 var name: shortstring; // no memory allocation nor P^ modification
+    PropNameLen: integer;
+    PropNameUpper: array[byte] of AnsiChar;
 begin
   if P<>nil then begin
     P := GotoNextNotSpace(P);
-    if (PropName<>'') and (P^='{') then begin
-      P := GotoNextNotSpace(P+1);
+    PropNameLen := length(PropName);
+    if PropNameLen<>0 then begin
+      if PropName[PropNameLen]='*' then begin
+        UpperCopy255(PropNameUpper,pointer(PropName),PropNameLen-1)^ := #0;
+        PropNameLen := 0;
+      end;
+      if P^='{' then
+        P := GotoNextNotSpace(P+1);
       while P^<>'}' do begin
         GetJSONPropName(P,name);
-        if name='' then
+        if (name[0]=#0) or (name[0]>#200) then
           break;
-        if IdemPropName(name,pointer(PropName),length(PropName)) then begin
+        if PropNameLen=0 then begin
+          name[ord(name[0])+1] := #0; // make ASCIIZ
+          if IdemPChar(@name[1],@PropNameUpper) then begin
+            if PropNameFound<>nil then
+              PropNameFound^ := name;
+            result := P;
+            exit;
+          end;
+        end else
+        if IdemPropName(name,pointer(PropName),PropNameLen) then begin
           result := P;
           exit;
         end;
@@ -34347,16 +34376,16 @@ begin
 end;
 
 function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
-var itemName: RawUTF8;
+var objName: RawUTF8;
 begin
   result := nil;
   if (JsonObject=nil) or (PropPath=nil) then
     exit;
   repeat
-    itemName := GetNextItem(PropPath,'.');
-    if itemName='' then
+    objName := GetNextItem(PropPath,'.');
+    if objName='' then
       exit;
-    JsonObject := JsonObjectItem(JsonObject,itemName);
+    JsonObject := JsonObjectItem(JsonObject,objName);
     if JsonObject=nil then
       exit;
     if PropPath=nil then
@@ -34366,9 +34395,24 @@ begin
 end;
 
 function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
-var itemName: RawUTF8;
-    start,ending: PUTF8Char;
+var itemName,objName,propNameFound,objPath: RawUTF8;
+    start,ending,obj: PUTF8Char;
     WR: TTextWriter;
+  procedure AddFromStart(const name: RaWUTF8);
+  begin
+    start := GotoNextNotSpace(start);
+    ending := GotoEndJSONItem(start);
+    if ending=nil then
+      exit;
+    if WR=nil then begin
+      WR := TTextWriter.CreateOwnedStream;
+      WR.Add('{');
+    end else
+      WR.Add(',');
+    WR.AddFieldName(name);
+    while (ending>start) and (ending[-1]<=' ') do dec(ending); // trim right
+    WR.AddNoJSONEscape(start,ending-start);
+  end;
 begin
   result := '';
   if (JsonObject=nil) or (PropPath=nil) then
@@ -34379,23 +34423,39 @@ begin
       itemName := GetNextItem(PropPath,',');
       if itemName='' then
         break;
-      start := JsonObjectByPath(JsonObject,pointer(itemName));
-      if start<>nil then begin
-        start := GotoNextNotSpace(start);
-        ending := GotoEndJSONItem(start);
-        if ending=nil then
-          exit;
-        if WR=nil then begin
-          WR := TTextWriter.CreateOwnedStream;
-          WR.Add('[');
-        end else
-          WR.Add(',');
-        while (ending>start) and (ending[-1]<=' ') do dec(ending); // trim right
-        WR.AddNoJSONEscape(start,ending-start);
+      if itemName[length(itemName)]<>'*' then begin
+        start := JsonObjectByPath(JsonObject,pointer(itemName));
+        if start<>nil then
+          AddFromStart(itemName);
+      end else begin
+        objPath := '';
+        obj := pointer(itemName);
+        repeat
+          objName := GetNextItem(obj,'.');
+          if objName='' then
+            exit;
+          propNameFound := '';
+          JsonObject := JsonObjectItem(JsonObject,objName,@propNameFound);
+          if JsonObject=nil then
+            exit;
+          if obj=nil then begin // found full name scope
+            start := JsonObject;
+            repeat
+              AddFromStart(objPath+propNameFound);
+              ending := GotoNextNotSpace(ending);
+              if ending^<>',' then
+                break;
+              propNameFound := '';
+              start := JsonObjectItem(GotoNextNotSpace(ending+1),objName,@propNameFound);
+            until start=nil;
+            break;
+          end else
+            objPath := objPath+objName+'.';
+        until false;
       end;
     until PropPath=nil;
     if WR<>nil then begin
-      WR.Add(']');
+      WR.Add('}');
       WR.SetText(result);
     end;
   finally
@@ -35947,7 +36007,7 @@ var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255(tmp,RawUTF8(Elem))-tmp);
+    result := Hasher(0,tmp,UpperCopy255(tmp,pointer(Elem),length(RawUTF8(Elem)))-tmp);
 end;
 
 {$ifdef UNICODE}
