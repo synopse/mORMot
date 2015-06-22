@@ -2455,7 +2455,7 @@ var res: TVarData absolute result;
 begin
   if res.VType and VTYPE_STATIC<>0 then
     VarClear(result);
-  ZeroFill(TVarData(result)); // set result.VType=varEmpty and result.VAny=nil
+  ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
     res.VDouble := PDouble(Element)^;
@@ -4005,7 +4005,7 @@ procedure TBSONVariant.Clear(var V: TVarData);
 begin
   if TBSONVariantData(V).VKind in BSON_ELEMENTVARIANTMANAGED then
     RawByteString(TBSONVariantData(V).VBlob) := '';
-  ZeroFill(V); // will set V.VType := varEmpty
+  ZeroFill(@V); // will set V.VType := varEmpty
 end;
 
 procedure TBSONVariant.Copy(var Dest: TVarData;

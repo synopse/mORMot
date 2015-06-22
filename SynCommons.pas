@@ -646,7 +646,8 @@ unit SynCommons;
   - added GotoEndOfJSONString() function
   - added GetJSONPropName() and GotoNextJSONPropName() functions, able to
     understand MongoDB extended syntax
-  - added JSONArrayCount() and JSONObjectPropCount() functions
+  - added JSONArrayCount/JSONObjectPropCount, JsonArayItem and
+    JsonObjectItem/JsonObjectByPath/JsonObjectsByPath functions
   - several speedup in GetJSONField() and JSON parsing: it will now expect true,
     false or null to be in lowercase only (as in json.org specifications)
   - fixed function GetJSONField() to properly decode JSON number with exponent
@@ -2424,38 +2425,38 @@ function CSVEncode(const NameValuePairs: array of const;
   const KeySeparator: RawUTF8='='; const ValueSeparator: RawUTF8=#13#10): RawUTF8;
 
 
-/// returns TRUE if the given text buffer contains A..Z,0..9 characters
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+/// returns TRUE if the given text buffer contains A..Z,0..9,_ characters
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - i.e. can be tested via IdemPropName*() functions
 // - first char must be alphabetical or '_', following chars can be
 // alphanumerical or '_'
 function PropNameValid(P: PUTF8Char): boolean;
 
 /// case unsensitive test of P1 and P2 content
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropName(const P1,P2: shortstring): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expect P2 to be a PAnsiChar with a specified length
 function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expect P1 and P2 to be a PAnsiChar with specified lengths
 function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expect P1 and P2 to be a PAnsiChar with specified lengths
 function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
-// - use it with property names values (i.e. only including A..Z,0..9 chars)
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropNameU(const P1,P2: RawUTF8): boolean; overload;
 
 /// returns true if the beginning of p^ is the same as up^
@@ -7686,7 +7687,17 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-function GetJSONPropName(var P: PUTF8Char): PUTF8Char;
+function GetJSONPropName(var P: PUTF8Char): PUTF8Char; overload;
+
+/// decode a JSON field name in an UTF-8 encoded shortstring variable
+// - this function would left the P^ buffer memory untouched, so may be safer
+// than the overloaded GetJSONPropName() function in some cases
+// - it will return the property name as a local UTF-8 encoded shortstring,
+// or PropName='' on error
+// - this function won't unescape the property name, as strict JSON (i.e. a "st\"ring")
+// - but it will handle MongoDB syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
+// see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
+procedure GetJSONPropName(var P: PUTF8Char; out PropName: shortstring); overload;
 
 /// decode a JSON content in an UTF-8 encoded buffer
 // - GetJSONField() will only handle JSON "strings" or numbers - if
@@ -7748,7 +7759,7 @@ function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
 // - first char is expected to be either '[' either '{' with default EndChar=#0
 // - or you can specify ']' or '}' as the expected EndChar
 // - will return nil in case of parsing error or unexpected end (#0)
-// - will return the next character after ending ] or { - i.e. may be , } ]
+// - will return the next character after ending ] or } - i.e. may be , } ]
 function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
 
 /// reach the position of the next JSON object of JSON array
@@ -7762,20 +7773,66 @@ function GotoNextJSONObjectOrArrayMax(P,PMax: PUTF8Char): PUTF8Char;
 /// compute the number of elements of a JSON array
 // - this will handle any kind of arrays, including those with nested
 // JSON objects or arrays
+// - incoming P^ should point to the first char after the initial '[' (which
+// may be a closing ']')
 function JSONArrayCount(P: PUTF8Char): integer; overload;
 
 /// compute the number of elements of a JSON array
 // - this will handle any kind of arrays, including those with nested
 // JSON objects or arrays
+// - incoming P^ should point to the first char after the initial '[' (which
+// may be a closing ']')
 // - this overloaded method will abort if P reaches a certain position: for
 // really HUGE arrays, it is faster to allocate the content within the loop,
-// not in-head
+// not ahead of time
 function JSONArrayCount(P,PMax: PUTF8Char): integer; overload;
+
+/// go to the #nth item of a JSON array
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - returns nil if the supplied index is out of range
+// - returns a pointer to the index-nth item in the JSON array (first index=0)
+// - this will handle any kind of arrays, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '[' char
+function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
 
 /// compute the number of fields in a JSON object
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
+// - incoming P^ should point to the first char after the initial '{' (which
+// may be a closing '}')
 function JSONObjectPropCount(P: PUTF8Char): integer;
+
+/// go to a named property of a JSON object
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - returns nil if the supplied property name does not exist
+// - returns a pointer to the matching item in the JSON object
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8): PUTF8Char;
+
+/// go to a property of a JSON object, by its full path, e.g. 'parent.child'
+// - implemented via a fast SAX-like approach: the input buffer is not changed,
+// nor no memory buffer allocated neither content copied
+// - returns nil if the supplied property path does not exist
+// - returns a pointer to the matching item in the JSON object
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
+
+/// return all mathinc properties of a JSON object as a JSON array
+// - here the PropPath could be a comma-separated list of full paths,
+// e.g. 'Prop1,Prop2' or 'Obj1.Obj2.Prop1,Obj1.Prop2'
+// - returns '' if no property did match
+// - returns a JSON array of all matching properties
+// - this will handle any kind of objects, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first initial '{' char
+function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
 
 /// remove comments from a text buffer before passing it to JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -10986,11 +11043,11 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 // - will unreference any varByRef content
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 
-/// same as FillChar(Value,sizeof(TVarData),0)
+/// same as FillChar(Value^,sizeof(TVarData),0)
 // - so can be used for TVarData or Variant
 // - it will set V.VType := varEmpty, so Value will be Unassigned
 // - it won't call VarClear(variant(Value)): it should have been cleaned before
-procedure ZeroFill(var Value: TVarData);
+procedure ZeroFill(Value: PVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve a variant value from variable-length buffer
@@ -11160,6 +11217,12 @@ function VarRecToVariant(const V: TVarRec): variant; overload;
 // - will always map to a vtVariant kind of argument
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
   {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any Variant into a database value
+// - ftBlob kind won't be handled by this function
+// - complex variant types would be converted into ftUTF8 JSON object/array
+procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
+  var Output: TSQLVar);
 
 /// convert a dynamic array of variants into its JSON serialization
 // - will use a TDocVariantData temporary storage
@@ -16021,6 +16084,53 @@ begin
   VariantToUTF8(V,result,wasString);
 end;
 
+procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
+  var Output: TSQLVar);
+var wasString: boolean;
+begin
+  with TVarData(Input) do
+  if VType=varVariant or varByRef then
+    VariantToSQLVar(PVariant(VPointer)^,temp,Output) else
+  case VType of
+  varEmpty, varNull:
+    Output.VType := ftNull;
+  varCurrency: begin
+    Output.VType := ftCurrency;
+    Output.VInt64 := VInt64;
+  end;
+  varString: begin // assume RawUTF8
+    Output.VType := ftUTF8;
+    Output.VText := VPointer;
+  end;
+  varInteger: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VInteger;
+  end;
+  varInt64: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VInt64;
+  end;
+  varSingle: begin
+    Output.VType := ftDouble;
+    Output.VDouble := VSingle;
+  end;
+  varDouble: begin // varDate would be converted into ISO8601 by VariantToUTF8()
+    Output.VType := ftDouble;
+    Output.VDouble := VDouble;
+  end;
+  else // handle less current cases
+    if VariantToInt64(Input,Output.VInt64) then
+      Output.VType := ftInt64 else begin
+      VariantToUTF8(Input,RawUTF8(temp),wasString);
+      if wasString then begin
+        Output.VType := ftUTF8;
+        Output.VText := pointer(temp);
+      end else
+        Output.VType := ftNull;
+    end;
+  end;
+end;
+
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 var p: PDynArrayRec;
     V: PVarData;
@@ -19952,6 +20062,7 @@ begin
       exit;
   result := true;
 end;
+
 
 { TPropNameList }
 
@@ -30397,7 +30508,7 @@ begin
     inc(P);
   end else
   for i := 0 to High(NestedProperty) do begin
-    PropName := GetJSONPropName(P);
+    PropName := RawUTF8(GetJSONPropName(P));
     if PropName='' then
       exit;  // invalid JSON content
     if IdemPropNameU(NestedProperty[i].PropertyName,PropName) then begin
@@ -30423,7 +30534,7 @@ begin
         P := GotoNextJSONItem(P,1,@EndOfObject);
         if EndOfObject='}' then
           break;
-        PropName := GetJSONPropName(P); // next name
+        PropName := RawUTF8(GetJSONPropName(P)); // next name
         if PropName='' then
           exit;  // invalid JSON content
       until false;
@@ -30984,13 +31095,13 @@ begin
       Dest := Source;
 end;
 
-procedure ZeroFill(var Value: TVarData);
+procedure ZeroFill(Value: PVarData);
 begin // slightly faster than FillChar(Value,sizeof(Value),0);
-  PInt64Array(@Value)^[0] := 0;
-  PInt64Array(@Value)^[1] := 0;
+  PInt64Array(Value)^[0] := 0;
+  PInt64Array(Value)^[1] := 0;
   {$ifdef CPU64}
-  assert(SizeOf(TVarData)=24);
-  PInt64Array(@Value)^[2] := 0;
+  //assert(SizeOf(TVarData)=24);
+  PInt64Array(Value)^[2] := 0;
   {$endif}
 end;
 
@@ -31519,7 +31630,7 @@ end;
 
 procedure TSynInvokeableVariantType.Clear(var V: TVarData);
 begin
-  ZeroFill(V); // will set V.VType := varEmpty
+  ZeroFill(@V); // will set V.VType := varEmpty
 end;
 
 procedure TSynInvokeableVariantType.Copy(var Dest: TVarData;
@@ -31803,7 +31914,7 @@ var Size: Cardinal;
 const TYPE_BYREF = 128;
       TYPE_BYREF_MASK = TYPE_BYREF-1;
 begin // this code should copy parameters without any reference count handling
-  ZeroFill(Value); // TVarData is expected to be bulk stack: no VarClear needed
+  ZeroFill(@Value); // TVarData is expected to be bulk stack: no VarClear needed
   ByRef := (aType and TYPE_BYREF)<>0;
   Size := sizeof(pointer);
   case aType and TYPE_BYREF_MASK of
@@ -32038,7 +32149,7 @@ procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantK
 begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
-  ZeroFill(TVarData(self));
+  ZeroFill(@self);
   VType := DocVariantType.VarType;
   VOptions := aOptions;
   VKind := aKind;
@@ -32048,7 +32159,7 @@ procedure TDocVariantData.InitFast;
 begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
-  ZeroFill(TVarData(self));
+  ZeroFill(@self);
   VType := DocVariantType.VarType;
   VOptions := JSON_OPTIONS[true];
 end;
@@ -32142,7 +32253,7 @@ begin
   case JSON^ of
   '[': begin
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    n := JSONArrayCount(JSON);
+    n := JSONArrayCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
     VKind := dvArray;
@@ -32163,7 +32274,7 @@ begin
   end;
   '{': begin
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
-    n := JSONObjectPropCount(JSON);
+    n := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
     VKind := dvObject;
@@ -33134,7 +33245,7 @@ begin
   //Assert(V.VType=DocVariantType.VarType);
   VariantDynArrayClear(TDocVariantData(V).VValue);
   Finalize(TDocVariantData(V).VName,1);
-  ZeroFill(V); // will set V.VType := varEmpty and VCount=0
+  ZeroFill(@V); // will set V.VType := varEmpty and VCount=0
 end;
 
 procedure TDocVariant.Copy(var Dest: TVarData; const Source: TVarData;
@@ -34101,6 +34212,40 @@ begin
     result := n;
 end;
 
+function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
+begin
+  if P<>nil then begin
+    P := GotoNextNotSpace(P);
+    if P^='[' then begin
+      P := GotoNextNotSpace(P+1);
+      while P^<>']' do begin
+        if Index<=0 then begin
+          result := P;
+          exit;
+        end;
+        case P^ of
+        '"': begin
+          P := GotoEndOfJSONString(P);
+          if P^<>'"' then
+            break; // invalid content
+          inc(P);
+        end;
+        '{','[': begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P=nil then
+            break; // invalid content
+        end;
+        end;
+        while not (P^ in [#0,',',']']) do inc(P);
+        if P^<>',' then break;
+        repeat inc(P) until not(P^ in [#1..' ']);
+        dec(Index);
+      end;
+    end;
+  end;
+  result := nil;
+end;
+
 function JSONArrayCount(P,PMax: PUTF8Char): integer;
 var n: integer;
 begin
@@ -34162,6 +34307,100 @@ begin
   until false;
   if P^='}' then
     result := n;
+end;
+
+function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8): PUTF8Char;
+var name: shortstring; // no memory allocation nor P^ modification
+begin
+  if P<>nil then begin
+    P := GotoNextNotSpace(P);
+    if (PropName<>'') and (P^='{') then begin
+      P := GotoNextNotSpace(P+1);
+      while P^<>'}' do begin
+        GetJSONPropName(P,name);
+        if name='' then
+          break;
+        if IdemPropName(name,pointer(PropName),length(PropName)) then begin
+          result := P;
+          exit;
+        end;
+        case P^ of
+        '"': begin
+          P := GotoEndOfJSONString(P);
+          if P^<>'"' then
+            break; // invalid content
+          inc(P);
+        end;
+        '{','[': begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P=nil then
+            break; // invalid content
+        end;
+        end;
+        while not (P^ in [#0,',',']']) do inc(P);
+        if P^<>',' then break;
+        repeat inc(P) until not(P^ in [#1..' ']);
+      end;
+    end;
+  end;
+  result := nil;
+end;
+
+function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
+var itemName: RawUTF8;
+begin
+  result := nil;
+  if (JsonObject=nil) or (PropPath=nil) then
+    exit;
+  repeat
+    itemName := GetNextItem(PropPath,'.');
+    if itemName='' then
+      exit;
+    JsonObject := JsonObjectItem(JsonObject,itemName);
+    if JsonObject=nil then
+      exit;
+    if PropPath=nil then
+      break; // found full name scope
+  until false;
+  result := JsonObject;
+end;
+
+function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
+var itemName: RawUTF8;
+    start,ending: PUTF8Char;
+    WR: TTextWriter;
+begin
+  result := '';
+  if (JsonObject=nil) or (PropPath=nil) then
+    exit;
+  WR := nil;
+  try
+    repeat
+      itemName := GetNextItem(PropPath,',');
+      if itemName='' then
+        break;
+      start := JsonObjectByPath(JsonObject,pointer(itemName));
+      if start<>nil then begin
+        start := GotoNextNotSpace(start);
+        ending := GotoEndJSONItem(start);
+        if ending=nil then
+          exit;
+        if WR=nil then begin
+          WR := TTextWriter.CreateOwnedStream;
+          WR.Add('[');
+        end else
+          WR.Add(',');
+        while (ending>start) and (ending[-1]<=' ') do dec(ending); // trim right
+        WR.AddNoJSONEscape(start,ending-start);
+      end;
+    until PropPath=nil;
+    if WR<>nil then begin
+      WR.Add(']');
+      WR.SetText(result);
+    end;
+  finally
+    WR.Free;
+  end;
 end;
 
 const
@@ -39265,6 +39504,56 @@ begin  // should match GotoNextJSONObjectOrArray()
   result := Name;
 end;
 
+procedure GetJSONPropName(var P: PUTF8Char; out PropName: shortstring);
+var Name: PAnsiChar;
+begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
+  PropName[0] := #0;
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  Name := pointer(P);
+  case P^ of
+  '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
+    repeat
+      inc(P);
+    until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
+    if P^ in [#1..' '] then begin
+      SetString(PropName,Name,P-Name);
+      inc(P);
+    end;
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+      exit;
+    inc(P);
+  end;
+  '''': begin // single quotes won't handle nested quote character
+    inc(P);
+    inc(Name);
+    while P^<>'''' do
+      if P^<' ' then
+        exit else
+        inc(P);
+    SetString(PropName,Name,P-Name);
+    repeat inc(P) until not(P^ in [#1..' ']);
+    if P^<>':' then
+      exit;
+    inc(P);
+  end;
+  '"': begin
+    inc(Name);
+    P := GotoEndOfJSONString(P); // won't unescape JSON strings
+    if P^<>'"' then
+      exit;
+    SetString(PropName,Name,P-Name);
+    repeat inc(P) until not(P^ in [#1..' ']);
+    if P^<>':' then
+      exit;
+    inc(P);
+  end else
+    exit;
+  end;
+end;
+
 function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
 label s;
 begin  // should match GotoNextJSONObjectOrArray()
@@ -39311,6 +39600,8 @@ var Value: PUTF8Char;
     wStr: boolean;
 begin
   result := nil;
+  if P=nil then
+    exit;
   while ord(P^) in [1..32] do inc(P);
   if HandleValuesAsObjectOrArray and (P^ in ['{','[']) then begin
     Value := P;
@@ -39402,32 +39693,32 @@ end;
 function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
 label next;
 begin
- result := nil; // to notify unexpected end
- if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
- // get a field
- case P^ of
- #0: exit;
- '"': begin
-   P := GotoEndOfJSONString(P);
-   if P^<>'"' then
-     exit; // P^ should be '"' here -> execute repeat.. below
- end;
- '[','{': begin
-   P := GotoNextJSONObjectOrArray(P);
-   if P=nil then
-     exit;
-   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-   goto next;
- end;
- end;
- repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-   inc(P);
-   if P^=#0 then exit; // unexpected end
- until P^ in [':',',',']','}'];
+  result := nil; // to notify unexpected end
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  // get a field
+  case P^ of
+  #0: exit;
+  '"': begin
+    P := GotoEndOfJSONString(P);
+    if P^<>'"' then
+      exit; // P^ should be '"' here -> execute repeat.. below
+  end;
+  '[','{': begin
+    P := GotoNextJSONObjectOrArray(P);
+    if P=nil then
+      exit;
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    goto next;
+  end;
+  end;
+  repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+    inc(P);
+    if P^=#0 then exit; // unexpected end
+  until P^ in [':',',',']','}'];
 next:
- if P^=#0 then
-   exit;
- result := P;
+  if P^=#0 then
+    exit;
+  result := P;
 end;
 
 function GetJSONItemAsRawJSON(var P: PUTF8Char; EndOfObject: PAnsiChar=nil): RawJSON;
@@ -39486,7 +39777,7 @@ end;
 
 function GotoNextJSONObjectOrArrayInternal(P,PMax: PUTF8Char; EndChar: AnsiChar): PUTF8Char;
 label Prop;
-begin
+begin // should match GetJSONPropName()
   result := nil;
   repeat
     case P^ of

@@ -4787,6 +4787,7 @@ procedure TestGit(Options: TJSONCustomParserSerializationOptions);
 var i: Integer;
     U: RawUTF8;
     git,git2: TTestCustomJSONGitHubs;
+    item,value: PUTF8Char;
 begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
     __TTestCustomJSONGitHub).Options := Options;
@@ -4804,6 +4805,19 @@ begin
     Check(git[0].description='Authentication component from Zend Framework 2');
     Check(git[0].owner.login='zendframework');
     Check(git[0].owner.id=296074);
+  end;
+  for i := 0 to high(git) do begin
+    item := JSONArrayItem(Pointer(U),i);
+    Check(item<>nil);
+    value := JsonObjectItem(item,'name');
+    check(value<>nil);
+    check(trim(GetJSONItemAsRawJSON(value))='"'+git[i].name+'"');
+    check(GetInteger(JsonObjectByPath(item,'owner.id'))=git[i].owner.id);
+    check(JsonObjectsByPath(item,'toto')='');
+    check(JsonObjectsByPath(item,'toto,titi')='');
+    check(JsonObjectsByPath(item,'toto,name')='["'+git[i].name+'"]');
+    check(JsonObjectsByPath(item,'fork,toto,owner.id,name')=
+      FormatUTF8('[%,%,"%"]',[JSON_BOOLEAN[git[i].fork],git[i].owner.id,git[i].name]));
   end;
   Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
   if not CheckFailed(length(git)=Length(git2)) then
