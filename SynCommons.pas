@@ -3884,7 +3884,8 @@ type
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): integer;
     function GetArrayTypeName: RawUTF8;
-    function IsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
+    procedure SetIsObjArray(aValue: boolean);
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
     /// faster than System.DynArraySetLength() function + handle T*ObjArray
@@ -4239,6 +4240,8 @@ type
     property ElemSize: PtrUInt read fElemSize;
     /// the internal type information of one element, as retrieved from RTTI
     property ElemType: pointer read fElemType;
+    /// if this dynamic aray is a T*ObjArray
+    property IsObjArray: boolean read GetIsObjArray write SetIsObjArray;
   end;
 
   /// function prototype to be used for hashing of an element
@@ -11677,13 +11680,13 @@ type
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
-    procedure ToTextPairs(out result: RawUTF8; const NameValueSep: RawUTF8='=';
-      const ItemSep: RawUTF8=#13#10; Escape: TTextWriterKind=twJSONEscape); overload;
+    procedure ToTextPairsVar(out result: RawUTF8; const NameValueSep: RawUTF8='=';
+      const ItemSep: RawUTF8=#13#10; Escape: TTextWriterKind=twJSONEscape);
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
     function ToTextPairs(const NameValueSep: RawUTF8='=';
-      const ItemSep: RawUTF8=#13#10): RawUTF8; overload;
+      const ItemSep: RawUTF8=#13#10): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
@@ -26473,32 +26476,33 @@ begin // "out result" parameter definition already made result := ''
 end;
 
 function GetDisplayNameFromClass(C: TClass): RawUTF8;
-var DelphiName: ShortString;
+var DelphiName: PShortString;
     TrimLeft: integer;
 begin
-  result := '';
-  if C=nil then
+  if C=nil then begin
+    result := '';
     exit;
-  // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
+  end;
+  // new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
   // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-  DelphiName := PShortString(PPointer(PtrInt(C)+vmtClassName)^)^;
+  DelphiName := PPointer(PtrInt(C)+vmtClassName)^;
   TrimLeft := 0;
-  if DelphiName[0]>#4 then
-    case pInteger(@DelphiName[1])^ and $DFDFDFDF of
+  if DelphiName^[0]>#4 then
+    case pInteger(@DelphiName^[1])^ and $DFDFDFDF of
       // fast case-insensitive compare
       ord('T')+ord('S')shl 8+ord('Q')shl 16+ord('L')shl 24:
-        if (DelphiName[0]<=#10) or
-         (pInteger(@DelphiName[5])^ and $DFDFDFDF<> // fast case-insensitive compare
+        if (DelphiName^[0]<=#10) or
+         (pInteger(@DelphiName^[5])^ and $DFDFDFDF<> // fast case-insensitive compare
            ord('R')+ord('E')shl 8+ord('C')shl 16+ord('O')shl 24) or
-         (pWord(@DelphiName[9])^ and $DFDF<>ord('R')+ord('D')shl 8) then
+         (pWord(@DelphiName^[9])^ and $DFDF<>ord('R')+ord('D')shl 8) then
         TrimLeft := 4 else
         TrimLeft := 10;
       ord('T')+ord('S')shl 8+ord('Y')shl 16+ord('N')shl 24:
         TrimLeft := 4;
     end;
-  if (Trimleft=0) and (DelphiName[1]='T') then
+  if (Trimleft=0) and (DelphiName^[1]='T') then
     Trimleft := 1;
-  SetString(result,PAnsiChar(@DelphiName[TrimLeft+1]),ord(DelphiName[0])-TrimLeft);
+  SetString(result,PAnsiChar(@DelphiName^[TrimLeft+1]),ord(DelphiName^[0])-TrimLeft);
 end;
 
 function GetCaptionFromClass(C: TClass): string;
@@ -31707,12 +31711,12 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
 var wasString: boolean;
-procedure ProcessSimple(Val: PUTF8Char);
-begin
-  GetVariantFromJSON(Val,wasString,Value);
-  if JSON=nil then
-    JSON := @NULCHAR;
-end;
+  procedure ProcessSimple(Val: PUTF8Char);
+  begin
+    GetVariantFromJSON(Val,wasString,Value);
+    if JSON=nil then
+      JSON := @NULCHAR;
+  end;
 var i: integer;
     VariantType: ^TSynInvokeableVariantType;
     ToBeParsed: PUTF8Char;
@@ -32330,7 +32334,7 @@ end;
 function TDocVariantData.InitJSON(const JSON: RawUTF8;
   aOptions: TDocVariantOptions): boolean;
 var tmp: pointer;
-    buf: array[0..511] of AnsiChar; // avoid memory allocation in most cases
+    buf: array[0..4095] of AnsiChar; // avoid memory allocation in most cases
     L: integer;
 begin
   L := length(JSON);
@@ -32338,10 +32342,11 @@ begin
     result := false;
     exit;
   end;
-  if L<sizeof(buf) then
+  inc(L); // include ending #0
+  if L<=sizeof(buf) then
     tmp := @buf else
-    GetMem(tmp,L+1); // +1 to include ending #0
-  MoveFast(Pointer(JSON)^,tmp^,L+1); // make private copy
+    GetMem(tmp,L);
+  MoveFast(Pointer(JSON)^,tmp^,L); // make private copy
   try
     result := InitJSONInPlace(tmp,aOptions)<>nil;
   finally
@@ -32353,6 +32358,7 @@ end;
 procedure TDocVariantData.InitCSV(CSV: PUTF8Char; aOptions: TDocVariantOptions;
   const NameValueSep, ItemSep: AnsiChar; DoTrim: boolean);
 var n,v: RawUTF8;
+    val: variant;
 begin
   Init(aOptions,dvObject);
   while CSV<>nil do begin
@@ -32362,7 +32368,8 @@ begin
       v := trim(v);
     if n='' then
       break;
-    AddValue(n,RawUTF8ToVariant(v));
+    RawUTF8ToVariant(v,val);
+    AddValue(n,val);
   end;
 end;
 
@@ -33037,7 +33044,7 @@ begin
   ToRawUTF8DynArray(result);
 end;
 
-procedure TDocVariantData.ToTextPairs(out result: RawUTF8;
+procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
   const NameValueSep, ItemSep: RawUTF8; Escape: TTextWriterKind);
 var i: integer;
 begin
@@ -33069,7 +33076,7 @@ end;
 function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
   const ItemSep: RawUTF8=#13#10): RawUTF8;
 begin
-  ToTextPairs(result,NameValueSep,ItemSep);
+  ToTextPairsVar(result,NameValueSep,ItemSep);
 end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
@@ -33862,7 +33869,7 @@ begin
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
   if ElemType<>nil then
     _Finalize(P,ElemType) else
-    if IsObjArray then
+    if GetIsObjArray then
       FreeAndNil(PObject(P)^);
   if n>aIndex then begin
     len := cardinal(n-aIndex)*ElemSize;
@@ -34036,7 +34043,7 @@ begin
   // store dynamic array elements content
   P := fValue^;
   if ElemType=nil then
-    if IsObjArray then
+    if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
         [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
       // binary types: store as once
@@ -34122,7 +34129,7 @@ begin
   if n=0 then
     exit;
   if ElemType=nil then
-    if IsObjArray then
+    if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
         [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else
       inc(result,integer(ElemSize)*n) else begin
@@ -34628,9 +34635,9 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
        (LoadFrom(pointer(Base64ToBin(Val+3)))=nil) then
       exit; // invalid content
   end else begin
-    if IsObjArray then
+    if GetIsObjArray then
       for i := 0 to Count-1 do // force release any previous instance
-        FreeAndNil(PObjectArray(fValue^)[i]);
+        FreeAndNil(PObjectArray(fValue^)^[i]);
     SetCount(n); // fast allocation of the whole dynamic array memory at once
     case T of
     {$ifndef NOVARIANTS}
@@ -34784,7 +34791,7 @@ begin
   // retrieve dynamic array elements content
   P := fValue^;
   if ElemType=nil then
-  if IsObjArray then
+  if GetIsObjArray then
     raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
       [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
     // binary type was stored as once
@@ -35361,14 +35368,19 @@ asm
 end;
 {$endif}
 
-function TDynArray.IsObjArray: boolean;
+function TDynArray.GetIsObjArray: boolean;
 begin
   if fIsObjArray=oaUnknown then
-    if (fElemSize=sizeof(pointer)) and (fElemType=nil) and
-       Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo) then
-      fIsObjArray := oaTrue else
-      fIsObjArray := oaFalse;
+    SetIsObjArray((fElemSize=sizeof(pointer)) and (fElemType=nil) and
+          Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo));
   result := fIsObjArray=oaTrue;
+end;
+
+procedure TDynArray.SetIsObjArray(aValue: boolean);
+begin
+  if aValue then
+    fIsObjArray := oaTrue else
+    fIsObjArray := oaFalse; 
 end;
 
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
@@ -35386,7 +35398,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       exit;
     end;
     {$endif}
-    if IsObjArray then
+    if GetIsObjArray then
       for i := 0 to Count-1 do
         PObjectArray(fValue^)[i].Free;
     _DynArrayClear(fValue^,ArrayType);
@@ -35409,7 +35421,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     if NewLength<OldLength then
       if ElemType<>nil then
         _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength) else
-        if IsObjArray then
+        if GetIsObjArray then
           for i := NewLength to OldLength-1 do
             PObjectArray(fValue^)[i].Free;
     ReallocMem(p,neededSize);
