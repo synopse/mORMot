@@ -2021,6 +2021,35 @@ procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 // Delphi exception
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
 
+/// set a TSQLVar into a SQlite3 result context
+// - will call the corresponding sqlite3.result_*() function and return true,
+// or will return false if the TSQLVar type is not handled
+function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
+
+/// set a UTF-8 string into a SQlite3 result context
+procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context: TSQLite3FunctionContext;
+  VoidTextAsNull: boolean);
+
+{$ifndef NOVARIANTS}
+
+/// set a variant value into a SQlite3 result context
+// - will call the corresponding sqlite3.result_*() function, using
+// SQLVarToSQlite3Context() after a call to VariantToSQLVar()
+procedure VariantToSQlite3Context(const Value: Variant; Context: TSQLite3FunctionContext);
+
+/// set a JSON value into a SQlite3 result context
+// - a JSON object or array would be returned at plain TEXT, or other simple
+// JSON text or number would be returned as the corresponding SQLite3 value
+procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+
+{$endif}
+
+/// set a SQLite3 value into a TSQLVar
+// - will call the corresponding sqlite3.value_*() function to retrieve the
+// data with the less overhead (e.g. memory allocation or copy) as possible
+procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
+
+
 
 const
   SQLITE_INDEX_CONSTRAINT_EQ    = 2;
@@ -3250,9 +3279,91 @@ begin
         result := +1;
 end;
 
+const
+  NULCHAR: AnsiChar = #0;
+
+function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
+var tmp: array[0..31] of AnsiChar;
+begin
+  case Res.VType of
+    ftNull:
+      sqlite3.result_null(Context);
+    ftInt64:
+      sqlite3.result_int64(Context,Res.VInt64);
+    ftDouble:
+      sqlite3.result_double(Context,Res.VDouble);
+    ftCurrency:
+      sqlite3.result_double(Context,Res.VCurrency);
+    ftDate: begin
+      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp);
+      sqlite3.result_text(Context,tmp,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
+    end;
+    // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
+    // due to a bug in Sqlite3 current implementation of virtual tables in Win64
+    ftUTF8:
+      if Res.VText=nil then
+       sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else
+       sqlite3.result_text(Context,Res.VText,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
+    ftBlob:
+      sqlite3.result_blob(Context,Res.VBlob,Res.VBlobLen,SQLITE_TRANSIENT_VIRTUALTABLE);
+    else begin
+      sqlite3.result_null(Context);
+      {$ifdef WITHLOG}
+      SynSQLite3Log.DebuggerNotify(sllWarning,'SQLVarToSQlite3Context(%)',[ord(Res.VType)]);
+      {$endif}
+      result := false; // not handled type (will set null value)
+      exit;
+    end;
+  end;
+  result := true;
+end;
+
+procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
+var ValueType: Integer;
+begin
+  ValueType := sqlite3.value_type(Value);
+  case ValueType of
+  SQLITE_NULL:
+    Res.VType := ftNull;
+  SQLITE_INTEGER: begin
+    Res.VType := ftInt64;
+    Res.VInt64 := sqlite3.value_int64(Value);
+  end;
+  SQLITE_FLOAT: begin
+    Res.VType := ftDouble;
+    Res.VDouble := sqlite3.value_double(Value);
+  end;
+  SQLITE_TEXT:  begin
+    Res.VType := ftUTF8;
+    Res.VText := sqlite3.value_text(Value);
+  end;
+  SQLITE_BLOB: begin
+    Res.VType := ftBlob;
+    Res.VBlobLen := sqlite3.value_bytes(Value);
+    Res.VBlob := sqlite3.value_blob(Value);
+  end;
+  else begin
+    {$ifdef WITHLOG}
+    SynSQLite3Log.DebuggerNotify(sllWarning,'SQlite3ValueToSQLVar(%)',[ValueType]);
+    {$endif}
+    Res.VType := ftUnknown;
+  end;
+  end;
+end;
+
 procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 begin
   sqlite3.result_error(Context, 'wrong number of arguments');
+end;
+
+function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
+begin
+  if sent<>expected then begin
+    sqlite3.result_error(Context,
+      pointer(FormatUTF8('wrong number of arguments: expected %, got %',[expected,sent])));
+    result := false;
+  end else
+    result := true;
 end;
 
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
@@ -3266,25 +3377,22 @@ end;
 procedure InternalSoundex(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if argc=1 then
+  if CheckNumberOfArgs(Context,1,argc) then
     sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]))) else
-    ErrorWrongNumberOfArgs(Context);
 end;
 
 procedure InternalSoundexFr(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if argc=1 then
-    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxFrench)) else
-    ErrorWrongNumberOfArgs(Context);
+  if CheckNumberOfArgs(Context,1,argc) then
+    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxFrench));
 end;
 
 procedure InternalSoundexEs(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if argc=1 then
-    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxSpanish)) else
-    ErrorWrongNumberOfArgs(Context);
+  if CheckNumberOfArgs(Context,1,argc) then
+    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxSpanish));
 end;
 
 procedure InternalMod(Context: TSQLite3FunctionContext;
@@ -3382,10 +3490,8 @@ var Blob: pointer;
     PI: PIntegerArray;
     Count: integer;
 begin // SQL function: IntegerDynArrayContains(BlobField,10) returning a boolean
-  if argc<>2 then begin
-    ErrorWrongNumberOfArgs(Context);
-    exit; // two parameters expected
-  end;
+  if not CheckNumberOfArgs(Context,2,argc) then
+    exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob<>nil then begin
     PI := IntegerDynArrayLoadFrom(Blob,Count); // fast map into in-memory array
@@ -3402,16 +3508,14 @@ var Blob: pointer;
     V: Int64;
 begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   // for currency, expect I64 value = aCurrency*10000 = PInt64(@aCurrency)^
-  if argc<>2 then begin
-    ErrorWrongNumberOfArgs(Context);
-    exit; // two parameters expected
-  end;
+  if not CheckNumberOfArgs(Context,2,argc) then
+    exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob<>nil then begin // search into direct in-memory mapping (no allocation)
     Blob := SimpleDynArrayLoadFrom(Blob,sqlite3.user_data(Context),Count,ElemSize);
     if Blob<>nil then begin
       V := sqlite3.value_int64(argv[1]);
-      sqlite3.result_int64(Context,Int64(true));
+      sqlite3.result_int64(Context,Int64(true)); // exit will report value found
       case ElemSize of
         1: for i := 0 to Count-1 do if PByteArray(Blob)^[i]=byte(V) then exit;
         2: for i := 0 to Count-1 do if PWordArray(Blob)^[i]=word(V) then exit;
@@ -3420,7 +3524,7 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
       end;
     end;
   end;
-  sqlite3.result_int64(Context,Int64(false));
+  sqlite3.result_int64(Context,Int64(false)); // not found
 end;
 
 procedure InternalRawUTF8DynArray(Context: TSQLite3FunctionContext;
@@ -3428,10 +3532,8 @@ procedure InternalRawUTF8DynArray(Context: TSQLite3FunctionContext;
 var Blob: pointer;
     Value: PUTF8Char;
 begin // SQL function: RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
-  if argc<>2 then begin
-    ErrorWrongNumberOfArgs(Context);
-    exit; // two parameters expected
-  end;
+  if not CheckNumberOfArgs(Context,2,argc) then
+    exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob<>nil then begin
     Value := sqlite3.value_text(argv[1]);
@@ -3440,6 +3542,110 @@ begin // SQL function: RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') retu
       Blob := nil;
   end;
   sqlite3.result_int64(Context,Int64(Blob<>nil));
+end;
+
+procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context: TSQLite3FunctionContext;
+  VoidTextAsNull: boolean);
+begin
+  if Text='' then
+    if VoidTextAsNull then
+      sqlite3.result_null(Context) else
+      sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else
+   sqlite3.result_text(Context,Pointer(Text),length(Text)+1,SQLITE_TRANSIENT);
+end;
+
+{$ifndef NOVARIANTS}
+
+procedure VariantToSQlite3Context(const Value: Variant; Context: TSQLite3FunctionContext);
+var res: TSQLVar;
+    tmp: RawByteString;
+begin
+  VariantToSQLVar(Value,tmp,res);
+  SQLVarToSQlite3Context(res,Context);
+end;
+
+procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+var tmp: Variant;
+    start: PUTF8Char;
+begin
+  if json=nil then
+    sqlite3.result_null(Context) else begin
+    start := GotoNextNotSpace(json);
+    if start^ in ['[','{'] then begin
+      // JSON object or array is returned as plain TEXT
+      json := GotoNextJSONObjectOrArray(start);
+      if json=nil then
+        sqlite3.result_null(Context) else begin
+        json^ := #0; // truncate to the matching object or array
+        sqlite3.result_text(Context,start,json-start+1,SQLITE_TRANSIENT);
+      end;
+    end else
+      // JSON simple types (text, numbers) would be converted via a variant
+      if VariantLoadJSON(tmp,start,nil,nil)=nil then
+        sqlite3.result_null(Context) else
+        VariantToSQlite3Context(tmp,Context);
+  end;
+end;
+
+{$else}
+
+procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+begin // JsonGet() would return the raw JSON for Delphi 5
+  RawUTF8ToSQlite3Context(GetJSONItemAsRawJSON(json),Context,true);
+end;
+
+{$endif}
+
+procedure InternalJsonGet(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+var where,json: PUTF8Char;
+begin // JsonGet(VariantField,'PropName') returns the value of a JSON object
+      // JsonGet(VariantField,'Obj1.Obj2.PropName') to search by path
+      // JsonGet(VariantField,0) returns the 1st item in the JSON array
+      // JsonGet(VariantField,'Prop1,Prop2') returns the values as a JSON object
+      // JsonGet(VariantField,'Prop*') returns the values as a JSON object
+      // JsonGet(VariantField,'Obj1.Obj2.Prop1,Obj1.Prop2') to search by path
+      // JsonGet(VariantField,'Obj1.Obj2.Prop*,Obj1.Prop2') to search by path
+  if not CheckNumberOfArgs(Context,2,argc) then
+    exit;
+  if sqlite3.value_type(argv[0])<>SQLITE_TEXT then
+    sqlite3.result_null(Context) else
+  case sqlite3.value_type(argv[1]) of // fast SAX search (no memory allocation)
+  SQLITE_TEXT: begin
+    json := sqlite3.value_text(argv[0]);
+    where := sqlite3.value_text(argv[1]);
+    if (PosChar(where,',')=nil) and (PosChar(where,'*')=nil)  then
+      JsonToSQlite3Context(JsonObjectByPath(json,where),Context) else
+      RawUTF8ToSQlite3Context(JsonObjectsByPath(json,where),Context,true);
+  end;
+  SQLITE_INTEGER: begin
+    json := JSONArrayItem(sqlite3.value_text(argv[0]),sqlite3.value_int64(argv[1]));
+    JsonToSQlite3Context(json,Context);
+  end;
+  else
+    sqlite3.result_null(Context);
+  end;
+end;
+
+procedure InternalJsonHas(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin // JsonHas(VariantField,'PropName') returns TRUE if matches a JSON object property
+      // JsonHas(VariantField,'Obj1.Obj2.PropName') to search by path
+      // JsonHas(VariantField,0) returns TRUE if the JSON array has at least one item
+  if not CheckNumberOfArgs(Context,2,argc) then
+    exit;
+  if sqlite3.value_type(argv[0])<>SQLITE_TEXT then
+    sqlite3.result_int64(Context,Int64(false)) else
+  case sqlite3.value_type(argv[1]) of // fast SAX search (no memory allocation)
+  SQLITE_TEXT:
+    sqlite3.result_int64(Context,ord(JsonObjectByPath(
+      sqlite3.value_text(argv[0]),sqlite3.value_text(argv[1]))<>nil));
+  SQLITE_INTEGER:
+    sqlite3.result_int64(Context,ord(JSONArrayItem(
+      sqlite3.value_text(argv[0]),sqlite3.value_int64(argv[1]))<>nil));
+  else
+    sqlite3.result_int64(Context,Int64(false));
+  end;
 end;
 
 constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8='';
@@ -4066,6 +4272,9 @@ begin
     InternalRawUTF8DynArray,nil,nil);
   sqlite3.create_function(DB,'RAWUTF8DYNARRAYCONTAINSNOCASE',2,SQLITE_ANY,
     @UTF8ILComp,InternalRawUTF8DynArray,nil,nil);
+  // JSON related functions (ORM would store a variant as JSON UTF-8 text)
+  sqlite3.create_function(DB,'JSONGET',2,SQLITE_ANY,nil,InternalJsonGet,nil,nil);
+  sqlite3.create_function(DB,'JSONHAS',2,SQLITE_ANY,nil,InternalJsonHas,nil,nil);
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
@@ -4233,9 +4442,6 @@ procedure TSQLRequest.Bind(Param: Integer; Value: double);
 begin
   sqlite3_check(RequestDB,sqlite3.bind_double(Request,Param,Value));
 end;
-
-const
-  NULCHAR: AnsiChar = #0;
 
 procedure TSQLRequest.Bind(Param: Integer; const Value: RawUTF8);
 begin

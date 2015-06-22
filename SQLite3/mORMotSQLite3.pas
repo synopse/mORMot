@@ -659,17 +659,6 @@ type
 // - will raise an exception of failure
 function RegisterVirtualTableModule(aModule: TSQLVirtualTableClass; aDatabase: TSQLDataBase): TSQLVirtualTableModule;
 
-/// set a TSQLVar into a SQlite3 result context
-// - will call the corresponding sqlite3_result_*() function and return true,
-// or will return false if the TSQLVar type is not handled
-function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
-
-/// set a SQLite3 value into a TSQLVar
-// - will call the corresponding sqlite3_value_*() function to retrieve the
-// data with the less overhead (e.g. memory allocation or copy) as possible
-procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
-
-
 
 implementation
 
@@ -2027,78 +2016,11 @@ end;
 
 { TSQLVirtualTableModuleSQLite3 }
 
-const
-  NULCHAR: AnsiChar = #0;
-
-procedure Notify(Level: TSynLogInfo; const Format: RawUTF8; const Args: array of const);
+procedure Notify(const Format: RawUTF8; const Args: array of const);
 begin
   {$ifdef WITHLOG}
   SynSQLite3Log.DebuggerNotify(sllWarning,Format,Args);
   {$endif}
-end;
-
-function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
-var tmp: array[0..31] of AnsiChar;
-begin
-  case Res.VType of
-    ftNull:
-      sqlite3.result_null(Context);
-    ftInt64:
-      sqlite3.result_int64(Context,Res.VInt64);
-    ftDouble:
-      sqlite3.result_double(Context,Res.VDouble);
-    ftCurrency:
-      sqlite3.result_double(Context,Res.VCurrency);
-    ftDate: begin
-      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp);
-      sqlite3.result_text(Context,tmp,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
-    end;
-    // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
-    // due to a bug in Sqlite3 current implementation of virtual tables in Win64
-    ftUTF8:
-      if Res.VText=nil then
-       sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else
-       sqlite3.result_text(Context,Res.VText,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
-    ftBlob:
-      sqlite3.result_blob(Context,Res.VBlob,Res.VBlobLen,SQLITE_TRANSIENT_VIRTUALTABLE);
-    else begin
-      Notify(sllWarning,'SQLVarToSQlite3Context(%)',[ord(Res.VType)]);
-      result := false; // not handled type
-      exit;
-    end;
-  end;
-  result := true;
-end;
-
-procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
-var ValueType: Integer;
-begin
-  ValueType := sqlite3.value_type(Value);
-  case ValueType of
-  SQLITE_NULL:
-    Res.VType := ftNull;
-  SQLITE_INTEGER: begin
-    Res.VType := ftInt64;
-    Res.VInt64 := sqlite3.value_int64(Value);
-  end;
-  SQLITE_FLOAT: begin
-    Res.VType := ftDouble;
-    Res.VDouble := sqlite3.value_double(Value);
-  end;
-  SQLITE_TEXT:  begin
-    Res.VType := ftUTF8;
-    Res.VText := sqlite3.value_text(Value);
-  end;
-  SQLITE_BLOB: begin
-    Res.VType := ftBlob;
-    Res.VBlobLen := sqlite3.value_bytes(Value);
-    Res.VBlob := sqlite3.value_blob(Value);
-  end;
-  else begin
-    Notify(sllWarning,'SQlite3ValueToSQLVar(%)',[ValueType]);
-    Res.VType := ftUnknown;
-  end;
-  end;
 end;
 
 function TSQLVirtualTableModuleSQLite3.FileName(const aTableName: RawUTF8): TFileName;
@@ -2125,7 +2047,7 @@ begin
     ModuleName := Module.ModuleName;
   if (Module=nil) or (Module.DB.DB<>DB) or
      (StrIComp(pointer(ModuleName),argv[0])<>0) then begin
-    Notify(sllWarning,'vt_Create(%<>%)',[argv[0],ModuleName]);
+    Notify('vt_Create(%<>%)',[argv[0],ModuleName]);
     result := SQLITE_ERROR;
     exit;
   end;
@@ -2148,7 +2070,7 @@ begin
   Structure := Table.Structure;
   result := sqlite3.declare_vtab(DB,pointer(Structure));
   if result<>SQLITE_OK then begin
-    Notify(sllWarning,'vt_Create(%) declare_vtab(%)',[ModuleName,Structure]);
+    Notify('vt_Create(%) declare_vtab(%)',[ModuleName,Structure]);
     Table.Free;
     sqlite3.free_(ppVTab);
     result := SQLITE_ERROR;
@@ -2167,7 +2089,7 @@ function vt_Destroy(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cde
 begin
   if TSQLVirtualTable(pvTab^.pInstance).Drop then
     result := SQLITE_OK else begin
-    Notify(sllWarning,'vt_Destroy',[]);
+    Notify('vt_Destroy',[]);
     result := SQLITE_ERROR;
   end;
   vt_Disconnect(pVTab); // release memory
@@ -2183,7 +2105,7 @@ begin
   Table := TSQLVirtualTable(pvTab.pInstance);
   if (cardinal(pInfo.nOrderBy)>MAX_SQLFIELDS) or
      (cardinal(pInfo.nConstraint)>MAX_SQLFIELDS) then begin
-    Notify(sllWarning,'nOrderBy=% nConstraint=%',[pInfo.nOrderBy,pInfo.nConstraint]);
+    Notify('nOrderBy=% nConstraint=%',[pInfo.nOrderBy,pInfo.nConstraint]);
     exit; // avoid buffer overflow
   end;
   Prepared := sqlite3.malloc(sizeof(TSQLVirtualTablePrepared));
@@ -2249,7 +2171,7 @@ begin
     SQlite3ValueToSQLVar(argv[i],Prepared^.Where[i].Value);
   if TSQLVirtualTableCursor(pVtabCursor.pInstance).Search(Prepared^) then
     result := SQLITE_OK else
-    Notify(sllWarning,'vt_Filter',[]);
+    Notify('vt_Filter',[]);
 end;
 
 function vt_Open(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
@@ -2263,7 +2185,7 @@ begin
   end;
   Table := TSQLVirtualTable(pvTab.pInstance);
   if (Table=nil) or (Table.Module=nil) or (Table.Module.CursorClass=nil) then begin
-    Notify(sllWarning,'vt_Open',[]);
+    Notify('vt_Open',[]);
     sqlite3.free_(ppCursor);
     result := SQLITE_ERROR;
     exit;
@@ -2302,7 +2224,7 @@ begin
   if (N>=0) and TSQLVirtualTableCursor(pVtabCursor.pInstance).Column(N,Res) and
      SQLVarToSQlite3Context(Res,sContext) then
     result := SQLITE_OK else begin
-    Notify(sllWarning,'vt_Column(%) Res=%',[N,ord(Res.VType)]);
+    Notify('vt_Column(%) Res=%',[N,ord(Res.VType)]);
     result := SQLITE_ERROR;
   end;
 end;
@@ -2320,13 +2242,13 @@ begin
     ftCurrency: pRowID := trunc(Res.VCurrency);
     ftUTF8:     pRowID := GetInt64(Res.VText);
     else begin
-      Notify(sllWarning,'vt_Rowid Res=%',[ord(Res.VType)]);
+      Notify('vt_Rowid Res=%',[ord(Res.VType)]);
       exit;
     end;
     end;
     result := SQLITE_OK;
   end else
-    Notify(sllWarning,'vt_Rowid Column',[]);
+    Notify('vt_Rowid Column',[]);
 end;
 
 function vt_Update(var pVTab: TSQLite3VTab;
@@ -2363,7 +2285,7 @@ begin // call Delete/Insert/Update methods according to supplied parameters
   end;
   if OK then
     result := SQLITE_OK else
-    Notify(sllWarning,'vt_Update(%)',[pRowID]);
+    Notify('vt_Update(%)',[pRowID]);
 end;
 
 function InternalTrans(pVTab: TSQLite3VTab; aState: TSQLVirtualTableTransaction;
@@ -2371,7 +2293,7 @@ function InternalTrans(pVTab: TSQLite3VTab; aState: TSQLVirtualTableTransaction;
 begin
   if TSQLVirtualTable(pvTab.pInstance).Transaction(aState,aSavePoint) then
     result := SQLITE_OK else begin
-    Notify(sllWarning,'Transaction(%,%)',
+    Notify('Transaction(%,%)',
       [GetEnumName(TypeInfo(TSQLVirtualTableTransaction),ord(aState))^,aSavePoint]);
     result := SQLITE_ERROR;
   end;
@@ -2417,7 +2339,7 @@ function vt_Rename(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer;
 begin
   if TSQLVirtualTable(pvTab.pInstance).Rename(RawUTF8(zNew)) then
     result := SQLITE_OK else begin
-    Notify(sllWarning,'vt_Rename(%)',[zNew]);
+    Notify('vt_Rename(%)',[zNew]);
     result := SQLITE_ERROR;
   end;
 end;

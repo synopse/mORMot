@@ -1355,7 +1355,7 @@ In the following next paragraphs, we'll comment some main features of the lowest
 Other shared features available in {\f1\fs20 SynTests.pas} and {\f1\fs20 SynLog.pas} would be detailed later, i.e. @*Test@ing and @*Log@ging - see @12@.
 :32 Unicode and UTF-8
 Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest XE8 revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
-Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
+Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing in a @*SAX@-like mode, and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
 - {\f1\fs20 WinAnsiString} where {\i WinAnsi}-encoded {\f1\fs20 AnsiString} (code page 1252) are needed;
@@ -2507,7 +2507,8 @@ Starting with the revision 1.13 of the framework, {\i @*dynamic array@s}, {\f1\f
 {\f1\fs20 @*TPersistent@ / @*TStrings@} and {\f1\fs20 @*TCollection@ / @*TObjectList@} will be stored as TEXT fields in the database, following the {\f1\fs20 ObjectToJSON} function format: you can even serialize any {\f1\fs20 @*TObject@} class, via a previous call to the {\f1\fs20 TJSONSerializer. @*RegisterCustomSerializer@} class method - see @52@ - or {\f1\fs20 @*TObjectList@} list of instances, if they are previously registered by {\f1\fs20 TJSONSerializer. @*RegisterClassForJSON@} - see @71@. This format contains only valid JSON arrays or objects: so it could be un-serialized via an AJAX application, for instance.
 About this (trolling?) subject, and why/when you should use plain {\i Delphi} objects or arrays instead of classic @*Master/Detail@ DB relationship, please read "{\i Objects, not tables}" and "{\i ORM is not DB}" paragraphs below.
 :     TDocVariant and variant fields
-As we just wrote, first perfect candidate for {\i data sharding} in a {\f1\fs20 TSQLRecord} is our @80@.
+:      Schemaless storage via a variant
+As we just wrote, a first-class candidate for {\i data sharding} in a {\f1\fs20 TSQLRecord} is our @80@.
 You may define:
 ! TSQLRecordData = class(TSQLRecord)
 ! private
@@ -2552,6 +2553,37 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
 In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
+:      JSON operations from SQL code
+As we stated, any {\f1\fs20 variant} field would be serialized as @*JSON@, then stored as plain TEXT in the database. In order to make a complex query on the stored JSON, you could retrieve it in your end-user code, then use the corresponding {\f1\fs20 @*TDocVariant@} instance to perform the search on its content. Of course, all this has a noticeable performance cost, especially when the data tend to grow.
+The natural way of solving those performance issue is to add some "regular" RDBMS fields, with a proper index, then perform the requests on those fields. But sometimes, you may need to do some addition query, perhaps in conjunction with "regular" field lookup, on the JSON data stored itself.\line In order to avoid the slowest conversion to the ORM client side, we defined some @*SQL function@s, dedicated to JSON process.
+The first is {\f1\fs20 JsonGet()}, and is able to extract any value from the TEXT field, mapping a {\f1\fs20 variant}:
+|%47%53
+|{\f1\fs20 JsonGet(ArrColumn,0)}|returns a property value by index, from a JSON array
+|{\f1\fs20 JsonGet(ObjColumn,'PropName')}|returns a property value by name, from a JSON object
+|{\f1\fs20 JsonGet(ObjColumn,'Obj1.Obj2.Prop')}|returns a property value by path, including nested JSON objects
+|{\f1\fs20 JsonGet(ObjColumn,'Prop1,Prop2')}|extract properties by name, from a JSON object
+|{\f1\fs20 JsonGet(ObjColumn,'Prop1,Obj1.Prop')}|extract properties by name (including nested JSON objects), from a JSON object
+|{\f1\fs20 JsonGet(ObjColumn,'Prop*')}|extract properties by wildchar name, from a JSON object
+|{\f1\fs20 JsonGet(ObjColumn,'Prop*,Obj1.P*')}|extract properties by wildchar name (including nested JSON objects), from a JSON object
+|%
+If no value does match, this function would return the SQL {\f1\fs20 NULL}. If the matching value is a simple JSON text or number, it will be returned as a TEXT, INTEGER or DOUBLE value, ready to be passed as a result column or any WHERE clause. If the returned value is a nested JSON object or array, it will be returned as TEXT, serialized as JSON; as a consequence, you may use it as the source of another {\f1\fs20 JsonGet()} function, or even able to gather the results via the {\f1\fs20 CONCAT()} aggregate function.
+The comma-separated syntax allowed in the property name parameter (e.g. {\f1\fs20 'Prop1,Prop2,Prop3'}), would search for several properties at once in a single object, returning a JSON object of all matching values - e.g. {\f1\fs20 '\{"Prop2":"Value2","Prop3":123\}'} if the {\f1\fs20 Prop1} property did not appear in the stored JSON object.
+If you end the property name with a {\f1\fs20 *} character, it would return a JSON object, with all matching properties. Any nested object would have its property names be flattened as {\f1\fs20 \{"Obj1.Prop":...\}}, within the returned JSON object.\line Note that the comma-separated syntax also allows such wildchar search, so that e.g.
+$ JsonGet(ObjColumn,'owner') = {"login":"smith","id":123456} as TEXT
+$ JsonGet(ObjColumn,'owner.login') = "smith" as TEXT
+$ JsonGet(ObjColumn,'owner.id') = 123456 as INTEGER
+$ JsonGet(ObjColumn,'owner.name') = NULL
+$ JsonGet(ObjColumn,'owner.login,owner.id') = {"owner.login":"smith","owner.id":123456} as TEXT
+$ JsonGet(ObjColumn,'owner.I*') = {"owner.id:123456} as TEXT
+$ JsonGet(ObjColumn,'owner.*') = {"owner.login":"smith","owner.id":123456} as TEXT
+$ JsonGet(ObjColumn,'unknown.*') = NULL
+Another function, named {\f1\fs20 JsonHas()} is similar to {\f1\fs20 JsonGet()}, but will return TRUE or FALSE depending if the supplied property (specified by name or index) do exist. It may be faster to use {\f1\fs20 JsonHas()} than {\f1\fs20 JsonGet()} e.g. in a WHERE clause, when you do not want to process this property value, but only return data rows containing needed information.
+$ JsonHas(ObjColumn,'owner') = true
+$ JsonHas(ObjColumn,'owner.login') = true
+$ JsonHas(ObjColumn,'owner.name') = false
+$ JsonHas(ObjColumn,'owner.i*') = true
+$ JsonHas(ObjColumn,'owner.n*') = false
+Since the process would take place within the {\i SQLite3} engine itself, and since they use a @*SAX@-like fast approach (without any temporary memory allocation during its search), those JSON functions could be pretty efficient, and proudly compare to some dedicated @*NoSQL@ engines.
 :     Dynamic arrays fields
 :      Dynamic arrays from Delphi Code
 For instance, here is how the regression @*test@s included in the framework define a {\f1\fs20 @*TSQLRecord@} class with some additional {\i @*dynamic array@s} fields:
@@ -15668,7 +15700,7 @@ Its {\f1\fs20 Create} constructor method call its internal {\f1\fs20 protected} 
 : Fast JSON parsing
 When it deals with parsing some (textual) content, two directions are usually envisaged. In the XML world, you have usually to make a choice between:
 - A DOM parser, which creates an in-memory tree structure of objects mapping the XML nodes;
-- A SAX parser, which reads the XML content, then call pre-defined {\i events} for each XML content element.
+- A @*SAX@ parser, which reads the XML content, then call pre-defined {\i events} for each XML content element.
 In fact, DOM parsers use internally a SAX parser to read the XML content. Therefore, with the overhead of object creation and their property initialization, DOM parsers are typically three to five times slower than SAX. But, DOM parsers are much more powerful for handling the data: as soon as it's mapped in native objects, code can access with no time to any given node, whereas a SAX-based access will have to read again the whole XML content.
 Most JSON parser available in {\i Delphi} use a DOM-like approach. For instance, the {\i DBXJSON} unit included since {\i Delphi} 2010 or the {\i SuperObject} library create a class instance mapping each JSON node.
 In a JSON-based Client-Server ORM like ours, profiling shows that a lot of time is spent in JSON parsing, on both Client and Server side. Therefore, we tried to optimize this part of the library.
