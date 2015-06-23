@@ -2197,7 +2197,7 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
 /// our fast version of move()
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms, or an optimized X86 revision on older CPUs
-var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = System.Move;
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt);
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -47968,6 +47968,7 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  MoveFast := @System.Move;
   {$ifdef FPC}
   FillCharFast := @System.FillChar;
   {$else}
