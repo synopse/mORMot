@@ -1080,30 +1080,30 @@ class procedure TDDDRepositoryRestFactory.ComputeSQLRecord(
   const aAggregate: array of TClass; DestinationSourceCodeFile: TFileName);
 const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     // values left to '' will use the RTTI type
-    '',                 // sftUnknown
-    'RawUTF8',          // sftAnsiText
-    'RawUTF8',          // sftUTF8Text
-    '',                 // sftEnumerate
-    '',                 // sftSet
-    '',                 // sftInteger
-    '',                 // sftID = TSQLRecord(aID)
-    'TRecordReference', // sftRecord = TRecordReference
-    'boolean',          // sftBoolean
-    'double',           // sftFloat
-    'TDateTime',        // sftDateTime
-    'TTimeLog',         // sftTimeLog
-    'currency',         // sftCurrency
-    '',                 // sftObject
-    'variant',          // sftVariant
-    'TSQLRawBlob',      // sftBlob
-    'variant',          // sftBlobDynArray
-    '',                 // sftBlobCustom
-    'variant',          // sftUTF8Custom
-    '',                 // sftMany
-    'TModTime',         // sftModTime
-    'TCreateTime',      // sftCreateTime
-    '',                 // sftTID
-    'TRecordVersion');  // sftRecordVersion = TRecordVersion
+    '',                // sftUnknown
+    'RawUTF8',         // sftAnsiText
+    'RawUTF8',         // sftUTF8Text
+    '',                // sftEnumerate
+    '',                // sftSet
+    '',                // sftInteger
+    '',                // sftID = TSQLRecord(aID)
+    'TRecordReference',// sftRecord = TRecordReference
+    'boolean',         // sftBoolean
+    'double',          // sftFloat
+    'TDateTime',       // sftDateTime
+    'TTimeLog',        // sftTimeLog
+    'currency',        // sftCurrency
+    '',                // sftObject
+    'variant',         // sftVariant
+    'TSQLRawBlob',     // sftBlob
+    'variant',         // sftBlobDynArray T*ObjArray=JSON=variant (RawUTF8?)
+    '',                // sftBlobCustom
+    'variant',         // sftUTF8Custom
+    '',                // sftMany
+    'TModTime',        // sftModTime
+    'TCreateTime',     // sftCreateTime
+    '',                // sftTID
+    'TRecordVersion'); // sftRecordVersion = TRecordVersion
 var hier: TClassDynArray;
     a,i,f: integer;
     code,aggname,recname,parentrecname: RawUTF8;
@@ -1161,25 +1161,24 @@ begin
 end;
 
 procedure TDDDRepositoryRestFactory.ComputeMapping;
-{ TODO:
-  T*ObjArray published fields:
-    property Order.Lines: TOrderLineObjArray;
-  In all cases, T*ObjArray should be accessible directly, using ObjArray*()
-  wrapper functions.
-  Storage at TSQLRecord level would very likely use JSON format, since it is
-  the single one natively usable by the framework (TDynArray.SaveTo raise an
-  exception for IsObjArray):
-  -> TSQLOrder.Lines as variant? (JSON) -> this is the current implementation
-  -> TSQLOrder.Lines as JSON dynarray? (new feature request)
-  -> TSQLOrder.Lines as binary dynarray?
-}
+
   procedure EnsureCompatible(agg,rec: TSQLPropInfo);
+  { T*ObjArray published fields:
+      TOrder = class(TSynAutoCreateFields)
+      published
+        property Lines: TOrderLineObjArray;
+    In all cases, T*ObjArray should be accessible directly, using ObjArray*()
+    wrapper functions.
+    Storage at TSQLRecord level would use JSON format, i.e. a variant in the
+    current implementation - you may use a plain RawUTF8 field if the on-the-fly
+    conversion to/from TDocVariant appears to be a bottleneck. }
   begin
     if agg.SQLDBFieldType=rec.SQLDBFieldType then
       exit; // very same type at DB level 
-    if (agg.SQLFieldType=sftBlobDynArray) and (rec.SQLFieldType=sftVariant) and
+    if (agg.SQLFieldType=sftBlobDynArray) and
+       (rec.SQLFieldType in [sftVariant,sftUTF8Text]) and
        ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) then
-      exit; // we allow T*ObjArray <-> JSON <-> variant <-> TEXT marshalling
+      exit; // we allow T*ObjArray <-> JSON/TEXT <-> variant/RawUTF8 marshalling
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
       Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName^,
