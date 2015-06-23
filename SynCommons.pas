@@ -33262,7 +33262,7 @@ procedure TDocVariant.Clear(var V: TVarData);
 begin
   //Assert(V.VType=DocVariantType.VarType);
   VariantDynArrayClear(TDocVariantData(V).VValue);
-  Finalize(TDocVariantData(V).VName,1);
+  TDocVariantData(V).VName := nil;
   ZeroFill(@V); // will set V.VType := varEmpty and VCount=0
 end;
 
@@ -35400,7 +35400,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     {$endif}
     if GetIsObjArray then
       for i := 0 to Count-1 do
-        PObjectArray(fValue^)[i].Free;
+        PObjectArray(fValue^)^[i].Free;
     _DynArrayClear(fValue^,ArrayType);
     exit;
   end;
@@ -35423,7 +35423,7 @@ begin // this method is faster than default System.DynArraySetLength() function
         _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength) else
         if GetIsObjArray then
           for i := NewLength to OldLength-1 do
-            PObjectArray(fValue^)[i].Free;
+            PObjectArray(fValue^)^[i].Free;
     ReallocMem(p,neededSize);
   end else begin
     InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
@@ -36363,7 +36363,7 @@ begin
     except
       on Exception do;
     end;
-    Finalize(TObjectDynArray(fValue^)); // set capacity to 0
+    TObjectDynArray(fValue^) := nil; // set capacity to 0
     fCount := 0;
   end else
     if fCount>0 then
@@ -47103,7 +47103,7 @@ procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
 var s: RawUTF8;
     i: integer;
 begin
-  Init(false);
+  Init(false);                         
   fOnAdd := OnAdd;
   while (Section<>nil) and (Section^<>'[') do begin
     s := GetNextLine(Section,Section);
@@ -47117,11 +47117,11 @@ end;
 
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
-  List := nil;
+  List := nil; // release dynamic arrays memory before Fillchar()
   fDynArray.fHashs := nil;
   FillcharFast(self,sizeof(self),0);
-  fDynArray.Init(
-    TypeInfo(TSynNameValueItemDynArray),List,nil,nil,nil,@Count,not aCaseSensitive);
+  fDynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,
+    djRawUTF8,@Count,not aCaseSensitive);
 end;
 
 function TSynNameValue.Find(const aName: RawUTF8): integer;

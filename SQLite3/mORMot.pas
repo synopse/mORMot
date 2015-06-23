@@ -3809,6 +3809,8 @@ type
     /// this overriden constructor will instantiate all its nested
     // TPersistent class published properties
     constructor Create(Collection: TCollection); override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
   end;
 
   {$endif LVCL}
@@ -3827,6 +3829,8 @@ type
     /// this overriden constructor will instantiate all its nested
     // TPersistent class published properties
     constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
   end;
 
   /// our own empowered TPersistentAutoCreateFields-like parent class
@@ -3856,6 +3860,8 @@ type
     {$else}
     class function NewInstance: TObject; override;
     {$endif}
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
   end;
 
   /// abstract TInterfacedObject class, which will instantiate all its nested
@@ -3873,6 +3879,8 @@ type
     /// this overriden constructor will instantiate all its nested
     // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
     constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
   end;
 
   /// a generic value object able to handle any task / process statistic
@@ -9402,6 +9410,8 @@ type
     // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
     // - then resolve and call IAutoCreateFieldsResolve.SetProperties(self)
     constructor Create; override;
+    /// finalize the instance, and release its published properties
+    destructor Destroy; override;
   end;
 
   /// event used by TInterfaceFactory to run a method from a fake instance
@@ -48532,7 +48542,6 @@ type // use AutoTable VMT entry to store a cache of the needed fields RTTI
       Instance: TClassInstance;
     end;
     ObjArraysOffset: array of cardinal;
-    BeforeDestruction: pointer;
     constructor Create(aClass: TClass);
   end;
 
@@ -48571,24 +48580,6 @@ end;
 type
   TSimpleMethodCall = procedure(self: TObject);
 
-procedure AutoDestroyFields(self: TObject);
-var i: integer;
-    fields: TAutoCreateFields;
-begin
-  fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
-  if fields=nil then
-    exit; // may happen in a weird finalization code
-  // ensure orginal BeforeDestruction method is called, if overriden
-  if fields.BeforeDestruction<>nil then
-    TSimpleMethodCall(fields.BeforeDestruction)(self);
-  // auto-release published persistent class instances
-  for i := 0 to fields.ClassesCount-1 do
-    PObject(PtrUInt(self)+fields.Classes[i].Offset)^.Free;
-  // auto-release published T*ObjArray instances
-  for i := 0 to fields.ObjArraysCount-1 do
-    ObjArrayClear(pointer(PtrUInt(self)+fields.ObjArraysOffset[i])^);
-end;
-
 procedure AutoCreateFields(self: TObject);
 var fields: TAutoCreateFields;
     PVMT: PPointer;
@@ -48602,13 +48593,6 @@ begin
     // store the RTTI cache into the AutoTable VMT entry of this class
     PatchCodePtrUInt(pointer(PVMT),PtrUInt(fields),true);
     GarbageCollectorFreeAndNil(PVMT^,fields);
-    // patch BeforeDestruction VMT of this class to point to AutoDestroyFields
-    {$WARN SYMBOL_DEPRECATED OFF}
-    PVMT := pointer(PPtrInt(self)^+vmtBeforeDestruction);
-    if PVMT^<>@TObject.BeforeDestruction then
-      fields.BeforeDestruction := PVMT^;
-    PatchCodePtrUInt(pointer(PVMT),PtrUInt(@AutoDestroyFields),false);
-    {$WARN SYMBOL_DEPRECATED ON}
   end else
     if PClass(fields)^<>TAutoCreateFields then
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
@@ -48618,12 +48602,33 @@ begin
       PObject(PtrUInt(self)+Offset)^ := Instance.CreateNew;
 end;
 
+procedure AutoDestroyFields(self: TObject);
+var i: integer;
+    fields: TAutoCreateFields;
+begin
+  fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
+  if fields=nil then
+    exit; // may happen in a weird finalization code
+  // auto-release published persistent class instances
+  for i := 0 to fields.ClassesCount-1 do
+    PObject(PtrUInt(self)+fields.Classes[i].Offset)^.Free;
+  // auto-release published T*ObjArray instances
+  for i := 0 to fields.ObjArraysCount-1 do
+    ObjArrayClear(pointer(PtrUInt(self)+fields.ObjArraysOffset[i])^);
+end;
+
 
 { TPersistentAutoCreateFields }
 
 constructor TPersistentAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
+end;
+
+destructor TPersistentAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
 end;
 
 
@@ -48658,6 +48663,12 @@ end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces
 
 {$endif}
 
+destructor TSynAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
+
 
 { TInterfacedObjectAutoCreateFields }
 
@@ -48665,6 +48676,12 @@ constructor TInterfacedObjectAutoCreateFields.Create;
 begin
   inherited Create;
   AutoCreateFields(self);
+end;
+
+destructor TInterfacedObjectAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
 end;
 
 
@@ -48679,6 +48696,11 @@ begin
     Inject.SetProperties(self);
 end;
 
+destructor TInjectableAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
+end;
 
 
 {$ifndef LVCL}
@@ -48697,6 +48719,12 @@ constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
 begin
   inherited Create(Collection);
   AutoCreateFields(self);
+end;
+
+destructor TCollectionItemAutoCreateFields.Destroy;
+begin
+  AutoDestroyFields(self);
+  inherited Destroy;
 end;
 
 {$endif LVCL}
