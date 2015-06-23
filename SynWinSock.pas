@@ -1034,8 +1034,7 @@ begin
     p := inet_ntoa(Sin.sin_addr);
     if p <> nil then
       Result := p;
-  end
-  else begin
+  end else begin
     hostlen := NI_MAXHOST;
     servlen := NI_MAXSERV;
     r := getnameinfo(@sin, SizeOfVarSin(sin), host, hostlen,

@@ -4138,8 +4138,11 @@ begin
   if Sin.sin_family=AF_INET then
     with LongRec(Sin.sin_addr) do
       result := SockString(Format(
-        '%d.%d.%d.%d',[Bytes[0],Bytes[1],Bytes[2],Bytes[3]])) else
+        '%d.%d.%d.%d',[Bytes[0],Bytes[1],Bytes[2],Bytes[3]])) else begin
     result := GetSinIP(Sin); // AF_INET6 may be optimized in a future revision
+    if result='::1' then
+      result := '127.0.0.1'; // IP6 localhost benefits of matching IP4
+  end;
 end;
 
 
@@ -4176,7 +4179,7 @@ begin
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
   {$endif}
-  if GetSockName(Sock,Name)=0 then
+  if GetSockName(aClientSock,Name)=0 then
     GetSinIPFromCache(Name,RemoteIP);
 end;
 
