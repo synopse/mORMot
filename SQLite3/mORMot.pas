@@ -48532,6 +48532,7 @@ type // use AutoTable VMT entry to store a cache of the needed fields RTTI
       Instance: TClassInstance;
     end;
     ObjArraysOffset: array of cardinal;
+    BeforeDestruction: pointer;
     constructor Create(aClass: TClass);
   end;
 
@@ -48567,6 +48568,9 @@ begin
   until aClass=TObject;
 end;
 
+type
+  TSimpleMethodCall = procedure(self: TObject);
+
 procedure AutoDestroyFields(self: TObject);
 var i: integer;
     fields: TAutoCreateFields;
@@ -48574,6 +48578,9 @@ begin
   fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
   if fields=nil then
     exit; // may happen in a weird finalization code
+  // ensure orginal BeforeDestruction method is called, if overriden
+  if fields.BeforeDestruction<>nil then
+    TSimpleMethodCall(fields.BeforeDestruction)(self);
   // auto-release published persistent class instances
   for i := 0 to fields.ClassesCount-1 do
     PObject(PtrUInt(self)+fields.Classes[i].Offset)^.Free;
@@ -48597,8 +48604,10 @@ begin
     GarbageCollectorFreeAndNil(PVMT^,fields);
     // patch BeforeDestruction VMT of this class to point to AutoDestroyFields
     {$WARN SYMBOL_DEPRECATED OFF}
-    PatchCodePtrUInt(pointer(PPtrInt(self)^+vmtBeforeDestruction),
-      PtrUInt(@AutoDestroyFields),false);
+    PVMT := pointer(PPtrInt(self)^+vmtBeforeDestruction);
+    if PVMT^<>@TObject.BeforeDestruction then
+      fields.BeforeDestruction := PVMT^;
+    PatchCodePtrUInt(pointer(PVMT),PtrUInt(@AutoDestroyFields),false);
     {$WARN SYMBOL_DEPRECATED ON}
   end else
     if PClass(fields)^<>TAutoCreateFields then
@@ -49547,7 +49556,6 @@ begin
 end;
 
 procedure TSetWeakZeroClass.HookedFreeInstance;
-type Call = procedure(self: TObject);
 begin
   with EnterWeakZeroClass(self,false) do begin // if hooked -> never nil
     try
@@ -49555,7 +49563,7 @@ begin
     finally
       LeaveCriticalSection(fLock);
     end;
-    Call(fHookedFreeInstance)(self);
+    TSimpleMethodCall(fHookedFreeInstance)(self);
   end;
 end;
 
