@@ -24873,6 +24873,8 @@ begin
       if (M=0) or (M>12) then exit;
       if P[6] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
       if L>=8 then begin // YYYYMMDD
+        if not(P[8] in [#0,' ','T']) then
+          exit; // invalid date format
         D := ord(P[6])*10+ord(P[7])-(48+480);
         if (D=0) or (D>MonthDays[true][M]) then exit; // worse is leap year=true
       end;
@@ -24889,8 +24891,8 @@ begin
     with Div100(Y) do
       unaligned(result) := (146097*YDiv100) shr 2 + (1461*YMod100) shr 2 +
             (153*M+2) div 5+D-693900;
-    if (L<15) or not(P[8] in [' ','T']) then
-      exit;
+    if L<15 then
+      exit; // not enough space to retrieve the time
   end;
   H := ord(P[9])*10+ord(P[10])-(48+480);
   if P[11]=':' then inc(P); // allow hh:mm:ss
@@ -25162,14 +25164,14 @@ begin
       if P[6] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
       if L>=8 then begin  // YYYYMMDD
         V := ord(P[6])*10+ord(P[7])-(48+480+1); // Day 1..31 -> 0..30
-        if V<=30 then
+        if (V<=30) and(P[8] in [#0,' ','T']) then
           inc(result,V shl 17) else begin
           result := 0;
           exit;
         end;
       end;
     end;
-    if (L<15) or not(P[8] in [' ','T']) then begin
+    if L<15 then begin // not enough place to retrieve a time
       if ContainsNoTime<>nil then
         ContainsNoTime^ := true;
       exit;
@@ -25340,21 +25342,21 @@ end;
 function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
 begin // faster version by AB
   Result := False;
-  if (Month < 1) or (Month > 12) then exit;
-  if (Day <= MonthDays[((Year and 3) = 0) and
-    ((Year mod 100 > 0) or (Year mod 400 = 0))][Month]) and
-    (Year >= 1) and (Year < 10000) and
-    (Month < 13) and (Day > 0) then begin
-    if Month > 2 then
-      Dec (Month, 3) else
-    if (Month > 0) then begin
-      Inc (Month, 9);
-      Dec (Year);
+  if (Month<1) or (Month>12) then exit;
+  if (Day <= MonthDays[
+      ((Year and 3)=0) and ((Year mod 100>0) or (Year mod 400=0))][Month]) and
+     (Year>=1) and (Year<10000) and
+     (Month<13) and (Day>0) then begin
+    if Month>2 then
+      dec(Month,3) else
+    if (Month>0) then begin
+      inc(Month,9);
+      dec(Year);
     end
       else exit; // Month <= 0
     with Div100(Year) do
-      Date := (146097 * YDiv100) shr 2 + (1461 * YMod100) shr 2 +
-            (153 * Month + 2) div 5 + Day - 693900;
+      Date := (146097*YDiv100) shr 2+(1461*YMod100) shr 2+
+            (153*Month+2) div 5+Day-693900;
     result := true;
   end;
 end;

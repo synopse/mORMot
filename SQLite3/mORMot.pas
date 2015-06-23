@@ -20946,7 +20946,7 @@ begin
 end;
 
 procedure TSQLTable.InitFieldTypes;
-var f,i: integer;
+var f,i,len: integer;
     FieldType: TSQLFieldType;
     FieldTypeInfo: pointer;
     TableInd: integer;
@@ -20977,8 +20977,9 @@ begin
         for i := 1 to fRowCount do
           if U^=nil then  // search for a non void column
             inc(U,FieldCount) else begin
-            if Iso8601ToTimeLogPUTF8Char(U^,0)<>0 then
-              FieldType := sftDateTime; // this was a ISO-8601 date/time value
+            len := StrLen(U^);
+            if (len>=15) and (Iso8601ToTimeLogPUTF8Char(U^,len)<>0) then
+              FieldType := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
             break;
           end;
       end else begin
@@ -48603,6 +48604,7 @@ begin
 end;
 
 procedure AutoDestroyFields(self: TObject);
+ {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
     fields: TAutoCreateFields;
 begin
@@ -48623,6 +48625,7 @@ end;
 constructor TPersistentAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
+  inherited Create; // always call the virtual constructor
 end;
 
 destructor TPersistentAutoCreateFields.Destroy;
@@ -48639,6 +48642,7 @@ end;
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
+  inherited Create; // always call the virtual constructor
 end;
 
 {$else}
@@ -48674,8 +48678,8 @@ end;
 
 constructor TInterfacedObjectAutoCreateFields.Create;
 begin
-  inherited Create;
   AutoCreateFields(self);
+  inherited Create; // always call the virtual constructor
 end;
 
 destructor TInterfacedObjectAutoCreateFields.Destroy;
@@ -48690,8 +48694,8 @@ end;
 constructor TInjectableAutoCreateFields.Create;
 var Inject: IAutoCreateFieldsResolve;
 begin
-  inherited Create; // will auto-inject its dependencies (DI/IoC)
   AutoCreateFields(self);
+  inherited Create; // overriden method will inject its dependencies (DI/IoC)
   if TryResolve(TypeInfo(IAutoCreateFieldsResolve),Inject) then
     Inject.SetProperties(self);
 end;
@@ -48717,8 +48721,8 @@ end;
 
 constructor TCollectionItemAutoCreateFields.Create(Collection: TCollection);
 begin
-  inherited Create(Collection);
   AutoCreateFields(self);
+  inherited Create(Collection);
 end;
 
 destructor TCollectionItemAutoCreateFields.Destroy;

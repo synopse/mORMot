@@ -3126,6 +3126,9 @@ begin
   Check(not Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
   tmp := 'T06:03:2a';
   Check(not Iso8601CheckAndDecode(Pointer(tmp),length(tmp),D));
+  tmp := '1435051262-45869-63626';
+  check(Iso8601ToDateTime(tmp)=0);
+  check(Iso8601ToTimelog(tmp)=0);
 end;
 
 procedure TTestLowLevelCommon.TimeZones;
@@ -3721,7 +3724,7 @@ begin
   try
     Check(L.ExecutableName='D:\Dev\lib\SQLite3\exe\TestSQL3.exe');
     Check(L.ExecutableVersion='1.2.3.4');
-    if ExpectedDate=40640 then
+    if trunc(ExpectedDate)=40640 then
       Check(L.InstanceName='D:\Dev\MyLibrary.dll') else
       Check(L.InstanceName='');
     CheckSame(L.ExecutableDate,ExpectedDate,1e-7);
@@ -3751,7 +3754,7 @@ begin
   end;
 end;
 begin
-  Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07)'#13#10+
+  Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10+
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 '+
     'Instance=D:\Dev\MyLibrary.dll'#13#10+
     'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10+
@@ -3759,15 +3762,15 @@ begin
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",'+
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10+
     '20110407 12040915  -    SQLite3Commons.TSQLRestServer.URI (14163) 10.020.006',
-    40640);
-  Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10+
+    40640.464653);
+  Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-08 11:09:06)'#13#10+
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545'#13#10+
     'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10+
     '20110407 12040903  +    SQLite3Commons.TSQLRestServer.URI (14163)'#13#10+
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",'+
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10+
     '20110407 12040915  -    SQLite3Commons.TSQLRestServer.URI (14163) 10.020.006',
-    40640.464653);
+    40641.464653);
 end;
 
 procedure TTestLowLevelCommon._TObjectListHashed;
