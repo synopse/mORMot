@@ -29,6 +29,7 @@ unit mORMotDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -941,7 +942,8 @@ begin
             W.AddShort('not ');
           W.AddString(extFieldName(Field-1));
           W.AddString(DB_SQLOPERATOR[Operator]);
-          W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
+          if not (Operator in [opIsNull, opIsNotNull]) then
+            W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
         end;
       end;
       if Stmt.GroupByField<>nil then begin
