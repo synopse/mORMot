@@ -942,7 +942,7 @@ begin
   fLogFamily.SynLog.Log(sllDB,'CreateMissingTables on %',[fDB],self);
   fLogFamily.SynLog.Log(sllDB,'GetTables',TypeInfo(TRawUTF8DynArray),TableNamesAtCreation,self);
   {$endif}
-  fillchar(TableJustCreated,sizeof(TSQLFieldTables),0);
+  FillcharFast(TableJustCreated,sizeof(TSQLFieldTables),0);
   try
     // create not static and not existing tables
     for t := 0 to high(Model.Tables) do
@@ -1889,7 +1889,7 @@ begin
       finally
         DB.UnLock;
       end;
-      fillchar(ValuesNull[0],(ValuesCount shr 3)+1,0);
+      FillcharFast(ValuesNull[0],(ValuesCount shr 3)+1,0);
       ValuesCount := 0;
       rowCount := 0;
       Fields := nil; // force new SQL statement and Values[]
@@ -2056,7 +2056,7 @@ begin
     result := SQLITE_NOMEM;
     exit;
   end;
-  fillchar(ppVTab^,sizeof(ppVTab^),0);
+  FillcharFast(ppVTab^,sizeof(ppVTab^),0);
   try
     Table := Module.TableClass.Create(Module,RawUTF8(argv[2]),argc-3,@argv[3]);
   except
@@ -2111,7 +2111,7 @@ begin
   Prepared := sqlite3.malloc(sizeof(TSQLVirtualTablePrepared));
   try
     // encode the incoming parameters into Prepared^ record
-    fillchar(Prepared^,sizeof(Prepared^),0);
+    FillCharFast(Prepared^,sizeof(Prepared^),0);
     Prepared^.WhereCount := pInfo.nConstraint;
     for i := 0 to pInfo.nConstraint-1 do
     with Prepared^.Where[i], pInfo.aConstraint^[i] do
@@ -2131,7 +2131,7 @@ begin
     assert(sizeof(TSQLVirtualTablePreparedOrderBy)=sizeof(TSQLite3IndexOrderBy));
     if pInfo.nOrderBy>0 then begin
       Prepared^.OrderByCount := pInfo.nOrderBy;
-      Move(pInfo.aOrderBy^[0],Prepared^.OrderBy[0],pInfo.nOrderBy*sizeof(Prepared^.OrderBy[0]));
+      MoveFast(pInfo.aOrderBy^[0],Prepared^.OrderBy[0],pInfo.nOrderBy*sizeof(Prepared^.OrderBy[0]));
     end;
     // perform the index query
     if not Table.Prepare(Prepared^) then
@@ -2141,7 +2141,7 @@ begin
     for i := 0 to pInfo.nConstraint-1 do
     if Prepared^.Where[i].Value.VType<>ftUnknown then begin
       if i<>n then // expression needed for Search() method to be moved at [n]
-        move(Prepared^.Where[i],Prepared^.Where[n],sizeof(Prepared^.Where[i]));
+        MoveFast(Prepared^.Where[i],Prepared^.Where[n],sizeof(Prepared^.Where[i]));
       inc(n);
       pInfo.aConstraintUsage[i].argvIndex := n;
       pInfo.aConstraintUsage[i].omit := Prepared^.Where[i].OmitCheck;
@@ -2356,7 +2356,7 @@ begin
     raise EBusinessLayerException.CreateFmt('aDB=nil at %s.SetDB()',[ClassName]);
   if fDB<>nil then
     raise EBusinessLayerException.CreateFmt('fDB<>nil at %s.SetDB()',[ClassName]);
-  fillchar(fModule,sizeof(fModule),0);
+  FillCharFast(fModule,sizeof(fModule),0);
   fModule.iVersion := 1;
   fModule.xCreate := vt_Create;
   fModule.xConnect := vt_Create;

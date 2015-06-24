@@ -801,7 +801,7 @@ begin
       if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
         // add new missing Field
         Finalize(Field);
-        fillchar(Field,sizeof(Field),0);
+        FillcharFast(Field,sizeof(Field),0);
         if PropInfoToExternalField(Fields.List[f],Field) then begin
           SQL := fProperties.SQLAddColumn(fTableName,Field);
           if (SQL<>'') and (ExecuteDirect(pointer(SQL),[],[],false)<>nil) then
@@ -1261,9 +1261,9 @@ begin
         if length(IDs)<(i+1)*length(InClause) then
           n := length(IDs)-i*length(InClause) else
           n := length(InClause);
-        Move(IDs[i*length(InClause)],InClause[0],n*sizeof(TID));
-        if ExecuteInlined('delete from % where %',[fTableName,
-            Int64DynArrayToCSV(TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
+        MoveFast(IDs[i*length(InClause)],InClause[0],n*sizeof(TID));
+        if ExecuteInlined('delete from % where %',[fTableName,Int64DynArrayToCSV(
+            TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
       end;
       exit;

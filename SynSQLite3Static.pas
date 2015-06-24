@@ -348,21 +348,21 @@ function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { alway
 // a fast full pascal version of the standard C library function
 begin
   result := P;
-  FillChar(P^, count, B);
+  FillCharFast(P^, count, B);
 end;
 
 procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
   {$ifdef FPC}alias : '_memmove';{$endif}
 // a fast full pascal version of the standard C library function
 begin
-  Move(source^, dest^, count); // move() is overlapping-friendly
+  MoveFast(source^, dest^, count); // move() is overlapping-friendly
 end;
 
 procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
   {$ifdef FPC}alias : '_memcpy';{$endif}
 // a fast full pascal version of the standard C library function
 begin
-  Move(source^, dest^, count);
+  MoveFast(source^, dest^, count);
 end;
 
 {$ifndef FPC}
@@ -963,12 +963,12 @@ begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        Move(buf^,F.pMapRegion[offset.Lo],bufLen);
+        MoveFast(buf^,F.pMapRegion[offset.Lo],bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
         nCopy := F.mmapSize.Lo-offset.Lo;
-        Move(buf^,F.pMapRegion[offset.Lo],nCopy);
+        MoveFast(buf^,F.pMapRegion[offset.Lo],nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -1045,12 +1045,12 @@ begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        Move(F.pMapRegion[offset.Lo],buf^,bufLen);
+        MoveFast(F.pMapRegion[offset.Lo],buf^,bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
         nCopy := F.mmapSize.Lo-offset.Lo;
-        Move(F.pMapRegion[offset.Lo],buf^,nCopy);
+        MoveFast(F.pMapRegion[offset.Lo],buf^,nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -1084,7 +1084,7 @@ begin
   dec(buflen,result);
   if buflen>0 then begin // remaining bytes are set to 0
     inc(buf,result);
-    fillchar(buf^,buflen,0);
+    FillcharFast(buf^,buflen,0);
     result := SQLITE_IOERR_SHORT_READ;
   end else
     result := SQLITE_OK;
@@ -1323,4 +1323,4 @@ initialization
   sqlite3 := TSQLite3LibraryStatic.Create;
 {$endif NOSQLITE3STATIC}
 
-end.
+end.

@@ -3371,7 +3371,7 @@ var U: RawUTF8;
 begin
   U := StringToUTF8(E.Message);
   pzErr := sqlite3.malloc(length(U));
-  move(pointer(U)^,pzErr^,length(U));
+  MoveFast(pointer(U)^,pzErr^,length(U));
 end;
 
 procedure InternalSoundex(Context: TSQLite3FunctionContext;
@@ -3468,10 +3468,10 @@ begin
         sep := sqlite3.value_text(argv[1]);
         seplen := SynCommons.strlen(sep);
         ReallocMem(result,resultlen+txtlen+seplen+1);
-        Move(sep^,result[resultlen],seplen);
+        MoveFast(sep^,result[resultlen],seplen);
         inc(resultlen,seplen);
       end;
-      Move(txt^,result[resultlen],txtlen+1);
+      MoveFast(txt^,result[resultlen],txtlen+1);
       inc(resultlen,txtlen);
     end else
     ErrorWrongNumberOfArgs(Context);
@@ -5384,4 +5384,4 @@ initialization
 
 finalization
   FreeAndNil(sqlite3); // sqlite3.Free is not reintrant e.g. as .bpl in IDE
-end.
+end.
