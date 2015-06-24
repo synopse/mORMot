@@ -192,7 +192,8 @@ type
 
   /// some options to be used for TDDDRestSettings
   TDDDRestSettingsOption =
-    (optEraseDBFileAtStartup,optStoreDBFileRelativeToSettings,
+    (optEraseDBFileAtStartup,
+     optStoreDBFileRelativeToSettings,
      optSQlite3FileSafeSlowMode);
 
   /// define options to be used for TDDDRestSettings
@@ -201,9 +202,10 @@ type
   /// how TDDDRestSettings.NewRestInstance would create its instances
   // - riOwnModel will set ModelInstance.Owner := RestInstance
   // - riHandleAuthentication will set the corresponding parameter to true
-  // - riDefaultLocalSQlite3IfNone will create a SQLite3 engine with a local
-  // file, if TDDDRestSettings.ORM.Kind is not set
-  // - TSQLRestServerFullMemory will create a TSQLRestServerFullMemory
+  // - riDefaultLocalSQlite3IfNone/riDefaultInMemorySQLite3IfNone will create
+  // a SQLite3 engine with a local file/memory storage, if
+  // TDDDRestSettings.ORM.Kind is not set
+  // - riDefaultFullMemoryIfNone will create a TSQLRestServerFullMemory
   // storage, if TDDDRestSettings.ORM.Kind is not set
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
   TDDDNewRestInstanceOptions = set of (

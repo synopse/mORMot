@@ -241,6 +241,112 @@ type
     property Socket: TCrtSocket read fSocket;
   end;
 
+  /// defines the potential mocked actions for TDDDMockedSocket.MockException()
+  TDDDMockedSocketException = (
+    msaConnectRaiseException,
+    msaDataInRaiseException,
+    msaDataOutRaiseException,
+    msaDataOutReturnsFalse);
+
+  /// defines a set of mocked actions for TDDDMockedSocket.MockException()
+  TDDDMockedSocketExceptions = set of TDDDMockedSocketException;
+
+  /// defines the potential mocked actions for TDDDMockedSocket.MockLatency()
+  TDDDMockedSocketLatency = (
+    mslConnect,
+    mslDataIn,
+    mslDataOut);
+
+  /// defines a set of mocked actions for TDDDMockedSocket.MockLatency()
+  TDDDMockedSocketLatencies = set of TDDDMockedSocketLatency;
+
+  /// the default exception class raised by TDDDMockedSocket
+  EDDDMockedSocket = class(EDDDInfraException);
+
+  /// implements IDDDSocket using a fake/mocked in-memory input/ouput storage
+  // - may be supplied to TDDDSocketThread to bypass its default network communication
+  // - you could fake input/output of TCP/IP packets by calling MockDataIn() and
+  // MockDataOut() methods - incoming and outgoing packets would be merged in
+  // the internal in-memory buffers, as with a regular Socket
+  // - you could fake exception, for any upcoming method call, via MockException() 
+  // - you could emulate network latency, for any upcoming method call, via
+  // MockLatency()
+  // - this implementation is thread-safe, so multiple threads could access
+  // the same IDDDSocket instance, and settings be changed in real time
+  TDDDMockedSocket = class(TInterfacedObjectLocked,IDDDSocket)
+  protected
+    fInput,fOutput: RawByteString;
+    fExceptionActions: TDDDMockedSocketExceptions;
+    fExceptionMessage: string;
+    fExceptionClass: ExceptClass;
+    fLatencyActions: TDDDMockedSocketLatencies;
+    fLatencyMS: integer;
+    fOwner: TDDDSocketThread;
+    function GetPendingInBytes: integer;
+    function GetPendingOutBytes: integer;
+    procedure CheckLatency(Action: TDDDMockedSocketLatency);
+    procedure CheckRaiseException(Action: TDDDMockedSocketException);
+  public
+    /// initialize the mocked socket instance 
+    constructor Create(aOwner: TDDDSocketThread); reintroduce; virtual; 
+    /// add some bytes to the internal fake input storage
+    // - would be made accessible to the DataInPending/DataIn methods
+    // - the supplied buffer would be gathered to any previous MockDataIn()
+    // call, which has not been read yet by the DataIn method
+    procedure MockDataIn(const Content: RawByteString);
+    /// return the bytes from the internal fake output storage
+    // - as has be previously set by the DataOut method
+    // - will gather all data from several DataOut() calls in a single buffer 
+    function MockDataOut: RawByteString;
+    /// the specified methods would raise an exception
+    // - only a single registration is memorized: once raised, any further
+    // method execution would continue as usual
+    // - optional Exception.Message which should be raised with the exception
+    // - also optional exception class instead of default EDDDMockedSocket
+    // - msaDataOutReturnsFalse won't raise any exception, but let DataOut
+    // method return false
+    // - you may use ALL_DDDMOCKED_EXCEPTIONS to set all possible actions
+    // - you could reset any previous registered exception by calling
+    // ! MockException([]);
+    procedure MockException(NextActions: TDDDMockedSocketExceptions;
+      const ExceptionMessage: string=''; ExceptionClass: ExceptClass=nil);
+    /// will let the specified methods to wait for a given number of milliseconds
+    // - allow to emulate network latency, on purpose
+    // - you may use ALL_DDDMOCKED_LATENCIES to slow down all possible actions
+    procedure MockLatency(NextActions: TDDDMockedSocketLatencies;
+      MilliSeconds: integer);
+  public 
+    /// IDDDSocket method to connect to the host via the mocked socket
+    // - won't raise any exception unless ConnectShouldCheckRaiseException is set
+    procedure Connect;
+    /// IDDDSocket method to return a fake instance identifier
+    // - in fact, the hexa pointer of the TDDDMockedSocket instance
+    function Identifier: RawUTF8;
+    /// IDDDSocket method to  get some low-level information about the last error
+    // - i.e. the latest ExceptionMessage value as set by MockException()
+    function LastError: RawUTF8;
+    /// IDDDSocket method to return the number of bytes pending
+    // - note that the total length of all pending data is returned as once,
+    // i.e. all previous calls to MockDataIn() would be sum as a single count
+    function DataInPending(aTimeOut: integer): integer;
+    /// IDDDSocket method to get Length bytes from the mocked socket
+    // - returns the number of bytes read into the Content buffer
+    // - note that all pending data is returned as once, i.e. all previous
+    // calls to MockDataIn() would be gathered in a single buffer
+    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    /// IDDDSocket method to send Length bytes to the mocked socket
+    // - returns false on any error, true on success
+    // - then MockDataOut could be used to retrieve the sent data
+    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+  published
+    /// read-only access to the processing Thread using this fake/emulated socket
+    property Owner: TDDDSocketThread read fOwner;
+    /// how many bytes are actually in the internal input buffer
+    property PendingInBytes: integer read GetPendingInBytes;
+    /// how many bytes are actually in the internal output buffer
+    property PendingOutBytes: integer read GetPendingOutBytes;
+  end;
+  
   /// a generic TThread able to connect and reconnect to a TCP server
   // - initialize and own a TCrtSocket instance for TCP transmission
   // - allow automatic reconnection
@@ -287,6 +393,17 @@ type
     property Port: SockString read fPort;
   end;
 
+
+const
+  /// map all possible action steps for a exception emulation
+  // - could be used to simulate a global socket connection drop
+  ALL_DDDMOCKED_EXCEPTIONS =
+    [Low(TDDDMockedSocketException)..high(TDDDMockedSocketException)];
+
+  /// map all possible action steps for latency emulation
+  // - could be used to simulate a slow network
+  ALL_DDDMOCKED_LATENCIES =
+    [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
 
 
 implementation
@@ -842,6 +959,183 @@ begin
   Error := fSocket.LastLowSocketError;
   result := FormatUTF8('%[%]',[Error,SysErrorMessage(Error)]);
 end;
+
+
+{ TDDDMockedSocket }
+
+constructor TDDDMockedSocket.Create(aOwner: TDDDSocketThread);
+begin
+  inherited Create;
+  fOwner := aOwner;
+end;
+
+procedure TDDDMockedSocket.Connect;
+begin
+  CheckLatency(mslConnect);
+  fSafe.Lock;
+  try
+    CheckRaiseException(msaConnectRaiseException);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDDDMockedSocket.DataIn(Content: PAnsiChar; Length: integer): integer;
+begin
+  CheckLatency(mslDataIn);
+  fSafe.Lock;
+  try
+    CheckRaiseException(msaDataInRaiseException);
+    result := system.length(fInput);
+    if Length<result then
+      result := Length;
+    if result<=0 then
+      exit;
+    MoveFast(pointer(fInput)^,Content^,result);
+    Delete(fInput,1,result);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDDDMockedSocket.DataInPending(aTimeOut: integer): integer;
+begin
+  fSafe.Lock;
+  try
+    CheckRaiseException(msaDataInRaiseException);
+    result := Length(fInput);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDDDMockedSocket.DataOut(Content: PAnsiChar; Length: integer): boolean;
+var previous: integer;
+begin
+  CheckLatency(mslDataOut);
+  fSafe.Lock;
+  try
+    CheckRaiseException(msaDataOutRaiseException);
+    if msaDataOutReturnsFalse in fExceptionActions then begin
+      fExceptionActions := [];
+      result := false;
+      exit;
+    end;
+    result := true;
+    if Length<=0 then
+      exit;
+    previous := system.length(fOutput);
+    SetLength(fOutput,previous+Length);
+    MoveFast(Content^,PByteArray(fOutput)^[previous],Length);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDDDMockedSocket.Identifier: RawUTF8;
+begin
+  result := PointerToHex(self);
+end;
+
+function TDDDMockedSocket.LastError: RawUTF8;
+begin
+  fSafe.Lock;
+  try
+    StringToUTF8(fExceptionMessage,result);
+    fExceptionMessage := '';
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TDDDMockedSocket.MockDataIn(const Content: RawByteString);
+begin
+  fSafe.Lock;
+  try
+    fInput := fInput+Content;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TDDDMockedSocket.MockDataOut: RawByteString;
+begin
+  fSafe.Lock;
+  try
+    result := fOutput;
+    fOutput := '';
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TDDDMockedSocket.MockException(NextActions: TDDDMockedSocketExceptions;
+  const ExceptionMessage: string; ExceptionClass: ExceptClass);
+begin
+  fSafe.Lock;
+  try
+    fExceptionActions := NextActions;
+    fExceptionMessage := ExceptionMessage;
+    fExceptionClass := ExceptionClass;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TDDDMockedSocket.CheckRaiseException(Action: TDDDMockedSocketException);
+begin
+  if not (Action in fExceptionActions) then
+    exit;
+  fExceptionActions := [];
+  if fExceptionMessage='' then
+    fExceptionMessage := Format('Mocked Exception for %s',
+      [GetEnumName(TypeInfo(TDDDMockedSocketExceptions),ord(Action))^]);
+  if fExceptionClass=nil then
+    fExceptionClass := EDDDMockedSocket;
+  raise fExceptionClass.Create(fExceptionMessage);
+end;
+
+
+procedure TDDDMockedSocket.MockLatency(
+  NextActions: TDDDMockedSocketLatencies; MilliSeconds: integer);
+begin
+  fSafe.Lock;
+  try
+    fLatencyActions := NextActions;
+    fLatencyMS := MilliSeconds;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TDDDMockedSocket.CheckLatency(Action: TDDDMockedSocketLatency);
+var MS: integer;
+begin
+  fSafe.Lock;
+  try
+    if not (Action in fLatencyActions) then
+      exit;
+    MS := fLatencyMS;
+  finally
+    fSafe.UnLock;
+  end;
+  Sleep(MS); // wait outside the instance lock
+end;
+
+function TDDDMockedSocket.GetPendingInBytes: integer;
+begin
+  fSafe.Lock;
+  result := Length(fInput);
+  fSafe.UnLock;
+end;
+
+function TDDDMockedSocket.GetPendingOutBytes: integer;
+begin
+  fSafe.Lock;
+  result := Length(fOutput);
+  fSafe.UnLock;
+end;
+
 
 
 initialization
