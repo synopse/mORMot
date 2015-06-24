@@ -36,6 +36,7 @@ unit mORMot;
     Esmond
     Goran Despalatovic (gigo)
     Jordi Tudela
+    Maciej Izak (hnb)
     Martin Suer
     MilesYou
     Ondrej
@@ -19489,7 +19490,7 @@ begin
   fPropInfo.GetVariantProp(Instance,value);
   VariantToUTF8(value,result,wasString);
   if wasSQLString<>nil then
-    // from SQL point of view, variant columns are TEXT or null
+    // from SQL point of view, variant columns are TEXT or NULL
     wasSQLString^ := not VarIsEmptyOrNull(value);
 end;
 
@@ -19560,8 +19561,10 @@ begin
       if tmp<>@buf then
         FreeMem(tmp);
     end;
-  end else
+  end else begin
+    TVarData(V).VType := varNull; // TEXT or NULL: see GetValueVar()
     fPropInfo.SetVariantProp(Instance,V);
+  end;
 end;
 
 procedure TSQLPropInfoRTTIVariant.SetVariant(Instance: TObject;
