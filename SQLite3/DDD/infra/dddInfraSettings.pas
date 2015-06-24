@@ -345,6 +345,11 @@ type
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
   end;
 
+  /// a Factory event allowing to customize/mock a socket connection
+  // - the supplied aOwner should be a TDDDSocketThread instance
+  // - returns a IDDDSocket interface instance (e.g. a TDDDSynCrtSocket)
+  TOnIDDDSocketThreadCreate = procedure(aOwner: TObject; out Obj);
+
   /// the settings of a TDDDThreadSocketProcess thread
   // - defines how to connect (and reconnect) to the associated TCP server
   TDDDSocketThreadSettings = class(TPersistentAutoCreateFields)
@@ -355,9 +360,15 @@ type
     fConnectionAttemptsInterval: Integer;
     fAutoReconnectAfterSocketError: boolean;
     fMonitoringInterval: integer;
+    fOnIDDDSocketThreadCreate: TOnIDDDSocketThreadCreate;
   public
     /// used to set the default values
     constructor Create; override;
+    /// you could set here a factory method to mock the socket connection
+    // - this property is public, but not published, since it should not be
+    // serialized on the settings file, but overloaded at runtime
+    property OnIDDDSocketThreadCreate: TOnIDDDSocketThreadCreate
+      read fOnIDDDSocketThreadCreate write fOnIDDDSocketThreadCreate;
   published
     /// the associated TCP server host
     property Host: RawUTF8 read FHost write FHost;

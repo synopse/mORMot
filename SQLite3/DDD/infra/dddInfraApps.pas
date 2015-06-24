@@ -183,6 +183,61 @@ type
     property State: TDDDSocketThreadState read FState write FState;
   end;
 
+  /// interface allowing to customize/mock a socket connection
+  IDDDSocket = interface
+    /// connect to the host via the (mocked) socket
+    // - should raise an exception on error
+    procedure Connect;
+    /// returns instance identifier
+    // - e.g. the TCrtSocket.Sock number as text
+    function Identifier: RawUTF8;
+    /// get some low-level information about the last occurred error
+    // - e.g. TCrtSocket.LastLowSocketError value
+    function LastError: RawUTF8;
+    /// returns the number of bytes pending in the (mocked) socket
+    // - call e.g. TCrtSocket.SockInPending() method
+    function DataInPending(aTimeOut: integer): integer;
+    /// get Length bytes from the (mocked) socket
+    // - returns the number of bytes read into the Content buffer
+    // - call e.g. TCrtSocket.SockInRead() method
+    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    /// send Length bytes to the (mocked) socket
+    // - returns false on any error, true on success
+    // - call e.g. TCrtSocket.TrySndLow() method
+    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+  end;
+
+  TDDDSocketThread = class;
+
+  /// implements IDDDSocket using a SynCrtSock.TCrtSocket instance
+  // - used by TDDDSocketThread for its default network communication
+  TDDDSynCrtSocket = class(TInterfacedObject,IDDDSocket)
+  protected
+    fSocket: TCrtSocket;
+    fOwner: TDDDSocketThread;
+  public
+    /// initialize the internal TCrtSocket instance
+    constructor Create(aOwner: TDDDSocketThread);
+    /// finalize the internal TCrtSocket instance
+    destructor Destroy; override;
+    /// call TCrtSocket.OpenBind
+    procedure Connect;
+    /// returns TCrtSocket.Sock number as text
+    function Identifier: RawUTF8;
+    /// get information from TCrtSocket.LastLowSocketError
+    function LastError: RawUTF8;
+    /// call TCrtSocket.SockInPending() method
+    function DataInPending(aTimeOut: integer): integer;
+    /// call TCrtSocket.SockInRead() method
+    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    /// call TCrtSocket.TrySndLow() method
+    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+    /// read-only access to the associated processing thread
+    property Owner: TDDDSocketThread read fOwner;
+    /// read-only access to the associated processing socket
+    property Socket: TCrtSocket read fSocket;
+  end;
+
   /// a generic TThread able to connect and reconnect to a TCP server
   // - initialize and own a TCrtSocket instance for TCP transmission
   // - allow automatic reconnection
@@ -191,7 +246,7 @@ type
   protected
     fSettings: TDDDSocketThreadSettings;
     fMonitoring: TDDDSocketThreadMonitoring;
-    fSocket: TCrtSocket;
+    fSocket: IDDDSocket;
     fPerformConnection: boolean;
     fHost, fPort: SockString;
     fSocketInputBuffer: RawByteString;
@@ -541,23 +596,25 @@ var tix: Int64;
 begin
   FLog.Enter(self);
   if fSocket<>nil then
-    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: FSocket<>nil',[self]);
+    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil',[self]);
   if FMonitoring.State<>tpsDisconnected then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',[self,ord(FMonitoring.State)]);
   fMonitoring.State := tpsConnecting;
   FLog.Log(sllTrace,'ExecuteConnect: Connecting to %:%',[Host,Port],self);
   try
-    FSocket := TCrtSocket.Open(Host,Port,cslTCP,fSettings.SocketTimeout);
-    FSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
+    if Assigned(fSettings.OnIDDDSocketThreadCreate) then
+      fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
+      fSocket := TDDDSynCrtSocket.Create(self);
+    fSocket.Connect;
     InternalExecuteConnected;
     FMonitoring.State := tpsConnected;
     FLog.Log(sllTrace,'ExecuteConnect: Connected via Socket % - %',
-      [FSocket.Sock,FMonitoring],self);
+      [fSocket.Identifier,FMonitoring],self);
   except
     on E: Exception do begin
       FLog.Log(sllTrace,'ExecuteConnect: Impossible to Connect to %:% (%) %',
         [Host,Port,E.ClassType,FMonitoring],self);
-      FreeAndNil(FSocket);
+      fSocket := nil;
       FMonitoring.State := tpsDisconnected;
     end;
   end;
@@ -574,6 +631,7 @@ begin
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnect;
+var info: RawUTF8;
 begin
   FLog.Enter(self);
   try
@@ -582,11 +640,14 @@ begin
       fShouldDisconnect := false;
       FMonitoring.State := tpsDisconnected;
       try
+        if fSocket=nil then
+          info := '[Unknown]' else
+          info := fSocket.Identifier;
         InternalExecuteDisconnect;
       finally
-        FreeAndNil(FSocket);
+        fSocket := nil;
       end;
-      FLog.Log(sllTrace,'Socket disconnected %',[fMonitoring],self);
+      FLog.Log(sllTrace,'Socket % disconnected %',[info,fMonitoring],self);
     finally
       fSafe.UnLock;
     end;
@@ -598,8 +659,9 @@ end;
 
 procedure TDDDSocketThread.ExecuteDisconnectAfterError;
 begin
-  FLog.Log(sllError,'%.ExecuteDisconnectAfterError: Sock=% LastLowSocketError=%',
-    [ClassType,FSocket.Sock,FSocket.LastLowSocketError],self);
+  if fSocket<>nil then
+    FLog.Log(sllError,'%.ExecuteDisconnectAfterError: Sock=% LastError=%',
+      [ClassType,fSocket.Identifier,fSocket.LastError],self);
   ExecuteDisconnect;
   FSocketInputBuffer := '';
   if fSettings.AutoReconnectAfterSocketError then
@@ -609,7 +671,7 @@ end;
 procedure TDDDSocketThread.ExecuteSocket;
 var pending, len: integer;
 begin
-  pending := FSocket.SockInPending(fExecuteSocketLoopPeriod);
+  pending := fSocket.DataInPending(fExecuteSocketLoopPeriod);
   if Terminated or (pending=0) then
     exit;
   if pending<0 then begin
@@ -618,7 +680,7 @@ begin
   end;
   len := length(FSocketInputBuffer);
   SetLength(FSocketInputBuffer,len+pending);
-  if FSocket.SockInRead(@PByteArray(FSocketInputBuffer)[len],pending)<>pending then begin
+  if fSocket.DataIn(@PByteArray(FSocketInputBuffer)[len],pending)<>pending then begin
     ExecuteDisconnectAfterError;
     exit;
   end;
@@ -691,15 +753,17 @@ end;
 
 function TDDDSocketThread.TrySend(
   const aFrame: RawByteString; ImmediateDisconnectAfterError: boolean): Boolean;
+var tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
 begin
   fSafe.Lock;
-  result := (fSocket<>nil) and (fMonitoring.State=tpsConnected) and
-            not fShouldDisconnect;
+  result := (aFrame<>'') and (fSocket<>nil) and
+            (fMonitoring.State=tpsConnected) and not fShouldDisconnect;
+  if result then
+    tmpSock := fSocket;
   fSafe.UnLock;
   if not result then
     exit;
-  // here a GPF may occur if FSocket=nil after fSafe.UnLock (very unlikely)
-  result := FSocket.TrySndLow(pointer(aFrame),length(aFrame));
+  result := tmpSock.DataOut(pointer(aFrame),length(aFrame));
   if result then
     FMonitoring.AddSize(0,length(aFrame)) else
     if ImmediateDisconnectAfterError then
@@ -708,6 +772,55 @@ begin
       fShouldDisconnect := true; // notify for InternalExecuteIdle
       fSafe.UnLock;
     end;
+end;
+
+
+{ TDDDSynCrtSocket }
+
+constructor TDDDSynCrtSocket.Create(aOwner: TDDDSocketThread);
+begin
+  inherited Create;
+  fOwner := aOwner;
+  fSocket := TCrtSocket.Create(fOwner.Settings.SocketTimeout);
+end;
+
+destructor TDDDSynCrtSocket.Destroy;
+begin
+  FreeAndNil(fSocket);
+  inherited;
+end;
+
+procedure TDDDSynCrtSocket.Connect;
+begin
+  fSocket.OpenBind(fOwner.Host,fOwner.Port,False);
+  fSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
+end;
+
+function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; Length: integer): integer;
+begin
+  result := fSocket.SockInRead(Content,Length,false);
+end;
+
+function TDDDSynCrtSocket.DataInPending(aTimeOut: integer): integer;
+begin
+  result := fSocket.SockInPending(aTimeOut);
+end;
+
+function TDDDSynCrtSocket.DataOut(Content: PAnsiChar; Length: integer): boolean;
+begin
+  result := fSocket.TrySndLow(Content,Length);
+end;
+
+function TDDDSynCrtSocket.Identifier: RawUTF8;
+begin
+  result := Int32ToUtf8(fSocket.Sock);
+end;
+
+function TDDDSynCrtSocket.LastError: RawUTF8;
+var Error: integer;
+begin
+  Error := fSocket.LastLowSocketError;
+  result := FormatUTF8('%[%]',[Error,SysErrorMessage(Error)]);
 end;
 
 
