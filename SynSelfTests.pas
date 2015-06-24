@@ -3226,7 +3226,8 @@ end;
 
 procedure TTestLowLevelCommon._IdemPropName;
 const abcde: PUTF8Char = 'ABcdE';
-      abcdf: PUTF8Char = 'ABcdF';
+      abcdf: PUTF8Char = 'abCDF';
+      zbcde: PUTF8Char = 'zBcdE';
 var WinAnsi: WinAnsiString;
     i: integer;
 begin
@@ -3266,24 +3267,28 @@ begin
   Check(not IdemPropNameU('abcD',abcde,5));
   Check(not IdemPropNameU('abcDF',abcde,5));
   {$ifndef DELPHI5OROLDER}
+  Check(IdemPropName(abcde,abcde,4,4));
   Check(IdemPropName(abcde,abcde,5,5));
   Check(not IdemPropName(abcde,abcde,4,5));
   Check(not IdemPropName(abcde,abcdf,5,5));
-  {$endif DELPHI5OROLDER}
-  Check(IdemPropNameUSameLen('a','A',0));
-  Check(IdemPropNameUSameLen('a','z',0));
-  Check(IdemPropNameUSameLen('a','A',1));
-  Check(not IdemPropNameUSameLen('a','z',1));
-  Check(IdemPropNameUSameLen('ab','AB',2));
-  Check(not IdemPropNameUSameLen('ab','Az',2));
-  Check(not IdemPropNameUSameLen('ab','zb',2));
-  Check(IdemPropNameUSameLen('abc','ABc',3));
-  Check(not IdemPropNameUSameLen('abc','ABz',3));
-  Check(IdemPropNameUSameLen('abcD','ABcd',4));
   Check(not IdemPropNameUSameLen('abcD','ABcF',4));
   Check(not IdemPropNameUSameLen('abcD','ABcFG',4));
-  Check(not IdemPropNameUSameLen('abcDe','ABcFE',5));
   Check(IdemPropNameUSameLen('abcDe','ABcdE',5));
+  {$endif DELPHI5OROLDER}
+  Check(IdemPropNameUSameLen(abcde,abcdf,0));
+  Check(IdemPropNameUSameLen(abcde,nil,0));
+  Check(IdemPropNameUSameLen(nil,abcdf,0));
+  Check(IdemPropNameUSameLen(abcde,abcdf,1));
+  Check(IdemPropNameUSameLen(abcde,abcdf,2));
+  Check(IdemPropNameUSameLen(abcde,abcdf,3));
+  Check(IdemPropNameUSameLen(abcde,abcdf,4));
+  Check(not IdemPropNameUSameLen(abcde,abcdf,5));
+  Check(IdemPropNameUSameLen(abcde,zbcde,0));
+  Check(not IdemPropNameUSameLen(abcde,zbcde,1));
+  Check(not IdemPropNameUSameLen(abcde,zbcde,2));
+  Check(not IdemPropNameUSameLen(abcde,zbcde,3));
+  Check(not IdemPropNameUSameLen(abcde,zbcde,4));
+  Check(not IdemPropNameUSameLen(abcde,zbcde,5));
   WinAnsi := 'aecD';
   WinAnsi[2] := #$E9;
   WinAnsi[3] := #$E7;
