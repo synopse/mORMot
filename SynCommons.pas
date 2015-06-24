@@ -4623,9 +4623,10 @@ type
   end;
   {$M-}
 
-  /// adding cross-platform locking methods to any class instance
+  /// allow to add cross-platform locking methods to any class instance
   // - typical use is to define a Safe: TSynLocker property, call Safe.Init
-  // and Safe.Done in constructor/destructor methods, and use
+  // and Safe.Done in constructor/destructor methods, and use Safe.Lock/UnLock
+  // methods in a try ... finally section
   // - in respect to the TCriticalSection class, fix a potential CPU cache line
   // conflict which may degrade the multi-threading performance, as reported by
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
@@ -4636,20 +4637,39 @@ type
   {$endif}
   private
     fSection: TRTLCriticalSection;
-    {$HINTS OFF} // does not complain if Filler is declared but never used
-    fPadding: array[0..11] of Int64; // ensure no cache line mixup
+    {$HINTS OFF} // does not complain if filler is declared but never used
+    fPadding: array[0..11] of Int64; // ensure no CPU cache line mixup
     {$HINTS ON}
   public
     /// initialize the mutex
-    procedure Init;    {$ifdef HASINLINE}inline;{$endif}
+    procedure Init;
+      {$ifdef HASINLINE}inline;{$endif}
     /// finalize the mutex
-    procedure Done;    {$ifdef HASINLINE}inline;{$endif}
+    procedure Done;
+      {$ifdef HASINLINE}inline;{$endif}
     /// lock the instance for exclusive access
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
-    /// release the instance for exclusive access
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! Safe.Lock;
+    // ! try
+    // !   ...
+    // ! finally
+    // !   Safe.Unlock;
+    // ! end;
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will try to acquire the mutex
-    function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLock then
+    // ! try
+    // !   ...
+    // ! finally
+    // !   Safe.Unlock;
+    // ! end;
+    function TryLock: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// release the instance for exclusive access
+    procedure UnLock;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// adding locking methods to a TSynPersistent with virtual constructor
@@ -4678,6 +4698,7 @@ type
     /// release the instance (including the locking resource)
     destructor Destroy; override;
     /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
   end;
 
@@ -6916,8 +6937,9 @@ type
     constructor Create(AOwnsObjects: Boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
-    /// a critical section is associated to this list instance
+    /// the critical section associated to this list instance
     // - could be used to protect shared resources within the internal process
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
   end;
 
@@ -8359,6 +8381,7 @@ type
     property Message;
   end;
   {$M-}
+  ESynExceptionClass = class of ESynException;
 
   /// exception raised by all TSynTable related code
   ETableDataException = class(ESynException);
@@ -12643,22 +12666,43 @@ type
   /// an interface used by TAutoLocker to protect multi-thread execution
   IAutoLocker = interface
     ['{97559643-6474-4AD3-AF72-B9BB84B4955D}']
-    /// will enter the mutex until the IUnknown reference is released
-    // - i.e. until you left the method block
-    // - using an IUnknown interface to let the compiler auto-generate a
-    // try..finally block statement to release the lock
-    // - warning: under FPC, you should assign the result of this method to a local
-    // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
-    function ProtectMethod: IUnknown;
     /// enter the mutex
-    // - any call to Enter should be ended with a call to Leave
+    // - any call to Enter should be ended with a call to Leave, and
+    // protected by a try..finally block, as such:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.Enter;
+    // !  try
+    // !    ... // thread-safe code
+    // !  finally
+    // !    fSharedAutoLocker.Leave;
+    // !  end;
+    // !end;
     procedure Enter;
     /// leave the mutex
     // - any call to Leave should be preceded with a call to Enter
     procedure Leave;
+    /// will enter the mutex until the IUnknown reference is released
+    // - using an IUnknown interface to let the compiler auto-generate a
+    // try..finally block statement to release the lock for the code block
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    function ProtectMethod: IUnknown;
   end;
 
-  /// reference counted block code locker
+  /// reference counted block code critical section
   // - you can use one instance of this to protect multi-thread execution
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
@@ -12675,10 +12719,33 @@ type
     /// finalize the mutex
     destructor Destroy; override;
     /// will enter the mutex until the IUnknown reference is released
-    // - warning: under FPC, you should assign its result to a local lockFPC:
-    // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := fSharedAutoLocker.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
     function ProtectMethod: IUnknown;
     /// enter the mutex
+    // - any call to Enter should be ended with a call to Leave, and
+    // protected by a try..finally block, as such:
+    // !begin
+    // !  ... // unsafe code
+    // !  fSharedAutoLocker.Enter;
+    // !  try
+    // !    ... // thread-safe code
+    // !  finally
+    // !    fSharedAutoLocker.Leave;
+    // !  end;
+    // !end;
     procedure Enter;
     /// leave the mutex
     procedure Leave;
@@ -12687,6 +12754,8 @@ type
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
 {$ifndef NOVARIANTS}
   /// ref-counted interface for thread-safe access to a TDocVariant document
+  // - is implemented e.g. by TLockedDocVariant, for IoC/DI resolution
+  // - fast and safe storage of any JSON-like object, as property/value pairs
   ILockedDocVariant = interface
     ['{CADC2C20-3F5D-4539-9D23-275E833A86F3}']
     function GetValue(const Name: RawUTF8): Variant;
@@ -12707,14 +12776,17 @@ type
     procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
     /// delete all stored properties
     procedure Clear;
+    /// save the stored values as UTF-8 encoded JSON Object
+    function ToJSON(HumanReadable: boolean=false): RawUTF8;
     /// the document fields would be safely accessed via this property
+    // - implementation class would make a thread-safe copy of the variant value
     property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
   end;
 
   /// allows thread-safe access to a TDocVariant document
   // - this class inherits from TInterfacedObjectWithCustomCreate so you
   // could define one published property of a mORMot.pas' TInjectableObject
-  // as IAutoLocker so that this class may be automatically injected
+  // as ILockedDocVariant so that this class may be automatically injected
   TLockedDocVariant = class(TInterfacedObjectWithCustomCreate,ILockedDocVariant)
   protected
     fValue: TDocVariantData;
@@ -12724,7 +12796,8 @@ type
   public
     /// initialize the thread-safe document with a fast TDocVariant
     // - i.e. call Create(true) aka Create(JSON_OPTIONS[true])
-    // - will be the TInterfacedObjectWithCustomCreate default constructor
+    // - will be the TInterfacedObjectWithCustomCreate default constructor,
+    // called e.g. during IoC/DI resolution
     constructor Create; overload; override;
     /// initialize the thread-safe document storage
     constructor Create(FastStorage: boolean); reintroduce; overload;
@@ -12742,6 +12815,9 @@ type
     procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
     /// delete all stored properties
     procedure Clear;
+    /// save the stored value as UTF-8 encoded JSON Object
+    // - implemented as just a wrapper around VariantSaveJSON()
+    function ToJSON(HumanReadable: boolean=false): RawUTF8;
     /// the document fields would be safely accessed via this property
     // - result variant is returned as a copy, not as varByRef, since a copy
     // will definitively be more thread safe
@@ -41652,6 +41728,20 @@ begin
   finally
     fLock.Leave;
   end;
+end;
+
+function TLockedDocVariant.ToJSON(HumanReadable: boolean): RawUTF8;
+var tmp: RawUTF8;
+begin
+  fLock.Enter;
+  try
+    VariantSaveJSON(variant(fValue),twJSONEscape,tmp);
+  finally
+    fLock.Leave;
+  end;
+  if HumanReadable then
+    JSONBufferReformat(pointer(tmp),result) else
+    result := tmp;
 end;
 
 {$endif NOVARIANTS}
