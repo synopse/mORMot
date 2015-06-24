@@ -1163,10 +1163,10 @@ end;
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 
   procedure EnsureCompatible(agg,rec: TSQLPropInfo);
-  { T*ObjArray published fields:
+  { note about T*ObjArray published fields:
       TOrder = class(TSynAutoCreateFields)
       published
-        property Lines: TOrderLineObjArray;
+        property Lines: TOrderLineObjArray
     In all cases, T*ObjArray should be accessible directly, using ObjArray*()
     wrapper functions.
     Storage at TSQLRecord level would use JSON format, i.e. a variant in the
@@ -1174,10 +1174,10 @@ procedure TDDDRepositoryRestFactory.ComputeMapping;
     conversion to/from TDocVariant appears to be a bottleneck. }
   begin
     if agg.SQLDBFieldType=rec.SQLDBFieldType then
-      exit; // very same type at DB level 
+      exit; // very same type at DB level -> OK 
     if (agg.SQLFieldType=sftBlobDynArray) and
-       (rec.SQLFieldType in [sftVariant,sftUTF8Text]) and
-       ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) then
+       ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) and
+       (rec.SQLFieldType in [sftVariant,sftUTF8Text]) then
       exit; // we allow T*ObjArray <-> JSON/TEXT <-> variant/RawUTF8 marshalling
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,

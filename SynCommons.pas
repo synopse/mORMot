@@ -2439,25 +2439,33 @@ function IdemPropName(const P1,P2: shortstring): boolean; overload;
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
-// - this version expect P2 to be a PAnsiChar with a specified length
+// - this version expects P2 to be a PAnsiChar with a specified length
 function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
-// - this version expect P1 and P2 to be a PAnsiChar with specified lengths
+// - this version expects P1 and P2 to be a PAnsiChar with specified lengths
 function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
-// - this version expect P1 and P2 to be a PAnsiChar with specified lengths
+// - this version expects P2 to be a PAnsiChar with specified length
 function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// case unsensitive test of P1 and P2 content of same length
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - this version expects P1 and P2 to be a PAnsiChar with an already checked
+// identical length, so may be used for a faster process, e.g. in a loop
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean; overload;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropNameU(const P1,P2: RawUTF8): boolean; overload;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
@@ -2497,7 +2505,7 @@ function IdemPCharU(p, up: PUTF8Char): boolean;
 
 /// returns true if the beginning of p^ is same as up^
 // - ignore case - up^ must be already Upper
-// - this version expect p^ to point to an Unicode char array
+// - this version expects p^ to point to an Unicode char array
 function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
 
 /// returns true if the file name extension contained in p^ is the same same as extup^
@@ -2912,7 +2920,7 @@ function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
 function GetNextItemCardinalStrict(var P: PUTF8Char): PtrUInt;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
-// - this version expect P^ to point to an Unicode char array
+// - this version expects P^ to point to an Unicode char array
 function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar= ','): PtrUInt;
 
 /// return next CSV string as double from P, 0.0 if no more
@@ -3047,7 +3055,7 @@ function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source
-// - this version expect source^ to point to an Unicode char array
+// - this version expects source^ to point to an Unicode char array
 function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
 
 /// retrieve the whole content of a section as a string
@@ -9575,7 +9583,7 @@ type
 procedure LogToTextFile(Msg: RawUTF8);
 
 /// log a message to a local text file
-// - this version expect the filename to be specified
+// - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
 procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
@@ -18094,15 +18102,8 @@ function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 var i,j,L: integer;
 begin
   result := false;
-  if P1='' then begin
-    if P2='' then
-      result := P2='';
-    exit;
-  end else
-    if P2='' then
-      exit;
-  L := PStrRec(PtrInt(P1)-STRRECSIZE)^.length;
-  if L<>PStrRec(PtrInt(P2)-STRRECSIZE)^.length then
+  L := length(P1);
+  if L<>length(P2) then
     exit;
   j := 1;
   for i := 1 to L shr 2 do
@@ -18124,7 +18125,7 @@ asm // eax=p1, edx=p2
         cmp ecx,[edx-4]
         jne @out1
         push ebx
-        lea edx,[edx+ecx-4]
+        lea edx,[edx+ecx-4]  // may include the length for shortest strings
         lea ebx,[eax+ecx-4]
         neg ecx
         mov eax,[ebx] // compare last 4 chars
@@ -18143,16 +18144,13 @@ asm // eax=p1, edx=p2
 @match: mov al,1
         pop ebx
         ret
-@maybenil:
+@maybenil: // here we know that eax<>edx
         test eax,eax
-        jz @nil1
+        jz @nil0     // eax=nil and eax<>edx -> edx<>nil -> false
         test edx,edx
         jnz @notnil
-        cmp [eax-4],edx
-        setz al
-        ret
-@nil1:  cmp eax,[edx-4]
-        setz al
+        mov al,dl   // eax<>nil and edx=nil -> false
+@nil0:
 end;
 {$endif}
 
@@ -18226,6 +18224,59 @@ begin
       exit;
   result := true;
 end;
+
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean;
+{$ifdef PUREPASCAL}
+var i,j: integer;
+begin
+  result := false;
+  j := 0;
+  for i := 1 to P1P2Len shr 2 do
+    if (PCardinal(PtrInt(P1)+j)^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
+      exit else
+      inc(j,4);
+  for i := j to P1P2Len-1 do
+    if (PByteArray(P1)^[i] xor ord(P2[i])) and $df<>0 then
+      exit;
+  result := true;
+end;
+{$else}
+asm // eax=p1, edx=p2, ecx=P1P2Len
+        cmp eax,edx
+        je @out2
+        cmp ecx,4
+        jbe @sml
+        push ebx
+        lea edx,[edx+ecx-4]
+        lea ebx,[eax+ecx-4]
+        neg ecx
+        mov eax,[ebx]     // compare last 4 chars
+        xor eax,[edx]
+        and eax,$dfdfdfdf // case insensitive
+        jne @out1
+@by4:   add ecx,4
+        jns @match
+        mov eax,[ebx+ecx]
+        xor eax,[edx+ecx]
+        and eax,$dfdfdfdf // case insensitive
+        je @by4
+@out1:  pop ebx
+@out2:  setz al
+        ret
+        nop; nop
+@match: pop ebx
+        mov al,1
+        ret
+@mask:  dd 0,$df,$dfdf,$dfdfdf,$dfdfdfdf // compare 1..4 chars
+@sml:   test ecx,ecx
+        jz @smlo      // P1P2Len=0
+        mov eax,[eax]
+        xor eax,[edx]
+        and eax,dword ptr [@mask+ecx*4]
+@smlo:  setz al
+end;
+{$endif}
+
 
 {$ifdef MSWINDOWS}
 const
@@ -21166,7 +21217,7 @@ function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 var i: PtrInt;
 begin
   if P<>nil then begin
-    for i := 1 to Count shr 2 do      // 4 DWORD by loop - aligned read
+    for i := 1 to Count shr 2 do      // 4 Int64 by loop - aligned read
       if P^[0]<>Value then
       if P^[1]<>Value then
       if P^[2]<>Value then
@@ -32514,6 +32565,8 @@ end;
 function TDocVariantData.SearchItemByProp(const aPropName,aPropValue: RawUTF8;
   aCaseSensitive: boolean): integer;
 var i: integer;
+    v: RawUTF8;
+    wasString: boolean;
 begin
   if VKind=dvArray then
     for result := 0 to VCount-1 do
@@ -32524,9 +32577,11 @@ begin
             if aCaseSensitive then begin
               if VValue[i]=aPropValue then
                 exit;
-            end else
-            if IdemPropNameU(VariantToUTF8(VValue[i]),aPropValue) then
-              exit;
+            end else begin
+              VariantToUTF8(VValue[i],v,wasString);
+              if IdemPropNameU(v,aPropValue) then
+                exit;
+            end;
         end;
   result := -1;
 end;
@@ -32709,7 +32764,8 @@ begin
         exit;
   end else
     for result := 0 to VCount-1 do
-      if IdemPropNameU(VName[result],aName,aNameLen) then
+      if (length(VName[result])=aNameLen) and
+         IdemPropNameUSameLen(pointer(VName[result]),aName,aNameLen) then
         exit;
   result := -1;
 end;

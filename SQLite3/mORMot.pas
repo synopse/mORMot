@@ -29990,8 +29990,8 @@ function TSQLRest.UpdateField(Table: TSQLRecordClass;
 var TableIndex: integer;
     SetValue,WhereValue: RawUTF8;
 begin
-  VariantToInlineValue(WhereFieldValue[0],WhereValue);
-  VariantToInlineValue(FieldValue[0],SetValue);
+  VariantToInlineValue(WhereFieldValue,WhereValue);
+  VariantToInlineValue(FieldValue,SetValue);
   TableIndex := Model.GetTableIndexExisting(Table);
   result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
 end;

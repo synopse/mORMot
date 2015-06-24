@@ -3270,6 +3270,20 @@ begin
   Check(not IdemPropName(abcde,abcde,4,5));
   Check(not IdemPropName(abcde,abcdf,5,5));
   {$endif DELPHI5OROLDER}
+  Check(IdemPropNameUSameLen('a','A',0));
+  Check(IdemPropNameUSameLen('a','z',0));
+  Check(IdemPropNameUSameLen('a','A',1));
+  Check(not IdemPropNameUSameLen('a','z',1));
+  Check(IdemPropNameUSameLen('ab','AB',2));
+  Check(not IdemPropNameUSameLen('ab','Az',2));
+  Check(not IdemPropNameUSameLen('ab','zb',2));
+  Check(IdemPropNameUSameLen('abc','ABc',3));
+  Check(not IdemPropNameUSameLen('abc','ABz',3));
+  Check(IdemPropNameUSameLen('abcD','ABcd',4));
+  Check(not IdemPropNameUSameLen('abcD','ABcF',4));
+  Check(not IdemPropNameUSameLen('abcD','ABcFG',4));
+  Check(not IdemPropNameUSameLen('abcDe','ABcFE',5));
+  Check(IdemPropNameUSameLen('abcDe','ABcdE',5));
   WinAnsi := 'aecD';
   WinAnsi[2] := #$E9;
   WinAnsi[3] := #$E7;
