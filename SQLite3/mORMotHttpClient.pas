@@ -749,7 +749,7 @@ begin
   fakeCallID := GetInteger(pointer(id));
   if fakeCallID<=0 then
     exit;
-  fFakeCallbacks.Acquire;
+  fFakeCallbacks.Safe.Lock;
   try
     i := fFakeCallbacks.FindIndex(fakeCallID);
     if i<0 then
@@ -762,7 +762,7 @@ begin
     instance := fFakeCallbacks.List[i].Instance;
     factory := fFakeCallbacks.List[i].Factory;
   finally
-    fFakeCallbacks.Release;
+    fFakeCallbacks.Safe.UnLock;
   end;
   if (Ctxt.InHeaders<>'') and
      (factory.MethodIndexCurrentFrameCallback>=0) then begin

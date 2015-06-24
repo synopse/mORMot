@@ -577,7 +577,7 @@ procedure TDDDSocketThread.ExecuteDisconnect;
 begin
   FLog.Enter(self);
   try
-    fLock.Acquire;
+    fSafe.Lock;
     try
       fShouldDisconnect := false;
       FMonitoring.State := tpsDisconnected;
@@ -588,7 +588,7 @@ begin
       end;
       FLog.Log(sllTrace,'Socket disconnected %',[fMonitoring],self);
     finally
-      fLock.Release;
+      fSafe.UnLock;
     end;
   except
     on E: Exception do
@@ -663,12 +663,12 @@ end;
 
 procedure TDDDSocketThread.InternalExecuteIdle;
 begin
-  fLock.Acquire;
+  fSafe.Lock;
   try
     if fShouldDisconnect then
       ExecuteDisconnectAfterError;
   finally
-    fLock.Release;
+    fSafe.UnLock;
   end;
 end;
 
@@ -692,21 +692,21 @@ end;
 function TDDDSocketThread.TrySend(
   const aFrame: RawByteString; ImmediateDisconnectAfterError: boolean): Boolean;
 begin
-  fLock.Acquire;
+  fSafe.Lock;
   result := (fSocket<>nil) and (fMonitoring.State=tpsConnected) and
             not fShouldDisconnect;
-  fLock.Release;
+  fSafe.UnLock;
   if not result then
     exit;
-  // here a GPF may occur if FSocket=nil after fLock.Release (very unlikely)
+  // here a GPF may occur if FSocket=nil after fSafe.UnLock (very unlikely)
   result := FSocket.TrySndLow(pointer(aFrame),length(aFrame));
   if result then
     FMonitoring.AddSize(0,length(aFrame)) else
     if ImmediateDisconnectAfterError then
       ExecuteDisconnectAfterError else begin
-      fLock.Acquire;
+      fSafe.Lock;
       fShouldDisconnect := true; // notify for InternalExecuteIdle
-      fLock.Release;
+      fSafe.UnLock;
     end;
 end;
 

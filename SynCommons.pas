@@ -441,7 +441,9 @@ unit SynCommons;
     TSynPersistent abstract classes, allowing to define virtual constructors for
     TPersistent kind of objects (used e.g. with internal JSON serialization,
     for interface-based services, or for DDD objects)
-  - introducing TSynPersistentLocked and TInterfacedObjectLocked classes
+  - introducing TSynPersistentLocked and TInterfacedObjectLocked classes,
+    avoiding CPU cache line performance issue (so to be preferred to TMonitor or
+    TCriticalSection)
   - new TSynPersistentWithPassword class, able to store the password with
     a custom simple encryption when serialized as JSON
   - introducing TSynAuthentication class for simple generic authentication
@@ -703,7 +705,6 @@ unit SynCommons;
     exception mapping: to be used e.g. when mixing code between external
     libraries and Delphi code
   - added new TSynValidateNonVoidText and TSynFilterTruncate classes
-  - added new TSynCriticalSection class, avoiding CPU cache performance issue
   - added Utf8TruncateToUnicodeLength() and Utf8TruncateToLength() functions
   - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
     MaxUpperCount properties to TSynValidateText class
@@ -4596,6 +4597,8 @@ type
   // to manage property name fixup resolution (which we won't use outside the VCL)
   // - this class has a virtual constructor, so is a preferred alternative
   // to both TPersistent and TPersistentWithCustomCreate classes
+  // - for best performance, any type inheriting from this class will bypass
+  // some regular steps: do not implement interfaces or use TMonitor with them!
   TSynPersistent = class(TObject)
   public
     /// this virtual constructor will be called at instance creation
@@ -4619,35 +4622,55 @@ type
   {$M-}
 
   /// adding locking methods to a TSynPersistent with virtual constructor
+  // - fix potential CPU cache line conflict, as reported by
+  // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
+  {$ifdef UNICODE}
+  TSynLocker = record
+  {$else}
+  TSynLocker = object
+  {$endif}
+  private
+    fSection: TRTLCriticalSection;
+    {$HINTS OFF} // does not complain if Filler is declared but never used
+    fPadding: array[0..11] of Int64; // ensure no cache line mixup
+    {$HINTS ON}
+  public
+    /// initialize the mutex
+    procedure Init;    {$ifdef HASINLINE}inline;{$endif}
+    /// finalize the mutex
+    procedure Done;    {$ifdef HASINLINE}inline;{$endif}
+    /// lock the instance for exclusive access
+    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
+    /// release the instance for exclusive access
+    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    /// will try to acquire the mutex
+    function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// adding locking methods to a TSynPersistent with virtual constructor
   TSynPersistentLocked = class(TSynPersistent)
   protected
-    fLock: TRTLCriticalSection;
-    PaddingForLock: array[0..11] of Int64; // just like TSynCriticalSection
+    fSafe: TSynLocker;
   public
     /// initialize the object instance, and its associated lock
     constructor Create; override;
     /// release the instance (including the locking resource)
     destructor Destroy; override;
-    /// lock the instance for exclusive access
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
-    /// release the instance for exclusive access
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    /// access to the locking methods of this instance
+    property Safe: TSynLocker read fSafe;
   end;
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
   protected
-    fLock: TRTLCriticalSection;
-    PaddingForLock: array[0..11] of Int64; // just like TSynCriticalSection
+    fSafe: TSynLocker;
   public
     /// initialize the object instance, and its associated lock
     constructor Create; override;
     /// release the instance (including the locking resource)
     destructor Destroy; override;
-    /// lock the instance for exclusive access
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
-    /// release the instance for exclusive access
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    /// access to the locking methods of this instance
+    property Safe: TSynLocker read fSafe;
   end;
 
   /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
@@ -6672,24 +6695,6 @@ function ObjectToJSON(Value: TObject;
 
 
 type
-{$ifndef LVCL}
-  /// implements a cross-platform enhanced mutex
-  // - includes a TryEnter method for older versions of Delphi (e.g. Delphi 6-7)
-  // - fix potential CPU cache conflict, as reported by
-  // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
-  TSynCriticalSection = class(TCriticalSection)
-  protected
-    PaddingForLock: array[0..11] of Int64;
-  public
-    {$ifndef DELPHI5OROLDER}
-    {$ifndef HASINLINE}
-    /// will try to acquire the mutex
-    function TryEnter: boolean;
-    {$endif}
-    {$endif}
-  end;
-{$endif}
-
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
   // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
   // internal JSON format (which is faster than a query to the SQLite3 engine)
@@ -6895,8 +6900,7 @@ type
   // execution of regular TObjectList methods (like Add/Remove/Count...)
   TObjectListLocked = class(TObjectList)
   protected
-    fLock: TRTLCriticalSection;
-    PaddingForLock: array[0..9] of Int64; // just like TSynCriticalSection
+    fSafe: TSynLocker;
   public
     /// initialize the list instance
     // - the stored TObject instances will be owned by this TObjectListLocked,
@@ -6904,10 +6908,9 @@ type
     constructor Create(AOwnsObjects: Boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
-    /// lock the list for exclusive access
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
-    /// release the list for exclusive access
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    /// a critical section is associated to this list instance
+    // - could be used to protect shared resources within the internal process
+    property Safe: TSynLocker read fSafe;
   end;
 
   /// This class is able to emulate a TStringList with our native UTF-8 string type
@@ -18128,7 +18131,7 @@ asm // eax=p1, edx=p2
         lea edx,[edx+ecx-4]  // may include the length for shortest strings
         lea ebx,[eax+ecx-4]
         neg ecx
-        mov eax,[ebx] // compare last 4 chars
+        mov eax,[ebx]     // compare last 4 chars
         xor eax,[edx]
         and eax,$dfdfdfdf // case insensitive
         jne @out2
@@ -36715,28 +36718,47 @@ constructor TInterfacedObjectWithCustomCreate.Create;
 begin // nothing to do by default - overridden constructor may add custom code
 end;
 
+
+{ TSynLocker }
+
+procedure TSynLocker.Init;
+begin
+  InitializeCriticalSection(fSection);
+end;
+
+procedure TSynLocker.Done;
+begin
+  DeleteCriticalSection(fSection);
+end;
+
+procedure TSynLocker.Lock;
+begin
+  EnterCriticalSection(fSection);
+end;
+
+procedure TSynLocker.UnLock;
+begin
+  LeaveCriticalSection(fSection);
+end;
+
+function TSynLocker.TryLock: boolean;
+begin
+  result := TryEnterCriticalSection(fSection);
+end;
+
+
 { TInterfacedObjectLocked }
 
 constructor TInterfacedObjectLocked.Create;
 begin
   inherited Create;
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TInterfacedObjectLocked.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fLock);
-end;
-
-procedure TInterfacedObjectLocked.Lock;
-begin
-  EnterCriticalSection(fLock);
-end;
-
-procedure TInterfacedObjectLocked.UnLock;
-begin
-  LeaveCriticalSection(fLock);
+  fSafe.Done;
 end;
 
 
@@ -36768,7 +36790,7 @@ asm
         pop eax   // self
         pop edx   // class
         mov [eax],edx // store VMT
-end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
+end; // TSynPersistent has no interface -> bypass vmtIntfTable 
 
 procedure TSynPersistent.FreeInstance;
 asm
@@ -36797,7 +36819,9 @@ asm
         jnz @@loop
 @@end:  pop ebx
         jmp System.@FreeMem
-@@clr:  push offset @@loop // TSynPersistent has no vmtInitTable -> safe
+        // TSynPersistent has no TMonitor -> bypass TMonitor.Destroy(self)
+        // BTW, TMonitor.Destroy is private, so unreachable 
+@@clr:  push offset @@loop // parent has never any vmtInitTable -> @@loop
         jmp RecordClear // eax=self edx=typeinfo
 end;
 
@@ -36809,23 +36833,13 @@ end;
 constructor TSynPersistentLocked.Create;
 begin
   inherited Create;
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TSynPersistentLocked.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fLock);
-end;
-
-procedure TSynPersistentLocked.Lock;
-begin
-  EnterCriticalSection(fLock);
-end;
-
-procedure TSynPersistentLocked.UnLock;
-begin
-  LeaveCriticalSection(fLock);
+  fSafe.Done;
 end;
 
 
@@ -41679,20 +41693,6 @@ begin
 {$endif}
 end;
 
-{$ifndef LVCL}
-
-{ TSynCriticalSection }
-
-{$ifndef DELPHI5OROLDER}
-{$ifndef HASINLINE}
-function TSynCriticalSection.TryEnter: boolean;
-begin
-  result := TryEnterCriticalSection(FSection);
-end;
-{$endif}
-{$endif}
-
-{$endif LVCL}
 
 { TSynCache }
 
@@ -42509,24 +42509,15 @@ end;
 constructor TObjectListLocked.Create(AOwnsObjects: Boolean=true);
 begin
   inherited Create(AOwnsObjects);
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TObjectListLocked.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
 end;
 
-procedure TObjectListLocked.Lock;
-begin
-  EnterCriticalSection(fLock);
-end;
-
-procedure TObjectListLocked.UnLock;
-begin
-  LeaveCriticalSection(fLock);
-end;
 
 
 { TRawUTF8ListHashed }

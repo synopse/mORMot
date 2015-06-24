@@ -337,7 +337,7 @@ type
     wscBlockWithAnswer, wscBlockWithoutAnswer, wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
-  TWebSocketFrameList = class(TSynCriticalSection)
+  TWebSocketFrameList = class(TSynPersistentLocked)
   public
     /// low-level access to the WebSocket frames list
     List: TWebSocketFrameDynArray;
@@ -403,7 +403,7 @@ type
   PWebSocketProcessSettings = ^TWebSocketProcessSettings;
 
   /// generic WebSockets process, used on both client or server sides
-  TWebSocketProcess = class(TSynCriticalSection)
+  TWebSocketProcess = class(TSynPersistentLocked)
   protected
     fSocket: TCrtSocket;
     fIncoming: TWebSocketFrameList;
@@ -437,7 +437,7 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
       aOwnerConnection: Int64; aOwnerThread: TSynThread;
-      const aSettings: TWebSocketProcessSettings); virtual;
+      const aSettings: TWebSocketProcessSettings); reintroduce; virtual;
     /// finalize the context
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
@@ -769,7 +769,7 @@ begin
   result := false;
   if (self=nil) or (Count=0) or (head='') or (protocol=nil) then
     exit;
-  Acquire;
+  Safe.Lock;
   try
     for i := 0 to Count-1 do
       if protocol.FrameIs(List[i],head) then begin
@@ -782,7 +782,7 @@ begin
         exit;
       end;
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -790,14 +790,14 @@ procedure TWebSocketFrameList.Push(const frame: TWebSocketFrame);
 begin
   if self=nil then
     exit;
-  Acquire;
+  Safe.Lock;
   try
     if Count>=length(List) then
       SetLength(List,Count+Count shr 3+8);
     List[Count] := frame;
     inc(Count);
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -1555,12 +1555,12 @@ end;
 procedure TWebSocketProcess.SendPendingOutgoingFrames;
 begin
   WebSocketLog.Enter(self);
-  fOutgoing.Acquire;
+  fOutgoing.Safe.Lock;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
       WebSocketLog.Add.Log(sllError,'%.ProcessLoop SendFrames',[self]);
   finally
-    fOutgoing.Release;
+    fOutgoing.Safe.UnLock;
   end;
 end;
 
@@ -1624,19 +1624,19 @@ end;
 
 procedure TWebSocketProcess.SetLastPingTicks(invalidPing: boolean);
 begin
-  Acquire;
+  Safe.Lock;
   fLastSocketTicks := GetTickCount64;
   if invalidPing then
     inc(fInvalidPingSendCount) else
     fInvalidPingSendCount := 0;
-  Release;
+  Safe.UnLock;
 end;
 
 function TWebSocketProcess.LastPingDelay: Int64;
 begin
-  Acquire;
+  Safe.Lock;
   result := GetTickCount64-fLastSocketTicks;
-  Release;
+  Safe.UnLock;
 end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
@@ -1714,19 +1714,22 @@ begin
     'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest)),#13#10]);
   ClientSock.SockSendFlush;
   result := true; // connection upgraded: never back to HTTP/1.1
-  fWebSocketConnections.Lock;
+  fWebSocketConnections.Safe.Lock;
   fWebSocketConnections.Add(Context);
-  fWebSocketConnections.UnLock;
+  fWebSocketConnections.Safe.UnLock;
   try
     Context.fProcess.ProcessLoop;
     ClientSock.KeepAliveClient := false; // always close connection
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
-    fWebSocketConnections.Lock;
-    i := fWebSocketConnections.IndexOf(Context);
-    if i>=0 then
-      fWebSocketConnections.Delete(i);
-    fWebSocketConnections.UnLock;
+    fWebSocketConnections.Safe.Lock;
+    try
+      i := fWebSocketConnections.IndexOf(Context);
+      if i>=0 then
+        fWebSocketConnections.Delete(i);
+    finally
+      fWebSocketConnections.Safe.UnLock;
+    end;
   end;
 end;
 
@@ -1759,9 +1762,9 @@ begin
   result := nil;
   if Terminated or (ConnectionThread=nil) then
     exit;
-  fWebSocketConnections.Lock;
+  fWebSocketConnections.Safe.Lock;
   connectionIndex := fWebSocketConnections.IndexOf(ConnectionThread);
-  fWebSocketConnections.UnLock;
+  fWebSocketConnections.Safe.UnLock;
   if (connectionIndex>=0) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then
     //  this request is a websocket, on a non broken connection
@@ -1774,7 +1777,7 @@ begin
   result := nil;
   if Terminated or (ConnectionID<=0) then
     exit;
-  fWebSocketConnections.Lock;
+  fWebSocketConnections.Safe.Lock;
   try
     with fWebSocketConnections do
     for i := 0 to Count-1 do
@@ -1783,7 +1786,7 @@ begin
         exit;
       end;
   finally
-    fWebSocketConnections.UnLock;
+    fWebSocketConnections.Safe.UnLock;
   end;
 end;
 

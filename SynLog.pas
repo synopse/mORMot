@@ -1852,7 +1852,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
           exit;
         end;
     end else begin
-      SynLogFileList.Lock;
+      SynLogFileList.Safe.Lock;
       try
         Index := @SynLogFileIndexThreadVar;
         n := SynLogFileList.Count;
@@ -1871,7 +1871,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
         end;
         result := nil;
       finally
-        SynLogFileList.UnLock;
+        SynLogFileList.Safe.UnLock;
       end;
     end;
   end;
@@ -2372,7 +2372,7 @@ var i: integer;
 begin
   if SynLogFileList=nil then
     GarbageCollectorFreeAndNil(SynLogFileList,TObjectListLocked.Create);
-  SynLogFileList.Lock;
+  SynLogFileList.Safe.Lock;
   try
     result := fSynLogClass.Create(self);
     i := SynLogFileList.Add(result);
@@ -2384,7 +2384,7 @@ begin
       end else
       fGlobalLog := result;
   finally
-    SynLogFileList.UnLock;
+    SynLogFileList.Safe.UnLock;
   end;
 end;
 
@@ -2409,7 +2409,7 @@ begin
     if SynLogFileList=nil then
       continue; // nothing to flush
     inc(AutoFlushSecondElapsed);
-    SynLogFileList.Lock;
+    SynLogFileList.Safe.Lock;
     try
       for i := 0 to SynLogFileList.Count-1 do
       with TSynLog(SynLogFileList.List[i]) do
@@ -2424,7 +2424,7 @@ begin
             Flush(false); // write pending data
           end;
      finally
-       SynLogFileList.UnLock;
+       SynLogFileList.Safe.UnLock;
      end;
   until false;
   ExitThread(0);
@@ -2514,7 +2514,7 @@ begin
     if (fPerThreadLog=ptOneFilePerThread) and (fRotateFileCount=0) and
        (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
       ndx := SynLogFileIndexThreadVar[fIdent]-1;
-      if ndx>=0 then // SynLogFileList.Lock/Unlock is not mandatory here
+      if ndx>=0 then // SynLogFileList.Safe.Lock/Unlock is not mandatory here
         result := SynLogFileList.List[ndx] else
         result := CreateSynLog;
     end else // for ptMergedInOneFile and ptIdentifiedInOnFile
@@ -2536,13 +2536,13 @@ begin
   fEchoRemoteClient := aClient;
   fEchoRemoteEvent := aClientEvent;
   fEchoRemoteClientOwned := aClientOwnedByFamily;
-  SynLogFileList.Lock;
+  SynLogFileList.Safe.Lock;
   try
     for i := 0 to SynLogFileList.Count-1 do
       if TSynLog(SynLogFileList.List[i]).fFamily=self then
         TSynLog(SynLogFileList.List[i]).fWriter.EchoAdd(fEchoRemoteEvent);
   finally
-    SynLogFileList.Unlock;
+    SynLogFileList.Safe.UnLock;
   end;
 end;
 
@@ -2565,13 +2565,13 @@ begin
     end else
     fEchoRemoteClient := nil;
   if SynLogFileList<>nil then begin
-    SynLogFileList.Lock;
+    SynLogFileList.Safe.Lock;
     try
       for i := 0 to SynLogFileList.Count-1 do
         if TSynLog(SynLogFileList.List[i]).fFamily=self then
           TSynLog(SynLogFileList.List[i]).fWriter.EchoRemove(fEchoRemoteEvent);
     finally
-      SynLogFileList.Unlock;
+      SynLogFileList.Safe.UnLock;
     end;
   end;
   fEchoRemoteEvent := nil;
@@ -2797,14 +2797,14 @@ end;
 
 procedure TSynLog.Release;
 begin
-  SynLogFileList.Lock;
+  SynLogFileList.Safe.Lock;
   try
     CloseLogFile;
     SynLogFileList.Remove(self);
     if fFamily.fPerThreadLog=ptOneFilePerThread then
       SynLogFileIndexThreadVar[fFamily.fIdent] := 0;
   finally
-    SynLogFileList.Unlock;
+    SynLogFileList.Safe.UnLock;
   end;
   Free;
 end;
@@ -4232,7 +4232,7 @@ begin
   result := false;
   if Count=0 then
     exit;
-  Lock;
+  Safe.Lock;
   try
     for i := Count-1 downto 0 do
       if Level in Registration[i].Levels then
@@ -4243,7 +4243,7 @@ begin
         Registrations.Delete(i); // safer to unsubscribe ASAP
       end;
   finally
-    UnLock;
+    Safe.UnLock;
   end;
 end;
 
@@ -4253,24 +4253,24 @@ var Reg: TSynLogCallback;
 begin
   Reg.Levels := Levels;
   Reg.Callback := Callback;
-  Lock;
+  Safe.Lock;
   try
     Registrations.Add(Reg);
   finally
-    UnLock;
+    Safe.UnLock;
   end;
 end;
 
 procedure TSynLogCallbacks.Unsubscribe(const Callback: ISynLogCallback);
 var i: integer;
 begin
-  Lock;
+  Safe.Lock;
   try
     for i := Count-1 downto 0 do
       if Registration[i].Callback=Callback then
         Registrations.Delete(i);
   finally
-    UnLock;
+    Safe.UnLock;
   end;
 end;
 

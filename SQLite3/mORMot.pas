@@ -11324,7 +11324,7 @@ type
   TSQLRestDynArray = array of TSQLRest;
 
   /// used to store the execution parameters for a TSQLRest instance
-  TSQLRestAcquireExecution = class(TSynCriticalSection)
+  TSQLRestAcquireExecution = class(TSynPersistentLocked)
   public
     /// how read or write operations will be executed
     Mode: TSQLRestServerAcquireMode;
@@ -12494,7 +12494,7 @@ type
     fRest: TSQLRest;
     fOwnRest: boolean;
     fLog: TSynLog;
-    fLock: TSynCriticalSection;
+    fSafe: TSynLocker;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
     procedure Execute; override;
     /// you should override this method with the proper process
@@ -12520,7 +12520,7 @@ type
     property OwnRest: boolean read fOwnRest;
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
-    property Lock: TSynCriticalSection read fLock;
+    property Safe: TSynLocker read fSafe;
     /// read-only access to the TSynLog instance of the associated REST instance 
     property Log: TSynLog read fLog;
   end;
@@ -13518,7 +13518,7 @@ type
   // "asynchronous write"), or maintain a versioned image of the content
   // - all public methods (AddCopy/AddOwned/Update/Delete/FlushAsBatch) are
   // thread-safe, protected by a mutex lock
-  TSQLRestTempStorage = class(TSynCriticalSection)
+  TSQLRestTempStorage = class(TSynPersistentLocked)
   protected
     fStoredClass: TSQLRecordClass;
     fStoredClassRecordProps: TSQLRecordProperties;
@@ -13530,7 +13530,7 @@ type
     procedure InternalAddItem(const item: TSQLRestTempStorageItem);
   public
     /// initialize the temporary storage for a given class
-    constructor Create(aClass: TSQLRecordClass);
+    constructor Create(aClass: TSQLRecordClass); reintroduce; virtual;
     /// finalize this temporary storage instance
     destructor Destroy; override;
     /// add a copy of a TSQLRecord to the internal storage list
@@ -13723,7 +13723,7 @@ type
   TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
 
   /// used e.g. by TSQLRestServer to store a list of TServicesPublishedInterfaces
-  TServicesPublishedInterfacesList = class(TSynCriticalSection)
+  TServicesPublishedInterfacesList = class(TSynPersistentLocked)
   private
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;
@@ -13742,7 +13742,7 @@ type
     // - an optional time out period, in milliseconds, may be defined - but the
     // clients should ensure that RegisterFromClientJSON() is called in order
     // to refresh the list (e.g. from _contract_ HTTP body)
-    constructor Create(aTimeoutMS: integer);
+    constructor Create(aTimeoutMS: integer); reintroduce; virtual;
     /// add the JSON serialized TServicesPublishedInterfaces to the list
     // - called by TSQLRestServerURIContext.InternalExecuteSOAByInterface when
     // the client provides its own services as _contract_ HTTP body
@@ -15575,7 +15575,7 @@ type
     var aUserName, aPassword: string): boolean of object;
 
   /// store the references to active interface callbacks on a REST Client
-  TSQLRestClientCallbacks = class(TSynCriticalSection)
+  TSQLRestClientCallbacks = class(TSynPersistentLocked)
   protected
     fCurrentID: integer;
     function UnRegisterByIndex(index: integer): boolean;
@@ -17394,8 +17394,8 @@ end;
 type // those classes will be used to register globally some classes for JSON
   TJSONSerializerRegisteredClassAbstract = class(TList)
   protected
-    LastClass: TClass;
-    Lock: TRTLCriticalSection;
+    fLastClass: TClass;
+    fSafe: TSynLocker;
   public
     constructor Create;
     destructor Destroy; override;
@@ -29767,7 +29767,7 @@ end;
 procedure TSQLRest.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
   if self<>nil then begin
-    fAcquireExecution[execORMWrite].Enter;
+    fAcquireExecution[execORMWrite].Safe.Lock;
     try
       if (fTransactionActiveSession<>0) and
          (fTransactionActiveSession=SessionID) then begin
@@ -29775,7 +29775,7 @@ begin
         fTransactionTable := nil;
       end;
     finally
-      fAcquireExecution[execORMWrite].Leave;
+      fAcquireExecution[execORMWrite].Safe.UnLock;
     end;
   end;
 end;
@@ -29783,7 +29783,7 @@ end;
 procedure TSQLRest.RollBack(SessionID: cardinal);
 begin
   if self<>nil then begin
-    fAcquireExecution[execORMWrite].Enter;
+    fAcquireExecution[execORMWrite].Safe.Lock;
     try
       if (fTransactionActiveSession<>0) and
          (fTransactionActiveSession=SessionID) then begin
@@ -29791,7 +29791,7 @@ begin
         fTransactionTable := nil;
       end;
     finally
-      fAcquireExecution[execORMWrite].Leave;
+      fAcquireExecution[execORMWrite].Safe.UnLock;
     end;
   end;
 end;
@@ -29799,7 +29799,7 @@ end;
 function TSQLRest.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
 begin
   result := false;
-  fAcquireExecution[execORMWrite].Enter;
+  fAcquireExecution[execORMWrite].Safe.Lock;
   try
     if fTransactionActiveSession=0 then begin // nested transactions are not allowed
       fTransactionActiveSession := SessionID;
@@ -29807,7 +29807,7 @@ begin
       result := true;
     end;
   finally
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 
@@ -29815,11 +29815,11 @@ function TSQLRest.TransactionActiveSession: cardinal;
 begin
   if self=nil then
     result := 0 else begin
-    fAcquireExecution[execORMWrite].Enter;
+    fAcquireExecution[execORMWrite].Safe.Lock;
     try
       result := fTransactionActiveSession;
     finally
-      fAcquireExecution[execORMWrite].Leave;
+      fAcquireExecution[execORMWrite].Safe.UnLock;
     end;
   end;
 end;
@@ -30902,7 +30902,7 @@ constructor TSQLRestThread.Create(aRest: TSQLRest;
 begin
   if aRest=nil then
     raise EORMException.CreateUTF8('%.Create(aRest=nil)',[self]);
-  fLock := TSynCriticalSection.Create;
+  fSafe.Init;
   fRest := aRest;
   fOwnRest := aOwnRest;
   inherited Create(True);
@@ -30913,7 +30913,7 @@ begin
   inherited Destroy;
   if fOwnRest then
     FreeAndNil(fRest);
-  FreeAndNil(fLock);
+  fSafe.Done;
 end;
 
 procedure TSQLRestThread.Execute;
@@ -30983,7 +30983,7 @@ begin
   result := false;
   if (self=nil) or (Count=0) then
     exit;
-  Acquire;
+  Safe.Lock;
   try
     for i := Count-1 downto 0 do
       if List[i].Instance=aInstance then begin
@@ -30991,7 +30991,7 @@ begin
         result := true;
       end;
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -31000,7 +31000,7 @@ procedure TSQLRestClientCallbacks.DoRegister(aID: integer;
 begin
   if aID<=0 then
     exit;
-  Acquire;
+  Safe.Lock;
   try
     if length(List)>=Count then
       SetLength(List,Count+32);
@@ -31011,7 +31011,7 @@ begin
     end;
     inc(Count);
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -32482,13 +32482,13 @@ begin
   Log.Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount],self);
   {$endif}
   OnNotifyCallback := nil;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     if fShutdownRequested then
       exit; // Shutdown method already called
     fShutdownRequested := true; // will be identified by TSQLRestServer.URI()
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
   end;
   repeat
     SleepHiRes(5);
@@ -32686,7 +32686,7 @@ var m: integer;
     field: TSQLPropInfoRTTIRecordVersion;
     current,max,mDeleted: Int64;
 begin
-  fAcquireExecution[execORMWrite].Enter;
+  fAcquireExecution[execORMWrite].Safe.Lock;
   try
     if fRecordVersionMax=0 then begin // check twice to avoid race condition
       current := 0;
@@ -32713,7 +32713,7 @@ begin
     end;
     fRecordVersionMax := current;
   finally
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 
@@ -32721,10 +32721,10 @@ function TSQLRestServer.InternalRecordVersionComputeNext: TRecordVersion;
 begin
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(@result) else begin
-    fAcquireExecution[execORMWrite].Enter;
+    fAcquireExecution[execORMWrite].Safe.Lock;
     inc(fRecordVersionMax);
     result := fRecordVersionMax;
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 
@@ -32809,7 +32809,7 @@ begin
       break;
     end else
     try
-      fAcquireExecution[execORMWrite].Enter;
+      fAcquireExecution[execORMWrite].Safe.Lock;
       fRecordVersionDeleteIgnore := true;
       if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
         InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
@@ -32825,7 +32825,7 @@ begin
       end;
     finally
       fRecordVersionDeleteIgnore := false;
-      fAcquireExecution[execORMWrite].Leave;
+      fAcquireExecution[execORMWrite].Safe.UnLock;
       Writer.Free;
     end;
   until false;
@@ -32858,7 +32858,7 @@ begin
   if Props.RecordVersionField=nil then
     raise EORMException.CreateUTF8(
       '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,Table]);
-  fAcquireExecution[execORMWrite].Enter;
+  fAcquireExecution[execORMWrite].Safe.Lock;
   try
     Where := '%>? order by %';
     if MaxRowLimit>0 then
@@ -32932,7 +32932,7 @@ begin
       ListDeleted.Free;
     end;
   finally
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 
@@ -33272,7 +33272,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     for i := 0 to high(fSessionAuthentication) do
       if fSessionAuthentication[i].ClassType=aMethod then begin
@@ -33291,7 +33291,7 @@ begin
        (not TableHasRows(fSQLAuthGroupClass))) then
       CreateMissingTables(0,fCreateMissingTablesOptions);
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
   end;
 end;
 
@@ -33308,7 +33308,7 @@ var i: integer;
 begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     for i := 0 to high(fSessionAuthentication) do
       if fSessionAuthentication[i].ClassType=aMethod then begin
@@ -33317,7 +33317,7 @@ begin
         break;
       end;
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
   end;
 end;
 
@@ -33333,9 +33333,9 @@ procedure TSQLRestServer.AuthenticationUnregisterAll;
 begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   ObjArrayClear(fSessionAuthentication);
-  fSessions.UnLock;
+  fSessions.Safe.UnLock;
 end;
 
 procedure TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8);
@@ -33592,7 +33592,7 @@ begin
   if Server.HandleAuthentication then begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     result := false;
-    Server.fSessions.Lock;
+    Server.fSessions.Safe.Lock;
     try
       if Server.fSessionAuthentication<>nil then
         for i := 0 to length(Server.fSessionAuthentication)-1 do begin
@@ -33609,7 +33609,7 @@ begin
           end;
         end;
     finally
-      Server.fSessions.UnLock;
+      Server.fSessions.Safe.UnLock;
     end;
     // if we reached here, no session was found
     if Service<>nil then
@@ -33667,7 +33667,7 @@ begin
         Method := ExecuteORMWrite;
         Start64 := GetTickCount64;
         repeat
-          if TryEnter then
+          if Safe.TryLock then
           try
             if (Server.fTransactionActiveSession=0) or // avoid transaction mixups
                (Server.fTransactionActiveSession=Session) then begin
@@ -33678,7 +33678,7 @@ begin
               break;   // will handle Mode<>amLocked below
             end;
           finally
-            Leave;
+            Safe.UnLock;
           end;
           if (LockedTimeOut<>0) and (GetTickCount64>Start64+LockedTimeOut) then begin
             TimeOut; // wait up to 2 second by default
@@ -33701,20 +33701,20 @@ begin
       Method;
     amLocked:
       if LockedTimeOut=0 then begin
-        Enter;
+        Safe.Lock;
         try
           Method;
         finally
-          Leave;
+          Safe.UnLock;
         end;
       end else begin
       Start64 := GetTickCount64;
       repeat
-        if TryEnter then
+        if Safe.TryLock then
         try
           Method;
         finally
-          Leave;
+          Safe.UnLock;
         end;
         if GetTickCount64>Start64+LockedTimeOut then
           break; // wait up to 2 second by default
@@ -33971,7 +33971,7 @@ begin
       if TableID>0 then begin
         // GET ModelRoot/TableName/TableID[/BlobFieldName] to retrieve one member,
         // with or w/out locking, or a specified BLOB field content
-        if Method=mLOCK then // LOCK is to be followed by PUT -> check user
+        if Method=mLOCK then // Safe.Lock is to be followed by PUT -> check user
           if not (TableIndex in Call.RestAccessRights^.PUT) then
             Call.OutStatus := HTML_NOTALLOWED else
             if Server.Model.Lock(TableIndex,TableID) then
@@ -34007,7 +34007,7 @@ begin
           end;
       end else
       // ModelRoot/TableName with 'select=..&where=' or YUI paging
-      if Method<>mLOCK then begin // LOCK not available here
+      if Method<>mLOCK then begin // Safe.Lock not available here
         SQLSelect := 'RowID'; // if no select is specified (i.e. ModelRoot/TableName)
         // all IDs of this table are returned to the client
         SQLTotalRowsCount := 0;
@@ -34217,7 +34217,7 @@ begin
   mBEGIN: begin      // BEGIN TRANSACTION
     // TSQLVirtualTableJSON/External will rely on SQLite3 module
     // and also TSQLRestStorageInMemory, since COMMIT/ROLLBACK have Static=nil
-    // mBEGIN logic is just the opposite of mEND/mABORT: lock main, then static
+    // mBEGIN logic is just the opposite of mEND/mABORT: Safe.Lock main, then static
     if Server.TransactionBegin(Table,Session) then begin
       if (Static<>nil) and (StaticKind=sVirtualTable) then
         Static.TransactionBegin(Table,Session) else
@@ -35164,7 +35164,7 @@ begin
      (fSessions<>nil) then begin
     W.CancelLastComma;
     W.AddShort(',"sessions":[');
-    fSessions.Lock;
+    fSessions.Safe.Lock;
     try
       for s := 0 to fSessions.Count-1 do begin
         W.WriteObject(fSessions.List[s]);
@@ -35190,7 +35190,7 @@ begin
         end;
       end;
     finally
-      fSessions.UnLock;
+      fSessions.Safe.UnLock;
     end;
     W.CancelLastComma;
     W.Add(']',',');
@@ -35324,13 +35324,13 @@ var i: integer;
 begin
   if fSessionAuthentication=nil then
     exit;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     for i := 0 to length(fSessionAuthentication)-1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
         break; // found an authentication, which may be successfull or not
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
   end;
 end;
 
@@ -35355,7 +35355,7 @@ end;
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
     Tix64: Int64;
-begin // caller shall be locked via fSessions.Lock
+begin // caller shall be locked via fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
     // first check for outdated sessions to be deleted
     Tix64 := GetTickCount64;
@@ -35386,7 +35386,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     for i := 0 to fSessions.Count-1 do
       with TAuthSession(fSessions.List[i]) do
@@ -35398,7 +35398,7 @@ begin
         Break;
       end;
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
   end;
 end;
 
@@ -35417,7 +35417,7 @@ begin
   MS := TRawByteStringStream.Create;
   try
     W := TFileBufferWriter.Create(MS);
-    fSessions.Lock;
+    fSessions.Safe.Lock;
     try
       W.WriteVarUInt32(InternalState);
       SQLAuthUserClass.RecordProps.SaveBinaryHeader(W);
@@ -35428,7 +35428,7 @@ begin
       W.Write4(MAGIC_SESSION);
       W.Flush;
     finally
-      fSessions.UnLock;
+      fSessions.Safe.UnLock;
       W.Free;
     end;
     s := SynLZCompress(MS.DataString);
@@ -35458,7 +35458,7 @@ begin
   if s='' then
     exit;
   R.OpenFrom(pointer(s),length(s));
-  fSessions.Lock;
+  fSessions.Safe.Lock;
   try
     InternalState := R.ReadVarUInt32;
     if not SQLAuthUserClass.RecordProps.CheckBinaryHeader(R) or
@@ -35474,7 +35474,7 @@ begin
     if PCardinal(P)^<>MAGIC_SESSION then
       ContentError;
   finally
-    fSessions.UnLock;
+    fSessions.Safe.UnLock;
     R.Close;
   end;
   if andDeleteExistingFileAfterRead then
@@ -35857,7 +35857,7 @@ begin
 {$else}
 begin
 {$endif}
-  fAcquireExecution[execORMWrite].Enter; // avoid race condition
+  fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
     MaxRevisionJSON := fTrackChangesHistory[TableHistoryIndex].MaxRevisionJSON;
@@ -35964,7 +35964,7 @@ begin
       Rec.Free;
     end;
   finally
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 
@@ -35982,7 +35982,7 @@ begin
   else exit;
   end;
   TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-  fAcquireExecution[execORMWrite].Enter; // avoid race condition
+  fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
                         'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
@@ -35996,7 +35996,7 @@ begin
       // fast append as JSON until reached MaxSentDataJsonRow
       inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
   finally
-    fAcquireExecution[execORMWrite].Leave;
+    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 begin
@@ -36396,7 +36396,7 @@ begin
       PerformAutomaticCommit;
   finally
     if RunningBatchRest<>nil then
-      RunningBatchRest.InternalBatchStop; // send pending rows, and release lock
+      RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
   end;
   except
     on Exception do begin
@@ -37121,7 +37121,7 @@ function TServicesPublishedInterfacesList.FindURI(
 var tix: Int64;
 begin
   tix := GetTickCount64;
-  Enter;
+  Safe.Lock;
   try
     for result := 0 to Count-1 do
       if List[result].PublicURI.Equals(aPublicURI) then
@@ -37129,7 +37129,7 @@ begin
           exit;
     result := -1;
   finally
-    Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -37140,7 +37140,7 @@ var i,n: integer;
 begin
   tix := GetTickCount64;
   result := nil;
-  Enter;
+  Safe.Lock;
   try
     n := 0;
     for i := Count-1 downto 0 do // downwards to return the latest first
@@ -37151,7 +37151,7 @@ begin
           inc(n);
         end;
   finally
-    Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -37163,14 +37163,14 @@ begin
   tix := GetTickCount64;
   result := nil;
   n := 0;
-  Enter;
+  Safe.Lock;
   try
     for i := Count-1 downto 0 do // downwards to return the latest first
       if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then
           AddRawUTF8(TRawUTF8DynArray(result),n,List[i].PublicURI.URI);
   finally
-    Leave;
+    Safe.UnLock;
   end;
   SetLength(result,n);
 end;
@@ -37181,7 +37181,7 @@ var i: integer;
     tix: Int64;
 begin
   tix := GetTickCount64;
-  Enter;
+  Safe.Lock;
   try
     aWriter.Add('[');
     if aServiceName='*' then begin
@@ -37204,7 +37204,7 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   finally
-    Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -37221,7 +37221,7 @@ procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
 var tix: Int64;
     i: integer;
 begin
-  Enter;
+  Safe.Lock;
   try
     fDynArray.LoadFromJSON(pointer(PublishedJson));
     fDynArrayTimeoutTix.Count := Count;
@@ -37232,7 +37232,7 @@ begin
     for i := 0 to Count-1 do
       fTimeoutTix[i] := tix;
   finally
-    Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -37255,7 +37255,7 @@ begin
   if (RecordLoadJSON(nfo,P,TypeInfo(TServicesPublishedInterfaces))=nil) or
      (nfo.PublicURI.Address='') then
     exit; // invalid supplied JSON content
-  Enter;
+  Safe.Lock;
   try // store so that the latest updated version is always at the end
     for i := 0 to Count-1 do
       if List[i].PublicURI.Equals(nfo.PublicURI) then begin // ignore Timeout
@@ -37273,7 +37273,7 @@ begin
     end;
     fLastPublishedJson := crc;
   finally
-    Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -40078,13 +40078,13 @@ end;
 constructor TJSONSerializerRegisteredClassAbstract.Create;
 begin
   inherited Create;
-  InitializeCriticalSection(Lock);
+  fSafe.Init;
 end;
 
 destructor TJSONSerializerRegisteredClassAbstract.Destroy;
 begin
-  DeleteCriticalSection(Lock);
   inherited;
+  fSafe.Done;
 end;
 
 function TJSONSerializerRegisteredClass.Find(JSON: PUTF8Char; AndRegisterClass: boolean): TClass;
@@ -40100,12 +40100,12 @@ begin // at input, JSON^='{'
   repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if JSONRetrieveStringField(JSON,ClassNameValue,ClassNameLen,false)=nil then
     exit; //invalid JSON string value
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
-    if (LastClass<>nil) and
-       IdemPropName(PShortString(PPointer(PtrInt(LastClass)+vmtClassName)^)^,
+    if (fLastClass<>nil) and
+       IdemPropName(PShortString(PPointer(PtrInt(fLastClass)+vmtClassName)^)^,
        ClassNameValue,ClassNameLen) then begin
-      result := LastClass; // for speed-up e.g. within a loop
+      result := fLastClass; // for speed-up e.g. within a loop
       exit;
     end;
     result := Find(ClassNameValue,ClassNameLen);
@@ -40117,23 +40117,23 @@ begin // at input, JSON^='{'
       {$endif}
         exit; // unknown type
     end;
-    LastClass  := result;
+    fLastClass  := result;
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
 procedure TJSONSerializerRegisteredClass.AddOnce(aItemClass: TClass);
 var i: integer;
 begin
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
     for i := 0 to Count-1 do
       if TClass(List[i])=aItemClass then
         exit; // already registered
     Add(aItemClass);
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
@@ -40141,7 +40141,7 @@ function TJSONSerializerRegisteredClass.Find(aClassName: PUTF8Char; aClassNameLe
 var i: integer;
 begin
   result := nil;
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
     for i := 0 to Count-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
@@ -40152,7 +40152,7 @@ begin
         exit;
       end;
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
@@ -40173,7 +40173,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
     for i := 0 to (Count shr 1)-1 do
       if TClass(List[i*2])=aCollection then begin
@@ -40181,7 +40181,7 @@ begin
         exit;
       end;
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
@@ -40189,12 +40189,12 @@ procedure TJSONSerializerRegisteredCollection.AddOnce(aCollection: TCollectionCl
 begin
   if (self=nil) or (Find(aCollection)<>nil) then
     exit;
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
     Add(aCollection);
     Add(aItem);
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
@@ -40203,7 +40203,7 @@ function TJSONSerializerRegisteredCollection.Find(aCollClassName: PUTF8Char;
 var i: integer;
 begin
   result := nil;
-  EnterCriticalSection(Lock);
+  fSafe.Lock;
   try
     for i := 0 to (Count shr 1)-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
@@ -40214,7 +40214,7 @@ begin
         exit;
       end;
   finally
-    LeaveCriticalSection(Lock)
+    fSafe.UnLock;
   end;
 end;
 
@@ -41782,7 +41782,7 @@ begin
      IsZero(Fields) then
     exit;
   item.ValueFields := Fields;
-  Acquire;
+  fSafe.Lock;
   try
     if ForceID then begin
       item.ID := Value.IDValue;
@@ -41800,7 +41800,7 @@ begin
     item.Value := Value; // instance will be owned by the list
     InternalAddItem(item);
   finally
-    Release;
+    Safe.UnLock;
   end;
   result := item.ID;
 end;
@@ -41820,7 +41820,7 @@ var i: integer;
 begin
   if (self=nil) or (ID=0) then
     exit;
-  Acquire;
+  fSafe.Lock;
   try
     i := fItems.Find(ID);
     if i>=0 then
@@ -41835,7 +41835,7 @@ begin
     FillZero(item.ValueFields);
     InternalAddItem(item);
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -41851,7 +41851,7 @@ begin
     exit;
   item.ID := Value.IDValue;
   item.ValueFields := Fields;
-  Acquire;
+  fSafe.Lock;
   try
     i := fItems.Find(item);
     if i>=0 then begin
@@ -41869,7 +41869,7 @@ begin
     end;
     result := true;
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -41891,7 +41891,7 @@ begin
     exit;
   end;
   result := TSQLRestBatch.Create(Rest,fStoredClass,AutomaticTransactionPerRow,[]);
-  Acquire;
+  fSafe.Lock;
   try
     for i := 0 to fCount-1 do
     with fItem[i] do
@@ -41904,7 +41904,7 @@ begin
       end;
     fItems.Clear;
   finally
-    Release;
+    Safe.UnLock;
   end;
 end;
 
@@ -44178,7 +44178,7 @@ begin
     try
       PasswordPlain := pass; // compute SHA-256 hash of the supplied password
       if PasswordHashHexa=result.User.PasswordHashHexa then begin
-        // match -> store header in result (locked by fSessions.Lock)
+        // match -> store header in result (locked by fSessions.fSafe.Lock)
         result.fExpectedHttpAuthentication := userPass;
         exit;
       end;
@@ -45306,7 +45306,7 @@ procedure EnterInterfaceFactoryCache;
 begin
   if InterfaceFactoryCache=nil then
     GarbageCollectorFreeAndNil(InterfaceFactoryCache,TObjectListLocked.Create);
-  InterfaceFactoryCache.Lock;
+  InterfaceFactoryCache.Safe.Lock;
 end;
 
 class function TInterfaceFactory.Get(aInterface: PTypeInfo): TInterfaceFactory;
@@ -45331,7 +45331,7 @@ begin
     {$endif}
     InterfaceFactoryCache.Add(result);
   finally
-    InterfaceFactoryCache.UnLock;
+    InterfaceFactoryCache.Safe.UnLock;
   end;
 end;
 
@@ -45355,18 +45355,18 @@ var i,ga: integer;
     GUID32: TGUID32 absolute aGUID;
 begin
   if InterfaceFactoryCache<>nil then begin
-    InterfaceFactoryCache.Lock;
+    InterfaceFactoryCache.Safe.Lock;
     F := @InterfaceFactoryCache.List[0];
     ga := GUID32.a;
     for i := 0 to InterfaceFactoryCache.Count-1 do
     with PGUID32(@F^.fInterfaceIID)^ do
     if (a=ga) and (b=GUID32.b) and (c=GUID32.c) and (d=GUID32.d) then begin
       result := F^;
-      InterfaceFactoryCache.UnLock;
+      InterfaceFactoryCache.Safe.UnLock;
       exit;
     end else
       inc(F);
-    InterfaceFactoryCache.UnLock;
+    InterfaceFactoryCache.Safe.UnLock;
   end;
   result := nil;
 end;
@@ -45780,7 +45780,7 @@ var i: integer;
     P: PCardinal;
 begin
   if fFakeVTable=nil then begin
-    InterfaceFactoryCache.Lock;
+    InterfaceFactoryCache.Safe.Lock;
     try
       if fFakeVTable=nil then begin // avoid race condition error
         SetLength(fFakeVTable,fMethodsCount+RESERVED_VTABLE_SLOTS);
@@ -45809,7 +45809,7 @@ begin
         end;
       end;
     finally
-      InterfaceFactoryCache.UnLock;
+      InterfaceFactoryCache.Safe.UnLock;
     end;
   end;
   result := pointer(fFakeVTable);
@@ -46072,7 +46072,7 @@ begin
           [self,aInterface^.Name]);
     InterfaceFactoryCache.Add(Create(aInterface));
   finally
-    InterfaceFactoryCache.UnLock;
+    InterfaceFactoryCache.Safe.UnLock;
   end;
 end;
 
@@ -47034,7 +47034,7 @@ begin
   EnterCriticalSection(GlobalInterfaceResolutionLock);
   for i := 0 to length(GlobalInterfaceResolution)-1 do
     if GlobalInterfaceResolution[i].TypeInfo=aInterface then begin
-      LeaveCriticalSection(GlobalInterfaceResolutionLock); // release lock now
+      LeaveCriticalSection(GlobalInterfaceResolutionLock); // release fSafe.Lock now
       raise EInterfaceResolverException.CreateUTF8(
         '%.RegisterGlobal(%): % already registered',
         [self,aImplementationClass,aInterface^.Name]);
@@ -47531,9 +47531,9 @@ begin
     exit;
   if fFakeCallbacks=nil then
     fFakeCallbacks := TObjectListLocked.Create(false);
-  fFakeCallbacks.Lock;
+  fFakeCallbacks.Safe.Lock;
   fFakeCallbacks.Add(aFakeInstance);
-  fFakeCallbacks.UnLock;
+  fFakeCallbacks.Safe.UnLock;
 end;
 
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
@@ -47546,7 +47546,7 @@ begin
     exit;
   connectionID := 0;
   callbackID := 0;
-  fFakeCallbacks.Lock;
+  fFakeCallbacks.Safe.Lock;
   try
     i := fFakeCallbacks.IndexOf(aFakeInstance);
     if i>=0 then begin
@@ -47560,7 +47560,7 @@ begin
       fFakeCallbacks.Delete(i);
     end;
   finally
-    fFakeCallbacks.UnLock;
+    fFakeCallbacks.Safe.UnLock;
   end;
   if connectionID<>0 then begin
     server := fRest as TSQLRestServer;
@@ -47588,7 +47588,7 @@ begin
   fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
     [ClassType,fakeID,Values[0].Name],sllDebug);
   try
-    fFakeCallbacks.Lock;
+    fFakeCallbacks.Safe.Lock;
     for i := 0 to fFakeCallbacks.Count-1 do begin
       fake := fFakeCallbacks.List[i];
       if (fake.fLowLevelConnectionID=connectionID) and
@@ -47612,7 +47612,7 @@ begin
       end;
     end;
   finally
-    fFakeCallbacks.UnLock;
+    fFakeCallbacks.Safe.UnLock;
   end;
 end;
 
@@ -47624,7 +47624,7 @@ begin
   result := false;
   if (self=nil) or (cardinal(TableIndex)>cardinal(fRest.Model.TablesMax)) then
     exit;
-  fRest.fAcquireExecution[execORMWrite].Enter;
+  fRest.fAcquireExecution[execORMWrite].fSafe.Lock;
   try
     if RecordVersion<>(fRest as TSQLRestServer).fRecordVersionMax then
       exit; // there are some missing items on the client side
@@ -47636,7 +47636,7 @@ begin
        (instance.ClassType=TInterfacedObjectFakeServer) then
       TInterfacedObjectFakeServer(instance).fRaiseExceptionOnInvokeError := True;
   finally
-    fRest.fAcquireExecution[execORMWrite].Leave;
+    fRest.fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
   result := true;
 end;
@@ -47658,7 +47658,7 @@ var i: integer;
     arr: ^IServiceRecordVersionCallbackDynArray;
 begin
   try
-    fRest.fAcquireExecution[execORMWrite].Enter;
+    fRest.fAcquireExecution[execORMWrite].fSafe.Lock;
     try
       arr := @fRecordVersionCallback[TableIndex];
       for i := length(arr^)-1 downto 0 do // downto: InterfaceArrayDelete() below
@@ -47675,7 +47675,7 @@ begin
             InterfaceArrayDelete(arr^,i);
           end;
     finally
-      fRest.fAcquireExecution[execORMWrite].Leave;
+      fRest.fAcquireExecution[execORMWrite].Safe.UnLock;
     end;
   except // ignore any exception here
   end;
@@ -49097,7 +49097,7 @@ end;
 
 procedure TBlockingCallback.CallbackFinished(aRestForLog: TSQLRest);
 begin
-  Lock;
+  fSafe.Lock;
   try
     if fEvent in [evRaised,evTimeout] then
       exit; // ignore if already notified
@@ -49106,27 +49106,27 @@ begin
       aRestForLog.LogClass.Add.Log(sllTrace,self);
     fEventNotifier.SetEvent; // notify caller
   finally
-    UnLock;
+    Safe.UnLock;
   end;
 end;
 
 procedure TBlockingCallback.WaitFor;
 begin
-  Lock;
+  fSafe.Lock;
   try
     if fEvent in [evRaised,evTimeOut] then
       exit;
     fEvent := evWaiting;
   finally
-    UnLock;
+    Safe.UnLock;
   end;
   FixedWaitFor(fEventNotifier,fTimeOutMs);
-  Lock;
+  fSafe.Lock;
   try
     if fEvent<>evRaised then
       fEvent := evTimeout;
   finally
-    UnLock;
+    Safe.UnLock;
   end;
 end;
 
@@ -49207,13 +49207,13 @@ begin
     del.Deleted := ID;
     if fBatch=nil then
     try
-      fSlave.fAcquireExecution[execORMWrite].Enter;
+      fSlave.fAcquireExecution[execORMWrite].fSafe.Lock;
       fSlave.fRecordVersionDeleteIgnore := true;
       fSlave.Add(del,true,true,true);
       fSlave.Delete(fTable,ID);
     finally
       fSlave.fRecordVersionDeleteIgnore := false;
-      fSlave.fAcquireExecution[execORMWrite].Leave;
+      fSlave.fAcquireExecution[execORMWrite].Safe.UnLock;
     end else begin
       fBatch.Add(del,true,true);
       fBatch.Delete(fTable,ID);
@@ -49240,12 +49240,12 @@ begin
       Error('previous active BATCH -> send pending');
   if fBatch<>nil then
   try
-    fSlave.fAcquireExecution[execORMWrite].Enter;
+    fSlave.fAcquireExecution[execORMWrite].fSafe.Lock;
     fSlave.fRecordVersionDeleteIgnore := true;
     fSlave.BatchSend(fBatch);
   finally
     fSlave.fRecordVersionDeleteIgnore := false;
-    fSlave.fAcquireExecution[execORMWrite].Leave;
+    fSlave.fAcquireExecution[execORMWrite].Safe.UnLock;
     FreeAndNil(fBatch);
   end;
   if not isLast then
