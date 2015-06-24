@@ -341,6 +341,7 @@ type
 
   PTextFile = ^TextFile;
 
+  {$M+}
   /// Fast low-level Socket implementation
   // - direct access to the OS (Windows, Linux) network layer API
   // - use Open constructor to create a client to be connected to a server
@@ -494,16 +495,17 @@ type
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
     property KeepAlive: Integer index SO_KEEPALIVE write SetInt32OptionByIndex;
+    /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
+    property SockIn: PTextFile read fSockIn;
+    /// after CreateSockOut, use Writeln(SockOut^S,s) to send a line to the opened socket
+    property SockOut: PTextFile read fSockOut;
+  published
     /// initialized after Open() with socket
     property Sock: TSocket read fSock;
     /// initialized after Open() with Server name
     property Server: SockString read fServer;
     /// initialized after Open() with port number
     property Port: SockString read fPort;
-    /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
-    property SockIn: PTextFile read fSockIn;
-    /// after CreateSockOut, use Writeln(SockOut^S,s) to send a line to the opened socket
-    property SockOut: PTextFile read fSockOut;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
     property TimeOut: cardinal read fTimeOut;
@@ -512,6 +514,7 @@ type
     /// total bytes sent
     property BytesOut: Int64 read fBytesOut;
   end;
+  {$M-}
 
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
@@ -2657,7 +2660,7 @@ begin
   // Recv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
-    inc(Sock.fBytesIn, Size);
+    inc(Sock.fBytesIn,Size);
     result := 0; // no error
   end else begin
     Sock.fSockInEof := true; // error -> mark end of SockIn
@@ -2991,7 +2994,7 @@ begin
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
       if Size<=0 then
         exit;
-      inc(fBytesIn, Size);
+      inc(fBytesIn,Size);
       dec(Length,Size);
       inc(PByte(Buffer),Size);
       if Length=0 then

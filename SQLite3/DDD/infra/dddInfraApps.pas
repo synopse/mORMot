@@ -200,11 +200,11 @@ type
     /// get Length bytes from the (mocked) socket
     // - returns the number of bytes read into the Content buffer
     // - call e.g. TCrtSocket.SockInRead() method
-    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
     /// send Length bytes to the (mocked) socket
     // - returns false on any error, true on success
     // - call e.g. TCrtSocket.TrySndLow() method
-    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+    function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
   end;
 
   TDDDSocketThread = class;
@@ -232,9 +232,10 @@ type
     /// call TCrtSocket.SockInPending() method
     function DataInPending(aTimeOut: integer): integer;
     /// call TCrtSocket.SockInRead() method
-    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
     /// call TCrtSocket.TrySndLow() method
-    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+    function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
+  published
     /// read-only access to the associated processing thread
     property Owner: TDDDSocketThread read fOwner;
     /// read-only access to the associated processing socket
@@ -270,7 +271,7 @@ type
   // the internal in-memory buffers, as with a regular Socket
   // - you could fake exception, for any upcoming method call, via MockException() 
   // - you could emulate network latency, for any upcoming method call, via
-  // MockLatency()
+  // MockLatency() - to emulate remote/wireless access, or thread pool contention 
   // - this implementation is thread-safe, so multiple threads could access
   // the same IDDDSocket instance, and settings be changed in real time
   TDDDMockedSocket = class(TInterfacedObjectLocked,IDDDSocket)
@@ -292,10 +293,10 @@ type
     /// add some bytes to the internal fake input storage
     // - would be made accessible to the DataInPending/DataIn methods
     // - the supplied buffer would be gathered to any previous MockDataIn()
-    // call, which has not been read yet by the DataIn method
+    // call, which has not been read yet by the DataIn() method
     procedure MockDataIn(const Content: RawByteString);
     /// return the bytes from the internal fake output storage
-    // - as has be previously set by the DataOut method
+    // - as has be previously set by the DataOut() method
     // - will gather all data from several DataOut() calls in a single buffer 
     function MockDataOut: RawByteString;
     /// the specified methods would raise an exception
@@ -333,11 +334,11 @@ type
     // - returns the number of bytes read into the Content buffer
     // - note that all pending data is returned as once, i.e. all previous
     // calls to MockDataIn() would be gathered in a single buffer
-    function DataIn(Content: PAnsiChar; Length: integer): integer;
+    function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
     /// IDDDSocket method to send Length bytes to the mocked socket
     // - returns false on any error, true on success
     // - then MockDataOut could be used to retrieve the sent data
-    function DataOut(Content: PAnsiChar; Length: integer): boolean;
+    function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
   published
     /// read-only access to the processing Thread using this fake/emulated socket
     property Owner: TDDDSocketThread read fOwner;
@@ -918,11 +919,11 @@ begin
   fSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
 end;
 
-function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; Length: integer): integer;
+function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; ContentLength: integer): integer;
 begin
   fSafe.Lock;
   try
-    result := fSocket.SockInRead(Content,Length,false);
+    result := fSocket.SockInRead(Content,ContentLength,false);
   finally
     fSafe.UnLock;
   end;
@@ -938,11 +939,11 @@ begin
   end;
 end;
 
-function TDDDSynCrtSocket.DataOut(Content: PAnsiChar; Length: integer): boolean;
+function TDDDSynCrtSocket.DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
 begin
   fOutput.Lock;
   try
-    result := fSocket.TrySndLow(Content,Length);
+    result := fSocket.TrySndLow(Content,ContentLength);
   finally
     fOutput.UnLock;
   end;
@@ -980,15 +981,15 @@ begin
   end;
 end;
 
-function TDDDMockedSocket.DataIn(Content: PAnsiChar; Length: integer): integer;
+function TDDDMockedSocket.DataIn(Content: PAnsiChar; ContentLength: integer): integer;
 begin
   CheckLatency(mslDataIn);
   fSafe.Lock;
   try
     CheckRaiseException(msaDataInRaiseException);
-    result := system.length(fInput);
-    if Length<result then
-      result := Length;
+    result := length(fInput);
+    if ContentLength<result then
+      result := ContentLength;
     if result<=0 then
       exit;
     MoveFast(pointer(fInput)^,Content^,result);
@@ -1009,7 +1010,7 @@ begin
   end;
 end;
 
-function TDDDMockedSocket.DataOut(Content: PAnsiChar; Length: integer): boolean;
+function TDDDMockedSocket.DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
 var previous: integer;
 begin
   CheckLatency(mslDataOut);
@@ -1022,11 +1023,11 @@ begin
       exit;
     end;
     result := true;
-    if Length<=0 then
+    if ContentLength<=0 then
       exit;
-    previous := system.length(fOutput);
-    SetLength(fOutput,previous+Length);
-    MoveFast(Content^,PByteArray(fOutput)^[previous],Length);
+    previous := length(fOutput);
+    SetLength(fOutput,previous+ContentLength);
+    MoveFast(Content^,PByteArray(fOutput)^[previous],ContentLength);
   finally
     fSafe.UnLock;
   end;
