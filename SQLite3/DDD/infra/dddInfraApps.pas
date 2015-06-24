@@ -211,13 +211,16 @@ type
 
   /// implements IDDDSocket using a SynCrtSock.TCrtSocket instance
   // - used by TDDDSocketThread for its default network communication
-  TDDDSynCrtSocket = class(TInterfacedObject,IDDDSocket)
+  // - this class will also create two mutexes, one for DataIn/DataInPending,
+  // another for DataOut thread-safe process
+  TDDDSynCrtSocket = class(TInterfacedObjectLocked,IDDDSocket)
   protected
     fSocket: TCrtSocket;
     fOwner: TDDDSocketThread;
+    fOutput: TSynLocker; // input lock is TInterfacedObjectLocked.Safe
   public
     /// initialize the internal TCrtSocket instance
-    constructor Create(aOwner: TDDDSocketThread);
+    constructor Create(aOwner: TDDDSocketThread); reintroduce; virtual;
     /// finalize the internal TCrtSocket instance
     destructor Destroy; override;
     /// call TCrtSocket.OpenBind
@@ -782,11 +785,13 @@ begin
   inherited Create;
   fOwner := aOwner;
   fSocket := TCrtSocket.Create(fOwner.Settings.SocketTimeout);
+  fOutput.Init;
 end;
 
 destructor TDDDSynCrtSocket.Destroy;
 begin
   FreeAndNil(fSocket);
+  fOutput.Done;
   inherited;
 end;
 
@@ -798,17 +803,32 @@ end;
 
 function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; Length: integer): integer;
 begin
-  result := fSocket.SockInRead(Content,Length,false);
+  fSafe.Lock;
+  try
+    result := fSocket.SockInRead(Content,Length,false);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TDDDSynCrtSocket.DataInPending(aTimeOut: integer): integer;
 begin
-  result := fSocket.SockInPending(aTimeOut);
+  fSafe.Lock;
+  try
+    result := fSocket.SockInPending(aTimeOut);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TDDDSynCrtSocket.DataOut(Content: PAnsiChar; Length: integer): boolean;
 begin
-  result := fSocket.TrySndLow(Content,Length);
+  fOutput.Lock;
+  try
+    result := fSocket.TrySndLow(Content,Length);
+  finally
+    fOutput.UnLock;
+  end;
 end;
 
 function TDDDSynCrtSocket.Identifier: RawUTF8;
