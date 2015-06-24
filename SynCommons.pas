@@ -4536,6 +4536,8 @@ type
 
   /// abstract class able to use hashing to find an object in O(1) speed
   // - all protected abstract methods shall be overridden and implemented
+  // - use this class instead of a plain TDynArrayHashed, since it would
+  // feature its own dedicated hashing, and any abstract mean of value storage
   TObjectHash = class
   protected
     fHashs: TSynHashDynArray;
@@ -4558,10 +4560,10 @@ type
     /// to be called when an item is modified
     // - for Delete/Update will force a full rehash on next Find() call
     procedure Invalidate;
-    /// to be called when an item is added
+    /// to be called when an item has just been added
+    // - the index of the latest added item should be Count-1
     // - return FALSE if this item is already existing (i.e. insert error)
     // - return TRUE if has been added to the internal hash table
-    // - the index of the latest added item should be Count-1
     function JustAdded: boolean;
   end;
 
@@ -4621,8 +4623,11 @@ type
   end;
   {$M-}
 
-  /// adding locking methods to a TSynPersistent with virtual constructor
-  // - fix potential CPU cache line conflict, as reported by
+  /// adding cross-platform locking methods to any class instance
+  // - typical use is to define a Safe: TSynLocker property, call Safe.Init
+  // and Safe.Done in constructor/destructor methods, and use
+  // - in respect to the TCriticalSection class, fix a potential CPU cache line
+  // conflict which may degrade the multi-threading performance, as reported by
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   {$ifdef UNICODE}
   TSynLocker = record
@@ -4648,6 +4653,8 @@ type
   end;
 
   /// adding locking methods to a TSynPersistent with virtual constructor
+  // - you may use this class instead of the RTL TCriticalSection, since it
+  // would use a TSynLocker which does not suffer from CPU cache line conflit
   TSynPersistentLocked = class(TSynPersistent)
   protected
     fSafe: TSynLocker;
@@ -4657,6 +4664,7 @@ type
     /// release the instance (including the locking resource)
     destructor Destroy; override;
     /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
   end;
 
@@ -6864,7 +6872,7 @@ type
   // - this inherited class add a mutex to be thread-safe
   TPointerClassHashLocked = class(TPointerClassHash)
   protected
-    fLock: TRTLCriticalSection;
+    fSafe: TSynLocker;
   public
     /// initialize the storage list
     constructor Create;
@@ -7074,18 +7082,16 @@ type
   // to explicitely call Lock/UnLock to enter or leave the critical section
   TRawUTF8ListHashedLocked = class(TRawUTF8ListHashed)
   protected
-    fLock: TRTLCriticalSection;
-    PaddingForLock: array[0..4] of Int64; // just like TSynCriticalSection
+    fSafe: TSynLocker;
   public
     /// initialize the class instance
     constructor Create(aOwnObjects: boolean=false);
     /// finalize the instance
     // - and all internal objects stored, if was created with Create(true)
     destructor Destroy; override;
-    /// lock the list for exclusive access
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
-    /// release the list for exclusive access
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynLocker read fSafe;
     /// find a RawUTF8 item in the stored Strings[] list
     // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
@@ -12662,11 +12668,12 @@ type
   TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
   {$endif DELPHI5OROLDER}
   protected
-    fLock: TRTLCriticalSection;
-    fLocked: boolean;
+    fSafe: TSynLocker;
   public
     /// initialize the mutex
     constructor Create; {$ifndef DELPHI5OROLDER} override; {$endif}
+    /// finalize the mutex
+    destructor Destroy; override;
     /// will enter the mutex until the IUnknown reference is released
     // - warning: under FPC, you should assign its result to a local lockFPC:
     // IUnknown variable - see bug http://bugs.freepascal.org/view.php?id=26602
@@ -12675,8 +12682,6 @@ type
     procedure Enter;
     /// leave the mutex
     procedure Leave;
-    /// finalize the mutex
-    destructor Destroy; override;
   end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
@@ -41516,12 +41521,12 @@ end;
 
 constructor TAutoLocker.Create;
 begin
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TAutoLocker.Destroy;
 begin
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
   inherited;
 end;
 
@@ -41532,12 +41537,12 @@ end;
 
 procedure TAutoLocker.Enter;
 begin
-  EnterCriticalSection(fLock);
+  fSafe.Lock;
 end;
 
 procedure TAutoLocker.Leave;
 begin
-  LeaveCriticalSection(fLock);
+  fSafe.UnLock;
 end;
 
 
@@ -42460,12 +42465,12 @@ end;
 constructor TPointerClassHashLocked.Create;
 begin
   inherited Create;
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TPointerClassHashLocked.Destroy;
 begin
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
   inherited Destroy;
 end;
 
@@ -42473,11 +42478,11 @@ function TPointerClassHashLocked.FindLocked(aInfo: pointer): TPointerClassHashed
 begin
   if self=nil then
     result := nil else begin
-    EnterCriticalSection(fLock);
+    fSafe.Lock;
     try
       result := inherited Find(aInfo);
     finally
-      LeaveCriticalSection(fLock);
+      fSafe.UnLock;
     end;
   end;
 end;
@@ -42487,20 +42492,20 @@ function TPointerClassHashLocked.TryAddLocked(aInfo: pointer;
 var wasAdded: boolean;
     i: integer;
 begin
-  EnterCriticalSection(fLock);
+  fSafe.Lock;
   i := inherited Add(aInfo,wasAdded);
   if wasAdded then begin
     aNewEntry := @List[i];
     result := true; // caller should call Unlock
   end else begin
-    LeaveCriticalSection(fLock);
+    fSafe.UnLock;
     result := false;
   end;
 end;
 
 procedure TPointerClassHashLocked.Unlock;
 begin
-  LeaveCriticalSection(fLock);
+  fSafe.UnLock;
 end;
 
 
@@ -42579,32 +42584,22 @@ end;
 constructor TRawUTF8ListHashedLocked.Create(aOwnObjects: boolean);
 begin
   inherited Create(aOwnObjects);
-  InitializeCriticalSection(fLock);
+  fSafe.Init;
 end;
 
 destructor TRawUTF8ListHashedLocked.Destroy;
 begin
-  DeleteCriticalSection(fLock);
+  fSafe.Done;
   inherited;
-end;
-
-procedure TRawUTF8ListHashedLocked.Lock;
-begin
-  EnterCriticalSection(fLock);
-end;
-
-procedure TRawUTF8ListHashedLocked.UnLock;
-begin
-  LeaveCriticalSection(fLock);
 end;
 
 function TRawUTF8ListHashedLocked.LockedIndexOf(const aText: RawUTF8): PtrInt;
 begin
-  Lock;
+  fSafe.Lock;
   try
     result := IndexOf(aText);
   finally
-    UnLock;
+    fSafe.UnLock;
   end;
 end;
 

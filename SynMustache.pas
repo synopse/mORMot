@@ -662,7 +662,7 @@ end;
 function TSynMustacheCache.Parse(const aTemplate: RawUTF8): TSynMustache;
 var i: integer;
 begin
-  Lock;
+  fSafe.Lock;
   try
     i := IndexOf(aTemplate); // fast instance retrieval from shared cache
     if i>=0 then begin
@@ -672,7 +672,7 @@ begin
     result := TSynMustache.Create(aTemplate);
     AddObject(aTemplate,result);
   finally
-    UnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -682,7 +682,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  Lock;
+  fSafe.Lock;
   try
     i := IndexOf(aTemplate);
     if i>=0 then begin
@@ -690,7 +690,7 @@ begin
       result := true;
     end;
   finally
-    UnLock;
+    fSafe.UnLock;
   end;
 end;
 
