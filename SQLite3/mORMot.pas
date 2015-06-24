@@ -25117,20 +25117,20 @@ end;
 
 {$ifndef NOVARIANTS}
 procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
-procedure ByMethod; // sub proc for faster execution of simple types
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TGetProc = function: Variant of object;
-  TIndexedGetProc = function(Index: Integer): Variant of object;
-var Call: TMethod;
-begin
-  if PropWrap(GetProc).Kind=$FE then
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
-    Call.Code := Pointer(GetProc);
-  Call.Data := Instance;
-  if Index=NO_INDEX then
-    result := TGetProc(Call) else
-    result := TIndexedGetProc(Call)(Index);
-end;
+  procedure ByMethod; // sub proc for faster execution of simple types
+  type // function(Instance: TObject) trick does not work with CPU64 :(
+    TGetProc = function: Variant of object;
+    TIndexedGetProc = function(Index: Integer): Variant of object;
+  var Call: TMethod;
+  begin
+    if PropWrap(GetProc).Kind=$FE then
+      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
+      Call.Code := Pointer(GetProc);
+    Call.Data := Instance;
+    if Index=NO_INDEX then
+      result := TGetProc(Call) else
+      result := TIndexedGetProc(Call)(Index);
+  end;
 begin
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
@@ -25139,20 +25139,20 @@ begin
 end;
 
 procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
-procedure ByMethod; // sub proc for faster execution of simple types
-type // procedure(Instance: TObject) trick does not work with CPU64 :(
-  TSetProp = procedure(const Value: Variant) of object;
-  TIndexedProp = procedure(Index: integer; const Value: Variant) of object;
-var Call: TMethod;
-begin
-  if PropWrap(SetProc).Kind=$FE then
-    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
-    Call.Code := Pointer(SetProc);
-  Call.Data := Instance;
-  if Index=NO_INDEX then
-    TSetProp(Call)(Value) else
-    TIndexedProp(Call)(Index,Value);
-end;
+  procedure ByMethod; // sub proc for faster execution of simple types
+  type // procedure(Instance: TObject) trick does not work with CPU64 :(
+    TSetProp = procedure(const Value: Variant) of object;
+    TIndexedProp = procedure(Index: integer; const Value: Variant) of object;
+  var Call: TMethod;
+  begin
+    if PropWrap(SetProc).Kind=$FE then
+      Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
+      Call.Code := Pointer(SetProc);
+    Call.Data := Instance;
+    if Index=NO_INDEX then
+      TSetProp(Call)(Value) else
+      TIndexedProp(Call)(Index,Value);
+  end;
 begin
   if SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(GetProc).Kind<>$FF then

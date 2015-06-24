@@ -69,6 +69,7 @@ uses
   {$endif}
   SysUtils,
   Classes,
+  Variants,
   SynCommons,
   SynLog,
   mORMot,
@@ -170,17 +171,23 @@ type
 { ----- Implements Thread Processing to access a TCP server }
 
 type
+  TDDDSocketThread = class;
+
   /// the current connection state of the TCP client associated to a
   // TDDDSocketThread thread
   TDDDSocketThreadState = (tpsDisconnected, tpsConnecting, tpsConnected);
   
   /// the monitoring information of a TDDDSocketThread thread
   TDDDSocketThreadMonitoring = class(TDDDAdministratedDaemonMonitor)
-  private
+  protected
     FState: TDDDSocketThreadState;
+    fOwner: TDDDSocketThread;
+    function GetSocket: variant;
   published
     /// how this thread is currently connected to its associated TCP server
     property State: TDDDSocketThreadState read FState write FState;
+    /// information about the associated socket
+    property Socket: variant read GetSocket;
   end;
 
   /// interface allowing to customize/mock a socket connection
@@ -206,8 +213,6 @@ type
     // - call e.g. TCrtSocket.TrySndLow() method
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
   end;
-
-  TDDDSocketThread = class;
 
   /// implements IDDDSocket using a SynCrtSock.TCrtSocket instance
   // - used by TDDDSocketThread for its default network communication
@@ -235,9 +240,11 @@ type
     function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
     /// call TCrtSocket.TrySndLow() method
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
-  published
     /// read-only access to the associated processing thread
+    // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
+    // would point to this instance
     property Owner: TDDDSocketThread read fOwner;
+  published
     /// read-only access to the associated processing socket
     property Socket: TCrtSocket read fSocket;
   end;
@@ -339,15 +346,17 @@ type
     // - returns false on any error, true on success
     // - then MockDataOut could be used to retrieve the sent data
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
-  published
-    /// read-only access to the processing Thread using this fake/emulated socket
+    /// read-only access to the associated processing thread
+    // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
+    // would point to this instance
     property Owner: TDDDSocketThread read fOwner;
+  published
     /// how many bytes are actually in the internal input buffer
     property PendingInBytes: integer read GetPendingInBytes;
     /// how many bytes are actually in the internal output buffer
     property PendingOutBytes: integer read GetPendingOutBytes;
   end;
-  
+
   /// a generic TThread able to connect and reconnect to a TCP server
   // - initialize and own a TCrtSocket instance for TCP transmission
   // - allow automatic reconnection
@@ -657,7 +666,7 @@ end;
 function TDDDRestDaemon.InternalRetrieveState(
   var Status: variant): boolean;
 var mem: TSynMonitorMemory;
-begin                                     
+begin
   if fRest<>nil then begin
     mem := TSynMonitorMemory.Create;
     try
@@ -669,6 +678,17 @@ begin
     result := true;
   end else
     result := false;
+end;
+
+
+
+{ TDDDSocketThreadMonitoring }
+
+function TDDDSocketThreadMonitoring.GetSocket: variant;
+begin
+  if (fOwner=nil) or (fOwner.fSocket=nil) then
+    SetVariantNull(result) else
+    ObjectToVariant(ObjectFromInterface(fOwner.fSocket),result);
 end;
 
 
@@ -684,6 +704,7 @@ begin
   if aMonitoring=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(aMonitoring=nil)',[self]);
   fMonitoring := aMonitoring;
+  fMonitoring.fOwner := self;
   if fSettings.Host='' then
     if aDefaultHost='' then
       fHost := '127.0.0.1' else
@@ -934,7 +955,7 @@ begin
   fSafe.Lock;
   try
     result := fSocket.SockInPending(aTimeOut);
-  finally
+  finally                            
     fSafe.UnLock;
   end;
 end;
@@ -1136,7 +1157,6 @@ begin
   result := Length(fOutput);
   fSafe.UnLock;
 end;
-
 
 
 initialization
