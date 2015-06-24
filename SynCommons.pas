@@ -21497,28 +21497,32 @@ end;
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 type
-  TInts23 = packed array[word] of string[23]; // shortstring are faster
+  TInt = packed record
+    Len: byte;
+    Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
+  end;
 var i, L, Len: PtrInt;
-    tmp: array[0..23] of AnsiChar;
-    ints: ^TInts23;
+    ints: pointer;
+    int: ^TInt;
     P: PAnsiChar;
 begin
   result := '';
   if ValuesCount=0 then
     exit;
-  GetMem(ints,ValuesCount*sizeof(ints[0])); // getmem is faster than a dynamic array
+  GetMem(ints,ValuesCount*sizeof(TInt)); // getmem is faster than a dynamic array
   try
      // compute whole result length at once
     dec(ValuesCount);
     Len := length(Prefix)+length(Suffix);
-    tmp[23] := ',';
+    int := ints;
     for i := 0 to ValuesCount do begin
-      P := StrInt64(@tmp[23],Values[i]);
-      L := @tmp[23]-P;
+      P := StrInt64(PAnsiChar(int)+21,Values[i]);
+      L := PAnsiChar(int)+21-P;
+      int^.Len := L;
       if i<ValuesCount then
-        inc(L); // append tmp[23]=','
+        inc(L); // for ,
       inc(Len,L);
-      SetString(ints[i],P,L);
+      inc(int);
     end;
     // create result
     SetLength(result,Len);
@@ -21527,10 +21531,18 @@ begin
       MoveFast(pointer(Prefix)^,P^,length(Prefix));
       inc(P,length(Prefix));
     end;
-    for i := 0 to ValuesCount do begin
-      MoveFast(ints[i][1],P^,ord(ints[i][0]));
-      inc(P,ord(ints[i][0]));
-    end;
+    int := ints;
+    repeat
+      L := int^.Len;
+      MoveFast(PAnsiChar(int)[21-L],P^,L);
+      inc(P,L);
+      if ValuesCount=0 then
+        break;
+      inc(int);
+      P^ := ',';
+      inc(P);
+      dec(ValuesCount);
+    until false;
     if Suffix<>'' then
       MoveFast(pointer(Suffix)^,P^,length(Suffix));
   finally
