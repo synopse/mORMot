@@ -28564,9 +28564,8 @@ begin
   for i := 1 to high(Tables) do
     result := result+','+aProps[i].Props.SQLTableName;
   if SQLWhere<>'' then
-    if IdemPChar(pointer(SQLWhere),'ORDER BY ') or
-       IdemPChar(pointer(SQLWhere),'GROUP BY ') or
-       IdemPChar(pointer(SQLWhere),'LIMIT ') then
+    if IdemPCharArray(pointer(SQLWhere),
+       ['ORDER BY ','GROUP BY ','LIMIT ','OFFSET '])>=0 then
       result := result+' '+SQLWhere else
       result := result+' WHERE '+SQLWhere;
   result := result+';';
@@ -36286,13 +36285,12 @@ begin
         SetLength(Results,Count+256+Count shr 3);
       Results[Count] := HTML_NOTMODIFIED;
       // get CRUD method (ignoring @ char if appended after method name)
-      if IdemPChar(Method,'POST') then
-        URIMethod := mPOST else
-      if IdemPChar(Method,'PUT') then
-        URIMethod := mPUT else
-      if IdemPChar(Method,'DELETE') then
-        URIMethod := mDELETE else
-        URIMethod := mNone;
+      case IdemPCharArray(Method,['POST','PUT','DELETE']) of
+        0: URIMethod := mPOST;
+        1: URIMethod := mPUT;
+        2: URIMethod := mDELETE
+        else URIMethod := mNone;
+      end;
       // handle auto-committed transaction process
       if AutomaticTransactionPerRow>0 then begin
         if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
@@ -43099,17 +43097,13 @@ begin
 end;
 
 class function TSQLVirtualTable.ModuleName: RawUTF8;
+const LEN: array[-1..2] of byte = (1,16,11,4);
 begin
   if self=nil then
     result := '' else begin
     result := RawUTF8(ClassName);
-    if IdemPChar(pointer(result),'TSQLVIRTUALTABLE') then
-      system.delete(result,1,16) else
-    if IdemPChar(pointer(result),'TSQLVIRTUAL') then
-      system.delete(result,1,11) else
-    if IdemPChar(pointer(result),'TSQL') then
-      system.delete(result,1,4) else
-      system.delete(result,1,1);
+    system.delete(result,1,LEN[IdemPCharArray(pointer(result),
+      ['TSQLVIRTUALTABLE','TSQLVIRTUAL''TSQL'])]);
   end;
 end;
 

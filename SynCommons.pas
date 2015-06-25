@@ -11783,31 +11783,46 @@ type
     /// find an item in this document, and returns its value as TVarData
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetVarData(const aName: RawUTF8; var aValue: TVarData): boolean; overload;
+    // - will use simple loop lookup to identify the name, unless aSortedCompare
+    // is set, and would let use a faster binary search after a SortByName()
+    function GetVarData(const aName: RawUTF8; var aValue: TVarData;
+      aSortedCompare: TUTF8Compare=nil): boolean; overload;
     /// find an item in this document, and returns its value as TVarData pointer
     // - return nil if aName is not found, or if the instance is not a TDocVariant
     // - return a pointer to the value if the name has been found
-    function GetVarData(const aName: RawUTF8): PVarData; overload;
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetVarData(const aName: RawUTF8;
+      aSortedCompare: TUTF8Compare=nil): PVarData; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in this document, and returns its value as integer
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsInteger(const aName: RawUTF8; out aValue: integer;
+      aSortedCompare: TUTF8Compare=nil): Boolean;
     /// find an item in this document, and returns its value as integer
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetAsInt64(const aName: RawUTF8; out aValue: Int64): Boolean;
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsInt64(const aName: RawUTF8; out aValue: Int64;
+      aSortedCompare: TUTF8Compare=nil): Boolean;
     /// find an item in this document, and returns its value as floating point
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetAsDouble(const aName: RawUTF8; out aValue: double): Boolean;
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsDouble(const aName: RawUTF8; out aValue: double;
+      aSortedCompare: TUTF8Compare=nil): Boolean;
     /// find an item in this document, and returns its value as RawUTF8
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    function GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8;
+      aSortedCompare: TUTF8Compare=nil): Boolean;
     /// find an item in this document, and returns its value as a TDocVariantData
-    // - returns a void TDocVariant if aName is not a document 
-    function GetAsDocVariantSafe(const aName: RawUTF8): PDocVariantData; overload;
+    // - returns a void TDocVariant if aName is not a document
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsDocVariantSafe(const aName: RawUTF8;
+      aSortedCompare: TUTF8Compare=nil): PDocVariantData; overload;
     /// find returns a document value as a TDocVariantData, from its index
     // - returns a void TDocVariant if the suplied index is out of range, or
     // if the value is not a document
@@ -11839,8 +11854,7 @@ type
     /// retrieve an item in this document from its index, and returns its Name
     // - raise an EDocVariant if the supplied Index is not in the 0..Count-1
     // range and dvoReturnNullForOutOfRangeIndex is set in Options
-    procedure RetrieveNameOrRaiseException(Index: integer;
-      var Dest: RawUTF8);
+    procedure RetrieveNameOrRaiseException(Index: integer; var Dest: RawUTF8);
     /// set an item in this document from its index
     // - raise an EDocVariant if the supplied Index is not in 0..Count-1 range
     procedure SetValueOrRaiseException(Index: integer; const NewValue: variant);
@@ -11906,6 +11920,8 @@ type
     // - do nothing if the document is not a dvObject
     // - will follow case-insensitive order (@StrIComp) by default, but you
     // can specify @StrComp as comparer function for case-sensitive ordering
+    // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
+    // methods for much faster binary search
     procedure SortByName(Compare: TUTF8Compare=nil);
     /// reverse the order of the document object or array items 
     procedure Reverse;
@@ -24074,8 +24090,8 @@ begin
 end;
 
 function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
-var tmp: array[0..63] of AnsiChar;
-    L: PtrInt;
+var tmp: array[byte] of AnsiChar;
+    L: integer;
     Beg: PUTF8Char;
 // UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where') will
 // return TRUE
@@ -24099,7 +24115,7 @@ begin
     PWord(@tmp[L])^ := ord('=');
     Beg := U;
     repeat
-      if IdemPChar(U,@tmp) then
+      if IdemPChar(U,tmp) then
         break;
       while not(U^ in [#0,'&']) do inc(U);
       if U^=#0 then
@@ -32904,37 +32920,42 @@ begin
       SetVariantNull(result);
   end;
 end;
-function TDocVariantData.GetAsInteger(const aName: RawUTF8; out aValue: integer): Boolean;
+
+function TDocVariantData.GetAsInteger(const aName: RawUTF8; out aValue: integer;
+  aSortedCompare: TUTF8Compare): Boolean;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else
     result := VariantToInteger(PVariant(found)^,aValue)
 end;
 
-function TDocVariantData.GetAsInt64(const aName: RawUTF8; out aValue: Int64): Boolean;
+function TDocVariantData.GetAsInt64(const aName: RawUTF8; out aValue: Int64;
+  aSortedCompare: TUTF8Compare): Boolean;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else
     result := VariantToInt64(PVariant(found)^,aValue)
 end;
 
-function TDocVariantData.GetAsDouble(const aName: RawUTF8; out aValue: double): Boolean;
+function TDocVariantData.GetAsDouble(const aName: RawUTF8; out aValue: double;
+  aSortedCompare: TUTF8Compare): Boolean;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else
     result := VariantToDouble(PVariant(found)^,aValue);
 end;
 
-function TDocVariantData.GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8): Boolean;
+function TDocVariantData.GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8;
+  aSortedCompare: TUTF8Compare): Boolean;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else begin
     aValue := VariantToUTF8(PVariant(found)^);
@@ -32942,10 +32963,11 @@ begin
   end;
 end;
 
-function TDocVariantData.GetAsDocVariantSafe(const aName: RawUTF8): PDocVariantData;
+function TDocVariantData.GetAsDocVariantSafe(const aName: RawUTF8;
+  aSortedCompare: TUTF8Compare): PDocVariantData;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := @DocVariantDataFake else
     result := DocVariantDataSafe(PVariant(found)^);
@@ -32959,10 +32981,10 @@ begin
 end;
 
 function TDocVariantData.GetVarData(const aName: RawUTF8;
-  var aValue: TVarData): boolean;
+  var aValue: TVarData; aSortedCompare: TUTF8Compare): boolean;
 var found: PVarData;
 begin
-  found := GetVarData(aName);
+  found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else begin
     aValue := found^;
@@ -32970,13 +32992,16 @@ begin
   end;
 end;
 
-function TDocVariantData.GetVarData(const aName: RawUTF8): PVarData;
+function TDocVariantData.GetVarData(const aName: RawUTF8;
+  aSortedCompare: TUTF8Compare): PVarData;
 var ndx: Integer;
 begin
   if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
-     (Kind<>dvObject) then
+     (Kind<>dvObject) or (VCount=0) then
     result := nil else begin
-    ndx := FindRawUTF8(VName,VCount,aName,not(dvoNameCaseSensitive in VOptions));
+    if Assigned(aSortedCompare) then
+      ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName),aSortedCompare) else
+      ndx := FindRawUTF8(VName,VCount,aName,not(dvoNameCaseSensitive in VOptions));
     if ndx>=0 then
       result := @VValue[ndx] else
       result := nil;
@@ -33030,7 +33055,7 @@ begin
 end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
-var upper: RawUTF8;
+var Up: array[byte] of AnsiChar;
     i: integer;
     W: TTextWriter;
 begin
@@ -33038,12 +33063,12 @@ begin
     result := 'null';
     exit;
   end;
-  upper := UpperCase(aStartName);
+  UpperCopy255(Up,aStartName)^ := #0;
   W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
     W.Add('{');
     for i := 0 to VCount-1 do
-    if IdemPChar(Pointer(VName[i]),pointer(upper)) then begin
+    if IdemPChar(Pointer(VName[i]),Up) then begin
       W.Add('"');
       W.AddJSONEscape(pointer(VName[i]),Length(VName[i]));
       W.Add('"',':');
@@ -33059,7 +33084,7 @@ begin
 end;
 
 function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8): variant;
-var upper: RawUTF8;
+var Up: array[byte] of AnsiChar;
     i: integer;
 begin
   if aStartName='' then begin
@@ -33071,16 +33096,16 @@ begin
     exit;
   end;
   TDocVariant.NewFast(result);
-  upper := UpperCase(aStartName);
+  UpperCopy255(Up,aStartName)^ := #0;
   for i := 0 to VCount-1 do
-    if IdemPChar(Pointer(VName[i]),pointer(upper)) then
+    if IdemPChar(Pointer(VName[i]),Up) then
       TDocVariantData(result).AddValue(VName[i],VValue[i]);
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
 begin
   if cardinal(Index)>=cardinal(VCount) then
-    raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
+    raise EDocVariant.CreateUTF8('Out of range Values[%] (count=%)',[Index,VCount]) else
     VValue[Index] := NewValue;
 end;
 
@@ -33090,7 +33115,7 @@ begin
   if (cardinal(Index)>=cardinal(VCount)) or (VName=nil) then
     if dvoReturnNullForOutOfRangeIndex in VOptions then
       Dest := '' else
-      raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
+      raise EDocVariant.CreateUTF8('Out of range Names[%] (count=%)',[Index,VCount]) else
       Dest := VName[Index];
 end;
 
@@ -33101,7 +33126,7 @@ begin
   if cardinal(Index)>=cardinal(VCount) then
     if dvoReturnNullForOutOfRangeIndex in VOptions then
       SetVariantNull(Dest) else
-      raise EDocVariant.CreateUTF8('Out of range [%] (count=%)',[Index,VCount]) else
+      raise EDocVariant.CreateUTF8('Out of range Values[%] (count=%)',[Index,VCount]) else
     if DestByRef then
       SetVariantByRef(VValue[Index],Dest) else begin
       Source := @VValue[Index];
@@ -34503,7 +34528,7 @@ begin
           break;
         if PropNameLen=0 then begin
           name[ord(name[0])+1] := #0; // make ASCIIZ
-          if IdemPChar(@name[1],@PropNameUpper) then begin
+          if IdemPChar(@name[1],PropNameUpper) then begin
             if PropNameFound<>nil then
               PropNameFound^ := name;
             result := P;
