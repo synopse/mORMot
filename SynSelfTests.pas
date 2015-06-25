@@ -2876,6 +2876,7 @@ var i, CP, L: integer;
     SU: SynUnicode;
     U, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
+    PB: PByte;
 {$ifndef DELPHI5OROLDER}
     q: RawUTF8;
 {$endif}
@@ -3015,6 +3016,13 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U)=4) then
     Check(PCardinal(U)^=$92b3a8f0);
+  SetLength(res,10);
+  PB := pointer(res);
+  PB := ToVarString(U,PB);
+  check(PAnsiChar(PB)-pointer(res)=length(U)+1);
+  PB := pointer(res);
+  res := FromVarString(PB);
+  check(res=U);
   Check(UnQuoteSQLStringVar('"one two"',U)<>nil);
   Check(U='one two');
   Check(UnQuoteSQLStringVar('one two',U)<>nil);
