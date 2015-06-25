@@ -416,7 +416,8 @@ type
     // then call InputSock to try to receive any pending data
     // - will wait up to the specified aTimeOut value (in milliseconds) for
     // incoming data
-    function SockInPending(aTimeOut: integer=-1): integer;
+    // - returns -1 in case of a socket error (e.g. broken connection)
+    function SockInPending(aTimeOut: integer): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..)
@@ -2886,21 +2887,27 @@ begin
   end;
 end;
 
-function TCrtSocket.SockInPending(aTimeOut: integer=-1): integer;
+function TCrtSocket.SockInPending(aTimeOut: integer): integer;
 var backup: cardinal;
 begin
   if SockIn=nil then
     raise ECrtSocket.Create('SockInPending without SockIn');
   with PTextRec(SockIn)^ do begin
     result := BufEnd-BufPos;
-    if (result=0) and (SockReceivePending(aTimeOut)=cspDataAvailable) then begin
-      // non data in SockIn^.Buffer, but some at socket level -> retrieve now
-      backup := TimeOut;
-      fTimeOut := 0;
-      if InputSock(PTextRec(SockIn)^)=NO_ERROR then
-        result := BufEnd-BufPos;
-      fTimeOut := backup;
-    end;
+    if result=0 then
+      // no data in SockIn^.Buffer, but some at socket level -> retrieve now
+      case SockReceivePending(aTimeOut) of
+      cspDataAvailable: begin
+        backup := TimeOut;
+        fTimeOut := 0;
+        if InputSock(PTextRec(SockIn)^)=NO_ERROR then
+          result := BufEnd-BufPos else
+          result := -1; // indicates broken socket
+        fTimeOut := backup;
+      end;
+      cspSocketError:
+        result := -1; // indicates broken socket
+      end; // cspNoData will leave result=0
   end;
 end;
 
@@ -3023,13 +3030,13 @@ begin
   res := Select(Sock+1,@fdset,nil,nil,@tv);
   if res=0 then
     result := cspNoData else
-  if res<0 then
-    result := cspSocketError else
+  if res>0 then
+    result := cspDataAvailable else
     {$ifdef LINUX}
     if (WSAGetLastError=WSATRY_AGAIN) or (WSAGetLastError=WSAEWOULDBLOCK) then
       result := cspNoData else
     {$endif}
-      result := cspDataAvailable;
+      result := cspSocketError;
 end;
 
 function TCrtSocket.LastLowSocketError: Integer;
