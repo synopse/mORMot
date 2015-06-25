@@ -1607,12 +1607,16 @@ const
   // - the property should be defined as such:
   // ! property Tim: variant index sftNullableTimrency read fTim write fTim;
   sftNullableTimeLog    = -ord(sftTimeLog);
-  /// define a variant published property as a nullable UTF-8 encoded TEXT
-  // - either a varNull or varString of a RawUTF8 will be stored
+  /// define a variant published property as a nullable UTF-8 encoded text
+  // - either a varNull or varString (RawUTF8) will be stored in the variant
+  // - either a NULL or a TEXT value will be stored in the database
   // - the property should be defined as such:
   // ! property Txt: variant index sftNullableUTF8Text read fTxt write fTxt;
   // or for a fixed-width VARCHAR (in external databases), here of 32 max chars:
   // ! property Txt: variant index 32 read fTxt write fTxt;
+  // - warning: prior to Delphi 2009, since the variant will be stored as
+  // RawUTF8 internally, you should not use directly the field value as
+  // a VCL string=AnsiString like string(aField) but use VariantToString(aField)  
   sftNullableUTF8Text   = -ord(sftUTF8Text);
 
   /// the SQL field property types with their sftNullable* equivalency

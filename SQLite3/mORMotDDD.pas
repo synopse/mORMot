@@ -152,7 +152,6 @@ type
   // result as TCQRSResult enumeration for error handling, rather than a local
   // Exception, which is not likely to be transferred easily on consummer side 
   ICQRSService = interface(IInvokable)
-    ['{923614C8-A639-45AD-A3A3-4548337923C9}']
     /// should return the last error as an enumerate
     // - when stubed or mocked via TInterfaceStub, any method interface would
     // return 0, i.e. cqrsSuccess by default, to let the test pass
