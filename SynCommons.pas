@@ -474,7 +474,7 @@ unit SynCommons;
     to recognize (extended) JSON content, including MongoDB shell extensions
   - added IsHTMLContentTypeTextual() function, and modified ExistsIniNameValue()
   - added ShortStringToAnsi7String() and UpperCopyWin255() functions
-  - added IsEqualGUID, GUIDToText, GUIDToRawUTF8 and GUIDToString functions
+  - added IsEqualGUID/IsNullGuid/GUIDToText/GUIDToRawUTF8/GUIDToString functions
   - added TextToGUID, RawUTF8ToGUID and StringToGUID functions
   - added TDynArray.ElemPtr() low-level method
   - let TDynArray.LoadFrom() accept Win32/Win64 cross platform binary content
@@ -4950,6 +4950,11 @@ function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TGUID value contains only 0 bytes
+// - this version is faster than the one supplied by SysUtils
+function IsNullGUID(const guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append a TGUID binary content as text
@@ -26128,6 +26133,16 @@ begin // faster implementation than in SysUtils.pas
 {$endif}
 end;
 
+function IsNullGUID(const guid: TGUID): Boolean;
+begin
+  {$ifdef CPU64}
+  result := (PInt64Array(@guid)^[0]=0) and (PInt64Array(@guid)^[1]=0);
+  {$else}
+  result := (PIntegerArray(@guid)^[0]=0) and (PIntegerArray(@guid)^[1]=0) and
+            (PIntegerArray(@guid)^[2]=0) and (PIntegerArray(@guid)^[3]=0);
+  {$endif}
+end;
+
 function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 var i: integer;
 begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
@@ -42013,10 +42028,12 @@ procedure TRawUTF8List.Delete(Index: PtrInt);
 begin
   if (self=nil) or (PtrUInt(Index)>=PtrUInt(fCount)) then
     exit;
-  fList[Index] := ''; // release corresponding memory
-  dec(fCount);
+  // release string/object instances
+  fList[Index] := '';
   if (fObjects<>nil) and fObjectsOwned then
     FreeAndNil(fObjects[Index]);
+  // swap the string/object arrays
+  dec(fCount);
   if Index<fCount then begin
     MoveFast(fList[Index+1],fList[Index],(fCount-Index)*sizeof(fList[0]));
     PPointer(@fList[fCount])^ := nil; // avoid GPF
