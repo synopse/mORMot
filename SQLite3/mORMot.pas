@@ -11768,14 +11768,14 @@ type
     // - since no record is specified, locking is pointless here
     // - default implementation call ExecuteList(), and fill Value from a
     // temporary TSQLTable
-    // - the TSQLRawBlob (BLOB) fields are not retrieved by this method, to
-    // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TSQLRestClientURI.ForceBlobTransfert
-    // or TSQLRestClientURI.ForceBlobTransfertTable[] properties
-    // - the TSQLRecordMany fields are not retrieved either: they are separate
-    // instances created by TSQLRecordMany.Create, with dedicated methods to
-    // access to the separated pivot table
-    function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord): boolean; overload; virtual;
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // and TSQLRecordMany fields (use RetrieveBlob method or set
+    // TSQLRestClientURI.ForceBlobTransfert)
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
+    // - if this default set of simple fields does not fit your need, you could
+    // specify your own set
+    function Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+      const aCustomFieldsCSV: RawUTF8=''): boolean; overload; virtual;
     /// get a member from a SQL statement
     // - implements REST GET collection
     // - return true on success
@@ -11783,8 +11783,10 @@ type
     // this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, replacing all '%' chars with Args[], and all '?'
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
+    // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
+    // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     function Retrieve(const WhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
-      Value: TSQLRecord): boolean; overload;
+      Value: TSQLRecord; const aCustomFieldsCSV: RawUTF8=''): boolean; overload;
     /// get a member from its ID
     // - return true on success
     // - Execute 'SELECT * FROM TableName WHERE ID=:(aID): LIMIT 1' SQL Statememt
@@ -29455,14 +29457,14 @@ begin
     exit;
   if FieldNames='' then
     result := Model.Props[Table].SQLFromSelectWhere('*',WhereClause) else
-  with Table.RecordProps do
-  if FieldNames='*' then
-    result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-  if (PosEx(RawUTF8(','),FieldNames,1)=0) and
-     (PosEx(RawUTF8('('),FieldNames,1)=0) and
-     not IsFieldName(FieldNames) then
-    result := '' else // prevent SQL error
-    result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
+    with Table.RecordProps do
+    if FieldNames='*' then
+      result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
+    if (PosEx(RawUTF8(','),FieldNames,1)=0) and
+       (PosEx(RawUTF8('('),FieldNames,1)=0) and
+       not IsFieldName(FieldNames) then
+      result := '' else // prevent SQL error
+      result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -29478,7 +29480,8 @@ end;
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
   const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTableJSON;
 begin
-  result := MultiFieldValues(Table,FieldNames,FormatUTF8(WhereClauseFormat,[],BoundsSQLWhere));
+  result := MultiFieldValues(Table,FieldNames,FormatUTF8(
+    WhereClauseFormat,[],BoundsSQLWhere));
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -29535,24 +29538,21 @@ begin
   end;
 end;
 
-function TSQLRest.Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord): boolean;
+function TSQLRest.Retrieve(const SQLWhere: RawUTF8; Value: TSQLRecord;
+  const aCustomFieldsCSV: RawUTF8): boolean;
 var T: TSQLTable;
 begin
+  result := false;
   if (self=nil) or (Value=nil) then
-    T := nil else
-    T := ExecuteList([PSQLRecordClass(Value)^],
-      Model.Props[PSQLRecordClass(Value)^].SQLFromSelectWhere(
-        '*',trim(SQLWhere+' LIMIT 1')));
-  if T=nil then
-    result := false else
+    exit;
+  T := MultiFieldValues(PSQLRecordClass(Value)^,aCustomFieldsCSV,SQLWhere);
+  if T<>nil then
     try
       if T.fRowCount>=1 then begin
         Value.FillFrom(T,1); // fetch data from first result row
         result := true;
-      end else begin
+      end else
         Value.fID := 0;
-        result := false;
-      end;
     finally
       T.Free;
     end;
@@ -29729,12 +29729,12 @@ begin // this version handles locking and use fast EngineRetrieve() method
   result := true;
 end;
 
-function TSQLRest.Retrieve(const WhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
-  Value: TSQLRecord): boolean;
+function TSQLRest.Retrieve(const WhereClauseFmt: RawUTF8;
+  const Args,Bounds: array of const; Value: TSQLRecord; const aCustomFieldsCSV: RawUTF8): boolean;
 var where: RawUTF8;
 begin
   where := FormatUTF8(WhereClauseFmt,Args,Bounds);
-  result := Retrieve(where,Value);
+  result := Retrieve(where,Value,aCustomFieldsCSV);
 end;
 
 function TSQLRest.Retrieve(Reference: TRecordReference; ForUpdate: boolean): TSQLRecord;
