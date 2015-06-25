@@ -4484,6 +4484,8 @@ type
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldBitsFromBlobField(aBlobField: PPropInfo;
       var Bits: TSQLFieldBits): boolean;
+    /// compute the CSV field names text from a set of bits
+    function CSVFromFieldBits(const Bits: TSQLFieldBits): RawUTF8;
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
@@ -42480,6 +42482,24 @@ end;
 
 function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
   var Indexes: TSQLFieldIndexDynArray): boolean;
+var f,ndx: integer;
+begin
+  W := TTextWriter.CreateOwnedStream(512);
+  try
+    for f := 0 to Fields.Count-1 do
+      if f in Bits then begin
+        W.AddString(Fields.List[f].Name);
+        W.Add(',');
+      end;
+    W.CancelLastComma;
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(
+  const aFields: array of RawUTF8; var Indexes: TSQLFieldIndexDynArray): boolean;
 var f,ndx: integer;
 begin
   result := false;

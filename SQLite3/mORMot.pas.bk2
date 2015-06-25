@@ -6334,7 +6334,10 @@ type
     // which allow to access to the pivot table data)
     // - you can override this method to allow custom copy of the object,
     // including (or not) published properties copy
-    function CreateCopy: TSQLRecord; virtual;
+    function CreateCopy: TSQLRecord; overload; virtual;
+    /// this method create a clone of the current record, with same ID and properties
+    // - overloaded method to copy the specified properties
+    function CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord; overload;
     /// release the associated memory
     // - in particular, release all TSQLRecordMany instance created by the
     // constructor of this TSQLRecord
@@ -26156,19 +26159,28 @@ begin
 end;
 
 function TSQLRecord.CreateCopy: TSQLRecord;
-var i: integer;
+var f: integer;
 begin
   // create new instance
-  if self=nil then begin
-    result := nil;
-    exit;
-  end;
   result := RecordClass.Create;
   // copy properties content
   result.fID := fID;
   with RecordProps do
-    for i := 0 to high(CopiableFields) do
-      CopiableFields[i].CopyValue(self,Result);
+    for f := 0 to high(CopiableFields) do
+      CopiableFields[f].CopyValue(self,result);
+end;
+
+function TSQLRecord.CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord;
+var f: integer;
+begin
+  result := RecordClass.Create;
+  // copy properties content
+  result.fID := fID;
+  with RecordProps do
+    for f := 0 to Fields.Count-1 do
+    with Fields.List[f] do
+      if (f in CustomFields) and (SQLFieldType in COPIABLE_FIELDS) then
+        CopyValue(self,result);
 end;
 
 constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID; ForUpdate: boolean=false);
@@ -39849,15 +39861,23 @@ begin
   end;
   C := aFrom.ClassType;
   C2 := aTo.ClassType;
-  if C2.InheritsFrom(C) then // fast process of matching PPropInfo
-    repeat
+  if C2.InheritsFrom(C) then
+    repeat // fast process of inherited PPropInfo
       for i := 1 to InternalClassPropInfo(C,P) do begin
         P^.CopyValue(aFrom,aTo);
         P := P^.Next;
       end;
       C := C.ClassParent;
-    until C=TObject else // slower lookup by property name
-    repeat
+    until C=TObject else
+  if C.InheritsFrom(C2) then
+    repeat // fast process of inherited PPropInfo
+      for i := 1 to InternalClassPropInfo(C2,P) do begin
+        P^.CopyValue(aFrom,aTo);
+        P := P^.Next;
+      end;
+      C2 := C2.ClassParent;
+    until C2=TObject else
+    repeat // slower lookup by property name
       for i := 1 to InternalClassPropInfo(C,P) do begin
         P2 := ClassFieldPropWithParents(C2,P^.Name);
         if P2<>nil then
