@@ -252,6 +252,8 @@ type
   /// defines the potential mocked actions for TDDDMockedSocket.MockException()
   TDDDMockedSocketException = (
     msaConnectRaiseException,
+    msaDataInPendingTimeout,
+    msaDataInPendingFails,
     msaDataInRaiseException,
     msaDataOutRaiseException,
     msaDataOutReturnsFalse);
@@ -312,7 +314,12 @@ type
     // - optional Exception.Message which should be raised with the exception
     // - also optional exception class instead of default EDDDMockedSocket
     // - msaDataOutReturnsFalse won't raise any exception, but let DataOut
-    // method return false
+    // method return false (which is the normal way of indicating a socket
+    // error) - in this case, ExceptionMessage would be available from LastError
+    // - msaDataInPendingTimeout won't raise any exception, but let DataInPending
+    // sleep for the timeout period, and return 0
+    // - msaDataInPendingFails won't raise any exception, but let DataInPending
+    // fails immediately, and return -1 (emulating a broken socket)
     // - you may use ALL_DDDMOCKED_EXCEPTIONS to set all possible actions
     // - you could reset any previous registered exception by calling
     // ! MockException([]);
@@ -336,6 +343,8 @@ type
     /// IDDDSocket method to return the number of bytes pending
     // - note that the total length of all pending data is returned as once,
     // i.e. all previous calls to MockDataIn() would be sum as a single count
+    // - this method will emulate blocking process, just like a regular socket:
+    // if there is no pending data, it will wait up to aTimeOut milliseconds
     function DataInPending(aTimeOut: integer): integer;
     /// IDDDSocket method to get Length bytes from the mocked socket
     // - returns the number of bytes read into the Content buffer
@@ -405,12 +414,13 @@ type
 
 
 const
-  /// map all possible action steps for a exception emulation
+  /// map realistic exceptions steps for a mocked socket
   // - could be used to simulate a global socket connection drop
   ALL_DDDMOCKED_EXCEPTIONS =
-    [Low(TDDDMockedSocketException)..high(TDDDMockedSocketException)];
+    [msaConnectRaiseException,msaDataInPendingFails,
+     msaDataInRaiseException,msaDataOutReturnsFalse];
 
-  /// map all possible action steps for latency emulation
+  /// map realistic latencies steps for a mocked socket
   // - could be used to simulate a slow network
   ALL_DDDMOCKED_LATENCIES =
     [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
@@ -1021,14 +1031,37 @@ begin
 end;
 
 function TDDDMockedSocket.DataInPending(aTimeOut: integer): integer;
+var forcedTimeout: boolean;
+    endTix: Int64;
 begin
-  fSafe.Lock;
-  try
-    CheckRaiseException(msaDataInRaiseException);
-    result := Length(fInput);
-  finally
-    fSafe.UnLock;
-  end;
+  forcedTimeout := false;
+  endTix := GetTickCount64+aTimeOut;
+  repeat
+    fSafe.Lock;
+    try
+      CheckRaiseException(msaDataInRaiseException);
+      if msaDataInPendingFails in fExceptionActions then begin
+        fExceptionActions := [];
+        result := -1; // cspSocketError
+        exit;
+      end;
+      if not forcedTimeout then
+        if msaDataInPendingTimeout in fExceptionActions then begin
+          fExceptionActions := [];
+          forcedTimeout := true;
+        end;
+      if forcedTimeout then
+        result := 0 else
+        result := length(fInput);
+    finally
+      fSafe.UnLock; // wait outside the instance lock
+    end;
+    if (result<>0) or fOwner.Terminated or (aTimeOut=0) then
+      break;
+    sleep(1); // emulate blocking process, just like a regular socket
+    if fOwner.Terminated then
+      break; 
+  until GetTickCount64>endTix; // warning: 10-16 ms resolution under Windows
 end;
 
 function TDDDMockedSocket.DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
@@ -1131,17 +1164,20 @@ begin
 end;
 
 procedure TDDDMockedSocket.CheckLatency(Action: TDDDMockedSocketLatency);
-var MS: integer;
+var waitMS: integer;
 begin
   fSafe.Lock;
   try
-    if not (Action in fLatencyActions) then
-      exit;
-    MS := fLatencyMS;
+    if Action in fLatencyActions then
+      waitMS := fLatencyMS else
+      waitMS := 0;
   finally
-    fSafe.UnLock;
+    fSafe.UnLock; // wait outside the instance lock
   end;
-  Sleep(MS); // wait outside the instance lock
+  while (waitMS>0) and not fOwner.Terminated do begin
+    sleep(1); // do not use GetTickCount64 (poor resolution under Windows)
+    dec(waitMS);
+  end;
 end;
 
 function TDDDMockedSocket.GetPendingInBytes: integer;
