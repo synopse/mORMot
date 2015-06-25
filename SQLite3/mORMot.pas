@@ -1565,6 +1565,65 @@ const
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
   RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText, sftUTF8Text];
 
+  /// define a variant published property as a nullable integer
+  // - either a varNull or a varInt64 value will be stored in the variant
+  // - either a NULL or an INTEGER value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Int: variant index sftNullableInteger read fInt write fInt;
+  sftNullableInteger    = -ord(sftInteger);
+  /// define a variant published property as a nullable boolean
+  // - either a varNull or a varBoolean value will be stored in the variant
+  // - either a NULL or a 0/1 INTEGER value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Bool: variant index sftNullableBoolean read fBool write fBool;
+  sftNullableBoolean    = -ord(sftBoolean);
+  /// define a variant published property as a nullable enumerate
+  // - either a varNull or a varInteger value will be stored in the variant
+  // - either a NULL or a >0 INTEGER value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Enum: variant index sftNullableEnumerate read fEnum write fEnum;
+  sftNullableEnumerate  = -ord(sftEnumerate);
+  /// define a variant published property as a nullable floating point value
+  // - either a varNull or a varDouble value will be stored in the variant
+  // - either a NULL or a FLOAT value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Flt: variant index sftNullableFloat read fFlt write fFlt;
+  sftNullableFloat      = -ord(sftFloat);
+  /// define a variant published property as a nullable decimal value
+  // - either a varNull or a varCurrency value will be stored in the variant
+  // - either a NULL or a FLOAT value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Cur: variant index sftNullableCurrency read fCur write fCur;
+  sftNullableCurrency   = -ord(sftCurrency);
+  /// define a variant published property as a nullable date/time value
+  // - either a varNull or a varDate value will be stored in the variant
+  // - either a NULL or a ISO-8601 TEXT value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Dat: variant index sftNullableDateTime read fDat write fDat;
+  sftNullableDateTime   = -ord(sftDateTime);
+  /// define a variant published property as a nullable timestamp value
+  // - either a varNull or a varInt64 value will be stored in the variant
+  // - either a NULL or a TTimeLog INTEGER value will be stored in the database
+  // - the property should be defined as such:
+  // ! property Tim: variant index sftNullableTimrency read fTim write fTim;
+  sftNullableTimeLog    = -ord(sftTimeLog);
+  /// define a variant published property as a nullable UTF-8 encoded TEXT
+  // - either a varNull or varString of a RawUTF8 will be stored
+  // - the property should be defined as such:
+  // ! property Txt: variant index sftNullableUTF8Text read fTxt write fTxt;
+  // or for a fixed-width VARCHAR (in external databases), here of 32 max chars:
+  // ! property Txt: variant index 32 read fTxt write fTxt;
+  sftNullableUTF8Text   = -ord(sftUTF8Text);
+
+  /// the SQL field property types with their sftNullable* equivalency
+  // - those types may be stored in a variant published property, with the
+  // sftNullable* kind specified as "index ##" attribute, e.g.
+  // ! property Int: variant index sftNullableInteger read fInt write fInt;
+  // ! property Txt: variant index sftNullableUTF8Text read fTxt write fTxt;
+  // ! property Txt: variant index 32 read fTxt write fTxt;
+  NULLABLE_TYPES = [sftInteger,sftBoolean,sftEnumerate,sftFloat,sftCurrency,
+    sftDateTime,sftTimeLog,sftUTF8Text];
+
 type
   /// the available options for TSQLRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
