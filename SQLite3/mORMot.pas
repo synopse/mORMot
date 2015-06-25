@@ -4527,7 +4527,7 @@ type
     /// return the SQLite3 field datatype for each specified field
     // - set to '' for fields with no column created in the database (e.g. sftMany)
     // - equals e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
-    function SQLFieldTypeToSQL(Fieldindex: integer): RawUTF8;
+    function SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
     /// set a custom SQlite3 text column collation for a specified field
     // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUTF8
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
@@ -42480,9 +42480,9 @@ begin
     FillZero(result);
 end;
 
-function TSQLRecordProperties.FieldIndexDynArrayFromRawUTF8(const aFields: array of RawUTF8;
-  var Indexes: TSQLFieldIndexDynArray): boolean;
-var f,ndx: integer;
+function TSQLRecordProperties.CSVFromFieldBits(const Bits: TSQLFieldBits): RawUTF8;
+var f: integer;
+    W: TTextWriter;
 begin
   W := TTextWriter.CreateOwnedStream(512);
   try
@@ -45465,8 +45465,12 @@ begin
   {$endif}
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid;
+  if IsNullGUID(fInterfaceIID) then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.Create: % has no GUID',[self,aInterface^.Name]);
   // retrieve all interface methods (recursively including ancestors)
-  fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,@fMethodsCount,true);
+  fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
+    @fMethodsCount,true);
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount=0 then
     raise EInterfaceFactoryException.CreateUTF8(
