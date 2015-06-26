@@ -4047,9 +4047,11 @@ begin
   GetVariantFromJSON('0',False,V,nil);
   Check(TVarData(v).VType=varInteger);
   Check(v=0);
-  GetVariantFromJSON('0123',False,V,nil);
+  GetVariantFromJSON('123',False,V,nil);
   Check(TVarData(v).VType=varInteger);
   Check(v=123);
+  GetVariantFromJSON('0123',False,V,nil);
+  Check(TVarData(v).VType=varString);
   GetVariantFromJSON('-123',False,V,nil);
   Check(TVarData(v).VType=varInteger);
   Check(v=-123);
@@ -5186,8 +5188,8 @@ begin
   Check(UTF8ContentType('123')=sftInteger);
   Check(UTF8ContentType('0123')=sftUTF8Text);
   Check(UTF8ContentType('-123')=sftInteger);
-  Check(UTF8ContentType('123.1')=sftFloat);
-  Check(UTF8ContentType('123.12')=sftFloat);
+  Check(UTF8ContentType('123.1')=sftCurrency);
+  Check(UTF8ContentType('123.12')=sftCurrency);
   Check(UTF8ContentType('123.12345678')=sftFloat);
   Check(UTF8ContentType('1.13e+12')=sftFloat);
   Check(UTF8ContentType('-1.13e-12')=sftFloat);
@@ -5201,8 +5203,8 @@ begin
   Check(UTF8ContentNumberType('123')=sftInteger);
   Check(UTF8ContentNumberType('0123')=sftUTF8Text);
   Check(UTF8ContentNumberType('-123')=sftInteger);
-  Check(UTF8ContentNumberType('123.1')=sftFloat);
-  Check(UTF8ContentNumberType('123.12')=sftFloat);
+  Check(UTF8ContentNumberType('123.1')=sftCurrency);
+  Check(UTF8ContentNumberType('123.12')=sftCurrency);
   Check(UTF8ContentNumberType('123.12345678')=sftFloat);
   Check(UTF8ContentNumberType('1.13e+12')=sftFloat);
   Check(UTF8ContentNumberType('-1.13e-12')=sftFloat);

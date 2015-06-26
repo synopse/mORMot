@@ -1842,6 +1842,7 @@ function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 // - will return sftInteger or sftFloat if the supplied text is a number
 // - will return sftUTF8Text for any non numerical content
 function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 /// read an object properties, as saved by TINIWriter.WriteObject() method
@@ -23918,107 +23919,50 @@ begin
   end;
 end;
 
-function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
-var V: PUTF8Char;
+unction UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
 begin
-  if P=nil then begin
-    result := sftUnknown;
-    exit;
-  end;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  V := P;
-  // don't check for 'false' or 'true' here, since their UTF-8 value is '0' or '1'
-  if (P[0] in ['1'..'9']) or // is first char numeric?
-     ((P[0]='0') and not (P[1] in ['0'..'9'])) or // '012' excluded by JSON
-     ((P[0]='-') and (P[1] in ['0'..'9'])) then begin
-    // check if P^ is a true numerical value
-    result := sftInteger;
-    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
-    if P^='.' then begin
-      inc(P);
-      if P^ in ['0'..'9'] then begin
-        result := sftFloat;
-        repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-      end else begin
-        result := sftUTF8Text; // invalid '23023.' value
-        exit;
-      end;
-    end else
-      if P-V>18 then begin
-        Result := sftUTF8Text; // outside Int64 digits range
-        exit; // even sftFloat precision won't be able to handle it
-      end;
-    if byte(P^) and $DF=ord('E') then begin
-      result := sftFloat;
-      inc(P);
-      if P^='+' then inc(P) else
-      if P^='-' then inc(P);
-      while P^ in ['0'..'9'] do inc(P);
-    end;
-    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-    if P^<>#0 then // invalid numerical value
-      result := sftUTF8Text;
-  end else
-  if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
+  if (P=nil) or ((PInteger(P)^=ord('n')+ord('u')shl 8+ord('l')shl 16+
+                 ord('l')shl 24) and (P[4]=#0)) then
     result := sftUnknown else
-    result := sftUTF8Text;
+    case TextToVariantNumberType(P) of
+    varInt64:    result := sftInteger;
+    varDouble:   result := sftFloat;
+    varCurrency: result := sftCurrency;
+    else         result := sftUTF8Text;
+    end;
 end;
 
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
-var V: PUTF8Char;
-    c: integer;
+var c,len: integer;
 begin
-  if P=nil then begin
-    result := sftUnknown;
-    exit;
-  end;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  V := P;
-  if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
-     result := sftUnknown else
-  // don't check for 'false' or 'true' here, since their UTF-8 value is '0' or '1'
-  if (P[0] in ['1'..'9']) or // is first char numeric?
-     ((P[0]='0') and not (P[1] in ['0'..'9'])) or // '012' excluded by JSON
-     ((P[0]='-') and (P[1] in ['0'..'9'])) then begin
-    // check if P^ is a true numerical value
-    result := sftInteger;
-    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
-    if P^='.' then begin
-      inc(P);
-      if P^ in ['0'..'9'] then begin
-        result := sftFloat;
-        repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-      end else begin
-        result := sftUTF8Text; // invalid '23023.' value
-        exit;
-      end;
-    end else
-      if P-V>18 then begin
-        Result := sftUTF8Text; // outside Int64 digits range
-        exit; // even sftFloat precision won't be able to handle it
-      end;
-    if byte(P^) and $DF=ord('E') then begin
-      result := sftFloat;
-      inc(P);
-      if P^='+' then inc(P) else
-      if P^='-' then inc(P);
-      while P^ in ['0'..'9'] do inc(P);
-    end;
+  if P<>nil then begin
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-    if P^<>#0 then // invalid numerical value -> test if not TDateTime
-      if Iso8601ToTimeLogPUTF8Char(V,0)<>0 then
-        result := sftDateTime else
-        result := sftUTF8Text;
-    exit;
-  end else begin
-    c := PInteger(V)^ and $00ffffff;
-    if (c=JSON_BASE64_MAGIC) or ((V[1]='''') and isBlobHex(V)) then
-      result := sftBlob else
-    if c=JSON_SQLDATE_MAGIC then
-      result := sftDateTime else
-      result := sftUTF8Text;
-  end;
+    if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
+       result := sftUnknown else
+      // don't check for 'false' or 'true' here, since their UTF-8 value is 0/1
+      if P^ in ['-','0'..'9'] then
+      case TextToVariantNumberType(P) of
+      varInt64:    result := sftInteger;
+      varDouble:   result := sftFloat;
+      varCurrency: result := sftCurrency;
+      else begin
+        len := StrLen(P);
+        if (len>15) and (Iso8601ToTimeLogPUTF8Char(P,len)<>0) then
+          result := sftDateTime else
+          result := sftUTF8Text;
+      end;
+      end else begin
+        c := PInteger(P)^ and $00ffffff;
+        if (c=JSON_BASE64_MAGIC) or ((P^='''') and isBlobHex(P)) then
+          result := sftBlob else
+        if c=JSON_SQLDATE_MAGIC then
+          result := sftDateTime else
+          result := sftUTF8Text;
+      end;
+  end else
+    result := sftUnknown;
 end;
+
 
 
 { TPropInfo }

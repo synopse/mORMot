@@ -11247,6 +11247,11 @@ function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind=twJ
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean; var Value: variant;
   TryCustomVariants: PDocVariantOptions=nil);
 
+/// identify either varInt64, varDouble, varCurrency types following JSON format
+// - any non valid number is returned as varString
+// - is used e.g. by GetVariantFromJSON() to guess the destination variant type
+function TextToVariantNumberType(Json: PUTF8Char): word;
+
 /// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant); overload;
 
@@ -16200,7 +16205,7 @@ begin
   {$ifdef HASVARUSTRING}
   if VType=varByRef or varUString then begin
     wasString := true;
-    RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),length(UnicodeString(VAny)),result);
+    RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),length(PUnicodeString(VAny)^),result);
   end else
   {$endif}
     VariantSaveJSON(V,twJSONEscape,result); // will handle also custom types
@@ -16217,10 +16222,24 @@ function VariantToString(const V: Variant): string;
 var wasString: boolean;
     tmp: RawUTF8;
 begin
-  VariantToUTF8(V,tmp,wasString);
-  if tmp='' then
-    result := '' else
-    UTF8DecodeToString(pointer(tmp),length(tmp),result);
+  with TVarData(V) do
+    case VType of
+    varEmpty,varNull:
+      result := ''; // default VariantToUTF8(null)='null'
+    {$ifdef UNICODE}
+    varUString:
+      result := UnicodeString(VAny);
+    else
+    if VType=varByRef or varUString then
+      result := PUnicodeString(VAny)^
+    {$endif}
+    else begin
+      VariantToUTF8(V,tmp,wasString);
+      if tmp='' then
+        result := '' else
+        UTF8DecodeToString(pointer(tmp),length(tmp),result);
+    end;
+    end;
 end;
 
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
@@ -31973,9 +31992,12 @@ end;
 
 function TextToVariantNumberType(json: PUTF8Char): word;
 var start: PUTF8Char;
+label exponent;
 begin
   start := json;
-  if json^ in ['0'..'9','+','-'] then begin
+  if (json[0] in ['1'..'9']) or // is first char numeric?
+     ((json[0]='0') and not (json[1] in ['0'..'9'])) or // '012' is invalid JSON
+     ((json[0]='-') and (json[1] in ['0'..'9'])) then begin
     inc(json);
     repeat
       case json^ of
@@ -31990,22 +32012,36 @@ begin
             result := varCurrency; // currency ###.1234 number
             exit;
           end else begin
-          repeat // more than 4 decimals
-            inc(json)
-           until not (json^ in DigitFloatChars);
-           if json^=#0 then begin
-             result := varDouble; // (scientific floating pointer number)
-             exit;
-           end;
-           break;
-        end else
-        break;
-      #0: begin
-        if json-start<=18 then // integer number (with Int64 precision)
-          result := varInt64 else
+            repeat // more than 4 decimals
+              inc(json)
+            until not (json^ in ['0'..'9']);
+            if json^ in ['e','E'] then begin
+exponent:     inc(json);
+              if json^ in ['+','-'] then
+                inc(json);
+              if not (json^ in ['0'..'9']) then
+                break;
+              repeat
+                inc(json);
+              until not (json^ in ['0'..'9']);
+            end;
+            if json^=#0 then begin
+              result := varDouble; // (floating pointer number)
+              exit;
+            end;
+            break;
+          end else
+          break;
+      'e','E':
+        goto exponent;
+      #0: 
+        if json-start<=18 then begin // integer number (with Int64 precision)
+          result := varInt64;
+          exit;
+        end else begin
           result := varDouble; // we may lost precision, but it is a number
-        exit;
-      end;
+          exit;
+        end;
       else break;
       end;
     until false;
