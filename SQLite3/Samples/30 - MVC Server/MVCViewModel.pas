@@ -24,6 +24,7 @@ type
   // ! blog/main/login?name=...&plainpassword=... -> log as author
   // ! blog/main/articlecommit -> article edition commit (ID=0 for new)
   IBlogApplication = interface(IMVCApplication)
+    ['{73B27C06-9DB9-45A2-BEDD-2013CFB609D0}']
     procedure ArticleView(ID: TID;
       var WithComments: boolean; Direction: integer; var Scope: variant;
       out Article: TSQLArticle; out Author: variant;

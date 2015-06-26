@@ -20506,8 +20506,16 @@ begin // expect UpperName as 'NAME='
     if NormToUpperAnsi7[P[0]]=UpperName[0] then
       PBeg := P;
     repeat
-      if P^>#13 then
-        inc(P) else
+      if P[0]>#13 then
+        if P[1]>#13 then
+          if P[2]>#13 then
+            if P[3]>#13 then begin
+              inc(P,4);
+              continue;
+            end else
+            inc(P,3) else
+          inc(P,2) else
+        inc(P);
       if P^ in [#0,#10,#13] then
         break else
         inc(P);
