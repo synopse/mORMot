@@ -35144,7 +35144,7 @@ begin
       Call.OutInternalState := InternalState;
     if Ctxt.OutSetCookie<>'' then
       Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
-        '; Path=/'+Model.Root);
+        '; Path=/'); // not Path=/ModelRoot, since would be case sensitive
   finally
     QueryPerformanceCounter(timeEnd);
     dec(timeEnd,timeStart);
