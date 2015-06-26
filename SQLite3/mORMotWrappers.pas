@@ -184,12 +184,10 @@ const
     cpkDefault, cpkDefault,  cpkDefault,  cpkDefault,   cpkDefault,cpkDefault,
  // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,sftTimeLog,sftCurrency,
     cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkTimeLog,cpkDefault,
- // sftObject,                     sftVariant,         sftBlob, sftBlobDynArray,
-    cpkDefault,{$ifndef NOVARIANTS}cpkVariant,{$endif} cpkBlob, cpkDefault,
- // sftBlobCustom,sftUTF8Custom,sftMany, sftModTime,sftCreateTime, sftTID
-    cpkDefault,   cpkRecord,  cpkDefault,cpkModTime,cpkCreateTime, cpkDefault,
- // sftRecordVersion
-    cpkDefault);
+ // sftObject,  sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
+    cpkDefault, cpkVariant, cpkVariant,  cpkBlob, cpkDefault,      cpkDefault,
+ // sftUTF8Custom,sftMany, sftModTime, sftCreateTime, sftTID,   sftRecordVersion
+    cpkRecord,  cpkDefault,cpkModTime, cpkCreateTime, cpkDefault, cpkDefault);
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer','byte','word','integer','integer','int64','int64','int64','int64');
@@ -238,6 +236,7 @@ const
      wCurrency,       // sftCurrency
      wObject,         // sftObject
      wVariant,        // sftVariant
+     wVariant,        // sftNullable
      wBlob,           // sftBlob
      wBlob,           // sftBlobDynArray
      wRecord,         // sftBlobCustom

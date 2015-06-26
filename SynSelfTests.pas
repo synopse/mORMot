@@ -5334,7 +5334,7 @@ begin
       P := VariantLoadJSON(Va,P);
       Check((P<>nil) and (P^=#0));
       Check(Va=U);
-      Vb := VariantLoad(VariantSave(Va));
+      Vb := VariantLoad(VariantSave(Va),@JSON_OPTIONS[true]);
       Check(Vb=U);
     finally
       Free;
@@ -6098,9 +6098,9 @@ begin
   u := VariantSaveMongoJSON(o2,modNoMongo);
   Check(u=u2);
   bin := VariantSave(o2);
-  u := VariantSaveMongoJSON(VariantLoad(bin),modNoMongo);
+  u := VariantSaveMongoJSON(VariantLoad(bin,@JSON_OPTIONS[true]),modNoMongo);
   Check(u=u2);
-  check(VariantSaveMongoJSON(VariantLoad(bin),modNoMongo)=u2,'twice to ensure bin is untouched');
+  check(VariantSaveMongoJSON(VariantLoad(bin,@JSON_OPTIONS[true]),modNoMongo)=u2,'twice to ensure bin is untouched');
   u := VariantSaveMongoJSON(_Json('{id:ObjectId(),name:"John"}'),modNoMongo);
   Check(IdemPChar(Pointer(u),'{"ID":"'),'ObjectId() constructor ');
   Check(PosEx('","name":"John"}',u)=32);
@@ -7252,7 +7252,7 @@ begin
     Check(T.SameValues(T2));
     bin := VariantSave(T.ValVariant);
     Check(bin<>'');
-    Check(VariantLoad(T2.fVariant,pointer(bin))<>nil);
+    Check(VariantLoad(T2.fVariant,pointer(bin),@JSON_OPTIONS[true])<>nil);
     {$ifdef MSWINDOWS}
     Check(VariantSaveMongoJSON(T2.fVariant,modMongoStrict)='{"name":"John","int":1234}');
     {$endif}

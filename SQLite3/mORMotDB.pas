@@ -677,6 +677,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftUTF8,      // sftObject
        {$ifndef NOVARIANTS}
        ftUTF8,      // sftVariant
+       ftUTF8,      // sftNullable (retrieved from Prop.SQLFieldTypeStored)
        {$endif}
        ftBlob,      // sftBlob
        ftBlob,      // sftBlobDynArray
@@ -690,9 +691,9 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
-      exit; // ignore unkwnown/virtual fields
+      exit; // ignore unknown/virtual fields
     end;
-    Column.DBType := mORMotType[Prop.SQLFieldType];
+    Column.DBType := mORMotType[Prop.SQLFieldTypeStored];
     Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
     if Column.DBType=ftUTF8 then
       Column.Width := Prop.FieldWidth else
@@ -1575,7 +1576,7 @@ begin
        [self,StoredClass]);
     for f := 0 to ParamsCount-1 do
       if ParamsMatchCopiableFields and
-         (fStoredClassRecordProps.CopiableFields[f].SQLFieldType=sftDateTime) and
+         (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored=sftDateTime) and
          (Params[f].VType=ftUTF8) then
         Query.BindDateTime(f+1,Iso8601ToDateTimePUTF8Char(Params[f].VText)) else
         Query.Bind(f+1,Params[f]);

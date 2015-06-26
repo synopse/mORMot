@@ -1094,6 +1094,7 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'currency',        // sftCurrency
     '',                // sftObject
     'variant',         // sftVariant
+    '',                // sftNullable 
     'TSQLRawBlob',     // sftBlob
     'variant',         // sftBlobDynArray T*ObjArray=JSON=variant (RawUTF8?)
     '',                // sftBlobCustom

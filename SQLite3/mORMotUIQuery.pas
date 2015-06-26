@@ -209,7 +209,7 @@ begin
     FieldType := Table.FieldType(FieldIndex,@EnumType);
     Operation.Enabled := true;
     Label2.Enabled := true;
-    if FieldType in TEXT_FIELDS then
+    if FieldType in [sftAnsiText,sftUTF8Text,sftObject,sftVariant] then
       max := QueryOpEnumType^.MaxValue else  // allow textual operations
       max := ord(qoGreaterThanOrEqualTo);    // numeric operations only
     for i := ord(qoEqualTo) to max do

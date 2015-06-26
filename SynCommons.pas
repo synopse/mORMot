@@ -3789,8 +3789,13 @@ function ToVarString(const Value: RawUTF8; Dest: PByte): PByte;
 /// jump a value in variable-length text buffer
 function GotoNextVarString(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
 
+/// retrieve a variable-length UTF-8 encoded text buffer
+function FromVarString(var Source: PByte): RawUTF8; overload;
+
 /// retrieve a variable-length text buffer
-function FromVarString(var Source: PByte): RawUTF8;
+// - this overloaded function will set the supplied code page to the AnsiString
+procedure FromVarString(var Source: PByte; var Value: RawByteString;
+  CodePage: integer); overload;
 
 type
   /// kind of result returned by FromVarBlob() function
@@ -11090,6 +11095,26 @@ type
   /// pointer to a set of options for a TDocVariant storage
   PDocVariantOptions = ^TDocVariantOptions;
 
+const
+  /// some convenient TDocVariant options
+  // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
+  // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
+  JSON_OPTIONS: array[Boolean] of TDocVariantOptions = (
+    [dvoReturnNullForUnknownProperty],
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
+
+  /// TDocVariant options which may be used for plain JSON parsing
+  // - this won't recognize any extended syntax
+  JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoJSONParseDoNotTryCustomVariants];
+
+  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
+  // storage
+  JSON_OPTIONS_NAMEVALUE: TDocVariantOptions =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoNameCaseSensitive];
+
 
 /// same as Dest := Source, but copying by reference
 // - i.e. VType is defined as varVariant or varByRef
@@ -11116,7 +11141,7 @@ procedure ZeroFill(Value: PVarData);
 // - how custom type variants are created can be defined via CustomVariantOptions
 // - is just a wrapper around VariantLoad()
 procedure FromVarVariant(var Source: PByte; var Value: variant;
-  CustomVariantOptions: TDocVariantOptions=[dvoValueCopiedByReference]);
+  CustomVariantOptions: PDocVariantOptions=nil);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the number of bytes needed to save a Variant content
@@ -11151,7 +11176,7 @@ function VariantSave(const Value: variant): RawByteString; overload;
 // read content
 // - how custom type variants are created can be defined via CustomVariantOptions
 function VariantLoad(var Value: variant; Source: PAnsiChar;
-  CustomVariantOptions: TDocVariantOptions=[dvoValueCopiedByReference]): PAnsiChar; overload;
+  CustomVariantOptions: PDocVariantOptions): PAnsiChar; overload;
 
 /// retrieve a variant value from our optimized binary serialization format
 // - follow the data layout as used by RecordLoad() or VariantSave() function
@@ -11159,7 +11184,7 @@ function VariantLoad(var Value: variant; Source: PAnsiChar;
 // - just a wrapper around VariantLoad()
 // - how custom type variants are created can be defined via CustomVariantOptions
 function VariantLoad(const Bin: RawByteString;
-  CustomVariantOptions: TDocVariantOptions=[dvoValueCopiedByReference]): variant; overload;
+  CustomVariantOptions: PDocVariantOptions): variant; overload;
 
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
@@ -12287,27 +12312,6 @@ function _Copy(const DocVariant: variant): variant;
 // a varByRef pointing to a TDocVariant
 function _CopyFast(const DocVariant: variant): variant;
   {$ifdef HASINLINE}inline;{$endif}
-
-
-const
-  /// some convenient TDocVariant options
-  // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
-  // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
-  JSON_OPTIONS: array[Boolean] of TDocVariantOptions = (
-    [dvoReturnNullForUnknownProperty],
-    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
-
-  /// TDocVariant options which may be used for plain JSON parsing
-  // - this won't recognize any extended syntax
-  JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =
-    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
-     dvoJSONParseDoNotTryCustomVariants];
-
-  /// TDocVariant options to be used for case-sensitive TSynNameValue-like
-  // storage
-  JSON_OPTIONS_NAMEVALUE: TDocVariantOptions =
-    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
-     dvoNameCaseSensitive];
 
 
 {$endif NOVARIANTS}
@@ -13496,7 +13500,7 @@ begin
       FreeMem(A);
     end;
     {$ifdef UNICODE}
-    PWord(PtrInt(result)-12)^ := fCodePage; // force set code page
+    SetCodePage(result,fCodePage,false);
     {$endif}
   end;
 end;
@@ -13519,7 +13523,7 @@ begin
       FreeMem(A);
     end;
     {$ifdef UNICODE}
-    PWord(PtrInt(result)-12)^ := fCodePage; // force set code page
+    SetCodePage(result,fCodePage,false);
     {$endif}
   end;
 end;
@@ -25276,9 +25280,6 @@ function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUTF8;
 // we use YYYYMMDDTdate format
 begin
   FastNewRawUTF8(result,8+2*integer(Expanded));
-{$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
-  PWord(PtrUInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
-{$endif}
   DateToIso8601PChar(Date,pointer(result),Expanded);
 end;
 
@@ -25288,9 +25289,6 @@ end;
 function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8; overload;
 begin
   FastNewRawUTF8(result,8+2*integer(Expanded));
-{$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
-  PWord(PtrUInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
-{$endif}
   DateToIso8601PChar(pointer(result),Expanded,Y,M,D);
 end;
 
@@ -25298,9 +25296,6 @@ function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar='
 // we use Thhmmss format
 begin
   FastNewRawUTF8(result,7+2*integer(Expanded));
-{$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
-  PWord(PtrUInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
-{$endif}
   TimeToIso8601PChar(Time,pointer(result),Expanded,FirstChar);
 end;
 
@@ -26614,9 +26609,6 @@ begin
   if S='' then
     exit;
   SetLength(result,length(S)*2); // max length
-{$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
-  PWord(PtrInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
-{$endif}
   SetLength(result,UnCamelCase(pointer(result),pointer(S)));
 end;
 
@@ -27963,6 +27955,19 @@ begin
   inc(Source,Len);
 end;
 
+procedure FromVarString(var Source: PByte; var Value: RawByteString; CodePage: integer);
+var Len: PtrUInt;
+begin
+  Len := FromVarUInt32(Source);
+  if Len=0 then
+    exit;
+  SetString(Value,PAnsiChar(Source),Len);
+  {$ifdef UNICODE}
+  SetCodePage(Value,CodePage,false);
+  {$endif}
+  inc(Source,Len);
+end;
+
 function FromVarBlob(Data: PByte): TValueResult;
 begin
   Result.Len := FromVarUInt32(Data);
@@ -28498,8 +28503,8 @@ begin
           {$ifdef UNICODE}
           { Delphi 2009+: set Code page for this AnsiString }
           if LenBytes<>0 then
-            PWord(PPtrUInt(R)^-12)^ := PWord(PtrUInt(Field.TypeInfo^)+
-              Field.TypeInfo^^.NameLen+2)^;
+            SetCodePage(PRawByteString(R)^,PWord(PtrUInt(Field.TypeInfo^)+
+              Field.TypeInfo^^.NameLen+2)^,false);
           {$endif}
         end;
         tkWString:
@@ -28524,7 +28529,7 @@ begin
     end;
     {$ifndef NOVARIANTS}
     tkVariant: begin
-      Source := VariantLoad(PVariant(R)^,Source);
+      Source := VariantLoad(PVariant(R)^,Source,@JSON_OPTIONS[true]);
       Diff := sizeof(Variant); // size of tkVariant in record
     end;
     {$endif}
@@ -31525,14 +31530,14 @@ begin
 end;
 
 function VariantLoad(const Bin: RawByteString;
-  CustomVariantOptions: TDocVariantOptions): variant;
+  CustomVariantOptions: PDocVariantOptions): variant;
 begin
   if VariantLoad(result,Pointer(Bin),CustomVariantOptions)=nil then
     VarClear(result);
 end;
 
 function VariantLoad(var Value: variant; Source: PAnsiChar;
-  CustomVariantOptions: TDocVariantOptions): PAnsiChar;
+  CustomVariantOptions: PDocVariantOptions): PAnsiChar;
   procedure ComplexType;
   var JSON: PUTF8Char;
       tmp: RawUTF8;
@@ -31541,7 +31546,7 @@ function VariantLoad(var Value: variant; Source: PAnsiChar;
       tmp := FromVarString(PByte(Source));
       JSON := pointer(tmp); // GetJSON*() does in-place unescape -> private copy
       TVarData(Value).VType := varEmpty; // avoid GPF below
-      GetJSONToAnyVariant(Value,JSON,nil,@CustomVariantOptions);
+      GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions);
       result := Source;
     except
       on Exception do
@@ -31588,15 +31593,16 @@ begin
       inc(Source,LenBytes);
     end;
     else // expected format for complex type is JSON (VType may differ)
-      ComplexType;
+      if CustomVariantOptions<>nil then
+        ComplexType else
+        Source := nil; // notify unhandled type
     end;
   end;
   result := Source;
 end;
 
-
 procedure FromVarVariant(var Source: PByte; var Value: variant;
-  CustomVariantOptions: TDocVariantOptions);
+  CustomVariantOptions: PDocVariantOptions);
 begin
   Source := PByte(VariantLoad(Value,PAnsiChar(Source),CustomVariantOptions));
 end;
@@ -35067,8 +35073,8 @@ begin
         {$ifdef UNICODE}
         { Delphi 2009+: set Code page for this AnsiString }
         if LenBytes<>0 then
-          PWord(PPtrUInt(P)^-12)^ := PWord(PtrUInt(ElemType)+
-            PDynArrayTypeInfo(ElemType)^.NameLen+2)^;
+          SetCodePage(PRawByteString(P)^,PWord(PtrUInt(ElemType)+
+            PDynArrayTypeInfo(ElemType)^.NameLen+2)^,false);
         {$endif}
       end;
       tkWString:
@@ -35107,7 +35113,7 @@ begin
     {$ifndef NOVARIANTS}
     tkVariant:
       for i := 0 to n-1 do begin
-        Source := VariantLoad(PVariantArray(P)^[i],Source);
+        Source := VariantLoad(PVariantArray(P)^[i],Source,@JSON_OPTIONS[true]);
         if Source=nil then
           break; // invalid/unhandled variant content
       end;
@@ -35934,8 +35940,8 @@ begin
       {$ifdef UNICODE}
       { Delphi 2009+: set Code page for this AnsiString }
       if PPtrUInt(@Elem)^<>0 then
-        PWord(PPtrUInt(@Elem)^-12)^ := PWord(PtrUInt(ElemType)+
-          PDynArrayTypeInfo(ElemType)^.NameLen+2)^;
+        SetCodePage(RawByteString(Elem),PWord(PtrUInt(ElemType)+
+          PDynArrayTypeInfo(ElemType)^.NameLen+2)^,false);
       {$endif}
     end;
     tkWString: // WideString internal length is in bytes
@@ -35946,7 +35952,7 @@ begin
     {$endif}
     {$ifndef NOVARIANTS}
     tkVariant:
-      VariantLoad(variant(Elem),Source);
+      VariantLoad(variant(Elem),Source,@JSON_OPTIONS[true]);
     {$endif}
     tkRecord{$ifdef FPC},tkObject{$endif}:
       RecordLoad(Elem,Source,ElemType);

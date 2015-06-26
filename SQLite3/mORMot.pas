@@ -1294,6 +1294,8 @@ type
   // - it maps the SQLite3 RowID definition
   // - when converted to plain TSQLRecord published properties, you may loose
   // some information under Win32 when stored as a 32 bit pointer
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property AnotherRecord: TID read fAnotherRecord write fAnotherRecord;
   TID = type Int64;
 
   /// a pointer to a ORM primary key, i.e. TSQLRecord.ID: TID
@@ -1315,6 +1317,8 @@ type
   // for blobs, unless TSQLRestClientURI.ForceBlobTransfert property is TRUE
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property Blob: TSQLRawBlob read fBlob write fBlob;
   TSQLRawBlob = type RawByteString;
 
   /// a reference to another record in any table in the database Model
@@ -1326,6 +1330,8 @@ type
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, this property will be set to 0
   // by TSQLRestServer.AfterDeleteForceCoherency()
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property AnotherRecord: TRecordReference read fAnotherRecord write fAnotherRecord;
   TRecordReference = type Int64;
 
   /// a reference to another record in any table in the database Model
@@ -1337,6 +1343,9 @@ type
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, any record containg a matching
   // property will be deleted by TSQLRestServer.AfterDeleteForceCoherency()
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property AnotherRecord: TRecordReferenceToBeDeleted
+  // !   read fAnotherRecord write fAnotherRecord;
   TRecordReferenceToBeDeleted = type TRecordReference;
 
   /// an Int64-encoded date and time of the latest update of a record
@@ -1348,6 +1357,8 @@ type
   // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow/Iso8601ToTimeLog
   // functions, or type-cast the value with a TTimeLogBits memory structure for
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property LastModif: TModTime read fLastModif write fLastModif;
   TModTime = type TTimeLog;
 
   /// an Int64-encoded date and time of the record creation
@@ -1359,6 +1370,8 @@ type
   // - use TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow/Iso8601ToTimeLog
   // functions, or type-cast the value with a TTimeLogBits memory structure for
   // direct access to its bit-oriented content (or via PTimeLogBits pointer)
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property CreatedAt: TModTime read fCreatedAt write fCreatedAt;
   TCreateTime = type TTimeLog;
 
   /// a monotonic version number, used to track changes on a table
@@ -1371,6 +1384,8 @@ type
   // monotonic version number, just before storage to the persistence engine
   // - such a field will use a separated TSQLRecordTableDeletion table to
   // track the deleted items
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property TrackedVersion: TRecordVersion read fVersion write fVersion;
   TRecordVersion = type Int64;
 
   /// the available types for any SQL field property, as managed with the
@@ -1421,6 +1436,10 @@ type
   // - sftVariant is a TEXT containing a variant value encoded as JSON:
   // string values are stored between quotes, numerical values directly stored,
   // and JSON objects or arrays will be handled as TDocVariant custom types
+  // - sftNullable is a INTEGER/DOUBLE/TEXT field containing a NULLable value,
+  // stored as a local variant property, identifying TNullableInteger,
+  // TNullableBoolean, TNullableFloat, TNullableCurrency,
+  // TNullableDateTime, TNullableTimeLog and TNullableUTF8Text types
   // - sftBlob is a BLOB field (TSQLRawBlob Delphi property), and won't be
   // retrieved by default (not part of ORM "simple types"), to save bandwidth
   // - sftBlobDynArray is a dynamic array, stored as BLOB field: this kind of
@@ -1482,14 +1501,33 @@ type
   // operation by the low-level Engine*() storage methods - such a field
   // will use a TSQLRecordTableDeletion table to track the deleted items
   TSQLFieldType = (
-    sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,
-    sftInteger, sftID, sftRecord, sftBoolean,
-    sftFloat, sftDateTime, sftTimeLog, sftCurrency, sftObject,
+    sftUnknown,
+    sftAnsiText,
+    sftUTF8Text,
+    sftEnumerate,
+    sftSet,
+    sftInteger,
+    sftID,
+    sftRecord,
+    sftBoolean,
+    sftFloat,
+    sftDateTime,
+    sftTimeLog,
+    sftCurrency,
+    sftObject,
     {$ifndef NOVARIANTS}
     sftVariant,
+    sftNullable,
     {$endif}
-    sftBlob, sftBlobDynArray, sftBlobCustom, sftUTF8Custom, sftMany,
-    sftModTime, sftCreateTime, sftTID, sftRecordVersion);
+    sftBlob,
+    sftBlobDynArray,
+    sftBlobCustom,
+    sftUTF8Custom,
+    sftMany,
+    sftModTime,
+    sftCreateTime,
+    sftTID,
+    sftRecordVersion);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -1549,84 +1587,80 @@ const
   // - by design, TSQLRecordMany properties are stored in an external pivot table
   // - by convenience, the TRecordVersion number is for internal use only
   NOT_SIMPLE_FIELDS: TSQLFieldTypes =
-    [sftUnknown, sftBlob, sftMany, sftRecordVersion];
+    [sftUnknown,sftBlob,sftMany,sftRecordVersion];
 
   /// kind of fields which can be copied from one TSQLRecord instance to another
   COPIABLE_FIELDS: TSQLFieldTypes =
     [low(TSQLFieldType)..high(TSQLFieldType)] - [sftUnknown, sftMany];
 
-  /// kind of fields which will contain TEXT content when converted to JSON
-  TEXT_FIELDS: TSQLFieldTypes =
-    [sftAnsiText, sftUTF8Text, sftDateTime, sftObject, sftUTF8Custom
-      {$ifndef NOVARIANTS}, sftVariant{$endif}];
+  /// kind of DB fields which will contain TEXT content when converted to JSON
+  TEXT_DBFIELDS: TSQLDBFieldTypes = [ftUTF8,ftDate];
 
   /// kind of fields which will contain pure TEXT values
   // - independently from the actual storage level
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
-  RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText, sftUTF8Text];
+  RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText,sftUTF8Text];
 
+{$ifndef NOVARIANTS}
+type
   /// define a variant published property as a nullable integer
   // - either a varNull or a varInt64 value will be stored in the variant
   // - either a NULL or an INTEGER value will be stored in the database
   // - the property should be defined as such:
-  // ! property Int: variant index sftNullableInteger read fInt write fInt;
-  sftNullableInteger    = -ord(sftInteger);
+  // ! property Int: TNullableInteger read fInt write fInt;
+  TNullableInteger = type variant;
   /// define a variant published property as a nullable boolean
   // - either a varNull or a varBoolean value will be stored in the variant
   // - either a NULL or a 0/1 INTEGER value will be stored in the database
   // - the property should be defined as such:
-  // ! property Bool: variant index sftNullableBoolean read fBool write fBool;
-  sftNullableBoolean    = -ord(sftBoolean);
-  /// define a variant published property as a nullable enumerate
-  // - either a varNull or a varInteger value will be stored in the variant
-  // - either a NULL or a >0 INTEGER value will be stored in the database
-  // - the property should be defined as such:
-  // ! property Enum: variant index sftNullableEnumerate read fEnum write fEnum;
-  sftNullableEnumerate  = -ord(sftEnumerate);
+  // ! property Bool: TNullableBoolean read fBool write fBool;
+  TNullableBoolean = type variant;
   /// define a variant published property as a nullable floating point value
   // - either a varNull or a varDouble value will be stored in the variant
   // - either a NULL or a FLOAT value will be stored in the database
   // - the property should be defined as such:
-  // ! property Flt: variant index sftNullableFloat read fFlt write fFlt;
-  sftNullableFloat      = -ord(sftFloat);
+  // ! property Flt: TNullableFloat read fFlt write fFlt;
+  TNullableFloat = type variant;
   /// define a variant published property as a nullable decimal value
   // - either a varNull or a varCurrency value will be stored in the variant
   // - either a NULL or a FLOAT value will be stored in the database
   // - the property should be defined as such:
-  // ! property Cur: variant index sftNullableCurrency read fCur write fCur;
-  sftNullableCurrency   = -ord(sftCurrency);
+  // ! property Cur: TNullableCurrency read fCur write fCur;
+  TNullableCurrency = type variant;
   /// define a variant published property as a nullable date/time value
   // - either a varNull or a varDate value will be stored in the variant
   // - either a NULL or a ISO-8601 TEXT value will be stored in the database
   // - the property should be defined as such:
-  // ! property Dat: variant index sftNullableDateTime read fDat write fDat;
-  sftNullableDateTime   = -ord(sftDateTime);
+  // ! property Dat: TNullableDateTime read fDat write fDat;
+  TNullableDateTime = type variant;
   /// define a variant published property as a nullable timestamp value
   // - either a varNull or a varInt64 value will be stored in the variant
   // - either a NULL or a TTimeLog INTEGER value will be stored in the database
   // - the property should be defined as such:
-  // ! property Tim: variant index sftNullableTimrency read fTim write fTim;
-  sftNullableTimeLog    = -ord(sftTimeLog);
+  // ! property Tim: TNullableTimrency read fTim write fTim;
+  TNullableTimeLog = type variant;
   /// define a variant published property as a nullable UTF-8 encoded text
   // - either a varNull or varString (RawUTF8) will be stored in the variant
   // - either a NULL or a TEXT value will be stored in the database
   // - the property should be defined as such:
-  // ! property Txt: variant index sftNullableUTF8Text read fTxt write fTxt;
+  // ! property Txt: TNullableUTF8Text read fTxt write fTxt;
   // or for a fixed-width VARCHAR (in external databases), here of 32 max chars:
-  // ! property Txt: variant index 32 read fTxt write fTxt;
+  // ! property Txt: TNullableUTF8Text index 32 read fTxt write fTxt;
   // - warning: prior to Delphi 2009, since the variant will be stored as
-  // RawUTF8 internally, you should not use directly the field value as
-  // a VCL string=AnsiString like string(aField) but use VariantToString(aField)  
-  sftNullableUTF8Text   = -ord(sftUTF8Text);
+  // RawUTF8 internally, you should not use directly the field value as a
+  // VCL string=AnsiString like string(aField) but use VariantToString(aField)
+  TNullableUTF8Text = type variant;
 
-  /// the SQL field property types with their sftNullable* equivalency
-  // - those types may be stored in a variant published property, with the
-  // sftNullable* kind specified as "index ##" attribute, e.g.
-  // ! property Int: variant index sftNullableInteger read fInt write fInt;
-  // ! property Txt: variant index sftNullableUTF8Text read fTxt write fTxt;
-  // ! property Txt: variant index 32 read fTxt write fTxt;
+const
+  /// the SQL field property types with their TNullable* equivalency
+  // - those types may be stored in a variant published property, e.g.
+  // ! property Int: TNullableInteger read fInt write fInt;
+  // ! property Txt: TNullableUTF8Text read fTxt write fTxt;
+  // ! property Txt: TNullableUTF8Text index 32 read fTxt write fTxt;
   NULLABLE_TYPES = [sftInteger,sftBoolean,sftEnumerate,sftFloat,sftCurrency,
     sftDateTime,sftTimeLog,sftUTF8Text];
+
+{$endif NOVARIANTS}
 
 type
   /// the available options for TSQLRest.BatchStart() process
@@ -2823,6 +2857,8 @@ type
     fName: RawUTF8;
     fNameUnflattened: RawUTF8;
     fSQLFieldType: TSQLFieldType;
+    fSQLFieldTypeStored: TSQLFieldType;
+    fSQLDBFieldType: TSQLDBFieldType;
     fAttributes: TSQLPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
@@ -2857,6 +2893,10 @@ type
     property PropertyIndex: integer read fPropertyIndex;
     /// the corresponding column type, as managed by the ORM layer
     property SQLFieldType: TSQLFieldType read fSQLFieldType;
+    /// the corresponding column type, as stored by the ORM layer
+    // - match SQLFieldType, unless for SQLFieldType=sftNullable, in which this
+    // field would contain the simple eventually stored in the database
+    property SQLFieldTypeStored: TSQLFieldType read fSQLFieldTypeStored;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
     // - returns e.g. 'sftTimeLog'
@@ -2865,6 +2905,12 @@ type
     // - returns e.g. 'RawUTF8'
     // - will return the TSQLPropInfo class name if it is not a TSQLPropInfoRTTI
     property SQLFieldRTTITypeName: RawUTF8 read GetSQLFieldRTTITypeName;
+    /// the corresponding column type, as managed for abstract database access
+    // - TNullable* fields would report here the corresponding simple DB type,
+    // e.g. ftInt64 for TNullableInteger (following SQLFieldTypeStored value)
+    property SQLDBFieldType: TSQLDBFieldType read fSQLDBFieldType;
+    /// the corresponding column type name, as managed for abstract database access
+    function SQLDBFieldTypeName: PShortString;
     /// the ORM attributes of this property
     // - contains aIsUnique e.g for TSQLRecord published properties marked as
     // ! property MyProperty: RawUTF8 stored AS_UNIQUE;
@@ -2965,10 +3011,6 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); virtual;
     /// returns an untyped pointer to the field property memory in a given instance
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
-    /// the corresponding column type, as managed for abstract database access
-    function SQLDBFieldType: TSQLDBFieldType;
-    /// the corresponding column type name, as managed for abstract database access
-    function SQLDBFieldTypeName: PShortString;
   end;
 
   /// class-reference type (metaclass) of a TSQLPropInfo information
@@ -3313,6 +3355,7 @@ type
 
 {$ifndef NOVARIANTS}
   /// information about a variant published property
+  // - is also used for TNullable* properties
   TSQLPropInfoRTTIVariant = class(TSQLPropInfoRTTI)
   protected
     fDocVariantOptions: TDocVariantOptions;
@@ -6906,7 +6949,7 @@ type
     /// contains the TSQLFieldType and TypeInfo(enumerate), after calculation
     // from the fQueryTables values
     fFieldType: array of record
-      // the field kind
+      // the field kind, as in JSON (match TSQLPropInfo.SQLFieldTypeStored)
       ContentType: TSQLFieldType;
       // the field size in bytes; -1 means not computed yet
       ContentSize: integer;
@@ -7305,7 +7348,8 @@ type
     // ! aTable.SetFieldType(1,sftSet,TypeInfo(TSetSamples));
     // or for dynamic arrays
     procedure SetFieldType(Field: integer; FieldType: TSQLFieldType;
-       FieldTypeInfo: pointer=nil; FieldSize: integer=-1); overload;
+       FieldTypeInfo: pointer=nil; FieldSize: integer=-1;
+       FieldTableIndex: integer=-1); overload;
     /// set the exact type of a given field
     // - by default, column types and sizes will be retrieved from JSON content
     // from first row, or all rows if FieldTypeIntegerDetectionOnAllRows is set
@@ -17493,7 +17537,7 @@ function TSQLPropInfo.GetSQLFieldTypeName: PShortString;
 begin
   if self=nil then
     result := @NULL_SHORTSTRING else
-    result := GetEnumName(TypeInfo(TSQLFieldType),ord(SQLFieldType));
+    result := GetEnumName(TypeInfo(TSQLFieldType),ord(fSQLFieldType));
 end;
 
 function TSQLPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
@@ -17531,6 +17575,71 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS}
+function NullableTypeToSQLFieldType(aType: pointer): TSQLFieldType;
+begin
+  if aType<>nil then
+    if aType<>TypeInfo(TNullableInteger) then
+      if aType<>TypeInfo(TNullableUTF8Text) then
+        if aType<>TypeInfo(TNullableBoolean) then
+          if aType<>TypeInfo(TNullableFloat) then
+            if aType<>TypeInfo(TNullableCurrency) then
+              if aType<>TypeInfo(TNullableDateTime) then
+                if aType<>TypeInfo(TNullableTimeLog) then begin
+                  result := sftUnknown;
+                  exit;
+                end else
+                result := sftTimeLog else
+              result := sftDateTime else
+            result := sftCurrency else
+          result := sftFloat else
+        result := sftBoolean else
+      result := sftUTF8Text else
+    result := sftInteger else
+  result := sftUnknown;
+end;
+{$endif}
+
+const
+  SQLFIELDTYPETODBFIELDTYPE: array[TSQLFieldType] of TSQLDBFieldType =
+    (ftUnknown,   // sftUnknown
+     ftUTF8,      // sftAnsiText
+     ftUTF8,      // sftUTF8Text
+     ftInt64,     // sftEnumerate
+     ftInt64,     // sftSet
+     ftInt64,     // sftInteger
+     ftInt64,     // sftID = TSQLRecord(aID)
+     ftInt64,     // sftRecord = TRecordReference
+     ftInt64,     // sftBoolean
+     ftDouble,    // sftFloat
+     ftDate,      // sftDateTime
+     ftInt64,     // sftTimeLog
+     ftCurrency,  // sftCurrency
+     ftUTF8,      // sftObject
+{$ifndef NOVARIANTS}
+     ftUTF8,      // sftVariant
+     ftNull,      // sftNullable
+{$endif}
+     ftBlob,      // sftBlob
+     ftBlob,      // sftBlobDynArray
+     ftBlob,      // sftBlobCustom
+     ftUTF8,      // sftUTF8Custom
+     ftUnknown,   // sftMany
+     ftInt64,     // sftModTime
+     ftInt64,     // sftCreateTime
+     ftInt64,     // sftTID
+     ftInt64);    // sftRecordVersion = TRecordVersion
+
+function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType; aTypeInfo: pointer): TSQLDBFieldType;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifndef NOVARIANTS}
+  if aSQLFieldType=sftNullable then
+    result := SQLFIELDTYPETODBFIELDTYPE[NullableTypeToSQLFieldType(aTypeInfo)] else
+  {$endif}
+    result := SQLFIELDTYPETODBFIELDTYPE[aSqlFieldType];
+end;
+
 constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldType;
   aAttributes: TSQLPropInfoAttributes; aFieldWidth, aPropertyIndex: integer);
 begin
@@ -17539,6 +17648,8 @@ begin
   fName := aName;
   fNameUnflattened := aName;
   fSQLFieldType := aSQLFieldType;
+  fSQLFieldTypeStored := aSQLFieldType;
+  fSQLDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fSQLFieldTypeStored];
   fAttributes := aAttributes;
   fFieldWidth := aFieldWidth;
   fPropertyIndex := aPropertyIndex;
@@ -17579,51 +17690,16 @@ begin
   SetValue(Instance,pointer(Value),wasString);
 end;
 
-const
-  SQLFieldTypeToDB: array[TSQLFieldType] of TSQLDBFieldType =
-    (ftUnknown,   // sftUnknown
-     ftUTF8,      // sftAnsiText
-     ftUTF8,      // sftUTF8Text
-     ftInt64,     // sftEnumerate
-     ftInt64,     // sftSet
-     ftInt64,     // sftInteger
-     ftInt64,     // sftID = TSQLRecord(aID)
-     ftInt64,     // sftRecord = TRecordReference
-     ftInt64,     // sftBoolean
-     ftDouble,    // sftFloat
-     ftDate,      // sftDateTime
-     ftInt64,     // sftTimeLog
-     ftCurrency,  // sftCurrency
-     ftUTF8,      // sftObject
-{$ifndef NOVARIANTS}
-     ftUTF8,      // sftVariant
-{$endif}
-     ftBlob,      // sftBlob
-     ftBlob,      // sftBlobDynArray
-     ftBlob,      // sftBlobCustom
-     ftUTF8,      // sftUTF8Custom
-     ftUnknown,   // sftMany
-     ftInt64,     // sftModTime
-     ftInt64,     // sftCreateTime
-     ftInt64,     // sftTID
-     ftInt64);    // sftRecordVersion = TRecordVersion
-
-
-function TSQLPropInfo.SQLDBFieldType: TSQLDBFieldType;
-begin
-  result := SQLFieldTypeToDB[fSQLFieldType];
-end;
-
 function TSQLPropInfo.SQLDBFieldTypeName: PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(SQLDBFieldType));
+  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(fSQLDBFieldType));
 end;
 
 procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
   GetValueVar(Instance,true,RawUTF8(temp),nil);
-  aValue.VType := SQLFieldTypeToDB[fSQLFieldType];
+  aValue.VType := fSQLDBFieldType;
   case aValue.VType of
     ftInt64:
       SetInt64(pointer(temp),aValue.VInt64);
@@ -17682,8 +17758,8 @@ const
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
  // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
     varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
- // sftObject, {$ifndef NOVARIANTS}sftVariant{$endif} sftBlob, sftBlobDynArray,
-    varNull,{$ifndef NOVARIANTS} varNull, {$endif} varString, varNull,
+ //sftObject,{$NOVARIANTS}sftVariant,sftNullable{$endif} sftBlob,sftBlobDynArray,
+    varNull,{$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
  // sftRecordVersion,
@@ -17723,7 +17799,7 @@ begin
     pointer(result.VAny) := nil;
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
   end;
-  sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom: begin
+  sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom, sftNullable: begin
     if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
        (Value<>nil) and (Value^<>'[') then begin
       tempCopy := BlobToTSQLRawBlob(Value);
@@ -17745,7 +17821,7 @@ procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
 var temp: RawUTF8;
 begin
   GetValueVar(Instance,true,temp,nil);
-  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false,nil);
+  ValueVarToVariant(pointer(temp),fSQLFieldTypeStored,TVarData(Dest),false,nil);
 end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
@@ -17842,73 +17918,83 @@ end;
 begin
   if aPropInfo=nil then
     raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call',[self]);
+  result := nil;
+  aSQLFieldType := sftUnknown;
   aType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
-  aSQLFieldType := aType^.GetSQLFieldType;
-  C := nil;
-  case aSQLFieldType of
-    sftUnknown, sftBlobCustom:
-      ; // will raise an EORMException
-    sftBoolean, sftEnumerate:
-      C := TSQLPropInfoRTTIEnum;
-    sftTimeLog, sftModTime, sftCreateTime: // specific class for further use
-      C := TSQLPropInfoRTTITimeLog;
-    sftCurrency:
-      C := TSQLPropInfoRTTICurrency;
-    sftDateTime:
-      C := TSQLPropInfoRTTIDateTime;
-    sftID: // = TSQLRecord(aID)
-      C := TSQLPropInfoRTTIID;
-    sftTID:
-      C := TSQLPropInfoRTTITID;
-    sftRecord: // = TRecordReference
-      C := TSQLPropInfoRTTIInstance;
-    sftRecordVersion:
-      C := TSQLPropInfoRTTIRecordVersion;
-    sftMany:
-      C := TSQLPropInfoRTTIMany;
-    sftObject:
-      C := TSQLPropInfoRTTIObject;
-    {$ifndef NOVARIANTS}
-    sftVariant:
-      C := TSQLPropInfoRTTIVariant;
-    {$endif}
-    sftBlob:
-      C := TSQLPropInfoRTTIRawBlob;
-    sftBlobDynArray:
-      C := TSQLPropInfoRTTIDynArray;
-    sftUTF8Custom: begin // will happen only for DELPHI XE5 and up
-      result := TSQLPropInfoCustomJSON.Create(aPropInfo,aPropIndex);
-      exit;
-    end;
-    else
-    case aType^.Kind of // retrieve exact type at binary level
-      tkInteger:
-        C := TSQLPropInfoRTTIInt32;
-      tkSet:
-        C := TSQLPropInfoRTTISet;
-      tkChar, tkWChar:
-        C := TSQLPropInfoRTTIChar;
-      tkInt64 {$ifdef FPC}, tkQWord{$endif}:
-        C := TSQLPropInfoRTTIInt64;
-      tkFloat:
-        if aType^.FloatType=ftDoub then
-          C := TSQLPropInfoRTTIDouble;
-      tkLString {$ifdef FPC},tkAString{$endif}:
-        case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
-          CP_UTF8:  C := TSQLPropInfoRTTIRawUTF8;
-          CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
-          else C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
-        end;
-      {$ifdef UNICODE}
-      tkUString:
-        C := TSQLPropInfoRTTIUnicode;
-      {$endif}
-      tkWString:
-        C := TSQLPropInfoRTTIWide;
-    end;
+  {$ifndef NOVARIANTS}
+  if aType^.Kind=tkVariant then begin
+    aSQLFieldType := NullableTypeToSQLFieldType(aType);
+    if aSQLFieldType<>sftUnknown then // handle sftNullable type
+      result := TSQLPropInfoRTTIVariant.Create(aPropInfo,aPropIndex,aSQLFieldType);
   end;
-  if C<>nil then begin
-    result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+  {$endif}
+  if result=nil then begin
+    aSQLFieldType := aType^.GetSQLFieldType;
+    C := nil;
+    case aSQLFieldType of
+      sftUnknown, sftBlobCustom:
+        ; // will raise an EORMException
+      sftBoolean, sftEnumerate:
+        C := TSQLPropInfoRTTIEnum;
+      sftTimeLog, sftModTime, sftCreateTime: // specific class for further use
+        C := TSQLPropInfoRTTITimeLog;
+      sftCurrency:
+        C := TSQLPropInfoRTTICurrency;
+      sftDateTime:
+        C := TSQLPropInfoRTTIDateTime;
+      sftID: // = TSQLRecord(aID)
+        C := TSQLPropInfoRTTIID;
+      sftTID:
+        C := TSQLPropInfoRTTITID;
+      sftRecord: // = TRecordReference
+        C := TSQLPropInfoRTTIInstance;
+      sftRecordVersion:
+        C := TSQLPropInfoRTTIRecordVersion;
+      sftMany:
+        C := TSQLPropInfoRTTIMany;
+      sftObject:
+        C := TSQLPropInfoRTTIObject;
+      {$ifndef NOVARIANTS}
+      sftVariant:
+        C := TSQLPropInfoRTTIVariant;  // sftNullable already handle above
+      {$endif}
+      sftBlob:
+        C := TSQLPropInfoRTTIRawBlob;
+      sftBlobDynArray:
+        C := TSQLPropInfoRTTIDynArray;
+      sftUTF8Custom: // will happen only for DELPHI XE5 and up
+        result := TSQLPropInfoCustomJSON.Create(aPropInfo,aPropIndex);
+      else
+      case aType^.Kind of // retrieve exact type at binary level
+        tkInteger:
+          C := TSQLPropInfoRTTIInt32;
+        tkSet:
+          C := TSQLPropInfoRTTISet;
+        tkChar, tkWChar:
+          C := TSQLPropInfoRTTIChar;
+        tkInt64 {$ifdef FPC}, tkQWord{$endif}:
+          C := TSQLPropInfoRTTIInt64;
+        tkFloat:
+          if aType^.FloatType=ftDoub then
+            C := TSQLPropInfoRTTIDouble;
+        tkLString {$ifdef FPC},tkAString{$endif}:
+          case aType^.AnsiStringCodePage of // recognize optimized UTF-8/UTF-16
+            CP_UTF8:  C := TSQLPropInfoRTTIRawUTF8;
+            CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
+            else C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
+          end;
+        {$ifdef UNICODE}
+        tkUString:
+          C := TSQLPropInfoRTTIUnicode;
+        {$endif}
+        tkWString:
+          C := TSQLPropInfoRTTIWide;
+      end;
+    end;
+    if C<>nil then
+      result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+  end;
+  if result<>nil then begin
     if aFlattenedProps<>nil then
       FlattenedPropNameSet;
   end else
@@ -17945,11 +18031,12 @@ procedure TSQLPropInfoRTTI.GetVariant(Instance: TObject; var Dest: Variant);
 var temp: RawUTF8;
 begin
   GetValueVar(Instance,true,temp,nil);
-  ValueVarToVariant(pointer(temp),fSQLFieldType,TVarData(Dest),false,fPropInfo);
+  ValueVarToVariant(pointer(temp),fSQLFieldTypeStored,TVarData(Dest),false,fPropInfo);
 end;
 {$endif NOVARIANTS}
 
-constructor TSQLPropInfoRTTI.Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType);
+constructor TSQLPropInfoRTTI.Create(aPropInfo: PPropInfo; aPropIndex: integer;
+  aSQLFieldType: TSQLFieldType);
 var attrib: TSQLPropInfoAttributes;
 begin
   byte(attrib) := 0;
@@ -18772,8 +18859,10 @@ begin
 end;
 
 function TSQLPropInfoRTTIAnsi.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
+var tmp: RawByteString;
 begin
-  fPropInfo.SetLongStrProp(Instance,FromVarString(PByte(P)));
+  FromVarString(PByte(P),tmp,fEngine.CodePage);
+  fPropInfo.SetLongStrProp(Instance,tmp);
   result := P;
 end;
 
@@ -18785,7 +18874,8 @@ begin
     fPropInfo.SetLongStrProp(Instance,fEngine.UTF8BufferToAnsi(Value,StrLen(Value)));
 end;
 
-procedure TSQLPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+procedure TSQLPropInfoRTTIAnsi.SetValueVar(Instance: TObject; const Value: RawUTF8;
+  wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,fEngine.UTF8ToAnsi(Value));
 end;
@@ -19487,7 +19577,9 @@ constructor TSQLPropInfoRTTIVariant.Create(aPropInfo: PPropInfo; aPropIndex: int
   aSQLFieldType: TSQLFieldType);
 begin
   inherited;
-  fDocVariantOptions := JSON_OPTIONS[true];
+  if aSQLFieldType=sftVariant then
+    fDocVariantOptions := JSON_OPTIONS[true] else
+    fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored  
 end;
 
 procedure TSQLPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
@@ -19550,7 +19642,7 @@ procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
 var value: Variant;
 begin
   fPropInfo.GetVariantProp(Instance,value);
-  W.AddVariant(value,twJSONEscape);
+  W.AddVariant(value,twJSONEscape); // even sftNullable should escape strings
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetValueVar(Instance: TObject;
@@ -19561,8 +19653,12 @@ begin
   fPropInfo.GetVariantProp(Instance,value);
   VariantToUTF8(value,result,wasString);
   if wasSQLString<>nil then
-    // from SQL point of view, variant columns are TEXT or NULL
-    wasSQLString^ := not VarIsEmptyOrNull(value);
+    if fSQLFieldType=sftNullable then
+      // only TNullableUTF8Text and TNullableDateTime would be actual text
+      wasSQLString^ := (fSQLDBFieldType in TEXT_DBFIELDS) and
+                        not VarIsEmptyOrNull(value) else
+      // from SQL point of view, variant columns are TEXT or NULL
+      wasSQLString^ := not VarIsEmptyOrNull(value);
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetVariant(Instance: TObject;
@@ -19596,9 +19692,10 @@ end;
 function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 var value: Variant;
 begin
-  FromVarVariant(PByte(P),value,DocVariantOptions);
+  if fSQLFieldType=sftNullable then
+    result := VariantLoad(value,P,nil) else
+    result := VariantLoad(value,P,@DocVariantOptions);
   fPropInfo.SetVariantProp(Instance,value);
-  result := P;
 end;
 
 procedure TSQLPropInfoRTTIVariant.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -19626,7 +19723,9 @@ begin
       GetMem(tmp,ValueLen);
     MoveFast(Value^,tmp^,ValueLen); // make private copy
     try
-      GetVariantFromJSON(tmp,wasString,V,@DocVariantOptions);
+      if fSQLFieldType=sftNullable then
+        GetVariantFromJSON(tmp,wasString,V,nil) else
+        GetVariantFromJSON(tmp,wasString,V,@DocVariantOptions);
       fPropInfo.SetVariantProp(Instance,V);
     finally
       if tmp<>@buf then
@@ -20924,45 +21023,33 @@ begin
 end;
 
 function FieldPropFromTable(const aTable: TSQLRecordClass; const PropName: RawUTF8;
-  out FieldTypeInfo: Pointer): TSQLFieldType;
-var f: TSQLPropInfo;
+  out PropInfo: TSQLPropInfo): TSQLFieldType;
 begin
-  if IsRowID(pointer(PropName)) then
-    result := sftInteger else
-    with aTable.RecordProps do begin
-      f := Fields.ByRawUTF8Name(PropName);
-      if f=nil then
-        result := sftUnknown else begin
-        result := f.SQLFieldType;
-        FieldTypeInfo := nil;
-        if f.InheritsFrom(TSQLPropInfoRTTI) then
-        with TSQLPropInfoRTTI(f) do
-        case SQLFieldType of
-          sftBlobDynArray:
-            FieldTypeInfo := PropInfo^.PropType{$ifndef FPC}^{$endif};
-          sftEnumerate:
-            FieldTypeInfo := PropInfo^.PropType^{$ifndef FPC}^{$endif}.EnumBaseType;
-          sftSet:
-            FieldTypeInfo := PropInfo^.PropType^{$ifndef FPC}^{$endif}.SetEnumType;
-        end;
-      end;
-    end;
+  if IsRowID(pointer(PropName)) then begin
+    result := sftInteger;
+    PropInfo := nil;
+  end else begin
+    PropInfo := aTable.RecordProps.Fields.ByRawUTF8Name(PropName);
+    if PropInfo<>nil then
+      result := PropInfo.SQLFieldTypeStored else
+      result := sftUnknown;
+  end;
 end;
 
 function FieldPropFromTables(const Tables: TSQLRecordClassDynArray;
-  const PropName: RawUTF8; out FieldTypeInfo: Pointer; out TableIndex: integer): TSQLFieldType;
+  const PropName: RawUTF8; out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
 var i,t: integer;
 begin
   TableIndex := -1;
   if length(Tables)=1 then begin
-    result := FieldPropFromTable(Tables[0],PropName,FieldTypeInfo);
+    result := FieldPropFromTable(Tables[0],PropName,PropInfo);
     if result<>sftUnknown then
       TableIndex := 0;
   end else begin
     i := PosEx('.',PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(Tables) do begin
-        result := FieldPropFromTable(Tables[t],PropName,FieldTypeInfo);
+        result := FieldPropFromTable(Tables[t],PropName,PropInfo);
         if result<>sftUnknown then begin
           TableIndex := t;
           exit;
@@ -20973,7 +21060,7 @@ begin
         if Tables[t]<>nil then // avoid GPF
         if IdemPropNameU(Tables[t].RecordProps.SQLTableName,pointer(PropName),i) then begin
           TableIndex := t;
-          result := FieldPropFromTable(Tables[t],copy(PropName,i+2,255),FieldTypeInfo);
+          result := FieldPropFromTable(Tables[t],copy(PropName,i+2,255),PropInfo);
           exit;
         end;
     result := sftUnknown;
@@ -20981,14 +21068,13 @@ begin
 end;
 
 procedure TSQLTable.SetFieldType(Field: integer; FieldType: TSQLFieldType;
-   FieldTypeInfo: pointer=nil; FieldSize: integer=-1);
+   FieldTypeInfo: pointer; FieldSize,FieldTableIndex: integer);
 begin
   if (self=nil) or (cardinal(Field)>=cardinal(FieldCount)) then
     exit;
   if fFieldType=nil then
     InitFieldTypes;
   with fFieldType[Field] do begin
-    TableIndex := -1;
     ContentType := FieldType;
     ContentSize := FieldSize;
     ContentTypeInfo := nil;
@@ -21002,7 +21088,14 @@ begin
           ContentTypeInfo := PTypeInfo(FieldTypeInfo)^.SetEnumType;
       sftBlobDynArray:
         ContentTypeInfo := FieldTypeInfo;
+      sftNullable: begin
+        ContentTypeInfo := FieldTypeInfo;
+        ContentType := NullableTypeToSQLFieldType(FieldTypeInfo);
+        if ContentType=sftUnknown then
+          ContentType := sftNullable;
       end;
+      end;
+    TableIndex := FieldTableIndex;
   end;
 end;
 
@@ -21023,7 +21116,8 @@ procedure TSQLTable.InitFieldTypes;
 var f,i,len: integer;
     FieldType: TSQLFieldType;
     FieldTypeInfo: pointer;
-    TableInd: integer;
+    FieldPropInfo: TSQLPropInfo;
+    FieldSize,FieldTableIndex: integer;
     U: PPUTF8Char;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
@@ -21032,16 +21126,25 @@ begin
       [self,length(fQueryColumnTypes),FieldCount]);
   SetLength(fFieldType,FieldCount);
   for f := 0 to FieldCount-1 do begin
+    FieldPropInfo := nil;
     FieldTypeInfo := nil;
-    TableInd := -1;
+    FieldSize := -1;
+    FieldTableIndex := -1;
     // init fFieldType[] from fQueryTables/fQueryColumnTypes[]
     if Assigned(fQueryColumnTypes) then
       FieldType := fQueryColumnTypes[f] else
-    if Assigned(QueryTables) then // retrieve column info from field name
-      FieldType := FieldPropFromTables(QueryTables,fResults[f],FieldTypeInfo,TableInd) else
+    if Assigned(QueryTables) then begin // retrieve column info from field name
+      FieldType := FieldPropFromTables(
+        QueryTables,fResults[f],FieldPropInfo,FieldTableIndex);
+      if FieldPropInfo<>nil then begin
+        if FieldPropInfo.InheritsFrom(TSQLPropInfoRTTI) then
+          FieldTypeInfo := TSQLPropInfoRTTI(FieldPropInfo).PropType;
+        FieldSize := FieldPropInfo.FieldWidth;
+      end;
+    end else
       FieldType := sftUnknown;
     if FieldType=sftUnknown then
-      // not found from fQueryTables/fQueryColumnTypes[]: get from content
+      // not found in fQueryTables/fQueryColumnTypes[]: guess from content
       if IsRowID(fResults[f]) then
         FieldType := sftInteger else
       if f in fFieldParsedAsString then  begin
@@ -21071,12 +21174,7 @@ begin
           break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
         end;
       end;
-    with fFieldType[f] do begin
-      TableIndex := TableInd;
-      ContentType := FieldType;
-      ContentSize := -1;
-      ContentTypeInfo := FieldTypeInfo;
-    end;
+    SetFieldType(f,FieldType,FieldTypeInfo,FieldSize,FieldTableIndex);
   end;
 end;
 
@@ -21334,9 +21432,6 @@ begin
   result := '';
   if RawBlobLength<>0 then begin
     SetLength(result,RawBlobLength*2+3);
-{$ifdef UNICODE2} // not needed: SetLength() did already set the codepage
-    PWord(PtrUInt(result)-12)^ := CP_UTF8; // use only SetLength() -> force set code page
-{$endif}
     P := pointer(result);
     P[0] := 'X';
     P[1] := '''';
@@ -21460,6 +21555,7 @@ var W: TJSONWriter;
     F,R: integer;
     U: PPUTF8Char;
     directWrite: Boolean;
+    directWrites: set of 0..255;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
@@ -21476,8 +21572,15 @@ begin
       RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
     // get col names and types
     SetLength(W.ColNames,FieldCount);
-    for F := 0 to FieldCount-1 do
+    FillCharFast(directWrite,(FieldCount shr 3)+1,0);
+    for F := 0 to FieldCount-1 do begin
       W.ColNames[F] := fResults[F]; // first Row is field Names
+      if QueryTables<>nil then
+        with fFieldType[F] do
+        if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
+           [ftInt64,ftDouble,ftCurrency] then
+          include(directWrites,F);
+    end;
     W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
     if Expand then
       W.Add('[');
@@ -21492,18 +21595,13 @@ begin
         if Expand then
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if U^=nil then
-          W.AddShort('null') else begin
-          if QueryTables<>nil then
-            directWrite := SQLFieldTypeToDB[fFieldType[F].ContentType] in
-              [ftInt64,ftDouble,ftCurrency] else
-            // IsStringJSON() is fast and safe: no need to guess exact value type
-            directWrite := IsStringJSON(U^);
-          if directWrite then
+          W.AddShort('null') else
+          // IsStringJSON() is fast and safe: no need to guess exact value type
+          if (F in directWrites) or IsStringJSON(U^) then
             W.AddNoJSONEscape(U^,StrLen(U^)) else begin
             W.Add('"');
             W.AddJSONEscape(U^,StrLen(U^));
             W.Add('"');
-          end;
         end;
         W.Add(',');
         inc(U); // points to next value
@@ -21591,7 +21689,8 @@ begin
         InitFieldTypes;
       SetLength(fieldType,FieldCount);
       for f := 0 to FieldCount-1 do
-        fieldType[f] := SQLFieldTypeToDB[fFieldType[f].ContentType];
+        with fFieldType[F] do
+          fieldType[f] := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
       // check range
       if RowLast=0 then
         RowLast := fRowCount else
@@ -21925,6 +22024,7 @@ var
     nil,                 // Object (TEXT serialization)
     {$ifndef NOVARIANTS}
     nil,                 // Variant (TEXT serialization)
+    nil,                 // TNullable*
     {$endif}
     nil,                 // Blob
     nil,                 // BlobDynArray
@@ -23919,7 +24019,7 @@ begin
   end;
 end;
 
-unction UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
+function UTF8ContentNumberType(P: PUTF8Char): TSQLFieldType;
 begin
   if (P=nil) or ((PInteger(P)^=ord('n')+ord('u')shl 8+ord('l')shl 16+
                  ord('l')shl 24) and (P[4]=#0)) then
@@ -23962,7 +24062,6 @@ begin
   end else
     result := sftUnknown;
 end;
-
 
 
 { TPropInfo }
@@ -25451,7 +25550,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
     end;
     {$endif}
     {$ifndef NOVARIANTS}
-    tkVariant: begin
+    tkVariant: begin // this function does not need to handle sftNullable
       result := sftVariant;
       exit;
     end;
@@ -26027,7 +26126,7 @@ begin
   AddMap(aRecord,nil,aIndex);
   inc(aIndex);
   for i := 0 to high(aProps) do
-  if aProps[i].SQLFieldType<>sftID then begin
+  if aProps[i].SQLFieldTypeStored<>sftID then begin
     AddMap(aRecord,aProps[i],aIndex);
     inc(aIndex);
   end;
@@ -26526,7 +26625,7 @@ begin
     if max<>Fields.Count-1 then // must match field count
       exit else
     for field := 0 to max do
-      if SQLFieldTypeToDB[Fields.List[field].SQLFieldType]<>Values[field].VType then
+      if Fields.List[field].SQLDBFieldType<>Values[field].VType then
         exit;
     // now we can safely update field values
     for field := 0 to max do
@@ -26803,7 +26902,7 @@ begin
           'Virtual FTS class % should have published properties',[self]);
       for i := 0 to Count-1 do
         with List[i] do
-        if SQLFieldType<>sftUTF8Text then
+        if SQLFieldTypeStored<>sftUTF8Text then
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
           result := result+Name+',';
@@ -26819,7 +26918,7 @@ begin
           [self,Count,RTREE_MAX_DIMENSION*2]);
       for i := 0 to Count-1 do
         with List[i] do
-        if SQLFieldType<>sftFloat then
+        if SQLFieldTypeStored<>sftFloat then
           raise EModelException.CreateUTF8('%.%: RTREE field must be double',[self,Name]) else
           result := result+Name+',';
       result[length(result)] := ')';
@@ -30116,7 +30215,7 @@ begin // use mostly the same fast comparison functions as for sorting
   if FieldType=sftMany then
     exit; // nothing is stored directly, but in a separate pivot table
   if FieldType in [sftUnknown,sftBlob,sftBlobDynArray,sftBlobCustom,sftObject,
-    sftUTF8Custom{$ifndef NOVARIANTS},sftVariant{$endif}] then
+    sftUTF8Custom{$ifndef NOVARIANTS},sftVariant,sftNullable{$endif}] then
     FieldType := sftUTF8Text; // unknown or blob fields are compared as UTF-8
   { TODO: handle proper sftBlobDynArray/sftBlobCustom/sftBlobRecord comparison }
   case TSQLQueryOperator(Operator) of
@@ -42129,7 +42228,7 @@ begin
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end; // TRecordVersion is a copiable but not a simple field!
-      sftVariant:
+      sftVariant: // sftNullable are included in SmallfieldsBits
         goto Simple;
       else begin
 Small:  include(SmallFieldsBits,i);
@@ -42212,7 +42311,11 @@ begin
   result := nil;
 end;
 
-function TSQLRecordProperties.SQLFieldTypeToSQL(Fieldindex: integer): RawUTF8;
+const
+  DBTOFIELDTYPE: array[TSQLDBFieldType] of TSQLFieldType  = (sftUnknown,
+    sftUnknown,sftInteger,sftFloat,sftCurrency,sftDateTime,sftUTF8Text,sftBlob);
+
+function TSQLRecordProperties.SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
 const
   /// simple wrapper from each SQL used type into SQLite3 field datatype
   // - set to '' for fields with no column created in the database
@@ -42233,6 +42336,7 @@ const
     ' TEXT COLLATE NOCASE, ',        // sftObject
     {$ifndef NOVARIANTS}
     ' TEXT COLLATE NOCASE, ',        // sftVariant
+    ' TEXT COLLATE NOCASE, ',        // sftNullable (from SQLFieldTypeStored)
     {$endif}
     ' BLOB, ',                       // sftBlob
     ' BLOB, ',                       // sftBlobDynArray
@@ -42248,7 +42352,7 @@ begin
     result := '' else
   if (FieldIndex<length(fCustomCollation)) and (fCustomCollation[FieldIndex]<>'') then
     result := ' TEXT COLLATE '+fCustomCollation[FieldIndex]+', ' else
-    result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].SQLFieldType];
+    result := DEFAULT_SQLFIELDTYPETOSQL[Fields.List[FieldIndex].SQLFieldTypeStored];
 end;
 
 function TSQLRecordProperties.SetCustomCollation(FieldIndex: integer; const aCollationName: RawUTF8): boolean;
@@ -42274,7 +42378,7 @@ begin
   if Fields.Count>length(fCustomCollation) then
     SetLength(fCustomCollation,Fields.Count);
   for i := 0 to Fields.Count-1 do
-    if Fields.List[i].SQLFieldType=sftUTF8Text then
+    if Fields.List[i].SQLFieldTypeStored=sftUTF8Text then
       fCustomCollation[i] := aCollationName;
 end;
 
@@ -42284,7 +42388,7 @@ begin
   if self<>nil then
   for i := 0 to Fields.Count-1 do
     with Fields.List[i] do
-    if (SQLFieldType in TEXT_FIELDS) and (cardinal(FieldWidth-1)<262144) then
+    if (SQLDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth-1)<262144) then
       AddFilterOrValidate(i,TSynValidateText.CreateUTF8('{maxLength:%,UTF8Length:%}',
         [FieldWidth,IndexIsUTF8Length],[]));
 end;
@@ -42295,7 +42399,7 @@ begin
   if self<>nil then
   for i := 0 to Fields.Count-1 do
     with Fields.List[i] do
-    if (SQLFieldType in TEXT_FIELDS) and (cardinal(FieldWidth-1)<262144) then
+    if (SQLDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth-1)<262144) then
       AddFilterOrValidate(i,TSynFilterTruncate.CreateUTF8('{maxLength:%,UTF8Length:%}',
         [FieldWidth,IndexIsUTF8Length],[]));
 end;
@@ -49742,12 +49846,13 @@ initialization
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;
   pointer(@SQLFieldTypeComp[sftUTF8Custom]) := @AnsiIComp;
   pointer(@SQLFieldTypeComp[sftObject]) := @StrComp;
-{$ifndef NOVARIANTS}
+  {$ifndef NOVARIANTS}
   pointer(@SQLFieldTypeComp[sftVariant]) := @StrComp;
-{$endif}
-{$ifndef USENORMTOUPPER}
+  pointer(@SQLFieldTypeComp[sftNullable]) := @StrComp;
+  {$endif}
+  {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
-{$endif}
+  {$endif}
   SetCurrentThreadName('Main thread',[]);
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(
@@ -49761,10 +49866,10 @@ initialization
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(ILockedDocVariant),TLockedDocVariant);
   assert(sizeof(TServiceMethod)and 3=0,'wrong padding');
   TSQLRestServerFullMemory.RegisterClassNameForDefinition;
-{$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   TSQLRestClientURINamedPipe.RegisterClassNameForDefinition;
   TSQLRestClientURIMessage.RegisterClassNameForDefinition;
-{$endif}
+  {$endif}
 
 finalization
   FinalizeGlobalInterfaceResolution;
