@@ -43254,7 +43254,7 @@ begin
     result := '' else begin
     result := RawUTF8(ClassName);
     system.delete(result,1,LEN[IdemPCharArray(pointer(result),
-      ['TSQLVIRTUALTABLE','TSQLVIRTUAL''TSQL'])]);
+      ['TSQLVIRTUALTABLE','TSQLVIRTUAL','TSQL'])]);
   end;
 end;
 
