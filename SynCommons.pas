@@ -1744,6 +1744,10 @@ function VariantToUTF8(const V: Variant): RawUTF8; overload;
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
 
+/// fast comparison of a Variant and UTF-8 encoded String
+// - slightly faster than plain V=Str, which computes a temporary variant 
+function VariantEquals(const V: Variant; const Str: RawUTF8): boolean; overload;
+
 /// convert any Variant into a VCL string type
 // - expects any varString value to be stored as a RawUTF8
 // - prior to Delphi 2009, use VariantToString(aVariant) instead of
@@ -11547,6 +11551,14 @@ type
   // - if it has no name property, it is a dvArray
   TDocVariantKind = (dvUndefined, dvObject, dvArray);
 
+  /// method used by TDocVariantData.ReduceAsArray to filter each object
+  // - should return TRUE if the item match the expectations
+  TOnReducePerItem = function(Item: PDocVariantData): boolean of object;
+
+  /// method used by TDocVariantData.ReduceAsArray to filter each object
+  // - should return TRUE if the item match the expectations
+  TOnReducePerValue = function(const Value: variant): boolean of object;
+
   {$A-} { packet object not allowed since Delphi 2009 :( }
   /// memory structure used for TDocVariant storage of any JSON/BSON
   // document-based content as variant
@@ -11831,13 +11843,19 @@ type
     // is set, and would let use a faster binary search after a SortByName()
     function GetVarData(const aName: RawUTF8; var aValue: TVarData;
       aSortedCompare: TUTF8Compare=nil): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item in this document, and returns its value as TVarData pointer
     // - return nil if aName is not found, or if the instance is not a TDocVariant
     // - return a pointer to the value if the name has been found
     // - after a SortByName(aSortedCompare), would use faster binary search
     function GetVarData(const aName: RawUTF8;
       aSortedCompare: TUTF8Compare=nil): PVarData; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    /// find an item in this document, and returns its value as boolean
+    // - return false if aName is not found, or if the instance is not a TDocVariant
+    // - return true if the name has been found, and aValue stores the value
+    // - after a SortByName(aSortedCompare), would use faster binary search
+    function GetAsBoolean(const aName: RawUTF8; out aValue: boolean;
+      aSortedCompare: TUTF8Compare=nil): Boolean;
     /// find an item in this document, and returns its value as integer
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -11883,6 +11901,21 @@ type
     // slightly slower GetValueByPath() overloaded method, if any nested object
     // may be of another type (e.g. a TBSONVariant)
     function GetValueByPath(const aDocVariantPath: array of RawUTF8): variant; overload;
+    /// retrieve an dvObject, from a property name in the dvArray document
+    // - returns false if no object in the dvArray contains the supplied
+    // "aPropName":"aPropValue" property
+    // - returns true, and copy the corresponding VValue[] item into Dest
+    // if a match was found
+    // - create a copy of the variant by default, unless DestByRef is TRUE
+    function GetItemByProp(const aPropName,aPropValue: RawUTF8;
+      aCaseSensitive: boolean; var Dest: variant; DestByRef: boolean=false): boolean;
+    /// retrieve an dvObject, from a property name in the dvArray document
+    // - returns false if no object in the dvArray contains the supplied
+    // "aPropName":"aPropValue" property
+    // - returns true, and create a reference to the VValue[] item into Dest
+    // if a match was found
+    function GetDocVariantByProp(const aPropName,aPropValue: RawUTF8;
+      aCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -11984,12 +12017,26 @@ type
     function Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean): variant; overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
-    procedure ReduceAsArray(const aPropName: RawUTF8; out result: TDocVariantData); overload;
+    // - you can optionally apply an additional filter to each reduced item
+    procedure ReduceAsArray(const aPropName: RawUTF8; out result: TDocVariantData;
+      OnReduce: TOnReducePerItem=nil); overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
-    function ReduceAsArray(const aPropName: RawUTF8): variant; overload;
+    // - you can optionally apply an additional filter to each reduced item
+    function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerItem=nil): variant; overload;
+    /// create a TDocVariant array, from the values of a single properties of
+    // this document, specified by name
+    // - this overloaded method accepts an additional filter to each reduced item
+    procedure ReduceAsArray(const aPropName: RawUTF8; out result: TDocVariantData;
+      OnReduce: TOnReducePerValue); overload;
+    /// create a TDocVariant array, from the values of a single properties of
+    // this document, specified by name
+    // - always returns a TDocVariantData, even if no property name did match
+    // (in this case, it is dvUndefined)
+    // - this overloaded method accepts an additional filter to each reduced item
+    function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerValue): variant; overload;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -12107,6 +12154,7 @@ const
 // - will return a read-only fake TDocVariantData with Kind=dvUndefined if the
 // supplied variant is not a TDocVariant instance
 function DocVariantDataSafe(const DocVariant: variant): PDocVariantData; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
@@ -16222,6 +16270,26 @@ begin
   VariantToUTF8(V,result,wasString);
 end;
 
+function VariantEquals(const V: Variant; const Str: RawUTF8): boolean;
+  function Complex(const V: Variant; const Str: RawUTF8): boolean;
+  var wasString: boolean;
+      tmp: RawUTF8;
+  begin
+    VariantToUTF8(V,tmp,wasString);
+    result := (tmp=Str);
+  end;
+begin
+  with TVarData(V) do
+    case VType of
+    varEmpty,varNull:
+      result := false;
+    varString:
+      result := RawUTF8(VAny)=Str;
+    else
+      result := Complex(V,Str);
+  end;
+end;
+
 function VariantToString(const V: Variant): string;
 var wasString: boolean;
     tmp: RawUTF8;
@@ -18689,12 +18757,36 @@ Err:result := 0;
   until AnsiChar(result) in ['A'..'G','I'..'Z'];
 end;
 
-function GetHighUTF8UCS4(var U: PUTF8Char): cardinal; // here U^>=#80
+function GetHighUTF8UCS4(var U: PUTF8Char): cardinal;
 var extra,i: integer;
     c: cardinal;
 begin
   result := 0;
-  c := byte(U^);
+  c := byte(U^); // here U^>=#80
+  inc(U);
+  extra := UTF8_EXTRABYTES[c];
+  if extra=0 then exit else // invalid leading byte
+  for i := 1 to extra do begin
+    if byte(U^) and $c0<>$80 then
+      exit; // invalid input content
+    c := c shl 6+byte(U^);
+    inc(U);
+  end;
+  with UTF8_EXTRA[extra] do begin
+    dec(c,offset);
+    if c<minimum then
+      exit; // invalid input content
+  end;
+  result := c;
+end;
+
+function GetHighUTF8UCS4Inlined(var U: PUTF8Char): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+var extra,i: integer;
+    c: cardinal;
+begin
+  result := 0;
+  c := byte(U^); // here U^>=#80
   inc(U);
   extra := UTF8_EXTRABYTES[c];
   if extra=0 then exit else // invalid leading byte
@@ -19096,12 +19188,12 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
   if u1<>nil then
   if u2<>nil then
   repeat
-    result := pbyte(u1)^;
+    result := ord(u1^);
     if result and $80=0 then
       if result<>0 then begin
         result := NormToUpperByte[result];
         inc(u1);
-        b := pByte(u2)^;
+        b := ord(u2^);
         if b and $80=0 then begin
           if b=0 then exit; // u1>u2 -> return u1^
           dec(result,NormToUpperByte[b]);
@@ -19114,18 +19206,18 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
           result := -1;    // u1<u2
         exit;
       end else begin
-        result := GetHighUTF8UCS4(u1);
+        result := GetHighUTF8UCS4Inlined(u1);
         if result and $ffffff00=0 then
           result := NormToUpperByte[result]; // 8 bits to upper, 32 bits as is
       end;
-    c2 := pbyte(u2)^;
+    c2 := ord(u2^);
     if c2 and $80=0 then begin
       inc(u2);
       if c2=0 then exit; // u1>u2 -> return u1^
       dec(result,NormToUpperByte[c2]);
       if result<>0 then exit;
     end else begin
-      c2 := GetHighUTF8UCS4(u2);
+      c2 := GetHighUTF8UCS4Inlined(u2);
       if c2 and $ffffff00=0 then
         dec(result,NormToUpperByte[c2]) else // 8 bits to upper
         dec(result,c2); // 32 bits widechar returns diff
@@ -31744,6 +31836,9 @@ end;
 
 { TSynInvokeableVariantType }
 
+var // copy of DocVariantType.VarType
+  DocVariantVType: integer;
+
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData;
   FullName: PUTF8Char);
 var itemName: RawUTF8;
@@ -31758,7 +31853,7 @@ begin
     itemName := GetNextItem(FullName,'.');
     if itemName='' then
       exit;
-    if DestVar.VType=DocVariantType.VarType then begin
+    if DestVar.VType=DocVariantVType then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
     end else
@@ -31779,7 +31874,7 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=DocVariantType.VarType) and
+    if (DestVar.VType=DocVariantVType) and
        (TDocVariantData(DestVar).VCount=0) then
       DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
@@ -32352,6 +32447,8 @@ begin
     end;
   result :=  aClass.Create; // register variant type
   SynVariantTypes.Add(result);
+  if aClass=TDocVariant then
+    DocVariantVType := result.VarType;
 end;
 
 
@@ -32413,7 +32510,7 @@ begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   ZeroFill(@self);
-  VType := DocVariantType.VarType;
+  VType := DocVariantVType;
   VOptions := aOptions;
   VKind := aKind;
 end;
@@ -32423,7 +32520,7 @@ begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   ZeroFill(@self);
-  VType := DocVariantType.VarType;
+  VType := DocVariantVType;
   VOptions := JSON_OPTIONS[true];
 end;
 
@@ -32634,11 +32731,11 @@ begin
     if VType=varByRef or varVariant then
       Source := VPointer else
       Source := @SourceDocVariant;
-  if (DocVariantType=nil) or (Source^.VType<>DocVariantType.VarType) then
+  if (DocVariantType=nil) or (Source^.VType<>DocVariantVType) then
     raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[Source.VType]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
-    VType := DocVariantType.VarType;
+    VType := DocVariantVType;
     VKind := Source^.Kind;
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
@@ -32671,7 +32768,7 @@ end;
 
 procedure TDocVariantData.Clear;
 begin
-  if VType=DocVariantType.VarType then
+  if VType=DocVariantVType then
     DocVariantType.Clear(TVarData(self)) else
     VarClear(variant(self));
 end;
@@ -32681,7 +32778,7 @@ var opt: TDocVariantOptions;
 begin
   opt := VOptions;
   DocVariantType.Clear(TVarData(self));
-  VType := DocVariantType.VarType;
+  VType := DocVariantVType;
   VOptions := opt;
 end;
 
@@ -32760,23 +32857,39 @@ end;
 function TDocVariantData.SearchItemByProp(const aPropName,aPropValue: RawUTF8;
   aCaseSensitive: boolean): integer;
 var i: integer;
-    v: RawUTF8;
+    tmp: RawUTF8;
     wasString: boolean;
+    v: PVarData;
 begin
   if VKind=dvArray then
     for result := 0 to VCount-1 do
-      with TDocVariantData(VValue[result]) do
+      with DocVariantDataSafe(VValue[result])^ do
         if VKind=dvObject then begin
           i := GetValueIndex(aPropName);
-          if i>=0 then
-            if aCaseSensitive then begin
-              if VValue[i]=aPropValue then
-                exit;
-            end else begin
-              VariantToUTF8(VValue[i],v,wasString);
-              if IdemPropNameU(v,aPropValue) then
-                exit;
+          if i>=0 then begin
+            v := @VValue[i];
+            case v^.VType of
+            varEmpty,varNull:
+              if aPropValue='' then
+                exit; // VariantToUTF8(null)='null'
+            varString:
+              if aCaseSensitive then begin
+                if RawUTF8(v^.VAny)=aPropValue then
+                  exit;
+              end else
+                if IdemPropNameU(RawUTF8(v^.VAny),aPropValue) then
+                  exit;
+            else begin
+              VariantToUTF8(PVariant(v)^,tmp,wasString);
+              if aCaseSensitive then begin
+                if tmp=aPropValue then
+                  exit;
+              end else
+                if IdemPropNameU(tmp,aPropValue) then
+                  exit;
             end;
+            end;
+          end;
         end;
   result := -1;
 end;
@@ -32882,25 +32995,55 @@ begin
   end;
 end;
 
-function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8): variant;
+function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
+  OnReduce: TOnReducePerItem): variant;
 begin
   VarClear(result);
-  ReduceAsArray(aPropName,PDocVariantData(@result)^);
+  ReduceAsArray(aPropName,PDocVariantData(@result)^,OnReduce);
 end;
 
 procedure TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
-  out result: TDocVariantData);
+  out result: TDocVariantData; OnReduce: TOnReducePerItem);
 var i,j: integer;
+    item: PDocVariantData;
 begin
   result.InitFast;
   if (VCount=0) or (aPropName='') or (VKind<>dvArray) then
     exit;
-  for i := 0 to VCount-1 do
-    with DocVariantDataSafe(VValue[i])^ do begin
-      j := GetValueIndex(aPropName);
-      if j>=0 then
-        result.AddItem(VValue[j]);
+  for i := 0 to VCount-1 do begin
+    item := DocVariantDataSafe(VValue[i]);
+    j := item^.GetValueIndex(aPropName);
+    if j>=0 then
+      if (not Assigned(OnReduce)) or OnReduce(item) then
+        result.AddItem(item^.VValue[j]);
+  end;
+end;
+
+function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
+  OnReduce: TOnReducePerValue): variant;
+begin
+  VarClear(result);
+  ReduceAsArray(aPropName,PDocVariantData(@result)^,OnReduce);
+end;
+
+procedure TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
+  out result: TDocVariantData; OnReduce: TOnReducePerValue);
+var i,j: integer;
+    item: PDocVariantData;
+    v: PVariant;
+begin
+  result.InitFast;
+  if (VCount=0) or (aPropName='') or (VKind<>dvArray) then
+    exit;
+  for i := 0 to VCount-1 do begin
+    item := DocVariantDataSafe(VValue[i]);
+    j := item^.GetValueIndex(aPropName);
+    if j>=0 then begin
+      v := @item^.VValue[j];
+      if (not Assigned(OnReduce)) or OnReduce(v^) then
+        result.AddItem(v^);
     end;
+  end;
 end;
 
 function TDocVariantData.Delete(Index: integer): boolean;
@@ -32981,7 +33124,7 @@ function TDocVariantData.GetValueOrDefault(const aName: RawUTF8;
   const aDefault: variant): variant;
 var ndx: integer;
 begin
-  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
      (Kind<>dvObject) then
     result := aDefault else begin
     ndx := GetValueIndex(aName);
@@ -32994,7 +33137,7 @@ end;
 function TDocVariantData.GetValueOrNull(const aName: RawUTF8): variant;
 var ndx: integer;
 begin
-  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
      (Kind<>dvObject) then
     SetVariantNull(result) else begin
     ndx := GetValueIndex(aName);
@@ -33002,6 +33145,17 @@ begin
       result := VValue[ndx] else
       SetVariantNull(result);
   end;
+end;
+
+function TDocVariantData.GetAsBoolean(const aName: RawUTF8; out aValue: boolean;
+  aSortedCompare: TUTF8Compare): Boolean;
+var found: PVarData;
+    int: integer;
+begin
+  found := GetVarData(aName,aSortedCompare);
+  if (found=nil) and VariantToInteger(PVariant(found)^,int) then
+    result := false else
+    result := int<>0;
 end;
 
 function TDocVariantData.GetAsInteger(const aName: RawUTF8; out aValue: integer;
@@ -33079,7 +33233,7 @@ function TDocVariantData.GetVarData(const aName: RawUTF8;
   aSortedCompare: TUTF8Compare): PVarData;
 var ndx: Integer;
 begin
-  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
      (Kind<>dvObject) or (VCount=0) then
     result := nil else begin
     if Assigned(aSortedCompare) then
@@ -33095,7 +33249,7 @@ function TDocVariantData.GetValueByPath(const aPath: RawUTF8): variant;
 var Dest: TVarData;
 begin
   VarClear(result);
-  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
      (Kind<>dvObject) then
     exit;
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
@@ -33108,7 +33262,7 @@ var found,res: PVarData;
     P: integer;
 begin
   VarClear(result);
-  if (DocVariantType=nil) or (VType<>DocVariantType.VarType) or
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
      (Kind<>dvObject) or (high(aDocVariantPath)<0) then
     exit;
   found := @self;
@@ -33136,6 +33290,31 @@ begin
     // copy found value
     result := PVariant(found)^;
 end;
+
+function TDocVariantData.GetItemByProp(const aPropName,aPropValue: RawUTF8;
+  aCaseSensitive: boolean; var Dest: variant; DestByRef: boolean): boolean;
+var ndx: integer;
+begin
+  ndx := SearchItemByProp(aPropName,aPropValue,aCaseSensitive);
+  if ndx<0 then
+    result := false else begin
+    RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
+    result := true;
+  end;
+end;
+
+function TDocVariantData.GetDocVariantByProp(const aPropName,aPropValue: RawUTF8;
+  aCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
+var ndx: integer;
+begin
+  ndx := SearchItemByProp(aPropName,aPropValue,aCaseSensitive);
+  if ndx<0 then
+    result := false else begin
+    Dest := DocVariantData(VValue[ndx]);
+    result := true;
+  end;
+end;
+
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
 var Up: array[byte] of AnsiChar;
@@ -33377,7 +33556,7 @@ begin
 end;
 var NameLen, ndx: integer;
 begin
-  //Assert(V.VType=DocVariantType.VarType);
+  //Assert(V.VType=DocVariantVType);
   NameLen := StrLen(PUTF8Char(Name));
   // 1. search for any  _*  pseudo properties
   if (NameLen>4) and (Name[0]='_') then begin
@@ -33491,7 +33670,7 @@ procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant; Escape: TText
 var i: integer;
 begin
   with TDocVariantData(Value) do
-  if VType=DocVariantType.VarType then
+  if VType=DocVariantVType then
   case VKind of
     dvUndefined:
       W.AddShort('null');
@@ -33522,7 +33701,7 @@ end;
 
 procedure TDocVariant.Clear(var V: TVarData);
 begin
-  //Assert(V.VType=DocVariantType.VarType);
+  //Assert(V.VType=DocVariantVType);
   VariantDynArrayClear(TDocVariantData(V).VValue);
   TDocVariantData(V).VName := nil;
   ZeroFill(@V); // will set V.VType := varEmpty and VCount=0
@@ -33531,7 +33710,7 @@ end;
 procedure TDocVariant.Copy(var Dest: TVarData; const Source: TVarData;
   const Indirect: Boolean);
 begin
-  //Assert(Source.VType=DocVariantType.VarType);
+  //Assert(Source.VType=DocVariantVType);
   if Indirect then
     SimplisticCopy(Dest,Source,true) else
     if dvoValueCopiedByReference in TDocVariantData(Source).Options then begin
@@ -33549,7 +33728,7 @@ var S: TDocVariantData absolute Source;
     D: TDocVariantData absolute Dest;
     i: integer;
 begin
-  //Assert(Source.VType=DocVariantType.VarType);
+  //Assert(Source.VType=DocVariantVType);
   if Dest.VType and VTYPE_STATIC<>0 then
     VarClear(variant(Dest)); // Dest may be a complex type
   D.VType := S.VType;
@@ -33681,7 +33860,7 @@ begin
   if TVarData(DocVariantArray).VType=varByRef or varVariant then
     GetSingleOrDefault(PVariant(TVarData(DocVariantArray).VPointer)^,default,result) else
   if (DocVariantType=nil) or
-     (TVarData(DocVariantArray).VType<>DocVariantType.VarType) or
+     (TVarData(DocVariantArray).VType<>DocVariantVType) or
      (TDocVariantData(DocVariantArray).Kind<>dvArray) or
      (TDocVariantData(DocVariantArray).Count<>1) then
     result := default else
@@ -33691,7 +33870,7 @@ end;
 function DocVariantData(const DocVariant: variant): PDocVariantData;
 begin
   with TVarData(DocVariant) do
-    if VType=DocVariantType.VarType then
+    if VType=DocVariantVType then
       result := @DocVariant else
     if VType=varByRef or varVariant then
       result := DocVariantData(PVariant(VPointer)^) else
@@ -33699,6 +33878,19 @@ begin
 end;
 
 function DocVariantDataSafe(const DocVariant: variant): PDocVariantData;
+{$ifndef HASINLINE}
+asm
+@nxt: movzx edx,word ptr [eax].TVarData.VType
+      cmp   edx,DocVariantVType
+      jne   @by
+      ret
+@by:  cmp   edx,varByRef or varVariant
+      jne   @no
+      mov   eax,[eax].TVarData.VPointer
+      jmp @nxt
+@no:  lea   eax,[DocVariantDataFake]
+end;
+{$else}
 begin
   with TVarData(DocVariant) do
     if VType=DocVariantType.VarType then
@@ -33707,6 +33899,7 @@ begin
       result := DocVariantDataSafe(PVariant(VPointer)^) else
       result := @DocVariantDataFake;
 end;
+{$endif}
 
 function DocVariantDataSafe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
 begin
@@ -33739,7 +33932,7 @@ begin
     TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
   // add name,value pairs
   if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>DocVariantType.VarType) or
+     (TVarData(Obj).VType<>DocVariantVType) or
      (TDocVariantData(Obj).Kind<>dvObject) then begin
     // Obj is not a valid TDocVariant object -> create new
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
@@ -33756,9 +33949,9 @@ begin
   while TVarData(Obj).VType=varByRef or varVariant do
     TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
   if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>DocVariantType.VarType) or
+     (TVarData(Obj).VType<>DocVariantVType) or
      (TDocVariantData(Obj).Kind<>dvObject) or
-     (TVarData(Document).VType<>DocVariantType.VarType) or
+     (TVarData(Document).VType<>DocVariantVType) or
      (TDocVariantData(Document).Kind<>dvObject) then
     exit; // nothing to do
   with TDocVariantData(Document) do
@@ -40484,7 +40677,7 @@ begin
     ch := ord(P^);
     if ch and $80=0 then
       inc(P) else
-      ch := GetHighUTF8UCS4(P);
+      ch := GetHighUTF8UCS4Inlined(P);
     if (ch<=255) and (WinAnsiConvert.AnsiToWide[ch]<=255) then
       // convert into WinAnsi char
       c := AnsiChar(ch) else
@@ -40494,35 +40687,35 @@ begin
     STATE_BEGIN:
       if c in atom_chars then
         State := STATE_ATOM else
-      if c = '"' then
+      if c='"' then
         State := STATE_QTEXT else
         break;
     STATE_ATOM:
-      if c = '@' then
+      if c='@' then
         State := STATE_EXPECTING_SUBDOMAIN else
-      if c = '.' then
+      if c='.' then
         State := STATE_LOCAL_PERIOD else
       if not (c in atom_chars) then
         break;
     STATE_QTEXT:
-      if c = '\' then
+      if c='\' then
         State := STATE_QCHAR else
-      if c = '"' then
+      if c='"' then
         State := STATE_QUOTE else
       if not (c in quoted_string_chars) then
         break;
     STATE_QCHAR:
       State := STATE_QTEXT;
     STATE_QUOTE:
-      if c = '@' then
+      if c='@' then
         State := STATE_EXPECTING_SUBDOMAIN else
-      if c = '.' then
+      if c='.' then
         State := STATE_LOCAL_PERIOD else
         break;
     STATE_LOCAL_PERIOD:
       if c in atom_chars then
         State := STATE_ATOM else
-      if c = '"' then
+      if c='"' then
         State := STATE_QTEXT else
         break;
     STATE_EXPECTING_SUBDOMAIN:
@@ -40530,18 +40723,18 @@ begin
         State := STATE_SUBDOMAIN else
         break;
     STATE_SUBDOMAIN:
-      if c = '.' then begin
+      if c='.' then begin
         inc(subdomains);
         State := STATE_EXPECTING_SUBDOMAIN
       end else
-      if c = '-' then
+      if c='-' then
         State := STATE_HYPHEN else
       if not (c in letters_digits) then
         break;
     STATE_HYPHEN:
       if c in letters_digits then
         State := STATE_SUBDOMAIN else
-      if c <> '-' then
+      if c<>'-' then
         break;
     end;
     if P^=#0 then begin

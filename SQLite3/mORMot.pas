@@ -18005,8 +18005,7 @@ begin
     if aFlattenedProps<>nil then
       FlattenedPropNameSet;
   end else
-    if not (pilRaiseEORMExceptionIfNotHandled in aOptions) then
-      result := nil else
+    if pilRaiseEORMExceptionIfNotHandled in aOptions then
       raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
         [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
          GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,
