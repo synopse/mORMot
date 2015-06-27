@@ -779,7 +779,7 @@ const
   CP_UTF16 = 1200;
 
   /// fake code page used to recognize TSQLRawBlob
-  // - as returned e.g. by TTypeInfo.AnsiStringCodePage
+  // - as returned e.g. by TTypeInfo.AnsiStringCodePage from mORMot.pas
   CP_SQLRAWBLOB = 65534;
 
   /// internal Code Page for RawByteString undefined string
@@ -10933,6 +10933,12 @@ procedure SetVariantNull(var Value: variant);
 function VarIsEmptyOrNull(const V: Variant): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fastcheck if a variant hold a value
+// - varEmpty, varNull or a '' string would be considered as void
+// - varBoolean=false or varDate=0 would be considered as void 
+// - any other value (e.g. integer) would be considered as not void  
+function VarIsVoid(const V: Variant): boolean;
+
 type
   TVarDataTypes = set of 0..255;
 
@@ -12005,16 +12011,17 @@ type
     /// create a TDocVariant object, from a selection of properties of this
     // document, by property name
     // - if the document is a dvObject, to reduction will be applied to all
-    // its properties  
+    // its properties
     // - if the document is a dvArray, the reduction will be applied to each
     // stored item, if it is a document
     procedure Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean;
-      out result: TDocVariantData); overload;
+      out result: TDocVariantData; aDoNotAddVoidProp: boolean=false); overload;
     /// create a TDocVariant object, from a selection of properties of this
     // document, by property name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
-    function Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean): variant; overload;
+    function Reduce(const aPropNames: array of RawUTF8; aCaseSensitive: boolean;
+      aDoNotAddVoidProp: boolean=false): variant; overload;
     /// create a TDocVariant array, from the values of a single properties of
     // this document, specified by name
     // - you can optionally apply an additional filter to each reduced item
@@ -22983,9 +22990,9 @@ begin
   if sourceLen>0 then begin
     if sourceLen>250 then
       sourceLen := 250; // avoid buffer overflow
-    result := dest+sourceLen;
     for i := 0 to sourceLen-1 do
       dest[i] := AnsiChar(NormToUpperAnsi7Byte[PByteArray(source)[i]]);
+    result := dest+sourceLen;
   end else
     result := dest;
 end;
@@ -31392,12 +31399,38 @@ begin
       break;
     VD := VD^.VPointer;
     if VD=nil then begin
-      result := true;
+      result := false;
       exit;
     end;
   until false;
   result := VD^.VType in VTypes;
 end;
+
+function VarIsVoid(const V: Variant): boolean;
+begin
+  with TVarData(V) do
+    case VType of
+    varEmpty,varNull:
+      result := true;
+    varBoolean:
+      result := not VBoolean;
+    varString,varOleStr{$ifdef HASVARUSTRING},varUString{$endif}:
+      result := VAny=nil;
+    varDate:
+      result := VInt64=0;
+    else
+      if VType=varVariant or varByRef then
+        result := VarIsVoid(PVariant(VPointer)^) else
+      if VType=varByRef or varOleStr then
+        result := PPointer(VAny)^=nil else
+      {$ifdef HASVARUSTRING}
+        if VType=varByRef or varUString then
+        result := PPointer(VAny)^=nil else
+      {$endif}
+        result := false;
+    end;
+end;
+
 
 {$ifndef NOVARIANTS}
 
@@ -32960,14 +32993,14 @@ begin
 end;
 
 function TDocVariantData.Reduce(const aPropNames: array of RawUTF8;
-  aCaseSensitive: boolean): variant;
+  aCaseSensitive,aDoNotAddVoidProp: boolean): variant;
 begin
   VarClear(result);
-  Reduce(aPropNames,aCaseSensitive,PDocVariantData(@result)^);
+  Reduce(aPropNames,aCaseSensitive,PDocVariantData(@result)^,aDoNotAddVoidProp);
 end;
 
 procedure TDocVariantData.Reduce(const aPropNames: array of RawUTF8;
-  aCaseSensitive: boolean; out result: TDocVariantData);
+  aCaseSensitive: boolean; out result: TDocVariantData; aDoNotAddVoidProp: boolean);
 var i,j: integer;
     reduced: TDocVariantData;
 begin
@@ -32977,18 +33010,25 @@ begin
   case VKind of
   dvObject:
     if aCaseSensitive then begin
-      for i := 0 to VCount-1 do
-        for j := 0 to high(aPropNames) do
-          if VName[i]=aPropNames[j] then
-            result.AddValue(VName[i],VValue[i]);
+      for j := 0 to high(aPropNames) do
+        for i := 0 to VCount-1 do
+          if VName[i]=aPropNames[j] then begin
+            if (not aDoNotAddVoidProp) or (not VarIsVoid(VValue[i])) then
+              result.AddValue(VName[i],VValue[i]);
+            break;
+          end;
     end else
-      for i := 0 to VCount-1 do
-        for j := 0 to high(aPropNames) do
-          if IdemPropNameU(VName[i],aPropNames[j]) then
-            result.AddValue(VName[i],VValue[i]);
+      for j := 0 to high(aPropNames) do
+        for i := 0 to VCount-1 do
+          if IdemPropNameU(VName[i],aPropNames[j]) then begin
+            if (not aDoNotAddVoidProp) or (not VarIsVoid(VValue[i])) then
+              result.AddValue(VName[i],VValue[i]);
+            break;
+          end;
   dvArray:
     for i := 0 to VCount-1 do begin
-      DocVariantDataSafe(VValue[i])^.Reduce(aPropNames,aCaseSensitive,reduced);
+      DocVariantDataSafe(VValue[i])^.Reduce(
+        aPropNames,aCaseSensitive,reduced,aDoNotAddVoidProp);
       if reduced.VKind=dvObject then
         result.AddItem(variant(reduced));
     end;
@@ -36462,11 +36502,11 @@ end;
 
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
-  if PtrUInt(Elem)=0 then
-    result := HASH_ONVOIDCOLISION else
+  if PtrUInt(Elem)<>0 then
     result := Hasher(0,Pointer(PtrUInt(Elem)),
       {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
-      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif});
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif}) else
+    result := HASH_ONVOIDCOLISION;
 end;
 
 function HashAnsiStringI(const Elem; Hasher: THasher): cardinal;
@@ -36721,15 +36761,23 @@ end;
 function TDynArrayHashed.HashOneFromTypeInfo(const Elem): cardinal;
 var Kind: TDynArrayKind;
 begin
-  if @fHashElement<>nil then
-    result := fHashElement(Elem,fHasher) else
+  if @fHashElement<>nil then begin
+    result := fHashElement(Elem,fHasher);
+    exit;
+  end else
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     Kind := ToKnownType;
-    if Assigned(DYNARRAY_HASHFIRSTFIELD[false,Kind]) then
-      result := DYNARRAY_HASHFIRSTFIELD[false,Kind](Elem,fHasher) else
-      if fKnownSize=0 then
-        result := HASH_ONVOIDCOLISION else
+    if Assigned(DYNARRAY_HASHFIRSTFIELD[false,Kind]) then begin
+      result := DYNARRAY_HASHFIRSTFIELD[false,Kind](Elem,fHasher);
+      exit;
+    end else
+      if fKnownSize=0 then begin
+        result := HASH_ONVOIDCOLISION;
+        exit;
+      end else begin
         result := fHasher(0,@Elem,fKnownSize);
+        exit;
+      end;
   end;
 end;
 
@@ -42383,12 +42431,18 @@ end;
 function TRawUTF8List.GetObjectByName(const Name: RawUTF8): TObject;
 var ndx: PtrUInt;
 begin
-  if (self=nil) or (fObjects=nil) then
-    result := nil else begin
+  if (self=nil) or (fObjects=nil) then begin
+    result := nil;
+    exit;
+   end else begin
     ndx := IndexOf(Name);
-    if ndx<PtrUInt(fCount) then
-      result := fObjects[ndx] else
+    if ndx<PtrUInt(fCount) then begin
+      result := fObjects[ndx];
+      exit;
+    end else begin
       result := nil;
+      exit;
+    end;
   end;
 end;
 

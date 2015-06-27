@@ -24019,7 +24019,7 @@ begin
           Add('%%=%'#13,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
         end;
         {$endif}
-      end; // tkString (shortstring) is not handled
+      end; // tkString (shortstring) and tkInterface is not handled
       P := P^.Next;
     end;
   end;
@@ -24586,7 +24586,7 @@ str:  if kD in tkStringTypes then begin
         SetVariantProp(Dest,V);
       end;
     {$endif}
-  end; // note: tkString (shortstring) not handled
+  end; // note: tkString (shortstring) and tkInterface not handled
 end;
 
 function TPropInfo.GetFieldAddr(Instance: TObject): pointer;
@@ -25530,16 +25530,18 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end;
       {$ifdef FPC}tkAString,{$endif} tkLString:
-      if (@self=TypeInfo(RawUTF8)) or (@self=TypeInfo(RawUnicode)) then begin
-        result := sftUTF8Text;
-        exit;
-      end else
-      if @self=TypeInfo(TSQLRawBlob) then begin
+      // do not use AnsiStringCodePage since AnsiString = GetAcp may change
+      if (@self=TypeInfo(TSQLRawBlob)) or
+         (@self=TypeInfo(RawByteString)) then begin
         result := sftBlob;
         exit;
-      end else begin
+      end else
+      if @self=TypeInfo(WinAnsiString) then begin
         result := sftAnsiText;
         exit;
+      end else begin
+        result := sftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
+        exit; 
       end;
     {$ifdef UNICODE}tkUString,{$endif} tkChar, tkWChar, tkWString: begin
       result := sftUTF8Text;
@@ -25565,7 +25567,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       result := ClassSQLFieldType;
       exit;
     end;
-    // note: tkString (shortstring) not handled
+    // note: tkString (shortstring) and tkInterface not handled
     else begin
       result := sftUnknown;
       exit;
@@ -40069,7 +40071,7 @@ begin
         if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
           WriteObject(Value,IniContent,Section,SubCompName+RawUTF8(P^.Name)+'.');
       end;
-      // tkString (shortstring) and tkWString are not handled
+      // tkString (shortstring) and tkInterface are not handled
     end;
     P := P^.Next;
   end;
@@ -41078,7 +41080,7 @@ begin
         VariantLoadJSON(VVariant,pointer(U));
         P^.SetVariantProp(Value,VVariant);
       end;
-{$endif} // tkString (shortstring) is not handled
+{$endif} // tkString (shortstring) and tkInterface is not handled
     end;
     P := P^.Next;
   end;
@@ -43056,7 +43058,7 @@ begin
             end;
           end;
         end;
-        // tkString (shortstring) is not handled
+        // tkString (shortstring) and tkInterface is not handled
       end;
       if Added then
         Add(',');

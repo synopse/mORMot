@@ -1077,8 +1077,7 @@ begin // {{#if .<>""}} or {{#if .,"=",123}}
         ord('<'): if cmp<0 then result := True;
         ord('>')+ord('=')shl 8: if cmp>=0 then result := True;
         ord('<')+ord('=')shl 8: if cmp<=0 then result := True;
-        ord('<')+ord('>')shl 8: if cmp<>0 then result := True else
-          SetVariantNull(result);
+        ord('<')+ord('>')shl 8: if cmp<>0 then result := True;
         end;
       end;
     end;
