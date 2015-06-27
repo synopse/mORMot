@@ -2283,9 +2283,10 @@ type TR = record
        R: Int64Rec;
        Arr: array[0..10] of AnsiString;
        Dyn: array of integer;
-       Bulk: array[0..9] of byte;
+       Bulk: array[0..19] of byte;
      end;
 var A,B,C: TR;
+    i: integer;
     {$ifdef LINUX}
     uts: UtsName;
     {$endif}
@@ -2309,6 +2310,8 @@ begin
     {$endif}
     {$endif};
   fillchar(A,sizeof(A),0);
+  for i := 0 to High(A.Bulk) do
+    A.Bulk[i] := i;
   A.S1 := 'one';
   A.S2 := 'two';
   A.Five := true;
@@ -2335,6 +2338,14 @@ begin
   Check(A.Arr[0]=B.Arr[0]);
   Check(A.Dyn[9]=B.Dyn[9]);
   Check(A.Dyn[0]=0);
+  for i := 0 to High(B.Bulk) do
+    Check(B.Bulk[i]=i);
+  Check(CompareMem(@A,@A,0));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMem(@A.Bulk,@B.Bulk,i));
+  fillchar(A.Bulk,sizeof(A.Bulk),255);
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMem(@A.Bulk,@B.Bulk,i)=(i=0));
   B.Three := 3;
   B.Dyn[0] := 10;
   C := B;

@@ -2008,10 +2008,10 @@ procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
 {$ifndef FPC}  { these asm function use some low-level system.pas calls }
 /// use our fast asm RawUTF8 version of Trim()
 function Trim(const S: RawUTF8): RawUTF8;
+{$endif FPC}
 
 /// use our fast asm version of CompareMem()
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
-{$endif FPC}
 
 {$endif LVCL}
 {$endif PUREPASCAL}
@@ -2499,10 +2499,10 @@ function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 
 /// returns the index of a matching beginning of p^ in upArray[]
 // - returns -1 if no item matched
-// - ignore case - up^ must be already Upper
+// - ignore case - upArray^ must be already Upper
 // - chars are compared as 7 bit Ansi only (no accentuated characters)
-// - this function expects upArray[] items to have at least 2 characters (it
-// will use a fast comparison of word values)
+// - warning: this function expects upArray[] items to have AT LEAST TWO
+// CHARS (it will use a fast comparison of initial 2 bytes)
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 
 /// returns true if the beginning of p^ is the same as up^
@@ -16843,61 +16843,60 @@ asm  // fast implementation by John O'Harrow, modified for Delphi 2009+
   jmp  @@CheckDone
 end;
 
-function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
-asm // eax=P1 edx=P2 ecx=Length
-    cmp eax,edx
-    push  ebx
-    je    @@True                { P1=P2 }
-    sub   ecx, 8
-    jl    @@Small
-    mov   ebx, [eax]         {Compare First 4 Bytes}
-    cmp   ebx, [edx]
-    jne   @@False
-    lea   ebx, [eax+ecx]     {Compare Last 8 Bytes}
-    add   edx, ecx
-    mov   eax, [ebx]
-    cmp   eax, [edx]
-    jne   @@False
-    mov   eax, [ebx+4]
-    cmp   eax, [edx+4]
-    jne   @@False
-    sub   ecx, 4
-    jle   @@True             {All Bytes already Compared}
-    neg   ecx                {-(Length-12)}
-    add   ecx, ebx           {DWORD Align Reads}
-    and   ecx, -4
-    sub   ecx, ebx
-@@LargeLoop:               {Compare 8 Bytes per Loop}
-    mov   eax, [ebx+ecx]
-    cmp   eax, [edx+ecx]
-    jne   @@False
-    mov   eax, [ebx+ecx+4]
-    cmp   eax, [edx+ecx+4]
-    jne   @@False
-    add   ecx, 8
-    jl    @@LargeLoop
-@@True:
-    mov   al, 1
-    pop   ebx
-    ret
-@Table:
-    dd @@true, @1, @2, @3, @4, @5, @6, @7
-@@Small: // ecx=0..7
-    add   ecx, 8
-    jle   @@True             {Length <= 0}
-    jmp dword ptr [ecx*4+@Table]
-@7: mov bl,[eax+6]; cmp bl,[edx+6]; jne @@False
-@6: mov bh,[eax+5]; cmp bh,[edx+5]; jne @@False
-@5: mov cl,[eax+4]; cmp cl,[edx+4]; jne @@False
-@4: mov ch,[eax+3]; cmp ch,[edx+3]; jne @@False
-@3: mov bl,[eax+2]; cmp bl,[edx+2]; jne @@False
-@2: mov bh,[eax+1]; cmp bh,[edx+1]; jne @@False
-@1: mov al,[eax];   cmp al,[edx];   je @@True
-@@False:
-  xor   eax, eax
-  pop   ebx
-end;
 {$endif FPC}  { these asm function had some low-level system.pas calls }
+
+function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
+asm     // eax=P1 edx=P2 ecx=Length
+        cmp   eax,edx
+        je    @0                // P1=P2 
+        sub   ecx,8
+        jl    @small
+        push  ebx
+        mov   ebx,[eax]         // Compare First 4 Bytes
+        cmp   ebx,[edx]
+        jne   @setbig
+        lea   ebx,[eax+ecx]     // Compare Last 8 Bytes
+        add   edx,ecx
+        mov   eax,[ebx]
+        cmp   eax,[edx]
+        jne   @setbig
+        mov   eax,[ebx+4]
+        cmp   eax,[edx+4]
+        jne   @setbig
+        sub   ecx,4
+        jle   @true              // All Bytes already Compared
+        neg   ecx                // ecx=-(Length-12)
+        add   ecx,ebx            // DWORD Align Reads
+        and   ecx,-4
+        sub   ecx,ebx
+@loop:  mov   eax,[ebx+ecx]      // Compare 8 Bytes per Loop
+        cmp   eax,[edx+ecx]
+        jne   @setbig
+        mov   eax,[ebx+ecx+4]
+        cmp   eax,[edx+ecx+4]
+        jne   @setbig
+        add   ecx,8
+        jl    @loop
+@true:  pop   ebx
+@0:     mov   al,1
+        ret
+@setbig:pop   ebx
+        setz  al
+        ret
+@small: add   ecx,8              // ecx=0..7
+        jle   @0                 // Length <= 0
+        neg   ecx                // ecx=-1..-7
+        lea   ecx,[@1+ecx*8+8]   // each @#: line below = 8 bytes
+        jmp   ecx
+@7:     mov cl,[eax+6];   cmp cl,[edx+6];   jne @setsml
+@6:     mov ch,[eax+5];   cmp ch,[edx+5];   jne @setsml
+@5:     mov cl,[eax+4];   cmp cl,[edx+4];   jne @setsml
+@4:     mov ch,[eax+3];   cmp ch,[edx+3];   jne @setsml
+@3:     mov cl,[eax+2];   cmp cl,[edx+2];   jne @setsml
+@2:     mov ch,[eax+1];   cmp ch,[edx+1];   jne @setsml
+@1:     mov al,[eax];     cmp al,[edx]
+@setsml:setz al
+end;
 
 {$ifndef ISDELPHI2007ANDUP}
 {$endif ISDELPHI2007ANDUP}
