@@ -123,6 +123,8 @@ unit mORMotHttpServer;
       - added TSQLHttpServer.Port and DomainName properties
       - added TSQLHttpServer.AccessControlAllowOrigin property to handle
         cross-site AJAX requests via cross-origin resource sharing (CORS)
+      - added TSQLHttpServer.RedirectServerRootUriForExactCase to fix
+        URIs on the fly for case sensitivity
       - TSQLHttpServer now handles sub-domains generic matching (via
         TSQLModel.URIMatch call) at database model level (e.g. you can set
         root='/root/sub1' URIs)
@@ -285,6 +287,7 @@ type
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
     fRootRedirectToURI: array[boolean] of RawUTF8;
+    fRedirectServerRootUriForExactCase: boolean;
     fHttpServerKind: TSQLHttpServerOptions;
     fLog: TSynLogClass;
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
@@ -485,6 +488,17 @@ type
     // - current implementation is pretty basic, and does not check the incoming
     // "Origin: " header value
     property AccessControlAllowOrigin: RawUTF8 read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
+    /// enable redirectoin to fix any URI for a case-sensitive match of Model.Root
+    // - by default, TSQLRestServer.Model.Root would be accepted with case
+    // insensitivity; but it may induce errors for HTTP cookies, since they
+    // are bound with '; Path=/ModelRoot', which is case-sensitive on the
+    // browser side
+    // - set this property to TRUE so that only exact case URI would be handled
+    // by TSQLRestServer.URI(), and any case-sensitive URIs (e.g. /Root/... or
+    // /ROOT/...) would be temporary redirected to Model.Root (e.g. /root/...)
+    // via a HTTP 307 command
+    property RedirectServerRootUriForExactCase: boolean
+      read fRedirectServerRootUriForExactCase write fRedirectServerRootUriForExactCase;
   end;
 
   /// callback expected by TSQLHTTPRemoteLogServer to notify about a received log
@@ -534,7 +548,7 @@ begin
   try
     n := length(fDBServers);
     for i := 0 to n-1 do
-      if (fDBServers[i].Server.Model.URIMatch(aServer.Model.Root)) and
+      if (fDBServers[i].Server.Model.URIMatch(aServer.Model.Root)<>rmNoMatch) and
          (fDBServers[i].Security=aHttpServerSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
@@ -633,7 +647,7 @@ begin
       with aServers[i].Model do begin
         ServersRoot := ServersRoot+' '+Root;
         for j := i+1 to high(aServers) do
-          if aServers[j].Model.URIMatch(Root) then
+          if aServers[j].Model.URIMatch(Root)<>rmNoMatch then
             ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
       end;
     if ErrMsg<>'' then
@@ -809,6 +823,7 @@ var call: TSQLRestURIParams;
     i,len: integer;
     P: PUTF8Char;
     host,redirect: RawUTF8;
+    match: TSQLRestModelMatch;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI[Ctxt.UseSSL]<>'' then begin
@@ -828,7 +843,7 @@ begin
     result := HTML_SUCCESS;
   end else begin
     // compute URI, handling any virtual host domain
-    fillchar(call,sizeof(call),0);
+    FillcharFast(call,sizeof(call),0);
     call.LowLevelConnectionID := Ctxt.ConnectionID;
     if Ctxt.UseSSL then
       include(call.LowLevelFlags,llfSSL);
@@ -853,42 +868,52 @@ begin
     result := HTML_NOTFOUND; // page not found by default (in case of wrong URL)
     for i := 0 to high(fDBServers) do
     with fDBServers[i] do
-      if Ctxt.UseSSL=(Security=secSSL) then // registered for http or https
-      if Server.Model.URIMatch(call.Url) then begin
+    if Ctxt.UseSSL=(Security=secSSL) then begin // registered for http or https
+      match := Server.Model.URIMatch(call.Url);
+      if match=rmNoMatch then
+        continue;
+      if fRedirectServerRootUriForExactCase and (match=rmMatchWithCaseChange) then begin
+        // force redirection to exact Server.Model.Root case sensitivity
+        call.OutStatus := HTML_TEMPORARYREDIRECT;
+        call.OutHead := 'Location: '+Server.Model.Root+
+          copy(call.Url,length(Server.Model.Root)+1,maxInt);
+      end else begin
+        // call matching TSQLRestServer.URI()
         call.Method := Ctxt.Method;
         call.InHead := Ctxt.InHeaders;
         call.InBody := Ctxt.InContent;
         call.RestAccessRights := RestAccessRights;
         Server.URI(call);
-        // set output content
-        result := call.OutStatus;
-        Ctxt.OutContent := call.OutBody;
-        P := pointer(call.OutHead);
-        if IdemPChar(P,'CONTENT-TYPE: ') then begin
-          // change mime type if modified in HTTP header (e.g. GET blob fields)
-          Ctxt.OutContentType := GetNextLine(P+14,P);
-          call.OutHead := P;
-        end else
-          // default content type is JSON
-          Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-        // handle HTTP redirection over virtual hosts
-        if (host<>'') and
-           ((result=HTML_MOVEDPERMANENTLY) or (result=HTML_TEMPORARYREDIRECT)) then begin
-          redirect := FindIniNameValue(P,'LOCATION: ');
-          len := length(host);
-          if (length(redirect)>len) and (redirect[len+1]='/') and
-             IdemPropNameU(host,pointer(redirect),len) then
-            // host/method -> method on same domain
-            call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
-        end;
-        // handle optional CORS origin
-        Ctxt.OutCustomHeaders := Trim(call.OutHead)+
-          #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
-        if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
-          Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
-          Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);
-        break;
       end;
+      // set output content
+      result := call.OutStatus;
+      Ctxt.OutContent := call.OutBody;
+      P := pointer(call.OutHead);
+      if IdemPChar(P,'CONTENT-TYPE: ') then begin
+        // change mime type if modified in HTTP header (e.g. GET blob fields)
+        Ctxt.OutContentType := GetNextLine(P+14,P);
+        call.OutHead := P;
+      end else
+        // default content type is JSON
+        Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
+      // handle HTTP redirection over virtual hosts
+      if (host<>'') and
+         ((result=HTML_MOVEDPERMANENTLY) or (result=HTML_TEMPORARYREDIRECT)) then begin
+        redirect := FindIniNameValue(P,'LOCATION: ');
+        len := length(host);
+        if (length(redirect)>len) and (redirect[len+1]='/') and
+           IdemPropNameU(host,pointer(redirect),len) then
+          // host/method -> method on same domain
+          call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
+      end;
+      // handle optional CORS origin
+      Ctxt.OutCustomHeaders := Trim(call.OutHead)+
+        #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
+      if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
+        Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
+        Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);
+      break;
+    end;
   end;
 end;
 

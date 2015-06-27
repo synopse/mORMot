@@ -184,4 +184,4 @@ begin
     ['..\CrossPlatform\templates','..\..\CrossPlatform\templates'],
      '\..\..\SQlite3\TestSQL3FPCInterfaces.pas');
   {$endif}
-end.
+end.

@@ -5449,6 +5449,7 @@ type
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
     // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
+    // - if no Path=/.. is included, it will append '; Path=/'+Server.Model.Root
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
@@ -7810,6 +7811,10 @@ type
   /// set of standard actions for User Interface generation
   TSQLActions = set of TSQLAction;
 
+  /// how TSQLModel.URIMatch() would compare an URI
+  // - will allow to make a difference about case-sensitivity
+  TSQLRestModelMatch = (rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
+
   /// defines the way the TDrawGrid is displayed by User Interface generation
   TSQLListLayout = (llLeft, llUp, llClient, llLeftUp);
 
@@ -8305,11 +8310,13 @@ type
     // - if EnsureUniqueTableInFrom is TRUE, it will check that only one Table
     // is in the FROM clause, otherwise it will return the first Table specified
     function GetTableIndexFromSQLSelect(const SQL: RawUTF8; EnsureUniqueTableInFrom: boolean): integer;
-    /// returns TRUE if the supplied URI matches the model's Root property
+    /// check if the supplied URI matches the model's Root property
     // - allows sub-domains, e.g. if Root='root/sub1', then '/root/sub1/toto' and
     // '/root/sub1?n=1' will match, whereas '/root/sub1nope/toto' won't
-    function URIMatch(const URI: RawUTF8): boolean;
-
+    // - the returned enumerates allow to check if the match was exact (e.g.
+    // 'root/sub' matches exactly Root='root'), or with character case
+    // approximation (e.g. 'Root/sub' approximates Root='root')
+    function URIMatch(const URI: RawUTF8): TSQLRestModelMatch;
     /// compute the SQL statement to be executed for a specific SELECT on Tables
     // - you can set multiple Table class in Tables: the statement will contain the
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
@@ -26057,7 +26064,7 @@ begin
   if Where='' then
     result := '' else
   if IdemPCharArray(pointer(Where),['ORDER BY ','GROUP BY ','LIMIT ','OFFSET ',
-      'LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0 then
+    'LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0 then
     result := ' '+Where else
     result := ' WHERE '+Where;
 end;
@@ -26068,7 +26075,7 @@ begin
      // don't send BLOB values to query: retrieve all other fields
     result := 'SELECT '+SimpleFields  else
     result := 'SELECT '+Select;
-  result := result+' FROM '+TableName+SQLFromWhere(Where)+';';
+  result := result+' FROM '+TableName+SQLFromWhere(Where);
 end;
 
 
@@ -28643,16 +28650,21 @@ begin
     result := Root+'/'+result;
 end;
 
-function TSQLModel.URIMatch(const URI: RawUTF8): boolean;
+function TSQLModel.URIMatch(const URI: RawUTF8): TSQLRestModelMatch;
+var URILen: integer;
 begin
-  result := false;
+  result := rmNoMatch;
   if (self=nil) or (fRoot='') or (URI='') then
     exit;
   if fRootUpper='' then
     UpperCaseCopy(fRoot,fRootUpper);
-  if IdemPChar(pointer(URI),pointer(fRootUpper)) then
-    if URI[length(fRootUpper)+1] in [#0,'/','?'] then
-      result := true;
+  if IdemPChar(pointer(URI),pointer(fRootUpper)) then begin
+    URILen := length(fRoot);
+    if URI[URILen+1] in [#0,'/','?'] then
+      if CompareMem(pointer(URI),pointer(fRoot),URILen) then
+        result := rmMatchExact else
+        result := rmMatchWithCaseChange;
+  end;
 end;
 
 function TSQLModel.SQLFromSelectWhere(const Tables: array of TSQLRecordClass;
@@ -28668,7 +28680,7 @@ begin
     exit;
   end;
   // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
-  if PtrUInt(high(Tables))>high(aProps) then
+  if cardinal(high(Tables))>high(aProps) then
     raise EModelException.CreateUTF8('%.SQLFromSelectWhere() up to % Tables[]',
       [self,Length(aProps)]);
   for i := 0 to high(Tables) do
@@ -28685,12 +28697,7 @@ begin
   result := result+' FROM '+aProps[0].Props.SQLTableName;
   for i := 1 to high(Tables) do
     result := result+','+aProps[i].Props.SQLTableName;
-  if SQLWhere<>'' then
-    if IdemPCharArray(pointer(SQLWhere),
-       ['ORDER BY ','GROUP BY ','LIMIT ','OFFSET '])>=0 then
-      result := result+' '+SQLWhere else
-      result := result+' WHERE '+SQLWhere;
-  result := result+';';
+  result := result+SQLFromWhere(SQLWhere);
 end;
 
 procedure TSQLModel.SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
@@ -34666,7 +34673,9 @@ begin
   if PosEx('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
-  fOutSetCookie := aOutSetCookie;
+  if PosI('; PATH=',aOutSetCookie)=0 then
+    fOutSetCookie := aOutSetCookie+'; Path=/'+Server.Model.Root else
+    fOutSetCookie := aOutSetCookie;
   fInputCookieLastName := ''; // cache reset
 end;
 
