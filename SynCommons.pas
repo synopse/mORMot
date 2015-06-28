@@ -4298,6 +4298,8 @@ type
   // - used e.g. by TDynArrayHashed or TObjectHash
   TSynHashDynArray = array of TSynHash;
 
+  {.$define DYNARRAYHASHCOLLISIONCOUNT}
+
   /// used to access any dynamic arrray elements using fast hash
   // - by default, binary sort could be used for searching items for TDynArray:
   // using a hash is faster on huge arrays for implementing a dictionary
@@ -4342,7 +4344,9 @@ type
     fHashs: TSynHashDynArray;
     fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
-    function HashFind(aHashCode: cardinal; const Elem): integer;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    fHashFindCollisions: cardinal;
+    {$endif}
     procedure HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
     function GetHashFromIndex(aIndex: Integer): Cardinal;
     procedure HashInit;
@@ -4378,6 +4382,12 @@ type
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     procedure ReHash(aHasher: TOnDynArrayHashOne=nil);
+    /// low-level function which would inspect the internal fHashs[] array for
+    // any collision
+    // - is a brute force search within fHashs[].Hash values, which may be handy
+    // to validate the current HashElement() function
+    // - returns -1 if no collision was found, or the index of the first collision
+    function IsHashElementWithoutCollision: integer;
     /// search for an element value inside the dynamic array using hashing
     // - ELem should be of the same exact type than the dynamic array, or at
     // least matchs the fields used by both the hash function and Equals method:
@@ -4447,6 +4457,13 @@ type
     // - warning: Elem must be of the same exact type than the dynamic array, and
     // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
     function FindHashedAndDelete(var Elem): integer;
+    /// low-level search of an element from its pre-computed hash
+    // - you should not use this method, but rather high-level FindHashed*()
+    function HashFind(aHashCode: cardinal; const Elem): integer; overload;
+    /// low-level search of an element from its pre-computed hash
+    // - this overloaded method will return the first matching item: use the
+    // HashFind(...; const Elem) method to avoid any HashElement collision issue
+    function HashFind(aHashCode: cardinal): integer; overload;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: Integer]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
@@ -4454,6 +4471,12 @@ type
     property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
     property HashElement: TDynArrayHashOne read fHashElement;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    /// access to the internal collision of HashFind()
+    // - it won't depend only on the HashElement(), but also on the internal
+    // hash bucket size (which is much lower than 2^32 items)
+    property HashFindCollisions: cardinal read fHashFindCollisions write fHashFindCollisions;
+    {$endif}
   end;
 
 
@@ -7112,12 +7135,17 @@ type
     /// find a RawUTF8 item in the stored Strings[] list
     // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
+    // - if your purpose is to test is an item is existing, then add it on
+    // needed, use rather the AddObjectIfNotExisting() method which would
+    // preserve the internal hash array, so would perform better
     function IndexOf(const aText: RawUTF8): PtrInt; override;
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
     // - this overridden method will update and use the internal hash table
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
+    /// access to the low-level internal hashing table
+    property Hash: TDynArrayHashed read fHash;
   end;
 
   /// a TRawUTF8List with an internal hash, with locking methods
@@ -36701,11 +36729,9 @@ end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
 
-function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
+function TDynArrayHashed.HashFind(aHashCode: cardinal): integer;
 var first,last: integer;
-    looped: boolean;
 begin
-  looped := false;
   if fHashs=nil then
     HashInit;
   if aHashCode=HASH_VOID then
@@ -36715,38 +36741,72 @@ begin
   first := result;
   repeat
     with fHashs[result] do
-    if Hash=aHashCode then
+    if Hash=aHashCode then begin
+      result := Index;
+      exit;
+    end else
+    if Hash=HASH_VOID then
+      break; // not found
+    inc(result);
+    if result=last then
+      // reached the end -> search once from fHash[0] to fHash[first-1]
+      if result=first then
+        break else begin
+        result := 0;
+        last := first;
+      end;
+  until false;
+  result := -1;
+end;
+
+function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
+var first,last: integer;
+    P: PAnsiChar;
+begin
+  if fHashs=nil then
+    HashInit;
+  if aHashCode=HASH_VOID then
+    aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
+  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  last := fHashsCount;
+  first := result;
+  repeat
+    with fHashs[result] do
+    if Hash=aHashCode then begin
+      P := PAnsiChar(fValue^)+Index*ElemSize;
       if not Assigned(fEventCompare) then
         if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare<>nil then begin
-          if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(PAnsiChar(fValue^)[Index*ElemSize],Elem)=0 then begin
+          if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then begin
             result := Index;
             exit; // found -> returns index in dynamic array
           end;
         end else begin
-        if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(PAnsiChar(fValue^)[Index*ElemSize],Elem) then begin
+          if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem) then begin
+            result := Index;
+            exit; // found -> returns index in dynamic array
+          end;
+        end else
+        if fEventCompare(P^,Elem)=0 then begin
           result := Index;
           exit; // found -> returns index in dynamic array
         end;
-      end else begin
-        if fEventCompare(PAnsiChar(fValue^)[Index*ElemSize],Elem)=0 then begin
-          result := Index;
-          exit; // found -> returns index in dynamic array
-        end;
-      end else
+    end else
     if Hash=HASH_VOID then begin
       result := -(result+1);
       exit; // not found -> returns void index in fHashs[] as negative
     end;
-    // hash collision -> search next item
+    // fHashs[Hash mod fHashsCount].Hash collision -> search next item
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    inc(fHashFindCollisions);
+    {$endif}
     //inc(TDynArrayHashedCollisionCount);
     inc(result);
     if result=last then
       // reached the end -> search once from fHash[0] to fHash[first-1]
-      if looped then
+      if result=first then
         break else begin
         result := 0;
         last := first;
-        looped := true;
       end;
   until false;
   raise ESynException.Create('HashFind fatal collision'); // should never be here
@@ -36763,6 +36823,25 @@ begin
     if result=HASH_VOID then
       result := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
   end;
+end;
+
+function TDynArrayHashed.IsHashElementWithoutCollision: integer;
+var i,j: integer;
+    h: cardinal;
+begin
+  if Count>0 then begin
+    ReHash;
+    for i := 0 to fHashsCount-1 do begin
+      h := fHashs[i].Hash;
+      if h=HASH_VOID then
+        continue;
+      result := fHashs[i].Index;
+      for j := i+1 to fHashsCount-1 do
+        if fHashs[j].Hash=h then
+          exit; // found duplicate
+    end;
+  end;
+  result := -1;
 end;
 
 procedure TDynArrayHashed.ReHash(aHasher: TOnDynArrayHashOne=nil);
