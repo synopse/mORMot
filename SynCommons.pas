@@ -8796,9 +8796,7 @@ function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 
 var
   /// the default hasher used by TDynArrayHashed()
-  // - is set to crc32c() function above
-  // - should be set to faster and more accurate crc32() function if available
-  // (this is what mORMot.pas unit does in its initialization block)
+  // - is set to crc32c() function above by default
   DefaultHasher: THasher;
 
 /// retrieve a particular bit status from a bit array
@@ -10933,7 +10931,8 @@ function VarIsEmptyOrNull(const V: Variant): Boolean;
 
 /// fastcheck if a variant hold a value
 // - varEmpty, varNull or a '' string would be considered as void
-// - varBoolean=false or varDate=0 would be considered as void 
+// - varBoolean=false or varDate=0 would be considered as void
+// - a TDocVariantData with Count=0 would be considered as void 
 // - any other value (e.g. integer) would be considered as not void  
 function VarIsVoid(const V: Variant): boolean;
 
@@ -18276,11 +18275,11 @@ begin
   if Str1<>nil then
   if Str2<>nil then begin
     if PAnsiChar(Str1)^=PAnsiChar(Str2)^ then
-    repeat
-      if (pByte(Str1)^=0) or (pByte(Str2)^=0) then break;
-      inc(PtrUInt(Str1));
-      inc(PtrUInt(Str2));
-    until pByte(Str1)^<>pByte(Str2)^;
+      repeat
+        if pByte(Str1)^=0 then break;
+        inc(PtrUInt(Str1));
+        inc(PtrUInt(Str2));
+      until pByte(Str1)^<>pByte(Str2)^;
     result := pByte(Str1)^-pByte(Str2)^;
     exit;
   end else
@@ -18289,29 +18288,32 @@ begin
   result := 0;      // Str1=Str2
 end;
 {$else}
-asm // faster version by AB
-        mov     ecx,eax
-        xor     eax,eax
-        cmp     ecx,edx
-        je      @exit2  // same string or both nil
-        or      ecx,ecx
-        mov     al,1
-        jz      @exit2  // Str1=''
-        or      edx,edx
-        je      @min
-@1:     mov     al,[ecx]
-        mov     ah,[edx]
-        test    al,al
-        lea     ecx,[ecx+1]
-        je      @exit
-        cmp     al,ah
-        lea     edx,[edx+1]
-        je      @1
-@exit:  xor     edx,edx
-        xchg    ah,dl
-        sub     eax,edx
+asm // no branch taken in case of not equal first char
+        cmp   eax,edx
+        je    @zero  // same string or both nil
+        test  eax,edx
+        jz    @maynil
+@1:     mov   cl,[eax]
+        mov   ch,[edx]
+        test  cl,cl
+        lea   eax,[eax+1]
+        lea   edx,[edx+1]
+        jz    @exit
+        cmp   cl,ch
+        je    @1
+@exit:  movzx eax,cl
+        movzx edx,ch
+        sub   eax,edx
 @exit2: ret
-@min:   or      eax,-1
+@maynil:test  eax,eax  // Str1='' ?
+        jz    @max
+        test  edx,edx  // Str2='' ?
+        jnz   @1
+        or    eax,-1
+        ret
+@max:   inc   eax
+        ret
+@zero:  xor   eax,eax
 end;
 {$endif}
 
@@ -21338,42 +21340,37 @@ begin
 end;
 {$else}
 asm // eax=P, edx=Count, Value=ecx
-  test eax,eax
-  jz @end // avoid GPF
-  cmp edx,8
-  jae @s1
-  jmp dword ptr [edx*4+@Table]
-  nop // align @Table
-@Table:
-  dd @z, @1, @2, @3, @4, @5, @6, @7
+        test eax,eax
+        jz @end // avoid GPF
+        cmp edx,8
+        jae @s1
+        jmp dword ptr [edx*4+@Table]
+        nop // align @Table
+@Table: dd @z, @1, @2, @3, @4, @5, @6, @7
 @s1: // fast search by 8 integers (pipelined instructions)
-  sub edx,8
-  cmp [eax],ecx;    je @ok
-  cmp [eax+4],ecx;  je @ok
-  cmp [eax+8],ecx;  je @ok
-  cmp [eax+12],ecx; je @ok
-  cmp [eax+16],ecx; je @ok
-  cmp [eax+20],ecx; je @ok
-  cmp [eax+24],ecx; je @ok
-  cmp [eax+28],ecx; je @ok
-  cmp edx,8
-  lea eax,[eax+32] // preserve flags during 'cmp edx,8' computation
-@s2:
-  jae @s1
-  jmp dword ptr [edx*4+@Table]
-@7: cmp [eax+24],ecx; je @ok
-@6: cmp [eax+20],ecx; je @ok
-@5: cmp [eax+16],ecx; je @ok
-@4: cmp [eax+12],ecx; je @ok
-@3: cmp [eax+8],ecx;  je @ok
-@2: cmp [eax+4],ecx;  je @ok
-@1: cmp [eax],ecx;    je @ok
-@z:
-  xor eax,eax
-@end:
-  ret
-@ok:
-  mov al,1
+        sub edx,8
+        cmp [eax],ecx;      je @ok
+        cmp [eax+4],ecx;    je @ok
+        cmp [eax+8],ecx;    je @ok
+        cmp [eax+12],ecx;   je @ok
+        cmp [eax+16],ecx;   je @ok
+        cmp [eax+20],ecx;   je @ok
+        cmp [eax+24],ecx;   je @ok
+        cmp [eax+28],ecx;   je @ok
+        cmp edx,8
+        lea eax,[eax+32] // preserve flags during 'cmp edx,8' computation
+@s2:    jae @s1
+        jmp dword ptr [edx*4+@Table]
+@7:     cmp [eax+24],ecx;   je @ok
+@6:     cmp [eax+20],ecx;   je @ok
+@5:     cmp [eax+16],ecx;   je @ok
+@4:     cmp [eax+12],ecx;   je @ok
+@3:     cmp [eax+8],ecx;    je @ok
+@2:     cmp [eax+4],ecx;    je @ok
+@1:     cmp [eax],ecx;      je @ok
+@z:     xor eax,eax
+@end:   ret
+@ok:    mov al,1
 end;
 {$endif}
 
@@ -24965,7 +24962,7 @@ asm // eax=crc, edx=buf, ecx=len
     not eax
     test ecx,ecx; jz @0
     test edx,edx; jz @0
-@7: test edx,7;   jz @8 // align to 8 bytes boundary
+@3: test edx,3;   jz @8 // align to 4 bytes boundary
     {$ifdef ISDELPHI2010}
     crc32 dword ptr eax,byte ptr [edx]
     {$else}
@@ -24973,7 +24970,7 @@ asm // eax=crc, edx=buf, ecx=len
     {$endif}
     inc edx
     dec ecx;    jz @0
-    test edx,7; jnz @7
+    test edx,3; jnz @3
 @8: push ecx
     shr ecx,3
     jz @2
@@ -30380,7 +30377,7 @@ begin
     GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
       TRawUTF8ListHashed.Create(false));
     GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
-    GlobalCustomJSONSerializerFromTextSimpleType_.AddObject(
+    GlobalCustomJSONSerializerFromTextSimpleType_.AddObjectIfNotExisting(
       'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
   end;
   result := GlobalCustomJSONSerializerFromTextSimpleType_;
@@ -31052,19 +31049,19 @@ var
 class function TJSONRecordTextDefinition.FromCache(aTypeInfo: pointer;
   const aDefinition: RawUTF8): TJSONRecordTextDefinition;
 var i: integer;
+    added: boolean;
 begin
   if JSONCustomParserCache=nil then begin
     JSONCustomParserCache := TRawUTF8ListHashed.Create(True);
     GarbageCollector.Add(JSONCustomParserCache);
-  end else begin
-    i := JSONCustomParserCache.IndexOf(aDefinition);
-    if i>=0 then begin
-      result := TJSONRecordTextDefinition(JSONCustomParserCache.Objects[i]);
-      exit;
-    end;
+  end;
+  i := JSONCustomParserCache.AddObjectIfNotExisting(aDefinition,nil,@added);
+  if not added then begin
+    result := TJSONRecordTextDefinition(JSONCustomParserCache.fObjects[i]);
+    exit;
   end;
   result := TJSONRecordTextDefinition.Create(aTypeInfo,aDefinition);
-  JSONCustomParserCache.AddObject(aDefinition,result);
+  JSONCustomParserCache.fObjects[i] := result;
 end;
 
 constructor TJSONRecordTextDefinition.Create(aRecordTypeInfo: pointer;
@@ -31404,6 +31401,9 @@ begin
   result := VD^.VType in VTypes;
 end;
 
+var // copy of DocVariantType.VarType
+  DocVariantVType: integer;
+
 function VarIsVoid(const V: Variant): boolean;
 begin
   with TVarData(V) do
@@ -31425,6 +31425,8 @@ begin
         if VType=varByRef or varUString then
         result := PPointer(VAny)^=nil else
       {$endif}
+      if VType=DocVariantVType then
+        result := TDocVariantData(V).Count=0 else
         result := false;
     end;
 end;
@@ -31866,9 +31868,6 @@ end;
 
 
 { TSynInvokeableVariantType }
-
-var // copy of DocVariantType.VarType
-  DocVariantVType: integer;
 
 procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData;
   FullName: PUTF8Char);
@@ -35810,7 +35809,7 @@ begin
 end;
 
 procedure TDynArray.InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
-      aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
+  aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
 var Comp: TDynArraySortCompare;
 begin
   Init(aTypeInfo,aValue,aCountPointer);
@@ -42970,13 +42969,12 @@ begin
 end;
 
 
-
 { TRawUTF8ListHashed }
 
 constructor TRawUTF8ListHashed.Create(aOwnObjects: boolean);
 begin
   inherited Create(aOwnObjects);
-  fHash.Init(TypeInfo(TRawUTF8DynArray),fList,nil,nil,nil,@fCount);
+  fHash.InitSpecific(TypeInfo(TRawUTF8DynArray),fList,djRawUTF8,@fCount,not fCaseSensitive);
 end;
 
 procedure TRawUTF8ListHashed.Changed;
@@ -42993,7 +42991,8 @@ begin
   fHash.fHashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
   fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
     DYNARRAY_SORTFIRSTFIELD[not Value,djRawUTF8];
-  fChanged := true; // force re-hash next IndexOf() call
+  if not fChanged then
+    fChanged := Count>0; // force re-hash next IndexOf() call
 end;
 
 function TRawUTF8ListHashed.IndexOf(const aText: RawUTF8): PtrInt;
