@@ -4342,8 +4342,6 @@ type
     fHashs: TSynHashDynArray;
     fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
-    function HashOneFromTypeInfo(const Elem): cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
     function HashFind(aHashCode: cardinal; const Elem): integer;
     procedure HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
     function GetHashFromIndex(aIndex: Integer): Cardinal;
@@ -4410,7 +4408,7 @@ type
     // not for filling the newly created entry in the array
     // - optional aHashCode parameter can be supplied with an already hashed
     // value of the item, to be used e.g. after a call to HashFind() - default
-    // 0 will use HashOneFromTypeInfo(Elem)
+    // 0 will use fHashElement(Elem,fHasher)
     function FindHashedForAdding(const Elem; out wasAdded: boolean;
       aHashCode: cardinal=0): integer;
     /// ensure a given element name is unique, then add it to the array
@@ -36368,9 +36366,9 @@ end;
 
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
-  if fHashs=nil then
+  if (fHashs=nil) or not Assigned(fHashElement) then
     result := -1 else begin
-    result := HashFind(HashOneFromTypeInfo(Elem),Elem);
+    result := HashFind(fHashElement(Elem,fHasher),Elem);
     if result<0 then
       result := -1; // for coherency with most methods
   end;
@@ -36398,7 +36396,8 @@ function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal): integer;
 begin
   if aHashCode=0 then
-    aHashCode := HashOneFromTypeInfo(Elem);
+    if Assigned(fHashElement) then
+      aHashCode := fHashElement(Elem,fHasher);
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
   result := HashFind(aHashCode,Elem);
@@ -36452,52 +36451,61 @@ end;
 function TDynArrayHashed.FindHashedAndFill(var Elem): integer;
 var P: PAnsiChar;
 begin
-  result := HashFind(HashOneFromTypeInfo(Elem),Elem);
-  if result<0 then
-    result := -1 else begin
-    // copy from dynamic array found entry into Elem = Fill
-    P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
-    if ElemType=nil then
-      MoveFast(P^,Elem,ElemSize) else
-      CopyArray(@Elem,P,ElemType,1);
-  end;
+  if Assigned(fHashElement) then begin
+    result := HashFind(fHashElement(Elem,fHasher),Elem);
+    if result<0 then
+      result := -1 else begin
+      // copy from dynamic array found entry into Elem = Fill
+      P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
+      if ElemType=nil then
+        MoveFast(P^,Elem,ElemSize) else
+        CopyArray(@Elem,P,ElemType,1);
+    end;
+  end else
+    result := -1;
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(var Elem; AddIfNotExisting: boolean): integer;
 var P: PAnsiChar;
     aHashCode: cardinal;
 begin
-  aHashCode := HashOneFromTypeInfo(Elem);
-  if aHashCode=HASH_VOID then
-    aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
-  result := HashFind(aHashCode,Elem);
-  if result<0 then
-    if AddIfNotExisting then begin
-      // not existing -> add as new element
-      HashAdd(Elem,aHashCode,result); // ReHash only if necessary
+  if Assigned(fHashElement) then begin
+    aHashCode := fHashElement(Elem,fHasher);
+    if aHashCode=HASH_VOID then
+      aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
+    result := HashFind(aHashCode,Elem);
+    if result<0 then
+      if AddIfNotExisting then begin
+        // not existing -> add as new element
+        HashAdd(Elem,aHashCode,result); // ReHash only if necessary
+        P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
+        if ElemType=nil then
+          MoveFast(Elem,P^,ElemSize) else
+          CopyArray(P,@Elem,ElemType,1);
+      end else
+        result := -1 else begin
+      // copy from Elem into dynamic array found entry = Update
       P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
       if ElemType=nil then
         MoveFast(Elem,P^,ElemSize) else
         CopyArray(P,@Elem,ElemType,1);
-    end else
-      result := -1 else begin
-    // copy from Elem into dynamic array found entry = Update
-    P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
-    if ElemType=nil then
-      MoveFast(Elem,P^,ElemSize) else
-      CopyArray(P,@Elem,ElemType,1);
-    ReHash;
-  end;
+      ReHash;
+    end;
+  end else
+    result := -1;
 end;
 
 function TDynArrayHashed.FindHashedAndDelete(var Elem): integer;
 begin
-  result := HashFind(HashOneFromTypeInfo(Elem),Elem);
-  if result<0 then
-    result := -1 else begin
-    Delete(result);
-    ReHash;
-  end;
+  if Assigned(fHashElement) then begin
+    result := HashFind(fHashElement(Elem,fHasher),Elem);
+    if result<0 then
+      result := -1 else begin
+      Delete(result);
+      ReHash;
+    end;
+  end else
+    result := -1;
 end;
 
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
@@ -36748,36 +36756,13 @@ end;
 function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
 var P: pointer;
 begin
-  if cardinal(aIndex)>=cardinal(Count) then
+  if (cardinal(aIndex)>=cardinal(Count)) or not Assigned(fHashElement) then
     result := 0 else begin
     // it's faster to rehash than to loop in fHashs[].Index values
     P := PAnsiChar(fValue^)+cardinal(aIndex)*ElemSize;
-    result := HashOneFromTypeInfo(P^);
+    result := fHashElement(P^,fHasher);
     if result=HASH_VOID then
       result := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  end;
-end;
-
-function TDynArrayHashed.HashOneFromTypeInfo(const Elem): cardinal;
-var Kind: TDynArrayKind;
-begin
-  if @fHashElement<>nil then begin
-    result := fHashElement(Elem,fHasher);
-    exit;
-  end else
-  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
-    Kind := ToKnownType;
-    if Assigned(DYNARRAY_HASHFIRSTFIELD[false,Kind]) then begin
-      result := DYNARRAY_HASHFIRSTFIELD[false,Kind](Elem,fHasher);
-      exit;
-    end else
-      if fKnownSize=0 then begin
-        result := HASH_ONVOIDCOLISION;
-        exit;
-      end else begin
-        result := fHasher(0,@Elem,fKnownSize);
-        exit;
-      end;
   end;
 end;
 
@@ -36788,23 +36773,25 @@ var i, n, ndx: integer;
 begin
   HashInit;
   n := Count;
-  if n>0 then begin // avoid GPF after TDynArray.Clear call (Count=0)
-    P := fValue^;
-    for i := 0 to n-1 do begin
-      if @aHasher=nil then
-        aHashCode := HashOneFromTypeInfo(P^) else
-        aHashCode := aHasher(P^);
-      if aHashCode=HASH_VOID then
-        aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-      ndx := HashFind(aHashCode,P^);
-      if ndx<0 then
-        // >=0 -> already found -> not necessary to add duplicated hash
-        with fHashs[-ndx-1] do begin
-          Hash := aHashCode;
-          Index := i;
-        end;
-      inc(P,ElemSize);
-    end;
+  if n<=0 then
+    exit; // avoid GPF after TDynArray.Clear call (Count=0)
+  if (not Assigned(aHasher)) and (not Assigned(fHashElement)) then
+    exit;
+  P := fValue^;
+  for i := 0 to n-1 do begin
+    if Assigned(aHasher) then
+      aHashCode := aHasher(P^) else
+      aHashCode := fHashElement(P^,fHasher);
+    if aHashCode=HASH_VOID then
+      aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
+    ndx := HashFind(aHashCode,P^);
+    if ndx<0 then
+      // >=0 -> already found -> not necessary to add duplicated hash
+      with fHashs[-ndx-1] do begin
+        Hash := aHashCode;
+        Index := i;
+      end;
+    inc(P,ElemSize);
   end;
 end;
 
@@ -42799,9 +42786,9 @@ constructor TObjectListPropertyHashed.Create(
 begin
   inherited Create(aFreeItems);
   fSubPropAccess := aSubPropAccess;
-  if @aHashElement<>nil then
+  if Assigned(aHashElement) then
     fHash.fHashElement := aHashElement;
-  if @aCompare<>nil then
+  if Assigned(aCompare) then
     fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
   fHash.EventCompare := IntComp;
 end;
