@@ -5104,7 +5104,7 @@ begin
   GetDocumentsAndFree(
     TMongoRequestQuery.Create(aDatabaseName+'.$cmd',command,null,1),
     returnedValue);
-  with DocVariantDataSafe(returnedValue)^ do
+  with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok',1)<>0 then
       result := '' else
       result := VariantToUTF8(GetValueOrDefault('errmsg','unspecified error'));
@@ -5582,7 +5582,7 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys, Options: variant);
 var doc,res: variant;
     indexName: RawUTF8;
-    i,order: integer;
+    ndx,order: integer;
     useCommand: Boolean;
 begin
   if (self=nil) or (Database=nil) then
@@ -5596,21 +5596,21 @@ begin
   if not useCommand then
     doc.ns := FullCollectionName;
   if DocVariantType.IsOfType(Options) then
-    with DocVariantDataSafe(Options)^ do
-    for i := 0 to Count-1 do
-      if Names[i]='name' then
-        indexName := VariantToUTF8(Values[i]) else
-        TDocVariantData(doc).AddValue(Names[i],Values[i]);
+    with _Safe(Options)^ do
+    for ndx := 0 to Count-1 do
+      if Names[ndx]='name' then
+        indexName := VariantToUTF8(Values[ndx]) else
+        TDocVariantData(doc).AddValue(Names[ndx],Values[ndx]);
   if indexName='' then begin
-    with DocVariantDataSafe(Keys)^ do
-    for i := 0 to Count-1 do begin
-      indexName := indexName+Names[i]+'_';
-      order := VariantToIntegerDef(Values[i],10);
+    with _Safe(Keys)^ do
+    for ndx := 0 to Count-1 do begin
+      indexName := indexName+Names[ndx]+'_';
+      order := VariantToIntegerDef(Values[ndx],10);
       if order=-1 then
         indexName := indexName+'_' else
       if order<>1 then
         raise EMongoException.CreateUTF8('%[%].EnsureIndex() on order {%:%}',
-          [self,FullCollectionName,Names[i],Values[i]]);
+          [self,FullCollectionName,Names[ndx],Values[ndx]]);
     end;
   end;
   if length(FullCollectionName)+length(indexName)>120 then
@@ -5645,14 +5645,14 @@ function TMongoCollection.Count: Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name]),res);
-  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
+  result := _Safe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindCount(const Query: variant): Int64;
 var res: variant;
 begin
   fDatabase.RunCommand(BSONVariant(['count',Name,'query',Query]),res);
-  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
+  result := _Safe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindCount(Criteria: PUTF8Char;
@@ -5667,7 +5667,7 @@ begin
   if NumberToSkip>0 then
     cmd := FormatUTF8('%,skip:%',[cmd,NumberToSkip]);
   fDatabase.RunCommand(BSONVariant(cmd+'}'),res);
-  result := DocVariantDataSafe(res)^.GetValueOrDefault('n',0);
+  result := _Safe(res)^.GetValueOrDefault('n',0);
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;

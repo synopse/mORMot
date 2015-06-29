@@ -843,7 +843,7 @@ const ONOFF: array[boolean] of THtmlTableStyleLabel = (labelOff,labelOn);
       ENUM: array[boolean,boolean] of THtmlTableStyleLabel =
         ((labelValue,labelValue),(labelFalse,labelTrue));
 begin
-  Rec := DocVariantDataSafe(Value);
+  Rec := _Safe(Value);
   if Rec^.Kind=dvObject then begin
     W := TTextWriter.CreateOwnedStream;
     try

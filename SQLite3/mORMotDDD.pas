@@ -2131,7 +2131,7 @@ begin
     if Start=cqrsSuccess then
       writeln(name,' is running') else begin
       writeln(name,' failed to Start');
-      if DocVariantDataSafe(LastErrorInfo)^.GetAsRawUTF8('Exception',msg) then begin
+      if _Safe(LastErrorInfo)^.GetAsRawUTF8('Exception',msg) then begin
         TextColor(ccRed);
         writeln(msg);
         TextColor(ccLightGray);

@@ -957,7 +957,7 @@ end;
 
 class procedure TSynMustache.DateFmt(const Value: variant; out result: variant);
 begin // {{DateFmt DateValue,"dd/mm/yyy"}}
-  with DocVariantDataSafe(Value)^ do
+  with _Safe(Value)^ do
     if (Kind=dvArray) and (Count=2) and (TVarData(Values[0]).VType=varDate) then
       result := FormatDateTime(Values[1],TVarData(Values[0]).VDate) else
       SetVariantNull(result);
@@ -1053,7 +1053,7 @@ end;
 
 class procedure TSynMustache.Equals_(const Value: variant; out result: variant);
 begin // {{#Equals .,12}}
-  with DocVariantDataSafe(Value)^ do
+  with _Safe(Value)^ do
     if (Kind=dvArray) and (Count=2) and
        (SortDynArrayVariant(Values[0],Values[1])=0) then
       result := true else
@@ -1066,7 +1066,7 @@ var cmp: integer;
     wasString: boolean;
 begin // {{#if .<>""}} or {{#if .,"=",123}}
   SetVariantNull(result);
-  with DocVariantDataSafe(Value)^ do
+  with _Safe(Value)^ do
     if (Kind=dvArray) and (Count=3) then begin
       VariantToUTF8(Values[1],oper,wasString);
       if wasString and (oper<>'') then begin

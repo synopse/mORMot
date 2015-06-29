@@ -34574,7 +34574,7 @@ begin
 end;
 
 function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
-var i: integer;
+var ndx: integer;
     v: variant;
     MultiPart: TMultiPartDynArray;
 begin
@@ -34583,17 +34583,17 @@ begin
   if fInput<>nil then begin
     with TDocVariantData(result) do begin
       InitFast;
-      for i := 0 to (length(fInput) shr 1)-1 do begin
-        GetVariantFromJSON(pointer(fInput[i*2+1]),false,v,@JSON_OPTIONS[true]);
-        AddValue(fInput[i*2],v);
+      for ndx := 0 to (length(fInput) shr 1)-1 do begin
+        GetVariantFromJSON(pointer(fInput[ndx*2+1]),false,v,@JSON_OPTIONS[true]);
+        AddValue(fInput[ndx*2],v);
       end;
     end;
   end else
   if InputAsMultiPart(MultiPart) then
     with TDocVariantData(result) do begin
       InitFast;
-      for i := 0 to high(MultiPart) do
-        with MultiPart[i] do
+      for ndx := 0 to high(MultiPart) do
+        with MultiPart[ndx] do
           if ContentType=TEXT_CONTENT_TYPE then begin
             RawUTF8ToVariant(Content,v);
             AddValue(Name,v); // append as regular "Name":"TextValue" field
@@ -37918,7 +37918,7 @@ end;
 
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
-var i,KnownRowsCount: integer;
+var ndx,KnownRowsCount: integer;
     {$ifndef NOVARIANTS}
     j: integer;
     id: Int64;
@@ -37946,10 +37946,10 @@ begin // exact same format as TSQLTable.GetJSONValues()
     if Expand then
       W.Add('[');
     if Stmt.Where=nil then begin // no WHERE statement -> all rows
-      for i := 0 to KnownRowsCount-1 do begin
+      for ndx := 0 to KnownRowsCount-1 do begin
         if Expand then
           W.AddCR; // for better readability
-        TSQLRecord(fValue.List[i]).GetJSONValues(W);
+        TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
         W.Add(',');
       end;
       result := KnownRowsCount;
@@ -37964,8 +37964,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
          (Stmt.Offset>0) then
         goto err else
         with TDocVariantData(Stmt.Where[0].ValueVariant) do
-          for i := 0 to Count-1 do
-            if VariantToInt64(Values[i],id) then begin
+          for ndx := 0 to Count-1 do
+            if VariantToInt64(Values[ndx],id) then begin
               j := IDToIndex(id);
               if j>=0 then begin
                 TSQLRecord(fValue.List[j]).GetJSONValues(W);
@@ -37982,9 +37982,9 @@ begin // exact same format as TSQLTable.GetJSONValues()
         Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field-1];
         if Prop.InheritsFrom(TSQLPropInfoRTTIRawBlob) then begin
           IsNull := Stmt.Where[0].Operator=opIsNull;
-          for i := 0 to fValue.Count-1 do
-          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[i])=IsNull then begin
-            TSQLRecord(fValue.List[i]).GetJSONValues(W);
+          for ndx := 0 to fValue.Count-1 do
+          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[ndx])=IsNull then begin
+            TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
             W.Add(',');
             inc(result);
             if (Stmt.Limit>0) and (result>=Stmt.Limit) then

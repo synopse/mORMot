@@ -4902,7 +4902,7 @@ var ab0,ab1: TSubAB;
     agg,agg2: TAggregate;
     X: RawUTF8;
     AA,AB: TRawUTF8DynArrayDynArray;
-    i,a: Integer;
+    i,a,v: Integer;
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
     nrtti,nrtti2: TNewRTTI;
@@ -5074,8 +5074,8 @@ begin
       with DocVariantData(Values[0])^ do begin
         Check(Kind=dvArray);
         Check(Count=4);
-        for i := 0 to Count-1 do
-          Check(Values[i]=i+1);
+        for v := 0 to Count-1 do
+          Check(Values[v]=v+1);
       end;
     end;
   end;
@@ -6186,7 +6186,7 @@ procedure TTestLowLevelTypes._TDocVariant;
 procedure CheckDoc(var Doc: TDocVariantData; ExpectedYear: integer=1972);
 var JSON: RawUTF8;
 begin
-  if CheckFailed(Doc.VarType=DocVariantType.VarType) then
+  if CheckFailed(Doc.VarType=DocVariantVType) then
     exit;
   Check(Doc.Kind=dvObject);
   Check(Doc.Count=2);
@@ -6210,6 +6210,8 @@ begin
   Check(variant(Doc)._JSON__=JSON,'pseudo methods use IdemPChar');
   Check(VariantSaveMongoJSON(variant(Doc),modMongoStrict)=JSON);
   Check(variant(Doc)=JSON);
+  Check(Doc.U['name']='John');
+  Check(Doc.I['birthyear']=ExpectedYear);
 end;
 var discogs: RawUTF8;
 procedure CheckNestedDoc(aOptions: TDocVariantOptions=[]);
@@ -6240,12 +6242,19 @@ begin
   Doc2Doc := Doc2.GetValueOrRaiseException('doc');
   JSON := '{"id":10,"doc":{"name":"John","birthyear":1972}}';
   Check(Doc2.ToJSON=JSON);
+  Check(Doc2.I['id']=10);
+  Check(Doc2.O['doc'].U['name']='John');
+  Check(Doc2.O['doc'].I['birthyear']=1972);
   //Doc2Doc.birthyear := 1980;
   variant(DocVariantData(Doc2Doc)^).birthyear := 1980;
   JSON2 := Doc2.ToJSON;
-  if dvoValueCopiedByReference in aOptions then
-    Check(JSON2='{"id":10,"doc":{"name":"John","birthyear":1980}}') else
+  if dvoValueCopiedByReference in aOptions then begin
+    Check(JSON2='{"id":10,"doc":{"name":"John","birthyear":1980}}');
+    Check(Doc2.O['doc'].I['birthyear']=1980);
+  end else begin
     Check(JSON2=JSON);
+    Check(Doc2.O['doc'].I['birthyear']=1972);
+  end;
   _JSON(JSON,V,aOptions);
   Check(V._count=2);
   Check(V.id=10);
@@ -6301,6 +6310,8 @@ begin
   Doc.AddValue('birthyear',1972);
   Check(Doc.Value['name']='Jonas');
   Check(Doc.Value['birthyear']=1972);
+  Check(Doc.U['name']='Jonas');
+  Check(Doc.I['birthyear']=1972);
   Doc.Value['name'] := 'John';
   Check(Doc.Value['name']='John');
   CheckDoc(Doc);
@@ -6312,8 +6323,11 @@ begin
   Doc.AddValue('birthyear',1972);
   Check(Doc.Value['name']='Jonas');
   Check(Doc.Value['birthyear']=1972);
+  Check(Doc.U['name']='Jonas');
+  Check(Doc.I['birthyear']=1972);
   Doc.Value['name'] := 'John';
   Check(Doc.Value['name']='John');
+  Check(Doc.U['name']='John');
   CheckDoc(Doc);
   Doc2.InitJSON(Doc.ToJSON);
   CheckDoc(Doc2);
@@ -6328,9 +6342,8 @@ begin
   Check(Doc.Value[0]='one');
   Check(Doc.Value[1]=2);
   Check(Doc.Value[2]=3.0);
-  with Doc do
-    for i := 0 to Count-1 do
-      Check(Values[i]=Value[i]);
+  for i := 0 to Doc.Count-1 do
+    Check(Doc.Values[i]=Doc.Value[i]);
   Check(Doc.ToJSON='["one",2,3]');
   Check(Variant(Doc)._JSON='["one",2,3]');
   Doc.ToArrayOfConst(vr);
@@ -6405,12 +6418,18 @@ begin
   Check(Doc.Count=MAX div 2);
   for i := 0 to Doc.Count-1 do
     Check(Doc.Names[i]=Doc.Values[i]);
+  Check(TDocVariantData(V1)._[1].U['name']='Jim');
+  Check(TDocVariantData(V1)._[1].I['year']=1972);
   V1.Add(3.1415);
   Check(V1='["root",{"name":"Jim","year":1972},3.1415]');
   V1._(1).Delete('year');
   Check(V1='["root",{"name":"Jim"},3.1415]');
   V1.Delete(1);
   Check(V1='["root",3.1415]');
+  TDocVariantData(V2).DeleteByProp('name','JIM',true);
+  Check(V2<>'["root"]');
+  TDocVariantData(V2).DeleteByProp('name','JIM',false);
+  Check(V2='["root"]');
   s := '{"Url":"argentina","Seasons":[{"Name":"2011/2012","Url":"2011-2012",'+
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},'+
     '{"Name":"2010/2011","Url":"2010-2011","Competitions":[{"Name":"Ligue1","Url":"ligue-1"},'+
@@ -6483,6 +6502,22 @@ begin
   Doc.Clear;
   Doc.InitObjectFromPath('people.age',31);
   check(Doc.ToJSON='{"people":{"age":31}}');
+  check(Doc.O['people'].ToJson='{"age":31}');
+  check(Doc.O['people2'].ToJson='null');
+  Doc.O_['people2'].AddValue('name','toto');
+  check(Doc.ToJSON='{"people":{"age":31},"people2":{"name":"toto"}}');
+  check(Doc.A['arr'].ToJson='null');
+  Doc.A_['arr'].AddItems([1,2.2,'3']);
+  check(Doc.ToJSON='{"people":{"age":31},"people2":{"name":"toto"},"arr":[1,2.2,"3"]}');
+  Doc.Clear;
+  check(Doc.A['test'].ToJson='null');
+  Doc.A_['test']^.AddItems([1,2]);
+  j := Doc.ToJSON;
+  check(j='{"test":[1,2]}');
+  check(Doc.A['test'].ToJson='[1,2]');
+  Doc.A_['test']^.AddItems([3,4]);
+  check(Doc.ToJSON='{"test":[1,2,3,4]}');
+  check(Doc.A['test'].ToJson='[1,2,3,4]');
 end;
 
 {$endif LVCL}
@@ -6821,7 +6856,7 @@ var Model: TSQLModel;
     R: TSQLRecordTest;
     Batch: TSQLRestBatch;
     IDs: TIDDynArray;
-    i: integer;
+    i,j: integer;
     dummy: RawUTF8;
 procedure FillRWith(i: Integer);
 begin
@@ -6974,8 +7009,8 @@ begin
           Check(T.RowCount=9999);
           T.ToDocVariant(docs,readonly);
           with DocVariantData(docs)^ do
-            for i := 0 to Count-1 do
-              CheckVariantWith(Values[i],i+1);
+            for j := 0 to Count-1 do
+              CheckVariantWith(Values[j],j+1);
           T.Free;
         end;
         dummy := TSynMustache.Parse(

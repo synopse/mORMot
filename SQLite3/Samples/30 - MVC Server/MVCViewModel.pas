@@ -278,7 +278,7 @@ begin
   lastID := 0;
   tag := 0;
   rank := 0;
-  scop := DocVariantDataSafe(Scope);
+  scop := _Safe(Scope);
   if scop^.GetAsRawUTF8('match',match) and fHasFTS then begin
     if scop^.GetAsDouble('lastrank',rank) then
       whereClause := 'and rank<? ';
@@ -288,7 +288,7 @@ begin
     articles := RestModel.RetrieveDocVariantArray(
       TSQLArticle,'',whereClause,[match,rank],
       'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
-    with DocVariantDataSafe(articles)^do
+    with _Safe(articles)^ do
       if (Kind=dvArray) and (Count>0) then
         rank := Values[Count-1].rank else
         rank := 0;

@@ -1565,6 +1565,10 @@ To create instances of such {\f1\fs20 variant}, you can use some easy-to-remembe
 - {\f1\fs20 _Obj() _ObjFast()} global functions to create a {\f1\fs20 variant} {\i object} document;
 - {\f1\fs20 _Arr() _ArrFast()} global functions to create a {\f1\fs20 variant} {\i array} document;
 - {\f1\fs20 _Json() _JsonFast() _JsonFmt() _JsonFastFmt()} global functions to create any {\f1\fs20 variant} {\i object} or {\i array} document from JSON, supplied either with standard or {\i @*MongoDB@}-extended syntax.
+You have two non excluding ways of using the {\f1\fs20 TDocVariant} storage:
+- As regular {\f1\fs20 variant} variables, then using either late-binding or faster {\f1\fs20 _Safe()} to access its data;
+- Directly as {\f1\fs20 TDocVariantData} variables, then later on returing a {\f1\fs20 variant} instance using {\f1\fs20 variant(aDocVariantData)}.
+Note that you do not need to protect any stack-allocated {\f1\fs20 TDocVariantData} instance with a {\f1\fs20 try..finally}, since the compiler will do it for you. This {\f1\fs20 record} type has a lot of powerful methods, e.g. to apply map/reduce on the content, or do advanced searchs or marshalling.
 :   Variant object documents
 The more straightforward is to use @*late-binding@ to set the properties of a new {\f1\fs20 TDocVariant} instance:
 !var V: variant;
@@ -1627,22 +1631,22 @@ You may also trans-type your {\f1\fs20 variant} instance into a {\f1\fs20 TDocVa
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
 By definition, trans-typing via a {\f1\fs20 TDocVariantData record} is slightly faster than using late-binding.
-But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 DocVariantDataSafe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
-! if DocVariantType.IsOfType(V1) then
-! with TDocVariantData(V1) do             // direct transtyping
-!   for i := 0 to Count-1 do              // direct access to the Count: integer field
-!     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
+But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 _Safe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
+! with _Safe(V1)^ do                        // note ^ to de-reference into TDocVariantData
+!   for ndx := 0 to Count-1 do              // direct access to the Count: integer field
+!     writeln(Names[ndx],'=',Values[ndx]);  // direct access to the internal storage arrays
 !
 ! writeln(V2.doc); // will write  '{"name":"john","doc":{"one":1,"two":2.5}}'
 ! if DocVariantType.IsOfType(V2.Doc) then // will be false, since V2.Doc is a varByRef variant
 !   writeln('never run');                 // .. so TDocVariantData(V2.doc) will fail
 ! with DocVariantData(V2.Doc)^ do         // note ^ to de-reference into TDocVariantData
-!   for i := 0 to Count-1 do              // direct access the TDocVariantData methods
-!     writeln(Names[i],'=',Values[i]);
+!   for ndx := 0 to Count-1 do            // direct access the TDocVariantData methods
+!     writeln(Names[ndx],'=',Values[ndx]);
 !  // will write to the console:
 !  //  one=1
 !  //  two=2.5
-In practice, {\f1\fs20 DocVariantDataSafe(aVariant)^} may be preferred, since {\f1\fs20 DocVariantData(aVariant)^} would raise an {\f1\fs20 EDocVariant} exception if {\f1\fs20 aVariant} is not a {\f1\fs20 TDocVariant}, but {\f1\fs20 DocVariantDataSafe(aVariant)^} would return a "fake" void {\f1\fs20 DocVariant} instance, in which {\f1\fs20 Count=0} and {\f1\fs20 Kind=dbUndefined}.
+In practice, {\f1\fs20 _Safe(aVariant)^} may be preferred, since {\f1\fs20 DocVariantData(aVariant)^} would raise an {\f1\fs20 EDocVariant} exception if {\f1\fs20 aVariant} is not a {\f1\fs20 TDocVariant}, but {\f1\fs20 _Safe(aVariant)^} would return a "fake" void {\f1\fs20 DocVariant} instance, in which {\f1\fs20 Count=0} and {\f1\fs20 Kind=dbUndefined}.
+The {\f1\fs20 TDocVariantData} type features some additional {\f1\fs20 U[] I[] B[] D[] O[] O_[] A[] A_[] _[]} properties, which could be used to have direct typed access to the data, as {\f1\fs20 RawUTF8}, {\f1\fs20 Int64}/{\f1\fs20 integer}, {\f1\fs20 Double}, or checking if the nested document is an {\f1\fs20 O[]}bject or an {\f1\fs20 A[]}rray.
 You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack, if you do not need any {\f1\fs20 variant}-oriented access to the object, but just some local storage:
 !var Doc1,Doc2: TDocVariantData;
 ! ...
@@ -1650,9 +1654,11 @@ You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack,
 !  assert(Doc1.Kind=dvUndefined);
 !  Doc1.AddValue('name','John');        // add some properties
 !  Doc1.AddValue('birthyear',1972);
-!  assert(Doc1.Kind=dvObject);         // is now identified as an object
-!  Check(Doc1.Value['name']='John');    // read access to the properties (also as varByRef)
-!  Check(Doc1.Value['birthyear']=1972);
+!  assert(Doc1.Kind=dvObject);          // is now identified as an object
+!  assert(Doc1.Value['name']='John');    // read access to the properties (also as varByRef)
+!  assert(Doc1.Value['birthyear']=1972);
+!  assert(Doc1.U['name']='John');        // slightly faster read access
+!  assert(Doc1.I['birthyear']=1972);
 !  writeln(Doc1.ToJSON); // will write '{"name":"John","birthyear":1972}'
 !  Doc1.Value['name'] := 'Jonas';      // update one property
 !  writeln(Doc1.ToJSON); // will write '{"name":"Jonas","birthyear":1972}'
@@ -1662,9 +1668,14 @@ You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack,
 !  assert(Doc2.Count=2);
 !  assert(Doc2.Names[0]='name');
 !  assert(Doc2.Values[0]='John');
-!  writeln(Doc2.ToJSON); // will write '{"name":"John","birthyear":1972}'
+!  writeln(Doc2.ToJSON);         // will write '{"name":"John","birthyear":1972}'
 !  Doc2.Delete('name');
-!  writeln(Doc2.ToJSON); // will write '{"birthyear":1972}'
+!  writeln(Doc2.ToJSON);         // will write '{"birthyear":1972}'
+!  assert(Doc2.U['name']='');
+!  assert(Doc2.I['birthyear']=1972);
+!  Doc2.U['name'] := 'Paul';
+!  Doc2.I['birthyear'] := 1982;
+!  writeln(Doc2.ToJSON);         // will write '{"name":"Paul","birthyear":1982}'
 You do not need to protect the stack-allocated {\f1\fs20 TDocVariantData} instances with a {\f1\fs20 try..finally}, since the compiler will do it for your. Take a look at all the methods and properties of {\f1\fs20 TDocVariantData}.
 :   Variant array documents
 With {\f1\fs20 _Arr()}, an {\i array} {\f1\fs20 variant} instance will be initialized with data supplied as a list of {\i Value1,Value2,...}, e.g.
@@ -1716,14 +1727,21 @@ As with an {\i object} document, you can also allocate directly the {\f1\fs20 TD
 !  Doc.AddItem('one');                // add some items to the array
 !  Doc.AddItem(2);
 !  assert(Doc.Kind=dvArray);          // is now identified as an array
-!  Check(Doc.Value[0]='one');         // direct read access to the items
-!  Check(Doc.Values[0]='one');        // with index check
+!  assert(Doc.Value[0]='one');         // direct read access to the items
+!  assert(Doc.Values[0]='one');        // with index check
 !  assert(Doc.Count=2);
 !  writeln(Doc.ToJSON); // will write '["one",2]'
 !  Doc.Delete(0);
 !  assert(Doc.Count=1);
 !  writeln(Doc.ToJSON); // will write '[2]'
-You do not need to protect the stack-allocated {\f1\fs20 TDocVariantData} instances with a {\f1\fs20 try..finally}, since the compiler will do it for your. Take a look at all the methods and properties of {\f1\fs20 TDocVariantData}.
+You could use the {\f1\fs20 A[]} property to retrieve an object property as a {\f1\fs20 TDocVariant} array, or the {\f1\fs20 A_[]} property to add a missing array property to an object, for instance:
+!  Doc.Clear;  // reset the previous Doc content
+!  writeln(Doc.A['test']); // will write 'null'
+!  Doc.A_['test']^.AddItems([1,2]);
+!  writeln(Doc.ToJSON);    // will write '{"test":[1,2]}'
+!  writeln(Doc.A['test']); // will write '[1,2]'
+!  Doc.A_['test']^.AddItems([3,4]);
+!  writeln(Doc.ToJSON);    // will write '{"test":[1,2,3,4]}'
 :   Create variant object or array documents from JSON
 With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i array} {\f1\fs20 variant} instance will be initialized with data supplied as JSON, e.g.
 !var V1,V2,V3,V4: variant; // stored as any variant
@@ -11749,7 +11767,7 @@ Here, the supplied {\f1\fs20 Value} parameter would be either from a variable of
 If the parameters were supplied as a comma-separated list, you may write multi-parameter functions as such:
 !class procedure TSynMustache.DateFmt(const Value: variant; out result: variant);
 !begin
-!  with DocVariantDataSafe(Value)^ do
+!  with _Safe(Value)^ do
 !    if (Kind=dvArray) and (Count=2) and (TVarData(Values[0]).VType=varDate) then
 !      result := FormatDateTime(Values[1],TVarData(Values[0]).VDate) else
 !      SetVariantNull(result);
@@ -11759,7 +11777,7 @@ $ La date courante en France est : {{DateFmt DateValue,"dd/mm/yyyy"}}
 The {\f1\fs20 Equals} helper is defined as such:
 !class procedure TSynMustache.Equals_(const Value: variant; out result: variant);
 !begin // {{#Equals .,12}}
-!  with DocVariantDataSafe(Value)^ do
+!  with _Safe(Value)^ do
 !    if (Kind=dvArray) and (Count=2) and
 !       (SortDynArrayVariant(Values[0],Values[1])=0) then
 !      result := true else

@@ -608,12 +608,13 @@ begin
   end;
 end;
 
+
 { TDocVariantArrayDataSet }
 
 constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
   const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
   const ColumnTypes: array of TSQLDBFieldType);
-var n,i,j: integer;
+var n,ndx,j: integer;
     first: PDocVariantData;
 begin
   fValues := Data;
@@ -622,31 +623,31 @@ begin
     if n<>length(ColumnTypes) then
       raise ESynException.CreateUTF8('%.Create(ColumnNames<>ColumnTypes)',[self]);
     SetLength(fColumns,n);
-    for i := 0 to n-1 do begin
-      fColumns[i].Name := ColumnNames[i];
-      fColumns[i].FieldType := ColumnTypes[i];
+    for ndx := 0 to n-1 do begin
+      fColumns[ndx].Name := ColumnNames[ndx];
+      fColumns[ndx].FieldType := ColumnTypes[ndx];
     end;
   end else
   if fValues<>nil then begin
-    first := DocVariantDataSafe(fValues[0],dvObject);
+    first := _Safe(fValues[0],dvObject);
     SetLength(fColumns,first^.Count);
-    for i := 0 to first^.Count-1 do begin
-      fColumns[i].Name := first^.Names[i];
-      fColumns[i].FieldType := VariantTypeToSQLDBFieldType(first^.Values[i]);
-      case fColumns[i].FieldType of
+    for ndx := 0 to first^.Count-1 do begin
+      fColumns[ndx].Name := first^.Names[ndx];
+      fColumns[ndx].FieldType := VariantTypeToSQLDBFieldType(first^.Values[ndx]);
+      case fColumns[ndx].FieldType of
       SynCommons.ftNull:
-        fColumns[i].FieldType := SynCommons.ftBlob;
+        fColumns[ndx].FieldType := SynCommons.ftBlob;
       SynCommons.ftCurrency:
-        fColumns[i].FieldType := SynCommons.ftDouble;
+        fColumns[ndx].FieldType := SynCommons.ftDouble;
       SynCommons.ftInt64: // ensure type coherency of whole column
         for j := 1 to first^.Count-1 do
           if j>=Length(fValues) then // check objects are consistent
             break else
-            with DocVariantDataSafe(fValues[j],dvObject)^ do
-            if (i<Length(Names)) and IdemPropNameU(Names[i],fColumns[i].Name) then
-            if VariantTypeToSQLDBFieldType(Values[i]) in
+            with _Safe(fValues[j],dvObject)^ do
+            if (ndx<Length(Names)) and IdemPropNameU(Names[ndx],fColumns[ndx].Name) then
+            if VariantTypeToSQLDBFieldType(Values[ndx]) in
                 [SynCommons.ftNull,SynCommons.ftDouble,SynCommons.ftCurrency] then begin
-              fColumns[i].FieldType := SynCommons.ftDouble;
+              fColumns[ndx].FieldType := SynCommons.ftDouble;
               break;
             end;
       end;
@@ -671,13 +672,13 @@ begin
   if (cardinal(RowIndex)<cardinal(length(fValues))) and
      (cardinal(F)<cardinal(length(fColumns))) and
      not (fColumns[F].FieldType in [ftNull,SynCommons.ftUnknown,SynCommons.ftCurrency]) then
-    with DocVariantDataSafe(fValues[RowIndex])^ do
+    with _Safe(fValues[RowIndex])^ do
     if (Kind=dvObject) and (Count>0) then begin
       if IdemPropNameU(fColumns[F].Name,Names[F]) then
         ndx := F else // optimistic match
         ndx := GetValueIndex(fColumns[F].Name);
       if ndx>=0 then
-        if VarIsNull(Values[ndx]) then
+        if VarIsEmptyOrNull(Values[ndx]) then
           exit else begin
           result := @fTemp64;
           if not OnlyCheckNull then

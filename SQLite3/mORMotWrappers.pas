@@ -785,7 +785,7 @@ begin
   if (list.Kind<>dvArray) or (fDescriptions.Count=0) then
     exit;
   for i := 0 to list.Count-1 do
-    with DocVariantDataSafe(list.Values[i])^ do
+    with _Safe(list.Values[i])^ do
     if GetAsRawUTF8(propName,propValue) then
       AddValue(descriptionName,fDescriptions.GetValueOrNull(propValue));
 end;
