@@ -5017,6 +5017,10 @@ function GUIDToString(const guid: TGUID): string;
 type
   TGUIDShortString = string[38];
 
+const
+  /// a TGUID containing '{00000000-0000-0000-0000-00000000000}'
+  GUID_NULL: TGUID = ();
+
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
@@ -11655,7 +11659,6 @@ type
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
-    function InternalAdd(const aName: RawUTF8): integer;
     procedure SetCapacity(aValue: integer);
     function GetCapacity: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -37036,8 +37039,7 @@ var cap: integer;
 begin
   fHashs := nil; // any previous hash is invalid
   // find nearest power of two for new fHashs[] size
-  cap := Capacity;
-  inc(cap,cap shr 3+64); // Capacity is faster than Count
+  cap := Capacity*2; // Capacity sounds better than Count
   fHashsCount := 256;
   while fHashsCount<cap do
     fHashsCount := fHashsCount shl 1;
@@ -37471,15 +37473,14 @@ begin
 end;
 
 procedure TObjectHash.HashInit(aCountToHash: integer);
-var n,PO2,i,ndx: integer;
+var PO2,i,ndx: integer;
     H: cardinal;
     O: TObject;
 begin
   assert(fHashs=nil);
   // find nearest power of two for new fHashs[] size
-  n := aCountToHash+64+aCountToHash shr 3; // create some void entries (for speed)
   PO2 := 256;
-  while PO2<n do
+  while PO2<aCountToHash*2 do
     PO2 := PO2 shl 1;
   SetLength(fHashs,PO2);
   // hash all items
@@ -42813,7 +42814,7 @@ end;
 function TRawUTF8List.GetObjectByName(const Name: RawUTF8): TObject;
 var ndx: PtrUInt;
 begin
- if (self<>nil) and (fObjects<>nil) then begin
+  if (self<>nil) and (fObjects<>nil) then begin
     ndx := IndexOf(Name);
     if ndx<PtrUInt(fCount) then begin
       result := fObjects[ndx];
