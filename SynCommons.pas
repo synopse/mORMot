@@ -11659,10 +11659,6 @@ type
     procedure SetCapacity(aValue: integer);
     function GetCapacity: integer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// add some properties to a TDocVariantData dvObject
-    // - data is supplied two by two, as Name,Value pairs
-    // - caller should ensure that VKind=dvObject
-    procedure AddNameValuesToObject(const NameValuePairs: array of const);
     // implement U[] I[] B[] D[] O[] O_[] A[] A_[] _[] properties
     function GetOrAddValueIndex(const aName: RawUTF8): integer;
     function GetVarDataByName(const aName: RawUTF8): PVariant;
@@ -11708,7 +11704,11 @@ type
     // - see also TDocVariant.NewFast() if you want to initialize several
     // TDocVariantData variable instances at once
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure InitFast;
+    procedure InitFast; overload;
+    /// initialize a TDocVariantData to store per-reference document-based content
+    // - this overloaded method allows to specify an estimation of how many
+    // properties or items this aKind document would contain
+    procedure InitFast(InitialCapacity: integer; aKind: TDocVariantKind); overload;
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
@@ -11823,6 +11823,11 @@ type
     // - just set VCount, do not resize the arrays: caller should ensure that
     // Capacity is big enough
     procedure SetCount(aCount: integer);
+    /// low-level method called internally
+    // - you should not have to use it, unless you want to add some items
+    // directly within the Values[]/Names[] arrays, using e.g.
+    // InitFast(InitialCapacity) to initialize the document
+    function InternalAdd(const aName: RawUTF8): integer;
 
     /// save a document as UTF-8 encoded JSON
     // - will write either a JSON object or array, depending of the internal
@@ -12038,6 +12043,10 @@ type
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUTF8; const aValue: variant;
       wasAdded: PBoolean=nil): integer;
+    /// add some properties to a TDocVariantData dvObject
+    // - data is supplied two by two, as Name,Value pairs
+    // - caller should ensure that VKind=dvObject, otherwise it won't do anything
+    procedure AddNameValuesToObject(const NameValuePairs: array of const);
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -32755,6 +32764,14 @@ begin
   VOptions := JSON_OPTIONS[true];
 end;
 
+procedure TDocVariantData.InitFast(InitialCapacity: integer; aKind: TDocVariantKind);
+begin
+  Init(JSON_OPTIONS[true],aKind);
+  if aKind=dvObject then
+    SetLength(VName,InitialCapacity);
+  SetLength(VValue,InitialCapacity);
+end;
+
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
   aOptions: TDocVariantOptions=[]);
 begin
@@ -32766,7 +32783,7 @@ procedure TDocVariantData.AddNameValuesToObject(const NameValuePairs: array of c
 var n,arg: integer;
 begin
   n := length(NameValuePairs) shr 1;
-  if n=0 then
+  if (n=0) or (VKind<>dvObject) then
     exit; // nothing to add
   SetLength(VValue,VCount+n);
   SetLength(VName,VCount+n);
@@ -32797,7 +32814,7 @@ begin
     VType := varNull else begin
     Init(aOptions,dvArray);
     VCount := length(Items);
-    VValue := Items; // direct by-reference copy
+    VValue := Items; // fast by-reference copy of VValue[]
   end;
 end;
 
@@ -32808,7 +32825,7 @@ begin
     VType := varNull else begin
     Init(aOptions,dvObject);
     VCount := length(aNames);
-    VName := aNames; // direct by-reference copy
+    VName := aNames;     // fast by-reference copy of VName[] and VValue[]
     VValue := aValues;
   end;
 end;
@@ -36693,12 +36710,12 @@ end;
 
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
-  if (fHashs=nil) or not Assigned(fHashElement) then
-    result := -1 else begin
+  if (fHashs<>nil) and Assigned(fHashElement) then begin
     result := HashFind(fHashElement(Elem,fHasher),Elem);
     if result<0 then
       result := -1; // for coherency with most methods
-  end;
+  end else
+    result := -1;
 end;
 
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
@@ -42796,10 +42813,7 @@ end;
 function TRawUTF8List.GetObjectByName(const Name: RawUTF8): TObject;
 var ndx: PtrUInt;
 begin
-  if (self=nil) or (fObjects=nil) then begin
-    result := nil;
-    exit;
-   end else begin
+ if (self<>nil) and (fObjects<>nil) then begin
     ndx := IndexOf(Name);
     if ndx<PtrUInt(fCount) then begin
       result := fObjects[ndx];
@@ -42808,6 +42822,9 @@ begin
       result := nil;
       exit;
     end;
+  end else begin
+    result := nil;
+    exit;
   end;
 end;
 
