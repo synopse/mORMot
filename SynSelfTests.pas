@@ -4902,7 +4902,7 @@ var ab0,ab1: TSubAB;
     agg,agg2: TAggregate;
     X: RawUTF8;
     AA,AB: TRawUTF8DynArrayDynArray;
-    i,a,v: Integer;
+    i,a{$ifndef NOVARIANTS},v{$endif}: Integer;
 {$ifdef ISDELPHI2010}
     nav,nav2: TConsultaNav;
     nrtti,nrtti2: TNewRTTI;

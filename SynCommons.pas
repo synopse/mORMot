@@ -31570,8 +31570,10 @@ begin
         if VType=varByRef or varUString then
         result := PPointer(VAny)^=nil else
       {$endif}
+      {$ifndef NOVARIANTS}
       if VType=DocVariantVType then
         result := TDocVariantData(V).Count=0 else
+      {$endif}
         result := false;
     end;
 end;
