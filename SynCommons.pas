@@ -8872,6 +8872,18 @@ procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// logical OR of two memory buffers
+procedure OrMemory(Dest,Source: PByteArray; size: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+  
+/// logical XOR of two memory buffers
+procedure XorMemory(Dest,Source: PByteArray; size: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// logical AND of two memory buffers
+procedure AndMemory(Dest,Source: PByteArray; size: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns TRUE if all bytes equal zero
 function IsZero(P: pointer; Length: integer): boolean; overload;
 
@@ -24761,6 +24773,48 @@ asm
 @n: mov eax,ecx
 end;
 {$endif}
+
+procedure OrMemory(Dest,Source: PByteArray; size: integer);
+begin
+  while size>sizeof(PtrInt)-1 do begin
+    dec(size,sizeof(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ or PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size>0 do begin
+    dec(size);
+    Dest[size] := Dest[size] or Source[size];
+  end;
+end;
+
+procedure XorMemory(Dest,Source: PByteArray; size: integer);
+begin
+  while size>sizeof(PtrInt)-1 do begin
+    dec(size,sizeof(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ xor PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size>0 do begin
+    dec(size);
+    Dest[size] := Dest[size] xor Source[size];
+  end;
+end;
+
+procedure AndMemory(Dest,Source: PByteArray; size: integer);
+begin
+  while size>sizeof(PtrInt)-1 do begin
+    dec(size,sizeof(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Dest)^ and PPtrInt(Source)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source));
+  end;
+  while size>0 do begin
+    dec(size);
+    Dest[size] := Dest[size] and Source[size];
+  end;
+end;
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
