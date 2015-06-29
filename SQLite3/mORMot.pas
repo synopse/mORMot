@@ -2287,7 +2287,10 @@ type
     function GetEnumName(const Value): PShortString;
        {$ifdef HASINLINE}inline;{$endif}
     /// get all enumeration names as CSV or JSON array
-    function GetEnumNameAll(asJSONArray: boolean=false): RawUTF8;
+    function GetEnumNameAll(asJSONArray: boolean=false): RawUTF8; overload;
+    /// retrieve all element names as a dynamic array of RawUTF8
+    // - names could be optionally trimmed left from their initial lower chars
+    procedure GetEnumNameAll(var result: TRawUTF8DynArray; TrimLeftLowerCase: boolean); overload;
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -6599,7 +6602,11 @@ type
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
-    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits): variant;
+    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits): variant; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve the record content as a TDocVariant custom variant object
+    procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+      var result: variant); overload;
     /// retrieve the simple record content as a TDocVariant custom variant object
     function GetSimpleFieldsAsDocVariant(withID: boolean=true): variant;
     /// retrieve the published property value into a Variant
@@ -17092,7 +17099,9 @@ threadvar
   // - is set by TServiceFactoryServer.ExecuteMethod() just before calling the
   // implementation method of a service, allowing to retrieve the current
   // execution context - Request member is set from a client/server execution:
-  // Request.Server is the safe access point to the underlying TSQLRestServer
+  // Request.Server is the safe access point to the underlying TSQLRestServer,
+  // but the easiest is to use the CurrentServiceContextServer function  to
+  // retrieve directly the running TSQLRestServer (if any)
   // - its content is reset to zero out of the scope of a method execution
   // - when used, a local copy or a PServiceRunningContext pointer should better
   // be created, since accessing a threadvar has a non negligible performance
@@ -17116,6 +17125,11 @@ threadvar
 // - to be used when accessing the value from a package, to circumvent a
 // Delphi RTL/compiler restriction (bug?)
 function CurrentServiceContext: TServiceRunningContext;
+
+/// wrapper function to retrieve the current REST server instance from
+// the global ServiceContext threadvar value
+// - may return nil if ServiceContext.Request is nil
+function CurrentServiceContextServer: TSQLRestServer;
 
 
 { ************ Logging classes and functions }
@@ -25945,6 +25959,22 @@ begin
   end;
 end;
 
+procedure TEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
+  TrimLeftLowerCase: boolean);
+var max,i: integer;
+    V: PShortString;
+begin
+  max := MaxValue-MinValue;
+  SetLength(result,max+1);
+  V := @NameList;
+  for i := 0 to max do begin
+    if TrimLeftLowerCase then
+      result[i] := TrimLeftLowerCaseShort(V) else
+      result[i] := RawUTF8(V^);
+    inc(PtrUInt(V),length(V^)+1);
+  end;
+end;
+
 procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
 var i, L: integer;
     Line: array[byte] of AnsiChar;
@@ -27616,23 +27646,29 @@ end;
 
 function TSQLRecord.GetAsDocVariant(withID: boolean;
   const withFields: TSQLFieldBits): variant;
-var f: integer;
-    v: variant;
 begin
+  GetAsDocVariant(withID,withFields,result);
+end;
+
+procedure TSQLRecord.GetAsDocVariant(withID: boolean;
+  const withFields: TSQLFieldBits; var result: variant);
+var f: integer;
+    Fields: TSQLPropInfoList;
+    doc: TDocVariantData absolute result;
+begin
+  VarClear(result);
+  Fields := RecordProps.Fields;
+  doc.InitFast(Fields.Count+1,dvObject);
   if withID then
-    result := _ObjFast(['RowID',fID]) else
-    result := _ObjFast([]);
-  with RecordProps do
-    for f := 0 to Fields.Count-1 do
-    if f in withFields then begin
-      Fields.List[f].GetVariant(self,v);
-      TDocVariantData(result).AddValue(Fields.List[f].Name,v);
-    end;
+    doc.Values[doc.InternalAdd('RowID')] := fID;
+  for f := 0 to Fields.Count-1 do
+  if f in withFields then
+    Fields.List[f].GetVariant(self,doc.Values[doc.InternalAdd(Fields.List[f].Name)]);
 end;
 
 function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean): variant;
 begin
-  result := GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect]);
+  GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect],result);
 end;
 
 function TSQLRecord.GetFieldVariant(const PropName: string): Variant;
@@ -29807,7 +29843,7 @@ begin
            IdemPropNameU('ID=?',FormatSQLWhere) then begin
           Rec := Table.Create(self,ID);
           try
-            result := Rec.GetAsDocVariant(True,bits);
+            Rec.GetAsDocVariant(True,bits,result);
           finally
             Rec.Free;
           end;
@@ -36553,6 +36589,15 @@ function CurrentServiceContext: TServiceRunningContext;
 begin
   result := ServiceContext;
 end;
+
+function CurrentServiceContextServer: TSQLRestServer;
+begin
+  with PServiceRunningContext(@ServiceContext)^ do
+  if Request<>nil then
+    result := Request.Server else
+    result := nil;
+end;
+
 
 { TSQLRestClientURIDll }
 
@@ -49229,7 +49274,7 @@ end;
 destructor TInterfacedCallback.Destroy;
 var Obj: pointer; // Obj: IInvokable here raises a EStackOverflow
 begin
-  if (fRest<>nil) and (fRest.Services<>nil) then
+  if (fRest<>nil) and (fRest.Services<>nil) and not IsNullGUID(fInterface) then
     if GetInterface(fInterface,Obj) then
       fRest.Services.CallBackUnRegister(IInvokable(Obj));
   inherited Destroy;
