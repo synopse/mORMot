@@ -2177,9 +2177,23 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 
-/// use our fast version of StrComp(), to be used with PUTF8Char/PAnsiChar
+{$ifdef PUREPASCAL}
+/// inlined StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
+{$else}
+
+/// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
+function StrCompFast(Str1, Str2: pointer): PtrInt;
+
+/// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+
+/// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - will use SSE4.2 instructions on supported CPUs
+var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
+
+{$endif}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -5305,7 +5319,7 @@ function HashInt64(const Elem; Hasher: THasher): cardinal;
 function HashPointer(const Elem; Hasher: THasher): cardinal;
 
 
-const
+var
   /// helper array to get the comparison function corresponding to a given
   // standard array type
   // - not to be used as such, but e.g. when inlining TDynArray methods
@@ -8815,7 +8829,7 @@ var
 
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
-// - SSE 4.2 shall be available on the processor (checked with SupportSSE42)
+// - SSE 4.2 shall be available on the processor (i.e. cfSSE42 in CpuFeatures)
 // - result is not compatible with zlib's crc32() - not the same polynom
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -18446,26 +18460,30 @@ begin
   result := 0;      // Str1=Str2
 end;
 
-function StrComp(Str1, Str2: pointer): PtrInt;
 {$ifdef PUREPASCAL}
+
+function StrComp(Str1, Str2: pointer): PtrInt;
 begin
   if Str1<>Str2 then
   if Str1<>nil then
   if Str2<>nil then begin
-    if PAnsiChar(Str1)^=PAnsiChar(Str2)^ then
+    if PByte(Str1)^=PByte(Str2)^ then
       repeat
-        if pByte(Str1)^=0 then break;
-        inc(PtrUInt(Str1));
-        inc(PtrUInt(Str2));
-      until pByte(Str1)^<>pByte(Str2)^;
-    result := pByte(Str1)^-pByte(Str2)^;
+        if PByte(Str1)^=0 then break;
+        inc(PByte(Str1));
+        inc(PByte(Str2));
+      until PByte(Str1)^<>PByte(Str2)^;
+    result := PByte(Str1)^-PByte(Str2)^;
     exit;
   end else
   result := 1 else  // Str2=''
   result := -1 else // Str1=''
   result := 0;      // Str1=Str2
 end;
+
 {$else}
+
+function StrCompFast(Str1, Str2: pointer): PtrInt;
 asm // no branch taken in case of not equal first char
         cmp   eax,edx
         je    @zero  // same string or both nil
@@ -18493,8 +18511,100 @@ asm // no branch taken in case of not equal first char
         ret
 @zero:  xor   eax,eax
 end;
-{$endif}
 
+const  // see http://www.felixcloutier.com/x86/PCMPISTRI.html
+  EQUAL_EACH = 8;
+  NEGATIVE_POLARITY = 16;
+
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+asm 
+      test      eax,edx
+      jz        @n
+@ok:  sub       eax,edx
+      jz        @0
+      {$ifdef HASAESNI}
+      MovDqU    xmm0,dqword [edx]
+      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      {$else}
+      db $F3,$0F,$6F,$02
+      db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
+      {$endif}
+      ja        @1
+      jc        @2
+      xor       eax,eax
+      ret
+@1:   add       edx,16
+      {$ifdef HASAESNI}
+      MovDqU    xmm0,dqword [edx]
+      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      {$else}
+      db $F3,$0F,$6F,$02
+      db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
+      {$endif}
+      ja        @1
+      jc        @2
+@0:   xor       eax,eax // Str1=Str2
+      ret
+@n:   test      eax,eax  // Str1='' ?
+      jz        @max
+      test      edx,edx  // Str2='' ?
+      jnz       @ok
+      or        eax,-1
+      ret
+@max: inc       eax
+      ret
+@2:   add       eax,edx
+      movzx     eax,byte ptr [eax+ecx]
+      movzx     edx,byte ptr [edx+ecx]
+      sub       eax,edx
+end;
+
+function SortDynArrayAnsiStringSSE42(const A,B): integer;
+asm
+      mov       eax,[eax]
+      mov       edx,[edx]
+      test      eax,edx
+      jz        @n
+@ok:  sub       eax,edx
+      jz        @0
+      {$ifdef HASAESNI}
+      MovDqU    xmm0,dqword [edx]
+      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      {$else}
+      db $F3,$0F,$6F,$02
+      db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
+      {$endif}
+      ja        @1
+      jc        @2
+      xor       eax,eax
+      ret
+@1:   add       edx,16
+      {$ifdef HASAESNI}
+      MovDqU    xmm0,dqword [edx]
+      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      {$else}
+      db $F3,$0F,$6F,$02
+      db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
+      {$endif}
+      ja        @1
+      jc        @2
+@0:   xor       eax,eax // Str1=Str2
+      ret
+@n:   test      eax,eax  // Str1='' ?
+      jz        @max
+      test      edx,edx  // Str2='' ?
+      jnz       @ok
+      or        eax,-1
+      ret
+@max: inc       eax
+      ret
+@2:   add       eax,edx
+      movzx     eax,byte ptr [eax+ecx]
+      movzx     edx,byte ptr [edx+ecx]
+      sub       eax,edx
+end;
+
+{$endif PUREPASCAL}
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 {$ifdef PUREPASCAL}
@@ -29782,32 +29892,6 @@ end;
 
 {$ifndef DELPHI5OROLDER} // need SSE2 asm instruction set
 
-function SupportsSSE2: boolean;
-begin
-  result := false;
-  asm
-    pushfd
-    pop eax
-    mov edx,eax
-    xor eax,$200000
-    push eax
-    popfd
-    pushfd
-    pop eax
-    xor eax,edx
-    jz @nocpuidopcode
-    push ebx
-    mov eax,1
-    cpuid
-    test edx,$04000000
-    jz @nosse2
-    mov result,true
-@nosse2:
-    pop ebx
-@nocpuidopcode:
-  end;
-end;
-
 procedure FillCharSSE2;
 asm // Dest=eax Count=edx Value=cl
   cmp       edx, 32
@@ -29902,13 +29986,20 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
 end;
 
 function StrLenSSE42(S: pointer): PtrInt;
-const EQUAL_EACH = 8;
-asm // see http://www.felixcloutier.com/x86/PCMPISTRI.html
+asm 
         or        eax,eax
         mov       edx,eax             // copy pointer
         jz        @null               // returns 0 if S=nil
-        mov       eax,-16
+        xor       eax,eax
         pxor      xmm0,xmm0
+        {$ifdef HASAESNI}
+        PcmpIstrI xmm0,dqword [edx],EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db $66,$0F,$3A,$63,$02,EQUAL_EACH
+        {$endif}
+        jnz       @loop
+        mov       eax,ecx
+@null:  ret
 @loop:  add       eax,16
         {$ifdef HASAESNI}
         PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
@@ -29916,8 +30007,7 @@ asm // see http://www.felixcloutier.com/x86/PCMPISTRI.html
         db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH
         {$endif}
         jnz       @loop
-        add       eax,ecx
-@null:
+@ok:    add       eax,ecx
 end;
 
 {$endif DELPHI5OROLDER}
@@ -29936,7 +30026,7 @@ begin
   FillcharFast := @FillCharSSE2;
   MoveFast := @MoveSSE2;
   {$else}
-  if SupportsSSE2 then begin
+  if cfSSE2 in CpuFeatures then begin
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
       StrLen := @StrLenSSE2;
@@ -43477,7 +43567,7 @@ begin
 end;
 {$endif}
 
-const
+var
   DYNARRAY_SORTFIRSTFIELDHASHONLY: array[boolean] of TDynArraySortCompare = (
     SortDynArrayAnsiStringI,
     {$ifdef PUREPASCAL}SortDynArrayAnsiStringHashOnly
@@ -48961,8 +49051,19 @@ begin
     end;
   end;
   {$ifdef CPUINTEL}
-  if cfSSE42 in CpuFeatures then
-    crc32c := @crc32csse42 else
+  if cfSSE42 in CpuFeatures then begin
+    crc32c := @crc32csse42;
+    {$ifndef PUREPASCAL}
+    StrComp := @StrCompSSE42;
+    DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
+    DYNARRAY_SORTFIRSTFIELD[false,djWinAnsi] := @SortDynArrayAnsiStringSSE42;
+    DYNARRAY_SORTFIRSTFIELD[false,djRawByteString] := @SortDynArrayAnsiStringSSE42;
+    {$ifndef UNICODE}
+    DYNARRAY_SORTFIRSTFIELD[false,djString] := @SortDynArrayAnsiStringSSE42;
+    {$endif}
+    DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
+    {$endif}
+  end else
   {$endif CPUINTEL}
     crc32c := @crc32cfast;
   DefaultHasher := crc32c;
