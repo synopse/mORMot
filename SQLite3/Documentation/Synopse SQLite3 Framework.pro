@@ -12178,11 +12178,25 @@ $      },
 $      ...
 ... which will be processed by the {\i Mustache} engine.\line If you put a breakpoint at the end of this {\f1\fs20 Default()} method, and inspect the "{\f1\fs20 Scope}" variable, the Delphi debugger will in fact show you in real time the exact JSON content, retrieved from the ORM.
 I suspect you just find out how {\i mORMot}'s ORM/SOA abilites, and JSON / {\f1\fs20 TDocVariant} offer amazing means of processing your data. You have the best of both worlds: ORM/SOA gives you fixed structures and strong typing (like in C++/C#/Java), whereas {\f1\fs20 TDocVariant} gives you a flexible object scheme, using late-binding to access its content (like in Python/Ruby/JavaScript).
+:  Variable input parameters
+If you want to support a variable number of named parameters, you can define a {\f1\fs20 variant} input parameter, and provide the input as a JSON document, using a {\f1\fs20 TDocVariant} storage. But marshalling the context as JSON would involve using some JavaScript in the HTML page, which may not be very convenient.
+If you want to handle a non-fixed set of regular URI or POST value, you can prefix all the incoming parameter names with the dotted name of a single defined {\f1\fs20 variant}.\line For instance, if you have the following controller method:
+! function TnWebMVCMenu.CadastroSalvar3(const p: variant): TMVCAction;
+Then you can supply as parameter at URI level:
+$ p.a1=5&p.a2=dfasdfa
+And you would be able to handle them in the controller body:
+!function TnWebMVCMenu.CadastroSalvar3(const p: variant): TMVCAction;
+!begin
+!  GotoView(result,'Cadastro',
+!    ['pp1',p.a1,
+!     'pp2',p.a2])
+!end;
+You are now free to specify some versatile HTML forms in your views, and provide the controller with any kind of input parameters.\line Of course, it may sound safer and easier to explicitly define and name each one of the input parameters, with simple types like {\f1\fs20 integer} or {\f1\fs20 RawUTF8}. But this convention may help you work with any kind of HTML views.
 :  Using Services in the Controller
 Any controller method could retrieve and execute any dependency from its {\f1\fs20 interface}, following the {\i @*IoC@} pattern - see @157@.\line You have two ways of performing the dependency resolution:
 - From the associated {\f1\fs20 TSQLRest.Services} container;
 - From its own protected {\f1\fs20 Resolve()} method, since {\f1\fs20 TMVCApplication} inherits from {\f1\fs20 TInjectableObject}.
-In fact, you can set up your {\f1\fs20 TMVCApplication} instance to use any external dependencies, including stubs and mocks, or high-level DDD services (e.g. respository or modelization process), using its {\f1\fs20 CreateInjected()} constructor instead of plain {\f1\fs20 Create}.
+In fact, you can set up your {\f1\fs20 TMVCApplication} instance to use any external dependencies, including stubs and mocks, or high-level DDD services (e.g. repository or modelization process), using its {\f1\fs20 CreateInjected()} constructor instead of plain {\f1\fs20 Create}.
 :111  Controller Thread Safety
 When run from a {\f1\fs20 TSQLRestServer} instance, our {\i MVC} application commands will be executed by default without any thread protection. When hosted within a {\f1\fs20 TSQLHttpServer} instance - see @88@ - several threads may execute the same {\i Controller} methods at the same time. It is therefore up to your application code to ensure that your {\f1\fs20 TMVCApplication} process is thread safe.
 Note that by design, all {\f1\fs20 TMVCApplication.RestModel} ORM methods are thread-safe.\line If your {\i Controller} business code only uses ORM methods, sending back the information to the {\i Views}, without storing any data locally, it will be perfectly thread safe.\line See for instance the {\f1\fs20 TBlogApplication.AuthorView} method we described above.
@@ -12204,7 +12218,7 @@ In fact, even if this method may sound safe, we have an issue when it is execute
 A first - and brutal - solution could be to force the {\f1\fs20 TSQLRestServer} instance to execute all method-based services (including our {\i MVC} commands) in a giant lock, as stated about @25@:
 ! aServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // or amBackgroundThread
 But this may slow down the whole server process, and reduce its scaling abilities.
-You could also lock explictly the {\i Controller} method, for instance:
+You could also lock explicitly the {\i Controller} method, for instance:
 !procedure TBlogApplication.Default(var Scope: variant);
 !begin
 !!  Locker.ProtectMethod;
@@ -12265,9 +12279,9 @@ Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perfor
 !    Author.Free;
 !  end;
 !end;
-As you can see, this {\f1\fs20 Login()} method will be trigerred from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
+As you can see, this {\f1\fs20 Login()} method will be triggered from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
 The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI would have been requested.
-When a web page is computed, the following overriden method will be executed:
+When a web page is computed, the following overridden method will be executed:
 !function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
 !begin
 !  result := inherited GetViewInfo(MethodIndex);

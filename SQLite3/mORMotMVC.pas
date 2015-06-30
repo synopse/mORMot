@@ -1584,6 +1584,8 @@ var mvcinfo, inputContext: variant;
     staticFileName: TFileName;
     rendererClass: TMVCRendererReturningDataClass;
     renderer: TMVCRendererReturningData;
+    methodIndex: integer;
+    method: PServiceMethod;
 begin
   Split(MethodName,'/',rawMethodName,rawFormat);
   if (publishMvcInfo in fPublishOptions) and
@@ -1623,10 +1625,21 @@ begin
     renderer := rendererClass.Create(self);
     try
       if Ctxt.Method in [mGET,mPOST] then begin
-        inputContext := Ctxt.InputAsTDocVariant;
-        if not VarIsEmpty(inputContext) then
-          VariantSaveJSON(inputContext,twJSONEscape,renderer.fInput);
-        renderer.ExecuteCommand(fViews.fFactory.FindMethodIndex(rawMethodName));
+        methodIndex := fViews.fFactory.FindMethodIndex(rawMethodName);
+        if methodIndex>=0 then begin
+          inputContext := Ctxt.InputAsTDocVariant;
+          if not VarIsEmpty(inputContext) then
+          with _Safe(inputContext)^ do begin
+            if (Kind=dvObject) and (Count>0) then begin
+              // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
+              method := @fViews.fFactory.Methods[methodIndex];
+              if method^.ArgsInputValuesCount=1 then
+                FlattenAsNestedObject(RawUTF8(method^.Args[method^.ArgsInFirst].ParamName^));
+            end;
+            renderer.fInput := ToJSON;
+          end;
+        end;
+        renderer.ExecuteCommand(methodIndex);
       end else
         renderer.CommandError('notfound',true,HTML_NOTFOUND);
       Ctxt.Returns(renderer.Output.Content,renderer.Output.Status,

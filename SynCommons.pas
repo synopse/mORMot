@@ -12153,6 +12153,14 @@ type
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerValue): variant; overload;
+    /// map {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
+    // - the supplied aObjectPropName should match the incoming dotted value
+    // of all properties (e.g. 'obj' for "obj.prop1")
+    // - if any of the incoming property is not of "obj.prop#" form, the
+    // whole process would be ignored
+    // - return FALSE if the TDocVariant did not change
+    // - return TRUE if the TDocVariant has been flattened
+    function FlattenAsNestedObject(const aObjectPropName: RawUTF8): boolean;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -33429,6 +33437,27 @@ begin
         result.AddItem(v^);
     end;
   end;
+end;
+
+function TDocVariantData.FlattenAsNestedObject(const aObjectPropName: RawUTF8): boolean;
+var ndx,len: integer;
+    Up: array[byte] of AnsiChar;
+    nested: TDocVariantData;
+begin // {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
+  result := false;
+  if (VCount=0) or (aObjectPropName='') or (VKind<>dvObject) then
+    exit;
+  PWord(UpperCopy255(Up,aObjectPropName))^ := ord('.'); // e.g. 'P.'
+  for ndx := 0 to Count-1 do
+    if not IdemPChar(pointer(VName[ndx]),Up) then
+      exit; // all fields should match "p.####"
+  len := length(aObjectPropName)+1;
+  for ndx := 0 to Count-1 do
+    system.delete(VName[ndx],1,len);
+  nested := self;
+  Clear;
+  InitObject([aObjectPropName,variant(nested)]);
+  result := true;
 end;
 
 function TDocVariantData.Delete(Index: integer): boolean;
