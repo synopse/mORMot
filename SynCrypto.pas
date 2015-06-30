@@ -1431,12 +1431,6 @@ end;
     {$define PURE_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
   {$else}
     {$define USEAESNI}
-    {$ifdef ISDELPHIXE4}
-      {$define HASAESNI}
-    {$endif}
-    {$ifdef FPC}
-      {$define HASAESNI}
-    {$endif}
   {$endif PUREPASCAL}
 {$endif}
 

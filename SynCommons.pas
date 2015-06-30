@@ -401,7 +401,7 @@ unit SynCommons;
   - added TextColor() and TextBackground() functions - will initialize internal
     console process after any manual AllocConsole call
   - added ConsoleWaitForEnterKey function, able to handle Synchronize() calls
-  - StrLen() function will now use faster SSE2 instructions on supported CPUs
+  - StrLen() function will now use SSE2 or SSE4.2 instructions on supported CPUs
   - introduced StrLenPas() function, to be used when buffer is protected
   - included Windows-1258 code page to be recognized as a fixed-width charset
   - TSynAnsiFixedWidth.Create(CODEPAGE_US) will now use a hard-coded table,
@@ -29901,6 +29901,25 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
 @null:
 end;
 
+function StrLenSSE42(S: pointer): PtrInt;
+const EQUAL_EACH = 8;
+asm // see http://www.felixcloutier.com/x86/PCMPISTRI.html
+        or        eax,eax
+        mov       edx,eax             // copy pointer
+        jz        @null               // returns 0 if S=nil
+        mov       eax,-16
+        pxor      xmm0,xmm0
+@loop:  add       eax,16
+        {$ifdef HASAESNI}
+        PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH
+        {$endif}
+        jnz       @loop
+        add       eax,ecx
+@null:
+end;
+
 {$endif DELPHI5OROLDER}
 
 {$endif CPU64}
@@ -29918,7 +29937,9 @@ begin
   MoveFast := @MoveSSE2;
   {$else}
   if SupportsSSE2 then begin
-    StrLen := @StrLenSSE2;
+    if cfSSE42 in CpuFeatures then
+      StrLen := @StrLenSSE42 else
+      StrLen := @StrLenSSE2;
     FillcharFast := @FillCharSSE2;
   end else begin
     StrLen := @StrLenX86;
@@ -48848,13 +48869,22 @@ begin
     LeaveCriticalSection(GlobalCriticalSection);
 end;
 
+{$ifdef CPUINTEL}
+procedure TestIntelCpuFeatures;
+var regs: TRegisters;
+begin
+  regs.edx := 0;
+  regs.ecx := 0;
+  GetCPUID(1,regs);
+  PIntegerArray(@CpuFeatures)^[0] := regs.edx;
+  PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
+end;
+{$endif CPUINTEL}
+
 procedure InitSynCommonsConversionTables;
 var i,n: integer;
     v: byte;
     crc: cardinal;
-{$ifdef CPUINTEL}
-  regs: TRegisters;
-{$endif}
 {$ifdef OWNNORMTOUPPER}
     d: integer;
 const n2u: array[138..255] of byte =
@@ -48931,10 +48961,6 @@ begin
     end;
   end;
   {$ifdef CPUINTEL}
-  FillcharFast(regs,sizeof(regs),0);
-  GetCPUID(1,regs);
-  PIntegerArray(@CpuFeatures)^[0] := regs.edx;
-  PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
   if cfSSE42 in CpuFeatures then
     crc32c := @crc32csse42 else
   {$endif CPUINTEL}
@@ -48947,6 +48973,9 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  {$ifdef CPUINTEL}
+  TestIntelCpuFeatures;
+  {$endif}
   MoveFast := @System.Move;
   {$ifdef FPC}
   FillCharFast := @System.FillChar;

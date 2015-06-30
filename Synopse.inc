@@ -186,6 +186,7 @@
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
+  {$define HASAESNI}
   {$define HASTTHREADSTART}
   {$define FPC_OR_UNICODE}
 
@@ -332,6 +333,7 @@
     {$ifend}
     {$if CompilerVersion >= 25.0}
       {$define ISDELPHIXE4}
+      {$define HASAESNI}
     {$ifend}
     {$if CompilerVersion >= 26.0}
       {$define ISDELPHIXE5}
