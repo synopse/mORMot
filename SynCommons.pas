@@ -5212,6 +5212,12 @@ function SortDynArrayAnsiString(const A,B): integer;
 /// compare two "array of AnsiString" elements, with no case sensitivity
 function SortDynArrayAnsiStringI(const A,B): integer;
 
+/// compare two "array of PUTF8Char/PAnsiChar" elements, with case sensitivity
+function SortDynArrayPUTF8Char(const A,B): integer;
+
+/// compare two "array of PUTF8Char/PAnsiChar" elements, with no case sensitivity
+function SortDynArrayPUTF8CharI(const A,B): integer;
+
 /// compare two "array of WideString/UnicodeString" elements, with case sensitivity
 function SortDynArrayUnicodeString(const A,B): integer;
 
@@ -24788,7 +24794,7 @@ end;
 
 procedure OrMemory(Dest,Source: PByteArray; size: integer);
 begin
-  while size>sizeof(PtrInt)-1 do begin
+  while size>=sizeof(PtrInt) do begin
     dec(size,sizeof(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ or PPtrInt(Source)^;
     inc(PPtrInt(Dest));
@@ -24802,7 +24808,7 @@ end;
 
 procedure XorMemory(Dest,Source: PByteArray; size: integer);
 begin
-  while size>sizeof(PtrInt)-1 do begin
+  while size>=sizeof(PtrInt) do begin
     dec(size,sizeof(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ xor PPtrInt(Source)^;
     inc(PPtrInt(Dest));
@@ -24816,7 +24822,7 @@ end;
 
 procedure AndMemory(Dest,Source: PByteArray; size: integer);
 begin
-  while size>sizeof(PtrInt)-1 do begin
+  while size>=sizeof(PtrInt) do begin
     dec(size,sizeof(PtrInt));
     PPtrInt(Dest)^ := PPtrInt(Dest)^ and PPtrInt(Source)^;
     inc(PPtrInt(Dest));
@@ -34266,15 +34272,19 @@ end;
 function _Safe(const DocVariant: variant): PDocVariantData;
 {$ifndef HASINLINE}
 asm
-@nxt: movzx edx,word ptr [eax].TVarData.VType
-      cmp   edx,DocVariantVType
+      mov   ecx,DocVariantVType
+      movzx edx,word ptr [eax].TVarData.VType
+      cmp   edx,ecx
       jne   @by
       ret
 @ptr: mov   eax,[eax].TVarData.VPointer
-      jmp @nxt
+      movzx edx,word ptr [eax].TVarData.VType
+      cmp   edx,ecx
+      je    @ok
 @by:  cmp   edx,varByRef or varVariant
       je    @ptr
       lea   eax,[DocVariantDataFake]
+@ok:
 end;
 {$else}
 begin
@@ -34548,8 +34558,81 @@ begin
 end;
 
 function SortDynArrayAnsiString(const A,B): integer;
+{$ifdef PUREPASCAL}
 begin
-  result := StrComp(PUTF8Char(A),PUTF8Char(B));
+  result := StrComp(pointer(A),pointer(B));
+end;
+{$else}
+asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
+    mov  eax,[eax]
+    mov  edx,[edx]
+    cmp  eax,edx
+    je   @0
+    test eax,edx
+    jz   @n1
+@n2:movzx ecx,byte ptr [eax] // first char comparison (QuickSort speedup)
+    sub  cl,[edx]
+    jne  @no
+    push ebx
+    mov  ebx,[eax-4]
+    sub  ebx,[edx-4]
+    push ebx
+    adc  ecx,-1
+    and  ecx,ebx
+    sub  ecx,[eax-4]
+    sub  eax,ecx
+    sub  edx,ecx
+@s: mov  ebx,[eax+ecx]  // compare by DWORD
+    xor  ebx,[edx+ecx]
+    jnz  @d
+    add  ecx,4
+    js   @s
+@L: pop  eax            // all chars equal -> returns length(A)-length(B)
+    pop  ebx
+    ret
+@d: bsf  ebx,ebx        // char differs -> returns PByte(A)^-PByte(B)^
+    shr  ebx,3
+    add  ecx,ebx
+    jns  @L
+    movzx eax,byte ptr [eax+ecx]
+    movzx edx,byte ptr [edx+ecx]
+    pop  ebx
+    pop  ebx
+    sub  eax,edx
+    ret
+@n1:test eax,eax       // A or B may be ''
+    jz   @n0
+    test edx,edx
+    jnz  @n2
+    cmp  [eax-4],edx
+    je   @0
+@no:jnc  @1
+    or   eax,-1
+    ret
+@n0:cmp  eax,[edx-4]
+    je   @0
+    jnc  @1
+    or   eax,-1
+    ret
+@0: xor  eax,eax
+    ret
+@1: mov  eax,1
+end;
+{$endif}
+
+function SortDynArrayAnsiStringI(const A,B): integer;
+begin
+  result := StrIComp(PUTF8Char(A),PUTF8Char(B));
+end;
+
+function SortDynArrayPUTF8Char(const A,B): integer;
+begin
+  result := StrComp(pointer(A),pointer(B));
+end;
+
+function SortDynArrayPUTF8CharI(const A,B): integer;
+begin
+  result := StrIComp(PUTF8Char(A),PUTF8Char(B));
 end;
 
 function SortDynArrayString(const A,B): integer;
@@ -34559,11 +34642,6 @@ begin
   {$else}
   result := StrComp(PUTF8Char(A),PUTF8Char(B));
   {$endif}
-end;
-
-function SortDynArrayAnsiStringI(const A,B): integer;
-begin
-  result := StrIComp(PUTF8Char(A),PUTF8Char(B));
 end;
 
 function SortDynArrayStringI(const A,B): integer;
@@ -35835,8 +35913,8 @@ var QS: TDynArrayQuickSort;
     i: integer;
 begin
   if CaseSensitive then
-    QS.Compare := SortDynArrayAnsiString else
-    QS.Compare := SortDynArrayAnsiStringI;
+    QS.Compare := SortDynArrayPUTF8Char else
+    QS.Compare := SortDynArrayPUTF8CharI;
   QS.Value := pointer(Values);
   QS.ElemSize := sizeof(PUTF8Char);
   SetLength(SortedIndexes,Count);
@@ -36722,11 +36800,12 @@ begin
 end;
 
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
-var n: integer;
+var n,cap: integer;
 begin
   n := Count;
   SetCount(n+1); // reserve space for a void element in array
-  if Capacity+1>=length(fHashs) then begin
+  cap := Capacity;
+  if cap*2-cap shr 3>=fHashsCount then begin
     // fHashs[] is too small -> recreate
     ReHash;
     result := HashFind(aHashCode,Elem); // fHashs[] has changed -> recompute
@@ -37037,12 +37116,12 @@ end;
 procedure TDynArrayHashed.HashInit;
 var cap: integer;
 begin
-  fHashs := nil; // any previous hash is invalid
   // find nearest power of two for new fHashs[] size
   cap := Capacity*2; // Capacity sounds better than Count
   fHashsCount := 256;
   while fHashsCount<cap do
     fHashsCount := fHashsCount shl 1;
+  fHashs := nil; // any previous hash is invalid
   SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
 end;
 
@@ -37519,7 +37598,7 @@ begin
     result := true;
     exit;
   end;
-  if n+32+n shr 3>length(fHashs) then begin
+  if n*2-n shr 3>length(fHashs) then begin
     fHashs := nil;
     HashInit(n); // re-compute fHashs up to Count-1 if not enough void positions
   end;
@@ -43368,10 +43447,26 @@ end;
 
 { TRawUTF8ListHashed }
 
+{$ifdef PUREPASCAL}
+function SortDynArrayAnsiStringHashOnly(const A,B): integer;
+begin
+  if RawByteString(A)=RawByteString(B) then // faster than StrCmp
+    result := 0 else
+    result := 1; // fake comparison, but fHash only use equality
+end;
+{$endif}
+
+const
+  DYNARRAY_SORTFIRSTFIELDHASHONLY: array[boolean] of TDynArraySortCompare = (
+    SortDynArrayAnsiStringI,
+    {$ifdef PUREPASCAL}SortDynArrayAnsiStringHashOnly
+    {$else}SortDynArrayAnsiString{$endif});
+
 constructor TRawUTF8ListHashed.Create(aOwnObjects: boolean);
 begin
   inherited Create(aOwnObjects);
-  fHash.InitSpecific(TypeInfo(TRawUTF8DynArray),fList,djRawUTF8,@fCount,not fCaseSensitive);
+  fHash.Init(TypeInfo(TRawUTF8DynArray),fList,@HashAnsiString,
+    DYNARRAY_SORTFIRSTFIELDHASHONLY[true],nil,@fCount);
 end;
 
 procedure TRawUTF8ListHashed.Changed;
@@ -43387,7 +43482,7 @@ begin
   inherited;
   fHash.fHashElement := DYNARRAY_HASHFIRSTFIELD[not Value,djRawUTF8];
   fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
-    DYNARRAY_SORTFIRSTFIELD[not Value,djRawUTF8];
+    DYNARRAY_SORTFIRSTFIELDHASHONLY[Value];
   if not fChanged then
     fChanged := Count>0; // force re-hash next IndexOf() call
 end;

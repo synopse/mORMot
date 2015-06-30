@@ -45511,16 +45511,19 @@ end;
 
 class function TInterfaceFactory.Get(aInterface: PTypeInfo): TInterfaceFactory;
 var i: integer;
+    F: ^TInterfaceFactory;
 begin
   if (aInterface=nil) or (aInterface^.Kind<>tkInterface) then
     raise EInterfaceFactoryException.CreateUTF8('%.Get(nil)',[self]);
   EnterInterfaceFactoryCache;
   try
-    for i := 0 to InterfaceFactoryCache.Count-1 do begin
-      result := InterfaceFactoryCache.List[i];
-      if result.fInterfaceTypeInfo=aInterface then
+    F := @InterfaceFactoryCache.List[0];
+    for i := 1 to InterfaceFactoryCache.Count do
+      if F^.fInterfaceTypeInfo=aInterface then begin
+        result := F^;
         exit; // retrieved from cache
-    end;
+      end else
+        inc(F);
     // not existing -> create new instance from RTTI
     {$ifdef HASINTERFACERTTI}
     result := TInterfaceFactoryRTTI.Create(aInterface);
@@ -45558,7 +45561,7 @@ begin
     InterfaceFactoryCache.Safe.Lock;
     F := @InterfaceFactoryCache.List[0];
     ga := GUID32.a;
-    for i := 0 to InterfaceFactoryCache.Count-1 do
+    for i := 1 to InterfaceFactoryCache.Count do
     with PGUID32(@F^.fInterfaceIID)^ do
     if (a=ga) and (b=GUID32.b) and (c=GUID32.c) and (d=GUID32.d) then begin
       result := F^;
