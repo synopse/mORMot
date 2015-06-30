@@ -2187,10 +2187,15 @@ function StrComp(Str1, Str2: pointer): PtrInt;
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it can in principle
+// generate a protection violation (e.g. when used over mapped files) - in this
+// case, you can use the slightly slower StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - will use SSE4.2 instructions on supported CPUs
+// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
+// to 15 bytes beyond the string: use StrCompFast() for a safe memory read 
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
@@ -23210,34 +23215,31 @@ function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-  or eax,eax
-  jz @e // P=nil -> false
-  or edx,edx
-  push ebx
-  push esi
-  jz @z // up=nil -> true
-  mov esi,offset NormToUpperAnsi7
-  xor ebx,ebx
-  xor ecx,ecx
-@1:
-  mov cl,[edx] // cl=up^
-  mov bl,[eax] // bl=p^
-  test cl,cl
-  mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^]
-  jz @z // up^=#0 -> OK
-  lea edx,[edx+1] // = inc edx without changing flags
-  cmp bl,cl
-  lea eax,[eax+1]
-  je @1
-  pop esi
-  pop ebx
-  xor eax,eax
-@e:
-  ret
-@z:
-  mov al,1 // up^=#0 -> OK
-  pop esi
-  pop ebx
+    or eax,eax
+    jz @e // P=nil -> false
+    or edx,edx
+    push ebx
+    push esi
+    jz @z // up=nil -> true
+    mov esi,offset NormToUpperAnsi7
+    xor ebx,ebx
+    xor ecx,ecx
+@1: mov cl,[edx] // cl=up^
+    mov bl,[eax] // bl=p^
+    test cl,cl
+    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^]
+    jz @z // up^=#0 -> OK
+    lea edx,[edx+1] // = inc edx without changing flags
+    cmp bl,cl
+    lea eax,[eax+1]
+    je @1
+    pop esi
+    pop ebx
+    xor eax,eax
+@e: ret
+@z: mov al,1 // up^=#0 -> OK
+    pop esi
+    pop ebx
 end;
 {$endif}
 
@@ -39520,7 +39522,7 @@ begin
 end;
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
-var i,c: PtrInt;
+var i,c: integer;
 begin
   if P=nil then
     exit;
@@ -39528,29 +39530,40 @@ begin
     Len := MaxInt;
   i := 0;
   while i<Len do begin
-    c := i;
     if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
+      c := i;
       repeat
         inc(i);
       until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
-      AddNoJSONEscape(PAnsiChar(P)+c,i-c);
+      inc(PByte(P),c);
+      dec(i,c);
+      if BEnd-B<=i then
+        AddNoJSONEscape(P,i) else begin
+        MoveFast(P^,B[1],i);
+        inc(B,i);
+      end;
     end;
     while i<Len do begin
       c := PByteArray(P)[i];
       case c of
       0:  exit;
-      8:  Add('\','b');
-      9:  Add('\','t');
-      10: Add('\','n');
-      12: Add('\','f');
-      13: Add('\','r');
-      ord('\'),ord('"'): Add('\',AnsiChar(c));
+      8:  c := ord('\')+ord('b')shl 8;
+      9:  c := ord('\')+ord('t')shl 8;
+      10: c := ord('\')+ord('n')shl 8;
+      12: c := ord('\')+ord('f')shl 8;
+      13: c := ord('\')+ord('r')shl 8;
+      ord('\'): c := ord('\')+ord('\')shl 8;
+      ord('"'): c := ord('\')+ord('"')shl 8;
       1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
         AddShort('\u00');
-        Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
+        c := ord(HexCharsLower[c shr 4])+ord(HexCharsLower[c and $F])shl 8;
       end;
       else break;
       end;
+      if BEnd-B<=1 then
+        FlushToStream;
+      PWord(B+1)^ := c;
+      inc(B,2);
       inc(i);
     end;
   end;

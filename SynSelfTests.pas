@@ -6518,6 +6518,14 @@ begin
   Doc.A_['test']^.AddItems([3,4]);
   check(Doc.ToJSON='{"test":[1,2,3,4]}');
   check(Doc.A['test'].ToJson='[1,2,3,4]');
+  Doc.Clear;
+  check(not Doc.FlattenAsNestedObject('wrong'));
+  Doc.InitJSON('{"p.a1":5,"p.a2":"dfasdfa"}');
+  check(not Doc.FlattenAsNestedObject('wrong'));
+  check(Doc.ToJSON='{"p.a1":5,"p.a2":"dfasdfa"}');
+  check(Doc.FlattenAsNestedObject('p'));
+  check(Doc.ToJSON='{"p":{"a1":5,"a2":"dfasdfa"}}');
+  check(not Doc.FlattenAsNestedObject('p'));
 end;
 
 {$endif LVCL}
