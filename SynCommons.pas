@@ -7206,9 +7206,15 @@ type
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
     /// find a RawUTF8 item in the stored Strings[] list
-    // - this overridden method will update the internal hash table (if needed),
-    // then use it to retrieve the corresponding matching index
+    // - just a wrapper over IndexOf() using Safe.Lock/Unloack
     function LockedIndexOf(const aText: RawUTF8): PtrInt; virtual;
+    /// add a RawUTF8 item in the internal storage, with an optional object
+    // - just a wrapper over AddObjectIfNotExisting() using Safe.Lock/Unloack
+    function LockedAddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
+      wasAdded: PBoolean=nil): PtrInt; virtual;
+    /// find and delete an RawUTF8 item in the stored Strings[] list
+    // - just a wrapper over DeleteFromName() using Safe.Lock/Unloack
+    function LockedDeleteFromName(const aText: RawUTF8): PtrInt; virtual;
   end;
 
   /// This class is able to emulate a TStringList with our native UTF-8 string
@@ -18627,7 +18633,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       jz        @max
       test      edx,edx  // Str2='' ?
       jnz       @ok
-      mov     eax,1
+      mov       eax,1
       ret
 @max: dec       eax
       ret
@@ -43755,6 +43761,27 @@ begin
   fSafe.Lock;
   try
     result := IndexOf(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.LockedAddObjectIfNotExisting(const aText: RawUTF8;
+  aObject: TObject; wasAdded: PBoolean): PtrInt;
+begin
+  fSafe.Lock;
+  try
+    result := AddObjectIfNotExisting(aText,aObject,wasAdded);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.LockedDeleteFromName(const aText: RawUTF8): PtrInt;
+begin
+  fSafe.Lock;
+  try
+    result := DeleteFromName(aText);
   finally
     fSafe.UnLock;
   end;
