@@ -2181,9 +2181,17 @@ function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Cha
 /// inlined StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// buffer-safe version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - pure pascal StrComp() won't access the memory beyond the string, but this
+// function is defined for compatibility with SSE 4.2 expectations
+function StrCompFast(Str1, Str2: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 {$else}
 
 /// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - this version won't access the memory beyond the string, so may be
+// preferred to StrcompSSE42 or StrComp, when using e.g. mapped files 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
@@ -2204,8 +2212,10 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 function StrIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
-/// slower version of StrLen(), but which will never read over the buffer
-// - to be used instead of StrLen() on a memory protected buffer
+/// slower version of StrLen(), but which will never read beyond the string
+// - this version won't access the memory beyond the string, so may be
+// preferred to StrLen(), when using e.g. mapped files or any memory
+// protected buffer
 function StrLenPas(S: pointer): PtrInt;
 
 {$ifdef FPC}
@@ -18374,39 +18384,55 @@ begin
   result := 0;      // Str1=Str2
 end;
 {$else}
-asm // faster version by AB
+asm // faster version by AB, from Agner Fog's original
         mov     ecx,eax
-        xor     eax,eax
-        cmp     ecx,edx
-        je      @exit2  // same string or both nil
-        or      ecx,ecx
-        mov     al,1
-        jz      @exit2  // str1=''
-        or      edx,edx
-        je      @min
-@1:     mov     al,[ecx]
+        test    eax,edx
+        jz      @n
+@ok:    sub     edx,eax
+        jz      @0
+@10:    mov     al,[ecx]
+        cmp     al,[ecx+edx]
+        jne     @20
         inc     ecx
         test    al,al
-        mov     ah,[edx]
-        lea     edx,[edx+1]
-        je      @exit
-        cmp     al,ah
-        je      @1
+        jnz     @10                    // continue with next byte
+        // terminating zero found. Strings are equal
+@0:     xor     eax,eax
+        ret
+@20:    // bytes are different. check case
+        xor     al,20H                // toggle case
+        cmp     al,[ecx+edx]
+        jne     @30
+        // possibly differing only by case. Check if a-z
+        or      al,20H                // upper case
         sub     al,'a'
-        sub     ah,'a'
         cmp     al,'z'-'a'
-        ja      @@2
-        sub     al,20h
-@@2:    cmp     ah,'z'-'a'
-        ja      @@3
-        sub     ah,20h
-@@3:    cmp     al,ah
-        je      @1
-@exit:  xor     edx,edx
-        xchg    ah,dl
-        sub     eax,edx
-@exit2: ret
-@min:   or      eax,-1
+        ja      @30                    // not a-z
+        // a-z and differing only by case
+        inc     ecx
+        jmp     @10                    // continue with next byte
+@30:    // bytes are different,even after changing case
+        movzx   eax,byte [ecx]        // get original value again
+        sub     eax,'A'
+        cmp     eax,'Z' - 'A'
+        ja      @40
+        add     eax,20H
+@40:    movzx   edx,byte [ecx+edx]
+        sub     edx,'A'
+        cmp     edx,'Z' - 'A'
+        ja      @50
+        add     edx,20H
+@50:    sub     eax,edx                 // subtract to get result
+        ret
+@n:     cmp     eax,edx
+        je      @0
+        test    eax,eax  // Str1='' ?
+        jz      @max
+        test    edx,edx  // Str2='' ?
+        jnz     @ok
+        mov     eax,1
+        ret
+@max:   dec     eax
 end;
 {$endif}
 
@@ -18419,28 +18445,6 @@ begin
     if S[result+1]<>#0 then
     if S[result+2]<>#0 then
     if S[result+3]<>#0 then
-      inc(result,4) else begin
-      inc(result,3);
-      exit;
-    end else begin
-      inc(result,2);
-      exit;
-    end else begin
-      inc(result);
-      exit;
-    end else
-      exit;
-end;
-
-function StrLenPas(S: pointer): PtrInt;
-begin
-  result := 0;
-  if S<>nil then
-  while true do
-    if PAnsiChar(S)[result+0]<>#0 then
-    if PAnsiChar(S)[result+1]<>#0 then
-    if PAnsiChar(S)[result+2]<>#0 then
-    if PAnsiChar(S)[result+3]<>#0 then
       inc(result,4) else begin
       inc(result,3);
       exit;
@@ -18475,6 +18479,28 @@ end;
 
 {$ifdef PUREPASCAL}
 
+function StrLenPas(S: pointer): PtrInt;
+begin
+  result := 0;
+  if S<>nil then
+  while true do
+    if PAnsiChar(S)[result+0]<>#0 then
+    if PAnsiChar(S)[result+1]<>#0 then
+    if PAnsiChar(S)[result+2]<>#0 then
+    if PAnsiChar(S)[result+3]<>#0 then
+      inc(result,4) else begin
+      inc(result,3);
+      exit;
+    end else begin
+      inc(result,2);
+      exit;
+    end else begin
+      inc(result);
+      exit;
+    end else
+      exit;
+end;
+
 function StrComp(Str1, Str2: pointer): PtrInt;
 begin
   if Str1<>Str2 then
@@ -18494,7 +18520,44 @@ begin
   result := 0;      // Str1=Str2
 end;
 
+function StrCompFast(Str1, Str2: pointer): PtrInt;
+begin
+  if Str1<>Str2 then
+  if Str1<>nil then
+  if Str2<>nil then begin
+    if PByte(Str1)^=PByte(Str2)^ then
+      repeat
+        if PByte(Str1)^=0 then break;
+        inc(PByte(Str1));
+        inc(PByte(Str2));
+      until PByte(Str1)^<>PByte(Str2)^;
+    result := PByte(Str1)^-PByte(Str2)^;
+    exit;
+  end else
+  result := 1 else  // Str2=''
+  result := -1 else // Str1=''
+  result := 0;      // Str1=Str2
+end;
+
 {$else}
+
+function StrLenPas(S: pointer): PtrInt;
+asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
+    test eax,eax
+    mov edx,eax
+    jz @0
+    xor eax,eax
+@s: cmp byte ptr [eax+edx+0],0; je @0
+    cmp byte ptr [eax+edx+1],0; je @1
+    cmp byte ptr [eax+edx+2],0; je @2
+    cmp byte ptr [eax+edx+3],0; je @3
+    add eax,4
+    jmp @s
+@1: inc eax
+@0: ret
+@2: add eax,2; ret
+@3: add eax,3
+end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 asm // no branch taken in case of not equal first char
@@ -18518,9 +18581,9 @@ asm // no branch taken in case of not equal first char
         jz    @max
         test  edx,edx  // Str2='' ?
         jnz   @1
-        or    eax,-1
+        mov   eax,1
         ret
-@max:   inc   eax
+@max:   dec   eax
         ret
 @zero:  xor   eax,eax
 end;
@@ -18530,7 +18593,7 @@ const  // see http://www.felixcloutier.com/x86/PCMPISTRI.html
   NEGATIVE_POLARITY = 16;
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
-asm 
+asm // warning: may read up to 15 bytes beyond the string itself
       test      eax,edx
       jz        @n
 @ok:  sub       eax,edx
@@ -18558,13 +18621,15 @@ asm
       jc        @2
 @0:   xor       eax,eax // Str1=Str2
       ret
-@n:   test      eax,eax  // Str1='' ?
+@n:   cmp       eax,edx
+      je        @0
+      test      eax,eax  // Str1='' ?
       jz        @max
       test      edx,edx  // Str2='' ?
       jnz       @ok
-      or        eax,-1
+      mov     eax,1
       ret
-@max: inc       eax
+@max: dec       eax
       ret
 @2:   add       eax,edx
       movzx     eax,byte ptr [eax+ecx]
@@ -18573,7 +18638,7 @@ asm
 end;
 
 function SortDynArrayAnsiStringSSE42(const A,B): integer;
-asm
+asm // warning: may read up to 15 bytes beyond the string itself
       mov       eax,[eax]
       mov       edx,[edx]
       test      eax,edx
@@ -18603,7 +18668,9 @@ asm
       jc        @2
 @0:   xor       eax,eax // Str1=Str2
       ret
-@n:   test      eax,eax  // Str1='' ?
+@n:   cmp       eax,edx
+      je        @0
+      test      eax,eax  // Str1='' ?
       jz        @max
       test      edx,edx  // Str2='' ?
       jnz       @ok
@@ -29996,7 +30063,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
 end;
 
 function StrLenSSE42(S: pointer): PtrInt;
-asm 
+asm // warning: may read up to 15 bytes beyond the string itself
         or        eax,eax
         mov       edx,eax             // copy pointer
         jz        @null               // returns 0 if S=nil
