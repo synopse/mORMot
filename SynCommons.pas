@@ -4847,7 +4847,7 @@ type
     function ValueBool(const aName: RawUTF8): Boolean;
     /// returns all values, as CSV or INI content
     function AsCSV(const KeySeparator: RawUTF8='=';
-      const ValueSeparator: RawUTF8=#13#10): RawUTF8;
+      const ValueSeparator: RawUTF8=#13#10; const IgnoreKey: RawUTF8=''): RawUTF8;
     /// fill the supplied two arrays of RawUTF8 with the stored values
     procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
     {$ifndef NOVARIANTS}
@@ -48345,13 +48345,13 @@ begin
   result := Value(aName)='1';
 end;
 
-function TSynNameValue.AsCSV(const KeySeparator: RawUTF8='=';
-  const ValueSeparator: RawUTF8=#13#10): RawUTF8;
+function TSynNameValue.AsCSV(const KeySeparator,ValueSeparator,IgnoreKey: RawUTF8): RawUTF8;
 var i: integer;
 begin
   with TTextWriter.CreateOwnedStream do
   try
-    for i := 0 to Count-1 do begin
+    for i := 0 to Count-1 do
+    if (IgnoreKey='') or (List[i].Name<>IgnoreKey) then begin
       AddNoJSONEscapeUTF8(List[i].Name);
       AddNoJSONEscapeUTF8(KeySeparator);
       AddNoJSONEscapeUTF8(List[i].Value);
