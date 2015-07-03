@@ -1203,8 +1203,7 @@ begin
     Create(LockResource(HGlobal),SizeofResource(HInstance, HResInfo));
 end;
 
-constructor TZipRead.Create(aFile: THandle; ZipStartOffset: cardinal=0;
-      Size: cardinal=0);
+constructor TZipRead.Create(aFile: THandle; ZipStartOffset,Size: cardinal);
 var i, ExeOffset: integer;
 begin
   if aFile<=0 then

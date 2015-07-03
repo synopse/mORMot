@@ -1293,10 +1293,27 @@ end;
 
 procedure TTestLowLevelCommon.FastStringCompare;
 begin
+  Check(CompareText('','')=0);
+  Check(CompareText('abcd','')>0);
+  Check(CompareText('','abcd')<0);
+  Check(StrCompFast(nil,nil)=0);
+  Check(StrCompFast(PAnsiChar('abcD'),nil)=1);
+  Check(StrCompFast(nil,PAnsiChar('ABcd'))=-1);
+  Check(StrCompFast(PAnsiChar('ABCD'),PAnsiChar('ABCD'))=0);
+  Check(StrCompFast(PAnsiChar('ABCD'),PAnsiChar('ABCE'))=-1);
+  Check(StrCompFast(PAnsiChar('ABCD'),PAnsiChar('ABCC'))=1);
+  Check(StrIComp(nil,nil)=0);
+  Check(StrIComp(PAnsiChar('abcD'),nil)=1);
+  Check(StrIComp(nil,PAnsiChar('ABcd'))=-1);
   Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcd'))=0);
   Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcF'))=
     StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
+  Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCE'))=-1);
+  Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCC'))=1);
+  Check(StrComp(nil,nil)=0);
   Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCD'))=0);
+  Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCE'))=-1);
+  Check(StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCC'))=1);
   Check(AnsiIComp('abcD','ABcd')=0);
   Check(AnsiIComp('abcD','ABcF')=StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
   Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcd'))=AnsiIComp('abcD','ABcd'));
@@ -2898,6 +2915,9 @@ begin
   Check(StrLen(nil)=0);
   for i := length(res)+1 downto 1 do
     Check(StrLen(Pointer(@res[i]))=length(res)-i+1);
+  Check(StrLenPas(nil)=0);
+  for i := length(res)+1 downto 1 do
+    Check(StrLenPas(Pointer(@res[i]))=length(res)-i+1);
   CSVToRawUTF8DynArray(pointer(res),arr);
   Check(arr[0]='one');
   Check(arr[1]='two');

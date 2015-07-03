@@ -3384,6 +3384,12 @@ type
     /// how this property will deal with its instances (including TDocVariant)
     // - by default, contains JSON_OPTIONS[true] for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
+    // - you may add dvoSerializeAsExtendedJson so any TDocVariant nested
+    // field names would not be double-quoted, saving some chars in the stored
+    // TEXT column and in the JSON escaped transmitted data over REST, by
+    // writing '{name:"John",age:123}' instead of '{"name":"John","age":123}':
+    // be aware that this syntax is not supported by AJAX clients neither
+    // our SynCrossPlatformJSON unit (yet)
     property DocVariantOptions: TDocVariantOptions read fDocVariantOptions write fDocVariantOptions;
   end;
 {$endif NOVARIANTS}
@@ -25819,7 +25825,7 @@ begin
     while Value>0 do begin
       dec(Value);
       inc(PtrUInt(result),ord(result^[0])+1);
-      //{$ifdef FPC}result := AlignToPtr(result);{$endif} // enum names seem not aligned
+      //{$ifdef FPC}result := AlignToPtr(result);{$endif} // shortstrings not aligned
     end else
     result := @NULL_SHORTSTRING;
 end;
