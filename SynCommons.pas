@@ -41822,7 +41822,7 @@ begin
     if (ForbiddenTLD<>'') and (FindCSVIndex(pointer(ForbiddenTLD),TLD)>=0) then
       break;
     if not fAnyTLD then
-      if FastFindPUTF8CharSorted(@TopLevelTLD,high(TopLevelTLD),pointer(TLD),@StrComp)<0 then
+      if FastFindPUTF8CharSorted(@TopLevelTLD,high(TopLevelTLD),pointer(TLD))<0 then
         if length(TLD)<>2 then
           break; // assume a two chars string is a ISO 3166-1 alpha-2 code
     result := true;
