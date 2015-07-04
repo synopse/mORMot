@@ -2478,6 +2478,7 @@ function CSVEncode(const NameValuePairs: array of const;
 // - first char must be alphabetical or '_', following chars can be
 // alphanumerical or '_'
 function PropNameValid(P: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -11182,10 +11183,10 @@ type
   // - JSON serialization will follow the standard layout, unless
   // dvoSerializeAsExtendedJson is set so that the property names would not
   // be escaped with double quotes, writing '{name:"John",age:123}' instead of
-  // '{"name":"John","age":123}': this extended json layout is compatible
-  // with TDocVariant JSON unserialization, and follows
-  // http://docs.mongodb.org/manual/reference/mongodb-extended-json but is NOT
-  // recognized by most JSON clients, like AJAX or our SynCrossPlatformJSON unit  
+  // '{"name":"John","age":123}': this extended json layout is compatible with
+  // http://docs.mongodb.org/manual/reference/mongodb-extended-json and with
+  // TDocVariant JSON unserialization, also our SynCrossPlatformJSON unit, but
+  // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
   TDocVariantOption =
     (dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
      dvoReturnNullForUnknownProperty, dvoReturnNullForOutOfRangeIndex,

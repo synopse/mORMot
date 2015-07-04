@@ -887,6 +887,7 @@ type
     function GetNextString: string; overload;  {$ifdef HASINLINE}inline;{$endif}
     function GetNextJSON(out Value: variant): TJSONParserKind;
     function CheckNextIdent(const ExpectedIdent: string): Boolean;
+    function GetNextAlphaPropName(out fieldName: string): boolean;
     function ParseJSONObject(var Data: TJSONVariantData): boolean;
     function ParseJSONArray(var Data: TJSONVariantData): boolean;
     procedure GetNextStringUnEscape(var str: string);
@@ -996,10 +997,31 @@ begin
   result := false;
 end;
 
-function TJSONParser.GetNextString: string; 
+function TJSONParser.GetNextString: string;
 begin
   if not GetNextString(result) then
     result := '';
+end;
+
+function TJSONParser.GetNextAlphaPropName(out fieldName: string): boolean;
+var i: integer;
+begin
+  result := False;
+  if (Index>=JSONLength) or
+     not (Ord(JSON[Index]) in [Ord('A')..Ord('Z'),Ord('a')..Ord('z'),Ord('_'),Ord('$')]) then
+    exit; // first char must be alphabetical
+  for i := Index+1 to JSONLength do
+    case Ord(JSON[i]) of
+    Ord('0')..Ord('9'),Ord('A')..Ord('Z'),Ord('a')..Ord('z'),Ord('_'):
+      ; // allow MongoDB extended syntax, e.g. {age:{$gt:18}}
+    Ord(':'),Ord('='): begin // allow both age:18 and age=18 pairs
+      fieldName := Copy(JSON,Index,i-Index);
+      Index := i+1;
+      result := true;
+      exit;
+    end;
+    else exit;
+    end;
 end;
 
 function TJSONParser.GetNextJSON(out Value: variant): TJSONParserKind;
@@ -1092,11 +1114,13 @@ begin
   Data.Init;
   if not CheckNextNonWhiteChar('}') then // '{}' -> void object
     repeat
-      if (GetNextNonWhiteChar<>'"') or
-         not GetNextString(key) then
-        exit;
-      if (GetNextNonWhiteChar<>':') or
-         (GetNextJSON(val)=kNone) then
+      if CheckNextNonWhiteChar('"') then begin
+        if (not GetNextString(key)) or (GetNextNonWhiteChar<>':') then
+          exit;
+      end else
+        if not GetNextAlphaPropName(key) then
+          exit;                             
+      if GetNextJSON(val)=kNone then
         exit; // writeln(Copy(JSON,Index-10,30));
       Data.AddNameValue(key,val);
       case GetNextNonWhiteChar of

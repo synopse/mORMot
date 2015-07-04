@@ -3388,8 +3388,8 @@ type
     // field names would not be double-quoted, saving some chars in the stored
     // TEXT column and in the JSON escaped transmitted data over REST, by
     // writing '{name:"John",age:123}' instead of '{"name":"John","age":123}':
-    // be aware that this syntax is not supported by AJAX clients neither
-    // our SynCrossPlatformJSON unit (yet)
+    // be aware that this syntax is supported by the ORM, SOA, TDocVariant,
+    // TBSONVariant, and our SynCrossPlatformJSON unit, but not AJAX/JavaScript 
     property DocVariantOptions: TDocVariantOptions read fDocVariantOptions write fDocVariantOptions;
   end;
 {$endif NOVARIANTS}

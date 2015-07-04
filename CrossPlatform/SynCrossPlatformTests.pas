@@ -322,7 +322,6 @@ var doc: variant;
     obj1,obj2: TMain;
     item: TMainNested;
 begin
-  doc := JSONVariant('[{"ID:1,"Username":"xx","FirstName":"System","Active":-1}]');
   doc := JSONVariant('{"test":1234,"name":"Joh\"n\r","zero":0.0}');
   check(doc.test=1234);
   check(doc.name='Joh"n'#13);
@@ -339,6 +338,12 @@ begin
   {$endif}
   js := doc;
   check(js='{"test":1234,"name":"John","zero":0,"name2":3.1415926}');
+  doc := JSONVariant('[{ID:1,"Username":"xx","FirstName":"System",Active:-1}]');
+  check(TJSONVariantData(doc).Kind=jvArray);
+  check(TJSONVariantData(doc).Count=1);
+  check(TJSONVariantData(doc).Values[0].ID=1);
+  check(TJSONVariantData(doc).Values[0].Username='xx');
+  check(TJSONVariantData(doc).Values[0].Active=-1);
   check(IsRowID('id'));
   check(IsRowID('iD'));
   check(IsRowID('rowid'));
