@@ -3000,6 +3000,7 @@ type
     // - not all kind of properties are handled: only main types (like GetHash)
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
+    // - this method should match the case-sensitivity of GetHash()
     // - this default implementation will call GetValueVar() for slow comparison
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; virtual;
     /// retrieve an unsigned 32 bit hash of the corresponding property
@@ -3007,6 +3008,7 @@ type
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
     // - note that this method can return a hash value of 0
+    // - this method should match the case-sensitivity of CompareValue()
     // - this default implementation will call GetValueVar() for slow computation
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; virtual;
     /// add the JSON content corresponding to the given property
@@ -3384,7 +3386,7 @@ type
     /// how this property will deal with its instances (including TDocVariant)
     // - by default, contains JSON_OPTIONS[true] for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-    // - you may add dvoSerializeAsExtendedJson so any TDocVariant nested
+    // - you may add dvoSerializeAsExtendedJson so that any TDocVariant nested
     // field names would not be double-quoted, saving some chars in the stored
     // TEXT column and in the JSON escaped transmitted data over REST, by
     // writing '{name:"John",age:123}' instead of '{"name":"John","age":123}':
@@ -18847,7 +18849,7 @@ begin
   if CaseInsensitive then
     if fEngine.CodePage=CODEPAGE_US then
       result := crc32c(0,Up,UpperCopyWin255(Up,Value)-Up) else
-      result := crc32c(0,Up,UpperCopy255(Up,Value)-Up) else
+      result := crc32c(0,Up,UpperCopy255Buf(Up,pointer(Value),length(Value))-Up) else
     result := crc32c(0,pointer(Value),length(Value));
 end;
 
@@ -19633,7 +19635,7 @@ var Up: array[byte] of AnsiChar; // avoid slow heap allocation
   begin // slow but always working conversion to string
     tmp := VariantSaveJSON(value,twNone);
     if CaseInsensitive then
-      result := crc32c(0,Up,UTF8UpperCopy255(Up,tmp)-Up) else
+      result := crc32c(0,Up,UpperCopy255(Up,tmp)-Up) else
       result := crc32c(0,pointer(tmp),length(tmp));
   end;
 begin
@@ -19652,7 +19654,7 @@ begin
       result := crc32c(0,@VInt64,sizeof(Int64));
     varString:
       if CaseInsensitive then
-        result := crc32c(0,Up,UTF8UpperCopy255(Up,RawUTF8(VString))-Up) else
+        result := crc32c(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
         result := crc32c(0,VString,length(RawUTF8(VString)));
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       if CaseInsensitive then
@@ -49938,4 +49940,5 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+
 

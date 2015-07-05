@@ -403,6 +403,8 @@ unit SynCommons;
   - added ConsoleWaitForEnterKey function, able to handle Synchronize() calls
   - StrLen() function will now use SSE2 or SSE4.2 instructions on supported CPUs
   - introduced StrLenPas() function, to be used when buffer is protected
+  - UpperCopy255Buf() function will use SSE4.2 instrctions on supported CPUs
+    to speed up e.g. HashAnsiStringI()
   - included Windows-1258 code page to be recognized as a fixed-width charset
   - TSynAnsiFixedWidth.Create(CODEPAGE_US) will now use a hard-coded table,
     since some Russian system do tweak the registry to force 1252 page maps 1251
@@ -2191,7 +2193,7 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - this version won't access the memory beyond the string, so may be
-// preferred to StrcompSSE42 or StrComp, when using e.g. mapped files 
+// preferred to StrcompSSE42 or StrComp, when using e.g. mapped files
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
@@ -2203,7 +2205,7 @@ function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use StrCompFast() for a safe memory read 
+// to 15 bytes beyond the string: use StrCompFast() for a safe memory read
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
@@ -2594,14 +2596,43 @@ const
 function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// copy source into dest^ with 7 bits upper case conversion
+/// copy source into a 256 chars dest^ buffer with 7 bits upper case conversion
 // - returns final dest pointer
-// - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
-// AnsiChar)
+// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
+// array[byte] of AnsiChar on the caller stack)
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
-/// copy source into dest^ with 7 bits upper case conversion
-function UpperCopy255(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar; overload;
+/// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
+// to 15 bytes beyond the string: use UpperCopy255BufPas() for a safer memory read
+// - returns final dest pointer
+// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
+// array[byte] of AnsiChar on the caller stack)
+var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+
+/// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - this version is written in optimized pascal
+// - you should not have to call this function, but rely on UpperCopy255Buf()
+// - returns final dest pointer
+// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
+// array[byte] of AnsiChar on the caller stack)
+function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+
+{$ifndef PUREPASCAL}
+{$ifndef DELPHI5OROLDER}
+
+/// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - this version will use SSE4.2 instructions on supported CPUs - and potentiall
+// read up to 15 bytes beyond the string
+// - you should not have to call this function, but rely on UpperCopy255Buf()
+// - returns final dest pointer
+// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
+// array[byte] of AnsiChar on the caller stack)
+function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+
+{$endif}
+{$endif}
 
 /// copy source into dest^ with WinAnsi 8 bits upper case conversion
 // - returns final dest pointer
@@ -18613,8 +18644,8 @@ asm // no branch taken in case of not equal first char
 @zero:  xor   eax,eax
 end;
 
-const  // see http://www.felixcloutier.com/x86/PCMPISTRI.html
-  EQUAL_EACH = 8;
+const
+  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
@@ -18624,8 +18655,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
 @ok:  sub       eax,edx
       jz        @0
       {$ifdef HASAESNI}
-      MovDqU    xmm0,dqword [edx]
-      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0,dqword [edx]
+      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
@@ -18636,8 +18667,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
       ret
 @1:   add       edx,16
       {$ifdef HASAESNI}
-      MovDqU    xmm0,dqword [edx]
-      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0,dqword [edx]
+      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
@@ -18671,8 +18702,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
 @ok:  sub       eax,edx
       jz        @0
       {$ifdef HASAESNI}
-      MovDqU    xmm0,dqword [edx]
-      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0,dqword [edx]
+      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
@@ -18683,8 +18714,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
       ret
 @1:   add       edx,16
       {$ifdef HASAESNI}
-      MovDqU    xmm0,dqword [edx]
-      PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0,dqword [edx]
+      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
@@ -21233,8 +21264,9 @@ var P: PUTF8Char;
     // possible GPF if length(Section/Name)>255, but should be short const in code
 label Sec;
 begin
-  PWord(UpperCopy255(UpperName,Name))^ := ord('=');
-  UpperNameLength := length(Name)+1;
+  UpperNameLength := length(Name);
+  PWord(UpperCopy255Buf(UpperName,pointer(Name),UpperNameLength))^ := ord('=');
+  inc(UpperNameLength);
   V := Value+CRLF;
   P := pointer(Content);
   // 1. find Section, and try update within it
@@ -23364,23 +23396,94 @@ end;
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
   if source<>'' then
-    result := UpperCopy255(dest,pointer(source),
-      PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length) else
+    result := UpperCopy255Buf(dest,pointer(source),
+      {$ifdef HASINLINE}length(source){$else}PInteger(PtrInt(source)-4)^{$endif}) else
     result := dest;
 end;
 
-function UpperCopy255(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
 var i: integer;
+    c,d: PtrUInt;
 begin
   if sourceLen>0 then begin
-    if sourceLen>250 then
-      sourceLen := 250; // avoid buffer overflow
-    for i := 0 to sourceLen-1 do
-      dest[i] := AnsiChar(NormToUpperAnsi7Byte[PByteArray(source)[i]]);
-    result := dest+sourceLen;
+    if sourceLen>248 then
+      sourceLen := 248; // avoid buffer overflow
+    // we allow to copy up to 3/7 more chars in Dest^ since its size is 255
+    {$ifdef CPU64} // unbranched uppercase conversion of 8 chars blocks
+    for i := 0 to sourceLen shr 3 do begin
+      c := PPtrUIntArray(source)^[i];
+      d := c or $8080808080808080;
+      PPtrUIntArray(dest)^[i] :=
+        c-((d-$6161616161616161) and not(d-$7b7b7b7b7b7b7b7b)) and
+        ((not c) and $8080808080808080)shr 2;
+    end;
+    {$else}       // unbranched uppercase conversion of 4 chars blocks
+    for i := 0 to sourceLen shr 2 do begin
+      c := PPtrUIntArray(source)^[i];
+      d := c or $80808080;
+      PPtrUIntArray(dest)^[i] := c-((d-$61616161) and not(d-$7b7b7b7b)) and
+        ((not c) and $80808080)shr 2;
+    end;
+    {$endif}
+    result := dest+sourceLen; // but we always return the exact size
   end else
     result := dest;
 end;
+
+{$ifndef PUREPASCAL}
+{$ifndef DELPHI5OROLDER}
+
+const
+  CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
+
+function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+asm // eax=dest edx=source ecx=sourceLen
+       or      ecx,ecx
+       jz      @z
+       cmp     ecx,16
+       movdqu  xmm1,dqword ptr [@az]
+       movdqu  xmm3,dqword ptr [@bits]
+       ja      @big
+       // optimize the common case of sourceLen<=16
+       movdqu  xmm2,[edx]
+       {$ifdef HASAESNI}
+       pcmpistrm xmm1,xmm2,CMP_RANGES // find in range a-z, return mask in xmm0
+       {$else}
+       db $66,$0F,$3A,$62,$CA,CMP_RANGES
+       {$endif}
+       pand    xmm0,xmm3
+       pxor    xmm2,xmm0
+       movdqu  [eax],xmm2
+       add     eax,ecx
+@z:    ret
+@big:  cmp     ecx,240
+       push    eax
+       jb      @ok
+       mov     ecx,239
+@ok:   add     [esp],ecx // save to return end position with the exact size
+       shr     ecx,4
+       sub     edx,eax
+       inc     ecx
+@s:    movdqu  xmm2,[edx+eax]
+       {$ifdef HASAESNI}
+       pcmpistrm xmm1,xmm2,CMP_RANGES
+       {$else}
+       db $66,$0F,$3A,$62,$CA,CMP_RANGES
+       {$endif}
+       pand    xmm0,xmm3
+       pxor    xmm2,xmm0
+       movdqu  [eax],xmm2
+       dec     ecx
+       lea     eax,eax+16
+       jnz     @s
+       pop     eax
+       ret
+@az:   db 'azazazazazazazaz'         // define range for upper case conversion
+@bits: db '                '         // $20 = bit to change when changing case
+end;
+
+{$endif DELPHI5OROLDER}
+{$endif PUREPASCAL}
 
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 var i, L: integer;
@@ -30095,7 +30198,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
         xor       eax,eax
         pxor      xmm0,xmm0
         {$ifdef HASAESNI}
-        PcmpIstrI xmm0,dqword [edx],EQUAL_EACH  // comparison result in ecx
+        pcmpistri xmm0,dqword [edx],EQUAL_EACH  // comparison result in ecx
         {$else}
         db $66,$0F,$3A,$63,$02,EQUAL_EACH
         {$endif}
@@ -30104,7 +30207,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
 @null:  ret
 @loop:  add       eax,16
         {$ifdef HASAESNI}
-        PcmpIstrI xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
+        pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
         {$else}
         db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH
         {$endif}
@@ -35510,7 +35613,7 @@ begin
     PropNameLen := length(PropName);
     if PropNameLen<>0 then begin
       if PropName[PropNameLen]='*' then begin
-        UpperCopy255(PropNameUpper,pointer(PropName),PropNameLen-1)^ := #0;
+        UpperCopy255Buf(PropNameUpper,pointer(PropName),PropNameLen-1)^ := #0;
         PropNameLen := 0;
       end;
       if P^='{' then
@@ -37202,7 +37305,9 @@ var tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,tmp,UpperCopy255(tmp,pointer(Elem),length(RawUTF8(Elem)))-tmp);
+    result := Hasher(0,tmp,UpperCopy255Buf(tmp,pointer(Elem),
+      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif})-tmp);
 end;
 
 {$ifdef UNICODE}
@@ -49233,6 +49338,7 @@ begin
       crc32ctab[n,i] := crc;
     end;
   end;
+  UpperCopy255Buf := @UpperCopy255BufPas;
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
@@ -49245,7 +49351,10 @@ begin
     DYNARRAY_SORTFIRSTFIELD[false,djString] := @SortDynArrayAnsiStringSSE42;
     {$endif}
     DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
+    {$ifndef DELPHI5OROLDER}
+    UpperCopy255Buf := @UpperCopy255BufSSE42;
     {$endif}
+    {$endif PUREPASCAL}
   end else
   {$endif CPUINTEL}
     crc32c := @crc32cfast;
