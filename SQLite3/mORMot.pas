@@ -21582,7 +21582,6 @@ procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
 var W: TJSONWriter;
     F,R: integer;
     U: PPUTF8Char;
-    directWrite: Boolean;
     directWrites: set of 0..255;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
@@ -21599,8 +21598,10 @@ begin
     if RowFirst<=0 then
       RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
     // get col names and types
+    if QueryTables<>nil then
+      InitFieldTypes;
     SetLength(W.ColNames,FieldCount);
-    FillCharFast(directWrite,(FieldCount shr 3)+1,0);
+    FillCharFast(directWrites,(FieldCount shr 3)+1,0);
     for F := 0 to FieldCount-1 do begin
       W.ColNames[F] := fResults[F]; // first Row is field Names
       if QueryTables<>nil then
@@ -21613,8 +21614,6 @@ begin
     if Expand then
       W.Add('[');
     // write rows data
-    if QueryTables<>nil then
-      InitFieldTypes;
     U := @fResults[FieldCount*RowFirst];
     for R := RowFirst to RowLast do begin
       if Expand then
@@ -21625,7 +21624,7 @@ begin
         if U^=nil then
           W.AddShort('null') else
           // IsStringJSON() is fast and safe: no need to guess exact value type
-          if (F in directWrites) or IsStringJSON(U^) then
+          if (F in directWrites) or not IsStringJSON(U^) then
             W.AddNoJSONEscape(U^,StrLen(U^)) else begin
             W.Add('"');
             W.AddJSONEscape(U^,StrLen(U^));
@@ -27245,17 +27244,19 @@ end;
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8='');
+var where: RawUTF8;
 begin
-  CreateAndFillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
-    aCustomFieldsCSV);
+  where := FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere);
+  CreateAndFillPrepare(aClient,where,aCustomFieldsCSV);
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere,
   BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8);
+var where: RawUTF8;
 begin
-  CreateAndFillPrepare(aClient,
-    FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
+  where := FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere);
+  CreateAndFillPrepare(aClient,where,aCustomFieldsCSV);
 end;
 
 constructor TSQLRecord.CreateAndFillPrepare(aClient: TSQLRest;
