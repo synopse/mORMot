@@ -23474,7 +23474,7 @@ asm // eax=dest edx=source ecx=sourceLen
        pxor    xmm2,xmm0
        movdqu  [eax],xmm2
        dec     ecx
-       lea     eax,eax+16
+       lea     eax,[eax+16]
        jnz     @s
        pop     eax
        ret
