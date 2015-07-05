@@ -1022,6 +1022,8 @@ begin
   if FileName='' then
     FN := DestPath+Ident+'.txt' else
     FN := DestPath+FileName;
+  if ExtractFilePath(FN)='' then
+    FN := ExeVersion.ProgramFilePath+FN;
   assign(fSaveToFile,FN);
   rewrite(fSaveToFile);
   if IOResult<>0 then
@@ -1141,4 +1143,4 @@ begin
 end;
 
 
-end.
+end.

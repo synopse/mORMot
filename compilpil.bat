@@ -9,7 +9,7 @@ rem   call compilpil.bat
 
 
 if "%mORMot%"=="" set mORMot=\dev\lib
-if "%bin%"==""    set bin=\dev\lib\tempbuild
+if "%bin%"==""    set bin=z:\tempbuild
 
 set defaultFolders=%mORMot%;%mORMot%\sqlite3;%mORMot%\syndbdataset;%mORMot%\crossplatform;%mORMot%\sqlite3\DDD\dom;%mORMot%\sqlite3\DDD\infra -I%mORMot%;%mORMot%\crossplatform
 if "%DelphiVersion%"=="" (
@@ -49,10 +49,20 @@ echo.
 
 if not exist %bin% (
 	mkdir %bin%\exe
+	cd %mORMot%\sqlite3\exe
+	copy sqlite3-64.dll %bin%\exe >nul
+	copy comments.json %bin%\exe >nul
+	copy discogs.json %bin%\exe >nul
+	copy interpolation.json %bin%\exe >nul
+	copy inverted.json %bin%\exe >nul
+	copy partials.json %bin%\exe >nul
+	copy sections.json %bin%\exe >nul
+	copy transactions.json %bin%\exe >nul
+	copy zendframework.json %bin%\exe >nul
 	mkdir %bin%\dcu
+) else (
+	del /q %bin%\exe\*.exe %bin%\exe\*.drc %bin%\exe\*.map %bin%\exe\*.db3 %bin%\exe\*.ini %bin%\exe\*.data %bin%\exe\*.mdb %bin%\exe\TestSQL3.* %bin%\dcu\*.dcu
 )
-cd %bin%\exe
-del /q *.exe *.drc *.map *.db3 *.ini *.data *.mdb TestSQL3.* ..\dcu\*.dcu
 
 cd %mORMot%\sqlite3
 copy TestSQL3.cfg TestSQL3.cfg.bak /Y> nul
@@ -329,13 +339,12 @@ brcc32 FileMain.rc
 
 echo.
 echo Appending .map information into all generated .exe
-cd %bin%\exe
-if exist Map2Map.exe Map2Mab.exe *.exe
-del /q *.map *.drc
+if exist %bin%\exe\Map2Map.exe %bin%\exe\Map2Mab.exe %bin%\exe\*.exe
+del /q %bin%\exe\*.map %bin%\exe\*.drc
 
 echo.
 echo Running automated tests for mORMot
-TestSQL3 "%DelphiVersion% "
+%bin%\exe\TestSQL3 "%DelphiVersion% "
 
 :NoDCCCompiler
 cd %mORMot%
