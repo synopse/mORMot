@@ -477,7 +477,7 @@ unit SynCommons;
   - added IsHTMLContentTypeTextual() function, and modified ExistsIniNameValue()
   - added ShortStringToAnsi7String() and UpperCopyWin255() functions
   - added IsEqualGUID/IsNullGuid/GUIDToText/GUIDToRawUTF8/GUIDToString functions
-  - added TextToGUID, RawUTF8ToGUID and StringToGUID functions
+  - added RandomGUID, TextToGUID, RawUTF8ToGUID and StringToGUID functions
   - added TDynArray.ElemPtr() low-level method
   - let TDynArray.LoadFrom() accept Win32/Win64 cross platform binary content
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
@@ -5078,6 +5078,13 @@ function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString(const guid: TGUID): string;
+
+/// compute a random GUID value
+procedure RandomGUID(out result: TGUID); overload;
+
+/// compute a random GUID value
+function RandomGUID: TGUID; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 type
   TGUIDShortString = string[38];
@@ -26922,6 +26929,21 @@ begin
   result := GUIDToRawUTF8(guid);
 end;
 {$endif}
+
+function RandomGUID: TGUID;
+begin
+  RandomGUID(result);
+end;
+
+procedure RandomGUID(out result: TGUID); overload;
+var i,c: cardinal;
+begin
+  c := GetTickCount64+Random(maxInt);
+  for i := 0 to (sizeof(TGUID) shr 2)-1 do begin
+    c := c xor crc32ctab[0,(c+i) and 1023];
+    PCardinalArray(@result)^[i] := PCardinalArray(@result)^[i] xor c;
+  end;
+end;
 
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
 begin
