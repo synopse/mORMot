@@ -1746,6 +1746,13 @@ function VariantToUTF8(const V: Variant): RawUTF8; overload;
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
 
+/// convert any Variant into UTF-8 encoded String
+// - use VariantSaveJSON() instead if you need a conversion to JSON with
+// custom parameters
+// - returns TRUE if the V value was a text, FALSE if was not (e.g. a number)
+// - custom variant types will be stored as JSON
+function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
+
 /// fast comparison of a Variant and UTF-8 encoded String
 // - slightly faster than plain V=Str, which computes a temporary variant 
 function VariantEquals(const V: Variant; const Str: RawUTF8): boolean; overload;
@@ -5079,8 +5086,13 @@ function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString(const guid: TGUID): string;
 
+/// fill some memory buffer with random values
+// - the destination buffer is expected to be allocated as 32 bit items
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+
 /// compute a random GUID value
 procedure RandomGUID(out result: TGUID); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute a random GUID value
 function RandomGUID: TGUID; overload;
@@ -16552,6 +16564,11 @@ begin
   VariantToUTF8(V,result,wasString);
 end;
 
+function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean;
+begin
+  VariantToUTF8(V,Text,result);
+end;
+
 function VariantEquals(const V: Variant; const Str: RawUTF8): boolean;
   function Complex(const V: Variant; const Str: RawUTF8): boolean;
   var wasString: boolean;
@@ -26930,19 +26947,25 @@ begin
 end;
 {$endif}
 
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+var i: integer;
+    c: cardinal;
+begin
+  c := GetTickCount64+Random(maxInt);
+  for i := 0 to CardinalCount-1 do begin
+    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023];
+    Dest^[i] := Dest^[i] xor c;
+  end;
+end;
+
 function RandomGUID: TGUID;
 begin
-  RandomGUID(result);
+  FillRandom(@result,sizeof(TGUID) shr 2);
 end;
 
 procedure RandomGUID(out result: TGUID); overload;
-var i,c: cardinal;
 begin
-  c := GetTickCount64+Random(maxInt);
-  for i := 0 to (sizeof(TGUID) shr 2)-1 do begin
-    c := c xor crc32ctab[0,(c+i) and 1023];
-    PCardinalArray(@result)^[i] := PCardinalArray(@result)^[i] xor c;
-  end;
+  FillRandom(@result,sizeof(TGUID) shr 2);
 end;
 
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
