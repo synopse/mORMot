@@ -267,7 +267,7 @@ unit SynPdf;
     parameter has been also added to TPdfCanvas.RenderMetaFile() - it will
     produce bigger pdf file size, but will fulfill feature request [7d6a3a3f0f]
   - fixed text clipping - thanks Pierre for the patch!
-  - added TPdfDocumentGDI.DisableMetaFileTextClipping property and corresponding
+  - added TPdfDocumentGDI.UseMetaFileTextClipping property and corresponding
     optional parameter to TPdfCanvas.RenderMetaFile()
   - added vpEnforcePrintScaling to TPdfViewerPreferences set - forcing PDF 1.6 -
     thanks MChaos for the proposal!
@@ -1678,6 +1678,15 @@ type
   TPdfCanvasRenderMetaFileTextPositioning = (
     tpKerningFromAveragePosition, tpSetTextJustification, tpExactTextCharacterPositining);
 
+  /// is used to define how TMetaFile text is clipped
+  // - by default, text will be clipped with the specified TEMRText.ptlReference
+  // - you could set tcClipExplicit to clip following the specified rclBounds
+  // - or tcAlwaysClip to use the current clipping region (if any)
+  // - finally, tcNeverClip would disable whole text clipping process, which
+  // has been reported to be preferred e.g. on Wine
+  TPdfCanvasRenderMetaFileTextClipping = (
+    tcClipReference, tcClipExplicit, tcAlwaysClip, tcNeverClip);
+
   /// access to the PDF Canvas, used to draw on the page
   TPdfCanvas = class(TObject)
   protected
@@ -1711,7 +1720,7 @@ type
 {$endif}
     /// parameters taken from RenderMetaFile() call
     fUseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
-    fDisableMetaFileTextClipping: boolean;
+    fUseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping;
     fKerningHScaleBottom: Single;
     fKerningHScaleTop: Single;
     // some cache
@@ -2085,12 +2094,12 @@ type
     // if the EMF content used SetTextJustification() API call to justify text
     // - KerningHScaleBottom/KerningHScaleTop are limits below which and over
     // which Font Kerning is transformed into PDF Horizontal Scaling commands
-    // - DisableTextClipping can be set to fix some issues e.g. when using Wine
+    // - TextClipping can be set to fix some issues e.g. when using Wine
     procedure RenderMetaFile(MF: TMetaFile; Scale: Single=1.0;
       XOff: single=0.0; YOff: single=0.0;
       TextPositioning: TPdfCanvasRenderMetaFileTextPositioning=tpSetTextJustification;
       KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0;
-      DisableTextClipping: boolean=false);
+      TextClipping: TPdfCanvasRenderMetaFileTextClipping=tcAlwaysClip);
     // starts optional content (layer)
     // - Group must be registered with TPdfDocument.CreateOptionalContentGroup
     // - each BeginMarkedContent must have a corresponding EndMarkedContent
@@ -2552,9 +2561,9 @@ type
   TPdfDocumentGDI = class(TPdfDocument)
   private
     fUseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
+    fUseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping;
     fKerningHScaleTop: Single;
     fKerningHScaleBottom: Single;
-    fDisableTextClipping: boolean;
     function GetVCLCanvas: TCanvas;   {$ifdef HASINLINE}inline;{$endif}
     function GetVCLCanvasSize: TSize; {$ifdef HASINLINE}inline;{$endif}
   public
@@ -2615,10 +2624,11 @@ type
     // - replace deprecated property UseSetTextJustification
     property UseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning
       read fUseMetaFileTextPositioning write fUseMetaFileTextPositioning;
-    /// defines if TMetaFile text clipping should be disabled
-    // - has been reported to work better e.g. when app is running on Wine
-    property DisableMetaFileTextClipping: boolean
-      read fDisableTextClipping write fDisableTextClipping;
+    /// defines how TMetaFile text clipping should be applied
+    // - tcNeverClip has been reported to work better e.g. when app is running
+    // on Wine
+    property UseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping
+      read fUseMetaFileTextClipping write fUseMetaFileTextClipping;
     /// the % limit below which Font Kerning is transformed into PDF Horizontal
     // Scaling commands (when text positioning is tpKerningFromAveragePosition)
     // - set to 99.0 by default
@@ -8570,7 +8580,7 @@ begin
         FCanvas.SetPage(P);
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
           fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleTop,
-          fDisableTextClipping);
+          fUseMetaFileTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
       end;
@@ -8593,7 +8603,7 @@ begin
         FCanvas.FContents.FSaveAtTheEnd := false; // force flush NOW
         FCanvas.RenderMetaFile(P.fVCLCurrentMetaFile,1,0,0,
           fUseMetaFileTextPositioning,KerningHScaleBottom,KerningHScaleTop,
-          fDisableTextClipping);
+          fUseMetaFileTextClipping);
       finally
         FreeAndNil(P.fVCLCurrentMetaFile);
       end;
@@ -9287,7 +9297,8 @@ end;
 
 procedure TPdfCanvas.RenderMetaFile(MF: TMetaFile; Scale, XOff, YOff: single;
   TextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
-  KerningHScaleBottom, KerningHScaleTop: single; DisableTextClipping: boolean);
+  KerningHScaleBottom, KerningHScaleTop: single;
+  TextClipping: TPdfCanvasRenderMetaFileTextClipping);
 var E: TPdfEnum;
     R: TRect;
 begin
@@ -9302,7 +9313,7 @@ begin
     FDevScale := Scale * FFactor;
     FEmfBounds := R; // keep device rect
     fUseMetaFileTextPositioning := TextPositioning;
-    fDisableMetaFileTextClipping := DisableTextClipping;
+    fUseMetaFileTextClipping := TextClipping;
     fKerningHScaleBottom := KerningHScaleBottom;
     fKerningHScaleTop := KerningHScaleTop;
     if FDoc.FPrinterPxPerInch.X=0 then
@@ -10070,10 +10081,24 @@ begin
       Posi := Position else
       Posi := R.emrtext.ptlReference;
     // detect clipping
-    if Canvas.fDisableMetaFileTextClipping then
-      WithClip := False else
+    if Canvas.fUseMetaFileTextClipping<>tcNeverClip then begin
       with R.emrtext.rcl do
         WithClip := (Right>Left) and (Bottom>Top);
+      if WithClip then
+        ClipRect := Canvas.BoxI(R.emrtext.rcl,true) else begin
+        if Canvas.fUseMetaFileTextClipping=tcClipExplicit then
+          with R.rclBounds do
+            WithClip := (Right>Left) and (Bottom>Top);
+        if WithClip then
+          ClipRect := Canvas.BoxI(R.rclBounds,true) else begin
+          WithClip := (not ClipRgnNull) and
+                      (Canvas.fUseMetaFileTextClipping=tcAlwaysClip);
+          if WithClip then
+            ClipRect := GetClipRect;
+        end;
+      end;
+    end else
+      WithClip := False;
     bOpaque := (not brush.null) and (brush.Color<>clWhite) and
        ((R.emrtext.fOptions and ETO_OPAQUE<>0) or
         ((font.BkMode=OPAQUE) and (font.BkColor=brush.color)));
@@ -10089,12 +10114,7 @@ begin
     if WithClip then begin
       Canvas.GSave;
       Canvas.NewPath;
-      with R.emrtext.rcl do begin
-        Canvas.MoveToI(Left, Top);
-        Canvas.LineToI(Left, Bottom);
-        Canvas.LineToI(Right, Bottom);
-        Canvas.LineToI(Right, Top);
-      end;
+      Canvas.Rectangle(ClipRect.Left,ClipRect.Top,ClipRect.Width,ClipRect.Height);
       Canvas.ClosePath;
       Canvas.Clip;
       if bOpaque then begin
@@ -10103,16 +10123,6 @@ begin
       end else
         Canvas.NewPath;
       Canvas.fNewPath := False;
-    end else begin
-      // Even if clipping is not specified for the text rectangle, the current clipping region must still be respected
-      if not DC[nDC].ClipRgnNull then begin
-        ClipRect := GetClipRect;
-        Canvas.GSave;
-        Canvas.Rectangle(ClipRect.Left, ClipRect.Top, ClipRect.Width, ClipRect.Height);
-        Canvas.Clip;
-        Canvas.NewPath;
-        Canvas.fNewPath := False;
-      end;
     end;
     // draw background (if any)
     if bOpaque then
@@ -10177,7 +10187,7 @@ begin
     if font.LogFont.lfStrikeOut<>0 then
       DrawLine(Posi, - aSize / 3 / Canvas.GetWorldFactorX / Canvas.FDevScale);
     // end any pending clipped TextRect() region
-    if WithClip or (not DC[nDC].ClipRgnNull) then begin
+    if WithClip then begin
       Canvas.GRestore;
       fFillColor := -1; // force set drawing color
     end;
