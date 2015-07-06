@@ -55,7 +55,7 @@ begin
   fJSON := StringFromFile('..\..\exe\People.json');
   if fJSON='' then
     fJSON := StringFromFile('..\..\People.json');
-  if not FileExists(fDBFileName) then
+  if fJSON='' then
     raise Exception.Create('No People.json');
   fDBFileName :=  '..\..\exe\backupbackground.db3';
   if not FileExists(fDBFileName) then

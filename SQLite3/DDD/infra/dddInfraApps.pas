@@ -426,6 +426,12 @@ const
     [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
 
 
+var
+  /// you could set a text to this global variable at runtime, so that
+  // it would be displayed as copyright older name for the console
+  GlobalCopyright: string = '';
+  
+
 implementation
 
 { TDDDDaemon }
@@ -518,6 +524,8 @@ begin
     if fSettings.Description<>'' then begin
       TextColor(ccGreen);
       writeln(fSettings.Description);
+      if GlobalCopyright<>'' then
+        writeln('(c)',CurrentYear,' ',GlobalCopyright);
     end;
     writeln;
     TextColor(ccLightCyan);
