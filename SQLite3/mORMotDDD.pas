@@ -2130,9 +2130,9 @@ begin
   end else begin
     if Start=cqrsSuccess then
       writeln(name,' is running') else begin
-      writeln(name,' failed to Start');
+      writeln(#10,name,' failed to Start');
       if _Safe(LastErrorInfo)^.GetAsRawUTF8('Exception',msg) then begin
-        TextColor(ccRed);
+        TextColor(ccLightMagenta);
         writeln(msg);
         TextColor(ccLightGray);
       end;

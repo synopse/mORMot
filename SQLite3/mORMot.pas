@@ -1163,6 +1163,7 @@ unit mORMot;
       schemes for feature request [8c8a2a880c]
     - added TSQLRestServerAuthentication.Options, e.g. saoUserByLogonOrID to
       allow login via TSQLAuthUser.ID in addition to LogonName
+    - return also "logongroup":TSQLAuthGroup.ID on successful authentication
     - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck
       to disable the session timestamp check during URI signature authentication
     - new TSQLRestServerAuthenticationNone weak but simple method
@@ -44085,7 +44086,8 @@ begin
   try // now client is authenticated -> create a session
     fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
     if Session<>nil then
-      Ctxt.Returns(['result',Session.fPrivateSalt,'logonname',Session.User.LogonName]);
+      Ctxt.Returns(['result',Session.fPrivateSalt,
+        'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]);
   finally
     User.Free;
   end;
@@ -44432,7 +44434,8 @@ begin
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
-          Ctxt.Returns(['result',Session.IDCardinal,'logonname',Session.User.LogonName]);
+          Ctxt.Returns(['result',Session.IDCardinal,
+            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]);
           exit; // success
         end;
       end else
@@ -44541,11 +44544,12 @@ begin
       if Session<>nil then
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
-            'logonname',Session.User.LogonName]),HTML_SUCCESS,
-            (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
+            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]),
+            HTML_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-            'logonname',Session.User.LogonName,'data',BinToBase64(OutData)]);
+            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+            'data',BinToBase64(OutData)]);
     finally
       User.Free;
     end else
