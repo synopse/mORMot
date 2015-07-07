@@ -138,6 +138,8 @@ type
   TDDDThreadDaemon = class(TDDDAdministratedThreadDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
+    // returns the system memory info as current state
+    function InternalRetrieveState(var Status: variant): boolean; override;
   public
     /// initialize the thread with the supplied parameters
     constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
@@ -154,7 +156,7 @@ type
   TDDDRestDaemon = class(TDDDAdministratedRestDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
-    // returns the current state from fRest.Stat() + T
+    // returns the current state from fRest.Stat() + system memory
     function InternalRetrieveState(var Status: variant): boolean; override;
   public
     /// initialize the thread with the supplied parameters
@@ -659,6 +661,13 @@ begin
   inherited;
 end;
 
+function TDDDThreadDaemon.InternalRetrieveState(
+  var Status: variant): boolean;
+begin
+  Status := _ObjFast(['SystemMemory',TSynMonitorMemory.ToVariant]);
+  result := true;
+end;
+
 
 { TDDDRestDaemon }
 
@@ -683,16 +692,10 @@ end;
 
 function TDDDRestDaemon.InternalRetrieveState(
   var Status: variant): boolean;
-var mem: TSynMonitorMemory;
 begin
   if fRest<>nil then begin
-    mem := TSynMonitorMemory.Create;
-    try
-      Status := _ObjFast([
-        'Rest',fRest.FullStatsAsDocVariant,'SystemMemory',ObjectToVariant(mem)]);
-    finally
-      mem.Free;
-    end;
+    Status := _ObjFast(['Rest',fRest.FullStatsAsDocVariant,
+      'SystemMemory',TSynMonitorMemory.ToVariant]);
     result := true;
   end else
     result := false;

@@ -856,10 +856,10 @@ type
   // - including OS Memory information
   TDDDAdministratedDaemonMonitor = class(TSynMonitorServer)
   protected
-    FMemory: TSynMonitorMemory;
+    function GetMemory: variant;
   published
     /// information about the main System memory, as returned by the OS
-    property SystemMemory: TSynMonitorMemory read FMemory;
+    property SystemMemory: variant read GetMemory;
   end;
 
 
@@ -2184,6 +2184,14 @@ end;
 procedure TDDDAdministratedRestDaemon.InternalStop;
 begin
   FreeAndNil(fRest);
+end;
+
+
+{ TDDDAdministratedDaemonMonitor }
+
+function TDDDAdministratedDaemonMonitor.GetMemory: variant;
+begin
+  result := TSynMonitorMemory.ToVariant;
 end;
 
 initialization
