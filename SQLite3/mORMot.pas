@@ -3837,6 +3837,10 @@ function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 /// retrieve the PPropInfo values of all published properties of a class
 function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
 
+/// retrieve the field names of all published properties of a class
+// - will optionally append the property type to the name, e.g 'Age: integer'
+function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean=false): TRawUTF8DynArray;
+
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -17446,6 +17450,19 @@ begin
     end;
     ClassType := ClassType.ClassParent;
   end;
+end;
+
+function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean): TRawUTF8DynArray;
+var props: PPropInfoDynArray;
+    n,i: integer;
+begin
+  props := ClassFieldAllProps(ClassType);
+  n := length(props);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    if IncludePropType then
+      result[i] := FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name]) else
+      result[i] := props[i]^.Name;
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;

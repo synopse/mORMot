@@ -366,6 +366,13 @@ type
   public
     /// used to set the default values
     constructor Create; override;
+    /// implements a method-based service for live update of the settings
+    // - should be called from a method-based service, e.g. Configuration()
+    // - accept the following REST methods to read and write the settings:
+    // ! GET http://server:888/root/configuration
+    // ! GET http://server:888/root/configuration/propname
+    // ! GET http://server:888/root/configuration/propname?value=provalue
+    procedure ConfigurationRestMethod(Ctxt: TSQLRestServerURIContext);
     /// you could set here a factory method to mock the socket connection
     // - this property is public, but not published, since it should not be
     // serialized on the settings file, but overloaded at runtime
@@ -619,6 +626,30 @@ end;
 
 
 { TDDDSocketThreadSettings }
+
+procedure TDDDSocketThreadSettings.ConfigurationRestMethod(
+  Ctxt: TSQLRestServerURIContext);
+var value: TDocVariantData;
+    valid: boolean;
+    config: variant;
+begin
+  Ctxt.URIBlobFieldName := StringReplaceChars(Ctxt.URIBlobFieldName,'/','.');
+  if Ctxt.InputExists['value'] then begin
+    if Ctxt.URIBlobFieldName='' then
+      exit;
+    value.InitObjectFromPath(Ctxt.URIBlobFieldName,Ctxt.Input['value']);
+    JsonToObject(self,pointer(value.ToJSON),valid); // will update a single field
+    if not valid then begin
+      Ctxt.Error('Invalid input [%] - expected %',[variant(value),
+        RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ')]);
+      exit;
+    end;
+  end;
+  ObjectToVariant(self,config);
+  if Ctxt.URIBlobFieldName<>'' then
+    config := TDocVariantData(config).GetValueByPath(Ctxt.URIBlobFieldName);
+  Ctxt.ReturnsJson(config,HTML_SUCCESS,true,twJsonEscape,true);
+end;
 
 constructor TDDDSocketThreadSettings.Create;
 begin
