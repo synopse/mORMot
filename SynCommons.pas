@@ -12904,9 +12904,11 @@ type
     constructor Create; override;
     /// finalize the class, and its nested TSynMonitorSize instances
     destructor Destroy; override;
+    {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in MB (Bytes shl 20)
     class function ToVariant: variant;
+    {$endif}
   published
     /// Percent of memory in use
     property MemoryLoadPercent: integer read GetMemoryLoadPercent;
@@ -18437,9 +18439,14 @@ const QUOTECHAR: array[boolean] of AnsiChar = ('''','"');
         [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
 label Txt;
 begin
-  if (Format='') or ((high(Args)<0)and(high(Params)<0)) then begin
-    result := Format; // no formatting to process
+  if Format='' then begin
+    result := '';
     exit;
+  end;
+  if (high(Args)<0) and (high(Params)<0) then begin
+    // no formatting to process, but may be a const -> make unique
+    SetString(result,PAnsiChar(pointer(Format)),length(Format));
+    exit; // e.g. _JsonFmt() will parse it in-place
   end;
   if high(Params)<0 then begin
     result := FormatUTF8(Format,Args); // slightly faster overloaded function
@@ -42729,6 +42736,7 @@ begin
   inherited Destroy;
 end;
 
+{$ifndef NOVARIANTS}
 class function TSynMonitorMemory.ToVariant: variant;
 begin
   with TSynMonitorMemory.Create do
@@ -42744,6 +42752,7 @@ begin
     Free;
   end;
 end;
+{$endif}
 
 function TSynMonitorMemory.GetMemoryLoadPercent: integer;
 begin
