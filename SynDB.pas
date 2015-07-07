@@ -3483,7 +3483,7 @@ end;
 procedure TQueryValue.SetBoolean(const aValue: Boolean);
 begin
   CheckExists;
-  fValue := aValue;
+  fValue := ord(aValue); // store 0/1 in the DB, not 0/65535
 end;
 
 procedure TQueryValue.SetBound(const aValue: Boolean);
@@ -6171,7 +6171,9 @@ begin
     varNull:
       BindNull(Param,IO);
     varBoolean:
-      Bind(Param,ord(VBoolean),IO);
+      if VBoolean then
+        Bind(Param,1,IO) else
+        Bind(Param,0,IO);
     varByte:
       Bind(Param,VInteger,IO);
     varSmallint:
