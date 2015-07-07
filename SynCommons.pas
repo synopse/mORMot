@@ -12906,6 +12906,8 @@ type
     constructor Create; override;
     /// finalize the class, and its nested TSynMonitorSize instances
     destructor Destroy; override;
+    /// fill a TDocVariant with the current system memory information
+    class function ToVariant: variant;
   published
     /// Percent of memory in use
     property MemoryLoadPercent: integer read GetMemoryLoadPercent;
@@ -42709,6 +42711,22 @@ begin
   FVirtualMemoryTotal.Free;
   FPagingFileFree.Free;
   inherited Destroy;
+end;
+
+class function TSynMonitorMemory.ToVariant: variant;
+begin
+  with TSynMonitorMemory.Create do
+  try
+    result := _JsonFastFmt('{PhysicalMemory:{total:%,free:%},'+
+      'VirtualMemory:{total:%,free:%},PagingFile:{total:%,free:%}}',
+      [PhysicalMemoryTotal.Bytes,PhysicalMemoryFree.Bytes,
+      {$ifdef MSWINDOWS}
+      VirtualMemoryTotal.Bytes,VirtualMemoryFree.Bytes,
+      {$endif}
+      PagingFileTotal.Bytes,PagingFileFree.Bytes],[]);
+  finally
+    Free;
+  end;
 end;
 
 function TSynMonitorMemory.GetMemoryLoadPercent: integer;
