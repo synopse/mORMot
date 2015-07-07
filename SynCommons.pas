@@ -16812,20 +16812,29 @@ begin
     InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
     exit;
   end;
-  if (V^.VType>varNativeString) and
-     FindCustomVariantType(V^.VType,handler) then begin
-    for i := 1 to p^.length do begin
-      // faster clear of custom variant uniformous array
+  handler := nil;
+  for i := 1 to p^.length do begin
+    case V^.VType of
+    varEmpty..varDate,varError,varBoolean,varShortInt..varWord64: ;
+    varString: RawUTF8(V^.VAny) := '';
+    varOleStr: WideString(V^.VAny) := '';
+    {$ifdef HASVARUSTRING}
+    varUString: UnicodeString(V^.VAny) := '';
+    {$endif}
+    else
+    if V^.VType=word(DocVariantVType) then
+      DocVariantType.Clear(V^) else
+    if V^.VType=varVariant or varByRef then
+      VarClear(PVariant(V^.VPointer)^) else
+    if handler=nil then
+      if (V^.VType and varByRef=0) and
+         FindCustomVariantType(V^.VType,handler) then
+        handler.Clear(V^) else 
+        VarClear(variant(V^)) else
       if V^.VType=handler.VarType then
         handler.Clear(V^) else
-      if V^.VType and VTYPE_STATIC<>0 then
         VarClear(variant(V^));
-      inc(V);
     end;
-  end else
-  for i := 1 to p^.length do begin
-    if V^.VType and VTYPE_STATIC<>0 then
-      VarClear(variant(V^));
     inc(V);
   end;
   FreeMem(p);
@@ -32139,7 +32148,7 @@ begin
         result := PPointer(VAny)^=nil else
       {$endif}
       {$ifndef NOVARIANTS}
-      if VType=DocVariantVType then
+      if VType=word(DocVariantVType) then
         result := TDocVariantData(V).Count=0 else
       {$endif}
         result := false;
@@ -34799,7 +34808,7 @@ end;
 function DocVariantData(const DocVariant: variant): PDocVariantData;
 begin
   with TVarData(DocVariant) do
-    if VType=DocVariantVType then
+    if VType=word(DocVariantVType) then
       result := @DocVariant else
     if VType=varByRef or varVariant then
       result := DocVariantData(PVariant(VPointer)^) else
@@ -34826,11 +34835,17 @@ end;
 {$else}
 begin
   with TVarData(DocVariant) do
-    if VType=DocVariantVType then
-      result := @DocVariant else
-    if VType=varByRef or varVariant then
-      result := _Safe(PVariant(VPointer)^) else
+    if VType=word(DocVariantVType) then begin
+      result := @DocVariant;
+      exit;
+    end else
+    if VType=varByRef or varVariant then begin
+      result := _Safe(PVariant(VPointer)^);
+      exit;
+    end else begin
       result := @DocVariantDataFake;
+      exit;
+    end;
 end;
 {$endif}
 
@@ -34864,7 +34879,7 @@ begin
     TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
   // add name,value pairs
   if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>DocVariantVType) or
+     (TVarData(Obj).VType<>word(DocVariantVType)) or
      (TDocVariantData(Obj).Kind<>dvObject) then begin
     // Obj is not a valid TDocVariant object -> create new
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
@@ -34881,7 +34896,7 @@ begin
   while TVarData(Obj).VType=varByRef or varVariant do
     TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
   if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>DocVariantVType) or
+     (TVarData(Obj).VType<>word(DocVariantVType)) or
      (TDocVariantData(Obj).Kind<>dvObject) or
      (TVarData(Document).VType<>DocVariantVType) or
      (TDocVariantData(Document).Kind<>dvObject) then
