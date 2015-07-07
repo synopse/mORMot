@@ -12552,7 +12552,15 @@ function _Json(const JSON: RawUTF8;
 // propagated into another place, add dvoValueCopiedByReference in Options
 // will increase the process speed a lot, or use _JsonFast()
 function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
-  Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant;
+  Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// initialize a variant instance to store some document-based content
+// from a supplied (extended) JSON content, with parameters formating
+// - this overload function will set directly a local variant variable,
+// and would be used by inlined _JsonFmt/_JsonFastFmt functions 
+procedure _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
+  Options: TDocVariantOptions; out result: variant); overload;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
@@ -12603,6 +12611,7 @@ function _JsonFast(const JSON: RawUTF8): variant;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID():
 function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
@@ -34907,12 +34916,20 @@ end;
 function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions): variant;
 begin
-  _Json(FormatUTF8(Format,Args,Params,true),result,Options);
+  _JsonFmt(Format,Args,Params,Options,result);
+end;
+
+procedure _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
+  Options: TDocVariantOptions; out result: variant); overload;
+begin
+  if TDocVariantData(result).InitJSONInPlace(
+     pointer(FormatUTF8(Format,Args,Params,true)),Options)=nil then
+    TDocVariantData(result).Clear;
 end;
 
 function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
 begin
-  _Json(FormatUTF8(Format,Args,Params,true),result,JSON_OPTIONS[true]);
+  _JsonFmt(Format,Args,Params,JSON_OPTIONS[true],result);
 end;
 
 function _Json(const JSON: RawUTF8; var Value: variant;
