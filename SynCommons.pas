@@ -12553,7 +12553,6 @@ function _Json(const JSON: RawUTF8;
 // will increase the process speed a lot, or use _JsonFast()
 function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
@@ -12611,7 +12610,6 @@ function _JsonFast(const JSON: RawUTF8): variant;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID():
 function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents

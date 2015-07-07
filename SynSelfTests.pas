@@ -6142,6 +6142,9 @@ begin
   Check(u='{"type":{"$in":["food","snack"]}}');
   u := VariantSaveMongoJSON(o,modMongoShell);
   Check(u='{type:{$in:["food","snack"]}}');
+  o := _JSON('{"hello": null}');
+  Check(TVarData(o).VType=DocVariantVType);
+  check(o='{"hello":null}');
   o := _JSON('{"hello": world}');
   Check(TVarData(o).VType=varEmpty,'invalid JSON content');
   CheckRegEx(_Json('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
