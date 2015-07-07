@@ -32808,6 +32808,8 @@ var i: integer;
 begin
   if TVarData(Value).VType and VTYPE_STATIC<>0 then
     VarClear(Value);
+  if EndOfObject<>nil then
+    EndOfObject^ := ' ';
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if (Options=nil) or (JSON^ in ['1'..'9']) then begin // obvious simple type
     ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
