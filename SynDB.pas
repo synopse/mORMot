@@ -3363,14 +3363,20 @@ begin
     varInteger:  result := VInteger;
     varInt64:    result := VInt64;
     varCurrency: result := VCurrency;
-    varDouble, varDate:   result := VDouble;
+    varDouble, varDate: result := VDouble;
     else result := fValue;
   end;
 end;
 
 function TQueryValue.GetDateTime: TDateTime;
 begin
-  Result := GetDouble;
+  CheckValue;
+  with TVarData(fValue) do
+  case VType of
+    varString:     result := Iso8601ToDateTime(RawUTF8(VAny));
+    varSynUnicode: result := Iso8601ToDateTime(SynUnicodeToUtf8(SynUnicode(VAny)));
+  else result := GetDouble;
+  end;
 end;
 
 function TQueryValue.GetDouble: double;
