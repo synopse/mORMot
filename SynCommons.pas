@@ -1951,6 +1951,25 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
 
+type
+  /// a memory structure which avoid a temporary RawUTF8 allocation
+  // - used by VarRecToTempUTF8() and FormatUTF8()
+  TTempUTF8 = record
+    Text: PUTF8Char;
+    Len: integer;
+    Temp: array[0..23] of AnsiChar;
+  end;
+
+/// convert an open array (const Args: array of const) argument to an UTF-8
+// encoded text, using a specified temporary buffer
+// - this function would allocate a RawUTF8 in tmpStr only if needed,
+// but use the supplied Res.Temp[] buffer for numbers to text conversion
+// - it would return the number of UTF-8 bytes, i.e. Res.Len 
+// - note that cardinal values should be type-casted to Int64() (otherwise
+// the signed integer mapped value will be transmitted, therefore wrongly)
+// - any supplied TObject instance will be written as their class name
+function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempUTF8): integer;
+
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
 function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
@@ -15294,6 +15313,113 @@ begin
   result := true;
 end;
 
+function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempUTF8): integer;
+{$ifndef NOVARIANTS}
+var isString: boolean;
+{$endif}
+begin
+  case V.VType of
+    vtString: begin
+      Res.Text := @V.VString^[1];
+      Res.Len := ord(V.VString^[0]);
+      result := Res.Len;
+      exit;
+    end;
+    vtAnsiString: begin // expect UTF-8 content
+      Res.Text := pointer(V.VAnsiString);
+      Res.Len := length(RawUTF8(V.VAnsiString));
+      result := Res.Len;
+      exit;
+    end;
+    {$ifdef UNICODE}
+    vtUnicodeString:
+      RawUnicodeToUtf8(V.VPWideChar,length(UnicodeString(V.VUnicodeString)),tmpStr);
+    {$endif}
+    vtWideString:
+      RawUnicodeToUtf8(V.VPWideChar,length(WideString(V.VWideString)),tmpStr);
+    vtPChar: begin
+      Res.Text := V.VPointer;
+      Res.Len := StrLen(V.VPointer);
+      result := Res.Len;
+      exit;
+    end;
+    vtChar: begin
+      Res.Text := @V.VChar;
+      Res.Len := 1;
+      result := 1;
+      exit;
+    end;
+    vtPWideChar:
+      RawUnicodeToUtf8(V.VPWideChar,StrLenW(V.VPWideChar),tmpStr);
+    vtWideChar:
+      RawUnicodeToUtf8(@V.VWideChar,1,tmpStr);
+    vtBoolean: begin
+      Res.Temp[0] := AnsiChar(ord(V.VBoolean)+48);
+      Res.Text := @Res.Temp;
+      Res.Len := 1;
+      result := 1;
+      exit;
+    end;
+    vtInteger: begin
+      Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],V.VInteger));
+      Res.Len := @Res.Temp[23]-Res.Text;
+      result := Res.Len;
+      exit;
+    end;
+    vtInt64: begin
+      Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],V.VInt64^));
+      Res.Len := @Res.Temp[23]-Res.Text;
+      result := Res.Len;
+      exit;
+    end;
+    vtCurrency: begin
+      Res.Text := @Res.Temp;
+      Res.Len := Curr64ToPChar(V.VInt64^,Res.Temp);
+      result := Res.Len;
+      exit;
+    end;
+    vtExtended:
+      ExtendedToStr(V.VExtended^,DOUBLE_PRECISION,tmpStr);
+    vtPointer,vtInterface: begin
+      Res.Text := @Res.Temp;
+      Res.Len := sizeof(pointer)*2;
+      BinToHexDisplay(V.VPointer,@Res.Temp,sizeof(Pointer));
+      result := sizeof(pointer)*2;
+      exit;
+    end;
+    vtClass: begin
+      if V.VClass<>nil then begin
+        Res.Text := PUTF8Char(PPointer(PtrInt(V.VClass)+vmtClassName)^)+1;
+        Res.Len := ord(Res.Text[-1]);
+      end else
+        Res.Len := 0;
+      result := Res.Len;
+      exit;
+    end;
+    vtObject: begin
+      if V.VObject<>nil then begin
+        Res.Text := PUTF8Char(PPointer(PPtrInt(V.VObject)^+vmtClassName)^)+1;
+        Res.Len := ord(Res.Text[-1]);
+      end else
+        Res.Len := 0;
+      result := Res.Len;
+      exit;
+    end;
+    {$ifndef NOVARIANTS}
+    vtVariant:
+      VariantToUTF8(V.VVariant^,tmpStr,isString);
+    {$endif}
+    else begin
+      Res.Len := 0;
+      result := 0;
+      exit;
+    end;
+  end;
+  Res.Text := pointer(tmpStr);
+  Res.Len := length(tmpStr);
+  result := Res.Len;
+end;
+
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
 var isString: boolean;
 begin
@@ -18221,24 +18347,9 @@ end;
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
 // only supported token is %, with any const arguments
 var i, blocksN, L, argN: PtrInt;
-    blocks: array of record
-      Text: PUTF8Char;
-      Len: integer;
-    end;
-    Arg: TRawUTF8DynArray;
+    tmpStr: TRawUTF8DynArray;
     F,FDeb: PUTF8Char;
-procedure Add(aText: PUTF8Char; aLen: Integer);
-begin
-  if aLen>0 then begin
-    inc(L,aLen);
-    assert(blocksN<length(blocks));
-    with blocks[blocksN] do begin // add inbetween text
-      Text := aText;
-      Len := aLen;
-    end;
-    inc(blocksN);
-  end;
-end;
+    blocks: array[0..49] of TTempUTF8;
 begin
   if (Format='') or (high(Args)<0) then begin
     result := Format; // no formatting to process
@@ -18249,8 +18360,9 @@ begin
     exit;
   end;
   result := '';
-  SetLength(Arg,length(Args));
-  SetLength(blocks,length(Args)*2+1);
+  SetLength(tmpStr,length(Args));
+  if length(Args)*2+1>high(blocks) then
+    raise ESynException.Create('FormatUTF8!');
   blocksN := 0;
   argN := 0;
   L := 0;
@@ -18259,17 +18371,27 @@ begin
     if F^<>'%' then begin
       FDeb := F;
       while (F^<>'%') and (F^<>#0) do inc(F);
-      Add(FDeb,F-FDeb);
+      with blocks[blocksN] do begin
+        Text := FDeb;
+        Len := F-FDeb;
+        inc(L,Len);
+        inc(blocksN);
+      end;
     end;
     if F^=#0 then break;
     inc(F); // jump '%'
     if argN<=high(Args) then begin
-      VarRecToUTF8(Args[argN],arg[argN]);
-      Add(pointer(arg[argN]),length(arg[argN]));
+      inc(L,VarRecToTempUTF8(Args[argN],tmpStr[argN],blocks[blocksN]));
+      inc(blocksN);
       inc(argN);
     end else
     if F^<>#0 then begin // no more available Args -> add all remaining text
-      Add(F,StrLen(F));
+      with blocks[blocksN] do begin
+        Text := F;
+        Len := StrLen(F);
+        inc(L,Len);
+        inc(blocksN);
+      end;
       break;
     end;
   end;
@@ -18277,15 +18399,13 @@ begin
     exit;
   SetLength(result,L);
   F := pointer(result);
-  for i := 0 to blocksN-1 do
-  with blocks[i] do begin
-    MoveFast(Text^,F^,Len);
-    inc(F,Len);
+  for i := 0 to blocksN-1 do begin
+    MoveFast(blocks[i].Text^,F^,blocks[i].Len);
+    inc(F,blocks[i].Len);
   end;
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8; overload;
-// supports both % and ? tokens
 var i, tmpN, L, A, P, len: PtrInt;
     isParam: AnsiChar;
     tmp: TRawUTF8DynArray;
@@ -18300,6 +18420,10 @@ label Txt;
 begin
   if (Format='') or ((high(Args)<0)and(high(Params)<0)) then begin
     result := Format; // no formatting to process
+    exit;
+  end;
+  if high(Params)<0 then begin
+    result := FormatUTF8(Format,Args); // slightly faster overloaded function
     exit;
   end;
   if Format='%' then begin
