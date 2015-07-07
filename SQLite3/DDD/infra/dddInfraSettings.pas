@@ -213,7 +213,8 @@ type
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
     riDefaultFullMemoryIfNone,
-    riCreateMissingTables);
+    riCreateMissingTables,
+    riRaiseExceptionIfNoRest);
 
   /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
@@ -252,7 +253,9 @@ type
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
-    /// would let function NewRestInstance() create the expected TSQLRest
+    /// defines a mean of access to a TSQLRest instance
+    // - using Kind/ServerName/DatabaseName/User properties: Kind would define
+    // the TSQLRest class to be instantiated by function NewRestInstance()
     property ORM: TSynConnectionDefinition read fORM;
     /// if set to a valid folder, the generated TSQLRest will publish a
     // '/Root/wrapper' HTML page so that client code could be generated
@@ -345,6 +348,15 @@ type
     /// under Windows, will define if the Service should auto-start at boot
     // - FALSE means that it should be started on demand
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
+  end;
+
+  /// parent class for storing a HTTP published service/daemon settings as a JSON file
+  TDDDAdministratedDaemonHttpSettingsFile = class(TDDDAdministratedDaemonSettingsFile)
+  private
+    fHttp: TSQLHttpServerDefinition;
+  published
+    /// how the HTTP server should be defined 
+    property Http: TSQLHttpServerDefinition read fHttp;
   end;
 
   /// a Factory event allowing to customize/mock a socket connection
@@ -549,7 +561,8 @@ begin
         riHandleAuthentication in aOptions,aExternalDBOptions);
     if result=nil then
       exit; // no match or wrong parameters
-    if result.InheritsFrom(TSQLRestServer) then begin
+    if result.InheritsFrom(TSQLRestServer) then
+    try
       if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
@@ -562,12 +575,17 @@ begin
         end;
       if riCreateMissingTables in aOptions then
         TSQLRestServer(result).CreateMissingTables;
+    except
+      FreeAndNil(result);
     end;
   finally
     if riOwnModel in aOptions then
       if result=nil then // avoid memory leak
         aModel.Free else
         aModel.Owner := result;
+    if riRaiseExceptionIfNoRest in aOptions then
+      raise EORMException.CreateUTF8('Impossible to initialize % on %/%',
+        [fORM.Kind,fORM.ServerName,fRoot]);
   end;
 end;
 
@@ -657,5 +675,7 @@ begin
   FConnectionAttemptsInterval := 5;
   FMonitoringInterval := 30*1000; // log monitoring information every 30 seconds
 end;
+
+
 
 end.

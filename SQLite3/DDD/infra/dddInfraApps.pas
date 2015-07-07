@@ -169,6 +169,75 @@ type
     property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
   end;
 
+  /// abstract class to implement a IAdministratedDaemon service via a
+  // TSQLRestServer, publishing its services as HTTP
+  // - as hosted by TDDDDaemon service/daemon application
+  TDDDRestHttpDaemon = class(TDDDRestDaemon)
+  protected
+    fSettings: TDDDAdministratedDaemonHttpSettingsFile;
+    fHttpServer: TSQLHttpServer;
+    // initialize HTTP Server into fHttpServer
+    // (fRest should have been set by the overriden method)
+    procedure InternalStart; override;
+    // finalize HTTP Server
+    procedure InternalStop; override;
+  public
+    /// initialize the Daemon with the supplied settings
+    // - no HTTP server is published, until Start is performed
+    constructor Create(aSettings: TDDDAdministratedDaemonHttpSettingsFile); reintroduce;
+    /// reference to the main HTTP server publishing this daemon Services
+    // - may be nil outside a Start..Stop range
+    property HttpServer: TSQLHttpServer read fHttpServer;
+  end;
+
+
+{ ----- Implements ORM/SOA REST Client access }
+
+type
+  /// exception raised by TDDDRestClientSettings classes
+  EDDDRestClient = class(EDDDException);
+
+  /// advanced parameters for TDDDRestClientSettings definition 
+  TDDDRestClient = class(TSynPersistentWithPassword)
+  protected
+    fRoot: RawUTF8;
+  published
+    /// the URI Root to be used for the REST Model
+    property Root: RawUTF8 read fRoot write fRoot;
+    /// the encrypted password to be used to connect with WebSockets
+    property WebSocketsPassword: RawUTF8 read fPassWord write fPassWord;
+  end;
+
+  /// storage class for initializing an ORM/SOA REST Client class
+  // - this class will contain some generic properties to initialize a
+  // TSQLRestClientURI pointing to a remote server, using WebSockets by default
+  // - WebSockets support is the reason why this class is defined in
+  // dddInfraApps, and not dddInfraSettings
+  TDDDRestClientSettings = class(TSynAutoCreateFields)
+  protected
+    fORM: TSynConnectionDefinition;
+    fClient: TDDDRestClient;
+  public
+    /// is able to instantiate a Client REST instance for the stored definition
+    // - Definition.Kind is expected to specify a TSQLRestClient class to be
+    // instantiated, not a TSQLRestServer instance
+    // - will return nil if the supplied Definition is not correct
+    // - note that the supplied Model.Root is expected to be the default root
+    // URI, which will be overriden with this TDDDRestSettings.Root property
+    // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
+    function NewRestClientInstance(aRootSettings: TDDDAppSettingsFile;
+      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
+  published
+    /// defines a mean of access to a TSQLRest instance
+    // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
+    // would define the TSQLRest class to be instantiated by NewRestClientInstance()
+    property ORM: TSynConnectionDefinition read fORM;
+    /// advanced connection options
+    // - ORM.Password defines the authentication main password, and
+    // Client.WebSocketsPassword is used for WebSockets binary encryption
+    property Client: TDDDRestClient read fClient;
+  end;
+
 
 { ----- Implements Thread Processing to access a TCP server }
 
@@ -178,7 +247,7 @@ type
   /// the current connection state of the TCP client associated to a
   // TDDDSocketThread thread
   TDDDSocketThreadState = (tpsDisconnected, tpsConnecting, tpsConnected);
-  
+
   /// the monitoring information of a TDDDSocketThread thread
   TDDDSocketThreadMonitoring = class(TDDDAdministratedDaemonMonitor)
   protected
@@ -436,6 +505,9 @@ var
 
 implementation
 
+
+{ ----- Implements Service/Daemon Applications }
+
 { TDDDDaemon }
 
 constructor TDDDDaemon.Create(aSettings: TDDDAdministratedDaemonSettingsFile);
@@ -526,9 +598,9 @@ begin
     if fSettings.Description<>'' then begin
       TextColor(ccGreen);
       writeln(fSettings.Description);
-      if GlobalCopyright<>'' then
-        writeln('(c)',CurrentYear,' ',GlobalCopyright);
     end;
+    if GlobalCopyright<>'' then
+      writeln('(c)',CurrentYear,' ',GlobalCopyright);
     writeln;
     TextColor(ccLightCyan);
     param := trim(StringToUTF8(paramstr(1)));
@@ -702,6 +774,32 @@ begin
 end;
 
 
+{ TDDDRestHttpDaemon }
+
+constructor TDDDRestHttpDaemon.Create(
+  aSettings: TDDDAdministratedDaemonHttpSettingsFile);
+begin
+  fSettings := aSettings;
+  inherited Create(aSettings);
+end;
+
+procedure TDDDRestHttpDaemon.InternalStart;
+begin
+  if fSettings.Http.BindPort<>'' then
+    fHttpServer := TSQLHttpServer.Create(fRest,fSettings.Http);
+end;
+
+procedure TDDDRestHttpDaemon.InternalStop;
+begin
+  try
+    FreeAndNil(fHttpServer);
+  finally
+    inherited InternalStop; // FreeAndNil(fRest)
+  end;
+end;
+
+
+{ ----- Implements Thread Processing to access a TCP server }
 
 { TDDDSocketThreadMonitoring }
 
@@ -902,10 +1000,10 @@ begin
   with TJSONSerializer.CreateOwnedStream do
   try
     WriteObject(FMonitoring);
-    if FRest.InheritsFrom(TSQLRestServer) then begin
+    if fRest.InheritsFrom(TSQLRestServer) then begin
       CancelLastChar('}');
       AddShort(',"Rest":');
-      AddNoJSONEscapeUTF8(TSQLRestServer(FRest).FullStatsAsJson);
+      AddNoJSONEscapeUTF8(TSQLRestServer(fRest).FullStatsAsJson);
       Add('}');
     end;
     SetText(result);
@@ -1161,7 +1259,6 @@ begin
   raise fExceptionClass.Create(fExceptionMessage);
 end;
 
-
 procedure TDDDMockedSocket.MockLatency(
   NextActions: TDDDMockedSocketLatencies; MilliSeconds: integer);
 begin
@@ -1205,6 +1302,61 @@ begin
   fSafe.UnLock;
 end;
 
+
+
+{ ----- Implements ORM/SOA REST Client access }
+
+{ TDDDRestClientSettings }
+
+function TDDDRestClientSettings.NewRestClientInstance(
+  aRootSettings: TDDDAppSettingsFile; aModel: TSQLModel;
+  aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
+var pass,error: RawUTF8;
+begin
+  if aModel=nil then begin
+    aModel := TSQLModel.Create([],'');
+    include(aOptions,riOwnModel);
+  end;
+  if fClient.Root='' then // supplied TSQLModel.Root is the default root URI
+    fClient.Root := aModel.Root else
+    aModel.Root := fClient.Root;
+  if fORM.Kind='' then
+    fORM.Kind := 'TSQLHttpClientWebsockets'; // assume we need HTTP + callbacks
+  if fORM.ServerName='' then
+    fORM.ServerName := 'localhost';
+  result := nil;
+  try
+    try
+      result := TSQLRest.CreateTryFrom(
+        aModel,ORM,riHandleAuthentication in aOptions) as TSQLRestClientURI;
+      if result=nil then
+        exit; // no match or wrong parameters
+      pass := fClient.PasswordPlain;
+      if pass<>'' then begin
+        error := (result as TSQLHttpClientWebsockets).WebSocketsUpgrade(pass);
+        if error='' then
+          if not result.ServerTimeStampSynchronize then
+            error := 'ServerTimeStampSynchronize';
+        if error<>'' then
+          raise EDDDRestClient.CreateUTF8('%.Create: WebSockets failure on %/% -> %',
+            [self,ORM.ServerName,aModel.Root,error]);
+      end else
+        if not result.ServerTimeStampSynchronize then
+          raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
+            [self,ORM.ServerName,aModel.Root]);
+    except
+      FreeAndNil(result);
+    end;
+  finally
+    if riOwnModel in aOptions then
+      if result=nil then // avoid memory leak
+        aModel.Free else
+        aModel.Owner := result;
+    if riRaiseExceptionIfNoRest in aOptions then
+      raise EORMException.CreateUTF8('Impossible to initialize % on %/%',
+        [fORM.Kind,fORM.ServerName,fClient.Root]);
+  end;
+end;
 
 initialization
   {$ifdef EnableMemoryLeakReporting}
