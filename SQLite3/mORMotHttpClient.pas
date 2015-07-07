@@ -919,6 +919,7 @@ end;
 
 initialization
   TSQLHttpClientWinSock.RegisterClassNameForDefinition;
+  TSQLHttpClientWebsockets.RegisterClassNameForDefinition;
 {$ifdef USELIBCURL}
   TSQLHttpClientCurl.RegisterClassNameForDefinition;
 {$endif}

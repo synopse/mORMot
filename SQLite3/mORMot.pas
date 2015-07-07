@@ -31270,6 +31270,10 @@ function TSQLRestClientURI.ServerTimeStampSynchronize: boolean;
 var status: integer;
     aResp: RawUTF8;
 begin
+  if self=nil then begin
+    result := false;
+    exit;
+  end;
   fServerTimeStampOffset := 0.0001; // avoid endless recursive call
   status := CallBackGet('TimeStamp',[],aResp);
   result := (status=HTML_SUCCESS) and (aResp<>'');
