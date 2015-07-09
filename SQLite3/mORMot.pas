@@ -14587,6 +14587,8 @@ type
     // - by default, only Auth and TimeStamp methods do not require the RESTful
     // authentication of the URI; you may call this method to add another method
     // to the list (e.g. for returning some HTML content from a public URI)
+    // - if the supplied aMethodName='', all method-based services would
+    // bypass the authenticaton process
     procedure ServiceMethodByPassAuthentication(const aMethodName: RawUTF8);
     /// retrieve detailed statistics about a method-based service use
     // - will return a reference to the actual alive item: caller should
@@ -14694,6 +14696,7 @@ type
     /// register a Service instance on the server side
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - the supplied aSharedImplementation will be owned by this Server instance
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of TGUID; const aContractExpected: RawUTF8=''): TServiceFactoryServer; overload;
     /// register a remote Service via its interface
@@ -33551,9 +33554,13 @@ var i: Integer;
 begin
   if self=nil then
     exit;
-  i := fPublishedMethods.FindHashed(aMethodName);
-  if i>=0 then
-    fPublishedMethod[i].ByPassAuthentication := true;
+  if aMethodName='' then
+    for i := 0 to fPublishedMethods.Count-1 do
+      fPublishedMethod[i].ByPassAuthentication := true else begin
+    i := fPublishedMethods.FindHashed(aMethodName);
+    if i>=0 then
+      fPublishedMethod[i].ByPassAuthentication := true;
+  end;
 end;
 
 function TSQLRestServer.GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
