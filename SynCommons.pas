@@ -7135,7 +7135,8 @@ type
   public
     /// initialize the class instance
     // - by default, any associated Objects[] are just weak references
-    // - set aOwnObjects=true to force memory object instance management
+    // - also define CaseSensitive=true
+    // - you may supply aOwnObjects=true to force object instance management
     constructor Create(aOwnObjects: boolean=false);
     /// finalize the internal objects stored
     // - if instance was created with aOwnObjects=true
@@ -7282,6 +7283,11 @@ type
     /// find a RawUTF8 item in the stored Strings[] list
     // - just a wrapper over IndexOf() using Safe.Lock/Unloack
     function LockedIndexOf(const aText: RawUTF8): PtrInt; virtual;
+    /// find a RawUTF8 item in the stored Strings[] list
+    // - just a wrapper over GetObjectByName() using Safe.Lock/Unloack
+    // - warning: the object instance should remain in the list, so the caller
+    // should not make any Delete/LockedDeleteFromName otherwise a GPF may occur
+    function LockedGetObjectByName(const aText: RawUTF8): TObject; virtual;
     /// add a RawUTF8 item in the internal storage, with an optional object
     // - just a wrapper over AddObjectIfNotExisting() using Safe.Lock/Unloack
     function LockedAddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
@@ -43621,14 +43627,8 @@ end;
 function TRawUTF8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
   if (self<>nil) and (fObjects<>nil) then
-{$ifdef CPU64}
-    for result := 0 to fCount-1 do
-      if fObjects[result]=aObject then
-        exit;
-{$else}
-    result := IntegerScanIndex(pointer(fObjects),fCount,cardinal(aObject)) else
-{$endif}
-  result := -1;
+    result := PtrUIntScanIndex(pointer(fObjects),fCount,PtrUInt(aObject)) else
+    result := -1;
 end;
 
 procedure TRawUTF8List.OnChangeHidden(Sender: TObject);
@@ -44134,6 +44134,16 @@ begin
   fSafe.Lock;
   try
     result := IndexOf(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.LockedGetObjectByName(const aText: RawUTF8): TObject;
+begin
+  fSafe.Lock;
+  try
+    result := GetObjectByName(aText);
   finally
     fSafe.UnLock;
   end;

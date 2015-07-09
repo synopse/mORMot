@@ -1754,6 +1754,11 @@ begin
   end;
   for i := 0 to 1000 do
     Check(AIP.IndexOf(i)=i);
+  for i := 0 to 1000 do begin
+    Check(IntegerScanExists(Pointer(AI),i+1,i));
+    Check(IntegerScanExists(Pointer(AI),AIP.Count,i));
+    Check(not IntegerScanExists(Pointer(AI),AIP.Count,i+2000));
+  end;
   Test := AIP.SaveTo;
   Check(Hash32(Test)=$924462C);
   PI := IntegerDynArrayLoadFrom(pointer(Test),AIcount);
