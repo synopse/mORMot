@@ -127,6 +127,7 @@ type
   // - cqrsNotFound appear after a I*Query SelectBy*() method with no match
   // - cqrsNoMoreData indicates a GetNext*() method has no more matching data
   // - cqrsDataLayerError indicates a low-level error at database level
+  // - cqrsInvalidCallback is returned if a callback is required for this method
   // - cqrsInternalError for an unexpected issue, like an Exception raised
   // - cqrsDDDValidationFailed will be trigerred when
   // - cqrsInvalidContent for any I*Command method with invalid aggregate input
@@ -139,8 +140,8 @@ type
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsSuccessWithMoreData,
-     cqrsUnspecifiedError, cqrsBadRequest,
-     cqrsNotFound, cqrsNoMoreData, cqrsDataLayerError,
+     cqrsUnspecifiedError, cqrsBadRequest, cqrsNotFound,
+     cqrsNoMoreData, cqrsDataLayerError, cqrsInvalidCallback,
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand,

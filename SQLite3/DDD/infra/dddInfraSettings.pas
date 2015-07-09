@@ -209,7 +209,7 @@ type
   // storage, if TDDDRestSettings.ORM.Kind is not set
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
   TDDDNewRestInstanceOptions = set of (
-    riOwnModel,
+    riOwnModel, riCreateVoidModelIfNone,
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
     riDefaultFullMemoryIfNone,
@@ -520,7 +520,11 @@ function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
   if aModel=nil then
-     raise EDDDInfraException.CreateUTF8('%.NewRestInstance(aModel=nil)',[self]);
+    if riCreateVoidModelIfNone in aOptions then begin
+      aModel := TSQLModel.Create([],'');
+      include(aOptions,riOwnModel);
+    end else
+       raise EDDDInfraException.CreateUTF8('%.NewRestInstance(aModel=nil)',[self]);
   if fRoot='' then // supplied TSQLModel.Root is the default root URI
     fRoot := aModel.Root else
     aModel.Root := fRoot;
@@ -562,7 +566,7 @@ begin
     if result=nil then
       exit; // no match or wrong parameters
     if result.InheritsFrom(TSQLRestServer) then
-    try
+    try // initialize server features
       if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
@@ -577,14 +581,14 @@ begin
         TSQLRestServer(result).CreateMissingTables;
     except
       FreeAndNil(result);
-    end;
+    end; // note: TSQLRestClient.SetUser() has been called in TSQLRest*DBCreate()
   finally
     if riOwnModel in aOptions then
       if result=nil then // avoid memory leak
         aModel.Free else
         aModel.Owner := result;
     if riRaiseExceptionIfNoRest in aOptions then
-      raise EORMException.CreateUTF8('Impossible to initialize % on %/%',
+      raise EDDDInfraException.CreateUTF8('Impossible to initialize % on %/%',
         [fORM.Kind,fORM.ServerName,fRoot]);
   end;
 end;

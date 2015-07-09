@@ -218,6 +218,8 @@ type
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClient;
   public
+    /// set the default Client.Root, ORM.ServerName, Client.WebSocketsPassword 
+    procedure SetDefaults(const Root,Port,Password: RawUTF8);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -226,7 +228,9 @@ type
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     function NewRestClientInstance(aRootSettings: TDDDAppSettingsFile;
-      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
+      aModel: TSQLModel=nil;
+      aOptions: TDDDNewRestInstanceOptions=[riOwnModel,riCreateVoidModelIfNone,
+        riHandleAuthentication,riRaiseExceptionIfNoRest]): TSQLRestClientURI;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
@@ -466,8 +470,7 @@ type
   public
     /// initialize the thread for a given REST instance
     constructor Create(aSettings: TDDDSocketThreadSettings; aRest: TSQLRest;
-      aMonitoring: TDDDSocketThreadMonitoring;
-      const aDefaultHost,aDefaultPort: SockString);
+      aMonitoring: TDDDSocketThreadMonitoring);
     /// finalize the thread process, and its associted REST instance
     destructor Destroy; override;
     /// returns the Monitoring and Rest statistics as a JSON object
@@ -815,7 +818,7 @@ end;
 
 constructor TDDDSocketThread.Create(
   aSettings: TDDDSocketThreadSettings; aRest: TSQLRest;
-  aMonitoring: TDDDSocketThreadMonitoring; const aDefaultHost, aDefaultPort: SockString);
+  aMonitoring: TDDDSocketThreadMonitoring);
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(Settings=nil)',[self]);
@@ -825,13 +828,11 @@ begin
   fMonitoring := aMonitoring;
   fMonitoring.fOwner := self;
   if fSettings.Host='' then
-    if aDefaultHost='' then
-      fHost := '127.0.0.1' else
-      fHost := aDefaultHost else
-    fHost := fSettings.Host;
+    fSettings.Host := '127.0.0.1';
+  fHost := fSettings.Host;
   if fSettings.Port=0 then
-    fPort := aDefaultPort else
-    fPort := UInt32ToUtf8(fSettings.Port);
+    raise EDDDInfraException.CreateUTF8('%.Create(Port=0)',[self]);
+  fPort := UInt32ToUtf8(fSettings.Port);
   fExecuteSocketLoopPeriod := 300;
   if fSettings.SocketTimeout<fExecuteSocketLoopPeriod then
     fSettings.SocketTimeout := 2000;
@@ -1313,10 +1314,12 @@ function TDDDRestClientSettings.NewRestClientInstance(
   aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
 var pass,error: RawUTF8;
 begin
-  if aModel=nil then begin
-    aModel := TSQLModel.Create([],'');
-    include(aOptions,riOwnModel);
-  end;
+  if aModel=nil then
+    if riCreateVoidModelIfNone in aOptions then begin
+      aModel := TSQLModel.Create([],'');
+      include(aOptions,riOwnModel);
+    end else
+       raise EDDDRestClient.CreateUTF8('%.NewRestClientInstance(aModel=nil)',[self]);
   if fClient.Root='' then // supplied TSQLModel.Root is the default root URI
     fClient.Root := aModel.Root else
     aModel.Root := fClient.Root;
@@ -1327,8 +1330,8 @@ begin
   result := nil;
   try
     try
-      result := TSQLRest.CreateTryFrom(
-        aModel,ORM,riHandleAuthentication in aOptions) as TSQLRestClientURI;
+      result := TSQLRest.CreateTryFrom(aModel,ORM, // will call SetUser()
+        riHandleAuthentication in aOptions) as TSQLRestClientURI;
       if result=nil then
         exit; // no match or wrong parameters
       pass := fClient.PasswordPlain;
@@ -1353,8 +1356,21 @@ begin
         aModel.Free else
         aModel.Owner := result;
     if riRaiseExceptionIfNoRest in aOptions then
-      raise EORMException.CreateUTF8('Impossible to initialize % on %/%',
+      raise EDDDRestClient.CreateUTF8('Impossible to initialize % on %/%',
         [fORM.Kind,fORM.ServerName,fClient.Root]);
+  end;
+end;
+
+procedure TDDDRestClientSettings.SetDefaults(const Root,Port,Password: RawUTF8);
+begin
+  if fClient.Root='' then
+    fClient.Root := Root;
+  if fORM.Kind='' then
+    fORM.Kind := 'TSQLHttpClientWebsockets';
+  if (Port<>'') and (fORM.ServerName='') then begin
+    fORM.ServerName := 'http://localhost:'+Port;
+    if fClient.PasswordPlain='' then
+      fClient.PasswordPlain := Password;
   end;
 end;
 
