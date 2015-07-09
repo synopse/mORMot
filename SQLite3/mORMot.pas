@@ -3988,6 +3988,20 @@ type
     destructor Destroy; override;
   end;
 
+  /// adding locking methods to a TSynAutoCreateFields with virtual constructor
+  TSynAutoCreateFieldsLocked = class(TSynAutoCreateFields)
+  protected
+    fSafe: TSynLocker;
+  public
+    /// initialize the object instance, and its associated lock
+    constructor Create; override;
+    /// release the instance (including the locking resource)
+    destructor Destroy; override;
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynLocker read fSafe;
+  end;
+
   /// abstract TInterfacedObject class, which will instantiate all its nested
   // TPersistent/TSynPersistent published properties, then release them when freed
   // - could be used for gathering of TCollectionItem properties, e.g. for
@@ -48915,6 +48929,21 @@ destructor TSynAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
+end;
+
+
+{ TSynAutoCreateFieldsLocked }
+
+constructor TSynAutoCreateFieldsLocked.Create;
+begin
+  inherited Create;
+  fSafe.Init;
+end;
+
+destructor TSynAutoCreateFieldsLocked.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
 end;
 
 
