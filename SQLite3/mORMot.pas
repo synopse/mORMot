@@ -12877,7 +12877,9 @@ type
     // - 'Guest' won't have access to the interface-based remote JSON-RPC service
     // (no reService flag), nor perform any modification to a table: in short,
     // this is an ORM read-only limited user
-    // - you MUST override the default 'synopse' password to a custom value
+    // - you MUST override the default 'synopse' password to a custom value,
+    // or at least customize the global AuthAdminDefaultPassword,
+    // AuthSupervisorDefaultPassword, AuthUserDefaultPassword variables
     // - of course, you can change and tune the settings of the AuthGroup and
     // AuthUser tables, but only 'Admin' group users will be able to remotely
     // modify the content of those two tables
@@ -17011,6 +17013,18 @@ const
   /// special TSQLFieldBits value containing all field bits set to 1
   ALL_FIELDS: TSQLFieldBits = [0..MAX_SQLFIELDS-1];
 
+var
+  /// default password set by TSQLAuthGroup.InitializeTable for 'Admin' user
+  // - you can override this value to follow your own application expectations
+  AuthAdminDefaultPassword: RawUTF8 = 'synopse';
+  /// default password set by TSQLAuthGroup.InitializeTable for 'Supervisor' user
+  // - you can override this value to follow your own application expectations
+  AuthSupervisorDefaultPassword: RawUTF8 = 'synopse';
+  /// default password set by TSQLAuthGroup.InitializeTable for 'User' user
+  // - you can override this value to follow your own application expectations
+  AuthUserDefaultPassword: RawUTF8 = 'synopse';
+
+const
   /// timer identifier which indicates we must refresh the current Page
   // - used for User Interface generation
   // - is associated with the TSQLRibbonTabParameters.AutoRefresh property,
@@ -44006,15 +44020,17 @@ begin
           U := Server.fSQLAuthUserClass.Create;
           try
             U.LogonName := 'Admin';
-            U.PasswordPlain := 'synopse';
+            U.PasswordPlain := AuthAdminDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(AdminID);
             Server.Add(U,true);
             U.LogonName := 'Supervisor';
+            U.PasswordPlain := AuthSupervisorDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(SupervisorID);
             Server.Add(U,true);
             U.LogonName := 'User';
+            U.PasswordPlain := AuthUserDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(UserID);
             Server.Add(U,true);
