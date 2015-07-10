@@ -1992,9 +1992,7 @@ begin
   {$ifdef WITHLOG}
   fLogClass := fAdministrationServer.LogClass;
   {$endif}
-  if fAdministrationServer.Services=nil then
-    inherited Create else
-    inherited CreateWithResolver(fAdministrationServer.Services);
+  CreateWithResolver(fAdministrationServer.ServiceContainer);
   fAdministrationServer.ServiceDefine(self,[IAdministratedDaemon]);
   fFinished := TEvent.Create(nil,false,false,'');
   fStatus := dsCreated;

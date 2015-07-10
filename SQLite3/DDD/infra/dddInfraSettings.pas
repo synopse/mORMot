@@ -208,14 +208,17 @@ type
   // - riDefaultLocalSQlite3IfNone/riDefaultInMemorySQLite3IfNone will create
   // a SQLite3 engine with a local file/memory storage, if
   // TDDDRestSettings.ORM.Kind is not set
-  // - riDefaultFullMemoryIfNone will create a TSQLRestServerFullMemory
-  // storage, if TDDDRestSettings.ORM.Kind is not set
+  // - riDefaultFullMemoryIfNone will create a TSQLRestServerFullMemory non
+  // persistent storage, or riDefaultLocalBinaryFullMemoryIfNone with a
+  // binary local file, if TDDDRestSettings.ORM.Kind is not set
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
+  // - riRaiseExceptionIfNoRest will raise an EDDDInfraException if
+  // TDDDRestSettings.NewRestInstance would return nil
   TDDDNewRestInstanceOptions = set of (
     riOwnModel, riCreateVoidModelIfNone,
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
-    riDefaultFullMemoryIfNone,
+    riDefaultFullMemoryIfNone, riDefaultLocalBinaryFullMemoryIfNone,
     riCreateMissingTables,
     riRaiseExceptionIfNoRest);
 
@@ -225,6 +228,7 @@ type
   TDDDRestSettings = class(TSynAutoCreateFields)
   protected
     fORM: TSynConnectionDefinition;
+    fDefaultDataFolder: TFileName;
     fRoot: RawUTF8;
     fWrapperTemplateFolder: TFileName;
     fWrapperSourceFolders: TFileName;
@@ -241,8 +245,7 @@ type
     // - will return nil if the supplied Definition is not correct
     // - note that the supplied Model.Root is expected to be the default root
     // URI, which will be overriden with this TDDDRestSettings.Root property
-    // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
-    // and publish the /wrapper HTML page if WrapperTemplateFolder is set
+    // - will also publish /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
       aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
@@ -253,6 +256,9 @@ type
     /// returns the WrapperSourceFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperSourceFolderFixed: TFileName;
+    /// the default folder where database files are to be stored
+    // - will be used by NewRestInstance instead of the .exe folder, if set
+    property DefaultDataFolder: TFileName read fDefaultDataFolder write fDefaultDataFolder;
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
@@ -304,9 +310,6 @@ type
     FAuthNamedPipeName: TFileName;
     FAuthHttp: TSQLHttpServerDefinition;
   public
-    /// set default settings
-    // - i.e. AuthRootURI='admin' and plain AuthHttp.WebSocketPassword=ClassName
-    constructor Create; override;
   published
     /// the root URI used for the REST data model
     // - default URI is 'admin'
@@ -316,7 +319,7 @@ type
     // instance with the supplied AuthUserName/AuthHashedPassword credentials
     property AuthUserName: RawUTF8 read FAuthUserName write FAuthUserName;
     /// the SHA-256 hashed password to authenticate AuthUserName
-    // - follows the TSQLAuthUser.PasswordHashHexa expectations
+    // - follows the TSQLAuthUser.ComputeHashedPassword() encryption
     // - marked as 'stored false' so that it won't appear e.g. in the logs
     property AuthHashedPassword: RawUTF8 read FAuthHashedPassword write FAuthHashedPassword
       stored false;
@@ -521,6 +524,20 @@ function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
   aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+
+  procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
+  begin
+    if fORM.ServerName='' then begin
+      if fDefaultDataFolder='' then
+        fDefaultDataFolder := ExeVersion.ProgramFilePath;
+      fORM.ServerName := StringToUTF8(IncludeTrailingPathDelimiter(
+        fDefaultDataFolder))+ExeVersion.ProgramName+Ext;
+    end;
+    if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
+      fORM.ServerName := StringToUTF8(
+        aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
+  end;
+
 begin
   if aModel=nil then
     if riCreateVoidModelIfNone in aOptions then begin
@@ -531,32 +548,31 @@ begin
   if fRoot='' then // supplied TSQLModel.Root is the default root URI
     fRoot := aModel.Root else
     aModel.Root := fRoot;
-  {$ifndef LINUX}
-  if (fWrapperTemplateFolder='') and
-     DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
-    fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
-  {$endif}
   if fORM.Kind='' then
     if riDefaultLocalSQlite3IfNone in aOptions then begin
       fORM.Kind := 'TSQLRestServerDB'; // SQlite3 engine by default
-      if fORM.ServerName='' then
-        fORM.ServerName := StringToUTF8(
-          ChangeFileExt(ExtractFileName(ExeVersion.ProgramFileName),'.db'));
-      if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
-        fORM.ServerName := StringToUTF8(
-          aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
+      ComputeDefaultORMServerName('.db');
     end else
     if riDefaultInMemorySQLite3IfNone in aOptions then begin
       fORM.Kind := 'TSQLRestServerDB';
       fORM.ServerName := SQLITE_MEMORY_DATABASE_NAME;
     end else
-    if riDefaultFullMemoryIfNone in aOptions then begin
+    if riDefaultFullMemoryIfNone in aOptions then 
+      fORM.Kind := 'TSQLRestServerFullMemory' else
+    if riDefaultLocalBinaryFullMemoryIfNone in aOptions then begin
       fORM.Kind := 'TSQLRestServerFullMemory';
+      fORM.DatabaseName := 'binary'; // as TSQLRestServerFullMemory.DefinitionTo
+      ComputeDefaultORMServerName('.data');
     end;
   result := nil;
   try
     if fORM.Kind='' then
       exit;
+    {$ifndef LINUX}
+    if (fWrapperTemplateFolder='') and
+       DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
+      fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
+    {$endif}
     if (optEraseDBFileAtStartup in Options) and (fORM.ServerName<>'') then
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
@@ -590,7 +606,7 @@ begin
       if result=nil then // avoid memory leak
         aModel.Free else
         aModel.Owner := result;
-    if riRaiseExceptionIfNoRest in aOptions then
+    if (result=nil) and (riRaiseExceptionIfNoRest in aOptions) then
       raise EDDDInfraException.CreateUTF8('Impossible to initialize % on %/%',
         [fORM.Kind,fORM.ServerName,fRoot]);
   end;
@@ -626,15 +642,6 @@ begin
     ServerPort := {$ifdef LINUX}'8888'{$else}'888'{$endif};
 end;
 
-
-{ TDDDAdministratedDaemonSettings }
-
-constructor TDDDAdministratedDaemonSettings.Create;
-begin
-  inherited Create;
-  AuthRootURI := 'admin';
-  AuthHttp.PasswordPlain := RawUTF8(ClassName); // default WebSocketPassword
-end;
 
 
 { TDDDAdministratedDaemonSettingsFile }

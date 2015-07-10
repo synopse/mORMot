@@ -1369,8 +1369,8 @@ begin
     fORM.Kind := 'TSQLHttpClientWebsockets';
   if (Port<>'') and (fORM.ServerName='') then begin
     fORM.ServerName := 'http://localhost:'+Port;
-    if fClient.PasswordPlain='' then
-      fClient.PasswordPlain := Password;
+    if fClient.WebSocketsPassword='' then
+      fClient.WebSocketsPassword := Password;
   end;
 end;
 
