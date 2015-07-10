@@ -41722,7 +41722,7 @@ begin
   try
     instance.Key := CustomKey;
     instance.SetPassWordPlain(PlainPassword);
-    result := instance.GetPassWordPlain;
+    result := instance.fPassWord;
   finally
     instance.Free;
   end;
