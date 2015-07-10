@@ -15114,6 +15114,7 @@ type
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    procedure DoInstanceEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
@@ -15260,6 +15261,14 @@ type
       out ResultID: TIDDynArray): boolean; override;
     /// search for a field value, according to its SQL content representation
     // - return a copy of the found TSQLRecord on success, nil if it was not found
+    // - warning: it returns a reference to one item of the unlocked internal
+    // list, so you should NOT use this on a read/write table, but rather
+    // use the slightly slower but safer SearchCopy() method 
+    function SearchInstance(const FieldName, FieldValue: RawUTF8): pointer;
+    /// search for a field value, according to its SQL content representation
+    // - return a copy of the found TSQLRecord on success, nil if it was not found
+    // - you should use SearchCopy() instead of SearchInstance(), unless you
+    // are sure that the internal TSQLRecord list won't change
     function SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
     /// search and count for a field value, according to its SQL content representation
     // - return the number of found entries on success, 0 if it was not found
@@ -38940,6 +38949,19 @@ end;
 function TSQLRestStorageInMemory.SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
 begin
   if SearchEvent(FieldName,FieldValue,DoCopyEvent,@result,1,0)=0 then
+    result := nil;
+end;
+
+procedure TSQLRestStorageInMemory.DoInstanceEvent(
+  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+begin
+  if aDest<>nil then
+    PPointer(aDest)^ := aRec;
+end;
+
+function TSQLRestStorageInMemory.SearchInstance(const FieldName, FieldValue: RawUTF8): pointer;
+begin
+  if SearchEvent(FieldName,FieldValue,DoInstanceEvent,@result,1,0)=0 then
     result := nil;
 end;
 

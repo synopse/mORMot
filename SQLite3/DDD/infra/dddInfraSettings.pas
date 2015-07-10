@@ -135,7 +135,7 @@ type
     // - in order not to loose any log, a background thread can be created
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
-    // - this parameter is effective only under Linux by now
+    // - this parameter is effective only under Windows by now
     property AutoFlushTimeOut: integer read fAutoFlush write fAutoFlush;
     /// the logged information about threads
     // - the default value is ptIdentifiedInOnFile, since it sounds more
@@ -189,6 +189,9 @@ type
     /// defines how logging will be done for this application
     property Log: TDDDLogSettings read fLog;
   end;
+
+  /// class type for storing a service/daemon settings as a JSON file
+  TDDDAppSettingsFileClass = class of TDDDAppSettingsFile;
 
   /// some options to be used for TDDDRestSettings
   TDDDRestSettingsOption =

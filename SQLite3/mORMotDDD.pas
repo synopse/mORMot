@@ -137,6 +137,7 @@ type
   // call to SelectBy*()
   // - cqrsNoPriorCommand for a I*Command.Commit with no prior Add/Update/Delete
   // - cqrsNoMatch will notify that a command did not have any match
+  // - cqrsNotImplemented may be returned when there is no code yet for a method
   // - cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsSuccessWithMoreData,
@@ -145,7 +146,7 @@ type
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand,
-     cqrsNoMatch);
+     cqrsNoMatch, cqrsNotImplemented);
 
   /// generic interface, to be used for CQRS I*Query and I*Command types definition
   // - TCQRSService class will allow to easily implement LastError* members
