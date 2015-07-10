@@ -39,6 +39,7 @@ unit SynCommons;
    - Sanyin
    - Pavel (mpv)
    - Wloochacz
+   - zed
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -482,6 +483,7 @@ unit SynCommons;
   - let TDynArray.LoadFrom() accept Win32/Win64 cross platform binary content
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
   - TDynArray will now recognize variant/interface fields
+  - new TDynArray.FastLocateSorted FastAddSorted FastLocateOrAddSorted methods
   - code refactoring of TTextWriter to simplify flushing mechanism, and
     allow internal buffer auto-grow if it was found out to be too small (see
     FlushToStream / FlushFinal methods and FlushToStreamNoAutoResize property)
@@ -4189,6 +4191,28 @@ type
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
     procedure Sort;
+    /// search for an element value inside a sorted dynamic array
+    // - this method will use the Compare property function for the search
+    // - will be faster than a manual FindAndAddIfNotExisting+Sort process
+    // - returns TRUE and the index of existing Elem, or FALSE and the index
+    // where the Elem is to be inserted so that the array remains sorted
+    // - you should then call FastAddSorted() later
+    // - if the array is not sorted, returns FALSE and Index=-1
+    // - warning: Elem must be of the same exact type than the dynamic array,
+    // and must be a reference to a variable (no FastLocateSorted(i+10) e.g.)
+    function FastLocateSorted(const Elem; out Index: Integer): boolean;
+    /// insert a sorted element value at the proper place
+    // - the index should have been computed by FastLocateSorted(): false
+    // - you may consider using FastLocateOrAddSorted() instead
+    procedure FastAddSorted(Index: Integer; const Elem);
+    /// search and add an element value inside a sorted dynamic array
+    // - this method will use the Compare property function for the search
+    // - will be faster than a manual FindAndAddIfNotExisting+Sort process
+    // - returns the index of the existing Elem and wasAdded^=false
+    // - returns the sorted index of the inserted Elem and wasAdded^=true
+    // - if the array is not sorted, returns -1 and wasAdded^=false
+    // - is just a wrapper around FastLocateSorted+FastAddSorted
+    function FastLocateOrAddSorted(const Elem; wasAdded: PBoolean=nil): integer;
     /// will reverse all array elements, in place
     procedure Reverse;
     /// sort the dynamic array elements using a lookup array of indexes
@@ -12744,7 +12768,7 @@ type
     // - not necessary if created on the heap (e.g. as class member)
     // - will set all fields to 0
     procedure Init;
-    /// start the high resolution timer
+    /// initialize and start the high resolution timer
     procedure Start;
     /// stop the timer, setting the Time elapsed since last Start
     procedure ComputeTime;
@@ -36465,6 +36489,53 @@ begin
           inc(P,ElemSize);
   end;
   result := -1;
+end;
+
+function TDynArray.FastLocateSorted(const Elem; out Index: Integer): boolean;
+var n, i, cmp: integer;
+    P: PAnsiChar;
+begin
+  result := False;
+  n := Count;
+  if @fCompare<>nil then
+    if n=0 then // a void array is always sorted
+      Index := 0 else
+    if fSorted then begin
+      P := fValue^;
+      Index := 0;
+      dec(n);
+      while Index<=n do begin
+        i := (Index+n) shr 1;
+        cmp := fCompare(P[cardinal(i)*ElemSize],Elem);
+        if cmp=0 then begin
+          Index := i; // index of existing Elem
+          result := True;
+          exit;
+        end else
+          if cmp<0 then
+            Index := i+1 else
+            n := i-1;
+      end;
+      // Elem not found: returns false + the index where to insert
+    end else
+      Index := -1 else // not Sorted
+    Index := -1; // no fCompare()
+end;
+
+procedure TDynArray.FastAddSorted(Index: Integer; const Elem);
+begin
+  Insert(Index,Elem);
+  fSorted := true; // Insert -> SetCount -> fSorted := false
+end;
+
+function TDynArray.FastLocateOrAddSorted(const Elem; wasAdded: PBoolean): integer;
+var toInsert: boolean;
+begin
+  toInsert := (not FastLocateSorted(Elem,result)) and (result>=0);
+  if toInsert then
+    FastAddSorted(result,Elem);
+  if wasAdded<>nil then
+    wasAdded^ := toInsert;
 end;
 
 type
