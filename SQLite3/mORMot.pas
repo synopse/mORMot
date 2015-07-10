@@ -17025,7 +17025,7 @@ const
   /// special TSQLFieldBits value containing all field bits set to 1
   ALL_FIELDS: TSQLFieldBits = [0..MAX_SQLFIELDS-1];
 
- // contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  // contains TSQLAuthUser.ComputeHashedPassword('synopse')
   DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
 
 var
@@ -33773,13 +33773,13 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   end;
   ParametersPos := PosEx(RawUTF8('?'),Call^.url,1);
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
-    Parameters := @Call^.url[ParametersPos+1] else
-    if Method=mPost then begin
-      fInputPostContentType := FindIniNameValue(
-        pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
-      if IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
-        Parameters := pointer(Call^.InBody);
-    end;
+    Parameters := @Call^.url[ParametersPos+1];
+  if Method=mPost then begin
+    fInputPostContentType := FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
+    if (Parameters=nil) and
+       IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
+      Parameters := pointer(Call^.InBody);
+  end;
   // compute URI without any root nor parameter
   inc(i,j+2);
   if ParametersPos=0 then
