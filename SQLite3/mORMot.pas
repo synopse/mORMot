@@ -12931,6 +12931,9 @@ type
     // user is disabled via a custom ORM boolean and date/time field
     function CanUserLog(Ctxt: TSQLRestServerURIContext): boolean; virtual;
   public
+    /// static function allowing to compute a hashed password
+    // - as expected by this class
+    class function ComputeHashedPassword(const aPasswordPlain: RawUTF8): RawUTF8; 
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
     property PasswordPlain: RawUTF8 write SetPasswordPlain;
@@ -17022,16 +17025,19 @@ const
   /// special TSQLFieldBits value containing all field bits set to 1
   ALL_FIELDS: TSQLFieldBits = [0..MAX_SQLFIELDS-1];
 
+ // contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
+
 var
-  /// default password set by TSQLAuthGroup.InitializeTable for 'Admin' user
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
   // - you can override this value to follow your own application expectations
-  AuthAdminDefaultPassword: RawUTF8 = 'synopse';
-  /// default password set by TSQLAuthGroup.InitializeTable for 'Supervisor' user
+  AuthAdminDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Supervisor' user
   // - you can override this value to follow your own application expectations
-  AuthSupervisorDefaultPassword: RawUTF8 = 'synopse';
-  /// default password set by TSQLAuthGroup.InitializeTable for 'User' user
+  AuthSupervisorDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for 'User' user
   // - you can override this value to follow your own application expectations
-  AuthUserDefaultPassword: RawUTF8 = 'synopse';
+  AuthUserDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
 
 const
   /// timer identifier which indicates we must refresh the current Page
@@ -39274,7 +39280,7 @@ constructor TSQLRestServerFullMemory.RegisteredClassCreateFrom(aModel: TSQLModel
   aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition);
 begin
   fFileName := UTF8ToString(aDefinition.ServerName);
-  fBinaryFile := aDefinition.DatabaseName<>'';
+  fBinaryFile := aDefinition.DatabaseName<>''; // DefinitionTo() set 'binary'
   Create(aModel,aServerHandleAuthentication);
   LoadFromFile;
 end;
@@ -44042,17 +44048,17 @@ begin
           U := Server.fSQLAuthUserClass.Create;
           try
             U.LogonName := 'Admin';
-            U.PasswordPlain := AuthAdminDefaultPassword;
+            U.PasswordHashHexa := AuthAdminDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(AdminID);
             Server.Add(U,true);
             U.LogonName := 'Supervisor';
-            U.PasswordPlain := AuthSupervisorDefaultPassword;
+            U.PasswordHashHexa := AuthSupervisorDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(SupervisorID);
             Server.Add(U,true);
             U.LogonName := 'User';
-            U.PasswordPlain := AuthUserDefaultPassword;
+            U.PasswordHashHexa := AuthUserDefaultPassword;
             U.DisplayName := U.LogonName;
             U.GroupRights := TSQLAuthGroup(UserID);
             Server.Add(U,true);
@@ -44073,13 +44079,17 @@ end;
 
 { TSQLAuthUser }
 
-const
-  TSQLAUTHUSER_SALT = 'salt';
+
+class function TSQLAuthUser.ComputeHashedPassword(const aPasswordPlain: RawUTF8): RawUTF8;
+const TSQLAUTHUSER_SALT = 'salt';
+begin
+  result := SHA256(TSQLAUTHUSER_SALT+aPasswordPlain);
+end;
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: RawUTF8);
 begin
   if self<>nil then
-    PasswordHashHexa := SHA256(TSQLAUTHUSER_SALT+Value);
+    PasswordHashHexa := ComputeHashedPassword(Value);
 end;
 
 function TSQLAuthUser.CanUserLog(Ctxt: TSQLRestServerURIContext): boolean;
@@ -44740,7 +44750,8 @@ end;
 class function TSynAuthenticationRest.ComputeHash(Token: Int64;
   const UserName,PassWord: RawUTF8): cardinal;
 begin // same as GetPassword() above
-  result := inherited ComputeHash(Token,UserName,SHA256(TSQLAUTHUSER_SALT+Password));
+  result := inherited ComputeHash(Token,UserName,
+    TSQLAuthUser.ComputeHashedPassword(Password));
 end;
 
 
