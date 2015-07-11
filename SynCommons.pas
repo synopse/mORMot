@@ -11321,6 +11321,16 @@ const
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoNameCaseSensitive];
 
+  /// TDocVariant options to be used so that JSON serialization would
+  // use the extended JSON syntax for field names
+  // - you could use it e.g. on a TSQLRecord variant published field to
+  // reduce the JSON escape process during storage in the database:
+  // !  (aModel.Props[TSQLMyRecord]['VariantProp'] as TSQLPropInfoRTTIVariant).
+  // !    DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
+  JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoSerializeAsExtendedJson];
+
 
 /// same as Dest := Source, but copying by reference
 // - i.e. VType is defined as varVariant or varByRef

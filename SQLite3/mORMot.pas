@@ -3387,12 +3387,13 @@ type
     /// how this property will deal with its instances (including TDocVariant)
     // - by default, contains JSON_OPTIONS[true] for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
-    // - you may add dvoSerializeAsExtendedJson so that any TDocVariant nested
-    // field names would not be double-quoted, saving some chars in the stored
-    // TEXT column and in the JSON escaped transmitted data over REST, by
-    // writing '{name:"John",age:123}' instead of '{"name":"John","age":123}':
-    // be aware that this syntax is supported by the ORM, SOA, TDocVariant,
-    // TBSONVariant, and our SynCrossPlatformJSON unit, but not AJAX/JavaScript 
+    // - set JSON_OPTIONS_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
+    // so that any TDocVariant nested field names would not be double-quoted,
+    // saving some chars in the stored TEXT column and in the JSON escaped
+    // transmitted data over REST, by writing '{name:"John",age:123}' instead of
+    // '{"name":"John","age":123}': be aware that this syntax is supported by
+    // the ORM, SOA, TDocVariant, TBSONVariant, and our SynCrossPlatformJSON
+    // unit, but not AJAX/JavaScript or most JSON libraries 
     property DocVariantOptions: TDocVariantOptions read fDocVariantOptions write fDocVariantOptions;
   end;
 {$endif NOVARIANTS}
@@ -8171,6 +8172,7 @@ type
     fFTSWithoutContentTableIndex: integer;
     fFTSWithoutContentExpression: RawUTF8;
     procedure SetKind(Value: TSQLRecordVirtualKind);
+    function GetProp(const PropName: RawUTF8): TSQLPropInfo;
   public
     /// pre-computed SQL statements for this TSQLRecord in this model
     // - those statements will work for internal tables, not for external
@@ -8209,6 +8211,8 @@ type
 
     /// the table index of this TSQLRecord in the associated Model
     property TableIndex: Integer read fTableIndex;
+    /// direct access to a property RTTI information, by name
+    property Prop[const PropName: RawUTF8]: TSQLPropInfo read GetProp; default;
   published
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
@@ -28377,6 +28381,13 @@ begin
   FTS4WithoutContent(ContentTable,exp);
 end;
 
+function TSQLModelRecordProperties.GetProp(const PropName: RawUTF8): TSQLPropInfo;
+begin
+  if self<>nil then
+    result := Props.Fields.ByName(pointer(PropName)) else
+    result := nil;
+end;
+
 
 { TSQLModel }
 
@@ -34865,7 +34876,9 @@ procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
 var FileTime: TDateTime;
     clientHash, serverHash: RawUTF8;
 begin
-  FileTime := FileAgeToDateTime(FileName);
+  if FileName='' then
+    FileTime := 0 else
+    FileTime := FileAgeToDateTime(FileName);
   if FileTime=0 then
     if Error404Redirect<>'' then
       Redirect(Error404Redirect) else
