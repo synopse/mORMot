@@ -15122,6 +15122,7 @@ type
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoInstanceEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    procedure DoIndexEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
@@ -15267,13 +15268,18 @@ type
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; override;
     /// search for a field value, according to its SQL content representation
-    // - return a copy of the found TSQLRecord on success, nil if it was not found
+    // - return the found TSQLRecord on success, nil if none did match
     // - warning: it returns a reference to one item of the unlocked internal
     // list, so you should NOT use this on a read/write table, but rather
     // use the slightly slower but safer SearchCopy() method 
     function SearchInstance(const FieldName, FieldValue: RawUTF8): pointer;
     /// search for a field value, according to its SQL content representation
-    // - return a copy of the found TSQLRecord on success, nil if it was not found
+    // - return the found TSQLRecord index on success, -1 if none did match
+    // - warning: it returns a reference to the current index of the unlocked
+    // internal list, so you should NOT use without StorageLock/StorageUnlock
+    function SearchIndex(const FieldName, FieldValue: RawUTF8): integer;
+    /// search for a field value, according to its SQL content representation
+    // - return a copy of the found TSQLRecord on success, nil if no match
     // - you should use SearchCopy() instead of SearchInstance(), unless you
     // are sure that the internal TSQLRecord list won't change
     function SearchCopy(const FieldName, FieldValue: RawUTF8): pointer;
@@ -29441,7 +29447,7 @@ end;
 procedure TSQLRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  if (self<>nil) and (Level in fLogFamily.Level) then
+  if (self<>nil) and (fLogFamily<>nil) and (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level,Text,self);
   {$endif}
 end;
@@ -29450,7 +29456,7 @@ procedure TSQLRest.InternalLog(const Format: RawUTF8;
   const Args: array of const; Level: TSynLogInfo);
 begin
   {$ifdef WITHLOG}
-  if (self<>nil) and (Level in fLogFamily.Level) then
+  if (self<>nil) and (fLogFamily<>nil) and (Level in fLogFamily.Level) then
     fLogFamily.SynLog.Log(Level,Format,Args,self);
   {$endif}
 end;
@@ -37920,7 +37926,7 @@ begin
     exit;
   if IsRowID(pointer(WhereFieldName)) then
     WhereFieldIndex := 0 else begin
-    WhereFieldIndex := fStoredClassRecordProps.Fields.IndexByName(WhereFieldName);
+    WhereFieldIndex := fStoredClassRecordProps.Fields.IndexByName(pointer(WhereFieldName));
     if WhereFieldIndex<0 then
       exit;
     inc(WhereFieldIndex); // FindWhereEqual() expects index = RTTI+1
@@ -38983,6 +38989,20 @@ begin
   if SearchEvent(FieldName,FieldValue,DoInstanceEvent,@result,1,0)=0 then
     result := nil;
 end;
+
+procedure TSQLRestStorageInMemory.DoIndexEvent(
+  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+begin
+  if aDest<>nil then
+    PInteger(aDest)^ := aIndex;
+end;
+
+function TSQLRestStorageInMemory.SearchIndex(const FieldName, FieldValue: RawUTF8): integer;
+begin
+  if SearchEvent(FieldName,FieldValue,DoIndexEvent,@result,1,0)=0 then
+    result := -1;
+end;
+
 
 function TSQLRestStorageInMemory.SearchCount(const FieldName, FieldValue: RawUTF8): integer;
 begin

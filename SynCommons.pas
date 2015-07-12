@@ -7282,13 +7282,15 @@ type
     /// find a RawUTF8 item in the stored Strings[] list
     // - this overridden method will update the internal hash table (if needed),
     // then use it to retrieve the corresponding matching index
-    // - if your purpose is to test is an item is existing, then add it on
-    // needed, use rather the AddObjectIfNotExisting() method which would
-    // preserve the internal hash array, so would perform better
+    // - if your purpose is to test if an item is existing, then add it on need,
+    // use rather the AddObjectIfNotExisting() method which would preserve
+    // the internal hash array, so would perform better
     function IndexOf(const aText: RawUTF8): PtrInt; override;
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
-    // - this overridden method will update and use the internal hash table
+    // - this overridden method will update and use the internal hash table,
+    // so is preferred to plain Add/AddObject if you want faster insertion
+    // into the TRawUTF8ListHashed
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
     /// access to the low-level internal hashing table
