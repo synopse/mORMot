@@ -2510,6 +2510,12 @@ function CSVEncode(const NameValuePairs: array of const;
 function PropNameValid(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns TRUE if the given text buffer contains simple characters as
+// recognized by JSON extended syntax
+// - follow GetJSONPropName and GotoNextJSONObjectOrArray expectations
+function JsonPropNameValid(P: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropName(const P1,P2: shortstring): boolean; overload;
@@ -9876,6 +9882,7 @@ const
   /// used internaly for fast identifier recognition (32 bytes const)
   // - can be used e.g. for field or table name
   // - this char set matches the classical pascal definition of identifiers
+  // - see also PropNameValid()
   IsIdentifier: set of byte =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
 
@@ -9886,6 +9893,18 @@ const
     [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
      ord('-'),ord('.'),ord('_'),ord('~')];
 
+  /// used internaly for fast extended JSON property name recognition (32 bytes const)
+  // - can be used e.g. for extended JSON object field
+  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
+  IsJsonIdentifierFirstChar: set of byte =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
+
+  /// used internaly for fast extended JSON property name recognition (32 bytes const)
+  // - can be used e.g. for extended JSON object field
+  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
+  IsJsonIdentifier: set of byte =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
+     ord('.'),ord('['),ord(']')];
 
 {$M+} // to have existing RTTI for published properties
 type
@@ -34194,7 +34213,7 @@ begin
     for ndx := 0 to VCount-1 do
     if IdemPChar(Pointer(VName[ndx]),Up) then begin
       if (dvoSerializeAsExtendedJson in VOptions) and
-         PropNameValid(pointer(VName[ndx])) then begin
+         JsonPropNameValid(pointer(VName[ndx])) then begin
         W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
       end else begin
         W.Add('"');
@@ -34658,7 +34677,7 @@ begin
       W.Add('{');
       for ndx := 0 to VCount-1 do begin
         if (dvoSerializeAsExtendedJson in VOptions) and
-           PropNameValid(pointer(VName[ndx])) then begin
+           JsonPropNameValid(pointer(VName[ndx])) then begin
           W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
         end else begin
           W.Add('"');
@@ -39156,7 +39175,7 @@ begin
       Name := GetJSONPropName(JSON);
       if Name=nil then
         exit;
-      if (Format=jsonUnquotedPropName) and PropNameValid(Name) then
+      if (Format=jsonUnquotedPropName) and JsonPropNameValid(Name) then
         AddNoJSONEscape(Name,StrLen(Name)) else begin
         Add('"');
         AddJSONEscape(Name);
@@ -41176,7 +41195,7 @@ function GetJSONPropName(var P: PUTF8Char): PUTF8Char;
 var Name: PUTF8Char;
     wasString: boolean;
     EndOfObject: AnsiChar;
-begin  // should match GotoNextJSONObjectOrArray()
+begin  // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
   result := nil;
   if P=nil then
     exit;
@@ -41186,7 +41205,7 @@ begin  // should match GotoNextJSONObjectOrArray()
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
     repeat
       inc(P);
-    until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
+    until not (ord(P^) in IsJsonIdentifier);
     if P^ in [#1..' '] then begin
       P^ := #0;
       inc(P);
@@ -41232,7 +41251,7 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
     repeat
       inc(P);
-    until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
+    until not (ord(P^) in IsJsonIdentifier);
     if P^ in [#1..' '] then begin
       SetString(PropName,Name,P-Name);
       inc(P);
@@ -41281,7 +41300,7 @@ begin  // should match GotoNextJSONObjectOrArray()
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
     repeat
       inc(P);
-    until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
+    until not (ord(P^) in IsJsonIdentifier);
     if P^ in [#1..' '] then
       inc(P);
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
@@ -41534,13 +41553,13 @@ begin // should match GetJSONPropName()
       repeat inc(P) until not(P^ in [#1..' ']);
     end;
     else begin
-Prop: if not (P^ in ['_','A'..'Z','a'..'z','0'..'9','$']) then
+Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
         exit; // expect e.g. '{age:{$gt:18}}'
       repeat
         inc(P);
-       until not (P^ in ['_','A'..'Z','a'..'z','0'..'9','.']);
-       while P^ in [#1..' '] do inc(P);
-       if P^<>':' then exit;
+      until not (ord(P^) in IsJsonIdentifier);
+      while P^ in [#1..' '] do inc(P);
+      if P^<>':' then exit;
     end;
     end;
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
@@ -45867,6 +45886,53 @@ begin
   result := true;
 end;
 
+function JsonPropNameValid(P: PUTF8Char): boolean;
+{$ifdef HASINLINE}
+begin
+  if (P<>nil) and (ord(P^) in IsJsonIdentifierFirstChar) then begin
+    repeat
+      inc(P);
+    until not(ord(P^) in IsJsonIdentifier);
+    if P^=#0 then begin
+      result := true;
+      exit;
+    end else begin
+      result := false;
+      exit;
+    end;
+  end else
+    result := false;
+end;
+{$else}
+asm
+    test eax,eax
+    jz @z
+    movzx edx,byte ptr [eax]
+    bt [offset @f],edx
+    mov ecx,offset @c
+    jb @2
+    xor eax,eax
+@z: ret
+@f: dd 0,$03FF0010,$87FFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifierFirstChar
+@c: dd 0,$03FF4000,$AFFFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifier
+@s: mov dl,[eax]
+    bt [ecx],edx
+    jnb @1
+@2: mov dl,[eax+1]
+    bt [ecx],edx
+    jnb @1
+    mov dl,[eax+2]
+    bt [ecx],edx
+    jnb @1
+    mov dl,[eax+3]
+    bt [ecx],edx
+    lea eax,[eax+4]
+    jb @s
+@1: test dl,dl
+    setz al
+end;
+{$endif}
+
 function TSynTable.AddField(const aName: RawUTF8;
   aType: TSynTableFieldType; aOptions: TSynTableFieldOptions): TSynTableFieldProperties;
 var aSize: Integer;
@@ -49695,7 +49761,7 @@ initialization
   {$else}
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
-  {$else}
+  {$else}    
   {$ifdef USEPACKAGES}
   Pointer(@FillCharFast) := SystemFillCharAddress;
   {$else}

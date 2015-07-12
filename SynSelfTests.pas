@@ -3337,6 +3337,19 @@ begin
   WinAnsi[2] := #$E9;
   WinAnsi[3] := #$E7;
   Check(UpperCaseU(WinAnsiToUTF8(WinAnsi))='AECD');
+  check(not JsonPropNameValid(nil));
+  check(not JsonPropNameValid(#0));
+  check(JsonPropNameValid('a'));
+  check(JsonPropNameValid('abc'));
+  check(JsonPropNameValid('_abc'));
+  check(JsonPropNameValid('$aBc'));
+  check(JsonPropNameValid('abc[0]'));
+  check(JsonPropNameValid('abc[0]edfghij'));
+  check(not JsonPropNameValid('ab$c'));
+  check(not JsonPropNameValid('ab\c[0]'));
+  check(not JsonPropNameValid('ab"c0'));
+  check(not JsonPropNameValid('~abc0'));
+  check(not JsonPropNameValid('"abc0'));
 end;
 
 procedure TTestLowLevelCommon._TSynTable;
