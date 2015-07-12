@@ -2886,7 +2886,6 @@ type
    -> code is even shorter then original one using TThread }
 function ThreadWrapper(var P: TThreadParams): Integer; stdcall;
 begin
-  SetCurrentThreadName('AES #%',[P.BlockIndex]);
   with P do
     AES.DoBlocks(bIn,bOut,bIn,bOut,BlockCount,Encrypt);
   ExitThread(0);
