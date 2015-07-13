@@ -21250,13 +21250,15 @@ begin
       if IsRowID(fResults[f]) then
         FieldType := sftInteger else
       if f in fFieldParsedAsString then  begin
-        // the parser identified as string value -> check if was sftDateTime
+        // the parser identified string values -> check if was sftDateTime
         FieldType := sftUTF8Text;
         U := @fResults[FieldCount+f];
         for i := 1 to fRowCount do
           if U^=nil then  // search for a non void column
             inc(U,FieldCount) else begin
             len := StrLen(U^);
+            if (len in [8,10]) and (cardinal(Iso8601ToTimeLogPUTF8Char(U^,len) shr 26)-1800<300) then
+              FieldType := sftDateTime else // e.g. YYYYMMDD date (Y=1800..2100)
             if (len>=15) and (Iso8601ToTimeLogPUTF8Char(U^,len)<>0) then
               FieldType := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
             break;
@@ -49413,7 +49415,9 @@ end;
 
 function TServiceContainerClient.CallBackUnRegister(const Callback: IInvokable): boolean;
 begin
-  result := (fRest as TSQLRestClientURI).fFakeCallbacks.UnRegister(pointer(Callback));
+  if Assigned(Callback) then
+    result := (fRest as TSQLRestClientURI).fFakeCallbacks.UnRegister(pointer(Callback)) else
+    result := false;
 end;
 
 
