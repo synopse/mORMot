@@ -5115,6 +5115,10 @@ function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns the index of a matching TGUID in an array
+// - returns -1 if no item matched
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
 function IsNullGUID(const guid: TGUID): Boolean;
@@ -25930,7 +25934,7 @@ procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TD
 var i: integer;
     B: cardinal;
     Y,M,D, H,MI,SS: cardinal;
-// we expect 'YYYYMMDDThhmmss' format but we handle also 'YYYY-MM-DDThh:mm:ss'
+// expect 'YYYYMMDDThhmmss' format but handle also 'YYYY-MM-DDThh:mm:ss'
 begin
   unaligned(result) := 0;
   if P=nil then
@@ -25981,8 +25985,8 @@ begin
   if P[13]=':' then inc(P); // allow hh:mm:ss
   SS := ord(P[13])*10+ord(P[14])-(48+480);
   if (H<24) and (MI<60) and (SS<60) then // inlined EncodeTime()
-    result := result + (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
-              MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec) / MSecsPerDay;
+    result := result+(H*(MinsPerHour*SecsPerMin*MSecsPerSec)+
+              MI*(SecsPerMin*MSecsPerSec)+SS*MSecsPerSec)/MSecsPerDay;
 end;
 
 function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer=0): TDateTime;
@@ -25994,8 +25998,8 @@ procedure Iso8601ToTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateT
 var H,MI,SS: cardinal;
 begin
   if Iso8601ToTimePUTF8Char(P,L,H,MI,SS) then
-    result := (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
-              MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec) / MSecsPerDay else
+    result := (H*(MinsPerHour*SecsPerMin*MSecsPerSec)+
+               MI*(SecsPerMin*MSecsPerSec)+SS*MSecsPerSec)/MSecsPerDay else
     result := 0;
 end;
 
@@ -26050,11 +26054,8 @@ begin
   result := PTimeLogBits(@TimeStamp)^.ToDateTime;
 end;
 
-
-/// Write a Date to P^ Ansi buffer
-// - if Expanded is false, 'YYYYMMDD' date format is used
-// - if Expanded is true, 'YYYY-MM-DD' date format is used
 procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal); overload;
+// use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
 {$ifdef PUREPASCAL}
   PWord(P  )^ := TwoDigitLookupW[Y div 100];
@@ -26078,7 +26079,7 @@ end;
 
 procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S: cardinal;
   FirstChar: AnsiChar = 'T'); overload;
-// we use Thhmmss format
+// use Thhmmss format
 begin
   if FirstChar<>#0 then begin
     P^ := FirstChar;
@@ -26100,23 +26101,22 @@ begin
 end;
 
 procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean); overload;
-// we use YYYYMMDD date format
+// use YYYYMMDD date format
 var Y,M,D: word;
 begin
   DecodeDate(Date,Y,M,D);
   DateToIso8601PChar(P,Expanded,Y,M,D);
 end;
 
-/// convert a date into 'YYYY-MM-DD' date format
 function DateToIso8601Text(Date: TDateTime): RawUTF8;
-begin
+begin // into 'YYYY-MM-DD' date format
   SetLength(Result,10);
   DateToIso8601PChar(Date,pointer(Result),True);
 end;
 
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
   FirstChar: AnsiChar = 'T'); overload;
-// we use Thhmmss format
+// use Thhmmss format
 var H,M,S,MS: word;
 begin
   DecodeTime(Time,H,M,S,MS);
@@ -26125,7 +26125,7 @@ end;
 
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar='T'): RawUTF8;
-// we use YYYYMMDDThhmmss format
+// use YYYYMMDDThhmmss format
 var tmp: array[0..31] of AnsiChar;
 begin
   if Expanded then begin
@@ -26140,23 +26140,21 @@ begin
 end;
 
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUTF8;
-// we use YYYYMMDDTdate format
+// use YYYYMMDDTdate format
 begin
   FastNewRawUTF8(result,8+2*integer(Expanded));
   DateToIso8601PChar(Date,pointer(result),Expanded);
 end;
 
-/// basic Date conversion into ISO-8601
-// - use 'YYYYMMDD' format if not Expanded
-// - use 'YYYY-MM-DD' format if Expanded
 function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8; overload;
+// use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
   FastNewRawUTF8(result,8+2*integer(Expanded));
   DateToIso8601PChar(pointer(result),Expanded,Y,M,D);
 end;
 
 function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar='T'): RawUTF8;
-// we use Thhmmss format
+// use Thhmmss format
 begin
   FastNewRawUTF8(result,7+2*integer(Expanded));
   TimeToIso8601PChar(Time,pointer(result),Expanded,FirstChar);
@@ -26201,14 +26199,9 @@ begin
   Dest^ := #0;
 end;
 
-/// convert a Iso8601 encoded string into a "fake" second count
-// - use internally for computation an abstract "year" of 16 months of 32 days
-// of 32 hours of 64 minutes of 64 seconds
-// - use this function only for fast comparaison between Iso8601 date/time
-// - conversion is faster than Iso8601ToDateTime: use only binary integer math
 function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBoolean=nil): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl for multiply
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
 var V,B: PtrUInt;
     i: integer;
 begin
@@ -26224,7 +26217,7 @@ begin
     V := ConvertHexToBin[ord(P[0])]; if V>9 then exit;
     for i := 1 to 3 do begin
       B := ConvertHexToBin[ord(P[i])]; if B>9 then exit else V := V*10+B; end;
-    result := Int64(V) shl 26;
+    result := Int64(V) shl 26;  // store YYYY
     if P[4] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
     if L>=6 then begin // YYYYMM
       V := ord(P[4])*10+ord(P[5])-(48+480+1); // Month 1..12 -> 0..11
@@ -26286,7 +26279,7 @@ end;
 
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
 // size: S=6 M=6  H=5  D=5  M=4  Y=12
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl for multiply
+// i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
 
 procedure TTimeLogBits.From(Y, M, D, HH, MM, SS: cardinal);
 begin
@@ -26320,7 +26313,7 @@ end;
 procedure TTimeLogBits.From(FileDate: integer);
 begin
 {$ifdef MSWINDOWS}
-  From(LongRec(FileDate).Hi shr 9 + 1980,
+  From(LongRec(FileDate).Hi shr 9+1980,
        LongRec(FileDate).Hi shr 5 and 15,
        LongRec(FileDate).Hi and 31,
        LongRec(FileDate).Lo shr 11,
@@ -26909,7 +26902,7 @@ var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
     i: integer;
-{$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS}
     Now: TSystemTime; {$else}
     D: TDateTime;     {$endif}
 begin
@@ -26933,15 +26926,15 @@ begin
       exit;
   end;
   PWord(@Date)^ := 13+10 shl 8; // first go to next line
-{$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   GetLocalTime(Now); // windows dedicated function
   DateToIso8601PChar(@Date[3],true,Now.wYear,Now.wMonth,Now.wDay);
   TimeToIso8601PChar(@Date[13],true,Now.wHour,Now.wMinute,Now.wSecond,' ');
-{$else}
+  {$else}
   D := Now; // cross platform version
   DateToIso8601PChar(D,@Date[3],true);
   TimeToIso8601PChar(D,@Date[13],true);
-{$endif}
+  {$endif}
   Date[22] := ' ';
   FileWrite(F,Date,sizeof(Date));
   for i := 1 to length(aLine) do
@@ -27035,6 +27028,14 @@ begin // faster implementation than in SysUtils.pas
     result := (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
   {$endif}
 {$endif}
+end;
+
+function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+begin
+  for result := 0 to high(guids) do
+    if IsEqualGUID(guid,guids[result]) then
+      exit;
+  result := -1;
 end;
 
 function IsNullGUID(const guid: TGUID): Boolean;
