@@ -29859,7 +29859,7 @@ begin
   T := MultiFieldValues(Table,aCustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
   if T<>nil then
   try
-    result := T.ToObjArray(result,Table);
+    result := T.ToObjArray(ObjArray,Table);
   finally
     T.Free;
   end;

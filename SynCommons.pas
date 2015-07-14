@@ -18448,7 +18448,7 @@ begin
   result := '';
   SetLength(tmpStr,length(Args));
   if length(Args)*2+1>high(blocks) then
-    raise ESynException.Create('FormatUTF8!');
+    raise ESynException.Create('FormatUTF8: too many args (max=25)!');
   blocksN := 0;
   argN := 0;
   L := 0;
