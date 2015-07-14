@@ -583,7 +583,12 @@ begin
   if fTransaction=nil then
     raise EFirebirdException.Create('Commit');
   with TFirebirdLib(fFirebirdInstance) do
+  try
     Check(isc_commit_transaction(fStatus,fTransaction),fStatus);
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 procedure TSQLDBFirebirdConnection.Rollback;

@@ -107,6 +107,7 @@ unit SynOleDB;
     unrecognized column type when table schema is retrieved from SQL
   - fixed issue when running TOleDBStatement.Step(true)
   - fixed issue [e8c211062e] when binding NULL values in multi INSERT statements
+  - exception during Commit should leave transaction state - see [ca035b8f0da]
   - fixed logging SQL content of external OleDB statements
 
 }
@@ -2105,7 +2106,12 @@ begin
   SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Commit;
-    OleDbCheck(nil,fTransaction.Commit(False,XACTTC_SYNC,0));
+    try
+      OleDbCheck(nil,fTransaction.Commit(False,XACTTC_SYNC,0));
+    except
+      inc(fTransactionCount); // the transaction is still active
+      raise;
+    end;
   end;
 end;
 

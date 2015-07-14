@@ -321,7 +321,12 @@ end;
 procedure TSQLDBNexusDBConnection.Commit;
 begin
   inherited Commit;
-  fDatabase.Commit;
+  try
+    fDatabase.Commit;
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 procedure TSQLDBNexusDBConnection.Connect;

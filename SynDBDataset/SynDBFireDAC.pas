@@ -408,7 +408,12 @@ end;
 procedure TSQLDBFireDACConnection.Commit;
 begin
   inherited Commit;
-  fDatabase.Commit;
+  try
+    fDatabase.Commit;
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 constructor TSQLDBFireDACConnection.Create(aProperties: TSQLDBConnectionProperties);

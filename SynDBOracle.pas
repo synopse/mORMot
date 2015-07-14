@@ -123,6 +123,7 @@ unit SynDBOracle;
   - fixed ticket [73aec05724] about potential BLOB/CURSOR resource leaks
   - fixed ticket [e9cab7cd97] about OCI_SUCCESS_WITH_INFO not returning any data
   - fixed truncated error message in TSQLDBOracleLib.HandleError() method
+  - exception during Commit should leave transaction state - see [ca035b8f0da]
   - allow to return NULL columns (ex. "SELECT one, two, NULL AS three FROM table")
   - fix potential ORA-24333 error when using stored procedures
   - strip error text constants to decrease the generated .exe size by about 16KB
@@ -1789,10 +1790,15 @@ end;
 
 procedure TSQLDBOracleConnection.Commit;
 begin
-  inherited;
+  inherited Commit;
   if fTrans=nil then
     raise ESQLDBOracle.CreateUTF8('Invalid %.Commit call',[self]);
-  OCI.Check(self,nil,OCI.TransCommit(fContext,fError,OCI_DEFAULT),fError);
+  try
+    OCI.Check(self,nil,OCI.TransCommit(fContext,fError,OCI_DEFAULT),fError);
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 procedure TSQLDBOracleConnection.Connect;

@@ -85,6 +85,7 @@ unit SynDBSQLite3;
   - most SQL-level specific methods are moved to SynDB unit for reusability
   - TSQLDBSQLite3Statement.Reset won't call BindReset, since it is not mandatory
   - added TSQLDBSQLite3Connection.LockingMode property for performance tuning
+  - exception during Commit should leave transaction state - see [ca035b8f0da]
 
 
 }
@@ -435,7 +436,12 @@ end;
 procedure TSQLDBSQLite3Connection.Commit;
 begin
   inherited Commit;
-  fDB.Commit;
+  try
+    fDB.Commit;
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 procedure TSQLDBSQLite3Connection.Connect;

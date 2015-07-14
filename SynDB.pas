@@ -261,6 +261,7 @@ unit SynDB;
   - fixed ticket [545fbe7579] about TSQLDBConnection.LastErrorMessage not reset
   - fixed ticket [d465da9843] when guessing SQLite3 column type from its
     affinity - see http://www.sqlite.org/datatype3.html
+  - exception during Commit should leave transaction state - see [ca035b8f0da]
   - fixed potential GPF after TSQLDBConnectionProperties.ExecuteNoResult() method call
   - fixed TSQLDBConnectionProperties.SQLGetField() returned value for dFirebird
   - fixed TSQLDBConnectionProperties.ColumnTypeNativeToDB() for dFirebird
@@ -7707,8 +7708,13 @@ end;
 
 procedure TSQLDBProxyConnection.Commit;
 begin
-  inherited Commit;
-  fProxy.Process(cCommit,self,self);
+  inherited Commit; // dec(fTransactionCount)
+  try
+    fProxy.Process(cCommit,self,self);
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
 end;
 
 procedure TSQLDBProxyConnection.Connect;

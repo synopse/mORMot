@@ -61,6 +61,7 @@ unit SynDBODBC;
   - now trim any spaces when retrieving database schema text values
   - fixed ticket [4c68975022] about broken SQL statement when logging active
   - fixed ticket [d48283f5ec] about error at binding void string parameter
+  - exception during Commit should leave transaction state - see [ca035b8f0da]
   - GetCol() will now retrieve all columns at once - mandatory for drivers not
     supporting SQL_GD_ANY_ORDER feature (like SQL Server Native Client 10.0)
   - TODBCConnectionProperties.Create will now handle full ODBC connection string
@@ -1106,11 +1107,15 @@ end;
 
 procedure TODBCConnection.Commit;
 begin
-  inherited Commit;
-  with ODBC do begin
+  inherited Commit; // dec(fTransactionCount)
+  with ODBC do
+  try
     Check(self,nil,EndTran(SQL_HANDLE_DBC,fDBc,SQL_COMMIT),SQL_HANDLE_DBC,fDBc);
     Check(self,nil,SetConnectAttrW(fDBc,SQL_AUTOCOMMIT,SQL_AUTOCOMMIT_ON,0),
       SQL_HANDLE_DBC,fDBc); // back to default AUTO COMMIT ON mode
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
   end;
 end;
 
