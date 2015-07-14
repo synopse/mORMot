@@ -3272,6 +3272,8 @@ procedure TTestLowLevelCommon._IdemPropName;
 const abcde: PUTF8Char = 'ABcdE';
       abcdf: PUTF8Char = 'abCDF';
       zbcde: PUTF8Char = 'zBcdE';
+      edf:   PUTF8Char = '$a_bc[0]edfghij';
+      eda:   PUTF8Char = '$a_bc[0]"edfghij';
 var WinAnsi: WinAnsiString;
     i: integer;
 begin
@@ -3338,18 +3340,11 @@ begin
   WinAnsi[3] := #$E7;
   Check(UpperCaseU(WinAnsiToUTF8(WinAnsi))='AECD');
   check(not JsonPropNameValid(nil));
-  check(not JsonPropNameValid(#0));
-  check(JsonPropNameValid('a'));
-  check(JsonPropNameValid('abc'));
-  check(JsonPropNameValid('_abc'));
-  check(JsonPropNameValid('$aBc'));
-  check(JsonPropNameValid('abc[0]'));
-  check(JsonPropNameValid('abc[0]edfghij'));
-  check(not JsonPropNameValid('ab$c'));
-  check(not JsonPropNameValid('ab\c[0]'));
-  check(not JsonPropNameValid('ab"c0'));
-  check(not JsonPropNameValid('~abc0'));
-  check(not JsonPropNameValid('"abc0'));
+  check(not JsonPropNameValid(@edf[15]));
+  for i := 14 downto 0 do
+    check(JsonPropNameValid(@edf[i])<>(i in [5,7]));
+  for i := 15 downto 0 do
+    check(JsonPropNameValid(@eda[i])=(i>8));
 end;
 
 procedure TTestLowLevelCommon._TSynTable;
