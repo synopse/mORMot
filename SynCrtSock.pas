@@ -1390,6 +1390,8 @@ type
     function From(aURI: SockString): boolean;
     /// compute the whole normalized URI
     function URI: SockString;
+    /// the server port, as integer value
+    function PortInt: integer;
   end;
 
   /// the supported authentication schemes which may be used by HTTP clients
@@ -2485,6 +2487,14 @@ begin
   if (Port='80') or (Port='0') or (Port='') then
     result := Prefix[Https]+Server+'/'+Address else
     result := Prefix[Https]+Server+':'+Port+'/'+Address;
+end;
+
+function TURI.PortInt: integer;
+var err: integer;
+begin
+  Val(string(Server),result,err);
+  if err<>0 then
+    result := 0;
 end;
 
 
