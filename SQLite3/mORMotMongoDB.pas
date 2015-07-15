@@ -661,7 +661,7 @@ begin
   if aID<=0 then
     exit;
   query := BSONVariant(['_id',aID]);
-  update.Init(JSON_OPTIONS[true]);
+  update.Init(JSON_OPTIONS_FAST);
   for f := 0 to fStoredClassRecordProps.Fields.Count-1 do begin
     info := fStoredClassRecordProps.Fields.List[f];
     if info.SQLFieldType=sftBlob then begin
@@ -1240,4 +1240,4 @@ begin
 end;
 
 
-end.
+end.

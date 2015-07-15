@@ -4957,16 +4957,22 @@ type
     // - output variant will be reset and filled as a TDocVariant instance,
     // ready to be serialized as a JSON object
     // - if there is no value stored (i.e. Count=0), set null
-    procedure AsDocVariant(out DocVariant: variant); overload;
+    procedure AsDocVariant(out DocVariant: variant;
+      ExtendedJson: boolean=false); overload;
     /// compute a TDocVariant document from the stored values
-    function AsDocVariant: variant; overload; {$ifdef HASINLINE}inline;{$endif}
+    function AsDocVariant(ExtendedJson: boolean=false): variant; overload; {$ifdef HASINLINE}inline;{$endif}
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
+    // - if ValueAsString is TRUE, values would be stored as string
+    // - if ValueAsString is FALSE, numerical values would be identified by
+    // IsString() and stored as such in the resulting TDocVariant
     // - if you let ChangedProps point to a TDocVariantData, it would contain
     // an object with the stored values, just like AsDocVariant
     // - returns the resulting count of stored values in the TDocVariant
-    function MergeDocVariant(var DocVariant: variant; ChangedProps: PVariant=nil): integer;
+    function MergeDocVariant(var DocVariant: variant;  
+      ValueAsString: boolean; ChangedProps: PVariant=nil;
+      ExtendedJson: Boolean=false): integer;
     {$endif}
     /// returns true if the Init() method has been called
     function Initialized: boolean;
@@ -7984,7 +7990,8 @@ function IsString(P: PUTF8Char): boolean;
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating or integer), according to the JSON encoding schema
 // - this version will NOT recognize JSON null/false/true as strings
-// - e.g. IsString('0')=false, IsString('abc')=true, IsString('null')=false
+// - e.g. IsStringJSON('0')=false, IsStringJSON('abc')=true,
+// but IsStringJSON('null')=false
 // - will follow the JSON definition of number, i.e. '0123' is a string (i.e.
 // '0' is excluded at the begining of a number) and '123' is not a string
 function IsStringJSON(P: PUTF8Char): boolean;
@@ -11334,6 +11341,10 @@ const
     [dvoReturnNullForUnknownProperty],
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
 
+  /// same as JSON_OPTIONS[true], but can not be used as PDocVariantOptions
+  JSON_OPTIONS_FAST =
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference];
+
   /// TDocVariant options which may be used for plain JSON parsing
   // - this won't recognize any extended syntax
   JSON_OPTIONS_FAST_STRICTJSON: TDocVariantOptions =
@@ -11341,17 +11352,27 @@ const
      dvoJSONParseDoNotTryCustomVariants];
 
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
-  // storage
-  JSON_OPTIONS_NAMEVALUE: TDocVariantOptions =
+  // storage, with optional extended JSON syntax serialization
+  JSON_OPTIONS_NAMEVALUE: array[boolean] of TDocVariantOptions = (
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
-     dvoNameCaseSensitive];
+     dvoNameCaseSensitive],
+    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
+     dvoNameCaseSensitive,dvoSerializeAsExtendedJson]);
 
   /// TDocVariant options to be used so that JSON serialization would
   // use the extended JSON syntax for field names
   // - you could use it e.g. on a TSQLRecord variant published field to
-  // reduce the JSON escape process during storage in the database:
+  // reduce the JSON escape process during storage in the database, by
+  // customizing your TSQLModel instance:
   // !  (aModel.Props[TSQLMyRecord]['VariantProp'] as TSQLPropInfoRTTIVariant).
   // !    DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
+  // or - in a cleaner way - by overriding TSQLRecord.InternalDefineModel():
+  // ! class procedure TSQLMyRecord.InternalDefineModel(Props: TSQLRecordProperties);
+  // ! begin
+  // !   (Props.Fields.ByName('VariantProp') as TSQLPropInfoRTTIVariant).
+  // !     DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
+  // ! end;
+  // - consider using JSON_OPTIONS_NAMEVALUE[true] for TSynNameValue-like storage
   JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson];
@@ -12338,7 +12359,7 @@ type
 
     /// how this document will behave
     // - those options are set when creating the instance
-    property Options: TDocVariantOptions read VOptions;
+    property Options: TDocVariantOptions read VOptions write VOptions;
     /// returns the instance internal layout
     // - just after initialization, it will return dvUndefined
     // - most of the time, you will add named values with AddValue() or by
@@ -33290,14 +33311,14 @@ end;
 function JSONToVariantDynArray(const JSON: RawUTF8): TVariantDynArray;
 var tmp: TDocVariantData;
 begin
-  tmp.InitJSON(JSON,JSON_OPTIONS[true]);
+  tmp.InitJSON(JSON,JSON_OPTIONS_FAST);
   result := tmp.VValue;
 end;
 
 function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 var tmp: TDocVariantData;
 begin
-  tmp.InitArray(items,JSON_OPTIONS[true]);
+  tmp.InitArray(items,JSON_OPTIONS_FAST);
   result := tmp.VValue;
 end;
 
@@ -33349,12 +33370,12 @@ begin
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   ZeroFill(@self);
   VType := DocVariantVType;
-  VOptions := JSON_OPTIONS[true];
+  VOptions := JSON_OPTIONS_FAST;
 end;
 
 procedure TDocVariantData.InitFast(InitialCapacity: integer; aKind: TDocVariantKind);
 begin
-  Init(JSON_OPTIONS[true],aKind);
+  Init(JSON_OPTIONS_FAST,aKind);
   if aKind=dvObject then
     SetLength(VName,InitialCapacity);
   SetLength(VValue,InitialCapacity);
@@ -34509,7 +34530,7 @@ begin
   if result^.Kind<>aKind then begin
     result := @VValue[ndx];
     VarClear(PVariant(result)^);
-    result^.Init(JSON_OPTIONS[true],aKind);
+    result^.Init(JSON_OPTIONS_FAST,aKind);
   end;
 end;
 
@@ -34954,7 +34975,7 @@ begin
     // Obj is not a valid TDocVariant object -> create new
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
       VarClear(Obj);
-    TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS[true]);
+    TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
   end else
     // add name,value pairs to the TDocVariant object
     TDocVariantData(Obj).AddNameValuesToObject(NameValuePairs);
@@ -34980,14 +35001,14 @@ function _ObjFast(const NameValuePairs: array of const): variant;
 begin
   if TVarData(result).VType and VTYPE_STATIC<>0 then
     VarClear(result);
-  TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS[true]);
+  TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
 end;
 
 function _ArrFast(const Items: array of const): variant;
 begin
   if TVarData(result).VType and VTYPE_STATIC<>0 then
     VarClear(result);
-  TDocVariantData(result).InitArray(Items,JSON_OPTIONS[true]);
+  TDocVariantData(result).InitArray(Items,JSON_OPTIONS_FAST);
 end;
 
 function _Json(const JSON: RawUTF8; Options: TDocVariantOptions): variant;
@@ -34997,7 +35018,7 @@ end;
 
 function _JsonFast(const JSON: RawUTF8): variant;
 begin
-  _Json(JSON,result,JSON_OPTIONS[true]);
+  _Json(JSON,result,JSON_OPTIONS_FAST);
 end;
 
 function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
@@ -35016,7 +35037,7 @@ end;
 
 function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const): variant;
 begin
-  _JsonFmt(Format,Args,Params,JSON_OPTIONS[true],result);
+  _JsonFmt(Format,Args,Params,JSON_OPTIONS_FAST,result);
 end;
 
 function _Json(const JSON: RawUTF8; var Value: variant;
@@ -35038,7 +35059,7 @@ end;
 
 procedure _UniqueFast(var DocVariant: variant);
 begin
-  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[true]);
+  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS_FAST);
 end;
 
 function _Copy(const DocVariant: variant): variant;
@@ -35048,7 +35069,7 @@ end;
 
 function _CopyFast(const DocVariant: variant): variant;
 begin
-  result := TDocVariant.NewUnique(DocVariant,JSON_OPTIONS[true]);
+  result := TDocVariant.NewUnique(DocVariant,JSON_OPTIONS_FAST);
 end;
 
 {$endif NOVARIANTS}
@@ -43160,7 +43181,7 @@ end;
 
 constructor TLockedDocVariant.Create;
 begin
-  Create(JSON_OPTIONS[true]);
+  Create(JSON_OPTIONS_FAST);
 end;
 
 constructor TLockedDocVariant.Create(FastStorage: boolean);
@@ -47832,7 +47853,7 @@ begin
        Where.Value[1] := '[';
        Where.Value[P-B] := ']';
        TDocVariantData(Where.ValueVariant).InitJSONInPlace(
-         pointer(Where.Value),JSON_OPTIONS[true]);
+         pointer(Where.Value),JSON_OPTIONS_FAST);
        result := true;
        exit;
     end;
@@ -49011,12 +49032,12 @@ begin
     RawUTF8ToVariant(List[i].Value,result);
 end;
 
-procedure TSynNameValue.AsDocVariant(out DocVariant: variant);
+procedure TSynNameValue.AsDocVariant(out DocVariant: variant; ExtendedJson: boolean);
 var ndx: integer;
 begin
   if Count>0 then
   with TDocVariantData(DocVariant) do begin
-    Init(JSON_OPTIONS_NAMEVALUE,dvObject);
+    Init(JSON_OPTIONS_NAMEVALUE[ExtendedJson],dvObject);
     VCount := self.Count;
     SetLength(VName,VCount);
     SetLength(VValue,VCount);
@@ -49028,22 +49049,24 @@ begin
     TVarData(DocVariant).VType := varNull;
 end;
 
-function TSynNameValue.AsDocVariant: variant;
+function TSynNameValue.AsDocVariant(ExtendedJson: boolean): variant;
 begin
-  AsDocVariant(result);
+  AsDocVariant(result,ExtendedJson);
 end;
 
 function TSynNameValue.MergeDocVariant(var DocVariant: variant;
-  ChangedProps: PVariant): integer;
+  ValueAsString: boolean; ChangedProps: PVariant; ExtendedJson: Boolean): integer;
 var i: integer;
     v: variant;
 begin
-  if not DocVariantType.IsOfType(DocVariant) then
-    TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE);
+  if TVarData(DocVariant).VType<>DocVariantVType then
+    TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
   if ChangedProps<>nil then
-    TDocVariant.New(ChangedProps^,JSON_OPTIONS_NAMEVALUE);
+    TDocVariant.New(ChangedProps^,TDocVariantData(DocVariant).Options);
   for i := 0 to Count-1 do begin
-    RawUTF8ToVariant(List[i].Value,v);
+    if ValueAsString or (List[i].Value='') or IsString(pointer(List[i].Value)) then
+      RawUTF8ToVariant(List[i].Value,v) else
+      GetVariantFromJSON(pointer(List[i].Value),false,v,nil);
     if ChangedProps<>nil then
       PDocVariantData(ChangedProps)^.AddValue(List[i].Name,v);
     TDocVariantData(DocVariant).AddOrUpdateValue(List[i].Name,v);

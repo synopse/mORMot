@@ -3385,7 +3385,7 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     /// how this property will deal with its instances (including TDocVariant)
-    // - by default, contains JSON_OPTIONS[true] for best performance - i.e.
+    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
     // - set JSON_OPTIONS_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
     // so that any TDocVariant nested field names would not be double-quoted,
@@ -6634,9 +6634,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
-      var result: variant); overload;
+      var result: variant; options: PDocVariantOptions=nil); overload;
     /// retrieve the simple record content as a TDocVariant custom variant object
-    function GetSimpleFieldsAsDocVariant(withID: boolean=true): variant;
+    function GetSimpleFieldsAsDocVariant(withID: boolean=true;
+      options: PDocVariantOptions=nil): variant;
     /// retrieve the published property value into a Variant
     // - will set the Variant type to the best matching kind according to the
     // property type
@@ -8899,7 +8900,7 @@ type
   // - used to store a log of events into a JSON text, easy to be displayed
   // with a TSQLTableToGrid
   // - this log can then be stored as a RawUTF8 field property into a result
-  // record, e.g.
+  // record, for instance
   TSQLRecordLog = class(TSQLRecord)
   protected
     /// store the Log Table JSON content
@@ -9694,7 +9695,7 @@ type
     property InterfaceIID: TGUID read fInterfaceIID;
     {$ifndef NOVARIANTS}
     /// how this interface will work with variants (including TDocVariant)
-    // - by default, contains JSON_OPTIONS[true] for best performance - i.e.
+    // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
     property DocVariantOptions: TDocVariantOptions
       read fDocVariantOptions write fDocVariantOptions;
@@ -19572,7 +19573,7 @@ procedure TSQLPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Varia
 var json: RawUTF8;
 begin
   json := GetDynArray(Instance).SaveToJSON;
-  _Json(JSON,Dest,JSON_OPTIONS[true]);
+  _Json(JSON,Dest,JSON_OPTIONS_FAST);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
@@ -19680,7 +19681,7 @@ constructor TSQLPropInfoRTTIVariant.Create(aPropInfo: PPropInfo; aPropIndex: int
 begin
   inherited;
   if aSQLFieldType=sftVariant then
-    fDocVariantOptions := JSON_OPTIONS[true] else
+    fDocVariantOptions := JSON_OPTIONS_FAST else
     fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored  
 end;
 
@@ -20599,7 +20600,7 @@ end;
 
 function TSynMonitor.ComputeDetails: variant;
 begin
-  _Json(ComputeDetailsJSON,result,JSON_OPTIONS[true]);
+  _Json(ComputeDetailsJSON,result,JSON_OPTIONS_FAST);
 end;
 
 
@@ -21079,7 +21080,7 @@ begin
   for f := 0 to fFieldCount-1 do
     ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true,
       fFieldType[f].ContentTypeInfo);
-  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,JSON_OPTIONS[true]);
+  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,JSON_OPTIONS_FAST);
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
@@ -21106,7 +21107,7 @@ procedure TSQLTable.ToDocVariant(out docarray: variant; readonly: boolean);
 var Values: TVariantDynArray;
 begin
   ToDocVariant(Values,readonly);
-  TDocVariantData(docarray).InitArrayFromVariants(Values,JSON_OPTIONS[true]);
+  TDocVariantData(docarray).InitArrayFromVariants(Values,JSON_OPTIONS_FAST);
 end;
 
 {$endif NOVARIANTS}
@@ -27736,7 +27737,7 @@ begin
 end;
 
 procedure TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; var result: variant);
+  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions);
 var f: integer;
     Fields: TSQLPropInfoList;
     doc: TDocVariantData absolute result;
@@ -27744,6 +27745,8 @@ begin
   VarClear(result);
   Fields := RecordProps.Fields;
   doc.InitFast(Fields.Count+1,dvObject);
+  if options<>nil then // force options
+    PDocVariantData(@result)^.Options := options^;
   if withID then
     doc.Values[doc.InternalAdd('RowID')] := fID;
   for f := 0 to Fields.Count-1 do
@@ -27751,9 +27754,10 @@ begin
     Fields.List[f].GetVariant(self,doc.Values[doc.InternalAdd(Fields.List[f].Name)]);
 end;
 
-function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean): variant;
+function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean;
+  options: PDocVariantOptions): variant;
 begin
-  GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect],result);
+  GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect],result,options);
 end;
 
 function TSQLRecord.GetFieldVariant(const PropName: string): Variant;
@@ -35371,7 +35375,7 @@ end;
 
 function TSQLRestServer.FullStatsAsDocVariant: variant;
 begin
-  _Json(FullStatsAsJson,result,JSON_OPTIONS[true]);
+  _Json(FullStatsAsJson,result,JSON_OPTIONS_FAST);
 end;
 
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
@@ -40313,7 +40317,7 @@ procedure ObjectToVariant(Value: TObject; out result: variant); overload;
 var json: RawUTF8;
 begin
   json := ObjectToJSON(Value);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS[true]);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 function ObjectToVariantDebug(Value: TObject): variant;
@@ -40321,7 +40325,7 @@ var json: RawUTF8;
 begin
   VarClear(result);
   json := ObjectToJSONDebug(Value);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS[true]);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 procedure _ObjAddProps(Value: TObject; var Obj: variant);
@@ -40335,7 +40339,7 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8): variant;
 begin
-  _Json(ObjectToJSONDebug(Value),result,JSON_OPTIONS[true]);
+  _Json(ObjectToJSONDebug(Value),result,JSON_OPTIONS_FAST);
   if ContextFormat<>'' then
     if ContextFormat[1]='{' then
       _ObjAddProps([ContextName,_JsonFastFmt(ContextFormat,[],ContextArgs)],result) else
@@ -45769,7 +45773,7 @@ begin
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): % is not an interface',[self,aInterface^.Name,aInterface^.Name]);
   {$ifndef NOVARIANTS}
-  fDocVariantOptions := JSON_OPTIONS[true];
+  fDocVariantOptions := JSON_OPTIONS_FAST;
   {$endif}
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid;

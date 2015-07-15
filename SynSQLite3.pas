@@ -3598,6 +3598,21 @@ end;
 
 procedure InternalJsonGet(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  function returnObject(w: PUTF8Char): boolean;
+  begin
+    if w<>nil then
+      repeat
+        case w^ of
+        #0: break;
+        ',','*': begin
+          result := true;
+          exit;
+        end;
+        end;
+        inc(w);
+      until false;
+    result := false;
+  end;
 var where,json: PUTF8Char;
 begin // JsonGet(VariantField,'PropName') returns the value of a JSON object
       // JsonGet(VariantField,'Obj1.Obj2.PropName') to search by path
@@ -3612,11 +3627,11 @@ begin // JsonGet(VariantField,'PropName') returns the value of a JSON object
     sqlite3.result_null(Context) else
   case sqlite3.value_type(argv[1]) of // fast SAX search (no memory allocation)
   SQLITE_TEXT: begin
-    json := sqlite3.value_text(argv[0]);
     where := sqlite3.value_text(argv[1]);
-    if (PosChar(where,',')=nil) and (PosChar(where,'*')=nil)  then
-      JsonToSQlite3Context(JsonObjectByPath(json,where),Context) else
-      RawUTF8ToSQlite3Context(JsonObjectsByPath(json,where),Context,true);
+    json := JsonObjectByPath(sqlite3.value_text(argv[0]),where);
+    if returnObject(where) then
+      JsonToSQlite3Context(json,Context) else
+      RawUTF8ToSQlite3Context(json,Context,true);
   end;
   SQLITE_INTEGER: begin
     json := JSONArrayItem(sqlite3.value_text(argv[0]),sqlite3.value_int64(argv[1]));

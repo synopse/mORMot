@@ -271,7 +271,8 @@ type
   // also much faster in some cases - but less safe - than asDocVariantPerValue)
   // - asDocVariantPerValue will set JSON_OPTIONS[false] settings:
   // ! [dvoReturnNullForUnknownProperty]
-  // - asDocVariantPerReference will set JSON_OPTIONS[true] settings:
+  // - asDocVariantPerReference will set JSON_OPTIONS[true]/JSON_OPTIONS_FAST
+  // settings:
   // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
   TBSONDocArrayConversion = (
     asBSONVariant, asDocVariantPerValue, asDocVariantPerReference);
@@ -2376,7 +2377,7 @@ procedure BSONItemsToDocVariant(Kind: TBSONElementType; BSON: PByte;
   var Doc: TDocVariantData; Option: TBSONDocArrayConversion);
 const OPTIONS: array[TBSONDocArrayConversion] of TDocVariantOptions =
     ([],[dvoReturnNullForUnknownProperty],
-        [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]);
+        [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
 var k: TDocVariantKind;
     i,n,cap: integer;
     items: array[0..63] of TBSONElement;
@@ -2390,16 +2391,16 @@ begin // very fast optimized code
       k := dvArray;
     Doc.Init(OPTIONS[Option],k);
     cap := 0;
-    repeat
+    repeat // will handle up to 64 TBSONElement per loop (via items[])
       n := 0;
       while items[n].FromNext(BSON) do begin
         inc(n);
         if n=length(items) then
-          break;
+          break; // avoid buffer overflow
       end;
       if n=0 then
         break;
-      inc(cap,n);
+      inc(cap,n); // pre-allocate Doc.Names[]/Values[]
       if cap<512 then
         Doc.Capacity := cap else
         if Doc.Capacity<cap then
@@ -4731,7 +4732,7 @@ function TMongoReplyCursor.AppendAllToDocVariant(var Dest: TDocVariantData): int
 var item: variant;
 begin
   if TVarData(Dest).VType<>DocVariantType.VarType then
-    TDocVariant.New(Variant(Dest),JSON_OPTIONS[true]);
+    TDocVariant.New(Variant(Dest),JSON_OPTIONS_FAST);
   result := Dest.Count;
   if (fReply='') or (DocumentCount<=0) then
     exit; // nothing to append
@@ -4867,7 +4868,7 @@ begin
   if docs<>nil then
     if ForceOneInstance then
       result := docs[0] else
-      TDocVariantData(result).InitArrayFromVariants(docs,JSON_OPTIONS[true]);
+      TDocVariantData(result).InitArrayFromVariants(docs,JSON_OPTIONS_FAST);
 end;
 
 function TMongoConnection.GetDocumentsAndFree(Query: TMongoRequestQuery): variant;
