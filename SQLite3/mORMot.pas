@@ -865,6 +865,7 @@ unit mORMot;
       an implementation proposal from EgorovAlex - thanks for sharing!
     - added TSQLRecordTimed class, and TSQLRecord.AddFilterNotVoidAllTextFields
       and TSQLModel.AddTableInherited methods
+    - new TSQLModel/TSQLRecordProperties.SetVariantFieldsDocVariantOptions methods
     - Windows Authentication can use either NTLM or the more secure Kerberos
       protocol, if the corresponding SPN domain is set as password
     - feature request [5a17a4277f]: you can now define in the Model your custom
@@ -3393,7 +3394,8 @@ type
     // transmitted data over REST, by writing '{name:"John",age:123}' instead of
     // '{"name":"John","age":123}': be aware that this syntax is supported by
     // the ORM, SOA, TDocVariant, TBSONVariant, and our SynCrossPlatformJSON
-    // unit, but not AJAX/JavaScript or most JSON libraries 
+    // unit, but not AJAX/JavaScript or most JSON libraries
+    // - see also TSQLModel/TSQLRecordProperties.SetVariantFieldsDocVariantOptions 
     property DocVariantOptions: TDocVariantOptions read fDocVariantOptions write fDocVariantOptions;
   end;
 {$endif NOVARIANTS}
@@ -4706,6 +4708,12 @@ type
     // - will expect the "index" value to be in UTF-16 codepoints, unless
     // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
     procedure SetMaxLengthFilterForTextFields(IndexIsUTF8Length: boolean=false);
+    {$ifndef NOVARIANTS}
+    /// customize the TDocVariant options for all variant published properties
+    // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
+    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+    {$endif}
     /// return the UTF-8 encoded SQL statement source to alter the table for
     //  adding the specified field
     function SQLAddField(FieldIndex: integer): RawUTF8;
@@ -8394,6 +8402,12 @@ type
     // - will expect the "index" value to be in UTF-16 codepoints, unless
     // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
     procedure SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean=false);
+    {$ifndef NOVARIANTS}
+    /// customize the TDocVariant options for all variant published properties
+    // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
+    // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+    {$endif}
 
     /// assign an enumeration type to the possible actions to be performed
     // with this model
@@ -28862,6 +28876,16 @@ begin
       fTableProps[i].fProps.SetMaxLengthFilterForTextFields(IndexIsUTF8Length);
 end;
 
+{$ifndef NOVARIANTS}
+procedure TSQLModel.SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+var i: integer;
+begin
+  if self<>nil then
+    for i := 0 to high(fTableProps) do
+      fTableProps[i].fProps.SetVariantFieldsDocVariantOptions(Options);
+end;
+{$endif}
+
 function TSQLModel.NewRecord(const SQLTableName: RawUTF8): TSQLRecord;
 var aClass: TSQLRecordClass;
 begin
@@ -42591,6 +42615,18 @@ begin
       AddFilterOrValidate(i,TSynFilterTruncate.CreateUTF8('{maxLength:%,UTF8Length:%}',
         [FieldWidth,IndexIsUTF8Length],[]));
 end;
+
+{$ifndef NOVARIANTS}
+procedure TSQLRecordProperties.SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
+var i: integer;
+begin
+  if self<>nil then
+  for i := 0 to Fields.Count-1 do
+    if (Fields.List[i].SQLFieldType=sftVariant) and
+       Fields.List[i].InheritsFrom(TSQLPropInfoRTTIVariant) then
+      TSQLPropInfoRTTIVariant(Fields.List[i]).DocVariantOptions := Options;
+end;
+{$endif}
 
 function TSQLRecordProperties.SQLAddField(FieldIndex: integer): RawUTF8;
 begin
