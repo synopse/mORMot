@@ -218,8 +218,9 @@ type
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClient;
   public
-    /// set the default Client.Root, ORM.ServerName, Client.WebSocketsPassword 
-    procedure SetDefaults(const Root,Port,Password: RawUTF8);
+    /// set the default values for Client.Root, ORM.ServerName,
+    // Client.WebSocketsPassword and ORM.Password
+    procedure SetDefaults(const Root,Port,WebSocketPassword,UserPassword: RawUTF8);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -1361,7 +1362,8 @@ begin
   end;
 end;
 
-procedure TDDDRestClientSettings.SetDefaults(const Root,Port,Password: RawUTF8);
+procedure TDDDRestClientSettings.SetDefaults(const Root,Port,WebSocketPassword,
+  UserPassword: RawUTF8);
 begin
   if fClient.Root='' then
     fClient.Root := Root;
@@ -1370,7 +1372,11 @@ begin
   if (Port<>'') and (fORM.ServerName='') then begin
     fORM.ServerName := 'http://localhost:'+Port;
     if fClient.WebSocketsPassword='' then
-      fClient.WebSocketsPassword := Password;
+      fClient.WebSocketsPassword := WebSocketPassword;
+    if UserPassword<>'' then begin
+      fORM.User := 'User';
+      fORM.Password := UserPassword;
+    end;
   end;
 end;
 
