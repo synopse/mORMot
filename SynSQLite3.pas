@@ -3627,11 +3627,11 @@ begin // JsonGet(VariantField,'PropName') returns the value of a JSON object
     sqlite3.result_null(Context) else
   case sqlite3.value_type(argv[1]) of // fast SAX search (no memory allocation)
   SQLITE_TEXT: begin
+    json := sqlite3.value_text(argv[0]);
     where := sqlite3.value_text(argv[1]);
-    json := JsonObjectByPath(sqlite3.value_text(argv[0]),where);
     if returnObject(where) then
-      JsonToSQlite3Context(json,Context) else
-      RawUTF8ToSQlite3Context(json,Context,true);
+      RawUTF8ToSQlite3Context(JsonObjectsByPath(json,where),Context,true) else
+      JsonToSQlite3Context(JsonObjectByPath(json,where),Context);
   end;
   SQLITE_INTEGER: begin
     json := JSONArrayItem(sqlite3.value_text(argv[0]),sqlite3.value_int64(argv[1]));
