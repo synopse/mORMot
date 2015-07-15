@@ -4919,6 +4919,10 @@ begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),'');
 end;
 {$ifndef DELPHI5OROLDER}
+function uct(const s: RawUTF8): TSQLFieldType;
+begin
+  result := UTF8ContentNumberType(pointer(s));
+end;
 var O,O2: TPersistentToJSON;
     E: TSynBackgroundThreadProcessStep;
     {$ifndef LVCL}
@@ -5242,21 +5246,21 @@ begin
   Check(UTF8ContentType('123.1a')=sftUTF8Text);
   Check(UTF8ContentType('123.1234a')=sftUTF8Text);
   Check(UTF8ContentType('123-2')=sftUTF8Text);
-  Check(UTF8ContentNumberType('null')=sftUnknown);
-  Check(UTF8ContentNumberType('0')=sftInteger);
-  Check(UTF8ContentNumberType('123')=sftInteger);
-  Check(UTF8ContentNumberType('0123')=sftUTF8Text);
-  Check(UTF8ContentNumberType('-123')=sftInteger);
-  Check(UTF8ContentNumberType('123.1')=sftCurrency);
-  Check(UTF8ContentNumberType('123.12')=sftCurrency);
-  Check(UTF8ContentNumberType('123.12345678')=sftFloat);
-  Check(UTF8ContentNumberType('1.13e+12')=sftFloat);
-  Check(UTF8ContentNumberType('-1.13e-12')=sftFloat);
-  Check(UTF8ContentNumberType('123.')=sftUTF8Text);
-  Check(UTF8ContentNumberType('123.a')=sftUTF8Text);
-  Check(UTF8ContentNumberType('123.1a')=sftUTF8Text);
-  Check(UTF8ContentNumberType('123.1234a')=sftUTF8Text);
-  Check(UTF8ContentNumberType('123-2')=sftUTF8Text);
+  Check(uct('null')=sftUnknown);
+  Check(uct('0')=sftInteger);
+  Check(uct('123')=sftInteger);
+  Check(uct('0123')=sftUTF8Text);
+  Check(uct('-123')=sftInteger);
+  Check(uct('123.1')=sftCurrency);
+  Check(uct('123.12')=sftCurrency);
+  Check(uct('123.12345678')=sftFloat);
+  Check(uct('1.13e+12')=sftFloat);
+  Check(uct('-1.13e-12')=sftFloat);
+  Check(uct('123.')=sftUTF8Text);
+  Check(uct('123.a')=sftUTF8Text);
+  Check(uct('123.1a')=sftUTF8Text);
+  Check(uct('123.1234a')=sftUTF8Text);
+  Check(uct('123-2')=sftUTF8Text);
   {$endif}
   J := JSONEncode(['name','john','year',1982,'pi',3.14159]);
   Check(J='{"name":"john","year":1982,"pi":3.14159}');
