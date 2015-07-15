@@ -3269,6 +3269,10 @@ begin
 end;
 
 procedure TTestLowLevelCommon._IdemPropName;
+  function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
+  begin
+    result := IdemPropNameUSameLen(pointer(s1),pointer(s2),len);
+  end;
 const abcde: PUTF8Char = 'ABcdE';
       abcdf: PUTF8Char = 'abCDF';
       zbcde: PUTF8Char = 'zBcdE';
@@ -3317,10 +3321,10 @@ begin
   Check(IdemPropName(abcde,abcde,5,5));
   Check(not IdemPropName(abcde,abcde,4,5));
   Check(not IdemPropName(abcde,abcdf,5,5));
-  Check(not IdemPropNameUSameLen('abcD','ABcF',4));
-  Check(not IdemPropNameUSameLen('abcD','ABcFG',4));
-  Check(IdemPropNameUSameLen('abcDe','ABcdE',5));
   {$endif DELPHI5OROLDER}
+  Check(not IPNUSL('abcD','ABcF',4));
+  Check(not IPNUSL('abcD','ABcFG',4));
+  Check(IPNUSL('abcDe','ABcdE',5));
   Check(IdemPropNameUSameLen(abcde,abcdf,0));
   Check(IdemPropNameUSameLen(abcde,nil,0));
   Check(IdemPropNameUSameLen(nil,abcdf,0));
