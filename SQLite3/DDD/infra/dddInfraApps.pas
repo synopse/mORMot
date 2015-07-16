@@ -869,8 +869,8 @@ begin
       fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
       fSocket := TDDDSynCrtSocket.Create(self);
     fSocket.Connect;
+    FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
-    FMonitoring.State := tpsConnected;
     FLog.Log(sllTrace,'ExecuteConnect: Connected via Socket % - %',
       [fSocket.Identifier,FMonitoring],self);
   except

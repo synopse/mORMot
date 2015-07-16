@@ -4287,6 +4287,8 @@ type
   // Update=mPUT and Delete=mDELETE
   TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
                    mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE);
+  /// set of available HTTP methods transmitted between client and server
+  TSQLURIMethods = set of TSQLURIMethod;
 
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
@@ -13983,6 +13985,7 @@ type
     fVirtualTableDirect: boolean;
     fNoAJAXJSON: boolean;
     fHandleAuthentication: boolean;
+    fBypassORMAuthentication: TSQLURIMethods;
     fAfterCreation: boolean;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
@@ -14811,6 +14814,12 @@ type
     // - i.e. if the associated TSQLModel contains TSQLAuthUser and
     // TSQLAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean read fHandleAuthentication;
+    /// allow to by-pass Authentication for a given set of HTTP verbs
+    // - by default, RESTful access to the ORM would follow HandleAuthentication
+    /// setting: but you could define some HTTP verb to this property, which
+    // would by-pass the authentication - may be used e.g. for public GET
+    // of the content by an AJAX client 
+    property BypassORMAuthentication: TSQLURIMethods read fBypassORMAuthentication write fBypassORMAuthentication;
     /// read-only access to the high-level Server statistics
     // - see ServiceMethodStat[] for information about method-based services,
     // or TServiceFactoryServer.Stats / Stat[] for interface-based services
@@ -29362,12 +29371,12 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
+  InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
   FreeAndNil(fServices);
   FreeAndNil(fCache);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
     // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
-  InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
   for cmd := Low(cmd) to high(cmd) do
     FreeAndNil(fAcquireExecution[cmd]); // should be done BEFORE private GC
   if fPrivateGarbageCollector<>nil then begin
@@ -33908,7 +33917,10 @@ begin
       result := Service.ByPassAuthentication else
     if MethodIndex>=0 then
       // /auth + /timestamp are e.g. allowed methods without signature
-      result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication;
+      result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication else
+    if (Table<>nil) and (Method in Server.fBypassORMAuthentication)  then
+      // allow by-pass for a set of HTTP verbs (e.g. mGET)
+      result := true; 
   end else begin // default unique session if authentication is not enabled
     Session := CONST_AUTHENTICATION_NOT_USED;
     result := true;
