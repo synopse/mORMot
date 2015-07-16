@@ -49824,7 +49824,7 @@ begin
   with TInterfacedObjectFake(fSharedInstance) do
     if fRefCount<>1 then
       raise EServiceException.CreateUTF8('%.Destroy with RefCount=%: you must release '+
-        'I% interface (.. := nil) before Client.Free',[self,fRefCount,fInterfaceURI]) else
+        'I% interface (:= nil) before Client.Free',[self,fRefCount,fInterfaceURI]) else
       _Release; // bonne nuit les petits
   inherited;
 end;

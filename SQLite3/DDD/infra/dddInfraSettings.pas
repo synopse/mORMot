@@ -411,7 +411,7 @@ type
     property AutoReconnectAfterSocketError: boolean
       read FAutoReconnectAfterSocketError write FAutoReconnectAfterSocketError;
     /// the period, in milliseconds, on which Monitoring information is logged
-    // - default value is 30000, i.e. 30 seconds
+    // - default value is 120000, i.e. 2 minutes
     property MonitoringLogInterval: integer read FMonitoringInterval write FMonitoringInterval;
   end;
 
@@ -687,7 +687,7 @@ constructor TDDDSocketThreadSettings.Create;
 begin
   inherited Create;
   FConnectionAttemptsInterval := 5;
-  FMonitoringInterval := 30*1000; // log monitoring information every 30 seconds
+  FMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
 end;
 
 

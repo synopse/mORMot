@@ -1356,7 +1356,7 @@ begin
       if result=nil then // avoid memory leak
         aModel.Free else
         aModel.Owner := result;
-    if riRaiseExceptionIfNoRest in aOptions then
+    if (result=nil) and (riRaiseExceptionIfNoRest in aOptions) then
       raise EDDDRestClient.CreateUTF8('Impossible to initialize % on %/%',
         [fORM.Kind,fORM.ServerName,fClient.Root]);
   end;
@@ -1375,7 +1375,7 @@ begin
       fClient.WebSocketsPassword := WebSocketPassword;
     if UserPassword<>'' then begin
       fORM.User := 'User';
-      fORM.Password := UserPassword;
+      fORM.PasswordPlain := UserPassword;
     end;
   end;
 end;
