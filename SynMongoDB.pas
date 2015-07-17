@@ -1871,9 +1871,8 @@ type
     // - in case of success, this method will return TRUE, or FALSE on error
     function RunCommand(const command: variant;
       var returnedValue: TBSONDocument): boolean; overload;
-
-    /// register an user to the given database
-    procedure AddUser(const User: variant);
+    /// register an User/Password credential pair for OpenAuth() secure connection
+    procedure AddAuthUser(const UserName,Password: RawUTF8);
 
     /// access to a given MongoDB collection
     // - raise an EMongoDatabaseException if the collection name does not exist
@@ -1948,10 +1947,20 @@ type
       Flags: TMongoQueryFlags=[]): variant; overload;
     /// find an existing document in a collection, by its _id field
     // - _id will identify the unique document to be retrieved
+    // - returns null, or a TDocVariant instance
     function FindOne(const _id: TBSONObjectID): variant; overload;
     /// find an existing document in a collection, by its _id field
     // - _id will identify the unique document to be retrieved
+    // - returns null, or a TDocVariant instance
     function FindOne(const _id: variant): variant; overload;
+    /// find an existing document in a collection, by a custom Criteria value
+    // - Criteria object, specified as name/value pairs, will identify the
+    // unique document to be retrieved
+    // - returns the found TDocVariant instance
+    // - if the Criteria has no match, return either null or a new object with
+    // default values as NameValuePairs if ReturnNewObjectIfNotFound is true
+    function FindOne(const NameValuePairs: array of const;
+      ReturnNewObjectIfNotFound: boolean=false): variant; overload;
     /// returns a dynamic array of TDocVariant instance containing
     // all documents of a collection
     // - Projection can be null (to retrieve all fields) or a CSV string to set
@@ -5479,9 +5488,14 @@ begin
   inherited;
 end;
 
-procedure TMongoDatabase.AddUser(const User: variant);
+procedure TMongoDatabase.AddAuthUser(const UserName,Password: RawUTF8);
+var user: variant;
+    users: TMongoCollection;
 begin
-  raise EMongoException.CreateUTF8('No %.AddUser() yet',[self]);
+  users := CollectionOrCreate['system.users'];
+  user := users.FindOne(['user',UserName],true);
+  _Safe(user)^.AddOrUpdateValue('pwd',MD5(UserName+':mongo:'+PassWord));
+  users.Save(user);
 end;
 
 function TMongoDatabase.GetCollection(const Name: RawUTF8): TMongoCollection;
@@ -5747,12 +5761,20 @@ end;
 
 function TMongoCollection.FindOne(const _id: TBSONObjectID): variant;
 begin
-  result := FindOne(_id.ToVariant);
+  result := FindOne(['_id',_id.ToVariant]);
 end;
 
 function TMongoCollection.FindOne(const _id: variant): variant;
 begin
-  result := FindDoc(BSONVariant(['_id',_id]),null,1);
+  result := FindOne(['_id',_id]);
+end;
+
+function TMongoCollection.FindOne(const NameValuePairs: array of const;
+  ReturnNewObjectIfNotFound: boolean): variant;
+begin
+  result := FindDoc(BSONVariant(NameValuePairs),null,1);
+  if ReturnNewObjectIfNotFound and VarIsEmptyOrNull(result) then
+    TDocVariantData(Result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
 end;
 
 procedure TMongoCollection.FindDocs(var result: TVariantDynArray;

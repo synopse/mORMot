@@ -1385,7 +1385,7 @@ begin
   if fORM.Kind='' then
     if WebSocketPassword<>'' then
       fORM.Kind := 'TSQLHttpClientWebsockets' else
-      fORM.Kind := RawUTF8(TSQLHttpClient.ClassName);
+      fORM.Kind := TSQLHttpClient.ClassName;
   if (Port<>'') and (fORM.ServerName='') then begin
     fORM.ServerName := 'http://localhost:'+Port;
     if fClient.WebSocketsPassword='' then
