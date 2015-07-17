@@ -31,6 +31,7 @@ unit SynMongoDB;
   Contributor(s):
   - BBackSoon
   - Sabbiolina
+  - Zed
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -76,9 +77,10 @@ uses
   {$endif}
   {$endif}
   Classes,
-  Variants, // this unit expects Variants to be available for storage
+  Variants,  // this unit expects Variants to be available for storage
   SysUtils,
   SynCrtSock,
+  SynCrypto, // MD5 needed for OpenAuth()
   SynCommons,
   SynLog;
 
@@ -1742,7 +1744,7 @@ type
     // - this method will use authentication and will return the corresponding
     // MongoDB database instance, with a dedicated secured connection
     // - see http://docs.mongodb.org/manual/administration/security-access-control
-    function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase; overload;
+    function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase;
     /// close the connection and release all associated TMongoDatabase,
     // TMongoCollection and TMongoConnection instances
     destructor Destroy; override;
@@ -5108,7 +5110,8 @@ begin
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok',1)<>0 then
       result := '' else
-      result := VariantToUTF8(GetValueOrDefault('errmsg','unspecified error'));
+      if not GetAsRawUTF8('errmsg',result) then
+        result := 'unspecified error';
 end;
 
 function TMongoConnection.RunCommand(const aDatabaseName: RawUTF8;
@@ -5276,7 +5279,7 @@ begin
         Port := MONGODB_DEFAULTPORT else
         Port := secPort[i];
       fConnections[i+1] := TMongoConnection.Create(self,secHost[i],Port);
-      fConnectionString := FormatUTF8('%,%:%',[secHost[i],Port]);
+      fConnectionString := FormatUTF8('%,%:%',[fConnectionString,secHost[i],Port]);
     end;
   end;
   fDatabases := TRawUTF8ListHashed.Create(true);
@@ -5357,14 +5360,43 @@ begin
       fDatabases.AddObject(DatabaseName,result);
     end;
   end;
-  if result=nil then
-    raise EMongoException.CreateUTF8('%.Open("%") unknown DB',[self,DatabaseName]);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName,
   PassWord: RawUTF8): TMongoDatabase;
+var res,bson: variant;
+    err,nonce,key: RawUTF8;
 begin
-  raise EMongoException.CreateUTF8('%.OpenAuth(%) not implemented yet',[self,DatabaseName]);
+  if (self=nil) or (UserName='') or (PassWord='') then
+    result := nil else begin
+    result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+    if result=nil then begin // not already opened -> try now from primary host
+      if not fConnections[0].Opened then
+      try // see http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
+        fConnections[0].Open;
+        // step 1
+        bson := BSONVariant(['getnonce',1]);
+        err := fConnections[0].RunCommand(DatabaseName,bson,res);
+        if (err='') and not _Safe(res)^.GetAsRawUTF8('nonce',nonce) then
+          err := 'missing returned nonce';
+        if err<>'' then
+          raise EMongoException.CreateUTF8('%.OpenAuth("%") step1 error: %',[self,DatabaseName,err]);
+        // step 2
+        key := MD5(nonce+UserName+MD5(UserName+':mongo:'+PassWord));
+        bson := BSONVariant(['authenticate',1,'user',UserName,'nonce',nonce,'key',key]);
+        err := fConnections[0].RunCommand(DatabaseName,bson,res);
+        if err<>'' then
+          raise EMongoException.CreateUTF8('%.OpenAuth("%") step2 error: %',[self,DatabaseName,err]);
+      except
+        fConnections[0].Close;
+        raise;
+      end;
+      result := TMongoDatabase.Create(Self,DatabaseName);
+      fDatabases.AddObject(DatabaseName,result);
+    end;
+  end;
+  if result=nil then
+    raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
 end;
 
 function TMongoClient.GetServerBuildInfo: variant;

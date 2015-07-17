@@ -51,6 +51,7 @@ Contributors
   Win2014
   Wloochacz
   Wolfgang Ehrhardt
+  Zed
 
 [See below if you upgrade from 1.17 revision]
 
