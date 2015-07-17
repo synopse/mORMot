@@ -7211,8 +7211,19 @@ end;
 procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   // libcurl has dedicated options for GET,HEAD verbs
-  if (fIn.Method='') or (fIn.Method='GET') then
-    curl.easy_setopt(fHandle,coHTTPGet,1) else
+  if (fIn.Method='') or (fIn.Method='GET') then begin
+    curl.easy_setopt(fHandle,coHTTPGet,1);
+    if (aData<>'') and (fIn.Method='GET') then begin // e.g. GET with body
+      curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
+      curl.easy_setopt(fHandle,coNoBody,0);
+      curl.easy_setopt(fHandle,coUpload,1);
+      fIn.Data := aData;
+      fIn.DataOffset := 0;
+      curl.easy_setopt(fHandle,coInFile,pointer(self));
+      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
+      curl.easy_setopt(fHandle,coInFileSize,length(aData));
+    end;
+  end else
   if fIn.Method='HEAD' then
     curl.easy_setopt(fHandle,coNoBody,1) else begin
     // handle other HTTP verbs
