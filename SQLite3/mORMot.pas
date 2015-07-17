@@ -15779,7 +15779,7 @@ type
   // - should return FALSE if the user pressed cancel or the number of Retry
   // reached a defined limit
   TOnAuthentificationFailed = function(Retry: integer;
-    var aUserName, aPassword: string): boolean of object;
+    var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
 
   /// store the references to active interface callbacks on a REST Client
   TSQLRestClientCallbacks = class(TSynPersistentLocked)
@@ -31890,7 +31890,7 @@ var Retry: integer;
     aUserName, aPassword: string;
     StatusMsg: RawUTF8;
     Call: TSQLRestURIParams;
-    aRetryOnceOnTimeout: boolean;
+    aRetryOnceOnTimeout, aPasswordHashed: boolean;
 label DoRetry;
 begin
   if self=nil then begin
@@ -31959,8 +31959,8 @@ DoRetry:
     if (Call.OutStatus<>HTML_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
       break;
     // "403 Forbidden" in case of authentication failure -> try relog
-    if not OnAuthentificationFailed(Retry+2,aUserName,aPassword) or
-       not SetUser(StringToUTF8(aUserName),StringToUTF8(aPassword)) then
+    if not OnAuthentificationFailed(Retry+2,aUserName,aPassword,aPasswordHashed) or
+       not SetUser(StringToUTF8(aUserName),StringToUTF8(aPassword),aPasswordHashed) then
       break;
   except
     on E: Exception do begin
@@ -35649,9 +35649,10 @@ begin
     if Services is TServiceContainerServer then
       TServiceContainerServer(Services).OnCloseSession(IDCardinal);
     if Ctxt=nil then
-      InternalLog('Deleted session %/%',[User.LogonName,IDCardinal],sllUserAuth) else
-      InternalLog('Deleted session %/% from %/%',
-        [User.LogonName,IDCardinal,RemoteIP,Ctxt.Call^.LowLevelConnectionID],sllUserAuth);
+      InternalLog('Deleted session %:%/%',
+        [User.LogonName,IDCardinal,fSessions.Count],sllUserAuth) else
+      InternalLog('Deleted session %:%/% from %/%',
+        [User.LogonName,IDCardinal,fSessions.Count,RemoteIP,Ctxt.Call^.LowLevelConnectionID],sllUserAuth);
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self,fSessions.List[aSessionIndex],Ctxt);
     fSessions.Delete(aSessionIndex);
@@ -40779,6 +40780,7 @@ var P: PPropInfo;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
     WS: WideString;
+    U: RawUTF8;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     DocVariantOptionsSet: TDocVariantOptions;
@@ -41133,8 +41135,10 @@ begin
         end;
       {$ifdef FPC}tkAString,{$endif} tkLString:
         if not wasString then
-          exit else
-          P^.SetLongStrValue(Value,RawUTF8(PropValue));
+          exit else begin
+          SetString(U,PAnsiChar(PropValue),StrLen(PropValue));
+          P^.SetLongStrValue(Value,U);
+        end;
       {$ifdef UNICODE}
       tkUString:
         if not wasString then
