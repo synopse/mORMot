@@ -217,6 +217,8 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClient;
+    function OnAuthentificationFailed(Retry: integer;
+      var aUserName,aPassword: string; out aPasswordHashed: boolean): boolean;
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
@@ -1348,6 +1350,7 @@ begin
         if not result.ServerTimeStampSynchronize then
           raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
             [self,ORM.ServerName,aModel.Root]);
+      result.OnAuthentificationFailed := OnAuthentificationFailed;
     except
       FreeAndNil(result);
     end;
@@ -1362,13 +1365,27 @@ begin
   end;
 end;
 
+function TDDDRestClientSettings.OnAuthentificationFailed(Retry: integer;
+  var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean;
+begin
+  if (Retry=1) and (fORM.User<>'') then begin
+    aUserName := UTF8ToString(fORM.User);
+    aPassword := UTF8ToString(fORM.PasswordPlain);
+    aPasswordHashed := true;
+    result := true;
+  end else
+    result := false;
+end;
+
 procedure TDDDRestClientSettings.SetDefaults(const Root,Port,WebSocketPassword,
   UserPassword: RawUTF8);
 begin
   if fClient.Root='' then
     fClient.Root := Root;
   if fORM.Kind='' then
-    fORM.Kind := 'TSQLHttpClientWebsockets';
+    if WebSocketPassword<>'' then
+      fORM.Kind := 'TSQLHttpClientWebsockets' else
+      fORM.Kind := RawUTF8(TSQLHttpClient.ClassName);
   if (Port<>'') and (fORM.ServerName='') then begin
     fORM.ServerName := 'http://localhost:'+Port;
     if fClient.WebSocketsPassword='' then
