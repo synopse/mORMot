@@ -1348,6 +1348,7 @@ end;
 
 procedure TMVCRendererAbstract.ExecuteCommand(aMethodIndex: integer);
 var action: TMVCAction;
+    exec: TServiceMethodExecute;
     isAction: boolean;
     WR: TTextWriter;
     methodOutput: RawUTF8;
@@ -1363,12 +1364,18 @@ begin
           WR := TJSONSerializer.CreateOwnedStream;
           try
             WR.Add('{');
-            with fApplication.fFactory do
-            if not Methods[fMethodIndex].InternalExecute([fApplication.fFactoryEntry],
-               pointer(fInput),WR,action.RedirectToMethodName,action.ReturnedStatus,
-               [optVariantCopiedByReference],true,nil,nil) then
-              raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
-                [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
+            exec := TServiceMethodExecute.Create(@fApplication.fFactory.Methods[fMethodIndex]);
+            try
+              exec.Options := [optVariantCopiedByReference];
+              if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,true) then
+                with fApplication.fFactory do
+                raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
+                  [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
+              action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
+              action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
+            finally
+              exec.Free;
+            end;
             if not isAction then
               WR.Add('}');
             WR.SetText(methodOutput);

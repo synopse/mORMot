@@ -727,10 +727,18 @@ var i,methodIndex,fakeCallID: integer;
     instance: pointer;
     factory: TInterfaceFactory;
     WR: TTextWriter;
-procedure CallCurrentFrame;
+    ok: Boolean;
+procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
+var exec: TServiceMethodExecute;
 begin
-  factory.Methods[factory.MethodIndexCurrentFrameCallback].InternalExecute(
-    [instance],pointer(frames),nil,head,result,[],false,nil,nil);
+  exec := TServiceMethodExecute.Create(@factory.Methods[methodIndex]);
+  try
+    ok := exec.ExecuteJson([instance],pointer(par),res);
+    head := exec.ServiceCustomAnswerHead;
+    result := exec.ServiceCustomAnswerStatus;
+  finally
+    exec.Free;
+  end;
 end;
 begin
   result := HTML_BADREQUEST;
@@ -777,11 +785,10 @@ begin
     WR := TJSONSerializer.CreateOwnedStream;
     try
       WR.AddShort('{"result":[');
-      if frames='[0]' then
-        CallCurrentFrame; // call before the first method of the jumbo frame
-      if not factory.Methods[methodIndex].InternalExecute([instance],
-         pointer(Ctxt.InContent),WR,head,result,[],False,nil,nil) then
-        result := HTML_SERVERERROR else begin
+      if frames='[0]' then // call before the first method of the jumbo frame
+        Call(factory.MethodIndexCurrentFrameCallback,frames,nil);
+      Call(methodIndex,Ctxt.InContent,WR);
+      if ok then begin
         if head='' then begin
           WR.Add(']','}');
           result := HTML_SUCCESS;
@@ -792,9 +799,10 @@ begin
         if Ctxt.OutContentType='' then
           Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
         Ctxt.OutContent := WR.Text;
-      end;
-      if frames='[1]' then
-        CallCurrentFrame; // call after the last method of the jumbo frame
+      end else
+        result := HTML_SERVERERROR;
+      if frames='[1]' then // call after the last method of the jumbo frame
+        Call(factory.MethodIndexCurrentFrameCallback,frames,nil);
     finally
       WR.Free;
     end;

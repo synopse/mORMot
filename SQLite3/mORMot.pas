@@ -735,8 +735,9 @@ unit mORMot;
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
       or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
       valid alternative to default /root/Calculator.Add, if needed
-    - TServiceMethod.InternalExecute() allows incoming parameters to be encoded
-      as a JSON object, alternatively to a JSON array - see request [48e30e0e05]
+    - new TServiceMethodExecute class replacing TServiceMethod.InternalExecute:
+      allows incoming parameters to be encoded as a JSON object, in
+      addition to the standard JSON array - see request [48e30e0e05]
     - added optional CustomFields parameter to TSQLRest.Update() - and in case
       of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
@@ -9220,11 +9221,11 @@ type
   // creation of a per-interface dedicated thread
   TServiceMethodOptions = set of TServiceMethodOption;
 
-  /// callback called by TServiceMethod.InternalExecute to process an
-  // interface callback parameter
+  /// callback called by TServiceMethodExecute to process an interface
+  // callback parameter
   // - implementation should set the Obj local variable to an instance of
   // a fake class implementing the aParamInfo interface
-  TServiceMethodInternalExecuteCallback =
+  TServiceMethodExecuteCallback =
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj) of object;
 
   /// describe an interface-based service provider method
@@ -9294,15 +9295,6 @@ type
     // QueryInterface, _AddRef, and _Release are always defined by default
     // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
     ExecutionMethodIndex: integer;
-    /// execute the corresponding method of a given TInterfacedObject instance
-    // - will retrieve a JSON array of parameters from Par
-    // - will append a JSON array of results in Res, or set an Error message, or
-    // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
-    function InternalExecute(Instances: array of pointer; Par: PUTF8Char;
-      Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
-      Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-      BackgroundExecutionThread: TSynBackgroundThreadMethod;
-      OnCallback: TServiceMethodInternalExecuteCallback): boolean;
     /// retrieve a var / out / result argument index in Args[] from its name
     // - search is case insensitive
     // - returns -1 if not found
@@ -9319,6 +9311,43 @@ type
   // - since TInterfaceFactory instances are shared in a global list, we
   // can safely use such pointers in our code to refer to a particular method
   PServiceMethod = ^TServiceMethod;
+
+  /// execute a method of a TInterfacedObject instance, from/to JSON
+  TServiceMethodExecute = class
+  protected
+    fMethod: PServiceMethod;
+    fRawUTF8s: TRawUTF8DynArray;
+    fStrings: TStringDynArray;
+    fWideStrings: TWideStringDynArray;
+    fRecords: array of TBytes;
+    fInt64s: TInt64DynArray;
+    fObjects: TObjectDynArray;
+    fInterfaces: TPointerDynArray;
+    fDynArrays: array of record
+      Value: Pointer;
+      Wrapper: TDynArray;
+    end;
+    fValues: array of PPointer;
+    fAlreadyExecuted: boolean;
+    procedure BeforeExecute;
+    procedure RawExecute(Instances: PPointerArray; InstancesLast: integer);
+    procedure AfterExecute;
+  public
+    BackgroundExecutionThread: TSynBackgroundThreadMethod;
+    OnCallback: TServiceMethodExecuteCallback;
+    Options: TServiceMethodOptions;
+    ServiceCustomAnswerHead: RawUTF8;
+    ServiceCustomAnswerStatus: cardinal;
+    /// initialize the execution instance
+    constructor Create(aMethod: PServiceMethod);
+    /// execute the corresponding method of a given TInterfacedObject instance
+    // - will retrieve a JSON array of parameters from Par
+    // - will append a JSON array of results in Res, or set an Error message, or
+    // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
+    function ExecuteJson(Instances: array of pointer; Par: PUTF8Char;
+      Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
+    property Method: PServiceMethod read fMethod;
+  end;
 
   /// a record type to be used as result for a function method for custom content
   // for interface-based services
@@ -14533,7 +14562,7 @@ type
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
     // - caller must specify the TThread instance running
-    // - used e.g. for optExecInMainThread option in TServiceMethod.InternalExecute
+    // - used e.g. for optExecInMainThread option in TServiceMethodExecute
     // - this default implementation will call the methods of all its internal
     // TSQLRestStorage instances
     // - this method shall be called from the thread just initiated: e.g.
@@ -45578,7 +45607,7 @@ begin
     exit;
   end;
   if Par=nil then
-    Par := @NULL_SHORTSTRING; // as expected by TServiceMethod.InternalExecute
+    Par := @NULL_SHORTSTRING; // as expected by TServiceMethodExecute
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
   instance := TInterfacedObjectFakeServer.Create(self,factory,FakeID);
   pointer(Obj) := instance.fFakeInterface;
@@ -48518,6 +48547,7 @@ var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
     entry: PInterfaceEntry;
     dolock: boolean;
+    exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
     ndx: integer;
@@ -48593,18 +48623,23 @@ begin
       dolock := optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options;
       if dolock then
         EnterCriticalSection(fInstanceLock);
+      exec := TServiceMethodExecute.Create(@fInterface.fMethods[Ctxt.ServiceMethodIndex]);
       try
-        if not fInterface.fMethods[Ctxt.ServiceMethodIndex].InternalExecute(
-            [PAnsiChar(Inst.Instance)+entry^.IOffset],Ctxt.ServiceParameters,
-             WR,Ctxt.Call.OutHead,Ctxt.Call.OutStatus,
-             fExecution[Ctxt.ServiceMethodIndex].Options,
-             Ctxt.ForceServiceResultAsJSONObject,
-             {$ifdef LVCL}nil{$else}fBackgroundThread{$endif},
-             Ctxt.ExecuteCallback) then begin
+        exec.Options := fExecution[Ctxt.ServiceMethodIndex].Options;
+        {$ifndef LVCL}
+        exec.BackgroundExecutionThread := fBackgroundThread;
+        {$endif}
+        exec.OnCallback := Ctxt.ExecuteCallback;
+        if exec.ExecuteJson([PAnsiChar(Inst.Instance)+entry^.IOffset],
+           Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
+          Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
+          Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
+        end else begin
           Error('execution failed (probably due to bad input parameters)',HTML_NOTACCEPTABLE);
           exit; // wrong request
         end;
       finally
+        exec.Free;
         if dolock then
           LeaveCriticalSection(fInstanceLock);
       end;
@@ -49185,50 +49220,193 @@ begin
   result := false;
 end;
 
-function TServiceMethod.InternalExecute(Instances: array of pointer;
-  Par: PUTF8Char; Res: TTextWriter; out aHead: RawUTF8; out aStatus: cardinal;
-  Options: TServiceMethodOptions; ResultAsJSONObject: boolean;
-  BackgroundExecutionThread: TSynBackgroundThreadMethod;
-  OnCallback: TServiceMethodInternalExecuteCallback): boolean;
-var RawUTF8s: TRawUTF8DynArray;
-    Strings: TStringDynArray;
-    WideStrings: TWideStringDynArray;
-    Records: array of TBytes;
-    Value: pointer;
-    i,a,a1: integer;
+
+{ TServiceMethodExecute }
+
+constructor TServiceMethodExecute.Create(aMethod: PServiceMethod);
+var a: integer;
+begin
+  with aMethod^ do begin
+    if ArgsUsedCount[smvv64]>0 then
+      SetLength(fInt64s,ArgsUsedCount[smvv64]);
+    if ArgsUsedCount[smvvObject]>0 then
+      SetLength(fObjects,ArgsUsedCount[smvvObject]);
+    if ArgsUsedCount[smvvInterface]>0 then
+      SetLength(fInterfaces,ArgsUsedCount[smvvInterface]);
+    if ArgsUsedCount[smvvRecord]>0 then
+      SetLength(fRecords,ArgsUsedCount[smvvRecord]);
+    if ArgsUsedCount[smvvDynArray]>0 then
+      SetLength(fDynArrays,ArgsUsedCount[smvvDynArray]);
+    SetLength(fValues,length(Args));
+    for a := ArgsManagedFirst to ArgsManagedLast do
+    with Args[a] do
+      case ValueType of
+      smvDynArray:
+        with fDynArrays[IndexVar] do begin
+          Wrapper.Init(ArgTypeInfo,Value);
+          Wrapper.IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
+        end;
+      smvRecord:
+        SetLength(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size);
+      {$ifndef NOVARIANTS}
+      smvVariant:
+        SetLength(fRecords[IndexVar],sizeof(Variant));
+      {$endif}
+      end;
+  end;
+  fMethod := aMethod;
+end;
+
+procedure TServiceMethodExecute.BeforeExecute;
+var a: integer;
+begin
+  with fMethod^ do begin
+    if ArgsUsedCount[smvvRawUTF8]>0 then
+      SetLength(fRawUTF8s,ArgsUsedCount[smvvRawUTF8]);
+    if ArgsUsedCount[smvvString]>0 then
+      SetLength(fStrings,ArgsUsedCount[smvvString]);
+    if ArgsUsedCount[smvvWideString]>0 then
+      SetLength(fWideStrings,ArgsUsedCount[smvvWideString]);
+    if fAlreadyExecuted then begin
+      if ArgsUsedCount[smvvObject]>0 then
+        FillcharFast(fObjects,ArgsUsedCount[smvvObject]*sizeof(TObject),0);
+      if ArgsUsedCount[smvv64]>0 then
+        FillcharFast(fInt64s,ArgsUsedCount[smvv64]*sizeof(Int64),0);
+      if ArgsUsedCount[smvvInterface]>0 then
+        FillcharFast(fInterfaces,ArgsUsedCount[smvvInterface]*sizeof(pointer),0);
+      if ArgsUsedCount[smvvDynArray]>0 then
+        FillcharFast(fDynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
+    end;
+    for a := ArgsManagedFirst to ArgsManagedLast do
+    with Args[a] do
+      case ValueType of
+      smvObject:
+        fObjects[IndexVar] := ArgTypeInfo^.ClassCreate;
+      smvRecord:
+        if fAlreadyExecuted then
+          FillcharFast(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size,0);
+      end;
+  end;
+  fAlreadyExecuted := true;
+end;
+
+procedure TServiceMethodExecute.RawExecute(Instances: PPointerArray;
+  InstancesLast: integer);
+var Value: pointer;
+    a,i: integer;
+    call: TCallMethodArgs;
+    Stack: array[0..MAX_EXECSTACK-1] of byte;
+begin
+  with fMethod^ do begin
+    // create the stack content
+    call.StackAddr := PtrInt(@Stack);
+    call.StackSize := ArgsSizeInStack;
+    for a := 1 to high(Args) do
+    with Args[a] do begin
+      case ValueVar of
+      smvvSelf:       continue; // call.Regs[REG_FIRST] := Instance[i] below
+      smvv64:         Value := @fInt64s[IndexVar];
+      smvvRawUTF8:    Value := @fRawUTF8s[IndexVar];
+      smvvString:     Value := @fStrings[IndexVar];
+      smvvWideString: Value := @fWideStrings[IndexVar];
+      smvvObject:     Value := @fObjects[IndexVar];
+      smvvInterface:  Value := @fInterfaces[IndexVar];
+      smvvRecord:     Value := pointer(fRecords[IndexVar]);
+      smvvDynArray:   Value := @fDynArrays[IndexVar].Value;
+      else raise EInterfaceFactoryException.CreateUTF8(
+        'Invalid % argument type = %',[ParamName^,ord(ValueType)]);
+      end;
+      fValues[a] := Value;
+      if (ValueDirection<>smdConst) or
+         (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then
+        // pass by reference
+        if RegisterIdent=0 then
+          MoveFast(Value,Stack[InStackOffset],SizeInStack) else
+          call.Regs[RegisterIdent] := PtrInt(Value) else
+        // pass by value
+        if RegisterIdent=0 then
+          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else
+          call.Regs[RegisterIdent] := PPtrInt(Value)^;
+    end;
+    // execute the method
+    for i := 0 to InstancesLast do begin
+      // prepare the low-level call context for the asm stub
+      call.Regs[REG_FIRST] := PtrInt(Instances[i]);
+      call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
+      if ArgsResultIndex>=0 then
+      with Args[ArgsResultIndex] do begin
+        call.resKind := ValueType;
+        if ValueVar=smvv64 then
+          fValues[ArgsResultIndex] := @call.res64;
+      end else
+        call.resKind := smvNone;
+      // launch the asm stub in the expected execution context
+      {$ifndef LVCL}
+      if (optExecInMainThread in Options) and
+         (GetCurrentThreadID<>MainThreadID) then
+        BackgroundExecuteCallMethod(@call,nil) else
+      {$endif}
+      if optExecInPerInterfaceThread in Options then
+        if not Assigned(BackgroundExecutionThread) then
+          raise EInterfaceFactoryException.Create(
+            'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else
+          BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
+        CallMethod(call);
+    end;
+  end;
+end;
+
+procedure TServiceMethodExecute.AfterExecute;
+var i,a: integer;
+begin
+  Finalize(fRawUTF8s);
+  Finalize(fStrings);
+  Finalize(fWideStrings);
+  with fMethod^ do
+  if ArgsManagedFirst>=0 then begin
+    for i := 0 to ArgsUsedCount[smvvObject]-1 do
+      fObjects[i].Free;
+    for i := 0 to ArgsUsedCount[smvvInterface]-1 do
+      IUnknown(fInterfaces[i]) := nil;
+    for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
+      fDynArrays[i].Wrapper.Clear; // will handle T*ObjArray as expected
+    if fRecords<>nil then begin
+      i := 0;
+      for a := ArgsManagedFirst to ArgsManagedLast do
+      with Args[a] do
+      case ValueType of
+      smvRecord: begin
+        RecordClear(fRecords[i][0],ArgTypeInfo);
+        inc(i);
+      end;
+      {$ifndef NOVARIANTS}
+      smvVariant: begin
+        VarClear(PVariant(fRecords[i])^); // fast, even for simple types
+        inc(i);
+      end;
+      {$endif}
+      end;
+    end;
+  end;
+end;
+
+function TServiceMethodExecute.ExecuteJson(Instances: array of pointer; Par: PUTF8Char;
+  Res: TTextWriter; ResAsJSONObject: boolean): boolean;
+var a,a1: integer;
     wasString, valid: boolean;
     Val: PUTF8Char;
-    call: TCallMethodArgs;
     Name: PUTF8Char;
     NameLen: integer;
     EndOfObject: AnsiChar;
     ParObjValues: TPUTF8CharDynArray;
-    Stack: array[0..MAX_EXECSTACK-1] of byte;
-    Int64s: array[0..MAX_METHOD_ARGS-1] of Int64;
-    Objects: array[0..MAX_METHOD_ARGS-1] of TObject;
-    Interfaces: array[0..MAX_METHOD_ARGS-1] of pointer;
-    DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArrayFake;
-    Values: array[0..MAX_METHOD_ARGS-1] of PPointer;
 begin
   result := false;
   if high(Instances)<0 then
     exit;
-  if ArgsUsedCount[smvvRawUTF8]>0 then
-    SetLength(RawUTF8s,ArgsUsedCount[smvvRawUTF8]);
-  if ArgsUsedCount[smvvString]>0 then
-    SetLength(Strings,ArgsUsedCount[smvvString]);
-  if ArgsUsedCount[smvvWideString]>0 then
-    SetLength(WideStrings,ArgsUsedCount[smvvWideString]);
-  if ArgsUsedCount[smvvRecord]>0 then
-    SetLength(Records,ArgsUsedCount[smvvRecord]);
-  if ArgsUsedCount[smvvObject]>0 then
-    FillcharFast(Objects,ArgsUsedCount[smvvObject]*sizeof(TObject),0);
-  if ArgsUsedCount[smvvInterface]>0 then
-    FillcharFast(Interfaces,ArgsUsedCount[smvvInterface]*sizeof(pointer),0);
-  if ArgsUsedCount[smvvDynArray]>0 then
-    FillcharFast(DynArrays,ArgsUsedCount[smvvDynArray]*sizeof(TDynArrayFake),0);
+  BeforeExecute;
+  with fMethod^ do
   try
-    // 1. validate input parameters
+    // validate input parameters
     if (ArgsInputValuesCount<>0) and (Par<>nil) then begin
       if Par^ in [#1..' '] then repeat inc(Par) until not(Par^ in [#1..' ']);
       case Par^ of
@@ -49237,7 +49415,6 @@ begin
       '{': begin // retrieve parameters values from JSON object
         inc(Par);
         SetLength(ParObjValues,ArgsInLast+1); // nil will set default value
-        FillcharFast(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0); // set default
         a1 := ArgsInFirst;
         repeat
           Name := GetJSONPropName(Par);
@@ -49261,27 +49438,8 @@ begin
       else exit; // only support JSON array or JSON object as input
       end;
     end;
-    // 2. instantiate temporary managed objects
-    for a := ArgsManagedFirst to ArgsManagedLast do
-    with Args[a] do
-      case ValueType of
-      smvObject:
-        Objects[IndexVar] := ArgTypeInfo^.ClassCreate;
-      smvDynArray:
-        with DynArrays[IndexVar] do begin
-          Wrapper.Init(ArgTypeInfo,Value);
-          Wrapper.IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
-        end;
-      smvRecord:
-        SetLength(Records[IndexVar],ArgTypeInfo^.RecordType^.Size);
-      {$ifndef NOVARIANTS}
-      smvVariant:
-        SetLength(Records[IndexVar],sizeof(Variant));
-      {$endif}
-      end;
-    // 3. decode input parameters (if any)
-    if (Par=nil) and (ParObjValues=nil) then // set default if no input parameter
-      FillcharFast(Int64s,ArgsUsedCount[smvv64]*sizeof(Int64),0) else
+    // decode input parameters (if any) in f*[]
+    if (Par<>nil) or (ParObjValues<>nil) then 
       for a := ArgsInFirst to ArgsInLast do
       with Args[a] do
       if ValueDirection<>smdOut then begin
@@ -49291,27 +49449,27 @@ begin
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
-          Par := JSONToObject(Objects[IndexVar],Par,valid);
+          Par := JSONToObject(fObjects[IndexVar],Par,valid);
           if not valid then
             exit;
           IgnoreComma(Par);
         end;
         smvInterface:
           if Assigned(OnCallback) then
-            OnCallback(Par,ArgTypeInfo,Interfaces[IndexVar]) else
+            OnCallback(Par,ArgTypeInfo,fInterfaces[IndexVar]) else
             raise EInterfaceFactoryException.CreateUTF8(
               'Unhandled %(%: %) parameter',[URI,ParamName^,ArgTypeName^]);
         smvRawJSON:
-          RawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
+          fRawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
         smvDynArray: begin
-          Par := DynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
+          Par := fDynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
           IgnoreComma(Par);
         end;
         smvRecord:
-          Par := RecordLoadJSON(pointer(Records[IndexVar])^,Par,ArgTypeInfo);
+          Par := RecordLoadJSON(pointer(fRecords[IndexVar])^,Par,ArgTypeInfo);
         {$ifndef NOVARIANTS}
         smvVariant:
-          Par := VariantLoadJSON(PVariant(pointer(Records[IndexVar]))^,Par,nil,
+          Par := VariantLoadJSON(PVariant(pointer(fRecords[IndexVar]))^,Par,nil,
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
         {$endif}
         smvBoolean..smvWideString: begin
@@ -49322,22 +49480,22 @@ begin
             exit;
           case ValueType of
           smvBoolean:
-            Int64s[IndexVar] := byte((Val<>nil) and
+            fInt64s[IndexVar] := byte((Val<>nil) and
               ((PWord(Val)^=ord('1'))or(PInteger(Val)^=TRUE_LOW)));
           smvEnum..smvInt64:
-            SetInt64(Val,Int64s[IndexVar]);
+            SetInt64(Val,fInt64s[IndexVar]);
           smvDouble,smvDateTime:
-            PDouble(@Int64s[IndexVar])^ := GetExtended(Val);
+            PDouble(@fInt64s[IndexVar])^ := GetExtended(Val);
           smvCurrency:
-            Int64s[IndexVar] := StrToCurr64(Val);
+            fInt64s[IndexVar] := StrToCurr64(Val);
           smvRawUTF8:
-            SetString(RawUTF8s[IndexVar],Val,StrLen(Val));
+            SetString(fRawUTF8s[IndexVar],Val,StrLen(Val));
           smvString:
-            UTF8DecodeToString(Val,StrLen(Val),Strings[IndexVar]);
+            UTF8DecodeToString(Val,StrLen(Val),fStrings[IndexVar]);
           smvRawByteString:
-            Base64ToBin(PAnsiChar(Val),StrLen(Val),RawByteString(RawUTF8s[IndexVar]));
+            Base64ToBin(PAnsiChar(Val),StrLen(Val),RawByteString(fRawUTF8s[IndexVar]));
           smvWideString:
-            UTF8ToWideString(Val,StrLen(Val),WideStrings[IndexVar]);
+            UTF8ToWideString(Val,StrLen(Val),fWideStrings[IndexVar]);
           else exit; // should not happen
           end;
           continue; // here Par=nil or Val=nil is correct
@@ -49347,115 +49505,35 @@ begin
         if Par=nil then
           exit;
       end;
-    // 4. create the stack content
-    call.StackAddr := PtrInt(@Stack);
-    call.StackSize := ArgsSizeInStack;
-    for a := 1 to high(Args) do
-    with Args[a] do begin
-      case ValueVar of
-      smvvSelf:       continue; // call.Regs[REG_FIRST] := Instance[i] below
-      smvv64:         Value := @Int64s[IndexVar];
-      smvvRawUTF8:    Value := @RawUTF8s[IndexVar];
-      smvvString:     Value := @Strings[IndexVar];
-      smvvWideString: Value := @WideStrings[IndexVar];
-      smvvObject:     Value := @Objects[IndexVar];
-      smvvInterface:  Value := @Interfaces[IndexVar];
-      smvvRecord:     Value := pointer(Records[IndexVar]);
-      smvvDynArray:   Value := @DynArrays[IndexVar].Value;
-      else raise EInterfaceFactoryException.CreateUTF8(
-        'Invalid % argument type = %',[ParamName^,ord(ValueType)]);
-      end;
-      Values[a] := Value;
-      if (ValueDirection<>smdConst) or
-         (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then
-        // pass by reference
-        if RegisterIdent=0 then
-          MoveFast(Value,Stack[InStackOffset],SizeInStack) else
-          call.Regs[RegisterIdent] := PtrInt(Value) else
-        // pass by value
-        if RegisterIdent=0 then
-          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else
-          call.Regs[RegisterIdent] := PPtrInt(Value)^;
-    end;
-    // 5. execute the method
-    for i := 0 to high(Instances) do begin
-      // 5.1 prepare the low-level call context for the asm stub
-      call.Regs[REG_FIRST] := PtrInt(Instances[i]);
-      call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
-      if ArgsResultIndex>=0 then
-      with Args[ArgsResultIndex] do begin
-        call.resKind := ValueType;
-        if ValueVar=smvv64 then
-          Values[ArgsResultIndex] := @call.res64;
-      end else
-        call.resKind := smvNone;
-      // 5.2 launch the asm stub in the expected execution context
-      {$ifndef LVCL}
-      if (optExecInMainThread in Options) and
-         (GetCurrentThreadID<>MainThreadID) then
-        BackgroundExecuteCallMethod(@call,nil) else
-      {$endif}
-      if optExecInPerInterfaceThread in Options then
-        if not Assigned(BackgroundExecutionThread) then
-          raise EInterfaceFactoryException.Create(
-            'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else
-          BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
-        CallMethod(call);
-    end;
-    // 6. send back any result
+    // execute the method, using prepared values in f*[]
+    RawExecute(@Instances[0],high(Instances));
+    // send back any result
     if Res<>nil then begin
-      // 6.1 handle custom content (not JSON array/object answer)
-      if (call.resKind=smvRecord) and ArgsResultIsServiceCustomAnswer then
-        with PServiceCustomAnswer(Values[ArgsResultIndex])^ do
+      // handle custom content (not JSON array/object answer)
+      if ArgsResultIsServiceCustomAnswer then
+        with PServiceCustomAnswer(fValues[ArgsResultIndex])^ do
         if Header<>'' then begin
-          aHead := Header;
+          ServiceCustomAnswerHead := Header;
           Res.ForceContent(Content);
           if Status=0 then // Values[]=@Records[] is filled with 0 by default
-            aStatus := HTML_SUCCESS else
-            aStatus := Status;
+            ServiceCustomAnswerStatus := HTML_SUCCESS else
+            ServiceCustomAnswerStatus := Status;
           Result := true;
           exit;
         end;
-      // 6.2 write the '{"result":[...' array or object
+      // write the '{"result":[...' array or object
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
-        if ResultAsJSONObject then
+        if ResAsJSONObject then
           Res.AddPropName(ParamName^);
-        AddJSON(Res,Values[a]);
+        AddJSON(Res,fValues[a]);
       end;
       Res.CancelLastComma;
     end;
     Result := true;
   finally
-    // 7. release any Records[], Objects[], Interfaces[] and DynArrays[]
-    if ArgsManagedFirst>=0 then begin
-      for i := 0 to ArgsUsedCount[smvvObject]-1 do
-        Objects[i].Free;
-      for i := 0 to ArgsUsedCount[smvvInterface]-1 do
-        IUnknown(Interfaces[i]) := nil;
-      for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
-        DynArrays[i].Wrapper.Clear;
-      if Records<>nil then begin
-        i := 0;
-        for a := ArgsManagedFirst to ArgsManagedLast do
-          if Records[i]=nil then // avoid GPF in case of incorrect input
-            break else
-          with Args[a] do
-          case ValueType of
-          smvRecord: begin
-            RecordClear(Records[i][0],ArgTypeInfo);
-            inc(i);
-          end;
-          {$ifndef NOVARIANTS}
-          smvVariant: begin
-            VarClear(PVariant(Records[i])^); // fast, even for simple types
-            inc(i);
-          end;
-          {$endif}
-          end;
-      end;
-    end;
+    AfterExecute;
   end;
 end;
 
