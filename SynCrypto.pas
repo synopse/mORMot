@@ -817,7 +817,15 @@ function MD5(const s: RawByteString): RawUTF8;
 function SHA1(const s: RawByteString): RawUTF8;
 
 /// compute the HMAC message authentication code using SHA1 as hash function
-procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
+procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest); overload;
+
+/// compute the HMAC message authentication code using SHA1 as hash function
+procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString;
+  out result: TSHA1Digest); overload;
+
+/// compute the HMAC message authentication code using SHA1 as hash function
+procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer;
+  out result: TSHA1Digest); overload;
 
 /// compute the PBKDF2 derivation of a password using HMAC over SHA1
 // - this function expect the resulting key length to match SHA1 digest size
@@ -837,10 +845,17 @@ function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
 // - this procedure has a weak password protection: small incoming data
 // is append to some salt, in order to have at least a 256 bytes long hash:
 // such a feature improve security for small passwords, e.g.
-procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest); overload;
+procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
 /// compute the HMAC message authentication code using SHA256 as hash function
-procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
+procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest); overload;
+
+/// compute the HMAC message authentication code using SHA256 as hash function
+procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString;
+  out result: TSHA256Digest); overload;
+
+/// compute the HMAC message authentication code using SHA256 as hash function
+procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest); overload;
 
 /// compute the PBKDF2 derivation of a password using HMAC over SHA256
 // - this function expect the resulting key length to match SHA256 digest size
@@ -1377,40 +1392,47 @@ begin
 end;
 
 procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
-var keylen,i: integer;
+begin
+  HMAC_SHA1(Pointer(key),pointer(msg),length(key),length(msg),result);
+end;
+
+procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer; out result: TSHA1Digest);
+var i: integer;
     sha: TSHA1;
     k0,k0xorIpad,step7data: array[0..15] of cardinal;
 begin
   FillcharFast(k0,sizeof(k0),0);
-  keylen := length(key);
   if keylen>64 then
-    sha.Full(pointer(key),64,PSHA1Digest(@k0)^) else
-    MoveFast(pointer(key)^,k0,keylen);
+    sha.Full(key,64,PSHA1Digest(@k0)^) else
+    MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,64);
-  sha.Update(pointer(msg),length(msg));
+  sha.Update(msg,msglen);
   sha.Final(result);
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
   sha.Final(result);
 end;
 
+procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString; out result: TSHA1Digest);
+begin
+  HMAC_SHA1(@key,pointer(msg),SizeOf(key),length(msg),result);
+end;
+
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
   out result: TSHA1Digest);
-var tmp: RawByteString;
-    i: integer;
+var i: integer;
+    tmp: TSHA1Digest;
 begin
   HMAC_SHA1(password,salt+#0#0#0#1,result);
-  if count<2 then
-    exit;
-  SetString(tmp,PAnsiChar(@result),sizeof(result));
+  tmp := result;
   for i := 2 to count do begin
-    HMAC_SHA1(password,tmp,PSHA1Digest(tmp)^);
-    XorMemory(@result,pointer(tmp),sizeof(result));
+    HMAC_SHA1(pointer(password),@tmp,length(password),SizeOf(tmp),tmp);
+    XorMemory(@result,@tmp,sizeof(result));
   end;
 end;
 
@@ -1431,40 +1453,47 @@ begin
 end;
 
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
-var keylen,i: integer;
+begin
+  HMAC_SHA256(Pointer(key),pointer(msg),length(key),length(msg),result);
+end;
+
+procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
+var i: integer;
     sha: TSHA256;
     k0,k0xorIpad,step7data: array[0..15] of cardinal;
 begin
   FillcharFast(k0,sizeof(k0),0);
-  keylen := length(key);
   if keylen>64 then
-    sha.Full(pointer(key),64,PSHA256Digest(@k0)^) else
-    MoveFast(pointer(key)^,k0,keylen);
+    sha.Full(key,64,PSHA256Digest(@k0)^) else
+    MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,64);
-  sha.Update(pointer(msg),length(msg));
+  sha.Update(msg,msglen);
   sha.Final(result);
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
   sha.Final(result);
 end;
 
+procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString; out result: TSHA256Digest);
+begin
+  HMAC_SHA256(@key,pointer(msg),SizeOf(key),length(msg),result);
+end;
+
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   out result: TSHA256Digest);
-var tmp: RawByteString;
-    i: integer;
+var i: integer;
+    tmp: TSHA256Digest;
 begin
   HMAC_SHA256(password,salt+#0#0#0#1,result);
-  if count<2 then
-    exit;
-  SetString(tmp,PAnsiChar(@result),sizeof(result));
+  tmp := result;
   for i := 2 to count do begin
-    HMAC_SHA256(password,tmp,PSHA256Digest(tmp)^);
-    XorMemory(@result,pointer(tmp),sizeof(result));
+    HMAC_SHA256(pointer(password),@tmp,length(password),SizeOf(tmp),tmp);
+    XorMemory(@result,@tmp,sizeof(result));
   end;
 end;
 
