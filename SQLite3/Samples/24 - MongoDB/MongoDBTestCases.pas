@@ -7,6 +7,8 @@ interface
 // if defined, will test with 5000 records instead of the default 100 records
 {.$define ADD5000}
 
+{.$define TESTMONGOAUTH}
+
 uses
   SysUtils,
   Variants,
@@ -110,6 +112,8 @@ end;
 
 const
   DB_NAME = 'test24';
+  USER_NAME = 'toto';
+  USER_PWD = 'pass';
   COLL_NAME = 'direct';
   {$ifndef ADD5000}
   COLL_COUNT = 100;
@@ -120,6 +124,9 @@ const
   HASH1 = $4EA46962;
   HASH2 = $2A005528;
   {$endif}
+
+var
+  UserCreated: boolean;
 
 procedure TTestDirect.CleanUp;
 begin
@@ -132,6 +139,17 @@ var serverTime: TDateTime;
     errmsg: RawUTF8;
 begin
   assert(fClient=nil);
+  {$ifdef TESTMONGOAUTH}
+  if not UserCreated then begin
+    fClient := TMongoClient.Create('localhost',27017);
+    with fClient.Database[DB_NAME] do begin
+      DropUser(USER_NAME);
+      Check(CreateUserForThisDatabase(USER_NAME,USER_PWD,true)='');
+    end;
+    fClient.Free;
+    UserCreated := true;
+  end;
+  {$endif}
   fClient := TMongoClient.Create('localhost',27017);
   if ClassType=TTestDirectWithAcknowledge then
     fClient.WriteConcern := wcAcknowledged else
@@ -141,7 +159,11 @@ begin
   {$ifdef WITHLOG}
   fClient.SetLog(SQLite3Log); // define some verbose log
   {$endif}
+  {$ifdef TESTMONGOAUTH}
+  fDB := fClient.OpenAuth(DB_NAME,USER_NAME,USER_PWD);
+  {$else}
   fDB := fClient.Database[DB_NAME];
+  {$endif}
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
   errmsg := fDB.RunCommand('hostInfo',res);

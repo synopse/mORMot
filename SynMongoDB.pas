@@ -80,7 +80,7 @@ uses
   Variants,  // this unit expects Variants to be available for storage
   SysUtils,
   SynCrtSock,
-  SynCrypto, // MD5 needed for OpenAuth()
+  SynCrypto, // MD5 and SHA1 needed for OpenAuth()
   SynCommons,
   SynLog;
 
@@ -1747,6 +1747,8 @@ type
     /// secure connection to a database on a remote MongoDB server
     // - this method will use authentication and will return the corresponding
     // MongoDB database instance, with a dedicated secured connection
+    // - will use MONGODB-CR for MongoDB engines up to 2.6, and SCRAM-SHA-1
+    // since MongoDB 3.x
     // - see http://docs.mongodb.org/manual/administration/security-access-control
     function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase;
     /// close the connection and release all associated TMongoDatabase,
@@ -1875,8 +1877,21 @@ type
     // - in case of success, this method will return TRUE, or FALSE on error
     function RunCommand(const command: variant;
       var returnedValue: TBSONDocument): boolean; overload;
-    /// register an User/Password credential pair for OpenAuth() secure connection
-    procedure AddAuthUser(const UserName,Password: RawUTF8);
+
+    /// create the user in the database to which the user will belong
+    // - you could specify the roles to use, for this database or others:
+    // ! reportingDB.CreateUser('reportsUser','12345678',BSONVariant(
+    // !  '[{ role: "readWrite", db: "reporting" }, { role: "read", db: "products" }]'));
+    // - returns '' on sucess, an error message otherwise
+    function CreateUser(const UserName,Password: RawUTF8;
+      const roles: variant): RawUTF8;
+    /// create the user with a read or read/write role on the current database
+    // - returns '' on sucess, an error message otherwise
+    function CreateUserForThisDatabase(const UserName,Password: RawUTF8;
+      allowWrite: Boolean=true): RawUTF8;
+    /// deletes the supplied user on the current database
+    // - returns '' on sucess, an error message otherwise
+    function DropUser(const UserName: RawUTF8): RawUTF8;
 
     /// access to a given MongoDB collection
     // - raise an EMongoDatabaseException if the collection name does not exist
@@ -5396,41 +5411,111 @@ begin
   end;
 end;
 
-function TMongoClient.OpenAuth(const DatabaseName, UserName,
-  PassWord: RawUTF8): TMongoDatabase;
+function PasswordDigest(const UserName,Password: RawUTF8): RawUTF8;
+begin
+  result := MD5(UserName+':mongo:'+PassWord);
+end;
+
+function TMongoClient.OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase;
 var res,bson: variant;
-    err,nonce,key: RawUTF8;
+    err,digest,nonce,first,key,user,msg,rnonce: RawUTF8;
+    payload: RawByteString;
+    rnd: TAESBlock;
+    sha: TSHA1;
+    salted,client,stored,server: TSHA1Digest;
+    resp: TDocVariantData;
+
+  procedure CheckPayload;
+  var bin: PVariant;
+  begin
+    if err<>'' then
+      exit;
+    if _Safe(res)^.GetAsPVariant('payload',bin) and
+       BSONVariantType.ToBlob(bin^,payload) then
+      resp.InitCSV(pointer(payload),JSON_OPTIONS_FAST,'=',',') else
+      err := 'missing or invalid returned payload';
+  end;
+  
 begin
   if (self=nil) or (UserName='') or (PassWord='') then
-    result := nil else begin
-    result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
-    if result=nil then begin // not already opened -> try now from primary host
-      if not fConnections[0].Opened then
-      try // see http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
-        fConnections[0].Open;
-        // step 1
+    raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
+  result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+  if result=nil then begin // not already opened -> try now from primary host
+    if not fConnections[0].Opened then
+    try
+      fConnections[0].Open;
+      digest := PasswordDigest(UserName,Password);
+      if ServerBuildInfoNumber<3000000 then begin // MONGODB-CR
+        // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
         bson := BSONVariant(['getnonce',1]);
         err := fConnections[0].RunCommand(DatabaseName,bson,res);
         if (err='') and not _Safe(res)^.GetAsRawUTF8('nonce',nonce) then
           err := 'missing returned nonce';
         if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuth("%") step1 error: %',[self,DatabaseName,err]);
-        // step 2
-        key := MD5(nonce+UserName+MD5(UserName+':mongo:'+PassWord));
+          raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step1: % - res=%',
+            [self,DatabaseName,err,res]);
+        key := MD5(nonce+UserName+digest);
         bson := BSONVariant(['authenticate',1,'user',UserName,'nonce',nonce,'key',key]);
         err := fConnections[0].RunCommand(DatabaseName,bson,res);
         if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuth("%") step2 error: %',[self,DatabaseName,err]);
-      except
-        fConnections[0].Close;
-        raise;
+          raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
+            [self,DatabaseName,err,res]);
+      end else begin // SCRAM-SHA-1
+        // https://tools.ietf.org/html/rfc5802#section-5
+        user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
+        SynCrypto.FillRandom(rnd);
+        nonce := BinToBase64(@rnd,sizeof(rnd));
+        first := FormatUTF8('n=%,r=%',[user,nonce]);
+        BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
+        err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+          'saslStart',1,'mechanism','SCRAM-SHA-1','payload',bson,'autoAuthorize',1]),res);
+        CheckPayload;
+        if err='' then begin
+          rnonce := resp.U['r'];
+          if copy(rnonce,1,length(nonce))<>nonce then
+            err := 'returned invalid nonce';
+        end;
+        if err<>'' then
+          raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step1: % - res=%',
+            [self,DatabaseName,err,res]);
+        key := 'c=biws,r='+rnonce;
+        PBKDF2_HMAC_SHA1(digest,Base64ToBin(resp.U['s']),GetInteger(pointer(resp.U['i'])),salted);
+        HMAC_SHA1(salted,'Client Key',client);
+        sha.Full(@client,SizeOf(client),stored);
+        msg := first+','+RawUTF8(payload)+','+key;
+        HMAC_SHA1(stored,msg,stored);
+        XorMemory(@client,@stored,SizeOf(client));
+        HMAC_SHA1(salted,'Server Key',server);
+        HMAC_SHA1(server,msg,server);
+        msg := key+',p='+BinToBase64(@client,SizeOf(client));
+        BSONVariantType.FromBinary(msg,bbtGeneric,bson);
+        err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+          'saslContinue',1,'conversationId',res.conversationId,'payload',bson]),res);
+        resp.Clear;
+        CheckPayload;
+        if (err='') and (resp.U['v']<>BinToBase64(@server,SizeOf(server))) then
+            err := 'Server returned an invalid signature';
+        if err<>'' then
+          raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step2: % - res=%',
+            [self,DatabaseName,err,res]);
+        if not res.done then begin
+          // third empty challenge may be required
+          err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+            'saslContinue',1,'conversationId',res.conversationId,'payload','']),res);
+         if (err='') and not res.done then
+           err := 'SASL conversation failed to complete';
+          if err<>'' then
+            raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step3: % - res=%',
+              [self,DatabaseName,err,res]);
+        end;
       end;
-      result := TMongoDatabase.Create(Self,DatabaseName);
-      fDatabases.AddObject(DatabaseName,result);
+    except
+      fConnections[0].Close;
+      raise;
     end;
+    result := TMongoDatabase.Create(Self,DatabaseName);
+    fDatabases.AddObject(DatabaseName,result);
   end;
-  if result=nil then
-    raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
 end;
 
 function TMongoClient.GetServerBuildInfo: variant;
@@ -5513,14 +5598,27 @@ begin
   inherited;
 end;
 
-procedure TMongoDatabase.AddAuthUser(const UserName,Password: RawUTF8);
-var user: variant;
-    users: TMongoCollection;
+function TMongoDatabase.CreateUser(const UserName,Password: RawUTF8;
+  const roles: variant): RawUTF8;
+var res: variant;
 begin
-  users := CollectionOrCreate['system.users'];
-  user := users.FindOne(['user',UserName],true);
-  _Safe(user)^.AddOrUpdateValue('pwd',MD5(UserName+':mongo:'+PassWord));
-  users.Save(user);
+  result := RunCommand(BSONVariant(
+    ['createUser',UserName,'pwd',PasswordDigest(UserName,Password),
+     'digestPassword',false,'roles',roles]),res);
+end;
+
+function TMongoDatabase.CreateUserForThisDatabase(const UserName,Password: RawUTF8;
+  allowWrite: Boolean): RawUTF8;
+const RW: array[boolean] of RawUTF8 = ('read','readWrite');
+begin
+  result := CreateUser(UserName,Password,
+    BSONVariant('[{role:?,db:?}]',[],[RW[allowWrite],Name]));
+end;
+
+function TMongoDatabase.DropUser(const UserName: RawUTF8): RawUTF8;
+var res: variant;
+begin
+  result := RunCommand(BSONVariant(['dropUser',UserName]),res);
 end;
 
 function TMongoDatabase.GetCollection(const Name: RawUTF8): TMongoCollection;
