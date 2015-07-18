@@ -107,6 +107,9 @@ type
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     betJSScope, betInt32, betTimeStamp, betInt64);
 
+  /// points to an element type for BSON internal representation
+  PBSONElementType = ^TBSONElementType;
+
   /// sub-types for betBinary element BSON internal representation
   TBSONElementBinaryType = (
     bbtGeneric, bbtFunction, bbtOldBinary, bbtOldUUID, bbtUUID, bbtMD5,
@@ -759,7 +762,7 @@ function BSONFieldSelector(const FieldNamesCSV: RawUTF8): TBSONDocument; overloa
 // ! BSON('{name:"John",field:/acme.*corp/i}');
 // - will create the BSON binary without any temporary TDocVariant storage, by
 // calling JSONBufferToBSONDocument() on a temporary copy of the supplied JSON
-function BSON(const JSON: RawUTF8): TBSONDocument; overload;
+function BSON(const JSON: RawUTF8; kind: PBSONElementType=nil): TBSONDocument; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// store some object content, supplied as (extended) JSON and parameters,
@@ -783,7 +786,8 @@ function BSON(const JSON: RawUTF8): TBSONDocument; overload;
 // explicitely via BSON-like extensions: any complex value (e.g. a TDateTime
 // or a BSONVariant binary) won't be handled as expected - use the overloaded
 // BSON() with explicit BSONVariant() name/value pairs instead
-function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument; overload;
+function BSON(const Format: RawUTF8; const Args,Params: array of const;
+  kind: PBSONElementType=nil): TBSONDocument; overload;
 
 /// store some TDocVariant custom variant content into BSON encoded binary
 // - will write either a BSON object or array, depending of the internal
@@ -4274,37 +4278,51 @@ begin
   result := true;
 end;
 
-function BSON(const Format: RawUTF8; const Args,Params: array of const): TBSONDocument;
+function BSON(const Format: RawUTF8; const Args,Params: array of const;
+  kind: PBSONElementType): TBSONDocument;
 var JSON: RawUTF8;
     v: variant;
+    k: TBSONElementType;
 begin
   if (Format='?') and (high(Params)>=0) then begin
     VarRecToVariant(Params[0],v);
     if DocVariantType.IsOfType(v) then begin
       result := BSON(TDocVariantData(v));
+      if kind<>nil then
+        if TDocVariantData(v).Kind=dvArray then
+          kind^ := betArray else
+          kind^ := betDoc;
       exit;
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
   UniqueRawUTF8(JSON);
-  JSONBufferToBSONDocument(pointer(JSON),result);
+  k := JSONBufferToBSONDocument(pointer(JSON),result);
+  if kind<>nil then
+    kind^ := k;
 end;
 
-function BSON(const JSON: RawUTF8): TBSONDocument;
+function BSON(const JSON: RawUTF8; kind: PBSONElementType): TBSONDocument;
 var tmp: RawUTF8; // make a private copy
+    k: TBSONElementType;
 begin
   SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON));
-  JSONBufferToBSONDocument(pointer(tmp),result);
+  k := JSONBufferToBSONDocument(pointer(tmp),result);
+  if kind<>nil then
+    kind^ := k;
 end;
 
 function BSONVariant(const NameValuePairs: array of const): variant;
 begin
-  BSONVariantType.FromBSONDocument(BSON(NameValuePairs),result);
+  BSONVariantType.FromBSONDocument(BSON(NameValuePairs),result,betDoc);
 end;
 
 function BSONVariant(const JSON: RawUTF8): variant;
+var k: TBSONElementType;
+    b: RawByteString;
 begin
-  BSONVariantType.FromBSONDocument(BSON(JSON),result);
+  b := BSON(JSON,@k);
+  BSONVariantType.FromBSONDocument(b,result,k);
 end;
 
 procedure BSONVariant(JSON: PUTF8Char; var result: variant);
@@ -4315,13 +4333,20 @@ begin
 end;
 
 function BSONVariant(const Format: RawUTF8; const Args,Params: array of const): variant; overload;
+var k: TBSONElementType;
+    b: RawByteString;
 begin
-  BSONVariantType.FromBSONDocument(BSON(Format,Args,Params),result);
+  b := BSON(Format,Args,Params,@k);
+  BSONVariantType.FromBSONDocument(b,result,k);
 end;
 
 function BSONVariant(doc: TDocVariantData): variant; overload;
+var k: TBSONElementType;
 begin
-  BSONVariantType.FromBSONDocument(BSON(Doc),result);
+  if doc.Kind=dvArray then
+    k := betArray else
+    k := betDoc;
+  BSONVariantType.FromBSONDocument(BSON(Doc),result,k);
 end;
 
 function BSONVariantFieldSelector(const FieldNames: array of RawUTF8): variant;
@@ -4384,7 +4409,7 @@ begin
   if VarIsStr(paramDoc) then
     BSONWriteProjection(VariantToUTF8(paramDoc)) else
   if (TVarData(paramDoc).VType=BSONVariantType.VarType) and
-     (TBSONVariantData(paramDoc).VKind=betDoc) and
+     (TBSONVariantData(paramDoc).VKind in [betDoc,betArray]) and
      (TBSONVariantData(paramDoc).VBlob<>nil) then
     WriteBinary(RawByteString(TBSONVariantData(paramDoc).VBlob)) else
     BSONWriteDoc(TDocVariantData(paramDoc)); // for TDocVariant or null
