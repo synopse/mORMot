@@ -229,7 +229,7 @@ unit SynCrypto;
    - added CompressShaAes() and global CompressShaAesKey and CompressShaAesClass
      variables to be used by THttpSocket.RegisterCompress
    - introduce new TRC4 object for RC4 encryption algorithm
-   - introducing HMAC_SHA1 and PBKDF2_HMAC_SHA1 functions
+   - introducing HMAC_SHA1/SHA256 and PBKDF2_HMAC_SHA1/SHA256 functions
    - removed several compilation hints when assertions are set to off
 
 *)
@@ -839,6 +839,14 @@ function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
 // such a feature improve security for small passwords, e.g.
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest); overload;
 
+/// compute the HMAC message authentication code using SHA256 as hash function
+procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA256
+// - this function expect the resulting key length to match SHA256 digest size
+procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
+  out result: TSHA256Digest);
+
 
 /// direct Encrypt/Decrypt of data using the TAES class
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
@@ -1387,25 +1395,22 @@ begin
   sha.Update(pointer(msg),length(msg));
   sha.Final(result);
   sha.Update(@step7data,64);
-  sha.Update(@result,20);
+  sha.Update(@result,sizeof(result));
   sha.Final(result);
 end;
 
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
   out result: TSHA1Digest);
-var msg,tmp: RawByteString;
-    saltlen,i: integer;
+var tmp: RawByteString;
+    i: integer;
 begin
-  saltlen := length(salt);
-  SetString(msg,PAnsiChar(pointer(salt)),saltlen+4);
-  PInteger(PAnsiChar(pointer(msg))+saltlen)^ := $01000000;
-  HMAC_SHA1(password,msg,result);
+  HMAC_SHA1(password,salt+#0#0#0#1,result);
   if count<2 then
     exit;
-  SetString(tmp,PAnsiChar(@result),20);
+  SetString(tmp,PAnsiChar(@result),sizeof(result));
   for i := 2 to count do begin
     HMAC_SHA1(password,tmp,PSHA1Digest(tmp)^);
-    XorMemory(@result,pointer(tmp),20);
+    XorMemory(@result,pointer(tmp),sizeof(result));
   end;
 end;
 
@@ -1423,6 +1428,44 @@ var SHA: TSHA256;
 begin
   SHA.Full(Data,Len,Digest);
   result := SHA256DigestToString(Digest);
+end;
+
+procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
+var keylen,i: integer;
+    sha: TSHA256;
+    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+begin
+  FillcharFast(k0,sizeof(k0),0);
+  keylen := length(key);
+  if keylen>64 then
+    sha.Full(pointer(key),64,PSHA256Digest(@k0)^) else
+    MoveFast(pointer(key)^,k0,keylen);
+  for i := 0 to 15 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 15 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  sha.Init;
+  sha.Update(@k0xorIpad,64);
+  sha.Update(pointer(msg),length(msg));
+  sha.Final(result);
+  sha.Update(@step7data,64);
+  sha.Update(@result,sizeof(result));
+  sha.Final(result);
+end;
+
+procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
+  out result: TSHA256Digest);
+var tmp: RawByteString;
+    i: integer;
+begin
+  HMAC_SHA256(password,salt+#0#0#0#1,result);
+  if count<2 then
+    exit;
+  SetString(tmp,PAnsiChar(@result),sizeof(result));
+  for i := 2 to count do begin
+    HMAC_SHA256(password,tmp,PSHA256Digest(tmp)^);
+    XorMemory(@result,pointer(tmp),sizeof(result));
+  end;
 end;
 
 function SHA1SelfTest: boolean;
