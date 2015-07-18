@@ -7920,16 +7920,26 @@ const
     ($A9,$99,$3E,$36,$47,$06,$81,$6A,$BA,$3E,$25,$71,$78,$50,$C2,$6C,$9C,$D0,$D8,$9D);
   Test2Out: TSHA1Digest=
     ($84,$98,$3E,$44,$1C,$3B,$D2,$6E,$BA,$AE,$4A,$A1,$F9,$51,$29,$E5,$E5,$46,$70,$F1);
-var
-  s: AnsiString;
-  SHA: TSHA1;
-  Digest: TSHA1Digest;
+var s: AnsiString;
+    SHA: TSHA1;
+    Digest: TSHA1Digest;
 begin
   SingleTest('abc',Test1Out);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',Test2Out);
   s := 'Wikipedia, l''encyclopedie libre et gratuite';
   SHA.Full(pointer(s),length(s),Digest);
   Check(SHA1DigestToString(Digest)='c18cc65028bbdc147288a2d136313287782b9c73');
+  HMAC_SHA1('','',Digest);
+  check(SHA1DigestToString(Digest)='fbdb1d1b18aa6c08324b7d64b71fb76370690e1d');
+  HMAC_SHA1('key','The quick brown fox jumps over the lazy dog',Digest);
+  check(SHA1DigestToString(Digest)='de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
+  // from https://www.ietf.org/rfc/rfc6070.txt
+  PBKDF2_HMAC_SHA1('password','salt',1,Digest);
+  check(SHA1DigestToString(Digest)='0c60c80f961f0e71f3a9b524af6012062fe037a6');
+  PBKDF2_HMAC_SHA1('password','salt',2,Digest);
+  check(SHA1DigestToString(Digest)='ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957');
+  PBKDF2_HMAC_SHA1('password','salt',4096,Digest);
+  check(SHA1DigestToString(Digest)='4b007901b765489abead49d926f721d065a429c1');
 end;
 
 procedure TTestCryptographicRoutines._SHA256;

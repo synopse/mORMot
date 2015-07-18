@@ -229,6 +229,7 @@ unit SynCrypto;
    - added CompressShaAes() and global CompressShaAesKey and CompressShaAesClass
      variables to be used by THttpSocket.RegisterCompress
    - introduce new TRC4 object for RC4 encryption algorithm
+   - introducing HMAC_SHA1 and PBKDF2_HMAC_SHA1 functions
    - removed several compilation hints when assertions are set to off
 
 *)
@@ -815,6 +816,14 @@ function MD5(const s: RawByteString): RawUTF8;
 // - result is returned in hexadecimal format
 function SHA1(const s: RawByteString): RawUTF8;
 
+/// compute the HMAC message authentication code using SHA1 as hash function
+procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA1
+// - this function expect the resulting key length to match SHA1 digest size
+procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
+  out result: TSHA1Digest);
+
 /// direct SHA256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function SHA256(const s: RawByteString): RawUTF8; overload;
@@ -1090,7 +1099,7 @@ end;
 
 function memcpy(dest, src: Pointer; count: integer): Pointer; cdecl;
 begin
-  Move(src^, dest^, count);
+  MoveFast(src^, dest^, count);
   Result := dest;
 end;
 
@@ -1359,6 +1368,47 @@ begin
   result := SHA1DigestToString(Digest);
 end;
 
+procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
+var keylen,i: integer;
+    sha: TSHA1;
+    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+begin
+  FillcharFast(k0,sizeof(k0),0);
+  keylen := length(key);
+  if keylen>64 then
+    sha.Full(pointer(key),64,PSHA1Digest(@k0)^) else
+    MoveFast(pointer(key)^,k0,keylen);
+  for i := 0 to 15 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 15 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  sha.Init;
+  sha.Update(@k0xorIpad,64);
+  sha.Update(pointer(msg),length(msg));
+  sha.Final(result);
+  sha.Update(@step7data,64);
+  sha.Update(@result,20);
+  sha.Final(result);
+end;
+
+procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
+  out result: TSHA1Digest);
+var msg,tmp: RawByteString;
+    saltlen,i: integer;
+begin
+  saltlen := length(salt);
+  SetString(msg,PAnsiChar(pointer(salt)),saltlen+4);
+  PInteger(PAnsiChar(pointer(msg))+saltlen)^ := $01000000;
+  HMAC_SHA1(password,msg,result);
+  if count<2 then
+    exit;
+  SetString(tmp,PAnsiChar(@result),20);
+  for i := 2 to count do begin
+    HMAC_SHA1(password,tmp,PSHA1Digest(tmp)^);
+    XorMemory(@result,pointer(tmp),20);
+  end;
+end;
+
 function SHA256(const s: RawByteString): RawUTF8;
 var SHA: TSHA256;
     Digest: TSHA256Digest;
@@ -1416,6 +1466,25 @@ begin
   s := 'Wikipedia, l''encyclopedie libre et gratuite';
   SHA.Full(pointer(s),length(s),Digest);
   result := SHA1DigestToString(Digest)='c18cc65028bbdc147288a2d136313287782b9c73';
+  if not result then exit;
+  HMAC_SHA1('','',Digest);
+  result := SHA1DigestToString(Digest)='fbdb1d1b18aa6c08324b7d64b71fb76370690e1d';
+  if not result then exit;
+  HMAC_SHA1('key','The quick brown fox jumps over the lazy dog',Digest);
+  result := SHA1DigestToString(Digest)='de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9';
+  if not result then exit;
+  // from https://www.ietf.org/rfc/rfc6070.txt
+  PBKDF2_HMAC_SHA1('password','salt',1,Digest);
+  s := SHA1DigestToString(Digest);
+  result := s='0c60c80f961f0e71f3a9b524af6012062fe037a6';
+  if not result then exit;
+  PBKDF2_HMAC_SHA1('password','salt',2,Digest);
+  s := SHA1DigestToString(Digest);
+  result := s='ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957';
+  if not result then exit;
+  PBKDF2_HMAC_SHA1('password','salt',4096,Digest);
+  s := SHA1DigestToString(Digest);
+  result := s='4b007901b765489abead49d926f721d065a429c1';
 end;
 
 
@@ -1464,7 +1533,7 @@ begin
 //    write('Test AES ',ks);
     for i := 1 to 100 do begin
       SHA256Weak(st,Key);
-      move(Key,s,16);
+      moveFast(Key,s,16);
       A.EncryptInit(Key,ks);
       A.Encrypt(s,b);
       A.Done;
@@ -2166,7 +2235,7 @@ begin
     exit;
   end;
   Nk := KeySize div 32;
-  Move(Key, ctx.RK, 4*Nk);
+  MoveFast(Key, ctx.RK, 4*Nk);
   {$ifdef CPUINTEL}
   ctx.AesNi := cfAESNI in CpuFeatures;
   {$else}
@@ -4177,13 +4246,13 @@ begin
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
-      move(buffer^,Data.Buffer[Data.Index],aLen);
+      MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
       dec(Len,aLen);
       inc(PtrInt(buffer),aLen);
       Compress;
       Data.Index := 0;
     end else begin
-      move(buffer^,Data.Buffer[Data.Index],Len);
+      MoveFast(buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
       break;
     end;
@@ -4201,7 +4270,7 @@ begin
   if L<sizeof(tmp) then begin
     FillcharFast(tmp,sizeof(tmp),L); // add some salt to unweak password
     if L>0 then
-      move(p^,tmp,L);
+      MoveFast(p^,tmp,L);
     SHA.Full(@tmp,sizeof(tmp),Digest);
   end else
     SHA.Full(p,L,Digest);
@@ -4225,11 +4294,11 @@ begin
     if (KeySize>4) and not Crypt.DoInit(Key,KeySize,Encrypt) then
       KeySize := 4; // if error in KeySize, use default fast XorOffset()
   if KeySize=0 then begin // KeySize=0 -> no encryption -> direct copy
-    move(bIn^, bOut^, Len);
+    MoveFast(bIn^, bOut^, Len);
     exit;
   end;
   if n<1 then begin // too small for AES -> XorOffset() remaining 0..15 bytes
-    move(bIn^, bOut^, Len);
+    MoveFast(bIn^, bOut^, Len);
     XorOffset(bOut,0,Len);
     exit;
   end;
@@ -4244,7 +4313,7 @@ begin
   // 3. Last block, just XORed from Key
 //  assert(KeySize div 8>=AESBlockSize);
   n := cardinal(Len) mod AESBlockSize;
-  move(pIn^,pOut^,n); // pIn=pOut is tested in move()
+  MoveFast(pIn^,pOut^,n); // pIn=pOut is tested in move()
   XorOffset(pointer(pOut),Len-n,n);
 {$ifdef USEPADLOCK}
   Crypt.Done; // use for Padlock support
@@ -4289,7 +4358,7 @@ begin
         b := n;
       assert(b mod AESBlockSize=0);
       if KeySize=4 then begin
-        move(buffer^,buf^,b);
+        MoveFast(buffer^,buf^,b);
         XorOffset(pointer(buf),i,b);
         inc(i,b);
       end else
@@ -4300,7 +4369,7 @@ begin
     end;
     assert((KeySize>4)or(i=Len-Last));
     if last>0 then begin // crypt/uncrypt (Xor) last 0..15 bytes
-      move(buffer^,buf^,Last);
+      MoveFast(buffer^,buf^,Last);
       XorOffset(pointer(buf),Len-Last,Last);
       Stream.Write(buf^,Last);
     end;
@@ -4337,7 +4406,7 @@ procedure Read(Tmp: pointer; ByteCount: cardinal);
 begin
   if pIn=nil then
     InStream.Read(Tmp^,ByteCount) else begin
-    move(pIn^,Tmp^,ByteCount);
+    MoveFast(pIn^,Tmp^,ByteCount);
     inc(PtrUInt(pIn),ByteCount);
   end;
 end;
@@ -4345,7 +4414,7 @@ procedure Write(Tmp: pointer; ByteCount: cardinal);
 begin
   if pOut=nil then
     OutStream.Write(Tmp^,ByteCount) else begin
-    move(Tmp^,pOut^,ByteCount);
+    MoveFast(Tmp^,pOut^,ByteCount);
     inc(PtrUInt(pOut),ByteCount);
   end;
 end;
@@ -4771,7 +4840,7 @@ begin
       Len := AESBlockSize-BufCount;
       if Len>Count then
         Len := Count;
-      move(Buffer,Buf[BufCount],Len);
+      MoveFast(Buffer,Buf[BufCount],Len);
       inc(BufCount,Len);
       if BufCount<AESBlockSize then
         exit;
@@ -4785,7 +4854,7 @@ begin
     BufCount := cardinal(Count) mod AESBlockSize;
     if BufCount<>0 then begin
       dec(Count,BufCount);
-      move(B[Count],Buf[0],BufCount);
+      MoveFast(B[Count],Buf[0],BufCount);
     end;
   end;
   Dest.Write(Buffer,Count);
@@ -4973,13 +5042,13 @@ end;
 function TMD5.Final: TMD5Digest;
 begin
   Finalize;
-  Move(buf,result,sizeof(result));
+  MoveFast(buf,result,sizeof(result));
 end;
 
 procedure TMD5.Final(out result: TMD5Digest);
 begin
   Finalize;
-  Move(buf,result,sizeof(result));
+  MoveFast(buf,result,sizeof(result));
 end;
 
 procedure TMD5.Finalize;
@@ -5012,7 +5081,7 @@ begin
   Init;
   Update(Buffer^,Len);
   Finalize;
-  Move(buf,Digest,sizeof(Digest));
+  MoveFast(buf,Digest,sizeof(Digest));
 end;
 
 procedure TMD5.Init;
@@ -5038,11 +5107,11 @@ begin
     Inc(bytes[1]);  // Carry from low to high
   t := 64 - (t and $3f);  // Space available in in_ (at least 1)
   if t>len then begin
-    Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, len);
+    MoveFast(p^, Pointer(PtrUInt(@in_) + 64 - t)^, len);
     exit;
   end;
   // First chunk is an odd size
-  Move(p^, Pointer(PtrUInt(@in_) + 64 - t)^, t);
+  MoveFast(p^, Pointer(PtrUInt(@in_) + 64 - t)^, t);
   MD5Transform(buf, in_);
   inc(PtrUInt(p), t);
   dec(len, t);
@@ -5052,7 +5121,7 @@ begin
     inc(p);
   end;
   // Handle any remaining bytes of data.
-  Move(p^, in_, len mod 64);
+  MoveFast(p^, in_, len mod 64);
 end;
 
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
@@ -5299,13 +5368,13 @@ begin
   while Len > 0 do begin
     aLen := sizeof(Data.Buffer)-Data.Index;
     if aLen<=Len then begin
-      move(buffer^,Data.Buffer[Data.Index],aLen);
+      MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
       dec(Len,aLen);
       inc(PtrUInt(buffer),aLen);
       Compress;
       Data.Index := 0;
     end else begin
-      move(buffer^,Data.Buffer[Data.Index],Len);
+      MoveFast(buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
       break;
     end;
@@ -5371,7 +5440,7 @@ begin
       '%.Create key size = %; should be either 128, 192 or 256',[self,aKeySize]);
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
-  move(aKey,fKey,fKeySizeBytes);
+  MoveFast(aKey,fKey,fKeySizeBytes);
 end;
 
 constructor TAESAbstract.CreateFromSha256(const aKey: RawUTF8);
@@ -5421,7 +5490,7 @@ begin
     FillRandom(fIV);
     PAESBlock(Output)^ := fIV;
   end;
-  move(Input^,PByteArray(Output)^[iv],InputLen);
+  MoveFast(Input^,PByteArray(Output)^[iv],InputLen);
   FillcharFast(PByteArray(Output)^[iv+InputLen],padding,padding);
   Inc(PByte(Output),iv);
   Encrypt(Output,Output,InputLen+padding);
@@ -5947,7 +6016,7 @@ begin
   if not CryptoAPI.SetKeyParam(fKeyCryptoAPI,KP_MODE,@fInternalMode,0) then
     raise ESynCrypto.CreateFmt('Error $%x in CryptSetKeyParam(KP_MODE,%d)',[GetLastError,fInternalMode]);
   if BufOut<>BufIn then
-    Move(BufIn^,BufOut^,Count);
+    MoveFast(BufIn^,BufOut^,Count);
   n := Count and not (AESBlockSize-1);
   if DoEncrypt then begin
     if not CryptoAPI.Encrypt(fKeyCryptoAPI,nil,false,0,BufOut,n,Count) then
@@ -6047,12 +6116,12 @@ end;
 
 procedure TRC4.RestoreKey(const Backup: TRC4InternalKey);
 begin
-  move(Backup,key,sizeof(key));
+  MoveFast(Backup,key,sizeof(key));
 end;
 
 procedure TRC4.SaveKey(out Backup: TRC4InternalKey);
 begin
-  move(key,Backup,sizeof(key));
+  MoveFast(key,Backup,sizeof(key));
 end;
 
 function RC4SelfTest: boolean;

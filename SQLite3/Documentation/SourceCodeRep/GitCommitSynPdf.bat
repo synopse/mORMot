@@ -17,6 +17,7 @@
 @xcopy %1\SynopseCommit.inc . /Y >nul
 @xcopy %1\SynPdf.pas . /Y >nul
 @xcopy %1\SynCrypto.pas . /Y >nul
+@xcopy %1\SynFPCTypInfo.pas . /Y >nul
 @xcopy %1\SynGdiPlus.pas . /Y >nul
 @xcopy %1\SynZip.pas . /Y >nul
 @xcopy %1\deflate.obj . /Y >nul
