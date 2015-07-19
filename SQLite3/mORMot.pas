@@ -9180,6 +9180,9 @@ type
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddJSON(WR: TTextWriter; V: pointer);
+    /// append the value corresponding to this argument as within a JSON string
+    // - will escape any JSON string character, and include a pending ','
+    procedure AddJSONEscaped(WR: TTextWriter; V: pointer);
     /// append the JSON value corresponding to this argument, from its text value
     // - includes a pending ','
     procedure AddValueJSON(WR: TTextWriter; const Value: RawUTF8);
@@ -9312,6 +9315,60 @@ type
   // can safely use such pointers in our code to refer to a particular method
   PServiceMethod = ^TServiceMethod;
 
+  /// common ancestor for storing interface-based service execution statistics
+  // - each call could be logged and monitored in the database
+  // - TServiceMethodExecute could store all its calls in such a table
+  TSQLRecordServiceLog = class(TSQLRecord)
+  protected
+    fMethod: RawUTF8;
+    fInput: variant;
+    fOutput: variant;
+    fModified: TModTime;
+    fMicroSec: integer;
+    // define Input/Output as dvoSerializeAsExtendedJson
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  public
+    /// this overriden method will create an index on the 'Method' column
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
+  published
+    /// the 'interface.method' identifier of this call
+    // - this column will be indexed, for fast SQL queries, with the MicroSec
+    // column (for performance tuning)
+    property Method: RawUTF8 read fMethod write fMethod;
+    /// the input parameters, as a JSON document
+    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+    // shortened field names, for smaller TEXT storage
+    // - content may be searched using JsonGet/JsonHas SQL functions on a
+    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+    property Input: variant read fInput write fInput;
+    /// the output parameters, as a JSON document, including result: for a function
+    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+    // shortened field names, for smaller TEXT storage
+    // - content may be searched using JsonGet/JsonHas SQL functions on a
+    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+    property Output: variant read fOutput write fOutput;
+    /// will be filled by the ORM when this record is written in the database
+    property Modified: TModTime read fModified write fModified;
+    /// execution time of this method, in micro seconds
+    property MicroSec: integer read fMicroSec write fMicroSec;
+  end;
+
+  /// class-reference type (metaclass) for storing interface-based service
+  // execution statistics
+  // - you could inherit from TSQLRecordServiceLog, and specify additional
+  // fields corresponding to the execution context
+  TSQLRecordServiceLogClass = class of TSQLRecordServiceLog;
+
+  TServiceMethodExecute = class;
+
+  /// the current step of a TServiceMethodExecute.OnExecute call
+  TServiceMethodExecuteEventStep = (smsBefore, smsAfter);
+
+  /// the TServiceMethodExecute.OnExecute signature
+  TServiceMethodExecuteEvent = procedure(Sender: TServiceMethodExecute;
+    Step: TServiceMethodExecuteEventStep) of object;
+
   /// execute a method of a TInterfacedObject instance, from/to JSON
   TServiceMethodExecute = class
   protected
@@ -9327,14 +9384,16 @@ type
       Value: Pointer;
       Wrapper: TDynArray;
     end;
-    fValues: array of PPointer;
+    fValues: TPPointerDynArray;
     fAlreadyExecuted: boolean;
+    fTempTextWriter: TTextWriter;
     procedure BeforeExecute;
     procedure RawExecute(Instances: PPointerArray; InstancesLast: integer);
     procedure AfterExecute;
   public
     BackgroundExecutionThread: TSynBackgroundThreadMethod;
     OnCallback: TServiceMethodExecuteCallback;
+    OnExecute: TServiceMethodExecuteEvent;
     Options: TServiceMethodOptions;
     ServiceCustomAnswerHead: RawUTF8;
     ServiceCustomAnswerStatus: cardinal;
@@ -9346,7 +9405,13 @@ type
     // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
     function ExecuteJson(Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
+    /// low-level direct access to the associated method information
     property Method: PServiceMethod read fMethod;
+    /// low-level direct access to the current input/output parameter values
+    property Values: TPPointerDynArray read fValues;
+    /// allow to use an instance-specific temporary TTextWriter
+    // - will be released just after each execution
+    function TempTextWriter: TTextWriter;
   end;
 
   /// a record type to be used as result for a function method for custom content
@@ -10526,6 +10591,10 @@ type
       Denied: set of 0..255;
       /// execution options for this method (about thread safety or logging)
       Options: TServiceMethodOptions;
+      /// where execution information should be written as TSQLRecordServiceLog 
+      LogRest: TSQLRest;
+      /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
+      LogClassModelIndex: integer;
     end;
     function GetInterfaceTypeInfo: PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10696,6 +10765,8 @@ type
     // the returned "id" number is the Instance identifier to be used for any later
     // sicClientDriven remote call - or just 0 in case of sicSingle or sicShared
     procedure ExecuteMethod(Ctxt: TSQLRestServerURIContext);
+    procedure OnExecuteMethod(Sender: TServiceMethodExecute;
+      Step: TServiceMethodExecuteEventStep);
     /// this method will create an implementation instance
     // - reference count will be set to one, in order to allow safe passing
     // of the instance into an interface, if AndIncreaseRefCount is TRUE
@@ -10808,6 +10879,8 @@ type
     // - if no method name is given (i.e. []), option will be set for all methods
     // - include optExecInMainThread will force the method(s) to be called within
     // a RunningThread.Synchronize() call - slower, but thread-safe
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
     function SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions): TServiceFactoryServer;
     /// define the the instance life time-out, in seconds
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
@@ -10815,6 +10888,17 @@ type
     // - this method returns self in order to allow direct chaining of setting
     // calls for the service, in a fluent interface
     function SetTimeoutSec(value: cardinal): TServiceFactoryServer;
+    /// log method execution information to a TSQLRecordServiceLog table
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - if no method name is given (i.e. []), option will be set for all methods
+    // - will write to the associated TSQLRestServer instance, unless aLogRest
+    // custom value is specified
+    // - will write to a TSQLRecordServiceLog table, unless a dedicated table
+    // is specified in aLogClass
+    // - this method returns self in order to allow direct chaining of security
+    // calls, in a fluent interface
+    function SetServiceLog(const aMethod: array of RawUTF8;
+      aLogRest: TSQLRest=nil; aLogClass: TSQLRecordServiceLogClass=nil): TServiceFactoryServer;
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -10834,7 +10918,7 @@ type
     // is set to TRUE (which is not the default setting, for security reasons)
     function RetrieveSignature: RawUTF8; override;
 
-    /// just typecast the associated TSQLRest instance to a true TSQLRestServer
+    /// just type-cast the associated TSQLRest instance to a true TSQLRestServer
     function RestServer: TSQLRestServer;
       {$ifdef HASINLINE}inline;{$endif}
 
@@ -34074,13 +34158,13 @@ begin
     length(Call.OutHead)+length(Call.OutBody)+16);
 end;
 
-procedure StatsFromContext(Stats: TSynMonitorInputOutput;
-  const Call: TSQLRestURIParams; const CounterDiff: Int64);
+function StatsFromContext(Stats: TSynMonitorInputOutput;
+  const Call: TSQLRestURIParams; const CounterDiff: Int64): QWord;
 begin
   StatsAddSizeForCall(Stats,Call);
   if not StatusCodeIsSuccess(Call.OutStatus) then
     Stats.ProcessErrorNumber(Call.OutStatus);
-  Stats.FromExternalQueryPerformanceCounters(CounterDiff);
+  result := Stats.FromExternalQueryPerformanceCounters(CounterDiff);
 end;
 
 procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
@@ -48534,15 +48618,42 @@ begin
     IInterface(result)._AddRef; // allow passing self to sub-methods
 end;
 
-procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
-procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
-var method: RawUTF8;
+procedure TServiceFactoryServer.OnExecuteMethod(Sender: TServiceMethodExecute;
+  Step: TServiceMethodExecuteEventStep);
+var W: TTextWriter;
+    a: integer;
 begin
-  if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
-    method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
-  Ctxt.Error('% % for %%',[ToText(InstanceCreation),Msg,
-    fInterface.fInterfaceTypeInfo^.Name,method],Status);
+  W := Sender.TempTextWriter;
+  with Sender.Method^ do
+  case Step of
+  smsBefore: begin
+    W.AddShort('{Method:"');
+    W.AddString(InterfaceDotMethodName);
+    W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
+    for a := ArgsInFirst to ArgsInLast do
+      with Args[a] do
+      if ValueDirection<>smdOut then begin
+        W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
+        W.Add(':');
+        AddJSON(W,Sender.Values[a]);
+      end;
+    W.CancelLastComma;
+  end;
+  smsAfter: begin
+    W.AddShort('},Output:{');
+    for a := ArgsOutFirst to ArgsOutLast do
+      with Args[a] do
+      if ValueDirection in [smdVar,smdOut,smdResult] then begin
+        W.AddShort(ParamName^);
+        W.Add(':');
+        AddJSON(W,Sender.Values[a]);
+      end;
+    W.CancelLastComma;
+  end;
+  end;
 end;
+
+procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
     entry: PInterfaceEntry;
@@ -48551,6 +48662,22 @@ var Inst: TServiceFactoryServerInstance;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
     ndx: integer;
+
+  procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
+  var method: RawUTF8;
+  begin
+    if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
+      method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
+    Ctxt.Error('% % for %%',[ToText(InstanceCreation),Msg,
+      fInterface.fInterfaceTypeInfo^.Name,method],Status);
+  end;
+  procedure ProcessOnExecute;
+  begin
+    exec.TempTextWriter.Add('},Modified:%,MicroSec:%}',[TimeLogNowUTC,timeStart]);
+    with fExecution[Ctxt.ServiceMethodIndex] do // direct write
+      LogRest.EngineAdd(LogClassModelIndex,exec.TempTextWriter.Text);
+  end;
+
 begin
   if mlInterfaces in TSQLRestServer(Rest).StatLevels then
     QueryPerformanceCounter(timeStart);
@@ -48604,6 +48731,7 @@ begin
     stats.Processing := true;
   end else
     stats := nil;
+  exec := nil;
   try
     if Inst.Instance.ClassType=fImplementationClass then
       entry := fImplementationClassInterfaceEntry else begin
@@ -48630,6 +48758,8 @@ begin
         exec.BackgroundExecutionThread := fBackgroundThread;
         {$endif}
         exec.OnCallback := Ctxt.ExecuteCallback;
+        if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
+          exec.OnExecute := OnExecuteMethod;
         if exec.ExecuteJson([PAnsiChar(Inst.Instance)+entry^.IOffset],
            Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
           Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
@@ -48639,7 +48769,6 @@ begin
           exit; // wrong request
         end;
       finally
-        exec.Free;
         if dolock then
           LeaveCriticalSection(fInstanceLock);
       end;
@@ -48659,7 +48788,7 @@ begin
     if stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
       dec(timeEnd,timeStart);
-      StatsFromContext(stats,Ctxt.Call^,timeEnd);
+      timeStart := StatsFromContext(stats,Ctxt.Call^,timeEnd);
       if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
         if Ctxt.fAuthSession.fInterfaces=nil then
           SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
@@ -48677,6 +48806,12 @@ begin
           StatsFromContext(stats,Ctxt.Call^,timeEnd);
         end;
       end;
+    end else
+      timeStart := 0;
+    if exec<>nil then begin
+      if Assigned(exec.OnExecute) then
+        ProcessOnExecute;
+      exec.Free;
     end;
   end;
 end;
@@ -48825,8 +48960,8 @@ begin
     if high(aMethod)<0 then
       for i := 0 to fInterface.fMethodsCount-1 do
         fExecution[i].Options := aOptions else
-    for m := 0 to high(aMethod) do
-      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Options := aOptions;
+      for m := 0 to high(aMethod) do
+        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Options := aOptions;
     fAnyOptions := [];
     for i := 0 to fInterface.fMethodsCount-1 do
       fAnyOptions := fAnyOptions+fExecution[i].Options;
@@ -48850,6 +48985,32 @@ begin
   result := self;
 end;
 
+function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
+  aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass): TServiceFactoryServer;
+var i,ndx: integer;
+begin
+  if self<>nil then begin
+    if aLogRest=nil then
+      aLogRest := Rest;
+    with aLogRest.Model do
+      if aLogClass=nil then
+        ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog) else
+        ndx := GetTableIndexExisting(aLogClass);
+    if high(aMethod)<0 then
+      for i := 0 to fInterface.fMethodsCount-1 do
+      with fExecution[i] do begin
+        LogRest := aLogRest;
+        LogClassModelIndex := ndx;
+      end else
+      for i := 0 to high(aMethod) do
+        with fExecution[fInterface.CheckMethodIndex(aMethod[i])] do begin
+          LogRest := aLogRest;
+          LogClassModelIndex := ndx;
+        end;
+  end;
+  result := self;
+end;
+
 
 { TServiceRecordVersion }
 
@@ -48860,7 +49021,7 @@ var server: TSQLRestServer;
 begin
   with PServiceRunningContext(@ServiceContext)^ do
    if Factory<>nil then begin
-     server := Factory.Rest as TSQLRestServer;
+     server := Factory.RestServer;
      if server<>nil then begin
        tableIndex := server.Model.GetTableIndex(SQLTableName);
        if tableIndex>=0 then begin
@@ -48925,7 +49086,7 @@ begin
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[woStoreStoredFalse]);
-  smvInterface:  ; // already written by TInterfacedObjectFake.InterfaceWrite
+  smvInterface:  WR.AddShort('null'); // already written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
   smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
@@ -48935,6 +49096,17 @@ begin
   if vIsString in ValueKindAsm then
     WR.Add('"',',') else
     WR.Add(',');
+end;
+
+procedure TServiceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
+var W: TTextWriter;
+begin
+  if ValueType in [smvBoolean..smvCurrency,smvInterface] then // no need to escape those
+    AddJSON(WR,V) else begin
+    W := WR.InternalJSONWriter;
+    AddJSON(W,V);
+    WR.AddJSONEscape(W);
+  end;
 end;
 
 procedure TServiceMethodArgument.AddValueJSON(WR: TTextWriter; const Value: RawUTF8);
@@ -49330,6 +49502,12 @@ begin
     end;
     // execute the method
     for i := 0 to InstancesLast do begin
+      // handle method execution interception
+      if Assigned(OnExecute) then
+      try
+        OnExecute(self,smsBefore);
+      except // ignore any exception during interception
+      end;
       // prepare the low-level call context for the asm stub
       call.Regs[REG_FIRST] := PtrInt(Instances[i]);
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
@@ -49343,19 +49521,35 @@ begin
         BackgroundExecuteCallMethod(@call,nil) else
       {$endif}
       if optExecInPerInterfaceThread in Options then
-        if not Assigned(BackgroundExecutionThread) then
-          raise EInterfaceFactoryException.Create(
-            'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else
+        if Assigned(BackgroundExecutionThread) then
           BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
+          raise EInterfaceFactoryException.Create('optExecInPerInterfaceThread'+
+            ' with BackgroundExecutionThread=nil') else
         CallMethod(call);
       if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
         PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
+      // handle method execution interception
+      if Assigned(OnExecute) then
+      try
+        OnExecute(self,smsAfter);
+      except // ignore any exception during interception
+      end;
+    end;
   end;
+end;
+
+function TServiceMethodExecute.TempTextWriter: TTextWriter;
+begin
+  if fTempTextWriter=nil then
+    fTempTextWriter := TJSONSerializer.CreateOwnedStream else
+    fTempTextWriter.CancelAll;
+  result := fTempTextWriter;
 end;
 
 procedure TServiceMethodExecute.AfterExecute;
 var i,a: integer;
 begin
+  FreeAndNil(fTempTextWriter);
   Finalize(fRawUTF8s);
   Finalize(fStrings);
   Finalize(fWideStrings);
@@ -49532,6 +49726,23 @@ begin
   finally
     AfterExecute;
   end;
+end;
+
+
+{ TSQLRecordServiceLog }
+
+class procedure TSQLRecordServiceLog.InitializeTable(
+  Server: TSQLRestServer; const FieldName: RawUTF8;
+  Options: TSQLInitializeTableOptions);
+begin
+  inherited;
+  if FieldName='' then
+    Server.CreateSQLMultiIndex(Self,['Method','MicroSec'],false);
+end;
+
+class procedure TSQLRecordServiceLog.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 
 
@@ -50219,5 +50430,6 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+
 
 

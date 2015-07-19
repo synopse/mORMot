@@ -1054,6 +1054,8 @@ type
   PPersistentDynArray = ^TPersistentDynArray;
   TPointerDynArray = array of pointer;
   PPointerDynArray = ^TPointerDynArray;
+  TPPointerDynArray = array of PPointer;
+  PPPointerDynArray = ^TPPointerDynArray;
   TMethodDynArray = array of TMethod;
   PMethodDynArray = ^TMethodDynArray;
   TObjectListDynArray = array of TObjectList;
@@ -6209,6 +6211,10 @@ type
     // - if you don't call FlushToStream or FlushFinal, some pending characters
     // may not be copied to the Stream: you should call it before using the Stream
     procedure FlushFinal;
+    /// gives access to an internal temporary TTextWriter
+    // - may be used to escape some JSON espaced value (i.e. escape it twice),
+    // in conjunction with AddJSONEscape(Source: TTextWriter)
+    function InternalJSONWriter: TTextWriter;
     /// add a callback to echo each line written by this class
     // - this class expects AddEndOfLine to mark the end of each line
     procedure EchoAdd(const aEcho: TOnTextWriterEcho);
@@ -6469,6 +6475,10 @@ type
     // - escapes chars according to the JSON RFC
     // - very fast (avoid most temporary storage)
     procedure AddJSONEscape(const V: TVarRec); overload;
+    /// flush a supplied TTextWriter, and write pending data as JSON escaped text
+    // - may be used with InternalJSONWriter, as a faster alternative to
+    // ! AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
+    procedure AddJSONEscape(Source: TTextWriter); overload;
     /// append an open array constant value to the buffer
     // - "" won't be added for string values
     // - string values may be escaped, depending on the supplied parameter
@@ -26392,23 +26402,23 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
-{$ifdef MSWINDOWS}
 var
   UTCTimeCache: TTimeLog;
   UTCTimeTicks: cardinal;
-{$endif}
 
 procedure TTimeLogBits.FromUTCTime;
+var Ticks: cardinal;
 {$ifdef MSWINDOWS}
-var Now: TSystemTime;
+    Now: TSystemTime;
     V: cardinal;
-    Ticks: cardinal;
+{$endif}
 begin
-  Ticks := GetTickCount; // typically in range of 10-16 ms
+  Ticks := GetTickCount64 shr 8; // 256 ms resolution
   if Ticks=UTCTimeTicks then begin
     Value := UTCTimeCache;
     exit;
   end;
+{$ifdef MSWINDOWS}
   UTCTimeTicks := Ticks;
   GetSystemTime(Now); // this API is fast enough for our purpose
   V := Now.wHour+Now.wDay shl 5+Now.wMonth shl 10+
@@ -26417,8 +26427,8 @@ begin
   UTCTimeCache := Value;
 end;
 {$else}
-begin
   From(NowUTC);
+  UTCTimeCache := Value;
 end;
 {$endif}
 
@@ -33554,10 +33564,10 @@ begin
         Name := GetJSONPropName(JSON);
         if Name=nil then
           exit;
+        SetString(VName[VCount],PAnsiChar(Name),StrLen(Name));
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
         if JSON=nil then
           exit;
-        VName[VCount] := Name;
         inc(VCount);
         if VCount>n then
           raise EDocVariant.Create('Unexpected object size');
@@ -38951,15 +38961,27 @@ begin
   Add(']','}');
 end;
 
+function TTextWriter.InternalJSONWriter: TTextWriter;
+begin
+  if fInternalJSONWriter=nil then
+    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
+    fInternalJSONWriter.CancelAll;
+  result := fInternalJSONWriter;
+end;
+
+procedure TTextWriter.AddJSONEscape(Source: TTextWriter);
+begin
+  if fTotalFileSize=0 then
+    AddJSONEscape(Source.fTempBuf,Source.B-Source.fTempBuf+1) else
+    AddJSONEscape(Pointer(Source.Text),0);
+end;
+
 procedure TTextWriter.WriteObjectAsString(Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
   Add('"');
-  if fInternalJSONWriter=nil then
-    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
-    fInternalJSONWriter.CancelAll;
-  fInternalJSONWriter.WriteObject(Value,Options);
-  AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
+  InternalJSONWriter.WriteObject(Value,Options);
+  AddJSONEscape(fInternalJSONWriter);
   Add('"');
 end;
 
@@ -39170,11 +39192,8 @@ end;
 procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
 begin
   Add('"');
-  if fInternalJSONWriter=nil then
-    fInternalJSONWriter := DefaultTextWriterJSONClass.CreateOwnedStream else
-    fInternalJSONWriter.CancelAll;
-  fInternalJSONWriter.AddDynArrayJSON(aTypeInfo,aValue);
-  AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
+  InternalJSONWriter.AddDynArrayJSON(aTypeInfo,aValue);
+  AddJSONEscape(fInternalJSONWriter);
   Add('"');
 end;
 
@@ -40132,6 +40151,7 @@ end;
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
 var i,c: integer;
+label noesc;
 begin
   if P=nil then
     exit;
@@ -40140,7 +40160,7 @@ begin
   i := 0;
   while i<Len do begin
     if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
-      c := i;
+noesc:c := i;
       repeat
         inc(i);
       until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
@@ -40167,7 +40187,7 @@ begin
         AddShort('\u00');
         c := ord(HexCharsLower[c shr 4])+ord(HexCharsLower[c and $F])shl 8;
       end;
-      else break;
+      else goto noesc;
       end;
       if BEnd-B<=1 then
         FlushToStream;
@@ -40547,7 +40567,8 @@ procedure TTextWriter.CancelAll;
 begin
   if self=nil then
     exit; // avoid GPF
-  fTotalFileSize := fStream.Seek(fInitialStreamPosition,soBeginning);
+  if fTotalFileSize<>0 then
+    fTotalFileSize := fStream.Seek(fInitialStreamPosition,soBeginning);
   B := fTempBuf-1;
 end;
 

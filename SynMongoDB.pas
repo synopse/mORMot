@@ -5538,33 +5538,42 @@ function TMongoClient.GetServerBuildInfoNumber: cardinal;
         vArr._(0)*1000000+vArr._(1)*10000+vArr._(2)*100+vArr._(3);
   end;
 begin
-  if fServerBuildInfoNumber=0 then
-    ComputeIt;
-  result := fServerBuildInfoNumber;
+  if self=nil then
+    result := 0 else begin
+    if fServerBuildInfoNumber=0 then
+      ComputeIt;
+    result := fServerBuildInfoNumber;
+  end;
 end;
 
 function TMongoClient.GetBytesReceived: Int64;
 var i: integer;
 begin
   result := 0;
-  for i := 0 to high(fConnections) do
-    inc(result,fConnections[i].Socket.BytesIn);
+  if self<>nil then
+    for i := 0 to high(fConnections) do
+      if fConnections[i].Socket<>nil then
+        inc(result,fConnections[i].Socket.BytesIn);
 end;
 
 function TMongoClient.GetBytesSent: Int64;
 var i: integer;
 begin
   result := 0;
-  for i := 0 to high(fConnections) do
-    inc(result,fConnections[i].Socket.BytesOut);
+  if self<>nil then
+    for i := 0 to high(fConnections) do
+      if fConnections[i].Socket<>nil then
+        inc(result,fConnections[i].Socket.BytesOut);
 end;
 
 function TMongoClient.GetBytesTransmitted: Int64;
 var i: integer;
 begin
   result := 0;
-  for i := 0 to high(fConnections) do
-    inc(result,fConnections[i].Socket.BytesIn+fConnections[i].Socket.BytesOut);
+  if self<>nil then
+    for i := 0 to high(fConnections) do
+      if fConnections[i].Socket<>nil then
+        inc(result,fConnections[i].Socket.BytesIn+fConnections[i].Socket.BytesOut);
 end;
 
 
@@ -5633,15 +5642,18 @@ end;
 function TMongoDatabase.GetCollectionOrCreate(const Name: RawUTF8): TMongoCollection;
 begin
   result := GetCollectionOrNil(Name);
-  if result=nil then begin
-    result := TMongoCollection.Create(self,Name);
-    fCollections.AddObject(Name,result);
-  end;
+  if result=nil then
+    if self<>nil then begin
+      result := TMongoCollection.Create(self,Name);
+      fCollections.AddObject(Name,result);
+    end;
 end;
 
 function TMongoDatabase.GetCollectionOrNil(const Name: RawUTF8): TMongoCollection;
 begin
-  result := TMongoCollection(fCollections.GetObjectByName(Name));
+  if self=nil then
+    result := nil else
+    result := TMongoCollection(fCollections.GetObjectByName(Name));
 end;
 
 function TMongoDatabase.RunCommand(const command: variant;
