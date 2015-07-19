@@ -125,8 +125,10 @@ const
   HASH2 = $2A005528;
   {$endif}
 
+{$ifdef TESTMONGOAUTH}
 var
   UserCreated: boolean;
+{$endif}
 
 procedure TTestDirect.CleanUp;
 begin
@@ -358,7 +360,11 @@ begin
   if ClassType=TTestORMWithoutAcknowledge then
     fMongoClient.WriteConcern := wcUnacknowledged else
     assert(false);
+  {$ifdef TESTMONGOAUTH}
+  fDB := fMongoClient.OpenAuth(DB_NAME,USER_NAME,USER_PWD);
+  {$else}
   fDB := fMongoClient.Database[DB_NAME];
+  {$endif}
   Check(fDB<>nil);
   Check(fDB.Name=DB_NAME);
   Check(fMongoClient.ServerBuildInfoNumber<>0);

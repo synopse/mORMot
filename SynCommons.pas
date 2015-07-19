@@ -2323,6 +2323,7 @@ var
 /// get the signed 32 bits integer value stored in P^
 // - we use the PtrInt result type, even if expected to be 32 bits, to use
 // native CPU register size (don't want any 32 bits overflow here)
+// - it will stop the parsing when P^ does not contain numbers any more
 function GetInteger(P: PUTF8Char): PtrInt; overload;
 
 /// get the signed 32 bits integer value stored in P^

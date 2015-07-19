@@ -1747,10 +1747,11 @@ type
     /// secure connection to a database on a remote MongoDB server
     // - this method will use authentication and will return the corresponding
     // MongoDB database instance, with a dedicated secured connection
-    // - will use MONGODB-CR for MongoDB engines up to 2.6, and SCRAM-SHA-1
-    // since MongoDB 3.x
+    // - will use MONGODB-CR for MongoDB engines up to 2.6 (or if ForceMongoDBCR
+    // is TRUE), and SCRAM-SHA-1 since MongoDB 3.x 
     // - see http://docs.mongodb.org/manual/administration/security-access-control
-    function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase;
+    function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
+      ForceMongoDBCR: boolean=false): TMongoDatabase;
     /// close the connection and release all associated TMongoDatabase,
     // TMongoCollection and TMongoConnection instances
     destructor Destroy; override;
@@ -5416,7 +5417,8 @@ begin
   result := MD5(UserName+':mongo:'+PassWord);
 end;
 
-function TMongoClient.OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8): TMongoDatabase;
+function TMongoClient.OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
+  ForceMongoDBCR: boolean): TMongoDatabase;
 var res,bson: variant;
     err,digest,nonce,first,key,user,msg,rnonce: RawUTF8;
     payload: RawByteString;
@@ -5445,7 +5447,7 @@ begin
     try
       fConnections[0].Open;
       digest := PasswordDigest(UserName,Password);
-      if ServerBuildInfoNumber<3000000 then begin // MONGODB-CR
+      if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin // MONGODB-CR
         // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
         bson := BSONVariant(['getnonce',1]);
         err := fConnections[0].RunCommand(DatabaseName,bson,res);
@@ -5479,7 +5481,7 @@ begin
           raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step1: % - res=%',
             [self,DatabaseName,err,res]);
         key := 'c=biws,r='+rnonce;
-        PBKDF2_HMAC_SHA1(digest,Base64ToBin(resp.U['s']),GetInteger(pointer(resp.U['i'])),salted);
+        PBKDF2_HMAC_SHA1(digest,Base64ToBin(resp.U['s']),UTF8ToInteger(resp.U['i']),salted);
         HMAC_SHA1(salted,'Client Key',client);
         sha.Full(@client,SizeOf(client),stored);
         msg := first+','+RawUTF8(payload)+','+key;

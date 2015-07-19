@@ -5,7 +5,7 @@ set bin=z:\tempbuild\fpc
 
 cd \dev\lib
 if not exist %bin% mkdir %bin%
-del %bin%\*.exe %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.map %bin%\*.db3 %bin%\*.ini %bin%\*.data %bin%\*.mdb %bin%\TestSQL3.* > nul
+del %bin%\*.exe %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.map %bin%\*.db3 %bin%\*.ini %bin%\*.data %bin%\*.mdb %bin%\TestSQL3.* > nul 2> nul
 echo.
 
 cd \dev\lib\SQLite3
