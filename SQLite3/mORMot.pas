@@ -49334,11 +49334,7 @@ begin
       call.Regs[REG_FIRST] := PtrInt(Instances[i]);
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
       if ArgsResultIndex>=0 then
-      with Args[ArgsResultIndex] do begin
-        call.resKind := ValueType;
-        if ValueVar=smvv64 then
-          fValues[ArgsResultIndex] := @call.res64;
-      end else
+        call.resKind := Args[ArgsResultIndex].ValueType else
         call.resKind := smvNone;
       // launch the asm stub in the expected execution context
       {$ifndef LVCL}
@@ -49352,7 +49348,8 @@ begin
             'optExecInPerInterfaceThread with BackgroundExecutionThread=nil') else
           BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
         CallMethod(call);
-    end;
+      if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
+        PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
   end;
 end;
 
