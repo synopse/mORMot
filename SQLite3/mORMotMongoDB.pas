@@ -235,11 +235,13 @@ function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
 // - if aDefinition.Kind matches a TSQLRest registered class, one new instance
 // of this kind will be created and returned
 // - if aDefinition.Kind is 'MongoDB', it will instantiate an in-memory
-// TSQLRestServerDB or a TSQLRestServerFullMemory instance, then call
+// TSQLRestServerDB or a TSQLRestServerFullMemory instance (calling
+// TSQLRestServer.CreateInMemoryForAllVirtualTables), then call
 // StaticMongoDBRegisterAll() with a TMongoClient initialized from
 // aDefinition.ServerName ('server' or 'server:port'), and a TMongoDatabase
-// created from aDefinition.DatabaseName: it will return nil if the supplied
-// TMongoClient/TMongoDatabase parameters are invalid
+// created from aDefinition.DatabaseName, using authentication if
+// aDefinition.User/Password credentials are set
+// - it will return nil if the supplied aDefinition is invalid
 function TSQLRestMongoDBCreate(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
   aOptions: TStaticMongoDBRegisterOptions): TSQLRest; overload;
@@ -305,9 +307,12 @@ begin
     exit;
   if SameText(aDefinition.Kind,'MongoDB') then begin
     Split(aDefinition.ServerName,':',server,port);
-    client := TMongoClient.Create(server,GetIntegerDef(pointer(port),MONGODB_DEFAULTPORT));
+    client := TMongoClient.Create(server,UTF8ToInteger(port,MONGODB_DEFAULTPORT));
     try
-      database := TMongoDatabase.Create(client,aDefinition.DatabaseName);
+      with aDefinition do
+        if (User<>'') and (Password<>'') then
+          database := client.OpenAuth(DatabaseName,User,PasswordPlain) else
+          database := client.Open(DatabaseName);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
       StaticMongoDBRegisterAll(TSQLRestServer(result),database,aOptions);
