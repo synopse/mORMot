@@ -1786,7 +1786,7 @@ begin
     fColumn.Clear;
     fColumn.ReHash;
     // faster if full command is re-prepared!
-    fcommand := nil;
+    fCommand := nil;
     Prepare(fSQL,fExpectResults);
   end;
   fUpdateCount := 0;

@@ -1517,7 +1517,7 @@ type
     // regression tests will be two times faster with statement caching)
     // - will cache only statements containing ? parameters or a SELECT with no
     // WHERE clause within
-    property UseCache: boolean read fUseCache;
+    property UseCache: boolean read fUseCache write fUseCache;
     /// defines if TSQLDBConnection.Disconnect shall Rollback any pending
     // transaction
     // - some engines executes a COMMIT when the client is disconnected, others
