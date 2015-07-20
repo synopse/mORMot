@@ -5932,7 +5932,10 @@ type
     fAddCount: integer;
     fUpdateCount: integer;
     fDeleteCount: integer;
+    fAutomaticTransactionPerRow: cardinal;
+    fOptions: TSQLRestBatchOptions;
     fOnWrite: TOnBatchWrite;
+    function GetCount: integer;
     procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
     /// close a BATCH sequence started by Start method
@@ -5969,11 +5972,15 @@ type
     //   OR IGNORE on internal SQLite3 engine
     constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
       AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]);
-    /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
-    procedure Reset(aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]);
-    /// finalize the BATCH sequence
+    /// finalize the BATCH instance
     destructor Destroy; override;
+    /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
+    procedure Reset(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0;
+      Options: TSQLRestBatchOptions=[]); overload; virtual; 
+    /// reset the BATCH sequence to its previous state
+    // - could be used to prepare a next chunk of values, after a call to
+    // TSQLRest.BatchSend
+    procedure Reset; overload;
     /// create a new member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -6028,10 +6035,14 @@ type
     // - with this overloaded method, the deleted record class is specified:
     // no TSQLRecordClass shall have been set at BatchStart() call
     function Delete(Table: TSQLRecordClass; ID: TID): integer; overload;
-    /// retrieve the current number of pending transactions in the BATCH sequence
-    function Count: integer;
+    /// allow to append some JSON content to the internal raw buffer
+    // - could be used to eumulate Add/Update/Delete
+    // - FullRow=TRUE would increment the global Count
+    function RawAppend(FullRow: boolean=true): TTextWriter;
     /// read only access to the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
+    /// retrieve the current number of pending transactions in the BATCH sequence
+    property Count: integer read GetCount;
     /// read only access to the main associated TSQLRecord class (if any)
     property Table: TSQLRecordClass read fTable;
     /// how many times Add() has been called for this BATCH process
@@ -6042,6 +6053,27 @@ type
     property DeleteCount: integer read fDeleteCount;
     /// this event handler will be triggerred by each Add/Update/Delete method
     property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
+  end;
+
+  /// thread-safe class to store a BATCH sequence of writing operations
+  TSQLRestBatchLocked = class(TSQLRestBatch)
+  protected
+    fTix: Int64;
+    fSafe: TSynLocker;
+  public
+    /// initialize the BATCH instance
+    constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
+      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]);
+    /// finalize the BATCH instance
+    destructor Destroy; override;
+    /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
+    procedure Reset(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0;
+      Options: TSQLRestBatchOptions=[]); override; 
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynLocker read fSafe;
+    /// property set to the current GetTickCount64 value when Reset is called
+    property ResetTix: Int64 read fTix;
   end;
 
   /// root class for defining and mapping database records
@@ -9323,7 +9355,9 @@ type
     fMethod: RawUTF8;
     fInput: variant;
     fOutput: variant;
-    fModified: TModTime;
+    fUser: integer;
+    fSession: integer;
+    fTime: TModTime;
     fMicroSec: integer;
     // define Input/Output as dvoSerializeAsExtendedJson
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
@@ -9348,8 +9382,12 @@ type
     // - content may be searched using JsonGet/JsonHas SQL functions on a
     // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
     property Output: variant read fOutput write fOutput;
+    /// the Session ID, if there is any
+    property Session: integer read fSession write fSession;
+    /// the User ID, if there is an identified Session
+    property User: integer read fUser write fUser;
     /// will be filled by the ORM when this record is written in the database
-    property Modified: TModTime read fModified write fModified;
+    property Time: TModTime read fTime write fTime;
     /// execution time of this method, in micro seconds
     property MicroSec: integer read fMicroSec write fMicroSec;
   end;
@@ -9399,6 +9437,8 @@ type
     ServiceCustomAnswerStatus: cardinal;
     /// initialize the execution instance
     constructor Create(aMethod: PServiceMethod);
+    /// finalize the execution instance
+    destructor Destroy; override;
     /// execute the corresponding method of a given TInterfacedObject instance
     // - will retrieve a JSON array of parameters from Par
     // - will append a JSON array of results in Res, or set an Error message, or
@@ -9410,7 +9450,6 @@ type
     /// low-level direct access to the current input/output parameter values
     property Values: TPPointerDynArray read fValues;
     /// allow to use an instance-specific temporary TTextWriter
-    // - will be released just after each execution
     function TempTextWriter: TTextWriter;
   end;
 
@@ -10591,10 +10630,13 @@ type
       Denied: set of 0..255;
       /// execution options for this method (about thread safety or logging)
       Options: TServiceMethodOptions;
-      /// where execution information should be written as TSQLRecordServiceLog 
+      /// where execution information should be written as TSQLRecordServiceLog
       LogRest: TSQLRest;
       /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
       LogClassModelIndex: integer;
+      /// curent BATCH instance used to write on LogRest
+      // - points to a TServiceFactoryServer.fLogRestBatch[] instance
+      LogRestBatch: TSQLRestBatchLocked;
     end;
     function GetInterfaceTypeInfo: PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10633,7 +10675,7 @@ type
     property InterfaceIID: TGUID read GetInterfaceIID;
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator 
+    // 'Calculator' for ICalculator
     property InterfaceURI: RawUTF8 read fInterfaceURI;
     /// the registered Interface mangled URI
     // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
@@ -10679,7 +10721,7 @@ type
     // - if set to SERVICE_CONTRACT_NONE_EXPECTED (i.e. '*'), the client won't
     // check and ask the server contract for consistency: it may be used e.g.
     // for accessing a plain REST HTTP server which is not based on mORMot,
-    // so may not implement POST /root/Interface._contract_ 
+    // so may not implement POST /root/Interface._contract_
     property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
   end;
 
@@ -10734,6 +10776,7 @@ type
     fResultAsJSONObjectIfAccept: boolean;
     fResultAsXMLObjectNameSpace: RawUTF8;
     fBackgroundThread: TSynBackgroundThreadMethod;
+    fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
     procedure SetTimeoutSecInt(value: cardinal);
@@ -10891,14 +10934,14 @@ type
     /// log method execution information to a TSQLRecordServiceLog table
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
-    // - will write to the associated TSQLRestServer instance, unless aLogRest
-    // custom value is specified
-    // - will write to a TSQLRecordServiceLog table, unless a dedicated table
-    // is specified in aLogClass
+    // - will write to the specified aLogRest instance, and would disable
+    // writing if aLogRest is nil
+    // - will write to a (inherited) TSQLRecordServiceLog table, as available in
+    // TSQLRest's model, unless a dedicated table is specified as aLogClass
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
     function SetServiceLog(const aMethod: array of RawUTF8;
-      aLogRest: TSQLRest=nil; aLogClass: TSQLRecordServiceLogClass=nil): TServiceFactoryServer;
+      aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil): TServiceFactoryServer;
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -11298,6 +11341,14 @@ type
     /// notify any TRecordVersion callback for a table Delete
     procedure RecordVersionNotifyDelete(TableIndex: integer;
       const ID: TID; const Revision: TRecordVersion);
+    /// log method execution information to a TSQLRecordServiceLog table
+    // - TServiceFactoryServer.SetServiceLog() will be called for all registered
+    // interfaced-based services of this container 
+    // - will write to the specified aLogRest instance, and would disable
+    // writing if aLogRest is nil
+    // - will write to a (inherited) TSQLRecordServiceLog table, as available in
+    // TSQLRest's model, unless a dedicated table is specified as aLogClass
+    procedure SetServiceLog(aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil);
     /// defines if the "method":"_signature_" or /root/Interface._signature
     // pseudo method is available to retrieve the whole interface signature,
     // encoded as a JSON object
@@ -23413,6 +23464,23 @@ end;
 const
   EndOfJSONField = [',',']','}',':'];
 
+function GetJSONArrayOrObject(P: PUTF8Char; out PDest: PUTF8Char;
+  EndOfObject: PUTF8Char): RawUTF8;
+var Beg: PUTF8Char;
+begin
+  PDest := nil;
+  Beg := P;
+  P := GotoNextJSONObjectOrArray(P); // quick go to end of array of object
+  if P=nil then begin
+    result := '';
+    exit;
+  end;
+  if EndOfObject<>nil then
+    EndOfObject^ := P^;
+  PDest := P+1;
+  SetString(result,PAnsiChar(Beg),P-Beg);
+end;
+
 function GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
   EndOfObject: PUTF8Char): RawUTF8;
 var Beg: PUTF8Char;
@@ -23464,13 +23532,13 @@ var EndOfObject: AnsiChar;
       '{': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaObject;
         if params=pNonQuoted then
-          FieldValues[ndx] := res else
+          FieldValues[ndx] := GetJSONArrayOrObject(res,P,@EndOfObject) else
           FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
       end;
       '[': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaArray;
         if params=pNonQuoted then
-          FieldValues[ndx] := res else
+          FieldValues[ndx] := GetJSONArrayOrObject(res,P,@EndOfObject) else
           FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
       end;
       else begin
@@ -29244,14 +29312,15 @@ end;
 procedure TSQLRestBatch.Reset(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
 begin
-  fBatch.Free;
+  fBatch.Free; // full reset for SetExpandedJSONWriter 
+  fBatch := TJSONSerializer.CreateOwnedStream;
+  fBatch.Expand := true;
   fBatchCount := 0;
   fAddCount := 0;
   fUpdateCount := 0;
   fDeleteCount := 0;
   fDeletedCount := 0;
-  fBatch := TJSONSerializer.CreateOwnedStream;
-  fBatch.Expand := true;
+  fTable := aTable;
   if aTable<>nil then begin
     fTableIndex := fRest.Model.GetTableIndexExisting(aTable);
     fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
@@ -29259,17 +29328,23 @@ begin
   end else
     fTableIndex := -1;
   fBatch.Add('[');
+  fAutomaticTransactionPerRow := AutomaticTransactionPerRow;
   if AutomaticTransactionPerRow>0 then begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.Add(AutomaticTransactionPerRow);
     fBatch.Add(',');
   end;
+  fOptions := Options;
   if byte(Options)<>0 then begin
     fBatch.AddShort('"options",');
     fBatch.Add(byte(Options));
     fBatch.Add(',');
   end;
-  fTable := aTable;
+end;
+
+procedure TSQLRestBatch.Reset;
+begin
+  Reset(fTable,fAutomaticTransactionPerRow,fOptions);
 end;
 
 destructor TSQLRestBatch.Destroy;
@@ -29278,7 +29353,7 @@ begin
   inherited;
 end;
 
-function TSQLRestBatch.Count: integer;
+function TSQLRestBatch.GetCount: integer;
 begin
   if self=nil then
     result := 0 else
@@ -29297,6 +29372,13 @@ begin
   fBatchFields := WrittenFields;
   fBatch.ChangeExpandedFields(withID,FieldBitsToIndex(WrittenFields,Props.Fields.Count));
   Props.SetJSONWriterColumnNames(fBatch,0);
+end;
+
+function TSQLRestBatch.RawAppend(FullRow: boolean): TTextWriter;
+begin
+  if FullRow then
+    inc(fBatchCount);
+  result := fBatch;
 end;
 
 function TSQLRestBatch.Add(Value: TSQLRecord; SendData,ForceID: boolean;
@@ -29459,6 +29541,29 @@ begin
     result := -1 else
     result := Update(Value,Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
       DoNotAutoComputeFields);
+end;
+
+
+{ TSQLRestBatchLocked }
+
+constructor TSQLRestBatchLocked.Create(aRest: TSQLRest; aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+begin
+  inherited;
+  fSafe.Init;
+end;
+
+destructor TSQLRestBatchLocked.Destroy;
+begin
+  fSafe.Done;
+  inherited;
+end;
+
+procedure TSQLRestBatchLocked.Reset(aTable: TSQLRecordClass;
+  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+begin
+  inherited;
+  fTix := GetTickCount64;
 end;
 
 
@@ -48228,6 +48333,15 @@ begin
     RecordVersionCallbackNotify(TableIndex,soDelete,ID,Revision,'');
 end;
 
+procedure TServiceContainerServer.SetServiceLog(aLogRest: TSQLRest;
+  aLogClass: TSQLRecordServiceLogClass);
+var i: integer;
+begin
+  for i := 0 to fListInterfaceMethods.Count-1 do
+    TServiceFactoryServer(fListInterfaceMethod[i].InterfaceService).
+      SetServiceLog([],aLogRest,aLogClass);
+end;
+
 
 { TServiceFactoryServer }
 
@@ -48432,6 +48546,11 @@ destructor TServiceFactoryServer.Destroy;
 var i: integer;
 begin
   try
+    for i := 0 to High(fLogRestBatch) do begin
+      if fLogRestBatch[i].Count>0 then
+        fLogRestBatch[i].Rest.BatchSend(fLogRestBatch[i]);
+      fLogRestBatch[i].Free;
+    end;
     if InstanceCreation<>sicPerThread then
       EnterCriticalSection(fInstanceLock);
     try // release any internal instance (should have been done by client)
@@ -48625,32 +48744,33 @@ var W: TTextWriter;
 begin
   W := Sender.TempTextWriter;
   with Sender.Method^ do
-  case Step of
-  smsBefore: begin
-    W.AddShort('{Method:"');
-    W.AddString(InterfaceDotMethodName);
-    W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
-    for a := ArgsInFirst to ArgsInLast do
-      with Args[a] do
-      if ValueDirection<>smdOut then begin
-        W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
-        W.Add(':');
-        AddJSON(W,Sender.Values[a]);
-      end;
-    W.CancelLastComma;
-  end;
-  smsAfter: begin
-    W.AddShort('},Output:{');
-    for a := ArgsOutFirst to ArgsOutLast do
-      with Args[a] do
-      if ValueDirection in [smdVar,smdOut,smdResult] then begin
-        W.AddShort(ParamName^);
-        W.Add(':');
-        AddJSON(W,Sender.Values[a]);
-      end;
-    W.CancelLastComma;
-  end;
-  end;
+    case Step of
+    smsBefore: begin
+      W.CancelAll;
+      W.AddShort('"POST",{Method:"');
+      W.AddString(InterfaceDotMethodName);
+      W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
+      for a := ArgsInFirst to ArgsInLast do
+        with Args[a] do
+        if ValueDirection<>smdOut then begin
+          W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
+          W.Add(':');
+          AddJSON(W,Sender.Values[a]);
+        end;
+      W.CancelLastComma;
+    end;
+    smsAfter: begin
+      W.AddShort('},Output:{');
+      for a := ArgsOutFirst to ArgsOutLast do
+        with Args[a] do
+        if ValueDirection in [smdVar,smdOut,smdResult] then begin
+          W.AddShort(ParamName^);
+          W.Add(':');
+          AddJSON(W,Sender.Values[a]);
+        end;
+      W.CancelLastComma;
+    end;
+    end;
 end;
 
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
@@ -48672,10 +48792,23 @@ var Inst: TServiceFactoryServerInstance;
       fInterface.fInterfaceTypeInfo^.Name,method],Status);
   end;
   procedure ProcessOnExecute;
+  var W: TTextWriter;
   begin
-    exec.TempTextWriter.Add('},Modified:%,MicroSec:%}',[TimeLogNowUTC,timeStart]);
-    with fExecution[Ctxt.ServiceMethodIndex] do // direct write
-      LogRest.EngineAdd(LogClassModelIndex,exec.TempTextWriter.Text);
+    W := exec.TempTextWriter;
+    W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
+      [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeStart]);
+    with fExecution[Ctxt.ServiceMethodIndex] do
+    try
+      LogRestBatch.Safe.Lock;
+      LogRestBatch.RawAppend.AddNoJSONEscape(W);
+      if (LogRestBatch.Count>=500) or // write every second or after 500 rows
+         (GetTickCount64-LogRestBatch.ResetTix>1000) then begin
+        LogRest.BatchSend(LogRestBatch);
+        LogRestBatch.Reset;
+      end;
+    finally
+      LogRestBatch.Safe.UnLock;
+    end;
   end;
 
 begin
@@ -48758,7 +48891,8 @@ begin
         exec.BackgroundExecutionThread := fBackgroundThread;
         {$endif}
         exec.OnCallback := Ctxt.ExecuteCallback;
-        if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
+        with fExecution[Ctxt.ServiceMethodIndex] do
+        if LogRest<>nil then 
           exec.OnExecute := OnExecuteMethod;
         if exec.ExecuteJson([PAnsiChar(Inst.Instance)+entry^.IOffset],
            Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
@@ -48987,26 +49121,46 @@ end;
 
 function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
   aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass): TServiceFactoryServer;
+  procedure SetEntry(i,ndx: integer);
+  var j: integer;
+  begin
+    with fExecution[i] do begin
+      if LogRestBatch.Count>0 then begin
+        LogRest.BatchSend(LogRestBatch);
+        LogRestBatch.Reset;
+      end;
+      LogRest := aLogRest;
+      LogClassModelIndex := ndx;
+      if LogRest=nil then
+        exit;
+      for j := 0 to High(fLogRestBatch) do
+        if fLogRestBatch[j].Rest=LogRest then begin
+          LogRestBatch := fLogRestBatch[j];
+          exit;
+        end;
+      LogRestBatch := TSQLRestBatchLocked.Create(LogRest,
+        LogRest.Model.Tables[ndx],10000);
+      ObjArrayAdd(fLogRestBatch,LogRestBatch);
+    end;
+  end;
 var i,ndx: integer;
 begin
   if self<>nil then begin
     if aLogRest=nil then
-      aLogRest := Rest;
-    with aLogRest.Model do
-      if aLogClass=nil then
-        ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog) else
-        ndx := GetTableIndexExisting(aLogClass);
+      ndx := -1 else
+      with aLogRest.Model do
+        if aLogClass=nil then begin
+          ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog);
+          if ndx<0 then
+            raise EModelException.CreateUTF8('%.SetServiceLog: Missing '+
+              'TSQLRecordServiceLog class in %.Model',[self,aLogRest]);
+        end else
+          ndx := GetTableIndexExisting(aLogClass);
     if high(aMethod)<0 then
       for i := 0 to fInterface.fMethodsCount-1 do
-      with fExecution[i] do begin
-        LogRest := aLogRest;
-        LogClassModelIndex := ndx;
-      end else
+        SetEntry(i,ndx) else
       for i := 0 to high(aMethod) do
-        with fExecution[fInterface.CheckMethodIndex(aMethod[i])] do begin
-          LogRest := aLogRest;
-          LogClassModelIndex := ndx;
-        end;
+        SetEntry(fInterface.CheckMethodIndex(aMethod[i]),ndx);
   end;
   result := self;
 end;
@@ -49429,6 +49583,12 @@ begin
   fMethod := aMethod;
 end;
 
+destructor TServiceMethodExecute.Destroy;
+begin
+  fTempTextWriter.Free;
+  inherited Destroy;
+end;
+
 procedure TServiceMethodExecute.BeforeExecute;
 var a: integer;
 begin
@@ -49541,15 +49701,13 @@ end;
 function TServiceMethodExecute.TempTextWriter: TTextWriter;
 begin
   if fTempTextWriter=nil then
-    fTempTextWriter := TJSONSerializer.CreateOwnedStream else
-    fTempTextWriter.CancelAll;
+    fTempTextWriter := TJSONSerializer.CreateOwnedStream;
   result := fTempTextWriter;
 end;
 
 procedure TServiceMethodExecute.AfterExecute;
 var i,a: integer;
 begin
-  FreeAndNil(fTempTextWriter);
   Finalize(fRawUTF8s);
   Finalize(fStrings);
   Finalize(fWideStrings);
@@ -50430,6 +50588,7 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+
 
 
 

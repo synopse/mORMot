@@ -1103,6 +1103,8 @@ type
     procedure ClientSideRESTBasicAuthentication;
     /// test the custom record JSON serialization
     procedure ClientSideRESTCustomRecordLayout;
+    /// test the client-side in RESTful mode with all calls logged in a table
+    procedure ClientSideRESTServiceLogToDB;
     /// test the client-side implementation in JSON-RPC mode
     procedure ClientSideJSONRPC;
     /// test REStful mode using HTTP client/server communication
@@ -12487,6 +12489,23 @@ begin
   Check(fClient.ServiceRegister([TypeInfo(ITestGroup)],sicPerGroup));
   Check(fClient.ServiceRegister([TypeInfo(ITestPerThread)],sicPerThread));
   ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB;
+var Log: TSQLRestServerDB;
+begin
+  DeleteFile('servicelog.db');
+  Log := TSQLRestServerDB.CreateWithOwnModel([TSQLRecordServiceLog],'servicelog.db');
+  try
+    Log.DB.Synchronous := smOff;
+    Log.DB.LockingMode := lmExclusive;
+    Log.CreateMissingTables;
+    (fClient.Server.ServiceContainer as TServiceContainerServer).SetServiceLog(Log);
+    ClientTest(TSQLRestRoutingREST,false);
+  finally
+    (fClient.Server.ServiceContainer as TServiceContainerServer).SetServiceLog(nil);
+    Log.Free;
+  end;
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats;
