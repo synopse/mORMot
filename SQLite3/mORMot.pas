@@ -9350,6 +9350,8 @@ type
   /// common ancestor for storing interface-based service execution statistics
   // - each call could be logged and monitored in the database
   // - TServiceMethodExecute could store all its calls in such a table
+  // - enabled on server side via either TServiceFactoryServer.SetServiceLog or
+  // TServiceContainerServer.SetServiceLog method
   TSQLRecordServiceLog = class(TSQLRecord)
   protected
     fMethod: RawUTF8;

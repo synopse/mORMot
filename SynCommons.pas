@@ -46432,22 +46432,21 @@ end;
 
 {$ifndef NOVARIANTS}
 function TSynTable.Data(aID: integer; RecordBuffer: pointer; RecordBufferLen: Integer): Variant;
+var data: TSynTableData absolute result;
 begin
   if SynTableVariantType=nil then
     SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  if data.VType and VTYPE_STATIC<>0 then
     VarClear(result);
-  with TSynTableData(result) do begin
-    VType := SynTableVariantType.VarType;
-    VID := aID;
-    VTable := self;
-    PtrInt(VValue) := 0; // avoid GPF
-    if RecordBuffer=nil then
-      VValue := DefaultRecordData else begin
-      if RecordBufferLen=0 then
-        RecordBufferLen := DataLength(RecordBuffer);
-      SetString(VValue,PAnsiChar(RecordBuffer),RecordBufferLen);
-    end;
+  data.VType := SynTableVariantType.VarType;
+  data.VID := aID;
+  data.VTable := self;
+  pointer(data.VValue) := nil; // avoid GPF
+  if RecordBuffer=nil then
+    data.VValue := DefaultRecordData else begin
+    if RecordBufferLen=0 then
+      RecordBufferLen := DataLength(RecordBuffer);
+    SetString(data.VValue,PAnsiChar(RecordBuffer),RecordBufferLen);
   end;
 end;
 {$endif NOVARIANTS}
