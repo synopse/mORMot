@@ -559,36 +559,40 @@ var name,param: RawUTF8;
     {$ifdef MSWINDOWS}
     service: TServiceSingle;
     ctrl: TServiceController;
+    depend: string;
+    i: integer;
     {$endif}
 {$I-} // no IO error for writeln() below
-function cmdText: RawUTF8;
-begin
-  result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd),cmd);
-end;
-procedure Show(Success: Boolean);
-var msg: RawUTF8;
-begin
-  if Success then begin
-    msg := 'Run';
-    TextColor(ccWhite);
-  end else begin
-    msg := FormatUTF8('Error % "%" occured with',
-      [GetLastError,SysErrorMessage(GetLastError)]);
-    TextColor(ccLightRed);
+
+  function cmdText: RawUTF8;
+  begin
+    result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd),cmd);
   end;
-  msg := FormatUTF8('% "%" (%) on Service "%"',
-    [msg,param,cmdText,fSettings.ServiceName]);
-  AppendToTextFile(msg,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
-  writeln(msg);
-end;
-procedure Syntax;
-begin
-  writeln('Try with one of the switches:');
-  writeln(ExeVersion.ProgramName,' /console -c /verbose /daemon -d /help -h /version');
-  {$ifdef MSWINDOWS}
-  writeln(ExeVersion.ProgramName,' /install /uninstall /start /stop /state');
-  {$endif}
-end;
+  procedure Show(Success: Boolean);
+  var msg: RawUTF8;
+  begin
+    if Success then begin
+      msg := 'Run';
+      TextColor(ccWhite);
+    end else begin
+      msg := FormatUTF8('Error % "%" occured with',
+        [GetLastError,SysErrorMessage(GetLastError)]);
+      TextColor(ccLightRed);
+    end;
+    msg := FormatUTF8('% "%" (%) on Service "%"',
+      [msg,param,cmdText,fSettings.ServiceName]);
+    AppendToTextFile(msg,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+    writeln(msg);
+  end;
+  procedure Syntax;
+  begin
+    writeln('Try with one of the switches:');
+    writeln(ExeVersion.ProgramName,' /console -c /verbose /daemon -d /help -h /version');
+    {$ifdef MSWINDOWS}
+    writeln(ExeVersion.ProgramName,' /install /uninstall /start /stop /state');
+    {$endif}
+  end;
+
 begin
   try
     if fSettings.ServiceDisplayName='' then begin
@@ -660,7 +664,7 @@ begin
         if cmd=cNone then
           Syntax else begin
           TextColor(ccLightRed);
-          writeln('No ServiceName specified - please fix the code');
+          writeln('No ServiceName specified - please fix the setttings');
         end else
       case cmd of
       cNone:
@@ -680,9 +684,15 @@ begin
           end;
         end else
           Syntax;
-      cInstall:
+      cInstall: begin
+        if (ParamCount>=3) and SameText(ParamStr(2),'/depend') then begin
+          depend := ParamStr(3);
+          for i := 4 to ParamCount do
+            depend := depend+#0+ParamStr(i);
+        end;
         Show(TServiceController.Install(ServiceName,ServiceDisplayName,
-          Description,ServiceAutoStart)<>ssNotInstalled);
+          Description,ServiceAutoStart,'',depend)<>ssNotInstalled);
+      end;
       else begin
         ctrl := TServiceController.CreateOpenService('','',ServiceName);
         try

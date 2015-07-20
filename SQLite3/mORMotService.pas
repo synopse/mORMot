@@ -212,7 +212,7 @@ type
     // - DisplayName - display name of a service.
     // - Path - a path to binary (executable) of the service created.
     // - OrderGroup - an order group name (unnecessary)
-    // - Dependances - string containing a list with names of services, which must
+    // - Dependencies - string containing a list with names of services, which must
     // start before (every name should be separated with #0, entire
     // list should be separated with #0#0. Or, an empty string can be
     // passed if there are no dependances).
@@ -251,14 +251,14 @@ type
     // SERVICE_ERROR_CRITICAL
     constructor CreateNewService(const TargetComputer, DatabaseName,
       Name, DisplayName, Path: string;
-      const OrderGroup: string = ''; const Dependances: string = '';
+      const OrderGroup: string = ''; const Dependencies: string = '';
       const Username: string = ''; const Password: string = '';
       DesiredAccess: DWORD = SERVICE_ALL_ACCESS;
       ServiceType: DWORD = SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
       StartType: DWORD = SERVICE_DEMAND_START; ErrorControl: DWORD = SERVICE_ERROR_NORMAL);
     /// wrapper around CreateNewService() to install the current executable as service
     class function Install(const Name,DisplayName,Description: string;
-      AutoStart: boolean; ExeName: TFileName=''): TServiceState;
+      AutoStart: boolean; ExeName: TFileName=''; Dependencies: string=''): TServiceState;
     /// Opens an existing service, in order  to control it or its configuration
     // from your application. Parameters (strings are unicode-ready since Delphi 2009):
     // - TargetComputer - set it to empty string if local computer is the target.
@@ -523,7 +523,7 @@ function StartServiceCtrlDispatcher(
 { TServiceController }
 
 constructor TServiceController.CreateNewService(const TargetComputer,
-  DatabaseName,Name,DisplayName,Path,OrderGroup,Dependances,Username,Password: String;
+  DatabaseName,Name,DisplayName,Path,OrderGroup,Dependencies,Username,Password: String;
   DesiredAccess,ServiceType,StartType,ErrorControl: DWORD);
 var Exe: TFileName;
    backupError: cardinal;
@@ -558,7 +558,7 @@ begin
   end;
   FHandle := CreateService(FSCHandle, pointer(Name), pointer(DisplayName),
                DesiredAccess, ServiceType, StartType, ErrorControl, pointer(Exe),
-               pointer(OrderGroup), nil, pointer(Dependances),
+               pointer(OrderGroup), nil, pointer(Dependencies),
                pointer(Username), pointer(Password));
   if FHandle=0 then begin
     backupError := GetLastError;
@@ -712,7 +712,7 @@ begin
 end;
 
 class function TServiceController.Install(const Name, DisplayName,
-  Description: string; AutoStart: boolean; ExeName: TFileName): TServiceState;
+  Description: string; AutoStart: boolean; ExeName: TFileName; Dependencies: string): TServiceState;
 var ctrl: TServiceController;
     start: DWORD;
 begin
@@ -722,7 +722,7 @@ begin
   if ExeName='' then
     ExeName := ExeVersion.ProgramFileName;
   ctrl := TServiceController.CreateNewService('','',Name,DisplayName,ExeName,
-    '','','','',SERVICE_ALL_ACCESS,SERVICE_WIN32_OWN_PROCESS,start);
+    '',Dependencies,'','',SERVICE_ALL_ACCESS,SERVICE_WIN32_OWN_PROCESS,start);
   try
     result := ctrl.State;
     if result<>ssNotInstalled then
