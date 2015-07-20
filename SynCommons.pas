@@ -6401,6 +6401,10 @@ type
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJSONEscapeUTF8(const text: RawByteString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// flush a supplied TTextWriter, and write pending data as JSON escaped text
+    // - may be used with InternalJSONWriter, as a faster alternative to
+    // ! AddNoJSONEscapeUTF8(Source.Text);
+    procedure AddNoJSONEscape(Source: TTextWriter); overload;
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
     // - this function implements what is specified in the official SQLite3
@@ -38971,9 +38975,16 @@ end;
 
 procedure TTextWriter.AddJSONEscape(Source: TTextWriter);
 begin
-  if fTotalFileSize=0 then
+  if Source.fTotalFileSize=0 then
     AddJSONEscape(Source.fTempBuf,Source.B-Source.fTempBuf+1) else
     AddJSONEscape(Pointer(Source.Text),0);
+end;
+
+procedure TTextWriter.AddNoJSONEscape(Source: TTextWriter);
+begin
+  if Source.fTotalFileSize=0 then
+    AddNoJSONEscape(Source.fTempBuf,Source.B-Source.fTempBuf+1) else
+    AddNoJSONEscapeUTF8(Source.Text);
 end;
 
 procedure TTextWriter.WriteObjectAsString(Value: TObject;
@@ -41348,13 +41359,12 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
     repeat
       inc(P);
     until not (ord(P^) in IsJsonIdentifier);
-    if P^ in [#1..' '] then begin
-      SetString(PropName,Name,P-Name);
-      inc(P);
-    end;
+    SetString(PropName,Name,P-Name);
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-    if not (P^ in [':','=']) then // allow both age:18 and age=18 pairs
+    if not (P^ in [':','=']) then begin // allow both age:18 and age=18 pairs
+      PropName[0] := #0;
       exit;
+    end;
     inc(P);
   end;
   '''': begin // single quotes won't handle nested quote character
@@ -41366,8 +41376,10 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
         inc(P);
     SetString(PropName,Name,P-Name);
     repeat inc(P) until not(P^ in [#1..' ']);
-    if P^<>':' then
+    if P^<>':' then begin
+      PropName[0] := #0;
       exit;
+    end;
     inc(P);
   end;
   '"': begin
@@ -41377,8 +41389,10 @@ begin // match GotoNextJSONObjectOrArray() and overloaded GetJSONPropName()
       exit;
     SetString(PropName,Name,P-Name);
     repeat inc(P) until not(P^ in [#1..' ']);
-    if P^<>':' then
+    if P^<>':' then begin
+      PropName[0] := #0;
       exit;
+    end;
     inc(P);
   end else
     exit;
