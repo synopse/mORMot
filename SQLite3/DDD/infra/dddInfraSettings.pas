@@ -229,6 +229,7 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fDefaultDataFolder: TFileName;
+    fDefaultDataFileName: RawUTF8;
     fRoot: RawUTF8;
     fWrapperTemplateFolder: TFileName;
     fWrapperSourceFolders: TFileName;
@@ -259,6 +260,8 @@ type
     /// the default folder where database files are to be stored
     // - will be used by NewRestInstance instead of the .exe folder, if set
     property DefaultDataFolder: TFileName read fDefaultDataFolder write fDefaultDataFolder;
+    /// the default database file name 
+    property DefaultDataFileName: RawUTF8 read fDefaultDataFileName write fDefaultDataFileName;
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
@@ -415,6 +418,19 @@ type
     property MonitoringLogInterval: integer read FMonitoringInterval write FMonitoringInterval;
   end;
 
+  /// storage class for a ServicesLog settings
+  TDDDServicesLogRestSettings = class(TDDDRestSettings)
+  public
+    /// compute a stand-alone REST instance for interface-based services logging
+    // - by default, will create a local SQLite3 file for storage
+    // - all services of aMainRestWithServices would log their calling information
+    // into a dedicated table
+    // - if aLogClass=nil, TSQLRecordServiceLog would be used as a class
+    function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+      aMainRestWithServices: TSQLRestServer;
+      aLogClass: TSQLRecordServiceLogClass=nil): TSQLRest; reintroduce;
+  end;
+
 
 implementation
 
@@ -526,12 +542,16 @@ function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 
   procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
+  var FN: RawUTF8;
   begin
     if fORM.ServerName='' then begin
       if fDefaultDataFolder='' then
         fDefaultDataFolder := ExeVersion.ProgramFilePath;
+      if fDefaultDataFileName='' then
+        FN := ExeVersion.ProgramName else
+        FN := fDefaultDataFileName;
       fORM.ServerName := StringToUTF8(IncludeTrailingPathDelimiter(
-        fDefaultDataFolder))+ExeVersion.ProgramName+Ext;
+        fDefaultDataFolder))+FN+Ext;
     end;
     if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
       fORM.ServerName := StringToUTF8(
@@ -691,5 +711,19 @@ begin
 end;
 
 
+{ TDDDServicesLogRestSettings }
+
+function TDDDServicesLogRestSettings.NewRestInstance(
+  aRootSettings: TDDDAppSettingsFile; aMainRestWithServices: TSQLRestServer;
+  aLogClass: TSQLRecordServiceLogClass): TSQLRest;
+begin
+  if aLogClass=nil then
+    aLogClass := TSQLRecordServiceLog;
+  result := inherited NewRestInstance(aRootSettings,TSQLModel.Create([aLogClass]),
+    [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
+  if result<>nil then
+    (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
+      SetServiceLog(result,aLogClass);
+end;
 
 end.

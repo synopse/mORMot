@@ -163,6 +163,9 @@ type
     function GetLastErrorInfo: variant;
   end;
 
+/// returns the text equivalency of a CQRS result enumeration
+function ToText(res: TCQRSResult): PShortString; overload;
+
 
 { ----- Services / Daemon Interfaces }
 
@@ -884,6 +887,12 @@ implementation
 
 
 { *********** Persistence / Repository Interfaces }
+
+function ToText(res: TCQRSResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCQRSResult),ord(res));
+end;
+
 
 { TCQRSService }
 
