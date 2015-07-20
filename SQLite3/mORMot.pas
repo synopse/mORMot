@@ -48754,7 +48754,7 @@ begin
       W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
       for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
-        if ValueDirection<>smdOut then begin
+        if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
           W.Add(':');
           AddJSON(W,Sender.Values[a]);
@@ -48795,6 +48795,7 @@ var Inst: TServiceFactoryServerInstance;
   end;
   procedure ProcessOnExecute;
   var W: TTextWriter;
+      context: PServiceRunningContext;
   begin
     W := exec.TempTextWriter;
     W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
@@ -48805,8 +48806,14 @@ var Inst: TServiceFactoryServerInstance;
       LogRestBatch.RawAppend.AddNoJSONEscape(W);
       if (LogRestBatch.Count>=500) or // write every second or after 500 rows
          (GetTickCount64-LogRestBatch.ResetTix>1000) then begin
-        LogRest.BatchSend(LogRestBatch);
-        LogRestBatch.Reset;
+        context := @ServiceContext;
+        context^.Request := nil; // avoid IsNotAllowed unexpected failure
+        try
+          LogRest.BatchSend(LogRestBatch);
+          LogRestBatch.Reset;
+        finally
+          context^.Request := Ctxt;
+        end;
       end;
     finally
       LogRestBatch.Safe.UnLock;
