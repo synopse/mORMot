@@ -6609,9 +6609,9 @@ begin
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession=nil then
     raise EWinINet.Create;
-  InternetSetOption(fConnection,INTERNET_OPTION_SEND_TIMEOUT,
-    @ConnectionTimeOut,SizeOf(ConnectionTimeOut));
   InternetSetOption(fConnection,INTERNET_OPTION_CONNECT_TIMEOUT,
+    @ConnectionTimeOut,SizeOf(ConnectionTimeOut));
+  InternetSetOption(fConnection,INTERNET_OPTION_SEND_TIMEOUT,
     @SendTimeout,SizeOf(SendTimeout));
   InternetSetOption(fConnection,INTERNET_OPTION_RECEIVE_TIMEOUT,
     @ReceiveTimeout,SizeOf(ReceiveTimeout));
