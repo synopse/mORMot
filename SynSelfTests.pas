@@ -8355,7 +8355,15 @@ begin
    R.Prepare(Demo.DB,ins+'Claud'+_uE8+s+#10#7''', ''M'+_uF4+'net'', ?, 1840, 1926);');
    R.Bind(1,@BlobMonet,sizeof(BlobMonet)); // Bind Blob
    R.Execute;
-   Demo.Execute(ins+'Albert'+s+''', ''Einstein'', '''+_uE9+_uE7+'p'', 1879, 1955);');
+   R.Prepare(Demo.DB,'INSERT INTO People (FirstName,LastName,Data,YearOfBirth,'+
+     'YearOfDeath) VALUES (?,?,?,?,?)');
+   R.BindS(1,'Albert'+s);
+   R.BindS(2,'Einstein');
+   R.Bind(3,_uE9+_uE7+'p');
+   R.Bind(4,1879);
+   R.Bind(5,1955);
+   R.Execute;
+//   Demo.Execute(ins+'Albert'+s+''', ''Einstein'', '''+_uE9+_uE7+'p'', 1879, 1955);');
    Demo.Execute(ins+'Johannes'+s+''', ''Gutenberg'', '''+_uEA+'mls'', 1400, 1468);');
    Demo.Execute(ins+'Jane'+s+''', ''Aust'+_uE8+'n'', '''+_uE7+_uE0+_uE7+'m'', 1775, 1817);');
  end;

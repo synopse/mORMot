@@ -4471,8 +4471,22 @@ begin
 end;
 
 procedure TSQLRequest.BindS(Param: Integer; const Value: string);
+var P: PUTF8Char;
+    len: integer;
 begin
-  Bind(Param,StringToUTF8(Value));
+  if pointer(Value)=nil then begin
+    // avoid to bind '' as null
+    sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,@NULCHAR,0,SQLITE_STATIC));
+    exit;
+  end;
+  len := length(Value);
+  GetMem(P,len*3+1);
+  {$ifdef UNICODE}
+  len := RawUnicodeToUtf8(P,len*3,pointer(Value),len);
+  {$else}
+  len := CurrentAnsiConvert.AnsiBufferToUTF8(P,pointer(Value),len)-P;
+  {$endif}
+  sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,P,len,@sqlite3InternalFree));
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; Data: pointer; Size: integer);
