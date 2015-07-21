@@ -37943,9 +37943,21 @@ begin
     if Rec.fID<=0 then
       raise EORMException.CreateUTF8('%.AddOne(%.ForceID=0)',[self,Rec]);
     if Rec.fID<=lastID then begin
-      if fUniqueFields<>nil then
-        raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) with unique '+
-          'fields is not implemented yet',[self,Rec,Rec.fID]);
+      if fUniqueFields<>nil then begin
+        for i := 0 to fUniqueFields.Count-1 do
+        with TListFieldHash(fUniqueFields.List[i]) do begin
+          for ndx := 0 to fValue.Count-1 do // O(n) search to avoid hashing
+            if Compare(fValue.List[ndx],Rec) then begin
+              InternalLog('%.AddOne: Duplicated field "%" value for % and %',
+                [self,Field.Name,Rec,TSQLRecord(fValue.List[ndx])],sllTrace);
+              result := 0; // duplicate unique fields -> error
+              exit;
+            end;
+          Invalidate;
+        end;
+        InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
+          [self,Rec,Rec.fID,lastID],sllTrace);
+      end;
       if IDToIndex(Rec.fID)>=0 then
         raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
           [self,Rec,Rec.fID]);
@@ -37958,15 +37970,17 @@ begin
   end;
   ndx := fValue.Add(Rec);
   if needSort then
-    fValue.Sort(TSQLRecordCompare);
-  if fUniqueFields<>nil then
-    for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
-    if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
-      fValue.List[ndx] := nil; // avoid GPF within Delete()
-      fValue.Delete(ndx);
-      result := 0; // duplicate unique fields -> error
-      exit;
-    end;
+    fValue.Sort(TSQLRecordCompare) else // fUniqueFields[] already checked
+    if fUniqueFields<>nil then
+      for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
+      if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
+        InternalLog('%.AddOne: Duplicated field "%" value for %',
+          [self,TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec],sllTrace);
+        result := 0; // duplicate unique fields -> error
+        fValue.List[ndx] := nil; // avoid GPF within Delete()
+        fValue.Delete(ndx);
+        exit;
+      end;
   fModified := true;
   if Owner<>nil then
     Owner.InternalUpdateEvent(seAdd,fStoredClassProps.TableIndex,result,SentData,nil);
