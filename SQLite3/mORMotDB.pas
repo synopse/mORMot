@@ -311,6 +311,9 @@ type
     /// update a field value of the external database
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    /// update a field value of the external database
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
     /// create one index for all specific FieldNames at once
     // - this method will in fact call the SQLAddIndex method, if the index
     // is not already existing
@@ -1402,19 +1405,44 @@ begin
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
         [fTableName,InternalToExternal(SetFieldName),SetValue,
          ExtWhereFieldName,WhereValue],false)<>nil;
-    if result and (Owner<>nil) then begin
-      if Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
-        Rows := ExecuteInlined('select % from % where %=:(%):',
-          [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
-        if Rows=nil then
-          exit;
-        JSON := '{"'+SetFieldName+'":'+SetValue+'}';
-        while Rows.Step do
-          Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+      if result and (Owner<>nil) then begin
+        if Owner.InternalUpdateEventNeeded(TableModelIndex) then begin
+          Rows := ExecuteInlined('select % from % where %=:(%):',
+            [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
+          if Rows=nil then
+            exit;
+          JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+          while Rows.Step do
+            Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
+        end;
+        Owner.FlushInternalDBCache;
       end;
-      Owner.FlushInternalDBCache;
     end;
-  end;
+end;
+
+function TSQLRestStorageExternal.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+var extField: RawUTF8;
+    Value: Int64;
+begin
+  result := false;
+  if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+    exit;
+  if (Owner<>nil) and Owner.InternalUpdateEventNeeded(TableModelIndex) then
+    result := OneFieldValue(fStoredClass,FieldName,'ID=?',[],[ID],Value) and
+              UpdateField(fStoredClass,ID,FieldName,[Value+Increment]) else
+    try
+      with StoredClassProps.ExternalDB do begin
+        extField := InternalToExternal(FieldName);
+        result := ExecuteInlined('update % set %=%+:(%): where %=:(%):',
+          [fTableName,extField,extField,Increment,RowIDFieldName,ID],false)<>nil;
+      end;
+      if result and (Owner<>nil) then
+        Owner.FlushInternalDBCache;
+    except
+      on Exception do
+        result := false;
+    end;
 end;
 
 function TSQLRestStorageExternal.EngineUpdateBlob(TableModelIndex: integer; aID: TID;

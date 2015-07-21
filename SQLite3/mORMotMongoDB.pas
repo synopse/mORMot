@@ -121,6 +121,8 @@ type
     function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
     function EngineDeleteWhere(TableModelIndex: Integer;const SQLWhere: RawUTF8;
       const IDs: TIDDynArray): boolean; override;
     // BLOBs should be accessed directly, not through slower JSON Base64 encoding
@@ -603,7 +605,7 @@ begin
      (fModel.Tables[TableModelIndex]<>fStoredClass) or
      (SetFieldName='') or (SetValue='') or (WhereFieldName='') or (WhereValue='') then
     result := false else
-    try
+    try // use {%:%} here since WhereValue/SetValue are already JSON encoded
       query := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
         InternalToExternal(WhereFieldName),WhereValue],[]);
       update := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
@@ -622,6 +624,28 @@ begin
       result := true;
     except
       result := false;
+    end;
+end;
+
+function TSQLRestStorageMongoDB.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+var Value: Int64;
+begin
+  result := false;
+  if (ID<=0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+    exit;
+  if (Owner<>nil) and Owner.InternalUpdateEventNeeded(TableModelIndex) then
+    result := OneFieldValue(fStoredClass,FieldName,'ID=?',[],[ID],Value) and
+              UpdateField(fStoredClass,ID,FieldName,[Value+Increment]) else
+    try
+      fCollection.Update(BSONVariant(['_id',ID]),BSONVariant('{$inc:{%:%}}',
+        [StoredClassProps.ExternalDB.InternalToExternal(FieldName),Increment],[]));
+      if Owner<>nil then
+        Owner.FlushInternalDBCache;
+      result := true;
+    except
+      on Exception do
+        result := false;
     end;
 end;
 

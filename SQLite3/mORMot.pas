@@ -1081,6 +1081,7 @@ unit mORMot;
     - added TSQLRest.RetrieveListJSON method to get a TSQLRecord list as JSON
     - added TSQLRest.RetrieveListObjArray and TSQLTable.ToObjArray methods
     - added TSQLRest.UpdateField() overloaded methods to update a single field
+    - added TSQLRest.UpdateFieldIncrement() method for atomic increase/decrease
     - "rowCount": is added in TSQLRestStorageInMemory.GetJSONValues,
       TSQLTable.GetJSONValues and in TSQLTableJSON.ParseAndConvert, at the end
       of the non expanded JSON content, if needed - improves client performance
@@ -11854,6 +11855,11 @@ type
     // - this method must be implemented in a thread-safe manner
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
+    /// increments one integer field value
+    // - this default implementation is just a wrapper around OneFieldValue +
+    // UpdateField methods
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; virtual;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TSQLModel); virtual;
@@ -12460,7 +12466,8 @@ type
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
     {$endif NOVARIANTS}
     /// increments one integer field value
-    // - is just a wrapper around OneFieldValue + UpdateField methods
+    // - if available, this method will use atomic value modification, e.g.
+    // $ UPDATE table SET field=field+?
     function UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
       const FieldName: RawUTF8; Increment: Int64=1): boolean; virtual;
     /// override this method to guess if this record can be updated or deleted
@@ -14295,6 +14302,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
     function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
     /// virtual methods which will perform CRUD operations on the main DB
@@ -14311,6 +14320,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; virtual; abstract;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; virtual; abstract;
+    function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; virtual; abstract;
   public
     /// this integer property is incremented by the database engine when any SQL
     // statement changes the database contents (i.e. on any not SELECT statement)
@@ -15450,6 +15461,11 @@ type
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     /// overridden method for direct in-memory database engine call
+    // - made public since a TSQLRestStorage instance may be created
+    // stand-alone, i.e. without any associated Model/TSQLRestServer
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+    /// overridden method for direct in-memory database engine call
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
     /// overridden method for direct in-memory database engine call
     function RetrieveBlobFields(Value: TSQLRecord): boolean; override;
@@ -15585,6 +15601,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
   public
     /// initialize the table storage redirection
     // - you should not have to use this constructor, but rather the
@@ -15631,6 +15649,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
     /// overridden methods which will return error (no main DB here)
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
     function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
@@ -15645,6 +15665,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
     // method not implemented: always return false
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
@@ -15744,6 +15766,8 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
   public
     /// initialize a REST server associated to a given TSQLRest instance
     // - the specified TSQLRest will be used for all ORM and data process
@@ -29777,6 +29801,19 @@ begin
 end;
 {$endif}
 
+function TSQLRest.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+var Value: Int64;
+    Table: TSQLRecordClass;
+begin
+  if (TableModelIndex<0) or (ID<0) then
+    result := false else begin
+    Table := Model.Tables[TableModelIndex];
+    result := OneFieldValue(Table,FieldName,'ID=?',[],[ID],Value) and
+              UpdateField(Table,ID,FieldName,[Value+Increment]);
+  end;
+end;
+
 procedure TSQLRest.SetRoutingClass(aServicesRouting: TSQLRestServerURIContextClass);
 begin
   if self<>nil then
@@ -30553,10 +30590,10 @@ end;
 
 function TSQLRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
-var Value: Int64;
 begin
-  if (ID<>0) and OneFieldValue(Table,FieldName,'ID=?',[],[ID],Value) then
-    result := UpdateField(Table,ID,FieldName,[Value+Increment]) else
+  if ID<>0 then
+    result := EngineUpdateFieldIncrement(Model.GetTableIndexExisting(Table),
+      ID,FieldName,Increment) else
     result := false;
 end;
 
@@ -32458,7 +32495,7 @@ function TSQLRestClientURI.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var url: RawUTF8;
 begin
-  if (self=nil) or (TableModelIndex<0) then
+  if TableModelIndex<0 then
     result := false else begin
     // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
     url := FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
@@ -36739,6 +36776,17 @@ begin
       WhereFieldName,WhereValue);
 end;
 
+function TSQLRestServer.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+var Rest: TSQLRest;
+begin
+  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  if Rest=nil then
+    result := MainEngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment) else
+    result := Rest.EngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment);
+end;
+
+
 type
   EORMBatchException = class(EORMException);
 
@@ -37991,14 +38039,14 @@ begin
           for ndx := 0 to fValue.Count-1 do // O(n) search to avoid hashing
             if Compare(fValue.List[ndx],Rec) then begin
               InternalLog('%.AddOne: Duplicated field "%" value for % and %',
-                [self,Field.Name,Rec,TSQLRecord(fValue.List[ndx])],sllTrace);
+                [ClassType,Field.Name,Rec,TSQLRecord(fValue.List[ndx])],sllTrace);
               result := 0; // duplicate unique fields -> error
               exit;
             end;
           Invalidate;
         end;
         InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
-          [self,Rec,Rec.fID,lastID],sllTrace);
+          [ClassType,Rec.ClassType,Rec.fID,lastID],sllTrace);
       end;
       if IDToIndex(Rec.fID)>=0 then
         raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
@@ -38017,7 +38065,7 @@ begin
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
         InternalLog('%.AddOne: Duplicated field "%" value for %',
-          [self,TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec],sllTrace);
+          [ClassType,TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec],sllTrace);
         result := 0; // duplicate unique fields -> error
         fValue.List[ndx] := nil; // avoid GPF within Delete()
         fValue.Delete(ndx);
@@ -38882,6 +38930,37 @@ begin
   end;
 end;
 
+function TSQLRestStorageInMemory.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+var i,err: integer;
+    P: TSQLPropInfo;
+    V: RawUTF8;
+    wasString: boolean;
+    int: Int64;
+begin
+  result := false;
+  if (ID<0) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+    exit;
+  P := fStoredClassProps.Prop[FieldName];
+  if P=nil then
+    exit;
+  StorageLock(false);
+  try
+    i := IDToIndex(ID);
+    if i<0 then
+      exit;
+    P.GetValueVar(fValue.List[i],false,V,@wasstring);
+    int := GetInt64(pointer(V),err);
+    if wasString or (err<>0) then
+      exit;
+    Int64ToUtf8(int+Increment,V);
+    P.SetValueVar(fValue.List[i],V,false);
+    result := true;
+  finally
+    StorageUnLock;
+  end;
+end;
+
 function TSQLRestStorageInMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var i: integer;
@@ -39419,6 +39498,12 @@ begin
   result := fRemoteRest.EngineUpdateField(fRemoteTableIndex,SetFieldName,SetValue,WhereFieldName,WhereValue);
 end;
 
+function TSQLRestStorageRemote.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+begin
+   result := fRemoteRest.EngineUpdateFieldIncrement(fRemoteTableIndex,ID,FieldName,Increment);
+end;
+
 
 { TListFieldHash }
 
@@ -39847,6 +39932,13 @@ begin
     SetFieldName,SetValue,WhereFieldName,WhereValue);
 end;
 
+function TSQLRestServerFullMemory.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+begin
+  result := fStorage[TableModelIndex].EngineUpdateFieldIncrement(TableModelIndex,
+    ID,FieldName,Increment);
+end;
+
 // MainEngine*() methods should return error (only access via static fStorage[])
 
 function TSQLRestServerFullMemory.MainEngineAdd(TableModelIndex: integer;
@@ -39898,6 +39990,12 @@ end;
 
 function TSQLRestServerFullMemory.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+begin
+  result := false;
+end;
+
+function TSQLRestServerFullMemory.MainEngineUpdateFieldIncrement(
+  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 begin
   result := false;
 end;
@@ -39977,6 +40075,13 @@ function TSQLRestServerRemoteDB.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 begin
   result := fRemoteRest.EngineUpdateField(fRemoteTableIndex[TableModelIndex],SetFieldName,SetValue,WhereFieldName,WhereValue);
+end;
+
+function TSQLRestServerRemoteDB.EngineUpdateFieldIncrement(TableModelIndex: integer;
+  ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
+begin
+  result := fRemoteRest.EngineUpdateFieldIncrement(fRemoteTableIndex[TableModelIndex],
+    ID,FieldName,Increment);
 end;
 
 function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(Table: TSQLRecordClass;
