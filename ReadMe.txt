@@ -22,6 +22,7 @@ Contributors
   Delphinium (louisyeow)
   DigDiver
   EgorovAlex
+  Emanuele (lele9)
   EMartin
   Eric Grange
   Esmond

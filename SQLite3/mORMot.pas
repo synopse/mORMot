@@ -33,6 +33,7 @@ unit mORMot;
     Alfred Glaenzer (alf)
     DigDiver
     EgorovAlex
+    Emanuele (lele9)
     Esmond
     Goran Despalatovic (gigo)
     Jordi Tudela
@@ -1759,7 +1760,12 @@ type
 
 /// set the TID (=64 bits integer) value from the numerical text stored in P^
 // - just a redirection to SynCommons.SetInt64()
-procedure SetID(P: PUTF8Char; var result: TID);
+procedure SetID(P: PUTF8Char; var result: TID); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// set the TID (=64 bits integer) value from the numerical text stored in U
+// - just a redirection to SynCommons.SetInt64()
+procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
@@ -16657,6 +16663,26 @@ type
     function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
   end;
 
+  /// will define an unicity validation for a set of TSQLRecord text fields
+  // - field names should be specified as CSV in the JSON "FieldNames" property
+  // in the constructor, or the Parameters field, e.g. like
+  // ! TSQLSampleRecord.AddFilterOrValidate('propA',
+  // !   TSynValidateUniqueFields.Create('{"FieldNames":"propA,propB"}'));
+  // - this class will handle only textual fields, not numeric values
+  // - it will check that the field values are not a duplicate
+  TSynValidateUniqueFields = class(TSynValidateRest)
+  protected
+    fFieldNames: TRawUTF8DynArray;
+    procedure SetParameters(Value: RawUTF8); override;
+  public
+    /// perform the unique fields validation action to the specified value
+    // - duplication value check will use ProcessRest and ProcessRec properties,
+    // as set by TSQLRecord.Validate
+    function Process(aFieldIndex: integer; const Value: RawUTF8; var ErrorMsg: string): boolean; override;
+    /// the validated field names
+    property FieldNames: TRawUTF8DynArray read fFieldNames;
+  end;
+
 
   /// a WHERE constraint as set by the TSQLVirtualTable.Prepare() method
   TSQLVirtualTablePreparedConstraint = record
@@ -17445,6 +17471,22 @@ asm
   jmp SynCommons.SetInt64
 {$endif}
 end;
+
+procedure SetID(const U: RawByteString; var result: TID); overload;
+{$ifdef HASINLINE}
+{$ifdef CPU64}
+begin // PtrInt is already int64 -> call PtrInt version
+  result := GetInteger(pointer(U));
+{$else}
+begin
+  SetInt64(pointer(U),Int64(result));
+{$endif}
+{$else}
+asm
+  jmp SynCommons.SetInt64
+{$endif}
+end;
+
 
 {$ifndef FPC}
 
@@ -23635,7 +23677,7 @@ begin
       FieldNames[FieldCount] := FieldName;
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
-        SetID(pointer(FieldValues[FieldCount]),DecodedRowID);
+        SetID(FieldValues[FieldCount],DecodedRowID);
       inc(FieldCount);
       if FieldCount=MAX_SQLFIELDS then
         raise EParsingException.Create('Too many inlines in TJSONObjectDecoder');
@@ -30826,8 +30868,8 @@ begin
   with Table.RecordProps do begin
     aMainField := MainField[false];
     if aMainField>=0 then
-      SetID(pointer(OneFieldValue(Table,'RowID',
-        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):')),result);
+      SetID(OneFieldValue(Table,'RowID',
+        Fields.List[aMainField].Name+'=:('+QuotedStr(Value,'''')+'):'),result);
   end;
 end;
 
@@ -42303,8 +42345,8 @@ end;
 function TSQLRecordMany.InternalIDFromSourceDest(aClient: TSQLRest;
   aSourceID, aDestID: TID): TID;
 begin
-  SetID(Pointer(aClient.OneFieldValue(RecordClass,'RowID',
-    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID]))),result);
+  SetID(aClient.OneFieldValue(RecordClass,'RowID',
+    FormatUTF8('Source=:(%): AND Dest=:(%):',[aSourceID,aDestID])),result);
 end;
 
 
@@ -43217,12 +43259,45 @@ begin
   with fProcessRec.RecordProps do
     if cardinal(aFieldIndex)>=cardinal(Fields.Count) then
       result := true else begin
-      SetID(pointer(fProcessRest.OneFieldValue(Table,'RowID',
-        Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):')),aID);
+      SetID(fProcessRest.OneFieldValue(Table,'RowID',
+        Fields.List[aFieldIndex].Name+'=:('+QuotedStr(Value,'''')+'):'),aID);
       if (aID>0) and (aID<>fProcessRec.fID) then
         ErrorMsg := sValidationFieldDuplicate else
         result := true;
     end;
+end;
+
+
+{ TSynValidateUniqueFields }
+
+procedure TSynValidateUniqueFields.SetParameters(Value: RawUTF8);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(Value,['FieldNames'],V,True);
+  CSVToRawUTF8DynArray(pointer(V[0]),fFieldNames);
+end;
+
+function TSynValidateUniqueFields.Process(aFieldIndex: integer;
+  const Value: RawUTF8; var ErrorMsg: string): boolean;
+var where,field: RawUTF8;
+    P: PUTF8Char;
+    aID: TID;
+begin
+  result := false;
+  if (fProcessRest=nil) or (fProcessRec=nil) then
+    result := true else begin
+    P := pointer(fParameters);
+    repeat
+      field := GetNextItem(P);
+      if where<>'' then
+        where := where+' AND ';
+      where := where+field+'=:('+QuotedStr(fProcessRec.GetFieldValue(field),'''')+'):';
+    until P=nil;
+    SetID(fProcessRest.OneFieldValue(fProcessRec.RecordClass,'ID',where),aID);
+    if (aID>0) and (aID<>fProcessRec.fID) then
+      ErrorMsg := sValidationFieldDuplicate else
+      result := true;
+  end;
 end;
 
 
