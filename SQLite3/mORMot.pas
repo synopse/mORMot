@@ -43279,23 +43279,23 @@ end;
 
 function TSynValidateUniqueFields.Process(aFieldIndex: integer;
   const Value: RawUTF8; var ErrorMsg: string): boolean;
-var where,field: RawUTF8;
-    P: PUTF8Char;
+var where: RawUTF8;
+    i: integer;
     aID: TID;
 begin
-  result := false;
-  if (fProcessRest=nil) or (fProcessRec=nil) then
+  if (fProcessRest=nil) or (fProcessRec=nil) or (fFieldNames=nil) then
     result := true else begin
-    P := pointer(fParameters);
-    repeat
-      field := GetNextItem(P);
+    for i := 0 to high(fFieldNames) do begin
       if where<>'' then
         where := where+' AND ';
-      where := where+field+'=:('+QuotedStr(fProcessRec.GetFieldValue(field),'''')+'):';
-    until P=nil;
+      where := where+fFieldNames[i]+'=:('+
+        QuotedStr(fProcessRec.GetFieldValue(fFieldNames[i]),'''')+'):';
+    end;
     SetID(fProcessRest.OneFieldValue(fProcessRec.RecordClass,'ID',where),aID);
-    if (aID>0) and (aID<>fProcessRec.fID) then
-      ErrorMsg := sValidationFieldDuplicate else
+    if (aID>0) and (aID<>fProcessRec.fID) then begin
+      ErrorMsg := sValidationFieldDuplicate;
+      result := false;
+    end else
       result := true;
   end;
 end;
