@@ -924,7 +924,8 @@ begin
       finally
         fSocket := nil;
       end;
-      FLog.Log(sllTrace,'Socket % disconnected %',[info,fMonitoring],self);
+      FLog.Log(sllTrace,'Socket % disconnected',[info],self);
+      InternalLogMonitoring;
     finally
       fSafe.UnLock;
     end;
@@ -1014,7 +1015,7 @@ procedure TDDDSocketThread.InternalLogMonitoring;
 var flushed: integer;
 begin // CachedMemory method will also purge any outdated cached entries
   FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',
-    [FMonitoring,fRest.CacheOrNil.CachedMemory(@flushed)],Self);
+    [FMonitoring,fRest.CacheOrNil.CachedMemory(@flushed),flushed],Self);
   fPreviousMonitorTix := GetTickCount64;
 end;
 

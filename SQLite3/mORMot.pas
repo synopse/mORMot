@@ -30332,6 +30332,7 @@ begin // this version handles locking and use fast EngineRetrieve() method
     end;
     fCache.Notify(Tableindex,aID,Resp,soSelect);
   end;
+  Value.fID := aID; // Resp may not contain the "RowID": field after Update
   // fill Value from JSON if was correctly retrieved
   Value.FillFrom(Resp);
   result := true;
@@ -31200,9 +31201,9 @@ end;
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean;
 var i: integer;
 begin
+  result := false;
   Mutex.Lock;
   try
-    result := false;
     i := Value.Find(aID); // fast binary search by first ID field
     if i>=0 then
       with Values[i] do
@@ -31222,7 +31223,7 @@ var JSON: RawUTF8;
 begin
   if RetrieveJSON(aID,JSON) then begin
     aValue.FillFrom(JSON);
-    aValue.fID := aID; // override RowID field if not present
+    aValue.fID := aID; // override RowID field (may be not present after Update)
     result := true;
   end else
     result := false;
