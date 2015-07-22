@@ -11534,7 +11534,7 @@ type
     /// TDynArray wrapper around the Values[] array
     Value: TDynArray;
     /// used to lock the table cache for multi thread safety
-    Mutex: TRTLCriticalSection;
+    Mutex: TSynLocker;
     /// initialize this table cache
     // - will set Value wrapper and Mutex handle - other fields should have
     // been cleared by caller (is the case for a TSQLRestCacheEntryDynArray)
@@ -11641,6 +11641,7 @@ type
     /// returns the number of JSON serialization records within this cache
     function CachedEntries: cardinal;
     /// returns the memory used by JSON serialization records within this cache
+    // - this method will also flush any outdated entries in the cache
     function CachedMemory: cardinal;
     /// read-only access to the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
@@ -30525,7 +30526,7 @@ begin
     result := true; // a TSQLRecord with NO simple fields (e.g. ID/blob pair)
     exit;
   end;
-  fCache.Notify(Value,soUpdate); // JSONValues on update may not be enough for cache
+  fCache.Notify(Value,soUpdate); // will serialize Value (JSONValues may not be enough)
   JSONValues := Value.GetJSONValues(true,false,FieldBits);
   result := EngineUpdate(TableIndex,Value.fID,JSONValues);
 end;
@@ -30600,10 +30601,14 @@ end;
 
 function TSQLRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; Increment: Int64): boolean;
+var tableIndex: integer;
 begin
-  if ID<>0 then
-    result := EngineUpdateFieldIncrement(Model.GetTableIndexExisting(Table),
-      ID,FieldName,Increment) else
+  if ID<>0 then begin
+    tableIndex := Model.GetTableIndexExisting(Table);
+    result := EngineUpdateFieldIncrement(tableIndex,ID,FieldName,Increment);
+    if fCache<>nil then
+      fCache.NotifyDeletion(tableIndex,ID);
+  end else
     result := false;
 end;
 
@@ -31088,25 +31093,25 @@ end;
 procedure TSQLRestCacheEntry.Init;
 begin
   Value.InitSpecific(TypeInfo(TSQLRestCacheEntryValueDynArray),
-    Values,djInteger,@Count); // will search/sort by first djInteger ID field
-  InitializeCriticalSection(Mutex);
+    Values,djInt64,@Count); // will search/sort by first ID: TID field
+  Mutex.Init;
 end;
 
 procedure TSQLRestCacheEntry.Done;
 begin
-  DeleteCriticalSection(Mutex);
+  Mutex.Done;
 end;
 
 procedure TSQLRestCacheEntry.Clear;
 begin
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     Value.Clear;
     CacheAll := false;
     CacheEnable := false;
     TimeOutMS := 0;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -31114,7 +31119,7 @@ procedure TSQLRestCacheEntry.FlushCacheEntry(Index: Integer);
 begin
   if cardinal(Index)<cardinal(Count) then
     if CacheAll then
-      Value.Delete(Index) else
+      Value.FastDeleteSorted(Index) else
       with Values[Index] do begin
         TimeStamp64 := 0;
         JSON := '';
@@ -31126,7 +31131,7 @@ var i: integer;
 begin
   if not CacheEnable then
     exit;
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     if CacheAll then
       Value.Clear else
@@ -31136,7 +31141,7 @@ begin
         JSON := '';
       end;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -31144,20 +31149,16 @@ procedure TSQLRestCacheEntry.SetCache(aID: TID);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     CacheEnable := true;
-    if not CacheAll then begin
-      i := Value.Find(aID); // search by first ID field
-      if i<0 then begin
-        Rec.ID := aID;
-        Rec.TimeStamp64 := 0; // indicates no value cache
-        Value.Add(Rec);
-        Value.Sort; // will sort by ID for faster retrieval
-      end; // do nothing if aID is already in Values[]
-    end;
+    if (not CacheAll) and (not Value.FastLocateSorted(aID,i)) and (i>=0) then begin
+      Rec.ID := aID;
+      Rec.TimeStamp64 := 0; // indicates no value cache yet
+      Value.FastAddSorted(i,Rec);
+    end; // do nothing if aID is already in Values[]
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -31165,20 +31166,17 @@ procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
-  EnterCriticalSection(Mutex);
+  Rec.ID := aID;
+  Rec.TimeStamp64 := GetTickCount64;
+  Rec.JSON := aJSON;
+  Mutex.Lock;
   try
-    Rec.ID := aID;
-    Rec.TimeStamp64 := GetTickCount64;
-    Rec.JSON := aJSON;
-    i := Value.Find(Rec); // search by first ID field
-    if i>=0 then
+    if Value.FastLocateSorted(Rec,i) then
       Values[i] := Rec else
-      if CacheAll then begin
-        Value.Add(Rec);
-        Value.Sort; // will sort by ID for faster retrieval
-      end;
+      if CacheAll and (i>=0) then
+        Value.FastAddSorted(i,Rec);
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -31190,7 +31188,7 @@ end;
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean;
 var i: integer;
 begin
-  EnterCriticalSection(Mutex);
+  Mutex.Lock;
   try
     result := false;
     i := Value.Find(aID); // fast binary search by first ID field
@@ -31203,7 +31201,7 @@ begin
           result := true; // found a non outdated serialized value in cache
         end;
   finally
-    LeaveCriticalSection(Mutex);
+    Mutex.UnLock;
   end;
 end;
 
@@ -31229,34 +31227,40 @@ begin
     for i := 0 to high(fCache) do
       with fCache[i] do
       if CacheEnable then begin
-        EnterCriticalSection(Mutex);
+        Mutex.Lock;
         try
           for j := 0 to Count-1 do
             if Values[j].TimeStamp64<>0 then
               inc(result);
         finally
-          LeaveCriticalSection(Mutex);
+          Mutex.UnLock;
         end;
       end;
 end;
 
 function TSQLRestCache.CachedMemory: cardinal;
 var i,j: integer;
+    tix: Int64;
 begin
   result := 0;
-  if self<>nil then
-    for i := 0 to high(fCache) do
-      with fCache[i] do
-      if CacheEnable then begin
-        EnterCriticalSection(Mutex);
-        try
-          for j := 0 to Count-1 do
-            if Values[j].TimeStamp64<>0 then
+  if self=nil then
+    exit;
+  tix := GetTickCount64;
+  for i := 0 to high(fCache) do
+    with fCache[i] do
+    if CacheEnable then begin
+      Mutex.Lock;
+      try
+        for j := Count-1 downto 0 do
+          if Values[j].TimeStamp64<>0 then begin
+            if (TimeOutMS<>0) and (tix>Values[j].TimeStamp64+TimeOutMS) then
+              FlushCacheEntry(j) else
               inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
-        finally
-          LeaveCriticalSection(Mutex);
         end;
+      finally
+        Mutex.UnLock;
       end;
+    end;
 end;
 
 function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: Cardinal): boolean;
@@ -31269,11 +31273,11 @@ begin
   if Rest.CacheWorthItForTable(i) then
     if Cardinal(i)<Cardinal(Length(fCache)) then
       with fCache[i] do begin
-        EnterCriticalSection(Mutex);
+        Mutex.Lock;
         try
           TimeOutMS := aTimeOutMS;
         finally
-          LeaveCriticalSection(Mutex);
+          Mutex.UnLock;
         end;
         result := true;
       end;
@@ -31302,14 +31306,14 @@ begin
     if Cardinal(i)<Cardinal(Length(fCache)) then
       with fCache[i] do begin
         // global cache of all records of this table
-        EnterCriticalSection(Mutex);
+        Mutex.Lock;
         try
           CacheEnable := true;
           CacheAll := True;
           Value.Clear;
           result := true;
         finally
-          LeaveCriticalSection(Mutex);
+          Mutex.UnLock;
         end;
       end;
 end;
@@ -31396,11 +31400,11 @@ begin
   if self<>nil then
     with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
     if CacheEnable then begin
-      EnterCriticalSection(Mutex);
+      Mutex.Lock;
       try
         FlushCacheEntry(Value.Find(aID));
       finally
-        LeaveCriticalSection(Mutex);
+        Mutex.UnLock;
       end;
     end;
 end;
@@ -31411,12 +31415,12 @@ begin
   if (self<>nil) and (length(aIDs)>0) then
     with fCache[fRest.Model.GetTableIndexExisting(aTable)] do
     if CacheEnable then begin
-      EnterCriticalSection(Mutex);
+      Mutex.Lock;
       try
         for i := 0 to high(aIDs) do
           FlushCacheEntry(Value.Find(aIDs[i]));
       finally
-        LeaveCriticalSection(Mutex);
+        Mutex.UnLock;
       end;
     end;
 end;
@@ -31457,11 +31461,11 @@ begin
      (Cardinal(aTableIndex)<Cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
     if CacheEnable then begin
-      EnterCriticalSection(Mutex);
+      Mutex.Lock;
       try
         FlushCacheEntry(Value.Find(aID));
       finally
-        LeaveCriticalSection(Mutex);
+        Mutex.UnLock;
       end;
     end;
 end;
