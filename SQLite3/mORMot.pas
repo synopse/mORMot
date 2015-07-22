@@ -5945,10 +5945,6 @@ type
     function GetCount: integer;
     procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
-    /// close a BATCH sequence started by Start method
-    // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
-    // - will also notify the TSQLRest.Cache for all deleted IDs
-    function PrepareForSending(out Data: RawUTF8): boolean; virtual;
   public
     /// begin a BATCH sequence to speed up huge database change
     // - each call to normal Add/Update/Delete methods will create a Server request,
@@ -5983,7 +5979,7 @@ type
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
     procedure Reset(aTable: TSQLRecordClass; AutomaticTransactionPerRow: cardinal=0;
-      Options: TSQLRestBatchOptions=[]); overload; virtual; 
+      Options: TSQLRestBatchOptions=[]); overload; virtual;
     /// reset the BATCH sequence to its previous state
     // - could be used to prepare a next chunk of values, after a call to
     // TSQLRest.BatchSend
@@ -6046,6 +6042,11 @@ type
     // - could be used to eumulate Add/Update/Delete
     // - FullRow=TRUE would increment the global Count
     function RawAppend(FullRow: boolean=true): TTextWriter;
+    /// close a BATCH sequence started by Start method
+    // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
+    // - will also notify the TSQLRest.Cache for all deleted IDs
+    // - you should not have to call it in normal use cases
+    function PrepareForSending(out Data: RawUTF8): boolean; virtual;
     /// read only access to the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
     /// retrieve the current number of pending transactions in the BATCH sequence
@@ -29428,7 +29429,8 @@ end;
 
 procedure TSQLRestBatch.Reset;
 begin
-  Reset(fTable,fAutomaticTransactionPerRow,fOptions);
+  if self<>nil then
+    Reset(fTable,fAutomaticTransactionPerRow,fOptions);
 end;
 
 destructor TSQLRestBatch.Destroy;
