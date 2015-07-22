@@ -4980,7 +4980,8 @@ type
     // IsString() and stored as such in the resulting TDocVariant
     // - if you let ChangedProps point to a TDocVariantData, it would contain
     // an object with the stored values, just like AsDocVariant
-    // - returns the resulting count of stored values in the TDocVariant
+    // - returns the number of updated values in the TDocVariant, 0 if
+    // no value was changed
     function MergeDocVariant(var DocVariant: variant;  
       ValueAsString: boolean; ChangedProps: PVariant=nil;
       ExtendedJson: Boolean=false): integer;
@@ -35401,12 +35402,12 @@ begin
       result := StrComp(TVarData(A).VAny,TVarData(B).VAny);
     varInteger:
       result := TVarData(A).VInteger-TVarData(B).VInteger;
-    varInt64:
+    varInt64,varCurrency:
       result := TVarData(A).VInt64-TVarData(B).VInt64;
+    varDouble:
+      result := SortDynArrayDouble(TVarData(A).VDouble,TVarData(B).VDouble);
     varBoolean:
-      if TVarData(A).VBoolean=TVarData(B).VBoolean then
-        result := 0 else
-        result := 1;
+      result := ord(TVarData(A).VBoolean)-ord(TVarData(B).VBoolean);
     else result := ICMP[VarCompareValue(variant(A),variant(B))];
     end else
     result := ICMP[VarCompareValue(variant(A),variant(B))];
@@ -35434,12 +35435,12 @@ begin
       result := StrIComp(TVarData(A).VAny,TVarData(B).VAny);
     varInteger:
       result := TVarData(A).VInteger-TVarData(B).VInteger;
-    varInt64:
+    varInt64,varCurrency:
       result := TVarData(A).VInt64-TVarData(B).VInt64;
+    varDouble:
+      result := SortDynArrayDouble(TVarData(A).VDouble,TVarData(B).VDouble);
     varBoolean:
-      if TVarData(A).VBoolean=TVarData(B).VBoolean then
-        result := 0 else
-        result := 1;
+      result := ord(TVarData(A).VBoolean)-ord(TVarData(B).VBoolean);
     else
       if TVarData(A).VType and VTYPE_STATIC=0 then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
@@ -37062,8 +37063,10 @@ end;
 function TDynArray.GetIsObjArray: boolean;
 begin
   if fIsObjArray=oaUnknown then
-    SetIsObjArray((fElemSize=sizeof(pointer)) and (fElemType=nil) and
-          Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo));
+    if (fElemSize=sizeof(pointer)) and (fElemType=nil) and
+       Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo) then
+      fIsObjArray := oaTrue else
+      fIsObjArray := oaFalse;
   result := fIsObjArray=oaTrue;
 end;
 
@@ -49165,23 +49168,29 @@ end;
 function TSynNameValue.MergeDocVariant(var DocVariant: variant;
   ValueAsString: boolean; ChangedProps: PVariant; ExtendedJson: Boolean): integer;
 var DV: TDocVariantData absolute DocVariant;
-    i: integer;
+    i,ndx: integer;
     v: variant;
 begin
   if DV.VType<>DocVariantVType then
     TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
   if ChangedProps<>nil then
     TDocVariant.New(ChangedProps^,DV.Options);
+  result := 0; // returns number of changed values
   for i := 0 to Count-1 do begin
     VarClear(v);
     if ValueAsString or
        not GetNumericVariantFromJSON(pointer(List[i].Value),TVarData(v)) then
       RawUTF8ToVariant(List[i].Value,v);
+    ndx := DV.GetValueIndex(List[i].Name);
+    if ndx<0 then
+      ndx := DV.InternalAdd(List[i].Name) else
+      if SortDynArrayVariant(v,DV.Values[ndx])=0 then
+        continue; // value not changed -> skip
     if ChangedProps<>nil then
       PDocVariantData(ChangedProps)^.AddValue(List[i].Name,v);
-    DV.AddOrUpdateValue(List[i].Name,v);
+    SetVariantByValue(v,DV.VValue[ndx]);
+    inc(result);
   end;
-  result := DV.VCount;
 end;
 {$endif}
 
