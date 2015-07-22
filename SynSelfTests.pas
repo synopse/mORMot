@@ -1061,11 +1061,11 @@ type
     fClient: TSQLRestClientDB;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal=700);
     procedure ClientTest(aRouting: TSQLRestServerURIContextClass;
-      aResultAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean=false;{$endif}
+      aAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean=false;{$endif}
       aOptions: TServiceMethodOptions=[]);
     class function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
     class procedure CustomWriter(const aWriter: TTextWriter; const aValue);
-    procedure SetOptions(aResultAsJSONObject: boolean;
+    procedure SetOptions(aAsJSONObject: boolean;
       aOptions: TServiceMethodOptions);
     procedure IntSubtractJSON(Ctxt: TOnInterfaceStubExecuteParamsJSON);
     {$ifndef NOVARIANTS}
@@ -1085,8 +1085,8 @@ type
     procedure ServerSide;
     /// test the client-side implementation in RESTful mode
     procedure ClientSideREST;
-    /// test the client-side in RESTful mode with method results as JSON objects
-    procedure ClientSideRESTResultAsObject;
+    /// test the client-side in RESTful mode with values transmitted as JSON objects
+    procedure ClientSideRESTAsJSONObject;
     /// test the client-side in RESTful mode with full session statistics
     procedure ClientSideRESTSessionsStats;
     /// test the client-side implementation of optExecLockedPerInterface
@@ -12107,21 +12107,21 @@ begin
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.SetOptions(aResultAsJSONObject: boolean;
+procedure TTestServiceOrientedArchitecture.SetOptions(aAsJSONObject: boolean;
   aOptions: TServiceMethodOptions);
 var s: integer;
 begin
   with fClient.Server.Services do
     for s := 0 to Count-1 do
       with Index(s) as TServiceFactoryServer do begin
-        ResultAsJSONObject := aResultAsJSONObject;
+        ResultAsJSONObject := aAsJSONObject;
         if InterfaceTypeInfo<>TypeInfo(ITestPerThread) then
           SetOptions([],aOptions);
      end;
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientTest(aRouting: TSQLRestServerURIContextClass;
-  aResultAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean;{$endif}
+  aAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean;{$endif}
   aOptions: TServiceMethodOptions);
 var Inst: TTestServiceInstances;
     O: TObject;
@@ -12139,7 +12139,9 @@ begin
     if optExecInPerInterfaceThread in aOptions then
       GlobalInterfaceTestMode := itmPerInterfaceThread;
   {$endif}
-  SetOptions(aResultAsJSONObject,aOptions);
+  (fClient.Services['Calculator'] as TServiceFactoryClient).
+    ParamsAsJSONObject := aAsJSONObject;
+  SetOptions(aAsJSONObject,aOptions);
   fClient.Server.ServicesRouting := aRouting;
   fClient.ServicesRouting := aRouting;
   (fClient.Server.Services as TServiceContainerServer).PublishSignature := true;
@@ -12531,7 +12533,7 @@ begin
   ClientTest(TSQLRestRoutingJSON_RPC,false);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTResultAsObject;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTAsJSONObject;
 begin
   ClientTest(TSQLRestRoutingREST,true);
 end;

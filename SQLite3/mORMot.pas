@@ -9344,6 +9344,8 @@ type
     /// find the next var / out / result argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgResultNext(var arg: integer): boolean;
+    /// convert input parameters encoded as a JSON array into a JSON object
+    function ArgsInputArrayToObject(P: PUTF8Char): RawUTF8;
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -11054,6 +11056,7 @@ type
   protected
     fClient: TSQLRestClientURI;
     fForcedURI: RawUTF8;
+    fParamsAsJSONObject: boolean;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -11096,6 +11099,13 @@ type
     // Client.ServerTimeStamp := TimeLogNowUTC to avoid an unsupported
     // ServerTimeStampSynchronize call)
     property ForcedURI: RawUTF8 read fForcedURI write fForcedURI;
+    /// set to TRUE to send the interface's methods parmaters as JSON object
+    // - by default (FALSE), any method execution will send a JSON array with
+    // all CONST/VAR parameters, in order
+    // - TRUE will generate a JSON object instead, with the CONST/VAR parameter
+    // names as field names - may be useful e.g. when working with a non
+    // mORMot server
+    property ParamsAsJSONObject: boolean read fParamsAsJSONObject write fParamsAsJSONObject;
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -49749,6 +49759,37 @@ begin
   result := false;
 end;
 
+function TServiceMethod.ArgsInputArrayToObject(P: PUTF8Char): RawUTF8;
+var i: integer;
+    W: TTextWriter;
+    Value: PUTF8Char;
+begin
+  W := TTextWriter.CreateOwnedStream;
+  try
+    W.Add('{');
+    if (P=nil) or (P^<>'[') then
+      P := nil else
+      inc(P);
+    for i := ArgsInFirst to ArgsInLast do
+    if P=nil then
+      break else
+      with Args[i] do
+      if ValueDirection<>smdOut then begin
+        W.AddPropName(ParamName^);
+        P := GotoNextNotSpace(P);
+        Value := P;
+        P := GotoEndJSONItem(P);
+        if P^=',' then
+          inc(P);
+        W.AddNoJsonEscape(Value,P-Value);
+      end;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
 
 { TServiceMethodExecute }
 
@@ -50363,7 +50404,7 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   aClientDrivenID: PCardinal=nil; aServiceCustomAnswer: PServiceCustomAnswer=nil): boolean;
 var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
-    status: integer;
+    status,ndx: integer;
     {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
@@ -50386,6 +50427,11 @@ begin
   if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
+  if ParamsAsJSONObject and (clientDrivenID='') then begin
+    ndx := fInterface.FindMethodIndex(aMethod);
+    if ndx>=0 then  // ParamsAsJSONObject won't apply to _signature_ e.g.
+      sent := fInterface.Methods[ndx].ArgsInputArrayToObject(Pointer(sent));
+  end;
   // call remote server
   status := fClient.URI(uri,'POST',@resp,@head,@sent).Lo;
   if status<>HTML_SUCCESS then begin

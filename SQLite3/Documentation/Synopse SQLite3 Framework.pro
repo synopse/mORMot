@@ -10435,6 +10435,16 @@ $ POST root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?+%5B+1%2C2+%5D
 $ GET root/Calculator/Add?n1=1&n2=2
 From a {\i Delphi} client, the {\f1\fs20 /RootName/InterfaceName.MethodName} scheme will always be used.
+:     Sending a JSON object
+By default, the {\i mORMot} client will send all values, transmitted as a JSON array without any parameter name, as we have seen:
+$ POST /root/Calculator.Add
+$ (...)
+$ [1,2]
+But if {\f1\fs20 TServiceFactoryClient.ParamsAsJSONObject} is set to {\f1\fs20 true}, the transmitted values from the client side would be encoded as a JSON object:
+$ POST /root/Calculator.Add
+$ (...)
+$ {"n1":1,"n2":2}
+This may help transmitting some values to a non-{\i mORMot} server, in another format, for a given service.
 :    JSON-RPC
 :     Parameters transmitted as JSON array
 If {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is used, the URI will define the interface, and then the method name will be inlined with parameters, e.g.
@@ -10462,6 +10472,7 @@ Of course, {\f1\fs20 TSQLRestRoutingJSON_RPC} mode may be used as an alternative
 :   Response format
 :    Standard answer as JSON object
 :     JSON answers
+:      Returning as JSON array
 The framework will always return the data in the same format, whatever the routing mode used.
 Basically, this is a JSON object, with one nested {\f1\fs20 "result":} property, and the client driven {\f1\fs20 "id":} value (e.g. always 0 in {\f1\fs20 sicShared} mode):
 $ POST /root/Calculator.Add
@@ -10526,9 +10537,23 @@ $ (...)
 $ [{"Real":2,"Imaginary":3},{"Real":20,"Imaginary":30}]
 will be answered as such:
 $ {"result":[{"Real":-18,"Imaginary":-27}]}
+:      Returning a JSON object
 Note that if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} is set to {\f1\fs20 true}, the outgoing values won't be emitted within a {\f1\fs20 "result":[...]} JSON array, but via a {\f1\fs20 "result":\{... \}} JSON object, with the {\f1\fs20 var/out} parameter names as object fields, and {\f1\fs20 "Result":} for a function result:
 $ {"result":{"Result":{"Real":-18,"Imaginary":-27}}}
-Both contents fulfill perfectly standard JSON declarations, so can be generated and consumed directly in any @*AJAX@ client. The {\f1\fs20 TServiceFactoryServer. ResultAsJSONObject} option make it even easier to consume {\i mORMot} services, since all outgoing values will be named in the {\f1\fs20 "result":} JSON object.
+The {\f1\fs20 TServiceFactoryServer.ResultAsJSONObjectWithoutResult} property may be used to avoid the main {\f1\fs20 "Result":} object.
+Instead of this JSON array content, returned by default:
+!GET root/Calculator/Add?n1=1&n2=2
+! ...
+!{"result":[3]}
+The following JSON will be returned if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} is {\f1\fs20 true}:
+!GET root/Calculator/Add?n1=1&n2=2
+! ...
+!{"result":{"Result":3}}
+Or, if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObjectWithoutResult} is {\f1\fs20 true}:
+!GET root/Calculator/Add?n1=1&n2=2
+! ...
+!{"Result":3}
+All those JSON array or object contents fulfill perfectly standard JSON declarations, so can be generated and consumed directly by any @*AJAX@ client. The {\f1\fs20 TServiceFactoryServer. ResultAsJSONObject} option make it even easier to consume {\i mORMot} services, since all outgoing values will be named in the {\f1\fs20 "result":} JSON object.
 :     Returning raw JSON content
 By default, if you want to transmit a JSON content with interface-based services, using a {\f1\fs20 RawUTF8} will convert it to a JSON string. Therefore, any JSON special characters (like {\f1\fs20 "} or {\f1\fs20 \\} or {\f1\fs20 [}) will be escaped. This will slow down the process on both server and client side, and increase transmission bandwidth.
 For instance, if you define such a method:
@@ -10575,7 +10600,7 @@ On the client side, you may encounter the following {\f1\fs20 EInterfaceFactoryE
 |missing or invalid value|a returned string or numerical value is not valid JSON content
 |%
 :    Returning content as XML
-By default, interface-based services of a {\i mORMot} server will always return a JSON array (or a JSON object, if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} is {\f1\fs20 true}).
+By default, interface-based services of a {\i mORMot} server will always return a JSON array. But you may  (or a JSON object, if {\f1\fs20 TServiceFactoryServer.ResultAsJSONObject} or {\f1\fs20 ResultAsJSONObjectWithoutResult} is {\f1\fs20 true}).
 With some kind of clients (e.g. if they are made by a third party), it could be useful to return @**XML@ content instead.
 Your {\i mORMot} server is able to let its interface-based services return XML context instead, or in addition to the default JSON format.
 :     Always return XML content
@@ -10584,10 +10609,6 @@ Instead of this JSON array content, returned by default:
 !GET root/Calculator/Add?n1=1&n2=2
 ! ...
 !{"result":[3]}
-or this JSON object, if {\f1\fs20 ServiceFactoryServer.ResultAsJSONObject} is {\f1\fs20 true}:
-!GET root/Calculator/Add?n1=1&n2=2
-! ...
-!{"result":{"Result":3}}
 The following XML will be returned if {\f1\fs20 TServiceFactoryServer.ResultAsXMLObject} is {\f1\fs20 true}:
 !GET root/Calculator/Add?n1=1&n2=2
 ! ...
