@@ -452,6 +452,7 @@ type
   protected
     fSettings: TDDDSocketThreadSettings;
     fMonitoring: TDDDSocketThreadMonitoring;
+    fPreviousMonitorTix: Int64;
     fSocket: IDDDSocket;
     fPerformConnection: boolean;
     fHost, fPort: SockString;
@@ -470,6 +471,7 @@ type
     procedure InternalExecuteDisconnect; virtual;
     procedure InternalExecuteIdle; virtual;
     procedure InternalExecuteSocket; virtual; abstract; // process FSocketInputBuffer
+    procedure InternalLogMonitoring; virtual;
   public
     /// initialize the thread for a given REST instance
     constructor Create(aSettings: TDDDSocketThreadSettings; aRest: TSQLRest;
@@ -964,9 +966,8 @@ begin
 end;
 
 procedure TDDDSocketThread.InternalExecute;
-var PreviousMonitorTix: Int64;
 begin
-  PreviousMonitorTix := GetTickCount64;
+  fPreviousMonitorTix := GetTickCount64;
   try
     repeat
       if fMonitoring.State=tpsConnected then
@@ -977,8 +978,8 @@ begin
       if Terminated then
         break;
       try
-        if Elapsed(PreviousMonitorTix,fSettings.MonitoringLogInterval) then
-          FLog.Log(sllMonitoring,'%',[FMonitoring],Self);
+        if Elapsed(fPreviousMonitorTix,fSettings.MonitoringLogInterval) then
+          InternalLogMonitoring;
         InternalExecuteIdle;
       except
         on E: Exception do
@@ -1007,6 +1008,14 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+procedure TDDDSocketThread.InternalLogMonitoring;
+var flushed: integer;
+begin // CachedMemory method will also purge any outdated cached entries
+  FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',
+    [FMonitoring,fRest.CacheOrNil.CachedMemory(@flushed)],Self);
+  fPreviousMonitorTix := GetTickCount64;
 end;
 
 function TDDDSocketThread.StatsAsJson: RawUTF8;

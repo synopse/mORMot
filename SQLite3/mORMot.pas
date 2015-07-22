@@ -11575,7 +11575,7 @@ type
   // - this caching will be located at the TSQLRest level, that is no automated
   // synchronization is implemented between TSQLRestClient and TSQLRestServer:
   // you shall ensure that your code won't fail due to this restriction
-  TSQLRestCache = class(TObject)
+  TSQLRestCache = class
   protected
     fRest: TSQLRest;
     /// fCache[] follows fRest.Model.Tables[] array: one entry per TSQLRecord
@@ -11642,7 +11642,7 @@ type
     function CachedEntries: cardinal;
     /// returns the memory used by JSON serialization records within this cache
     // - this method will also flush any outdated entries in the cache
-    function CachedMemory: cardinal;
+    function CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
     /// read-only access to the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
   public { TSQLRest low level methods which are not to be called usualy: }
@@ -12513,6 +12513,7 @@ type
       const BoundsSQLWhere: array of const): boolean; overload;
 
     /// access the internal caching parameters for a given TSQLRecord
+    // - will always return a TSQLRestCache instance, creating one if needed
     // - purpose of this caching mechanism is to speed up retrieval of some
     // common values at either Client or Server level (like configuration settings)
     // - by default, this CRUD level per-ID cache is disabled
@@ -12528,6 +12529,10 @@ type
     // overloaded methods on purpose: better no cache than unproper cache -
     // "premature optimization is the root of all evil"
     property Cache: TSQLRestCache read GetCache;
+    /// access the internal caching parameters for a given TSQLRecord
+    // - would return nil if no TSQLRestCache instance has been defined
+    function CacheOrNil: TSQLRestCache;
+      {$ifdef HASINLINE}inline;{$endif}
 
     /// get a blob field content from its record ID and supplied blob field name
     // - implements REST GET collection with a supplied member ID and a blob field name
@@ -31001,6 +31006,13 @@ begin
   end;
 end;
 
+function TSQLRest.CacheOrNil: TSQLRestCache;
+begin
+  if self=nil then
+    result := nil else
+    result := fCache;
+end;
+
 function TSQLRest.CacheWorthItForTable(aTableIndex: cardinal): boolean;
 begin
   result := true; // always worth caching by default
@@ -31238,23 +31250,27 @@ begin
       end;
 end;
 
-function TSQLRestCache.CachedMemory: cardinal;
+function TSQLRestCache.CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
 var i,j: integer;
     tix: Int64;
 begin
   result := 0;
-  if self=nil then
-    exit;
-  tix := GetTickCount64;
+  if FlushedEntriesCount<>nil then
+    FlushedEntriesCount^ := 0;
+  if self<>nil then
   for i := 0 to high(fCache) do
     with fCache[i] do
-    if CacheEnable then begin
+    if CacheEnable and (Count>0) then begin
+      tix := GetTickCount64-TimeOutMS;
       Mutex.Lock;
       try
         for j := Count-1 downto 0 do
           if Values[j].TimeStamp64<>0 then begin
-            if (TimeOutMS<>0) and (tix>Values[j].TimeStamp64+TimeOutMS) then
-              FlushCacheEntry(j) else
+            if (TimeOutMS<>0) and (tix>Values[j].TimeStamp64) then begin
+              FlushCacheEntry(j);
+              if FlushedEntriesCount<>nil then
+                inc(FlushedEntriesCount^);
+            end else
               inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
         end;
       finally
@@ -31319,13 +31335,13 @@ begin
 end;
 
 function TSQLRestCache.SetCache(aTable: TSQLRecordClass; aID: TID): boolean;
-var i: integer;
+var i: cardinal;
 begin
   result := false;
   if (self=nil) or (aTable=nil) or (aID<=0) then
     exit;
   i := Rest.Model.GetTableIndex(aTable);
-  if i>=Length(fCache) then
+  if i>=cardinal(Length(fCache)) then
     exit;
   if Rest.CacheWorthItForTable(i) then
     fCache[i].SetCache(aID);
@@ -31333,13 +31349,14 @@ begin
 end;
 
 function TSQLRestCache.SetCache(aTable: TSQLRecordClass; const aIDs: array of TID): boolean;
-var i,j: integer;
+var i: cardinal;
+    j: integer;
 begin
   result := false;
   if (self=nil) or (aTable=nil) or (length(aIDs)=0) then
     exit;
   i := Rest.Model.GetTableIndex(aTable);
-  if i>=Length(fCache) then
+  if i>=cardinal(Length(fCache)) then
     exit;
   if Rest.CacheWorthItForTable(i) then
     for j := 0 to high(aIDs) do
@@ -35734,8 +35751,14 @@ var s,i: integer;
 begin
   Stats.ComputeDetailsTo(W);
   W.CancelLastChar('}');
+  if fCache<>nil then begin
+    W.AddShort(',"cachedMemoryBytes":');
+    W.AddU(fCache.CachedMemory); // will also flush outdated JSON
+    W.Add(',');
+  end;
   withall := Ctxt.InputExists['withall'];
   if withall or Ctxt.InputExists['withtables'] then begin
+    W.CancelLastComma;
     W.AddShort(',"tables":[');
     for i := 0 to fModel.TablesMax do begin
       W.Add('{"%":[',[fModel.TableProps[i].Props.SQLTableName]);
