@@ -4222,6 +4222,10 @@ type
     // - if the array is not sorted, returns -1 and wasAdded^=false
     // - is just a wrapper around FastLocateSorted+FastAddSorted
     function FastLocateOrAddSorted(const Elem; wasAdded: PBoolean=nil): integer;
+    /// delete a sorted element value at the proper place
+    // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
+    // this method with a FastLocateSorted/FastAddSorted array 
+    procedure FastDeleteSorted(Index: Integer);
     /// will reverse all array elements, in place
     procedure Reverse;
     /// sort the dynamic array elements using a lookup array of indexes
@@ -8040,14 +8044,14 @@ function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal=1;
 function GotoNextJSONPropName(P: PUTF8Char): PUTF8Char;
 
 /// reach the position of the next JSON object of JSON array
-// - first char is expected to be either '[' either '{' with default EndChar=#0
+// - first char is expected to be either '[' or '{' with default EndChar=#0
 // - or you can specify ']' or '}' as the expected EndChar
 // - will return nil in case of parsing error or unexpected end (#0)
 // - will return the next character after ending ] or } - i.e. may be , } ]
 function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
 
 /// reach the position of the next JSON object of JSON array
-// - first char is expected to be either '[' either '{'
+// - first char is expected to be either '[' or '{'
 // - this version expects a maximum position in PMax: it may be handy to break
 // the parsing for HUGE content - used e.g. by JSONArrayCount(P,PMax)
 // - will return nil in case of parsing error or if P reached PMax limit
@@ -36600,7 +36604,7 @@ begin
           n := result-1;
       until L>n;
     end else
-      // array is not sorted -> use iterating search
+      // array is very small, or not sorted -> use iterating search
       for result := 0 to n do
         if fCompare(P^,Elem)=0 then
           exit else
@@ -36644,6 +36648,12 @@ procedure TDynArray.FastAddSorted(Index: Integer; const Elem);
 begin
   Insert(Index,Elem);
   fSorted := true; // Insert -> SetCount -> fSorted := false
+end;
+
+procedure TDynArray.FastDeleteSorted(Index: Integer);
+begin
+  Delete(Index);
+  fSorted := true; // Delete -> SetCount -> fSorted := false
 end;
 
 function TDynArray.FastLocateOrAddSorted(const Elem; wasAdded: PBoolean): integer;
