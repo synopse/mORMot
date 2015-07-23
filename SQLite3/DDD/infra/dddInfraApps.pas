@@ -1012,10 +1012,10 @@ begin
 end;
 
 procedure TDDDSocketThread.InternalLogMonitoring;
-var flushed: integer;
+var cached,flushed: integer;
 begin // CachedMemory method will also purge any outdated cached entries
-  FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',
-    [FMonitoring,fRest.CacheOrNil.CachedMemory(@flushed),flushed],Self);
+  cached := fRest.CacheOrNil.CachedMemory(@flushed);
+  FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',[FMonitoring,cached,flushed],Self);
   fPreviousMonitorTix := GetTickCount64;
 end;
 

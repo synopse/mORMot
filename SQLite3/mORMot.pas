@@ -29400,6 +29400,7 @@ begin
   fBatch.Free; // full reset for SetExpandedJSONWriter 
   fBatch := TJSONSerializer.CreateOwnedStream;
   fBatch.Expand := true;
+  FillZero(fBatchFields);
   fBatchCount := 0;
   fAddCount := 0;
   fUpdateCount := 0;
