@@ -580,6 +580,7 @@ var name,param: RawUTF8;
       msg := FormatUTF8('Error % "%" occured with',
         [GetLastError,SysErrorMessage(GetLastError)]);
       TextColor(ccLightRed);
+      ExitCode := 1; // notify error to caller batch
     end;
     msg := FormatUTF8('% "%" (%) on Service "%"',
       [msg,param,cmdText,fSettings.ServiceName]);
@@ -605,12 +606,13 @@ begin
     name := StringToUTF8(fSettings.ServiceDisplayName);
     if name='' then // perhaps the settings file is still void
       name := ExeVersion.ProgramName;
+    if ExeVersion.Version.Version32<>0 then
+      name := name+' '+ExeVersion.Version.Detailed;
     writeln(#10' ',name);
     writeln(StringOfChar('-',length(name)+2));
-    if fSettings.Description<>'' then begin
-      TextColor(ccGreen);
+    TextColor(ccGreen);
+    if fSettings.Description<>'' then
       writeln(fSettings.Description);
-    end;
     if GlobalCopyright<>'' then
       writeln('(c)',CurrentYear,' ',GlobalCopyright);
     writeln;
