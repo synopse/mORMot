@@ -36876,6 +36876,7 @@ var EndOfObject: AnsiChar;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
     CurrentContext: TSQLRestServerURIContext;
+
   procedure PerformAutomaticCommit;
   var i: integer;
   begin
@@ -36899,6 +36900,7 @@ var EndOfObject: AnsiChar;
       not CurrentContext.Call.RestAccessRights^.CanExecuteORMWrite(
         URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
   end;
+  
 {$ifdef WITHLOG}
 var Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -36966,71 +36968,103 @@ begin
       if RunStatic=nil then
         RunningRest := self else
         RunningRest := RunStatic;
-      if Count>=length(Results) then
-        SetLength(Results,Count+256+Count shr 3);
-      Results[Count] := HTML_NOTMODIFIED;
-      // get CRUD method (ignoring @ char if appended after method name)
+      // get CRUD method and associated Value/ID
       case IdemPCharArray(Method,['POST','PUT','DELETE']) of
-        0: URIMethod := mPOST;
-        1: URIMethod := mPUT;
-        2: URIMethod := mDELETE
-        else URIMethod := mNone;
+        // IdemPCharArray() will ignore '@' char if appended after method name
+        0: begin
+          // '{"Table":[...,"POST",{object},...]}' or '[...,"POST@Table",{object},...]'
+          URIMethod := mPOST;
+          Value := JSONGetObject(Sent,@ID,EndOfObject,true);
+          if Sent=nil then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
+          if IsNotAllowed then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST/Add not allowed on %',
+              [self,RunTable]);
+          if not RecordCanBeUpdated(RunTable,ID,seAdd,@ErrMsg)  then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST impossible: %',
+              [self,ErrMsg]);
+        end;
+        1: begin
+          // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
+          URIMethod := mPUT;
+          Value := JSONGetObject(Sent,@ID,EndOfObject,false);
+          if (Sent=nil) or (Value='') or (ID<=0) then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);
+          if IsNotAllowed then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: PUT/Update not allowed on %',
+              [self,RunTable]);
+        end;
+        2: begin
+          // '{"Table":[...,"DELETE",ID,...]}' or '[...,"DELETE@Table",ID,...]'
+          URIMethod := mDELETE;
+          ID := GetInt64(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
+          if (ID<=0) or wasString then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
+          if IsNotAllowed then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE not allowed on %',
+              [self,RunTable]);
+          if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
+            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE impossible: "%"',
+              [self,ErrMsg]);
+        end;
+        else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
+          [self,Method]);
       end;
-      // handle auto-committed transaction process
-      if AutomaticTransactionPerRow>0 then begin
-        if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
-          PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
-        inc(RowCountForCurrentTransaction);
-        if RunTableTransactions[RunTableIndex]=nil then
-          // initiate transaction for this table if not started yet
-          if (RunStatic<>nil) or not RunMainTransaction then begin
-            timeoutTix := GetTickCount64+2000;
-            repeat
-              if RunningRest.TransactionBegin(RunTable, // acquire transaction
-                   CONST_AUTHENTICATION_NOT_USED) then begin
-                RunTableTransactions[RunTableIndex] := RunningRest;
-                if RunStatic=nil then
-                  RunMainTransaction := true;
-                Break;
-              end;
-              if GetTickCount64>timeoutTix then
-                raise EORMBatchException.CreateUTF8(
-                  '%.EngineBatchSend: %.TransactionBegin timeout',[self,RunningRest]);
-              SleepHiRes(1); // retry in 1 ms
-            until false;
-          end;
-      end;
-      // handle batch pending request sending (if table or method changed)
-      if (RunningBatchRest<>nil) and
-         ((RunTable<>RunningBatchTable) or (RunningBatchURIMethod<>URIMethod)) then begin
-        RunningBatchRest.InternalBatchStop; // send pending statements
-        RunningBatchRest := nil;
-        RunningBatchTable := nil;
-      end;
-      if (RunStatic<>nil) and (RunStatic<>RunningBatchRest) and
-         RunStatic.InternalBatchStart(URIMethod,batchOptions) then begin
-        RunningBatchRest := RunStatic;
-        RunningBatchTable := RunTable;
-        RunningBatchURIMethod := URIMethod;
-      end else
-      if (RunningBatchRest=nil) and (RunStatic=nil) and
-         InternalBatchStart(URIMethod,batchOptions) then begin
-        RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
-        RunningBatchTable := RunTable;
-        RunningBatchURIMethod := URIMethod;
+      if (Count=0) and (EndOfObject=']') then begin
+        // single operation do not need a transaction nor InternalBatchStart/Stop
+        AutomaticTransactionPerRow := 0;
+        SetLength(Results,1);
+      end else begin
+        // handle auto-committed transaction process
+        if AutomaticTransactionPerRow>0 then begin
+          if RowCountForCurrentTransaction=AutomaticTransactionPerRow then
+            PerformAutomaticCommit; // reached AutomaticTransactionPerRow chunk
+          inc(RowCountForCurrentTransaction);
+          if RunTableTransactions[RunTableIndex]=nil then
+            // initiate transaction for this table if not started yet
+            if (RunStatic<>nil) or not RunMainTransaction then begin
+              timeoutTix := GetTickCount64+2000;
+              repeat
+                if RunningRest.TransactionBegin(RunTable, // acquire transaction
+                     CONST_AUTHENTICATION_NOT_USED) then begin
+                  RunTableTransactions[RunTableIndex] := RunningRest;
+                  if RunStatic=nil then
+                    RunMainTransaction := true;
+                  Break;
+                end;
+                if GetTickCount64>timeoutTix then
+                  raise EORMBatchException.CreateUTF8(
+                    '%.EngineBatchSend: %.TransactionBegin timeout',[self,RunningRest]);
+                SleepHiRes(1); // retry in 1 ms
+              until false;
+            end;
+        end;
+        // handle batch pending request sending (if table or method changed)
+        if (RunningBatchRest<>nil) and
+           ((RunTable<>RunningBatchTable) or (RunningBatchURIMethod<>URIMethod)) then begin
+          RunningBatchRest.InternalBatchStop; // send pending statements
+          RunningBatchRest := nil;
+          RunningBatchTable := nil;
+        end;
+        if (RunStatic<>nil) and (RunStatic<>RunningBatchRest) and
+           RunStatic.InternalBatchStart(URIMethod,batchOptions) then begin
+          RunningBatchRest := RunStatic;
+          RunningBatchTable := RunTable;
+          RunningBatchURIMethod := URIMethod;
+        end else
+        if (RunningBatchRest=nil) and (RunStatic=nil) and
+           InternalBatchStart(URIMethod,batchOptions) then begin
+          RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
+          RunningBatchTable := RunTable;
+          RunningBatchURIMethod := URIMethod;
+        end;
+        if Count>=length(Results) then
+          SetLength(Results,Count+256+Count shr 3);
       end;
       // process CRUD method operation
+      Results[Count] := HTML_NOTMODIFIED;
       case URIMethod of
-      mDELETE: begin // '{"Table":[...,"DELETE",ID,...]}' or '[...,"DELETE@Table",ID,...]'
-        ID := GetInt64(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
-        if (ID<=0) or wasString then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
-        if IsNotAllowed then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE not allowed on %',
-            [self,RunTable]);
-        if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE impossible: "%"',
-            [self,ErrMsg]);
+      mDELETE: begin
         OK := EngineDelete(RunTableIndex,ID);
         if OK then begin
           if fCache<>nil then
@@ -37040,28 +37074,13 @@ begin
             Results[Count] := HTML_SUCCESS; // 200 OK
         end;
       end;
-      mPOST: begin // '{"Table":[...,"POST",{object},...]}' or '[...,"POST@Table",{object},...]'
-        Value := JSONGetObject(Sent,@ID,EndOfObject,true);
-        if Sent=nil then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
-        if IsNotAllowed then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST/Add not allowed on %',
-            [self,RunTable]);
-        if not RecordCanBeUpdated(RunTable,ID,seAdd,@ErrMsg)  then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST impossible: %',
-            [self,ErrMsg]);
+      mPOST: begin
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
         if (ID<>0) and (fCache<>nil) then
           fCache.Notify(RunTableIndex,ID,Value,soInsert);
       end;
-      mPUT: begin // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
-        Value := JSONGetObject(Sent,@ID,EndOfObject,false);
-        if (Sent=nil) or (Value='') or (ID<=0) then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);
-        if IsNotAllowed then
-          raise EORMBatchException.CreateUTF8('%.EngineBatchSend: PUT/Update not allowed on %',
-            [self,RunTable]);
+      mPUT: begin
         OK := EngineUpdate(RunTableIndex,ID,Value);
         if OK then begin
           Results[Count] := HTML_SUCCESS; // 200 OK
