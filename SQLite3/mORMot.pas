@@ -13174,7 +13174,7 @@ type
   // - if the function returns nil, default Server.SQLAuthUserClass.Create()
   // methods won't be called, and the user will be reported as not found
   TOnAuthenticationUserRetrieve = function(Sender: TSQLRestServerAuthentication;
-    Ctxt: TSQLRestServerURIContext; aUserID: TID; const aUserName: RawUTF8): TSQLAuthUser;
+    Ctxt: TSQLRestServerURIContext; aUserID: TID; const aUserName: RawUTF8): TSQLAuthUser of object;
   /// callback raised in case of authentication failure
   // - as used by TSQLRestServerURIContext.AuthenticationFailed event
   TNotifyAuthenticationFailed = procedure(Sender: TSQLRestServer;
