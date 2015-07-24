@@ -6636,6 +6636,9 @@ type
     // - see also TSQLRest.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUTF8;
        W: TJSONSerializer; Fields: TSQLFieldBits=[]);
+    /// change TDocVariantData.Options for all variant published fields
+    // - may be used to replace e.g. JSON_OPTIONS_FAST_EXTENDED by JSON_OPTIONS_FAST
+    procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions=JSON_OPTIONS_FAST);
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TFileBufferWriter); overload;
@@ -25045,9 +25048,17 @@ begin
 end;
 
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
+{$ifdef HASINLINE}
 begin
   result := Pointer(PtrInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
+{$else}
+asm
+  mov eax,[eax].TPropInfo.GetProc
+  and eax,$00ffffff
+  add eax,edx
+end;
+{$endif}
 
 function TPropInfo.SetterAddr(Instance: pointer): pointer;
 begin
@@ -27188,6 +27199,20 @@ begin
   W.Add(']');
   if FieldName<>'' then
     W.Add(',');
+end;
+
+procedure TSQLRecord.ForceVariantFieldsOptions(aOptions: TDocVariantOptions);
+var i: integer;
+begin
+  if self<>nil then
+  with RecordProps do
+  for i := 0 to Fields.Count-1 do
+    with TSQLPropInfoRTTIVariant(Fields.List[i]) do
+    if (SQLFieldType=sftVariant) and InheritsFrom(TSQLPropInfoRTTIVariant) then
+      if PropInfo.GetterIsField then
+        with _Safe(PVariant(PropInfo.GetterAddr(self))^)^ do
+          if Count>0 then
+            Options := aOptions;
 end;
 
 procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
