@@ -607,7 +607,7 @@ begin
     if name='' then // perhaps the settings file is still void
       name := ExeVersion.ProgramName;
     if ExeVersion.Version.Version32<>0 then
-      name := name+' '+ExeVersion.Version.Detailed;
+      name := FormatUTF8('% %',[name,ExeVersion.Version.Detailed]);
     writeln(#10' ',name);
     writeln(StringOfChar('-',length(name)+2));
     TextColor(ccGreen);

@@ -6058,7 +6058,8 @@ end;
 
 { TSQLDBStatement }
 
-procedure TSQLDBStatement.Bind(Param: Integer; const Data: TSQLVar; IO: TSQLDBParamInOutType);
+procedure TSQLDBStatement.Bind(Param: Integer; const Data: TSQLVar;
+  IO: TSQLDBParamInOutType);
 begin
   with Data do
   case VType of

@@ -2014,6 +2014,11 @@ procedure sqlite3InternalFree(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$end
 // - can be used to free some Delphi class instance
 procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
+/// an internal function which calls RawByteString(p) := ''
+// - can be used to free some Delphi class instance
+// - use IncreaseRawByteStringRefCount() before assigning the RawUTF8 variable
+procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
 procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 
@@ -2391,6 +2396,10 @@ type
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     procedure Bind(Param: Integer; Data: pointer; Size: integer); overload;
+    /// bind a Blob buffer to a parameter
+    // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
+    // - raise an ESQLite3Exception on any error
+    procedure BindBlob(Param: Integer; const Data: RawByteString); 
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
@@ -3444,6 +3453,12 @@ begin
   TObject(p).Free;
 end;
 
+procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+begin
+  RawByteString(p) := '';
+end;
+
+
 // supplies a CONCAT() function to process fast string concatenation
 type
   PConcatRec = ^TConcatRec;
@@ -4459,15 +4474,22 @@ begin
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; const Value: RawUTF8);
+var tmp: pointer;
 begin
+  // note that the official SQLite3 documentation is measleading:
+  // sqlite3.bind_text(Text_bytes) must EXCLUDE the null terminator, otherwise a
+  // #0 is appended to all column values -> so length(Value) is needed below
   if pointer(Value)=nil then
     // avoid to bind '' as null
-    sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,@NULCHAR,0,SQLITE_STATIC)) else
-    // note that the official SQLite3 documentation could lead into misunderstanding:
-    // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
-    // all column values -> so length(Value) is needed here
-    sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,pointer(Value),
-      length(Value),SQLITE_TRANSIENT)); // make private copy of the data
+    sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,@NULCHAR,
+      0,SQLITE_STATIC)) else begin
+    // assign RawUTF8 value by reference, to avoid memory allocation
+    tmp := nil;
+    RawByteString(tmp) := Value;
+    // sqlite3InternalFreeRawByteString will decrease RefCount
+    sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,tmp,length(Value),
+      sqlite3InternalFreeRawByteString));
+  end;
 end;
 
 procedure TSQLRequest.BindS(Param: Integer; const Value: string);
@@ -4493,6 +4515,17 @@ procedure TSQLRequest.Bind(Param: Integer; Data: pointer; Size: integer);
 begin
   sqlite3_check(RequestDB,sqlite3.bind_blob(Request,Param,Data,Size,
     SQLITE_TRANSIENT)); // make private copy of the data
+end;
+
+procedure TSQLRequest.BindBlob(Param: Integer; const Data: RawByteString);
+var tmp: pointer;
+begin
+  // assign RawByteString value by reference, to avoid memory allocation
+  tmp := nil;
+  RawByteString(tmp) := Data;
+  // sqlite3InternalFreeRawByteString will decrease RefCount
+  sqlite3_check(RequestDB,sqlite3.bind_blob(Request,Param,tmp,length(Data),
+    sqlite3InternalFreeRawByteString));
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; Data: TCustomMemoryStream);

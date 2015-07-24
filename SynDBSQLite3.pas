@@ -523,7 +523,7 @@ procedure TSQLDBSQLite3Statement.Bind(Param: Integer; Value: double;
   IO: TSQLDBParamInOutType);
 begin
   if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then
-    fBindValues[Param-1] := DoubleToStr(Value);
+    ExtendedToStr(Value,DOUBLE_PRECISION,fBindValues[Param-1]);
   fStatement.Bind(Param,Value);
 end;
 
@@ -546,7 +546,9 @@ end;
 procedure TSQLDBSQLite3Statement.BindBlob(Param: Integer;
   const Data: RawByteString; IO: TSQLDBParamInOutType);
 begin
-  BindBlob(Param,pointer(Data),length(Data),IO);
+  if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then
+    fBindValues[Param-1] := '*BLOB*';
+  fStatement.BindBlob(Param,Data);
 end;
 
 procedure TSQLDBSQLite3Statement.BindCurrency(Param: Integer;
@@ -559,14 +561,8 @@ end;
 
 procedure TSQLDBSQLite3Statement.BindDateTime(Param: Integer;
   Value: TDateTime; IO: TSQLDBParamInOutType);
-var tmp: RawUTF8;
-begin
-  tmp := DateTimeToIso8601Text(Value,'T'); // see http://www.sqlite.org/lang_datefunc.html
-  if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then begin
-    fBindValues[Param-1] := tmp;
-    SetBit(pointer(fBindIsString)^,Param-1);
-  end;
-  fStatement.Bind(Param,tmp);
+begin // see http://www.sqlite.org/lang_datefunc.html
+  BindTextU(Param,DateTimeToIso8601Text(Value,'T'));
 end;
 
 procedure TSQLDBSQLite3Statement.BindNull(Param: Integer;
@@ -582,20 +578,10 @@ const
 
 procedure TSQLDBSQLite3Statement.BindTextP(Param: Integer;
   Value: PUTF8Char; IO: TSQLDBParamInOutType);
-var Len: integer;
+var V: RawUTF8;
 begin
-  Len := StrLen(Value);
-  if fBindShouldStoreValue and (cardinal(Param-1)<cardinal(fParamCount)) then begin
-    SetString(fBindValues[Param-1],PAnsiChar(Value),Len);
-    SetBit(pointer(fBindIsString)^,Param-1);
-  end;
-  if pointer(Value)=nil then
-    // avoid to bind '' as null
-    sqlite3_check(fStatement.RequestDB,
-      sqlite3.bind_text(fStatement.Request,Param,@NULCHAR,0,SQLITE_STATIC)) else
-    sqlite3_check(fStatement.RequestDB,
-      sqlite3.bind_text(fStatement.Request,Param,pointer(Value),Len,
-      SQLITE_TRANSIENT)); // make private copy of the data
+  SetString(V,PAnsiChar(Value),StrLen(Value));
+  BindTextU(Param,V);
 end;
 
 procedure TSQLDBSQLite3Statement.BindTextS(Param: Integer;

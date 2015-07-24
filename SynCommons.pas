@@ -18481,14 +18481,18 @@ end;
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8;
 var tmp: ShortString;
 begin
-  SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
+  if Value=0 then
+    result := '0' else
+    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
   var result: RawUTF8);
 var tmp: ShortString;
 begin
-  SetRawUTF8(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,Precision));
+  if Value=0 then
+    result := '0' else
+    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
 function DoubleToStr(Value: Double): RawUTF8;
@@ -18496,7 +18500,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := '0' else
-    SetString(result,PAnsiChar(@tmp[1]),ExtendedToString(tmp,Value,DOUBLE_PRECISION));
+    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,DOUBLE_PRECISION));
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;

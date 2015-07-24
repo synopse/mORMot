@@ -741,7 +741,7 @@ begin
     case Types[i] of
       sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
       sptText:    fStatement^.Bind(i+1,Values[i]);
-      sptBlob:    fStatement^.Bind(i+1,pointer(Values[i]),length(Values[i]));
+      sptBlob:    fStatement^.BindBlob(i+1,Values[i]);
       sptInteger: fStatement^.Bind(i+1,GetInt64(pointer(Values[i])));
       sptFloat:   fStatement^.Bind(i+1,GetExtended(pointer(Values[i])));
     end;
@@ -1400,7 +1400,7 @@ begin
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
       with fStatementCache.Prepare(SQL)^ do begin
-        Bind(1,pointer(BlobData),length(BlobData));
+        BindBlob(1,BlobData);
         Bind(2,aID);
         repeat
         until Step<>SQLITE_ROW; // Execute all steps of the first statement
@@ -1891,7 +1891,7 @@ begin
               ftDate, ftUTF8:
                 fStatement^.Bind(f+1,Values[f]);
               ftBlob:
-                fStatement^.Bind(f+1,pointer(Values[f]),length(Values[f]));
+                fStatement^.BindBlob(f+1,Values[f]);
               end;
             inc(prop);
             if prop=fieldCount then
