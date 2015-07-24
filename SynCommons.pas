@@ -11177,6 +11177,12 @@ procedure SetVariantNull(var Value: variant);
 function VarIsEmptyOrNull(const V: Variant): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
+// - we also discovered some issues with FPC's Variants unit, so this function
+// may be used even in end-user cross-compiler code
+function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fastcheck if a variant hold a value
 // - varEmpty, varNull or a '' string would be considered as void
 // - varBoolean=false or varDate=0 would be considered as void
@@ -32226,19 +32232,23 @@ end;
 {$endif LVCL}
 
 function VarIsEmptyOrNull(const V: Variant): Boolean;
-var VD: PVarData;
 begin
-  VD := @V;
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
+begin
   repeat
-    if VD^.VType<>varVariant or varByRef then
+    if PVarData(VarData)^.VType<>varVariant or varByRef then
       break;
-    VD := VD^.VPointer;
-    if VD=nil then begin
+    VarData := PVarData(VarData)^.VPointer;
+    if VarData=nil then begin
       result := true;
       exit;
     end;
   until false;
-  result := (VD^.VType<=varNull) or (VD^.VType=varNull or varByRef);
+  result := (PVarData(VarData)^.VType<=varNull) or
+            (PVarData(VarData)^.VType=varNull or varByRef);
 end;
 
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;

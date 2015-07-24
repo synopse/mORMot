@@ -1665,6 +1665,139 @@ const
   NULLABLE_TYPES = [sftInteger,sftBoolean,sftEnumerate,sftFloat,sftCurrency,
     sftDateTime,sftTimeLog,sftUTF8Text];
 
+/// creates a nullable integer value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableInteger = type variant
+// variable: use this function to circumvent it
+function NullableInteger(const Value: Int64): TNullableInteger;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable integer value containing null
+// - FPC does not allow direct assignment to a TNullableInteger = type variant
+// variable: use this function to circumvent it
+function NullableIntegerNull: TNullableInteger;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableInteger = type variant variant: use this
+// function to circumvent those limitations
+function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable Boolean value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableBoolean = type variant
+// variable: use this function to circumvent it
+function NullableBoolean(Value: boolean): TNullableBoolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable Boolean value containing null
+// - FPC does not allow direct assignment to a TNullableBoolean = type variant
+// variable: use this function to circumvent it
+function NullableBooleanNull: TNullableBoolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableBoolean = type variant variant: use this
+// function to circumvent those limitations
+function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable floating-point value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableFloat = type variant
+// variable: use this function to circumvent it
+function NullableFloat(const Value: double): TNullableFloat;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable Float value containing null
+// - FPC does not allow direct assignment to a TNullableFloat = type variant
+// variable: use this function to circumvent it
+function NullableFloatNull: TNullableFloat;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableFloat = type variant variant: use this
+// function to circumvent those limitations
+function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable Currency value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableCurrency = type variant
+// variable: use this function to circumvent it
+function NullableCurrency(const Value: currency): TNullableCurrency;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable Currency value containing null
+// - FPC does not allow direct assignment to a TNullableCurrency = type variant
+// variable: use this function to circumvent it
+function NullableCurrencyNull: TNullableCurrency;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableCurrency = type variant variant: use this
+// function to circumvent those limitations
+function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable TDateTime value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableDateTime = type variant
+// variable: use this function to circumvent it
+function NullableDateTime(const Value: TDateTime): TNullableDateTime;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable TDateTime value containing null
+// - FPC does not allow direct assignment to a TNullableDateTime = type variant
+// variable: use this function to circumvent it
+function NullableDateTimeNull: TNullableDateTime;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableDateTime = type variant variant: use this
+// function to circumvent those limitations
+function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable TTimeLog value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableTimeLog = type variant
+// variable: use this function to circumvent it
+function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable TTimeLog value containing null
+// - FPC does not allow direct assignment to a TNullableTimeLog = type variant
+// variable: use this function to circumvent it
+function NullableTimeLogNull: TNullableTimeLog;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableTimeLog = type variant variant: use this
+// function to circumvent those limitations
+function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable UTF-8 encoded text value from a supplied constant
+// - FPC does not allow direct assignment to a TNullableUTF8 = type variant
+// variable: use this function to circumvent it
+function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a nullable UTF-8 encoded text value containing null
+// - FPC does not allow direct assignment to a TNullableUTF8Text = type variant
+// variable: use this function to circumvent it
+function NullableUTF8TextNull: TNullableUTF8Text;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+// - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
+// direct transtyping from a TNullableUTF8Text = type variant variant: use this
+// function to circumvent those limitations
+function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 {$endif NOVARIANTS}
 
 type
@@ -19948,6 +20081,128 @@ end;
 
 
 {$ifndef NOVARIANTS}
+
+function NullableInteger(const Value: Int64): TNullableInteger;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableIntegerNull: TNullableInteger;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableBoolean(Value: boolean): TNullableBoolean;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableBooleanNull: TNullableBoolean;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableFloat(const Value: double): TNullableFloat;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableFloatNull: TNullableFloat;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableCurrency(const Value: currency): TNullableCurrency;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableCurrencyNull: TNullableCurrency;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableDateTime(const Value: TDateTime): TNullableDateTime;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableDateTimeNull: TNullableDateTime;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
+begin
+  PVariant(@result)^ := Value;
+end;
+
+function NullableTimeLogNull: TNullableTimeLog;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
+
+function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
+begin
+  VarClear(PVariant(@result)^);
+  TVarData(result).VType := varString;
+  TVarData(result).VAny := nil; // avoid GPF below
+  RawUTF8(TVarData(result).VAny) := Value;
+end;
+
+function NullableUTF8TextNull: TNullableUTF8Text;
+begin
+  VarClear(PVariant(@result)^);
+  PInteger(@result)^ := varNull;
+end;
+
+function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
+end;
+
 
 { TSQLPropInfoRTTIVariant }
 
