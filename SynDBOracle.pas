@@ -29,6 +29,7 @@ unit SynDBOracle;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Adam Siwon (asiwon)
   - richard6688
   - mpv
 
@@ -190,6 +191,10 @@ type
   /// wrapper to an array of TOracleDate items
   TOracleDateArray = array[0..(maxInt div sizeof(TOracleDate))-1] of TOracleDate;
 
+  /// event triggered when an expired password is detected
+  // - will allow to provide a new password 
+  TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): Boolean of object;
+
   /// will implement properties shared by native Oracle Client Interface connections
   TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
@@ -198,6 +203,8 @@ type
     fStatementCacheSize: integer;
     fInternalBufferSize: integer;
     fEnvironmentInitializationMode: integer;
+    fOnPasswordChanged: TNotifyEvent;
+    fOnPasswordExpired: TOnPasswordExpired;
     function GetClientVersion: RawUTF8;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
@@ -221,6 +228,7 @@ type
     /// extract the TNS listener name from a Oracle full connection string
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
     class function ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
+    procedure PasswordChanged(const ANewPassword: RawUTF8);
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
     property ClientVersion: RawUTF8 read GetClientVersion;
@@ -241,6 +249,10 @@ type
     /// the size (in bytes) of LOB prefecth
     // - is set to 4096 (4 KB) by default, but may be changed for tuned performance
     property BlobPrefetchSize: integer read fBlobPrefetchSize write fBlobPrefetchSize;
+    /// Password Expired event
+    property OnPasswordExpired: TOnPasswordExpired read FOnPasswordExpired write FOnPasswordExpired;
+    /// Password changed event
+    property OnPasswordChanged: TNotifyEvent read FOnPasswordChanged write FOnPasswordChanged;
     /// the number of prepared statements cached by OCI on the Client side
     // - is set to 30 by default
     // - only used if UseCache=true
@@ -308,6 +320,10 @@ type
     /// discard changes of a Transaction for this connection
     // - StartTransaction method must have been called before
     procedure Rollback; override;
+    /// allows to change the password of the current connected user
+    // - will first launch the OnPasswordExpired event to retrieve the new
+    // password, then change it and call OnPasswordChanged event on success
+    function PasswordChange: Boolean;
   end;
 
   /// implements a statement via the native Oracle Client Interface (OCI)
@@ -1283,7 +1299,7 @@ type
 { TSQLDBOracleLib }
 
 const
-  OCI_ENTRIES: array[0..37] of PChar = (
+  OCI_ENTRIES: array[0..38] of PChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate', 'OCIHandleAlloc', 'OCIHandleFree',
     'OCIServerAttach', 'OCIServerDetach', 'OCIAttrGet', 'OCIAttrSet',
     'OCISessionBegin', 'OCISessionEnd', 'OCIErrorGet', 'OCIStmtPrepare',
@@ -1293,7 +1309,8 @@ const
     'OCIDefineByPos', 'OCILobGetLength', 'OCILobOpen', 'OCILobRead',
     'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2', 'OCIStmtRelease',
     'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
-    'OCINumberFromInt','OCIStringAssignText', 'OCICollAppend', 'OCIBindObject');
+    'OCINumberFromInt','OCIStringAssignText', 'OCICollAppend', 'OCIBindObject',
+    'OCIPasswordChange');
 
 type
   /// direct access to the native Oracle Client Interface (OCI)
@@ -1389,6 +1406,8 @@ type
       coll: POCIColl):sword; cdecl;
     BindObject: function(bindp: POCIBind; errhp: POCIError; type_: POCIType; var pgvpp: dvoid;
       pvszsp: pub4; indpp: pdvoid; indszp: pub4):sword; cdecl;
+    PasswordChange: function(svchp: POCISvcCtx; errhp: POCIError; const user_name: text; usernm_len: ub4;
+      const opasswd: text; opasswd_len: ub4; const npasswd: text; npasswd_len: sb4; mode: ub4): sword; cdecl;
   public
     // the client verion numbers
     major_version, minor_version, update_num, patch_num, port_update_num: sword;
@@ -1409,6 +1428,9 @@ type
       Status: Integer; ErrorHandle: POCIError;
       InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
       {$ifdef HASINLINE} inline; {$endif}
+    procedure CheckSession(Conn: TSQLDBOracleConnection; Stmt: TSQLDBStatement;
+      Status: Integer; ErrorHandle: POCIError;
+      InfoRaiseException: Boolean=false; LogLevelNoRaise: TSynLogInfo=sllNone);
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: RawByteString); overload;
@@ -1547,6 +1569,34 @@ procedure TSQLDBOracleLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
 begin
   if Status<>OCI_SUCCESS then
     HandleError(Conn,Stmt,Status,ErrorHandle,InfoRaiseException,LogLevelNoRaise);
+end;
+
+procedure TSQLDBOracleLib.CheckSession(Conn: TSQLDBOracleConnection; Stmt: TSQLDBStatement; Status: Integer;
+  ErrorHandle: POCIError; InfoRaiseException: Boolean; LogLevelNoRaise: TSynLogInfo);
+var msg: RawUTF8;
+    tmp: array[0..3071] of AnsiChar;
+    L, ErrNum: integer;
+begin
+  if Status <> OCI_ERROR then
+    Check(Conn, Stmt, Status, ErrorHandle, InfoRaiseException, LogLevelNoRaise) else begin
+    tmp[0] := #0;
+    ErrorGet(ErrorHandle,1,nil,ErrNum,tmp,sizeof(tmp),OCI_HTYPE_ERROR);
+    L := SynCommons.StrLen(@tmp);
+    while (L>0) and (tmp[L-1]<' ') do begin
+      tmp[L-1] := #0; // trim right #10
+      dec(L);
+    end;
+    msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp,L);
+    if ErrNum = 28001 then
+      if Conn <> nil then
+        if Conn.PasswordChange then
+          Exit;
+    if LogLevelNoRaise<>sllNone then
+      SynDBLog.Add.Log(LogLevelNoRaise,msg) else
+      if Stmt=nil then
+        raise ESQLDBOracle.CreateUTF8('% error: %',[self,msg]) else
+        raise ESQLDBOracle.CreateUTF8('% error: %',[Stmt,msg]);
+  end;
 end;
 
 function TSQLDBOracleLib.ClientRevision: RawUTF8;
@@ -1785,6 +1835,13 @@ begin
   result := TSQLDBOracleConnection.Create(self);
 end;
 
+procedure TSQLDBOracleConnectionProperties.PasswordChanged(const ANewPassword: RawUTF8);
+begin
+  fPassWord := ANewPassword;
+  SynDBLog.Add.Log(sllDB, 'Password to database account was changed.');
+  if Assigned(FOnPasswordChanged) then
+    FOnPasswordChanged(Self);
+end;
 
 { TSQLDBOracleConnection }
 
@@ -1845,7 +1902,7 @@ begin
       mode := OCI_DEFAULT;
     if Props.UserID='SYS' then
       mode := mode or OCI_SYSDBA;
-    Check(self,nil,SessionBegin(fContext,fError,fSession,OCI_CRED_RDBMS,mode),fError);
+    CheckSession(self,nil,SessionBegin(fContext,fError,fSession,OCI_CRED_RDBMS,mode),fError);
     Check(self,nil,TypeByName(fEnv,fError,fContext,Pointer(type_owner_name),length(type_owner_name),
       Pointer(type_NymberListName),length(type_NymberListName),nil,0,OCI_DURATION_SESSION,OCI_TYPEGET_HEADER,
       fType_numList),fError);
@@ -1975,6 +2032,22 @@ begin
       result := nil;
     end;
   end;
+end;
+
+function TSQLDBOracleConnection.PasswordChange: Boolean;
+var password: RawUTF8;
+begin
+  Result := False;
+  if Properties is TSQLDBOracleConnectionProperties then
+    if Assigned(TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired) then begin
+      password := Properties.PassWord;
+      if TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired(Self, password) then
+        OCI.Check(Self, nil, OCI.PasswordChange(fContext, fError, pointer(Properties.UserID),
+          Length(Properties.UserID), Pointer(Properties.PassWord), Length(Properties.PassWord),
+          Pointer(password), Length(password), OCI_DEFAULT or OCI_AUTH), fError);
+        TSQLDBOracleConnectionProperties(Properties).PasswordChanged(password);
+      Result := True;
+    end;
 end;
 
 procedure TSQLDBOracleConnection.Rollback;
