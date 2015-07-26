@@ -12826,6 +12826,12 @@ procedure TextBackground(Color: TConsoleColor);
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
 
+/// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
+// - under Windows, will use the OEM_CHARSET encoding
+// - under Linux, will expect the console is defined with UTF-8 encoding
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
+  {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
 /// could be used in the main program block of a console application to
 // handle unexpected fatal exceptions
 // - typical use may be:
@@ -42685,6 +42691,15 @@ end;
 
 {$endif MSWINDOWS}
 
+function Utf8ToConsole(const S: RawUTF8): RawByteString; overload;
+begin
+  {$ifdef MSWINDOWS}
+  result := TSynAnsiConvert.Engine(OEM_CHARSET).UTF8ToAnsi(S);
+  {$else}
+  result := S;
+  {$endif}
+end;
+
 {$I-}
 procedure ConsoleShowFatalException(E: Exception);
 begin
@@ -42694,7 +42709,7 @@ begin
   TextColor(ccWhite);
   write(E.ClassName);
   TextColor(ccLightRed);
-  Writeln(' raised with message:'#13#10' ',E.Message);
+  Writeln(' raised with message:'#13#10' ',UTF8ToConsole(StringToUTF8(E.Message)));
   TextColor(ccLightGray);
   writeln(#13#10'Program will now abort');
   {$ifndef LINUX}
@@ -42705,6 +42720,7 @@ begin
   ioresult;
 end;
 {$I+}
+
 
 
 { ************ Unit-Testing classes and functions }
