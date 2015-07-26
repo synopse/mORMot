@@ -2016,7 +2016,10 @@ procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl
 
 /// an internal function which calls RawByteString(p) := ''
 // - can be used to free some Delphi class instance
-// - use IncreaseRawByteStringRefCount() before assigning the RawUTF8 variable
+// - use a local tmp: pointer variable to prepare the reference count, e.g.
+// !  tmp := nil;
+// !  RawUTF8(tmp) := Text; // fast COW assignment
+// !  sqlite3.result_text(Context,tmp,length(Text)+1,sqlite3InternalFreeRawByteString);
 procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
@@ -2032,6 +2035,8 @@ procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);
 function SQLVarToSQlite3Context(const Res: TSQLVar; Context: TSQLite3FunctionContext): boolean;
 
 /// set a UTF-8 string into a SQlite3 result context
+// - this function will use copy-on-write assignment of Text, with no memory
+// allocation, then let sqlite3InternalFreeRawByteString release its reference count
 procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context: TSQLite3FunctionContext;
   VoidTextAsNull: boolean);
 
@@ -2385,6 +2390,8 @@ type
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
+    // - this function will use copy-on-write assignment of Value, with no memory
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
     procedure Bind(Param: Integer; const Value: RawUTF8); overload;
     /// bind a generic VCL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
@@ -2399,6 +2406,8 @@ type
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
+    // - this function will use copy-on-write assignment of Data, with no memory
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
     procedure BindBlob(Param: Integer; const Data: RawByteString); 
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
@@ -3416,7 +3425,19 @@ begin // implements the MOD() function, just like Oracle and others
   A2 := sqlite3.value_int64(argv[1]);
   if A2=0 then // avoid computation exception, returns NULL
     sqlite3.result_null(Context) else
-    sqlite3.result_int64(Context, A1 mod A2);
+    sqlite3.result_int64(Context,A1 mod A2);
+end;
+
+procedure InternalTimeLog(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+var TimeLog: TTimeLogBits;
+begin
+  if argc<>1 then begin
+    ErrorWrongNumberOfArgs(Context);
+    exit;
+  end;
+  TimeLog.Value := sqlite3.value_int64(argv[0]);
+  RawUTF8ToSQlite3Context(TimeLog.Text(True,'T'),Context,false);
 end;
 
 procedure InternalRank(Context: TSQLite3FunctionContext;
@@ -3561,12 +3582,16 @@ end;
 
 procedure RawUTF8ToSQlite3Context(const Text: RawUTF8; Context: TSQLite3FunctionContext;
   VoidTextAsNull: boolean);
+var tmp: pointer;
 begin
   if Text='' then
     if VoidTextAsNull then
       sqlite3.result_null(Context) else
-      sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else
-   sqlite3.result_text(Context,Pointer(Text),length(Text)+1,SQLITE_TRANSIENT);
+      sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else begin
+      tmp := nil;
+      RawUTF8(tmp) := Text; // fast COW assignment
+      sqlite3.result_text(Context,tmp,length(Text)+1,sqlite3InternalFreeRawByteString);
+    end;
 end;
 
 {$ifndef NOVARIANTS}
@@ -4273,6 +4298,8 @@ begin
   sqlite3.create_collation(DB,'WIN32NOCASE',SQLITE_UTF16,nil,Utf16SQLCompNoCase);
   // register the MOD() user function, similar to the standard % operator
   sqlite3.create_function(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil);
+  // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
+  sqlite3.create_function(DB,'TIMELOG',1,SQLITE_ANY,nil,InternalTimeLog,nil,nil);
   // some user functions
   sqlite3.create_function(DB,'SOUNDEX',1,SQLITE_UTF8,nil,InternalSoundex,nil,nil);
   sqlite3.create_function(DB,'SOUNDEXFR',1,SQLITE_UTF8,nil,InternalSoundexFr,nil,nil);
