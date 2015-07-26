@@ -6857,6 +6857,10 @@ type
     // ready to be stored as JSON, according to a given private key
     class function ComputePassword(const PlainPassword: RawUTF8;
       CustomKey: cardinal=0): RawUTF8;
+    /// this class method could be used to decrypt a password, stored as JSON,
+    // according to a given private key
+    class function ComputePlainPassword(const CypheredPassword: RawUTF8;
+      CustomKey: cardinal=0): RawUTF8;
     /// low-level function used to identify if a given field is a Password
     // - this method is used e.g. by TJSONSerializer.WriteObject to identify the
     // password field, since its published name is set by the inherited classes
@@ -41909,6 +41913,20 @@ begin
     instance.Key := CustomKey;
     instance.SetPassWordPlain(PlainPassword);
     result := instance.fPassWord;
+  finally
+    instance.Free;
+  end;
+end;
+
+class function TSynPersistentWithPassword.ComputePlainPassword(const CypheredPassword: RawUTF8;
+  CustomKey: cardinal): RawUTF8;
+var instance: TSynPersistentWithPassword;
+begin
+  instance := TSynPersistentWithPassword.Create;
+  try
+    instance.Key := CustomKey;
+    instance.fPassWord := CypheredPassword;
+    result := instance.GetPassWordPlain;
   finally
     instance.Free;
   end;
