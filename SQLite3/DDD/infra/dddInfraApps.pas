@@ -245,6 +245,10 @@ type
     property Client: TDDDRestClient read fClient;
   end;
 
+/// create a client safe asynchronous connection to a IAdministratedDaemon service
+function AdministratedDaemonClient(const Server,Port: AnsiString;
+  const RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8): TSQLHttpClientWebsockets;
+
 
 { ----- Implements Thread Processing to access a TCP server }
 
@@ -1337,7 +1341,7 @@ end;
 function TDDDRestClientSettings.NewRestClientInstance(
   aRootSettings: TDDDAppSettingsFile; aModel: TSQLModel;
   aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
-var pass,error: RawUTF8;
+var pass: RawUTF8;
 begin
   if aModel=nil then
     if riCreateVoidModelIfNone in aOptions then begin
@@ -1360,15 +1364,8 @@ begin
       if result=nil then
         exit; // no match or wrong parameters
       pass := fClient.PasswordPlain;
-      if pass<>'' then begin
-        error := (result as TSQLHttpClientWebsockets).WebSocketsUpgrade(pass);
-        if error='' then
-          if not result.ServerTimeStampSynchronize then
-            error := 'ServerTimeStampSynchronize';
-        if error<>'' then
-          raise EDDDRestClient.CreateUTF8('%.Create: WebSockets failure on %/% -> %',
-            [self,ORM.ServerName,aModel.Root,error]);
-      end else
+      if pass<>'' then
+        (result as TSQLHttpClientWebsockets).WebSocketsConnect(pass) else
         if not result.ServerTimeStampSynchronize then
           raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
             [self,ORM.ServerName,aModel.Root]);
@@ -1416,6 +1413,21 @@ begin
       fORM.User := 'User';
       fORM.PasswordPlain := UserPassword;
     end;
+  end;
+end;
+
+function AdministratedDaemonClient(const Server,Port: AnsiString;
+  const RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8): TSQLHttpClientWebsockets;
+begin
+ result := TSQLHttpClientWebsockets.Create(server,port,TSQLModel.Create([],RootURI));
+  try
+    result.Model.Owner := result;
+    result.SetUser(UserName,HashedPassword,true);
+    result.WebSocketsConnect(WebSocketPassword);
+    result.ServiceDefine(IAdministratedDaemon,sicShared);
+  except
+    result.Free;
+    raise;
   end;
 end;
 

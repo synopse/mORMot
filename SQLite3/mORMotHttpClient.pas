@@ -302,6 +302,11 @@ type
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
+    /// connect using a specified WebSockets protocol
+    // - this method would call WebSocketsUpgrade, then ServerTimeStampSynchronize
+    // - it therefore expects SetUser() to have been previously called 
+    function WebSocketsConnect(const aWebSocketsEncryptionKey: RawUTF8;
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
     /// internal HTTP/1.1 and WebSockets compatible client
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
@@ -815,6 +820,20 @@ begin
       result := HTML_SERVERERROR;
     end;
   end;
+end;
+
+function TSQLHttpClientWebsockets.WebSocketsConnect(
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  aWebSocketsCompression: boolean): RawUTF8;
+var error: RawUTF8;
+begin
+  error := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
+  if error='' then
+    if not ServerTimeStampSynchronize then
+      error := 'ServerTimeStampSynchronize';
+  if error<>'' then
+    raise ESecurityException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
+      [self,Server,Port,Model.Root,error]);
 end;
 
 
