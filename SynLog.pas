@@ -4278,8 +4278,7 @@ end;
 
 const
   _TSynMapSymbol = 'Name:RawUTF8 Start,Stop:integer';
-  _TSynMapUnit = 'Symbol TSynMapSymbol FileName RawUTF8 Line array of integer '+
-    'Addr array of integer';
+  _TSynMapUnit = 'Symbol:TSynMapSymbol FileName:RawUTF8 Line,Addr:TIntegerDynArray';
 
 initialization
   InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process

@@ -181,7 +181,7 @@ type
 
   /// callback event triggered by TWebSocketProtocolChat for any incoming message
   // - a first call with frame.opcode=focContinuation will take place when
-  // the connection will be upgrade to WebSockets
+  // the connection will be upgraded to WebSockets
   // - then any incoming focText/focBinary events will trigger this callback
   // - eventually, a focConnectionClose will notify the connection ending
   TOnWebSocketProtocolChatIncomingFrame =
@@ -778,7 +778,7 @@ begin
         List[i].payload := '';
         dec(Count);
         if i<Count then
-          Move(List[i+1],List[i],(Count-i)*sizeof(List[i]));
+          MoveFast(List[i+1],List[i],(Count-i)*sizeof(List[i]));
         exit;
       end;
   finally

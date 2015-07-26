@@ -31962,7 +31962,7 @@ procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
       raise ESynException.CreateUTF8('%.Parse: missing field type',[self]);
   end;
 var PropsName: TRawUTF8DynArray;
-    PropsMax, ndx, firstNdx: cardinal;
+    PropsMax, ndx, len, firstNdx: cardinal;
     Typ, ArrayTyp: TJSONCustomParserRTTIType;
     TypIdent, ArrayTypIdent: RawUTF8;
     Item: TJSONCustomParserRTTI;
@@ -32009,10 +32009,24 @@ begin
           if P=nil then
             raise ESynException.CreateUTF8('%.Parse: expected syntax is '+
               '"array of record" or "array of SimpleType"',[self]);
-          ExpectedEnd := eeEndKeyWord;
+          if ArrayTyp=ptRecord then
+            ExpectedEnd := eeEndKeyWord else
+            ExpectedEnd := eeNothing;
         end;
         ptRecord:
           ExpectedEnd := eeEndKeyWord;
+        ptCustom: begin
+          len := length(TypIdent);
+          if (len>12) and (TypIdent[1]='T') and
+             IdemPropNameUSameLen('DynArray',@PByteArray(TypIdent)[len-8],8) then begin
+            ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
+              @PByteArray(TypIdent)[1],len-9,ArrayTypIdent);
+            if ArrayTyp=ptCustom then
+              raise ESynException.CreatEUTF8('%.Parse: unknown %',[self,TypIdent]);
+            Typ := ptArray;
+          end;
+          ExpectedEnd := eeNothing;
+        end;
         else ExpectedEnd := eeNothing;
       end;
     end;
