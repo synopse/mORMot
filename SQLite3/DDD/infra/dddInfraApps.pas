@@ -743,6 +743,7 @@ constructor TDDDThreadDaemon.Create(
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  fInternalSettings := aSettings;
   with aSettings.RemoteAdmin do
     inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
   fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
@@ -772,6 +773,7 @@ constructor TDDDRestDaemon.Create(
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  fInternalSettings := aSettings;
   with aSettings.RemoteAdmin do
     inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
   fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);

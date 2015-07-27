@@ -193,7 +193,8 @@ type
 
   /// generic interface, to manage a service/daemon instance from an executable
   // - in addition to Start/Stop methods, Halt would force the whole executable
-  // to abort its execution, and SubscribeLog allows log monitoring
+  // to abort its execution, SubscribeLog allows log monitoring, and
+  // DatabaseList/DatabaseExecute remote SQL execution on one or several ORMs
   // - those methods could be published as REST (e.g. over named pipe), so that
   // a single administration daemon (installed e.g. as a Windows Service) would
   // be able to launch and monitor child processes as individual executables
@@ -205,6 +206,17 @@ type
     // - the returned Information and TCQRSResult are passed directly from
     // the Stop() method
     function Halt(out Information: variant): TCQRSResult;
+    /// returns a list of internal database names, exposed by this daemon
+    // - in practice, each database name should identify a TSQLRest instance
+    // - the database name should be supplied to DatabaseExecute() as target
+    function DatabaseList: TRawUTF8DynArray;
+    /// returns a list of tables, stored in the internal database names
+    // - the database name should match one existing in the DatabaseList
+    // - in practice, returns all TSQLRecord table of the TSQLRest instance
+    function DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray;
+    /// execute a SQL query on an internal database
+    // - the database name should match one existing in the DatabaseList
+    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
     /// used to subscribe for real-time remote log monitoring
     // - allows to track the specified log events, with a callback
     procedure SubscribeLog(const Level: TSynLogInfos; const Callback: ISynLogCallback);
@@ -766,6 +778,8 @@ type
     fStatus: TDDDAdministratedDaemonStatus;
     fFinished: TEvent;
     fRemoteLog: TSynLogCallbacks;
+    fInternalDatabases: TSQLRestDynArray;
+    fInternalSettings: TObject;
     // return TRUE e.g. if TDDDAdministratedThreadDaemon.fThread<>nil
     function InternalIsRunning: boolean; virtual; abstract;
     // should start the daemon: e.g. set TDDDAdministratedThreadDaemon.fThread
@@ -773,7 +787,10 @@ type
     // return TRUE and set Status (e.g. from monitoring info) on success
     function InternalRetrieveState(var Status: variant): boolean; virtual; abstract;
     // should end the daemon: e.g. TDDDAdministratedThreadDaemon.fThread := nil
-    procedure InternalStop; virtual; abstract;
+    procedure InternalStop; virtual;
+    // set the list of published TSQLRestInstances - InternalStop would release it
+    procedure PublishORMTables(const Rest: array of TSQLRest); virtual;
+    function PublishedORM(const DatabaseName: RawUTF8): TSQLRest;
   public
     /// initialize the administrable service/daemon
     // - aAdministrationServer.ServiceDefine(IAdministratedDaemon) will be
@@ -807,6 +824,14 @@ type
     // quit the executable
     // - returning the same output information than Stop()
     function Halt(out Information: variant): TCQRSResult; virtual;
+    /// IAdministratedDaemon command to retrieve all internal databases names
+    // - will return fInternalDatabases[].Model.Root values
+    function DatabaseList: TRawUTF8DynArray; virtual;
+    /// IAdministratedDaemon command to return the table names of an internal database
+    function DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray; virtual;
+    /// IAdministratedDaemon command to execute a SQL query on an internal database
+    // - you may override this method to implement addition "pseudo-SQL" commands
+    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON; virtual;
     /// IAdministratedDaemon command to subscribe to a set of events for
     // real-time remote monitoring of the specified log events
     procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback);
@@ -884,7 +909,6 @@ type
 
 
 implementation
-
 
 { *********** Persistence / Repository Interfaces }
 
@@ -2169,6 +2193,168 @@ begin
   fRemoteLog.Subscribe(Levels,Callback);
 end;
 
+function TDDDAdministratedDaemon.PublishedORM(const DatabaseName: RawUTF8): TSQLRest;
+var i: integer;
+begin
+  for i := 0 to high(fInternalDatabases) do begin
+    result := fInternalDatabases[i];
+    if IdemPropNameU(result.Model.Root,DatabaseName) then
+      exit;
+  end;
+  result := nil;
+end;
+
+function TDDDAdministratedDaemon.DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+var table: integer;
+    rest: TSQLRest;
+    serv: TSQLRestServer absolute rest;
+    isAjax: Boolean;
+    obj: TObject;
+    name,value,interf,method: RawUTF8;
+    doc: TDocVariantData;
+    valid: Boolean;
+    P: PUTF8Char;
+    status: variant;
+    call: TSQLRestURIParams;
+begin
+  result := '';
+  if SQL='' then
+    exit;
+  if SQL[1]='#' then
+    case IdemPCharArray(@SQL[2],['STATE','STATU','SETTINGS','VERSION','EXE']) of
+    0: begin
+      if InternalRetrieveState(status) then
+        result := VariantSaveJSON(status);
+      exit;
+    end;
+    1: begin
+      result := FormatUTF8('"%"',[GetEnumName(
+        TypeInfo(TDDDAdministratedDaemonStatus),ord(fStatus))^]);
+      exit;
+    end;
+    2: begin
+      if fInternalSettings<>nil then begin
+        if SQL[10]=' ' then begin
+          Split(copy(SQL,11,maxInt),'=',name,value);
+          if (name<>'') and (value<>'') then begin
+            VariantLoadJSON(status,pointer(value));
+            doc.InitObjectFromPath(name,status);
+            JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
+          end;
+        end;
+        result := ObjectToJSON(fInternalSettings);
+      end;
+      exit;
+    end;
+    3,4: begin
+      result := JSONEncode(['prog',ExeVersion.ProgramName,
+        'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
+        'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true)]);
+      exit;
+    end;
+    end;
+  rest := PublishedORM(DatabaseName);
+  if rest=nil then
+    exit;
+  if SQL[1]='#' then begin // pseudo SQL for a given TSQLRest[Server] instance
+    case IdemPCharArray(@SQL[2],['TIME','MODEL','REST']) of
+    0: result := Int64ToUtf8(rest.ServerTimeStamp);
+    1: result := ObjectToJSON(rest.Model);
+    2: result := ObjectToJSON(rest);
+    else if rest.InheritsFrom(TSQLRestServer) then
+      case IdemPCharArray(@SQL[2],[
+        'INTERFACES','STATS(','STATS','SERVICES','SESSIONS','GET','POST']) of
+      0: result := serv.ServicesPublishedInterfaces;
+      1: begin
+        name := copy(SQL,8,length(SQL)-8);
+        obj := serv.ServiceMethodStat[name];
+        if obj=nil then begin
+          Split(name,'.',interf,method);
+          obj := serv.Services[interf];
+          if obj<>nil then
+            obj := (obj as TServiceFactoryServer).Stat[method] else
+            obj := nil;
+        end;
+        if obj<>nil then
+          result := ObjectToJSON(obj);
+      end;
+      2: result := serv.FullStatsAsJson;
+      3: result := serv.Services.AsJson;
+      4: result := serv.SessionsAsJson;
+      5,6: begin
+        fillchar(call,SizeOf(call),0);
+        call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+        P := @SQL[2];
+        call.Method := GetNextItem(P,' ');
+        call.Url := serv.Model.Root;
+        if P<>nil then
+          call.Url := call.Url+'/'+RawUTF8(P);
+        serv.URI(call);
+        result := call.OutBody;
+      end;
+      end;
+    end;
+    exit;
+  end;
+  if isSelect(pointer(SQL)) then begin
+    isAjax := rest.InheritsFrom(TSQLRestServer) and not serv.NoAjaxJson;
+    if isAjax then
+      TSQLRestServer(rest).NoAjaxJson := true; // force smaller content
+    try
+      table := rest.Model.GetTableIndexFromSQLSelect(SQL,true);
+      if table>=0 then
+        result := rest.ExecuteJson([rest.Model.Tables[table]],SQL) else
+        rest.ExecuteJson([],SQL);
+    finally
+      if isAjax then
+        serv.NoAjaxJson := false;
+    end;
+  end else
+    rest.Execute(SQL);
+end;
+
+function TDDDAdministratedDaemon.DatabaseList: TRawUTF8DynArray;
+var i,n: integer;
+begin
+  n := length(fInternalDatabases);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := fInternalDatabases[i].Model.Root;
+end;
+
+function TDDDAdministratedDaemon.DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray;
+var rest: TSQLRest;
+    i: integer;
+begin
+  rest := PublishedORM(DatabaseName);
+  if rest=nil then
+    result := nil else
+    with rest.Model do begin
+      SetLength(result,TablesMax+1);
+      for i := 0 to TablesMax do
+        result[i] := TableProps[i].Props.SQLTableName;
+    end;
+end;
+
+procedure TDDDAdministratedDaemon.PublishORMTables(const Rest: array of TSQLRest);
+var i,n: integer;
+begin
+  SetLength(fInternalDatabases,length(Rest));
+  n := 0;
+  for i := 0 to high(Rest) do
+    if Rest[i]<>nil then begin
+      fInternalDatabases[n] := Rest[i];
+      inc(n);
+    end;
+  SetLength(fInternalDatabases,n);
+end;
+
+procedure TDDDAdministratedDaemon.InternalStop;
+begin
+  fInternalDatabases := nil;
+end;
+
+
 
 { TDDDAdministratedThreadDaemon }
 
@@ -2179,6 +2365,7 @@ end;
 
 procedure TDDDAdministratedThreadDaemon.InternalStop;
 begin
+  inherited InternalStop; // fInternalDatabases := []
   FreeAndNil(fThread); // should terminate and wait for the thread to finish
 end;
 
@@ -2192,6 +2379,7 @@ end;
 
 procedure TDDDAdministratedRestDaemon.InternalStop;
 begin
+  inherited InternalStop; // fInternalDatabases := []
   FreeAndNil(fRest);
 end;
 

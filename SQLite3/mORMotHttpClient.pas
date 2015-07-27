@@ -832,7 +832,7 @@ begin
     if not ServerTimeStampSynchronize then
       error := 'ServerTimeStampSynchronize';
   if error<>'' then
-    raise ESecurityException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
+    raise ECommunicationException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
       [self,Server,Port,Model.Root,error]);
 end;
 

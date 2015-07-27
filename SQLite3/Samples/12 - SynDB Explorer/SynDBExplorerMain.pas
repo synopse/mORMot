@@ -294,6 +294,9 @@ begin
   end;
 end;
 
+var
+  FrameID: integer;
+  
 function TDbExplorerMain.CreateFrame: TDBExplorerFrame;
 var P: TSynPage;
 begin
@@ -306,7 +309,8 @@ begin
   result.Tables := Tables;
   result.Props := Props;
   result.EditTableChange(nil);
-  result.Name := 'P'+IntToStr(GetTickCount);
+  inc(FrameID);
+  result.Name := 'P'+IntToStr(FrameID);
   P.Tag := PtrInt(result);
   Page.ActivePage := P;
   result.EditTable.SetFocus;
