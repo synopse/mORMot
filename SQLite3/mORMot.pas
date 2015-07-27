@@ -11342,6 +11342,9 @@ type
     // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
     // ICalculator 
     procedure SetInterfaceNames(out Names: TRawUTF8DynArray);
+    /// retrieve all registered Services contracts as a JSON array
+    // - i.e. a JSON array of TServiceFactory.Contract JSON objects
+    function AsJson: RawJSON;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
@@ -12950,8 +12953,7 @@ type
     /// access or initialize the internal IoC resolver, used for interface-based
     // remote services, and more generaly any Services.Resolve() call
     // - create and initialize the internal TServiceContainer if no service
-    // interface has been registered yet
-    // - may be used to inject some dependencies, which are not interface-based
+    // interface has been registered yet    // - may be used to inject some dependencies, which are not interface-based
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
@@ -45791,6 +45793,28 @@ begin
   SetLength(Names,fList.Count);
   for i := 0 to fList.Count-1 do
     Names[i] :=  TServiceFactory(fList.ObjectPtr[i]).fInterfaceURI;
+end;
+
+function TServiceContainer.AsJson: RawJSON;
+var WR: TTextWriter;
+    i: integer;
+begin
+  result := '';
+  if (self=nil) or (fList.Count=0) then
+    exit;
+  WR := TJSONSerializer.CreateOwnedStream;
+  try
+    WR.Add('[');
+    for i := 0 to fList.Count-1 do begin
+      WR.AddString(TServiceFactory(fList.ObjectPtr[i]).Contract);
+      WR.Add(',');
+    end;
+    WR.CancelLastComma;
+    WR.Add(']');
+    WR.SetText(RawUTF8(result));
+  finally
+    WR.Free;
+  end;
 end;
 
 function TServiceContainer.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
