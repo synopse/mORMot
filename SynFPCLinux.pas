@@ -55,6 +55,8 @@ interface
 {$MODE objfpc}
 {$inline on}
 {$h+}
+{$R-} // disable Range checking in our code
+{$S-} // disable Stack checking in our code
 
 {$ifdef ANDROID}
   {$define LINUX}
@@ -85,6 +87,16 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef Linux}
+
+{$ifndef DARWIN}
+const
+  CLOCK_MONOTONIC = 1;
+  CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
+
+var
+  // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
+  CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
+{$endif}
 
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64); inline;
@@ -120,6 +132,11 @@ procedure GetNowUTCSystem(var result: TSystemTime);
 
 /// a wrapper around stat() to retrieve a file size
 function GetLargeFileSize(const aFile: string): int64;
+
+var
+  /// will contain the current Linux kernel revision, as one integer
+  // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
+  KernelRevision: cardinal;
 
 {$endif Linux}
 
@@ -266,7 +283,7 @@ end;
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
-  clock_gettime(CLOCK_MONOTONIC, @tp); // exists since Linux Kernel 2.6
+  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp);
   Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_nsec div 1000000);
 end;
 
@@ -288,7 +305,7 @@ begin
   result := FIsHighResolution;
 end;
 
-{$endif}
+{$endif DARWIN}
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
@@ -354,7 +371,36 @@ begin
   SysUtils.Sleep(ms);
 end;
 
+{$ifndef DARWIN}
 
-{$endif}
+procedure GetKernelRevision;
+var uts: UtsName;
+    P: PAnsiChar;
+  function GetNext: cardinal;
+  var c: cardinal;
+  begin
+    result := 0;
+    repeat
+      c := ord(P^)-48;
+      if c>9 then
+        break else
+        result := result*10+c;
+      inc(P);
+    until false;
+    if P^='.' then
+      inc(P);
+  end;
+begin
+  fpuname(uts);
+  P := @uts.release;
+  KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
+  if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
+    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
+    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+end;
 
-end.
+initialization
+  GetKernelRevision;
+{$endif DARWIN}
+{$endif Linux}
+end.

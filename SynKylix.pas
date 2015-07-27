@@ -90,6 +90,9 @@ const
   CLOCK_MONOTONIC = 1;
   CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
 
+var
+  // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
+  CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 
 /// compatibility function, wrapping Win32 API high resolution timer
 // - this version will return the CLOCK_MONOTONIC value, with a 1 ns resolution
@@ -151,6 +154,11 @@ procedure SleepHiRes(ms: cardinal);
 
 /// similar to FPC's unix.GetHostName function
 function GetHostName: string;
+
+var
+  /// will contain the current Linux kernel revision, as one integer
+  // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
+  KernelRevision: cardinal;
 
 
 implementation
@@ -301,7 +309,7 @@ end;
 function GetTickCount64: Int64;
 var r: TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC_COARSE,r);
+  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,r);
   result := Int64(r.tv_sec)*C_THOUSAND+(cardinal(r.tv_nsec) div 1000000); // in ms
 end;
 
@@ -365,5 +373,32 @@ begin
   result := tmp;
 end;
 
+procedure GetKernelRevision;
+var uts: UtsName;
+    P: PByte;
+  function GetNext: cardinal;
+  var c: cardinal;
+  begin
+    result := 0;
+    repeat
+      c := P^-48;
+      if c>9 then
+        break else
+        result := result*10+c;
+      inc(P);
+    until false;
+    if P^=ord('.') then
+      inc(P);
+  end;
+begin
+  uname(uts);
+  P := @uts.release;
+  KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
+  if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
+    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
+    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+end;
 
+initialization
+  GetKernelRevision;
 end.
