@@ -3556,7 +3556,7 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
         1: for i := 0 to Count-1 do if PByteArray(Blob)^[i]=byte(V) then exit;
         2: for i := 0 to Count-1 do if PWordArray(Blob)^[i]=word(V) then exit;
         4: if IntegerScanExists(Blob,Count,cardinal(V)) then exit;
-        8: for i := 0 to Count-1 do if PInt64Array(Blob)^[i]=V then exit;
+        8: if Int64ScanExists(Blob,Count,V) then exit;
       end;
     end;
   end;

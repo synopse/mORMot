@@ -1584,7 +1584,7 @@ type
 
   /// server-side implementation of a remote connection to any SynDB engine
   // - implements digitally signed SynLZ-compressed binary message format,
-  // with simple symmetric encryption
+  // with simple symmetric encryption, as expected by SynDBRemote.pas
   TSQLDBRemoteConnectionProtocol = class(TSQLDBProxyConnectionProtocol)
   protected
     /// SynLZ decompression + digital signature + encryption

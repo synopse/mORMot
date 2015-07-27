@@ -13373,11 +13373,11 @@ type
   // - do not use this class, but plain TSynAuthentication
   TSynAuthenticationAbstract = class
   protected
-    fLock: TAutoLocker;
     fSessions: TIntegerDynArray;
     fSessionsCount: Integer;
     fSessionGenerator: integer;
     fTokenSeed: Int64;
+    fSafe: TSynLocker;
     function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal; virtual;
     function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; virtual; abstract;
     function GetUsersCount: integer; virtual; abstract;
@@ -35427,6 +35427,14 @@ end;
 const ICMP: array[TVariantRelationship] of integer = (0,-1,1,1);
 
 function SortDynArrayVariant(const A,B): integer;
+  procedure CompareAsString;
+  var UA,UB: RawUTF8;
+      wasString: boolean;
+  begin
+    VariantToUTF8(variant(A),UA,wasString);
+    VariantToUTF8(variant(B),UB,wasString);
+    result := StrComp(pointer(UA),pointer(UB));
+  end;
 begin
   if TVarData(A).VType=varVariant or varByRef then
     result := SortDynArrayVariant(TVarData(A).VPointer^,B) else
@@ -35446,9 +35454,15 @@ begin
       result := SortDynArrayDouble(TVarData(A).VDouble,TVarData(B).VDouble);
     varBoolean:
       result := ord(TVarData(A).VBoolean)-ord(TVarData(B).VBoolean);
-    else result := ICMP[VarCompareValue(variant(A),variant(B))];
+    else
+      if TVarData(A).VType and VTYPE_STATIC=0 then
+        result := ICMP[VarCompareValue(variant(A),variant(B))] else
+        CompareAsString;
     end else
-    result := ICMP[VarCompareValue(variant(A),variant(B))];
+    if (TVarData(A).VType and VTYPE_STATIC=0) and
+       (TVarData(B).VType and VTYPE_STATIC=0) then
+      result := ICMP[VarCompareValue(variant(A),variant(B))] else
+      CompareAsString;
 end;
 
 function SortDynArrayVariantI(const A,B): integer;
@@ -42695,6 +42709,7 @@ begin
     write(#27'[1;3') else
     write(#27'[0;3');
   write(AnsiTbl[(ord(color) and 7)+1],'m');
+  ioresult;
 end;
 {$I+}
 
@@ -42709,7 +42724,7 @@ end;
 
 {$endif MSWINDOWS}
 
-function Utf8ToConsole(const S: RawUTF8): RawByteString; overload;
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
 begin
   {$ifdef MSWINDOWS}
   result := TSynAnsiConvert.Engine(OEM_CHARSET).UTF8ToAnsi(S);
@@ -49261,14 +49276,14 @@ end;
 
 constructor TSynAuthenticationAbstract.Create;
 begin
-  fLock := TAutoLocker.Create;
+  fSafe.Init;
   fTokenSeed := GetTickCount64*PtrUInt(self)*Random(maxInt);
   fSessionGenerator := abs(fTokenSeed*PtrUInt(ClassType));
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
 begin
-  fLock.Free;
+  fSafe.Done;
   inherited;
 end;
 
@@ -49309,7 +49324,7 @@ function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8; Hash: car
 var password: RawUTF8;
 begin
   result := 0;
-  fLock.Enter;
+  fSafe.Lock;
   try
     // check the credentials
     if not GetPassword(User,password) then
@@ -49324,25 +49339,31 @@ begin
     until result<>0;
     AddSortedInteger(fSessions,fSessionsCount,result);
   finally
-    fLock.Leave;
+    fSafe.UnLock;
   end;
 end;
 
 function TSynAuthenticationAbstract.SessionExists(aID: integer): boolean;
 begin
-  fLock.Enter;
-  result := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID)>=0;
-  fLock.Leave;
+  fSafe.Lock;
+  try
+    result := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID)>=0;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynAuthenticationAbstract.RemoveSession(aID: integer);
 var i: integer;
 begin
-  fLock.Enter;
-  i := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID);
-  if i>=0 then
-    DeleteInteger(fSessions,fSessionsCount,i);
-  fLock.Leave;
+  fSafe.Lock;
+  try
+    i := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID);
+    if i>=0 then
+      DeleteInteger(fSessions,fSessionsCount,i);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
@@ -49359,7 +49380,7 @@ end;
 function TSynAuthentication.GetPassword(const UserName: RawUTF8;
   out Password: RawUTF8): boolean;
 var i: integer;
-begin
+begin // caller did protect this method via fSafe.Lock
   i := fCredentials.Find(UserName);
   if i<0 then begin
     result := false;
@@ -49371,21 +49392,32 @@ end;
 
 function TSynAuthentication.GetUsersCount: integer;
 begin
-  result := fCredentials.Count;
+  fSafe.Lock;
+  try
+    result := fCredentials.Count;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
 begin
-  fLock.Enter;
-  fCredentials.Add(aName,aPassword);
-  fLock.Leave;
+  fSafe.Lock;
+  try
+    fCredentials.Add(aName,aPassword);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
 begin
-  fLock.Enter;
-  fCredentials.Delete(aName);
-  fLock.Leave;
+  fSafe.Lock;
+  try
+    fCredentials.Delete(aName);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
