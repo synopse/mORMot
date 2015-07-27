@@ -12469,6 +12469,11 @@ type
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
     function ExecuteList(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): TSQLTableJSON; virtual;
+    /// Execute directly a SQL statement, expecting a list of results
+    // - you should not have to use this method, but the ORM versions instead
+    // - return a result set as JSON on success, '' on failure
+    // - will call EngineList() abstract method to retrieve its JSON content
+    function ExecuteJson(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): RawJSON; virtual;
     /// Execute directly a SQL statement, without any expected result
     // - implements POST SQL on ModelRoot URI
     // - return true on success
@@ -31167,6 +31172,11 @@ begin
   if JSON<>'' then
     result := TSQLTableJSON.CreateFromTables(Tables,SQL,JSON) else
     result := nil;
+end;
+
+function TSQLRest.ExecuteJson(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): RawJSON;
+begin
+  result := EngineList(SQL,false);
 end;
 
 function TSQLRest.Execute(const aSQL: RawUTF8): boolean;
