@@ -15004,6 +15004,8 @@ type
     // - this method IS thread-safe, and call internaly fSessions.Lock
     procedure SessionsLoadFromFile(const aFileName: TFileName;
       andDeleteExistingFileAfterRead: boolean);
+    /// retrieve all current session information as a JSON array 
+    function SessionsAsJson: RawJSON;
 
     /// register a Service class on the server side
     // - this methods expects a class to be supplied, and the exact list of
@@ -20752,7 +20754,6 @@ procedure TSQLPropInfoCustomJSON.GetValueVar(Instance: TObject;
 var W: TJSONSerializer;
 begin
   W := TJSONSerializer.CreateOwnedStream;
-  with W do
   try
     GetJSONValues(Instance,W);
     W.SetText(result);
@@ -36339,6 +36340,30 @@ begin
       end;
   finally
     fSessions.Safe.UnLock;
+  end;
+end;
+
+
+function TSQLRestServer.SessionsAsJson: RawJSON;
+var i: integer;
+begin
+  result := '';
+  if (self=nil) or (fSessions.Count=0) then
+    exit;
+  fSessions.Safe.Lock;
+  with TJSONSerializer.CreateOwnedStream do
+  try
+    Add('[');
+    for i := 0 to fSessions.Count-1 do begin
+      WriteObject(fSessions.List[i]);
+      Add(',');
+    end;
+    CancelLastComma;
+    Add(']');
+    SetText(RawUTF8(result));
+  finally
+    fSessions.Safe.UnLock;
+    Free;
   end;
 end;
 
