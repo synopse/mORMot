@@ -13283,7 +13283,7 @@ type
     fDisplayName: RawUTF8;
     fGroup: TSQLAuthGroup;
     fData: TSQLRawBlob;
-    procedure SetPasswordPlain(const Value: RawUTF8);
+    procedure SetPasswordPlain(const Value: RawUTF8); 
     /// check if the user can authenticate in its current state
     // - called by TSQLRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
@@ -13294,7 +13294,8 @@ type
   public
     /// static function allowing to compute a hashed password
     // - as expected by this class
-    class function ComputeHashedPassword(const aPasswordPlain: RawUTF8): RawUTF8; 
+    // - defined as virtual so that you may use your own hashing class
+    class function ComputeHashedPassword(const aPasswordPlain: RawUTF8): RawUTF8; virtual; 
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
     property PasswordPlain: RawUTF8 write SetPasswordPlain;
@@ -13836,7 +13837,7 @@ type
     constructor Create(aServer: TSQLRestServer; const aAllowedGroups: array of integer); reintroduce;
     /// add some new groups to validate an user authentication
     procedure RegisterAllowedGroups(const aAllowedGroups: array of integer);
-    /// to be used to compute a Hash on the client, for a given Token
+    /// to be used to compute a Hash on the client side, for a given Token
     // - the password will be hashed as expected by the GetPassword() method
     class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; override;
   end;
@@ -45357,7 +45358,7 @@ begin
        (result.fExpectedHttpAuthentication=userPass) then
       exit; // already previously authenticated
     if user=Result.User.LogonName then
-    with TSQLAuthUser.Create do
+    with Ctxt.Server.SQLAuthUserClass.Create do
     try
       PasswordPlain := pass; // compute SHA-256 hash of the supplied password
       if PasswordHashHexa=result.User.PasswordHashHexa then begin
