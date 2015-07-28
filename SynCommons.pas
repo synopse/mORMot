@@ -733,6 +733,11 @@ unit SynCommons;
 interface
 
 uses
+{$ifndef FPC}
+{$ifndef HASFASTMM4}
+  FastMM4,
+{$endif}
+{$endif}
 {$ifdef MSWINDOWS}
   Windows,
   Messages,
@@ -13027,6 +13032,8 @@ type
   /// value object able to gather information about the current system memory
   TSynMonitorMemory = class(TSynPersistent)
   protected
+    FAllocatedUsed: TSynMonitorSize;
+    FAllocatedReserved: TSynMonitorSize;
     FMemoryLoadPercent: integer;
     FPhysicalMemoryFree: TSynMonitorSize;
     FVirtualMemoryFree: TSynMonitorSize;
@@ -13036,6 +13043,8 @@ type
     FPagingFileFree: TSynMonitorSize;
     fLastMemoryInfoRetrievedTix: cardinal;
     procedure RetrieveMemoryInfo; virtual;
+    function GetAllocatedUsed: TSynMonitorSize;
+    function GetAllocatedReserved: TSynMonitorSize;
     function GetMemoryLoadPercent: integer;
     function GetPagingFileFree: TSynMonitorSize;
     function GetPagingFileTotal: TSynMonitorSize;
@@ -13050,25 +13059,29 @@ type
     destructor Destroy; override;
     {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
-    // - numbers would be given in MB (Bytes shl 20)
+    // - numbers would be given in KB (Bytes shl 10)
     class function ToVariant: variant;
     {$endif}
   published
-    /// Percent of memory in use
+    /// Total of allocated memory used by the program
+    property AllocatedUsed: TSynMonitorSize read GetAllocatedUsed;
+    /// Total of allocated memory reserved by the program
+    property AllocatedReserved: TSynMonitorSize read GetAllocatedReserved;
+    /// Percent of memory in use for the system
     property MemoryLoadPercent: integer read GetMemoryLoadPercent;
-    /// Total of physical memory
+    /// Total of physical memory for the system
     property PhysicalMemoryTotal: TSynMonitorSize read GetPhysicalMemoryTotal;
-    /// Free of physical memory
+    /// Free of physical memory for the system
     property PhysicalMemoryFree: TSynMonitorSize read GetPhysicalMemoryFree;
-    /// Total of paging file
+    /// Total of paging file for the system
     property PagingFileTotal: TSynMonitorSize read GetPagingFileTotal;
-    /// Free of paging file
+    /// Free of paging file for the system
     property PagingFileFree: TSynMonitorSize read GetPagingFileFree;
     {$ifdef MSWINDOWS}
-    /// Total of virtual memory
+    /// Total of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
     property VirtualMemoryTotal: TSynMonitorSize read GetVirtualMemoryTotal;
-    /// Free of virtual memory
+    /// Free of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
     property VirtualMemoryFree: TSynMonitorSize read GetVirtualMemoryFree;
     {$endif}
@@ -43024,6 +43037,8 @@ end;
 
 constructor TSynMonitorMemory.Create;
 begin
+  FAllocatedUsed := TSynMonitorSize.create;
+  FAllocatedReserved := TSynMonitorSize.create;
   FPhysicalMemoryFree := TSynMonitorSize.Create;
   FVirtualMemoryFree := TSynMonitorSize.Create;
   FPagingFileTotal := TSynMonitorSize.Create;
@@ -43034,6 +43049,8 @@ end;
 
 destructor TSynMonitorMemory.Destroy;
 begin
+  FAllocatedReserved.Free;
+  FAllocatedUsed.Free;
   FPhysicalMemoryFree.Free;
   FVirtualMemoryFree.Free;
   FPagingFileTotal.Free;
@@ -43048,18 +43065,31 @@ class function TSynMonitorMemory.ToVariant: variant;
 begin
   with TSynMonitorMemory.Create do
   try
-    result := _JsonFastFmt('{Physical:{total:%,free:%},'+
+    result := _JsonFastFmt('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%},'+
       'Virtual:{total:%,free:%},Paged:{total:%,free:%}}',
-      [PhysicalMemoryTotal.Bytes shr 20,PhysicalMemoryFree.Bytes shr 20,
-      {$ifdef MSWINDOWS}
-      VirtualMemoryTotal.Bytes shr 20,VirtualMemoryFree.Bytes shr 20,
-      {$endif}
-      PagingFileTotal.Bytes shr 20,PagingFileFree.Bytes shr 20],[]);
+      [AllocatedReserved.Bytes shr 10,AllocatedUsed.Bytes shr 10,
+       PhysicalMemoryTotal.Bytes shr 10,PhysicalMemoryFree.Bytes shr 10,
+       {$ifdef MSWINDOWS}
+       VirtualMemoryTotal.Bytes shr 10,VirtualMemoryFree.Bytes shr 10,
+       {$endif}
+       PagingFileTotal.Bytes shr 10,PagingFileFree.Bytes shr 10],[]);
   finally
     Free;
   end;
 end;
 {$endif}
+
+function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedUsed;
+end;
+
+function TSynMonitorMemory.GetAllocatedReserved: TSynMonitorSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedReserved;
+end;
 
 function TSynMonitorMemory.GetMemoryLoadPercent: integer;
 begin
@@ -43127,6 +43157,11 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 
 procedure TSynMonitorMemory.RetrieveMemoryInfo;
 procedure RetrieveInfo;
+{$ifndef FPC}
+var Heap: TMemoryManagerState;
+    sb: integer;
+    tot,res: Int64;
+{$endif}
 {$ifdef MSWINDOWS}
 var MemoryStatus: TMemoryStatusEx;
 begin
@@ -43160,6 +43195,23 @@ begin
 begin // e.g. Darwin
 {$endif LINUX}
 {$endif MSWINDOWS}
+{$ifdef FPC}
+  with GetHeapStatus do begin
+    FAllocatedUsed.fBytes := TotalAllocated;
+    FAllocatedReserved.fBytes := TotalAllocated+TotalFree;
+  end;
+{$else}
+  GetMemoryManagerState(Heap);
+  tot := Heap.TotalAllocatedMediumBlockSize+Heap.TotalAllocatedLargeBlockSize;
+  res := Heap.ReservedMediumBlockAddressSpace+Heap.ReservedLargeBlockAddressSpace;
+  for sb := 0 to high(Heap.SmallBlockTypeStates) do
+    with Heap.SmallBlockTypeStates[sb] do begin
+      inc(tot,UseableBlockSize*AllocatedBlockCount);
+      inc(res,ReservedAddressSpace);
+    end;
+  FAllocatedUsed.fBytes := tot;
+  FAllocatedReserved.fBytes := res;
+{$endif FPC}
 end;
 var tix: cardinal;
 begin
