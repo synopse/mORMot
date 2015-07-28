@@ -10956,6 +10956,7 @@ type
     // the returned "id" number is the Instance identifier to be used for any later
     // sicClientDriven remote call - or just 0 in case of sicSingle or sicShared
     procedure ExecuteMethod(Ctxt: TSQLRestServerURIContext);
+    /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
     procedure OnExecuteMethod(Sender: TServiceMethodExecute;
       Step: TServiceMethodExecuteEventStep);
     /// this method will create an implementation instance
@@ -31879,21 +31880,20 @@ end;
 
 function TSQLRestClientCallbacks.UnRegisterByIndex(index: integer): boolean;
 begin
-  if cardinal(index)>=cardinal(Count) then begin
-    result := false;
+  result := false;
+  if cardinal(index)>=cardinal(Count) then
     exit;
-  end;
   with List[index] do
     if not ReleasedFromServer then
     try
-      Owner.FakeCallbackUnregister(Factory,ID,Instance);
+      if Owner.FakeCallbackUnregister(Factory,ID,Instance) then
+        result := true;
     except
       // ignore errors at this point, and continue
     end;
   dec(Count);
   if index<Count then
     MoveFast(List[index+1],List[index],(Count-index)*sizeof(List[index]));
-  result := true;
 end;
 
 function TSQLRestClientCallbacks.UnRegister(aInstance: pointer): boolean;
@@ -31905,10 +31905,10 @@ begin
   Safe.Lock;
   try
     for i := Count-1 downto 0 do
-      if List[i].Instance=aInstance then begin
-        UnRegisterByIndex(i);
-        result := true;
-      end;
+      if List[i].Instance=aInstance then
+        if UnRegisterByIndex(i) then
+          result := true else
+          break;
   finally
     Safe.UnLock;
   end;
@@ -46349,9 +46349,10 @@ begin // here aClientDrivenID^ = FakeCall ID
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [fServer,aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then begin
-    fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+
-      'the client side, so I% callback notification was NOT sent',
-      [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.InterfaceDotMethodName],sllWarning);
+    if not IdemPropName(fFactory.fInterfaceTypeInfo^.Name,'ISynLogCallback') then
+      fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+
+        'the client side, so I% callback notification was NOT sent',
+        [self,fFactory.fInterfaceTypeInfo^.Name,aMethod.InterfaceDotMethodName],sllWarning);
     if fRaiseExceptionOnInvokeError or
        ((fServer.Services<>nil) and
         (coRaiseExceptionIfReleasedByClient in
@@ -48790,6 +48791,7 @@ var i: integer;
     connectionID: Int64;
     fakeID: PtrUInt;
     Values: TNameValuePUTF8CharDynArray;
+    withLog: boolean; // avoid stack overflow
 begin
   if (self=nil) or (fFakeCallbacks=nil) or (Ctxt=nil) then
     exit;
@@ -48800,8 +48802,10 @@ begin
   fakeID := GetCardinal(Values[0].Value);
   if (fakeID=0) or (connectionID=0) or (Values[0].Name=nil) then
     exit;
-  fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
-    [ClassType,fakeID,Values[0].Name],sllDebug);
+  withLog := not IdemPropNameU('ISynLogCallback',Values[0].Name,StrLen(Values[0].Name));
+  if withLog then
+    fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
+      [ClassType,fakeID,Values[0].Name],sllDebug);
   try
     fFakeCallbacks.Safe.Lock;
     for i := 0 to fFakeCallbacks.Count-1 do begin
@@ -48818,8 +48822,9 @@ begin
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
               [PtrInt(fake.fFakeInterface),Values[0].Name]));
-          fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
-            Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
+          if withLog then
+            fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
+              Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
           fake.fService.ExecuteMethod(Ctxt);
         end else
           Ctxt.Success;

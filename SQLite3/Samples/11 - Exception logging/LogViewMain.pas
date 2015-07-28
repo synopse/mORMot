@@ -125,11 +125,6 @@ implementation
 
 {$R *.dfm}
 
-type
-  TLogFilter = (
-    lfNone,lfAll,lfErrors,lfExceptions,lfProfile,lfDatabase,lfClientServer,
-    lfDebug,lfCustom,lfDDD);
-
 resourcestring
   sEnterAddress = 'Enter an hexadecimal address:';
   sStats = #13#10'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10'Size: %s'#13#10#13#10+
@@ -145,12 +140,6 @@ resourcestring
   sUnknown = 'Unknown';
 
 const
-  LOG_FILTER: array[TLogFilter] of TSynLogInfos = (
-    [], [succ(sllNone)..high(TSynLogInfo)],
-    [sllError,sllLastError,sllException,sllExceptionOS],
-    [sllException,sllExceptionOS], [sllEnter,sllLeave],
-    [sllSQL,sllCache,sllDB], [sllClient,sllServer,sllServiceCall, sllServiceReturn],
-    [sllDebug,sllTrace,sllEnter], [sllCustom1..sllCustom4],[sllDDDError,sllDDDInfo]);
   LOG_COLORS: array[Boolean,TSynLogInfo] of TColor = (
     (clWhite,$DCC0C0,$DCDCDC,clSilver,$8080C0,$8080FF,$C0DCC0,$DCDCC0,
 //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
@@ -222,7 +211,7 @@ begin
           EventsList.Items.AddObject(FEventCaption[E],pointer(ord(E)));
       for i := 1 to FilterMenu.Items.Count-1 do
         FilterMenu.Items[i].Visible :=
-          LOG_FILTER[TLogFilter(FilterMenu.Items[i].Tag)]*FLog.EventLevelUsed<>[];
+          LOG_FILTER[TSynLogFilter(FilterMenu.Items[i].Tag)]*FLog.EventLevelUsed<>[];
     end;
   finally
     EventsList.Items.EndUpdate;
@@ -284,7 +273,7 @@ begin
 end;
 
 procedure TMainLogView.FormCreate(Sender: TObject);
-var F: TLogFilter;
+var F: TSynLogFilter;
     O: TLogProcSortOrder;
     M: TMenuItem;
     E: TSynLogInfo;
@@ -292,7 +281,7 @@ begin
   FMainCaption := Caption;
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
-    M.Caption := GetCaptionFromEnum(TypeInfo(TLogFilter),Ord(F));
+    M.Caption := GetCaptionFromEnum(TypeInfo(TSynLogFilter),Ord(F));
     M.Tag := ord(F);
     M.OnClick := BtnFilterMenu;
     if F=lfAll then
@@ -333,11 +322,11 @@ begin
 end;
 
 procedure TMainLogView.BtnFilterMenu(Sender: TObject);
-var F: TLogFilter;
+var F: TSynLogFilter;
     i: integer;
 begin
   if not Sender.InheritsFrom(TMenuItem) then exit;
-  F := TLogFilter(TMenuItem(Sender).Tag);
+  F := TSynLogFilter(TMenuItem(Sender).Tag);
   for i := 0 to EventsList.Count-1 do
     EventsList.Checked[i] := TSynLogInfo(EventsList.Items.Objects[i]) in LOG_FILTER[F];
   EventsListClickCheck(nil);

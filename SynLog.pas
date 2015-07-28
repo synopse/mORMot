@@ -328,6 +328,7 @@ type
   TSynLogCallbacks = class(TSynPersistentLocked)
   protected
     fCount: integer;
+    fCurrentlyEchoing: boolean;
   public
     /// direct access to the registration storage
     Registration: TSynLogCallbackDynArray;
@@ -1108,6 +1109,12 @@ type
     property LogProcCount: integer read fLogProcCurrentCount;
   end;
 
+type
+  /// a list of lof events families, used to gather events by type
+  TSynLogFilter = (
+    lfNone,lfAll,lfErrors,lfExceptions,lfProfile,lfDatabase,lfClientServer,
+    lfDebug,lfCustom,lfDDD);
+
 const
   /// up to 16 TSynLogFamily, i.e. TSynLog children classes can be defined
   MAX_SYNLOGFAMILY = 15;
@@ -1131,6 +1138,14 @@ const
     ' call  ', ' ret   ', ' auth  ',
     ' cust1 ', ' cust2 ', ' cust3 ', ' cust4 ', ' rotat ', ' dddER ', ' dddIN ',
     ' mon   ');
+
+  /// how TLogFilter map TSynLogInfo events
+  LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
+    [], [succ(sllNone)..high(TSynLogInfo)],
+    [sllError,sllLastError,sllException,sllExceptionOS],
+    [sllException,sllExceptionOS], [sllEnter,sllLeave],
+    [sllSQL,sllCache,sllDB], [sllClient,sllServer,sllServiceCall, sllServiceReturn],
+    [sllDebug,sllTrace,sllEnter], [sllCustom1..sllCustom4],[sllDDDError,sllDDDInfo]);
 
   /// the "magic" number used to identify .log.synlz compressed files, as
   // created by TSynLogFamily.EventArchiveSynLZ
@@ -4230,10 +4245,11 @@ function TSynLogCallbacks.OnEcho(Sender: TTextWriter; Level: TSynLogInfo;
 var i: integer;
 begin
   result := false;
-  if Count=0 then
+  if (Count=0) or fCurrentlyEchoing then
     exit;
   Safe.Lock;
   try
+    fCurrentlyEchoing := true; // avoid stack overflow if exception below
     for i := Count-1 downto 0 do
       if Level in Registration[i].Levels then
       try
@@ -4243,6 +4259,7 @@ begin
         Registrations.Delete(i); // safer to unsubscribe ASAP
       end;
   finally
+    fCurrentlyEchoing := false;
     Safe.UnLock;
   end;
 end;
