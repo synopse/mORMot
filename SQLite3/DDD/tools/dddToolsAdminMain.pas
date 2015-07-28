@@ -145,7 +145,7 @@ begin
     VK_F3:
       fLogFrame.btnSearchNextClick(fLogFrame.btnSearchNext);
     ord('A')..ord('Z'),Ord('0')..ord('9'),32:
-      if (byte(shift)=0) and not fLogFrame.edtSearch.Focused then
+      if (shift=[]) and not fLogFrame.edtSearch.Focused then
         fLogFrame.edtSearch.Text := fLogFrame.edtSearch.Text+string(Char(Key)) else
       if (key=ord('F')) and (ssCtrl in Shift) then begin
         fLogFrame.edtSearch.SelectAll;
@@ -156,7 +156,7 @@ begin
     with fDBFrame[pageIndex-1] do
     case Key of
     VK_RETURN:
-    if (byte(shift)=0) and (mmoSQL.SelLength=0) then begin
+    if (shift=[]) and (mmoSQL.SelLength=0) then begin
       btnExecClick(nil);
       Key := 0;
     end;
