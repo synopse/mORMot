@@ -2221,7 +2221,7 @@ begin
   if SQL='' then
     exit;
   if SQL[1]='#' then
-    case IdemPCharArray(@SQL[2],['STATE','STATU','SETTINGS','VERSION','EXE']) of
+    case IdemPCharArray(@SQL[2],['STATE','STATU','SETTINGS','VERSION','EXE','HELP']) of
     0: begin
       if InternalRetrieveState(status) then
         result := VariantSaveJSON(status);
@@ -2251,6 +2251,12 @@ begin
         'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
         'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true)]);
       exit;
+    end;
+    5: begin
+      result := '"Enter either a SQL request, or one of the following commands:|'+
+        '|#state|#status|#settings|#settings full.path=value|#version|#exe'+
+        '|#help|#time|#model|#rest|#interfaces|#stats|#stats(method)|'+
+        '#stats(interface.method)|#services|#sessions|#get url|#post url"';
     end;
     end;
   rest := PublishedORM(DatabaseName);
