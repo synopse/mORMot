@@ -402,6 +402,9 @@ type
   // THttpClientWebSockets.Settings property
   PWebSocketProcessSettings = ^TWebSocketProcessSettings;
 
+  /// the current state of the WebSockets process
+  TWebSocketProcessState = (wpsCreate,wpsRun,wpsClose,wpsDestroy);
+
   /// generic WebSockets process, used on both client or server sides
   TWebSocketProcess = class(TSynPersistentLocked)
   protected
@@ -410,7 +413,7 @@ type
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
     fOwnerConnection: Int64;
-    fState: (wpsCreate,wpsRun,wpsClose,wpsDestroy);
+    fState: TWebSocketProcessState;
     fProtocol: TWebSocketProtocol;
     fMaskSentFrames: byte;
     fLastSocketTicks: Int64;
@@ -418,7 +421,7 @@ type
     fInvalidPingSendCount: cardinal;
     fProcessCount: integer;
     /// low level WebSockets framing protocol
-    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal): boolean;
+    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
     function SendFrame(const Frame: TWebSocketFrame): boolean;
     /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
     procedure ProcessStart; virtual;
@@ -611,11 +614,14 @@ type
     destructor Destroy; override;
   end;
 
+  /// the current state of the client side processing thread
+  TWebSocketProcessClientThreadState = (sCreate, sRun, sFinished, sClosed);
+
   /// WebSockets processing thread used on client side
   // - will handle any incoming callback
   TWebSocketProcessClientThread = class(TSynThread)
   protected
-    fThreadState: (sCreate, sRun, sFinished, sClosed);
+    fThreadState: TWebSocketProcessClientThreadState;
     fProcess: TWebSocketProcessClient;
     procedure Execute; override;
   public
@@ -1315,7 +1321,7 @@ begin
       SendPendingOutgoingFrames;
     frame.opcode := focConnectionClose;
     if SendFrame(frame) then // notify clean closure
-      GetFrame(frame,1000);  // expects an answer from the other side
+      GetFrame(frame,1000,true);  // expects an answer from the other side
   finally
     InterlockedDecrement(fProcessCount);
   end else
@@ -1356,14 +1362,14 @@ begin
 end;
 
 function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;
-  TimeOut: cardinal): boolean;
+  TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
 var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
-procedure GetHeader;
+procedure GetHeader;  // SockInRead() below raise a ESynBidirSocket error on failure
 begin
-  fillchar(hdr,sizeof(hdr),0);
-  fSocket.SockInRead(@hdr.first,2,true);
+  FillCharFast(hdr,sizeof(hdr),0);
+  fSocket.SockInRead(@hdr.first,2,false);
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
   masked := hdr.len8 and 128<>0;
   if masked then
@@ -1371,11 +1377,11 @@ begin
   if hdr.len8<FRAME_LEN2BYTES then
     hdr.len32 := hdr.len8 else
   if hdr.len8=FRAME_LEN2BYTES then begin
-    fSocket.SockInRead(@hdr.len32,2,true);
+    fSocket.SockInRead(@hdr.len32,2,false);
     hdr.len32 := swap(hdr.len32);
   end else
   if hdr.len8=FRAME_LEN8BYTES then begin
-    fSocket.SockInRead(@hdr.len32,8,true);
+    fSocket.SockInRead(@hdr.len32,8,false);
     if hdr.len32<>0 then // size is more than 32 bits -> reject
       hdr.len32 := maxInt else
       hdr.len32 := bswap32(hdr.len64);
@@ -1383,42 +1389,46 @@ begin
       raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
   end;
   if masked then
-    fSocket.SockInRead(@hdr.mask,4,true);
+    fSocket.SockInRead(@hdr.mask,4,false);
 end;
 procedure GetData(var data: RawByteString);
 begin
   SetString(data,nil,hdr.len32);
-  fSocket.SockInRead(pointer(data),hdr.len32);
+  fSocket.SockInRead(pointer(data),hdr.len32,false);
   if hdr.mask<>0 then
     ProcessMask(pointer(data),hdr.mask,hdr.len32);
 end;
 var data: RawByteString;
+    pending: integer;
 begin
   result := false;
-  try
-    if fSocket.SockInPending(TimeOut)<2 then
-      exit; // no data available
+  pending := fSocket.SockInPending(TimeOut);
+  if pending<0 then
+    if IgnoreExceptions then
+      exit else
+      raise ESynBidirSocket.Create('SockInPending() Error');
+  if pending<2 then
+    exit; // not enough data available
+  GetHeader;
+  Frame.opcode := opcode;
+  GetData(Frame.payload);
+  while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
     GetHeader;
-    Frame.opcode := opcode;
-    GetData(Frame.payload);
-    while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
-      GetHeader;
-      if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
+    if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
+      if IgnoreExceptions then
+        exit else
         raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
           [self,OpcodeText(opcode)^,OpcodeText(Frame.opcode)^]);
-      GetData(data);
-      Frame.payload := Frame.payload+data;
-    end;
-    {$ifdef UNICODE}
-    if opcode=focText then
-      SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
-    {$endif}
-    Log(frame,'GetFrame');
-    SetLastPingTicks;
-    result := true;
-  except
-    result := false;
+    GetData(data);
+    Frame.payload := Frame.payload+data;
   end;
+  {$ifdef UNICODE}
+  if opcode=focText then
+    SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
+  {$endif}
+  Log(frame,'GetFrame');
+  SetLastPingTicks;
+  result := true;
 end;
 
 procedure TWebSocketProcess.ProcessStart;
@@ -1534,7 +1544,7 @@ begin
     end;
     start := GetTickCount64;
     if fSettings.CallbackAnswerTimeOutMS=0 then
-      max := start+60000 else // never wait for ever
+      max := start+30000 else // never wait for ever
       max := start+fSettings.CallbackAnswerTimeOutMS;
     while not fIncoming.Pop(fProtocol,'answer',answer) do
       if fState in [wpsDestroy,wpsClose] then begin
@@ -1577,7 +1587,7 @@ begin
     try
       InterlockedIncrement(fProcessCount);
       try
-        if GetFrame(request,1) then begin
+        if GetFrame(request,1,false) then begin
           case request.opcode of
           focPing: begin
             request.opcode := focPong;
@@ -1588,8 +1598,10 @@ begin
           focText,focBinary:
             fProtocol.ProcessIncomingFrame(self,request,'');
           focConnectionClose: begin
-            SendFrame(request);
-            fState := wpsClose;
+            if fState=wpsRun then begin
+              SendFrame(request);
+              fState := wpsClose;
+            end;
             break; // will close the connection
           end;
           end;
@@ -1617,7 +1629,8 @@ begin
       end;
       HiResDelay(fLastSocketTicks);
     except
-      SleepHiRes(500); // be optimistic: wait a little and retry
+      fState := wpsClose;
+      break; // don't be optimistic: forced close connection
     end;
   ProcessStop;
 end;
@@ -2013,10 +2026,12 @@ end;
 
 destructor TWebSocketProcessClient.Destroy;
 begin
+  // focConnectionClose would be handled in this thread -> close client thread
   fClientThread.Terminate;
-  inherited Destroy; // SendPendingOutgoingFrames + SendFrame(focConnectionClose)
   while fClientThread.fThreadState<sFinished do
     SleepHiRes(1);
+  // SendPendingOutgoingFrames + SendFrame/GetFrame(focConnectionClose)
+  inherited Destroy;
   fClientThread.Free;
 end;
 
@@ -2046,6 +2061,8 @@ begin
   if fProcess.fState=wpsClose then
     fThreadState := sClosed else
     fThreadState := sFinished;
+  WebSocketLog.Add.Log(sllDebug,'%.Execute: ThreadState=%',[ClassType,
+    GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(fThreadState))^]);
 end;
 
 

@@ -325,9 +325,15 @@ type
 
   /// exception thrown by the classes of this unit
   ECrtSocket = class(Exception)
+  protected
+    fSocketError: integer;
   public
+    /// will concat the message with the WSAGetLastError information
     constructor Create(const Msg: string); overload;
+    /// will concat the message with the supplied WSAGetLastError information
     constructor Create(const Msg: string; Error: integer); overload;
+    /// the associated WSAGetLastError value
+    property SocketError: integer read fSocketError;
   end;
 
   TCrtSocketClass = class of TCrtSocket;
@@ -406,9 +412,11 @@ type
     destructor Destroy; override;
     /// read Length bytes from SockIn buffer + Sock if necessary
     // - if SockIn is available, it first gets data from SockIn^.Buffer,
-    // then directly receive data from socket
+    // then directly receive data from socket if UseOnlySockIn=false
+    // - if UseOnlySockIn=true, it will return the data available in SockIn^,
+    // and returns the number of bytes
     // - can be used also without SockIn: it will call directly SockRecv()
-    // in such case
+    // in such case (assuming UseOnlySockin=false)
     function SockInRead(Content: PAnsiChar; Length: integer;
       UseOnlySockIn: boolean=false): integer;
     /// returns the number of bytes in SockIn buffer or pending in Sock
@@ -416,7 +424,8 @@ type
     // then call InputSock to try to receive any pending data
     // - will wait up to the specified aTimeOut value (in milliseconds) for
     // incoming data
-    // - returns -1 in case of a socket error (e.g. broken connection)
+    // - returns -1 in case of a socket error (e.g. broken connection); you
+    // can raise a ECrtSocket exception to propagate the error
     function SockInPending(aTimeOut: integer): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
@@ -4250,18 +4259,16 @@ end;
 { ECrtSocket }
 
 constructor ECrtSocket.Create(const Msg: string);
-var Error: integer;
 begin
-  Error := WSAGetLastError();
-  if Error=0 then
-    Error := WSAEWOULDBLOCK; // if unknown error, probably a manual timeout
-  Create(Msg,Error);
+  Create(Msg,WSAGetLastError());
 end;
 
 constructor ECrtSocket.Create(const Msg: string; Error: integer);
 begin
-  Error := abs(Error);
-  inherited CreateFmt('%s %d (%s)',[Msg,Error,SysErrorMessage(Error)]);
+  if Error=0 then
+    fSocketError := WSAEWOULDBLOCK else // if unknown, probably a timeout
+    fSocketError := abs(Error);
+  inherited CreateFmt('%s %d (%s)',[Msg,fSocketError,SysErrorMessage(fSocketError)]);
 end;
 
 

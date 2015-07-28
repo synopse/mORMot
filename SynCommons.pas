@@ -2546,7 +2546,7 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolea
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P1 and P2 to be a PAnsiChar with an already checked
 // identical length, so may be used for a faster process, e.g. in a loop
-function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean; overload;
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean; 
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// case unsensitive test of P1 and P2 content
@@ -31963,6 +31963,7 @@ end;
 
 procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
+const DYNARRAYTEXT: PUTF8Char = 'DynArray'; // make Delphi 5 compiler happy
   function GetNextFieldType(var P: PUTF8Char;
     var TypIdent: RawUTF8): TJSONCustomParserRTTIType;
   begin
@@ -32028,7 +32029,7 @@ begin
         ptCustom: begin
           len := length(TypIdent);
           if (len>12) and (TypIdent[1]='T') and
-             IdemPropNameUSameLen('DynArray',@PByteArray(TypIdent)[len-8],8) then begin
+             IdemPropNameUSameLen(DYNARRAYTEXT,@PByteArray(TypIdent)[len-8],8) then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
               @PByteArray(TypIdent)[1],len-9,ArrayTypIdent);
             if ArrayTyp=ptCustom then
