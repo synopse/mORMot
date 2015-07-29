@@ -608,7 +608,7 @@ begin
     try // use {%:%} here since WhereValue/SetValue are already JSON encoded
       query := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
         InternalToExternal(WhereFieldName),WhereValue],[]);
-      update := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
+      update := BSONVariant('{$set:{%:%}}',[fStoredClassProps.ExternalDB.
         InternalToExternal(SetFieldName),SetValue],[]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
