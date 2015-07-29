@@ -133,6 +133,9 @@ type
     procedure ExecuteCommandLine;
     /// start the daemon, until the instance is released
     procedure Execute;
+    /// read-only access to the underlying daemon instance
+    // - equals nil if the daemon is not started
+    property Daemon: IAdministratedDaemon read fDaemon;
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a TThread

@@ -9898,6 +9898,8 @@ type
     /// release all used instances
     // - including all TInterfaceStub instances as specified to CreateInjected()
     destructor Destroy; override;
+    /// access to the associated dependency resolver, if any
+    property Resolver: TInterfaceResolver read fResolver;
   end;
 
   /// class-reference type (metaclass) of a TInjectableObject type

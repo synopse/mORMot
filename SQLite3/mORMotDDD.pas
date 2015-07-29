@@ -879,6 +879,10 @@ type
     function InternalIsRunning: boolean; override;
     // end the daemon, i.e. FreeAndNil(fRest)
     procedure InternalStop; override;
+  public
+    /// read-only access to the associated REST instance
+    // - is assigned only between daemon Start/Stop
+    property Rest: TSQLRestServer read fRest;
   end;
 
   /// abstract class to monitor an administrable service/daemon
