@@ -960,6 +960,7 @@ type
     fOnHttpThreadStart: TNotifyThreadEvent;
     fServerName: SockString;
     fCurrentConnectionID: integer;
+    fCanNotifyCallback: boolean;
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
     procedure NotifyThreadStart(Sender: TSynThread);
@@ -1012,6 +1013,9 @@ type
     // ! end;
     // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
+    /// TRUE if the inherited class is able to handle callbacks
+    // - only TWebSocketServer has this ability by now
+    property CanNotifyCallback: boolean read fCanNotifyCallback;
   published
     /// returns the API version used by the inherited implementation
     property APIVersion: string read GetAPIVersion;

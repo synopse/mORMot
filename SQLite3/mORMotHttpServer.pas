@@ -150,6 +150,7 @@ unit mORMotHttpServer;
       - declared TSQLHttpServer.HttpThreadStart/HttpThreadTerminate as virtual
       - allow TSQLHttpServer.Create() without any associated TSQLRestServer
       - allow to specify the binding server address for sockets ('1.2.3.4:1234')
+      - implement asynchronous interface callbacks using WebSockets
 
 }
 
@@ -705,6 +706,10 @@ begin
     if ServerThreadPoolCount>1 then
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$endif}
+  // last HTTP server handling callbacks would be set for the TSQLRestServer(s)
+  if fHttpServer.CanNotifyCallback then 
+    for i := 0 to high(fDBServers) do
+      fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
   fLog.Add.Log(sllHttp,'% initialized for%',[fHttpServer,ServersRoot],self);
 end;
 
@@ -763,7 +768,8 @@ begin
   if (Self<>nil) and (cardinal(aIndex)<cardinal(length(fDBServers))) then
     with fDBServers[aIndex] do begin
       Server := aServer;
-      Server.OnNotifyCallback := NotifyCallback;
+      if (fHttpServer<>nil) and fHttpServer.CanNotifyCallback then
+        Server.OnNotifyCallback := NotifyCallback;
       Server.SetPublicURI(fPublicAddress,fPublicPort);
       Security := aSecurity;
       if aRestAccessRights=nil then
@@ -1007,7 +1013,9 @@ begin
     on E: Exception do
       if aErrorMsg<>nil then
         aErrorMsg^ := ObjectToJSONDebug(E);
-  end;
+  end else
+    if aErrorMsg<>nil then
+      aErrorMsg^ := FormatUTF8('NotifyCallback over % is unsupported',[fHttpServer]);
 end;
 
 constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
