@@ -1684,6 +1684,16 @@ function NullableIntegerNull: TNullableInteger;
 function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a TNullableInteger is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the Integer value
+function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableInteger is null, or return its value
+// - returns 0 if V is null or empty, or the stored Integer value
+function NullableIntegerToValue(const V: TNullableInteger): Int64;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// creates a nullable Boolean value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableBoolean = type variant
 // variable: use this function to circumvent it
@@ -1702,6 +1712,16 @@ function NullableBooleanNull: TNullableBoolean;
 // function to circumvent those limitations
 function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableBoolean is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the Boolean value
+function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableBoolean is null, or return its value
+// - returns false if V is null or empty, or the stored Boolean value
+function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a nullable floating-point value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableFloat = type variant
@@ -1722,6 +1742,16 @@ function NullableFloatNull: TNullableFloat;
 function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a TNullableFloat is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the Float value
+function NullableFloatToValue(const V: TNullableFloat; out Value: double): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableFloat is null, or return its value
+// - returns 0 if V is null or empty, or the stored Float value
+function NullableFloatToValue(const V: TNullableFloat): double;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// creates a nullable Currency value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableCurrency = type variant
 // variable: use this function to circumvent it
@@ -1740,6 +1770,16 @@ function NullableCurrencyNull: TNullableCurrency;
 // function to circumvent those limitations
 function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableCurrency is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the Currency value
+function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableCurrency is null, or return its value
+// - returns 0 if V is null or empty, or the stored Currency value
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
+  overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a nullable TDateTime value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableDateTime = type variant
@@ -1760,6 +1800,16 @@ function NullableDateTimeNull: TNullableDateTime;
 function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a TNullableDateTime is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the DateTime value
+function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableDateTime is null, or return its value
+// - returns 0 if V is null or empty, or the stored DateTime value
+function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// creates a nullable TTimeLog value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableTimeLog = type variant
 // variable: use this function to circumvent it
@@ -1779,6 +1829,16 @@ function NullableTimeLogNull: TNullableTimeLog;
 function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a TNullableTimeLog is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the TimeLog value
+function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableTimeLog is null, or return its value
+// - returns 0 if V is null or empty, or the stored TimeLog value
+function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// creates a nullable UTF-8 encoded text value from a supplied constant
 // - FPC does not allow direct assignment to a TNullableUTF8 = type variant
 // variable: use this function to circumvent it
@@ -1797,6 +1857,16 @@ function NullableUTF8TextNull: TNullableUTF8Text;
 // function to circumvent those limitations
 function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableUTF8Text is null, or return its value
+// - returns FALSE if V is null or empty, or TRUE and set the UTF8Text value
+function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// check if a TNullableUTF8Text is null, or return its value
+// - returns '' if V is null or empty, or the stored UTF8-encoded text value
+function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
+  overload; {$ifdef HASINLINE}inline;{$endif}
 
 {$endif NOVARIANTS}
 
@@ -20109,6 +20179,17 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
+function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
+begin
+  Value := 0;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToInt64(PVariant(@V)^,Value);
+end;
+
+function NullableIntegerToValue(const V: TNullableInteger): Int64;
+begin
+  VariantToInt64(PVariant(@V)^,result);
+end;
+
 
 function NullableBoolean(Value: boolean): TNullableBoolean;
 begin
@@ -20124,6 +20205,17 @@ end;
 function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
+end;
+
+function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+begin
+  Value := false;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToBoolean(PVariant(@V)^,Value);
+end;
+
+function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
+begin
+  VariantToBoolean(PVariant(@V)^,result);
 end;
 
 
@@ -20143,6 +20235,17 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
+function NullableFloatToValue(const V: TNullableFloat; out Value: Double): Boolean;
+begin
+  Value := 0;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToDouble(PVariant(@V)^,Value);
+end;
+
+function NullableFloatToValue(const V: TNullableFloat): Double;
+begin
+  VariantToDouble(PVariant(@V)^,result);
+end;
+
 
 function NullableCurrency(const Value: currency): TNullableCurrency;
 begin
@@ -20158,6 +20261,17 @@ end;
 function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
+end;
+
+function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): Boolean;
+begin
+  Value := 0;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToCurrency(PVariant(@V)^,Value);
+end;
+
+function NullableCurrencyToValue(const V: TNullableCurrency): currency;
+begin
+  VariantToCurrency(PVariant(@V)^,result);
 end;
 
 
@@ -20177,6 +20291,17 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
+function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
+begin
+  Value := 0;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToDouble(PVariant(@V)^,Double(Value));
+end;
+
+function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
+begin
+  VariantToDouble(PVariant(@V)^,Double(result));
+end;
+
 
 function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
 begin
@@ -20192,6 +20317,17 @@ end;
 function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
 begin
   result := VarDataIsEmptyOrNull(@V);
+end;
+
+function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
+begin
+  Value := 0;
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToInt64(PVariant(@V)^,Int64(Value));
+end;
+
+function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
+begin
+  VariantToInt64(PVariant(@V)^,Int64(result));
 end;
 
 
@@ -20214,6 +20350,18 @@ begin
   result := VarDataIsEmptyOrNull(@V);
 end;
 
+function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8): boolean;
+begin
+  result := (not VarDataIsEmptyOrNull(@V)) and VariantToUTF8(PVariant(@V)^,Value);
+end;
+
+function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
+begin
+  if VarDataIsEmptyOrNull(@V) then // VariantToUTF8() would return 'null'
+    result := '' else
+    VariantToUTF8(PVariant(@V)^,result);
+end;
+
 
 { TSQLPropInfoRTTIVariant }
 
@@ -20223,7 +20371,7 @@ begin
   inherited;
   if aSQLFieldType=sftVariant then
     fDocVariantOptions := JSON_OPTIONS_FAST else
-    fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored  
+    fSQLFieldType := sftNullable; // TNullable* will use fSQLFieldTypeStored
 end;
 
 procedure TSQLPropInfoRTTIVariant.CopySameClassProp(Source: TObject;
