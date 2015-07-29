@@ -2030,6 +2030,7 @@ begin
   fClientThread.Terminate;
   while fClientThread.fThreadState<sFinished do
     SleepHiRes(1);
+  fClientThread.fProcess := nil;
   // SendPendingOutgoingFrames + SendFrame/GetFrame(focConnectionClose)
   inherited Destroy;
   fClientThread.Free;
@@ -2055,10 +2056,11 @@ end;
 
 procedure TWebSocketProcessClientThread.Execute;
 begin
+  SetCurrentThreadName('% %',[self,fProcess.Protocol.Name]);
   fThreadState := sRun;
   if not Terminated then
     fProcess.ProcessLoop;
-  if fProcess.fState=wpsClose then
+  if (fProcess<>nil) and (fProcess.fState=wpsClose) then
     fThreadState := sClosed else
     fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'%.Execute: ThreadState=%',[ClassType,
