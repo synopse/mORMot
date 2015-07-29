@@ -131,6 +131,8 @@ type
     //!  end;
     //!end.
     procedure ExecuteCommandLine;
+    /// start the daemon, until the instance is released
+    procedure Execute;
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a TThread
@@ -532,6 +534,7 @@ end;
 
 destructor TDDDDaemon.Destroy;
 begin
+  fDaemon := nil;
   inherited;
   fSettings.Free;
 end;
@@ -540,8 +543,8 @@ end;
 
 procedure TDDDDaemon.DoStart(Sender: TService);
 begin
-  fDaemon := NewDaemon;
   SQLite3Log.Enter(self);
+  fDaemon := NewDaemon;
   fDaemon.Start;
 end;
 
@@ -552,6 +555,13 @@ begin
 end;
 
 {$endif MSWINDOWS} // to support Windows Services
+
+procedure TDDDDaemon.Execute;
+begin
+  SQLite3Log.Enter(self);
+  fDaemon := NewDaemon;
+  fDaemon.Start;
+end;
 
 type
   TExecuteCommandLineCmd = (
