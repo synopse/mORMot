@@ -1809,6 +1809,9 @@ function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 
+/// convert any numerical Variant into a fixed decimals floating point value
+function VariantToCurrency(const V: Variant; var Value: currency): boolean;
+
 /// convert any numerical Variant into a boolean value
 function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 
@@ -16686,7 +16689,7 @@ begin
   with TVarData(V) do
   if VType=varVariant or varByRef then
     result := VariantToDouble(PVariant(VPointer)^,Value) else
-  if VariantToInt64(V,tmp.VInt64) then begin
+  if VariantToInt64(V,tmp.VInt64) then begin // also handle varEmpty,varNull
     Value := tmp.VInt64;
     result := true;
   end else
@@ -16705,6 +16708,35 @@ begin
   end else
     if SetVariantUnRefSimpleValue(V,tmp) then
       result := VariantToDouble(variant(tmp),Value) else
+      result := false;
+  end;
+end;
+
+function VariantToCurrency(const V: Variant; var Value: currency): boolean;
+var tmp: TVarData;
+begin
+  with TVarData(V) do
+  if VType=varVariant or varByRef then
+    result := VariantToCurrency(PVariant(VPointer)^,Value) else
+  if VariantToInt64(V,tmp.VInt64) then begin
+    Value := tmp.VInt64;
+    result := true;
+  end else
+  case VType of
+  varDouble,varDate: begin
+    Value := VDouble;
+    result := true;
+  end;
+  varSingle: begin
+    Value := VSingle;
+    result := true;
+  end;
+  varCurrency: begin
+    Value := VCurrency;
+    result := true;
+  end else
+    if SetVariantUnRefSimpleValue(V,tmp) then
+      result := VariantToCurrency(variant(tmp),Value) else
       result := false;
   end;
 end;
