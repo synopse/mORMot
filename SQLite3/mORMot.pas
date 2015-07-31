@@ -15742,14 +15742,20 @@ type
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): integer;
     /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     // - will use fast O(1) hash for fUniqueFields[] fields
+    // - will use SYSTEMNOCASE case-insensitive search for text values, unless
+    // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt; overload;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
+      CaseInsensitive: boolean=true): PtrInt; overload;
     /// optimized search of WhereValue in a field, specified by name
     // - will use fast O(1) hash for fUniqueFields[] fields
+    // - will use SYSTEMNOCASE case-insensitive search for text values, unless
+    // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt; overload;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
+      CaseInsensitive: boolean=true): PtrInt; overload;
     /// execute a method on every TSQLRecord item
     // - the loop execution will be protected via StorageLock/StorageUnlock 
     procedure ForEach(WillModifyContent: boolean;
@@ -38813,7 +38819,8 @@ begin
 end;
 
 function TSQLRestStorageInMemory.FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
-  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): PtrInt;
+  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
+  CaseInsensitive: boolean): PtrInt;
 var WhereFieldIndex: integer;
 begin
   result := 0;
@@ -38826,12 +38833,13 @@ begin
       exit;
     inc(WhereFieldIndex); // FindWhereEqual() expects index = RTTI+1
   end;
-  result := FindWhereEqual(WhereFieldIndex,WhereValue,Onfind,Dest,FoundLimit,FoundOffset);
+  result := FindWhereEqual(WhereFieldIndex,WhereValue,Onfind,Dest,
+    FoundLimit,FoundOffset,CaseInsensitive);
 end;
 
 function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
-  FoundLimit,FoundOffset: integer): PtrInt;
+  FoundLimit,FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
 var i, ndx: integer;
     aValue: PtrInt;
     aID: Int64;
@@ -38925,8 +38933,8 @@ begin
     end;
     // generic search of any value, using fast CompareValue() overridden method
     P.SetValueVar(fSearchRec,WhereValue,false);
-    for i := 0 to fValue.Count-1 do  // ..,true)=SYSTEMNOCASE
-      if P.CompareValue(fValue.List[i],fSearchRec,true)=0 then begin
+    for i := 0 to fValue.Count-1 do  
+      if P.CompareValue(fValue.List[i],fSearchRec,CaseInsensitive)=0 then begin
         if FoundOffset>0 then begin
           inc(currentRow);
           if currentRow>=FoundOffset then
