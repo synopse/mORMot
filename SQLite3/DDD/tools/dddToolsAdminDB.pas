@@ -78,14 +78,16 @@ end;
 
 procedure TDBFrame.btnExecClick(Sender: TObject);
 var sql,res: RawUTF8;
-    SelStart, SelLength: integer;
+    mmo: string;
+    SelStart, SelLength,i : integer;
     table: TSQLTable;
 begin
   SelStart := mmoSQL.SelStart;
   SelLength := mmoSQL.SelLength;
   if SelLength>10 then
-    sql := Trim(StringToUTF8(mmoSQL.SelText)) else
-    sql := Trim(StringToUTF8(mmoSQL.Lines.Text));
+    mmo := mmoSQL.SelText else
+    mmo := mmoSQL.Lines.Text;
+  sql := Trim(StringToUTF8(mmo));
   if sql='' then
     exit;
   Screen.Cursor := crHourGlass;
@@ -105,8 +107,19 @@ begin
     drwgrdResult.Hide;
     mmoResult.Align := alClient;
     if fJson<>'' then
-      if IdemPropNameU(sql,'#help') then
-        res := StringReplaceAll(UnQuoteSQLString(fJson),'|',#13#10' ') else
+      if IdemPropNameU(sql,'#help') then begin
+        fJson := UnQuoteSQLString(fJson);
+        res := StringReplaceAll(fJson,'|',#13#10' ');
+        with TRawUTF8List.Create do
+        try
+          SetText(fJson);
+          for i := 0 to Count-1 do
+            if (ListPtr[i]<>nil) and (ListPtr[i][0]='#') then
+              
+        finally
+          Free;
+        end;
+      end else
         JSONBufferReformat(pointer(fJson),res);
     mmoResult.Text := UTF8ToString(res);
     fJson := '';
@@ -130,7 +143,8 @@ begin
     mmoSQL.SelLength := SelLength;
   end;
   mmoSQL.SetFocus;
-  if (fJson<>'') and (sql<>fPreviousSQL) then begin
+  if ((fJson<>'') or ((sql[1]='#') and (PosEx(' ',sql)>0))) and
+     (sql<>fPreviousSQL) then begin
     AppendToTextFile(sql,fSQLLogFile);
     fPreviousSQL := sql;
   end;
