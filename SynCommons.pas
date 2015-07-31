@@ -478,7 +478,7 @@ unit SynCommons;
   - added IsHTMLContentTypeTextual() function, and modified ExistsIniNameValue()
   - added ShortStringToAnsi7String() and UpperCopyWin255() functions
   - added IsEqualGUID/IsNullGuid/GUIDToText/GUIDToRawUTF8/GUIDToString functions
-  - added RandomGUID, TextToGUID, RawUTF8ToGUID and StringToGUID functions
+  - added AddGUID/RandomGUID/TextToGUID/RawUTF8ToGUID/StringToGUID functions
   - added TDynArray.ElemPtr() low-level method
   - let TDynArray.LoadFrom() accept Win32/Win64 cross platform binary content
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
@@ -5149,6 +5149,10 @@ function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integ
 // - this version is faster than the one supplied by SysUtils
 function IsNullGUID(const guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// append one TGUID item to a TGUID dynamic array
+// - returning the newly inserted index in guids[]
+function AddGUID(var guids: TGUIDDynArray; const guid: TGUID): integer;
 
 /// append a TGUID binary content as text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -27174,6 +27178,13 @@ begin
   result := (PIntegerArray(@guid)^[0]=0) and (PIntegerArray(@guid)^[1]=0) and
             (PIntegerArray(@guid)^[2]=0) and (PIntegerArray(@guid)^[3]=0);
   {$endif}
+end;
+
+function AddGUID(var guids: TGUIDDynArray; const guid: TGUID): integer;
+begin
+  result := length(guids);
+  SetLength(guids,result+1);
+  guids[result] := guid;
 end;
 
 function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
