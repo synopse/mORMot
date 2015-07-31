@@ -2235,18 +2235,13 @@ begin
   if SQL='' then
     exit;
   if SQL[1]='#' then
-    case IdemPCharArray(@SQL[2],['STATE','STATU','SETTINGS','VERSION','EXE','HELP']) of
+    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','HELP']) of
     0: begin
       if InternalRetrieveState(status) then
         result := VariantSaveJSON(status);
       exit;
     end;
     1: begin
-      result := FormatUTF8('"%"',[GetEnumName(
-        TypeInfo(TDDDAdministratedDaemonStatus),ord(fStatus))^]);
-      exit;
-    end;
-    2: begin
       if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           Split(copy(SQL,11,maxInt),'=',name,value);
@@ -2260,15 +2255,15 @@ begin
       end;
       exit;
     end;
-    3,4: begin
+    2: begin
       result := JSONEncode(['prog',ExeVersion.ProgramName,
         'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
         'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true)]);
       exit;
     end;
-    5: begin
+    3: begin
       result := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#status|#settings|#settings full.path=value|#version|#exe'+
+        '|#state|#settings|#settings full.path=value|#version'+
         '|#help|#time|#model|#rest|#interfaces|#stats|#stats(method)|'+
         '#stats(interface.method)|#services|#sessions|#get url|#post url"';
     end;
@@ -2277,13 +2272,14 @@ begin
   if rest=nil then
     exit;
   if SQL[1]='#' then begin // pseudo SQL for a given TSQLRest[Server] instance
-    case IdemPCharArray(@SQL[2],['TIME','MODEL','REST']) of
+    P := @SQL[2];
+    case IdemPCharArray(P,['TIME','MODEL','REST']) of
     0: result := Int64ToUtf8(rest.ServerTimeStamp);
     1: result := ObjectToJSON(rest.Model);
     2: result := ObjectToJSON(rest);
     else if rest.InheritsFrom(TSQLRestServer) then
-      case IdemPCharArray(@SQL[2],[
-        'INTERFACES','STATS(','STATS','SERVICES','SESSIONS','GET','POST']) of
+      case IdemPCharArray(P,['INTERFACES','STATS(','STATS',
+        'SERVICES','SESSIONS','GET','POST']) of
       0: result := serv.ServicesPublishedInterfaces;
       1: begin
         name := copy(SQL,8,length(SQL)-8);
@@ -2304,8 +2300,7 @@ begin
       5,6: begin
         fillchar(call,SizeOf(call),0);
         call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
-        P := @SQL[2];
-        call.Method := GetNextItem(P,' ');
+        call.Method := GetNextItem(P,' '); // GET or POST
         call.Url := serv.Model.Root;
         if P<>nil then
           call.Url := call.Url+'/'+RawUTF8(P);

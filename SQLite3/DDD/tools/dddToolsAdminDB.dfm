@@ -91,6 +91,20 @@ object DBFrame: TDBFrame
         TabOrder = 2
         OnClick = btnHistoryClick
       end
+      object btnCmd: TButton
+        Left = 509
+        Top = 72
+        Width = 43
+        Height = 25
+        Hint = 'Launch a pseudo-command'
+        Anchors = [akTop, akRight]
+        Caption = '#cmd'
+        ParentShowHint = False
+        PopupMenu = pmCmd
+        ShowHint = True
+        TabOrder = 3
+        OnClick = btnCmdClick
+      end
     end
     object mmoResult: TMemo
       Left = 1
@@ -124,5 +138,9 @@ object DBFrame: TDBFrame
       Visible = False
       OnClick = drwgrdResultClick
     end
+  end
+  object pmCmd: TPopupMenu
+    Left = 648
+    Top = 80
   end
 end

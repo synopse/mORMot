@@ -8480,7 +8480,7 @@ type
     // - when set, all internal SQL statements will be (re)created, depending of
     // the expected ID/RowID column name expected (i.e. SQLTableSimpleFields[]
     // and SQLSelectAll[] - SQLUpdateSet and SQLInsertSet do not include ID)
-    property Kind: TSQLRecordVirtualKind read fKind write SetKind;
+    property Kind: TSQLRecordVirtualKind read fKind write SetKind default rSQLite3;
   end;
 
   /// a Database Model (in a MVC-driven way), for storing some tables types
@@ -48962,7 +48962,7 @@ begin
   if (fakeID=0) or (connectionID=0) or (Values[0].Name=nil) then
     exit;
   withLog := not IdemPropNameU('ISynLogCallback',Values[0].Name,StrLen(Values[0].Name));
-  if withLog then
+  if withLog then // avoid stack overflow ;)
     fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType,fakeID,Values[0].Name],sllDebug);
   try

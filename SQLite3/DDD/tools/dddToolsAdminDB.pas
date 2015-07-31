@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, ExtCtrls,
-  SynCommons, mORMot, mORMotDDD, mORMotUI;
+  SynCommons, mORMot, mORMotDDD, mORMotUI, Menus;
 
 type
   TDBFrame = class(TFrame)
@@ -19,10 +19,13 @@ type
     spl1: TSplitter;
     spl2: TSplitter;
     btnHistory: TButton;
+    btnCmd: TButton;
+    pmCmd: TPopupMenu;
     procedure lstTablesDblClick(Sender: TObject);
     procedure btnExecClick(Sender: TObject);
     procedure drwgrdResultClick(Sender: TObject);
     procedure btnHistoryClick(Sender: TObject);
+    procedure btnCmdClick(Sender: TObject);
   protected
     fmmoResultRow: integer;
     fGrid: TSQLTableToGrid;
@@ -66,6 +69,9 @@ begin
   finally
     EndUpdate;
   end;
+  mmoSQL.Text := '#help';
+  btnExecClick(nil);
+  mmoSQL.Text := '';
 end;
 
 procedure TDBFrame.lstTablesDblClick(Sender: TObject);
@@ -77,11 +83,42 @@ begin
 end;
 
 procedure TDBFrame.btnExecClick(Sender: TObject);
+
+  function NewPopup(const c: string): TMenuItem;
+  var cmd: string;
+      i: integer;
+  begin
+    result := TMenuItem.Create(pmCmd);
+    result.Caption := c;
+    i := Pos(' ',c);
+    if i>0 then
+      cmd := copy(c,1,i)+'*' else begin
+      i := Pos('(',c);
+      if i>0 then
+        cmd := copy(c,1,i)+'*)' else
+        cmd := c;
+    end;
+    result.Hint := cmd;
+    result.OnClick := btnExecClick;
+  end;
+
 var sql,res: RawUTF8;
-    mmo: string;
+    mmo,cmd: string;
     SelStart, SelLength,i : integer;
     table: TSQLTable;
+    P: PUTF8Char;
 begin
+  if (Sender<>nil) and Sender.InheritsFrom(TMenuItem) then begin
+    mmo := TMenuItem(Sender).Hint;
+    mmoSQL.Text := mmo;
+    i := Pos('*',mmo);
+    if i>0 then begin
+      mmoSQL.SelStart := i-1;
+      mmoSQL.SelLength := 1;
+      mmoSQL.SetFocus;
+      exit;
+    end;
+  end;
   SelStart := mmoSQL.SelStart;
   SelLength := mmoSQL.SelLength;
   if SelLength>10 then
@@ -110,14 +147,13 @@ begin
       if IdemPropNameU(sql,'#help') then begin
         fJson := UnQuoteSQLString(fJson);
         res := StringReplaceAll(fJson,'|',#13#10' ');
-        with TRawUTF8List.Create do
-        try
-          SetText(fJson);
-          for i := 0 to Count-1 do
-            if (ListPtr[i]<>nil) and (ListPtr[i][0]='#') then
-              
-        finally
-          Free;
+        if pmCmd.Items.Count=0 then begin
+          P := pointer(res);
+          while P<>nil do begin
+            cmd := UTF8ToString(Trim(GetNextLine(P,P)));
+            if (cmd<>'') and (cmd[1]='#') then
+              pmCmd.Items.Add(NewPopup(cmd));
+          end;
         end;
       end else
         JSONBufferReformat(pointer(fJson),res);
@@ -141,8 +177,8 @@ begin
   if Sender<>nil then begin
     mmoSQL.SelStart := SelStart;
     mmoSQL.SelLength := SelLength;
+    mmoSQL.SetFocus;
   end;
-  mmoSQL.SetFocus;
   if ((fJson<>'') or ((sql[1]='#') and (PosEx(' ',sql)>0))) and
      (sql<>fPreviousSQL) then begin
     AppendToTextFile(sql,fSQLLogFile);
@@ -284,6 +320,12 @@ begin
   if AndExec then
     btnExecClick(btnExec) else
     mmoSQL.SetFocus;
+end;
+
+procedure TDBFrame.btnCmdClick(Sender: TObject);
+begin
+  with ClientToScreen(btnCmd.BoundsRect.TopLeft) do
+    pmCmd.Popup(X,Y+btnCmd.Height);
 end;
 
 end.
