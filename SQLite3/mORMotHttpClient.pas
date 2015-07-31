@@ -668,8 +668,10 @@ begin
       'to enable interface parameter callbacks for %.%(%: %)',
       [self,Sender.InterfaceTypeInfo^.Name,Method.URI,
        ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
-  result := fFakeCallbacks.DoRegister(
-    ParamValue,TInterfaceFactory.Get(ParamInfo.ArgTypeInfo));
+  if ParamValue=nil then
+    result := 0 else
+    result := fFakeCallbacks.DoRegister(
+      ParamValue,TInterfaceFactory.Get(ParamInfo.ArgTypeInfo));
 end;
 
 function TSQLHttpClientWebsockets.FakeCallbackUnregister(
@@ -681,6 +683,10 @@ begin
   ws := WebSockets;
   if ws=nil then
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
+  if FakeCallbackID=0 then begin
+    result := true;
+    exit;
+  end;
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp)=HTML_SUCCESS;
 end;
@@ -779,6 +785,8 @@ begin
   finally
     fFakeCallbacks.Safe.UnLock;
   end;
+  if instance=nil then
+    exit;
   if (Ctxt.InHeaders<>'') and
      (factory.MethodIndexCurrentFrameCallback>=0) then begin
     frames := FindIniNameValue(pointer(Ctxt.InHeaders),'SEC-WEBSOCKET-FRAME: ');
