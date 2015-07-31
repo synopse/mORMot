@@ -219,7 +219,11 @@ type
     function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
     /// used to subscribe for real-time remote log monitoring
     // - allows to track the specified log events, with a callback
-    procedure SubscribeLog(const Level: TSynLogInfos; const Callback: ISynLogCallback);
+    // - you can specify a number of KB of existing log content to send to the
+    // monitoring tool, before the actual real-time process: Callback.Log()
+    // would be called first with Level=sllNone and all the existing text
+    procedure SubscribeLog(const Level: TSynLogInfos; const Callback: ISynLogCallback;
+      ReceiveExistingKB: cardinal);
     /// will be called when a callback is released on the client side
     // - this method matches IServiceWithCallbackReleased signature
     // - will be used to unsubscribe any previous ISynLogCallback notification
@@ -834,7 +838,8 @@ type
     function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON; virtual;
     /// IAdministratedDaemon command to subscribe to a set of events for
     // real-time remote monitoring of the specified log events
-    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback);
+    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
+      ReceiveExistingKB: cardinal);
     /// IAdministratedDaemon command called when a callback is released on the client side
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
     /// run the daemon, until it is halted
@@ -2190,11 +2195,16 @@ begin
 end;
 
 procedure TDDDAdministratedDaemon.SubscribeLog(const Levels: TSynLogInfos;
-  const Callback: ISynLogCallback);
+  const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
+var previousContentSize: integer;
 begin
   if fRemoteLog=nil then
     fRemoteLog := TSynLogCallbacks.Create(fLogClass.Family);
-  fRemoteLog.Subscribe(Levels,Callback);
+  previousContentSize := fRemoteLog.Subscribe(Levels,Callback,ReceiveExistingKB);
+  {$ifdef WITHLOG}
+  fLogClass.Add.Log(sllTrace,'SubscribeLog sent % bytes as previous content',
+    [previousContentSize],self);
+  {$endif}
 end;
 
 function TDDDAdministratedDaemon.PublishedORM(const DatabaseName: RawUTF8): TSQLRest;

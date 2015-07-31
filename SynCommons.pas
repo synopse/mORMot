@@ -7288,6 +7288,7 @@ type
     property Capacity: PtrInt read GetCapacity write SetCapacity;
     /// get or set a RawUTF8 item
     // - returns '' and raise no exception in case of out of range supplied index
+    // - if you want to use it with the VCL, use UTF8ToString() function
     property Strings[Index: PtrInt]: RawUTF8 read Get write Put; default;
     /// get or set a Object item
     // - returns nil and raise no exception in case of out of range supplied index

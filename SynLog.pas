@@ -308,11 +308,13 @@ type
   {$ifndef DELPHI5OROLDER}
   /// a mORMot-compatible calback definition
   // - used to notify a remote mORMot server via interface-based serivces
-  // for any incoming event
+  // for any incoming event, using e.g. TSynLogCallbacks.Subscribe
   ISynLogCallback = interface(IInvokable)
     ['{9BC218CD-A7CD-47EC-9893-97B7392C37CF}']
     /// each line of the TTextWriter internal instance will trigger this method
     // - the format is similar to TOnTextWriterEcho, as defined in SynCommons
+    // - an initial call with Level=sllNone and the whole previous Text may be
+    // transmitted, if ReceiveExistingKB is set for TSynLogCallbacks.Subscribe()
     procedure Log(Level: TSynLogInfo; const Text: RawUTF8);
   end;
 
@@ -341,8 +343,10 @@ type
     /// finalize the registration storage for a given TSynLogFamily instance
     destructor Destroy; override;
     /// register a callback for a given set of log levels
-    procedure Subscribe(const Levels: TSynLogInfos;
-      const Callback: ISynLogCallback); virtual;
+    // - you can specify a number of KB of existing log content to send to the
+    // monitoring tool, before the actual real-time process
+    function Subscribe(const Levels: TSynLogInfos;
+      const Callback: ISynLogCallback; ReceiveExistingKB: cardinal=0): integer; virtual;
     /// unregister a callback previously registered by Subscribe()
     procedure Unsubscribe(const Callback: ISynLogCallback); virtual;
     /// notify a given log event
@@ -483,6 +487,11 @@ type
     /// stop echo remote logging
     // - will free the aClient instance supplied to EchoRemoteStart
     procedure EchoRemoteStop;
+    /// can be used to retrieve up to a specified amount of KB of existing log
+    // - expects a single file to be opened for this family
+    // - will retrieve the log content for the current file, truncating the
+    // text up to the specified number of KB (an up to 128 MB at most)
+    function GetExistingLog(MaximumKB: cardinal): RawUTF8;
 
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list
@@ -709,6 +718,7 @@ type
     fStartTimeStamp: Int64;
     fCurrentTimeStamp: Int64;
     fFrequencyTimeStamp: Int64;
+    fStreamPositionAfterHeader: cardinal;
     fFileName: TFileName;
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
@@ -2592,6 +2602,58 @@ begin
   fEchoRemoteEvent := nil;
 end;
 
+function TSynLogFamily.GetExistingLog(MaximumKB: cardinal): RawUTF8;
+const MAXPREVIOUSCONTENTSIZE = 1024*1024*128; // a 128 MB RawUTF8 is fair enough
+var log: TSynLog;
+    stream: TFileStream;
+    endpos,start: Int64;
+    c: AnsiChar;
+    i,len: integer;
+begin
+  result := '';
+  if SynLogFileList<>nil then begin
+    SynLogFileList.Safe.Lock;
+    try
+      for i := 0 to SynLogFileList.Count-1 do
+      if SynLogFileList.Count=1 then begin
+        log := SynLogFileList.List[0];
+        if log.fFamily<>self then
+          continue; 
+        EnterCriticalSection(GlobalThreadLock);
+        try
+          log.Writer.FlushToStream;
+          if log.Writer.Stream.InheritsFrom(TFileStream) then begin
+            stream := TFileStream(log.Writer.Stream);
+            endpos := stream.Position;
+            if endpos>MAXPREVIOUSCONTENTSIZE then 
+              len := MAXPREVIOUSCONTENTSIZE else
+              len := MaximumKB shl 10;
+            start := log.fStreamPositionAfterHeader;
+            if (len<>0) and (endpos-start>len) then begin
+              start := endpos-len;
+              stream.Position := start;
+              repeat
+                inc(start)
+              until (stream.Read(c,1)=0) or (c=#13);
+            end else
+              stream.Position := start;
+            len := endpos-start;
+            SetLength(result,len);
+            stream.Read(pointer(result)^,len);
+            assert(stream.Position=endpos);
+          end;
+        finally
+          LeaveCriticalSection(GlobalThreadLock);
+        end;
+        break;
+      end;
+    finally
+      SynLogFileList.Safe.UnLock;
+    end;
+  end;
+
+end;
+
 
 { TSynLog }
 
@@ -3242,6 +3304,7 @@ begin
     FlushToStream;
     EchoReset; // header is not to be sent to console
   end;
+  fStreamPositionAfterHeader := fWriter.WrittenBytes;
   QueryPerformanceCounter(fStartTimeStamp);
   Include(fInternalFlags,logHeaderWritten);
 end;
@@ -4264,18 +4327,31 @@ begin
   end;
 end;
 
-procedure TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
-  const Callback: ISynLogCallback);
+function TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback; ReceiveExistingKB: cardinal): integer;
 var Reg: TSynLogCallback;
+    previousContent: RawUTF8;
 begin
-  Reg.Levels := Levels;
-  Reg.Callback := Callback;
-  Safe.Lock;
+  if Assigned(Callback) then
   try
-    Registrations.Add(Reg);
+    if ReceiveExistingKB>0 then begin
+      EnterCriticalSection(GlobalThreadLock);
+      previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
+      Callback.Log(sllNone,previousContent);
+    end;
+    Reg.Levels := Levels;
+    Reg.Callback := Callback;
+    Safe.Lock;
+    try
+      Registrations.Add(Reg);
+    finally
+      Safe.UnLock;
+    end;
   finally
-    Safe.UnLock;
+    if ReceiveExistingKB>0 then
+      LeaveCriticalSection(GlobalThreadLock);
   end;
+  result := length(previousContent);
 end;
 
 procedure TSynLogCallbacks.Unsubscribe(const Callback: ISynLogCallback);

@@ -106,9 +106,7 @@ begin
       if n>0 then begin
         fPage.ActivePageIndex := 1;
         Application.ProcessMessages;
-        fDBFrame[0].mmoSQL.Text := '#help';
-        fDBFrame[0].btnExecClick(nil);
-        fDBFrame[0].mmoSQL.Text := '';
+        fDBFrame[0].mmoSQL.SetFocus;
       end;
     finally
       temp.Free;

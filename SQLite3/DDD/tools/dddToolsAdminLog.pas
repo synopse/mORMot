@@ -20,6 +20,8 @@ type
     drwgrdEvents: TDrawGrid;
     btnStartLog: TButton;
     tmrRefresh: TTimer;
+    edtExistingLogKB: TEdit;
+    lblExistingLogKB: TLabel;
     procedure chklstEventsDrawItem(Control: TWinControl; Index: Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure chklstEventsClick(Sender: TObject);
@@ -29,6 +31,7 @@ type
       Rect: TRect; State: TGridDrawState);
     procedure drwgrdEventsClick(Sender: TObject);
     procedure btnSearchNextClick(Sender: TObject);
+    procedure chklstEventsDblClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FEventCaption: array[TSynLogInfo] of string;
@@ -141,7 +144,6 @@ begin
   if not drwgrdEvents.Visible then
     exit;
   EventsCheck;
-
 end;
 
 procedure TLogFrame.EventsCheck;
@@ -167,11 +169,14 @@ begin
   Callback := cb;
   try
     FLog := TSynLogFile.Create;
-    Admin.SubscribeLog(FEventsSet,Callback);
+    Admin.SubscribeLog(FEventsSet,Callback,StrToIntDef(edtExistingLogKB.Text,0));
+    chklstEvents.Top := lblExistingLogKB.Top;
     for i := chklstEvents.Count-1 downto 0 do
       if not chklstEvents.Checked[i] then
         chklstEvents.Items.Delete(i);
     btnStartLog.Hide;
+    edtExistingLogKB.Hide;
+    lblExistingLogKB.Hide;
     edtSearch.Show;
     btnSearchNext.Show;
     drwgrdEvents.DoubleBuffered := true;
@@ -333,6 +338,30 @@ begin
   Callback := nil;
   Admin := nil;
   FreeAndNil(fLog);
+end;
+
+procedure TLogFrame.chklstEventsDblClick(Sender: TObject);
+var i: integer;
+    E: TSynLogInfo;
+begin
+  if FLog.EventLevel=nil then // plain text file does not handle this
+    exit;
+  i := chklstEvents.ItemIndex;
+  if i<0 then
+    exit;
+  E := TSynLogInfo(chklstEvents.Items.Objects[i]);
+  // search from next item
+  for i := drwgrdEvents.Row+1 to FLog.Count-1 do
+    if FLog.EventLevel[i]=E then begin
+      SetListItem(i);
+      exit;
+    end;
+  // search from beginning
+  for i := 0 to drwgrdEvents.Row-1 do
+    if FLog.EventLevel[i]=E then begin
+      SetListItem(i);
+      exit;
+    end;
 end;
 
 end.

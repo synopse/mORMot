@@ -14,6 +14,13 @@ object LogFrame: TLogFrame
     DesignSize = (
       145
       278)
+    object lblExistingLogKB: TLabel
+      Left = 12
+      Top = 50
+      Width = 56
+      Height = 13
+      Caption = 'Existing KB:'
+    end
     object edtSearch: TEdit
       Left = 8
       Top = 16
@@ -43,14 +50,14 @@ object LogFrame: TLogFrame
     end
     object chklstEvents: TCheckListBox
       Left = 8
-      Top = 48
+      Top = 72
       Width = 129
       Height = 105
       ItemHeight = 13
       PopupMenu = pmFilter
       Style = lbOwnerDrawFixed
       TabOrder = 2
-      OnClick = chklstEventsClick
+      OnDblClick = chklstEventsDblClick
       OnDrawItem = chklstEventsDrawItem
     end
     object btnStartLog: TButton
@@ -61,6 +68,17 @@ object LogFrame: TLogFrame
       Caption = 'Start Logging'
       TabOrder = 3
       OnClick = btnStartLogClick
+    end
+    object edtExistingLogKB: TEdit
+      Left = 72
+      Top = 48
+      Width = 57
+      Height = 21
+      Hint = 'How many KB of log text should be transmitted at Start'
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 4
+      Text = '256'
     end
   end
   object pnlRight: TPanel
