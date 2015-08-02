@@ -5235,7 +5235,6 @@ begin
       if WasPrepared<>nil then
         WasPrepared^ := true;
     end else begin
-      //Statement.BindReset; // slow down the process, and is not mandatory
       Statement.Reset;
       if WasPrepared<>nil then
         WasPrepared^ := false;

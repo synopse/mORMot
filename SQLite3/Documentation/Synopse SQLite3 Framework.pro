@@ -7637,6 +7637,8 @@ $  "POST",{"FirstName":"@…,KA½� #¶f","LastName":"New","YearOfBirth":1001, "Y
 $   (...)  all POST = add actions
 $ "POST",{"FirstName":"+tqCXW3Â\"","LastName":"New","YearOfBirth":2000, "YearOfDeath":1519}
 $  ]}
+If {\f1\fs20 BatchAdd} implies only simple fields (which is the default), those fields name won't be transmitted, and the following would be emitted in the JSON stream, to reduce needed bandwith:
+$  "SIMPLE",["‚@•�"H� m£� g","New",1000,1519],
 On success, the following JSON stream will be received from the server:
 $ [200,200,...]
 This array of results is either the HTTP status codes (here 200 means OK), or the inserted new ID (for a {\f1\fs20 BatchAdd} command).

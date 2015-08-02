@@ -1060,6 +1060,8 @@ unit mORMot;
     - in addition to Batch*() methods available at TSQLRestClientURI level, all
       BATCH process is now implemented by stand-alone TSQLRestBatch instances,
       which can safely be used at TSQLRestServer level, even from multi thread
+    - introduced "SIMPLE": and "SIMPLE@": commands in the JSON stream for
+      default BatchAdd() with simple fields (to reduce bandwidth and memory use) 
     - fixed BATCH process to generate valid JSON content
     - fixed BATCH process to check for the TSQLAccessRights of the current
       logged user just like other CRUD methods, as reported by [27cf02be50]
@@ -1876,8 +1878,14 @@ type
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
   // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
+  // - boExtendedJSON would force the JSON to unquote the column names,
+  // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
+  // - boPostNoSimpleFields would avoid to send a TSQLRestBach.Add() with simple
+  // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
+  // without the field names
   TSQLRestBatchOption = (
-    boInsertOrIgnore, boInsertOrReplace);
+    boInsertOrIgnore, boInsertOrReplace,
+    boExtendedJSON, boPostNoSimpleFields);
 
   /// a set of options for TSQLRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
@@ -4949,6 +4957,9 @@ type
     /// ensure that the TSQLRecord RTTI matches the supplied binary header
     // - used e.g. by TSQLRestStorageInMemory.LoadFromBinary()
     function CheckBinaryHeader(var R: TFileBufferReader): boolean;
+    /// convert a JSON array of simple field values into a matching JSON object
+    function SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
+      var EndOfObject: AnsiChar; ExtendedJSON: boolean): RawUTF8;
 
     /// register a custom filter or validation rule to the class for a specified
     // field
@@ -24059,7 +24070,7 @@ var EndOfObject: AnsiChar;
             FieldTypeApproximation[ndx] := ftaBlob;
             case Params of
             pInlined: // untouched -> recognized as BLOB in SQLParamContent()
-              FieldValues[ndx] := QuotedStr(res,'''');
+              QuotedStr(res,'''',FieldValues[ndx]);
 {            pQuoted: // \uFFF0base64encodedbinary -> 'X''hexaencodedbinary'''
               // if not inlined, it can be used directly in INSERT/UPDATE statements
               Base64MagicToBlob(res+3,FieldValues[ndx]);
@@ -24076,12 +24087,12 @@ var EndOfObject: AnsiChar;
             // regular string content
             if Params=pNonQuoted then
               // returned directly as RawUTF8
-              FieldValues[ndx] := res else
+              SetString(FieldValues[ndx],PAnsiChar(res),StrLen(res)) else
               { escape SQL strings, cf. the official SQLite3 documentation:
                 "A string is formed by enclosing the string in single quotes (').
                  A single quote within the string can be encoded by putting two
                  single quotes in a row - as in Pascal." }
-              FieldValues[ndx] := QuotedStr(res,'''');
+              QuotedStr(res,'''',FieldValues[ndx]);
           end;
         end else
           if res=nil then begin
@@ -24105,7 +24116,7 @@ var EndOfObject: AnsiChar;
     end;
   end;
 
-var FieldName: RawUTF8;
+var FN: PUTF8Char;
     F: integer;
     FieldIsRowID: Boolean;
 begin
@@ -24127,10 +24138,10 @@ begin
     repeat
       if P=nil then
         break;
-      FieldName := GetJSONPropName(P);
-      if (FieldName='') or (P=nil) then
+      FN := GetJSONPropName(P);
+      if (FN=nil) or (P=nil) then
         break; // invalid JSON field name
-      FieldIsRowID := IsRowId(pointer(FieldName));
+      FieldIsRowID := IsRowId(FN);
       if FieldIsRowID then
         if RowID>0 then begin
           GetJSONField(P,P,nil,@EndOfObject); // ignore this if explicit RowID
@@ -24138,8 +24149,8 @@ begin
             break else continue;
         end else
         if ReplaceRowIDWithID then
-          FieldName := 'ID';
-      FieldNames[FieldCount] := FieldName;
+          FN := 'ID';
+      SetString(FieldNames[FieldCount],PAnsiChar(FN),StrLen(FN));
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
         SetID(FieldValues[FieldCount],DecodedRowID);
@@ -24531,7 +24542,7 @@ begin
   result := '';
   if P=nil then
     exit;
-  P := GotoNextNotSpace(P);
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   if P^<>'{' then
     exit;
   Beg := P;
@@ -29867,6 +29878,9 @@ begin
     fBatch.Add(',');
   end;
   fOptions := Options;
+  if boExtendedJSON in Options then
+    fBatch.UnquotedExpandedColumnNames := true;
+  Options := Options-[boExtendedJSON,boPostNoSimpleFields]; // client-side only
   if byte(Options)<>0 then begin
     fBatch.AddShort('"options",');
     fBatch.Add(byte(Options));
@@ -29918,22 +29932,33 @@ function TSQLRestBatch.Add(Value: TSQLRecord; SendData,ForceID: boolean;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var Props: TSQLRecordProperties;
     FieldBits: TSQLFieldBits;
+    PostSimpleFields: boolean;
+    f: integer;
 begin
   result := -1;
   if (self=nil) or (Value=nil) or (fBatch=nil) then
     exit; // invalid parameters, or not opened BATCH sequence
+  if (fTable<>nil) and (PSQLRecordClass(Value)^<>fTable) then
+    exit;
   Props := Value.RecordProps;
-  if fTable<>nil then
-    if PSQLRecordClass(Value)^<>fTable then
-      exit else // '{"Table":[...,"POST",{object},...]}'
-      fBatch.AddShort('"POST",') else begin
-      fBatch.AddShort('"POST@'); // '[...,"POST@Table",{object}',...]'
+  if SendData and
+     (fRest.Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
+      ForceID := true; // same format as TSQLRestClient.Add
+  if SendData and (not ForceID) and IsZero(CustomFields) and
+     not(boPostNoSimpleFields in fOptions) then begin
+    PostSimpleFields := true;
+    fBatch.AddShort('"SIMPLE');
+  end else begin
+    PostSimpleFields := false;
+    fBatch.AddShort('"POST');
+  end;
+  if fTable<>nil then  // '{"Table":[...,"POST",{object},...]}'
+      fBatch.AddShort('",') else begin
+      fBatch.Add('@'); // '[...,"POST@Table",{object}',...]'
       fBatch.AddString(Props.SQLTableName);
       fBatch.Add('"',',');
     end;
   if SendData then begin
-    if fRest.Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID then
-      ForceID := true; // same format as TSQLRestClient.Add
     if IsZero(CustomFields) then
       FieldBits := Props.SimpleFieldsBits[soInsert] else
     if DoNotAutoComputeFields then
@@ -29944,7 +29969,16 @@ begin
     fTablePreviousSendData := PSQLRecordClass(Value)^;
     if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
       Value.ComputeFieldsBeforeWrite(fRest,seAdd);
-    Value.GetJSONValues(fBatch);
+    if PostSimpleFields then begin
+      fBatch.Add('[');
+      for f := 0 to length(Props.SimpleFields)-1 do begin
+        Props.SimpleFields[f].GetJSONValues(Value,fBatch);
+        fBatch.Add(',');
+      end;
+      fBatch.CancelLastComma;
+      fBatch.Add(']');
+    end else
+      Value.GetJSONValues(fBatch);
     if fCalledWithinRest and ForceID then
       fRest.fCache.Notify(Value,soInsert);
   end else
@@ -32837,8 +32871,10 @@ function TSQLRestClientURI.ServiceDefine(const aInterfaces: array of TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8): boolean;
 begin
-  result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterfaces),
-    aInstanceCreation,aContractExpected);
+  if self<>nil then
+    result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterfaces),
+      aInstanceCreation,aContractExpected) else
+    result := false;
 end;
 
 function TSQLRestClientURI.ServiceDefine(const aInterface: TGUID;
@@ -37418,20 +37454,21 @@ begin
         RunningRest := self else
         RunningRest := RunStatic;
       // get CRUD method and associated Value/ID
-      case IdemPCharArray(Method,['POST','PUT','DELETE']) of
+      case IdemPCharArray(Method,['POST','PUT','DELETE','SIMPLE']) of
         // IdemPCharArray() will ignore '@' char if appended after method name
         0: begin
           // '{"Table":[...,"POST",{object},...]}' or '[...,"POST@Table",{object},...]'
           URIMethod := mPOST;
           Value := JSONGetObject(Sent,@ID,EndOfObject,true);
           if Sent=nil then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong POST',[self]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: Wrong POST',[self]);
           if IsNotAllowed then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST/Add not allowed on %',
-              [self,RunTable]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: POST/Add not allowed on %',[self,RunTable]);
           if not RecordCanBeUpdated(RunTable,ID,seAdd,@ErrMsg)  then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: POST impossible: %',
-              [self,ErrMsg]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: POST impossible: %',[self,ErrMsg]);
         end;
         1: begin
           // '{"Table":[...,"PUT",{object},...]}' or '[...,"PUT@Table",{object},...]'
@@ -37440,24 +37477,41 @@ begin
           if (Sent=nil) or (Value='') or (ID<=0) then
             raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong PUT',[self]);
           if IsNotAllowed then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: PUT/Update not allowed on %',
-              [self,RunTable]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: PUT/Update not allowed on %',[self,RunTable]);
         end;
         2: begin
           // '{"Table":[...,"DELETE",ID,...]}' or '[...,"DELETE@Table",ID,...]'
           URIMethod := mDELETE;
           ID := GetInt64(GetJSONField(Sent,Sent,@wasString,@EndOfObject));
           if (ID<=0) or wasString then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Wrong DELETE',[self]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: Wrong DELETE',[self]);
           if IsNotAllowed then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE not allowed on %',
-              [self,RunTable]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: DELETE not allowed on %',[self,RunTable]);
           if not RecordCanBeUpdated(RunTable,ID,seDelete,@ErrMsg) then
-            raise EORMBatchException.CreateUTF8('%.EngineBatchSend: DELETE impossible: "%"',
-              [self,ErrMsg]);
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: DELETE impossible: "%"',[self,ErrMsg]);
         end;
-        else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
-          [self,Method]);
+        3: begin
+          // '{"Table":[...,"SIMPLE",[values],...]}' or '[...,"SIMPLE@Table",[values],...]'
+          URIMethod := mPOST;
+          Value := Model.TableProps[TableIndex].Props.
+            SaveSimpleFieldsFromJsonArray(Sent,EndOfObject,true);
+          ID := 0; // no ID is never transmitted with simple fields
+          if (Sent=nil) or (Value='') then
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: Wrong SIMPLE',[self]);
+          if IsNotAllowed then
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: SIMPLE/Add not allowed on %',[self,RunTable]);
+          if not RecordCanBeUpdated(RunTable,0,seAdd,@ErrMsg)  then
+            raise EORMBatchException.CreateUTF8(
+              '%.EngineBatchSend: SIMPLE/Add impossible: %',[self,ErrMsg]);
+        end;
+        else raise EORMBatchException.CreateUTF8(
+          '%.EngineBatchSend: Unknown "%" method',[self,Method]);
       end;
       if (Count=0) and (EndOfObject=']') then begin
         // single operation do not need a transaction nor InternalBatchStart/Stop
@@ -43613,6 +43667,47 @@ begin
     result := TJSONSerializer.Create(JSON,Expand,withID,aFields);
     SetJSONWriterColumnNames(result,KnownRowsCount);
   end;
+end;
+
+function TSQLRecordProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
+  var EndOfObject: AnsiChar; ExtendedJSON: boolean): RawUTF8;
+var i: integer;
+    W: TJSONSerializer;
+    Start: PUTF8Char;
+begin
+  result := '';
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  if P^<>'[' then
+    exit;
+  repeat inc(P) until not(P^ in [#1..' ']);
+  W := TJSONSerializer.CreateOwnedStream(1024);
+  try
+    W.Add('{');
+    for i := 0 to length(SimpleFields)-1 do begin
+      if ExtendedJSON then begin
+        W.AddString(SimpleFields[i].Name);
+        W.Add(':');
+      end else
+        W.AddFieldName(SimpleFields[i].Name);
+      Start := P;
+      P := GotoEndJSONItem(P);
+      if (P=nil) or not(P^ in [',',']']) then
+        exit;
+      W.AddNoJSONEscape(Start,P-Start);
+      W.Add(',');
+      repeat inc(P) until not(P^ in [#1..' ']);
+    end;
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+  EndOfObject := P^;
+  if P^<>#0 then
+    repeat inc(P) until not(P^ in [#1..' ']);
 end;
 
 procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);

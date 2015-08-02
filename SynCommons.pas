@@ -6797,6 +6797,8 @@ type
     fExpand: boolean;
     /// used to store output format for TSQLRecord.GetJSONValues()
     fWithID: boolean;
+    /// if expanded output format should write the column names without quotes
+    fUnquotedExpandedColumnNames: boolean;
     /// used to store field for TSQLRecord.GetJSONValues()
     fFields: TSQLFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
@@ -6842,6 +6844,14 @@ type
     property Expand: boolean read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
     property WithID: boolean read fWithID;
+    /// if expanded output format should write the column names without quotes
+    // - this property is ignored if EXPAND=FALSE
+    // - by default, Expand=TRUE would output "col1":...,"col2"... standard
+    // JSON content
+    // - set UnquotedExpandedColumnNames=TRUE to force the non standard
+    // (but shorter) extended JSON layout col1:...,col2:... for EXPAND=true
+    property UnquotedExpandedColumnNames: boolean read fUnquotedExpandedColumnNames
+      write fUnquotedExpandedColumnNames;
     /// Read-Only access to the field bits set for each column to be stored
     property Fields: TSQLFieldIndexDynArray read fFields;
     /// if not Expanded format, contains the Stream position of the first
@@ -11126,13 +11136,16 @@ const
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 /// returns TRUE if the specified field name is either 'ID', either 'ROWID'
-function IsRowID(FieldName: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif} overload;
+function IsRowID(FieldName: PUTF8Char): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// returns TRUE if the specified field name is either 'ID', either 'ROWID'
-function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean; {$ifdef HASINLINE}inline;{$endif} overload;
+function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// returns TRUE if the specified field name is either 'ID', either 'ROWID'
-function IsRowIDShort(const FieldName: shortstring): boolean; {$ifdef HASINLINE}inline;{$endif} overload;
+function IsRowIDShort(const FieldName: shortstring): boolean;
+  {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// retrieve the next identifier within the UTF-8 buffer
 // - returns true if something was set to Prop
@@ -40971,8 +40984,11 @@ procedure TJSONWriter.AddColumns(aKnownRowsCount: integer);
 var i: integer;
 begin
   if fExpand then begin
-    for i := 0 to High(ColNames) do
-      ColNames[i] := '"'+ColNames[i]+'":';
+    if fUnquotedExpandedColumnNames then
+      for i := 0 to High(ColNames) do
+        ColNames[i] := ColNames[i]+':' else
+      for i := 0 to High(ColNames) do
+        ColNames[i] := '"'+ColNames[i]+'":';
   end else begin
     AddShort('{"fieldCount":');
     Add(length(ColNames));
@@ -41275,7 +41291,7 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
 // this code is very fast
 var D: PUTF8Char;
     b,c4: integer;
-label slash;
+label slash,num;
 begin
   if wasString<>nil then
     wasString^ := false; // default is 'no string'
@@ -41283,26 +41299,33 @@ begin
   result := nil;
   if P=nil then exit;
   if P^<=' ' then repeat inc(P); if P^=#0 then exit; until P^>' ';
-  c4 := PInteger(P)^;
-  if (c4=NULL_LOW) and (P[4] in EndOfJSONValueField)  then begin
-    result := nil; // null -> returns nil and wasString=false
-    inc(P,3);
-  end else
-  if (c4=FALSE_LOW) and (P[4]='e') and (P[5] in EndOfJSONValueField) then begin
-    result := P; // false -> returns 'false' and wasString=false
-    inc(P,4);
-  end else
-  if (c4=TRUE_LOW) and (P[4] in EndOfJSONValueField)  then begin
-    result := P; // true -> returns 'true' and wasString=false
-    inc(P,3);
-  end else
-  if P^='"' then begin
+  case P^ of
+  'n':
+    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField)  then begin
+      result := nil; // null -> returns nil and wasString=false
+      inc(P,3);
+    end else
+      exit; // PDest=nil to indicate error
+  'f':
+    if (PInteger(P+1)^=ord('a')+ord('l')shl 8+ord('s')shl 16+ord('e')shl 24) and
+       (P[5] in EndOfJSONValueField) then begin
+      result := P; // false -> returns 'false' and wasString=false
+      inc(P,4);
+    end else
+      exit; // PDest=nil to indicate error
+  't':
+    if (PInteger(P)^=TRUE_LOW) and (P[4] in EndOfJSONValueField)  then begin
+      result := P; // true -> returns 'true' and wasString=false
+      inc(P,3);
+    end else
+      exit; // PDest=nil to indicate error
+  '"': begin
     // '"string \"\\field"' -> 'string "\field'
     if wasString<>nil then
       wasString^ := true;
     inc(P);
     result := P;
-    D := p;
+    D := P;
     repeat // unescape P^ into U^ (cf. http://www.ietf.org/rfc/rfc4627.txt)
       case P^ of
       #0:  exit;  // leave PDest=nil for unexpected end
@@ -41389,11 +41412,13 @@ slash:inc(P);
     inc(P);
     if P^=#0 then
       exit;
-  end else begin
-    // numerical field: all chars before end of field
-    if not (P[0] in DigitFirstChars) then // is first char (at least) a number?
-      if (P[0]<>'0') or (P[1] in ['0'..'9']) then // 0123 excluded by JSON!
-        exit; // leave PDest=nil for unexpected end
+  end;
+  '0':
+    if P[1] in ['0'..'9'] then // 0123 excluded by JSON!
+      exit else // leave PDest=nil for unexpected end
+      goto num;
+  '-','1'..'9': begin
+num:// numerical field: all chars before end of field
     result := P;
     repeat
       if not (P^ in DigitFloatChars) then
@@ -41404,6 +41429,8 @@ slash:inc(P);
       exit;
     if P^<=' ' then
       P^ := #0; // force numerical field with no trailing ' '
+  end;
+  else exit; // PDest=nil to indicate error
   end;
   if not (P^ in EndOfJSONField) then begin
     inc(P);
@@ -41430,12 +41457,12 @@ begin  // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
   if P=nil then
     exit;
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  Name := P; // put here to make some versions of Delphi compiler happy
+  Name := P; // put here to please some versions of Delphi compiler 
   case P^ of
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
     repeat
       inc(P);
-    until not (ord(P^) in IsJsonIdentifier);
+    until not (ord(P[0]) in IsJsonIdentifier);
     if P^ in [#1..' '] then begin
       P^ := #0;
       inc(P);
@@ -47895,12 +47922,10 @@ function IsRowID(FieldName: PUTF8Char): boolean;
 begin
   if FieldName=nil then
     result := false else
-    result :=
-      (PInteger(FieldName)^ and $ffdfdf=
-        ord('I')+ord('D')shl 8) or
-      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf=
-         ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
-       (PIntegerArray(FieldName)^[1] and $ffdf=ord('D')));
+    result := (PInteger(FieldName)^ and $ffdfdf=ord('I')+ord('D')shl 8) or
+              ((PIntegerArray(FieldName)^[0] and $dfdfdfdf=
+                 ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+               (PIntegerArray(FieldName)^[1] and $ffdf=ord('D')));
 end;
 
 function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;

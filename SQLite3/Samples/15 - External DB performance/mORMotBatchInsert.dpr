@@ -54,7 +54,7 @@ type
 const COUNT = 1000000;
 
 {
-    Prepared 1000000 rows in 874.54ms
+    Prepared 1000000 rows in 603.28ms
     Inserted 1000000 rows in 5.79s
 }
 
@@ -83,6 +83,7 @@ begin
           indy.famc := i;
           indy.fams := i*10;
           indy.todo := i+100;
+          indy.firstancestralloop := i*2;
           batch.Add(indy,true);
         end;
       finally
@@ -104,7 +105,8 @@ end;
 begin
   try
     Test;
-    readln;
+    //if DebugHook<>0 then
+      readln;
   except
     on E: Exception do
       ConsoleShowFatalException(E);

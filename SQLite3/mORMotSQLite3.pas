@@ -760,7 +760,8 @@ begin
     end;
   finally
     if fStatement=@fStaticStatement then
-      fStaticStatement.Close;
+      fStaticStatement.Close else
+      fStatement^.BindReset; // release bound RawUTF8 ASAP
     fStatement := nil;
     fStatementSQL := '';
     fStatementGenericSQL := '';
@@ -1791,7 +1792,7 @@ procedure TSQLRestServerDB.InternalBatchStop;
 const MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
 var ndx,f,r,prop,fieldCount,valuesCount,rowCount,valuesFirstRow: integer;
     P: PUTF8Char;
-    DecodeSaved: boolean;
+    DecodeSaved,UpdateEventNeeded: boolean;
     Fields, Values: TRawUTF8DynArray;
     ValuesNull: TByteDynArray;
     Types: TSQLDBFieldTypeDynArray;
@@ -1807,6 +1808,7 @@ begin
       exit; // nothing to add
     if fBatchValuesCount<>fBatchIDCount then
       raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
+    UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
     if fBatchValuesCount=1 then begin // handle single record insertion as usual
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchID[0]);
@@ -1814,7 +1816,7 @@ begin
         InternalRecordVersionHandle(
           soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
-      if InternalExecute(SQL,true) then
+      if InternalExecute(SQL,true) and UpdateEventNeeded then
         InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[0],fBatchValues[0],nil);
       exit;
     end;
@@ -1831,10 +1833,14 @@ begin
       repeat
         // decode a row
         if DecodeSaved then begin
-          privateCopy := fBatchValues[ndx];
-          if privateCopy='' then
-            raise EORMException.CreateUTF8('%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
-          P := UniqueRawUTF8(privateCopy);
+          if UpdateEventNeeded then begin
+            privateCopy := fBatchValues[ndx];
+            P := UniqueRawUTF8(privateCopy);
+          end else
+            P := pointer(fBatchValues[ndx]);
+          if P=nil then
+            raise EORMException.CreateUTF8(
+              '%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
           while P^ in [#1..' ','{','['] do inc(P);
           Decode.Decode(P,nil,pNonQuoted,fBatchID[ndx]);
           if Props.RecordVersionField<>nil then
@@ -1898,8 +1904,9 @@ begin
               prop := 0;
           end;
           repeat until fStatement^.Step<>SQLITE_ROW;
-          for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
-            InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[r],fBatchValues[r],nil);
+          if UpdateEventNeeded then
+            for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
+              InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[r],fBatchValues[r],nil);
           inc(valuesFirstRow,rowCount);
           GetAndPrepareStatementRelease;
         except

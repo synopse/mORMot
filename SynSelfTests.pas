@@ -5610,7 +5610,7 @@ begin
      Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil);
      Check(not Valid);
      U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-     Check(IdemPChar(JSONToObject(C2,UniqueRawUTF8(U),Valid),',"LENGTH'),'invalid JSON');
+     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil,'invalid JSON');
      Check(not Valid);
   finally
     C2.Free;
