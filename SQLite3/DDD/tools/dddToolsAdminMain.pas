@@ -55,7 +55,7 @@ begin
     if TLoginForm.Login(Application.Mainform.Caption,Format('Credentials for %s',
         [Definition.ORM.ServerName]),U,P,true,'') then begin
       Definition.ORM.User := StringToUTF8(U);
-      Definition.ORM.PasswordPlain := P;
+      Definition.ORM.PasswordPlain := StringToUTF8(P);
     end else
       exit;
   result := true;
