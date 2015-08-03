@@ -26,96 +26,113 @@ type
     fPages: array of TSynPage;
     fLogFrame: TLogFrame;
     fDBFrame: array of TDBFrame;
+    fDefinition: TAdministratedDaemonClientDefinition;
   public
-    Server,Port: AnsiString;
-    RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8;
-    DBFrameClass: TDBFrameClass;
     LogFrameClass: TLogFrameClass;
+    DBFrameClass: TDBFrameClass;
+    function Open(const Definition: TAdministratedDaemonClientDefinition): Boolean;
   end;
 
 var
   AdminMainForm: TAdminMainForm;
 
+function ValidateDefinition(var Definition: TAdministratedDaemonClientDefinition): boolean;
+
+
 implementation
 
 {$R *.dfm}
 
-procedure TAdminMainForm.FormShow(Sender: TObject);
-var temp: TForm;
-    i,n: integer;
-    version: Variant;
-    U,P: string;
+function ValidateDefinition(var Definition: TAdministratedDaemonClientDefinition): boolean;
+var U,P: string;
 begin
-  if Port='' then begin
-    Close;
+  result := false;
+  if Definition.Port='' then
     exit;
-  end;
-  if Server='' then
-    Server := 'localhost';
-  if DBFrameClass=nil then
-    DBFrameClass := TDBFrame;
-  if LogFrameClass=nil then
-    LogFrameClass := TLogFrame;
-  if UserName='' then
-  if TLoginForm.Login(Caption,Format('Credentials for %s:%s',
-      [Server,Port]),U,P,true,'') then begin
-    UserName := StringToUTF8(U);
-    HashedPassword := TSQLAuthUser.ComputeHashedPassword(StringToUTF8(P));
-  end else begin
-    Close;
+  if Definition.Server='' then
+    Definition.Server := 'localhost';
+  if Definition.UserName='' then
+    if TLoginForm.Login(Application.Mainform.Caption,Format('Credentials for %s:%s',
+        [Definition.Server,Definition.Port]),U,P,true,'') then begin
+      Definition.UserName := StringToUTF8(U);
+      Definition.HashedPassword := TSQLAuthUser.ComputeHashedPassword(StringToUTF8(P));
+    end else
+      exit;
+  result := true;
+end;
+
+function TAdminMainForm.Open(const Definition: TAdministratedDaemonClientDefinition): boolean;
+var temp: TForm;
+    version: Variant;
+begin
+  result := true;
+  if Assigned(fAdmin) then
     exit;
-  end;
   try
-    temp := CreateTempForm(Format('Connecting to %s:%s...',[Server,Port]));
+    temp := CreateTempForm(Format('Connecting to %s:%s...',[Definition.Server,Definition.Port]));
     try
       Application.ProcessMessages;
-      fClient := AdministratedDaemonClient(
-        Server,Port,RootURI,UserName,HashedPassword,WebSocketPassword);
+      fClient := AdministratedDaemonClient(Definition);
       fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
-      fDatabases := fAdmin.DatabaseList;
-      fPage := TSynPager.Create(self);
-      fPage.ControlStyle := fPage.ControlStyle+[csClickEvents]; // enable OnDblClick
-      fPage.Parent := self;
-      fPage.Align := alClient;
-      n := length(fDatabases);
-      SetLength(fPages,n+1);
-      fPages[0] := TSynPage.Create(self);
-      fPages[0].Caption := 'log';
-      fPages[0].PageControl := fPage;
-      fLogFrame := LogFrameClass.Create(fPages[0]);
-      fLogFrame.Parent := fPages[0];
-      fLogFrame.Align := alClient;
-      fLogFrame.Admin := fAdmin;
-      SetLength(fDBFrame,n);
-      for i := 0 to n-1 do begin
-        fPages[i+1] := TSynPage.Create(self);
-        fPages[i+1].Caption := UTF8ToString(fDatabases[i]);
-        fPages[i+1].PageControl := fPage;
-        fDBFrame[i] := DBFrameClass.Create(fPages[i+1]);
-        with fDBFrame[i] do begin
-          Parent := fPages[i+1];
-          Align := alClient;
-          DatabaseName := fDatabases[i];
-          Admin := fAdmin;
-          Open;
-        end;
-      end;
       version := _JsonFast(fAdmin.DatabaseExecute('','#version'));
       Caption := Format('%s - %s %s via %s:%s',[ExeVersion.ProgramName,
-        version.prog,version.version,Server,Port]);
-      if n>0 then begin
-        fPage.ActivePageIndex := 1;
-        Application.ProcessMessages;
-        fDBFrame[0].mmoSQL.SetFocus;
-      end;
+        version.prog,version.version,Definition.Server,Definition.Port]);
+      fDefinition := Definition;
     finally
       temp.Free;
     end;
   except
     on E: Exception do begin
       ShowException(E);
-      Close;
+      FreeAndNil(fClient);
+      result := false;
     end;
+  end;
+end;
+
+procedure TAdminMainForm.FormShow(Sender: TObject);
+var i,n: integer;
+begin
+  if (fClient=nil) or (fAdmin=nil) or (fPage<>nil) then begin
+    Close;
+    exit;
+  end;
+  if LogFrameClass=nil then
+    LogFrameClass := TLogFrame;
+  if DBFrameClass=nil then
+    DBFrameClass := TDBFrame;
+  fDatabases := fAdmin.DatabaseList;
+  fPage := TSynPager.Create(self);
+  fPage.ControlStyle := fPage.ControlStyle+[csClickEvents]; // enable OnDblClick
+  fPage.Parent := self;
+  fPage.Align := alClient;
+  n := length(fDatabases);
+  SetLength(fPages,n+1);
+  fPages[0] := TSynPage.Create(self);
+  fPages[0].Caption := 'log';
+  fPages[0].PageControl := fPage;
+  fLogFrame := LogFrameClass.Create(fPages[0]);
+  fLogFrame.Parent := fPages[0];
+  fLogFrame.Align := alClient;
+  fLogFrame.Admin := fAdmin;
+  if n>0 then begin
+    SetLength(fDBFrame,n);
+    for i := 0 to n-1 do begin
+      fPages[i+1] := TSynPage.Create(self);
+      fPages[i+1].Caption := UTF8ToString(fDatabases[i]);
+      fPages[i+1].PageControl := fPage;
+      fDBFrame[i] := DBFrameClass.Create(fPages[i+1]);
+      with fDBFrame[i] do begin
+        Parent := fPages[i+1];
+        Align := alClient;
+        DatabaseName := fDatabases[i];
+        Admin := fAdmin;
+        Open;
+      end;
+    end;
+    fPage.ActivePageIndex := 1;
+    Application.ProcessMessages;
+    fDBFrame[0].mmoSQL.SetFocus;
   end;
 end;
 
