@@ -12,7 +12,7 @@ uses
   dddToolsAdminDB, dddToolsAdminLog;
 
 type
-  TAdminMainForm = class(TForm)
+  TAdminForm = class(TForm)
     procedure FormShow(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word;
@@ -25,59 +25,59 @@ type
     fPage: TSynPager;
     fPages: array of TSynPage;
     fLogFrame: TLogFrame;
-    fDBFrame: array of TDBFrame;
-    fDefinition: TAdministratedDaemonClientDefinition;
+    fDBFrame: TDBFrameDynArray;
+    fDefinition: TDDDRestClientSettings;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
-    function Open(const Definition: TAdministratedDaemonClientDefinition): Boolean;
+    Version: Variant;
+    function Open(Definition: TDDDRestClientSettings): Boolean;
+    procedure EndLog;
+    property LogFrame: TLogFrame read fLogFrame;
+    property DBFrame: TDBFrameDynArray read fDBFrame;
   end;
 
 var
-  AdminMainForm: TAdminMainForm;
+  AdminForm: TAdminForm;
 
-function ValidateDefinition(var Definition: TAdministratedDaemonClientDefinition): boolean;
+function AskForUserIfVoid(Definition: TDDDRestClientSettings): boolean;
 
 
 implementation
 
 {$R *.dfm}
 
-function ValidateDefinition(var Definition: TAdministratedDaemonClientDefinition): boolean;
+function AskForUserIfVoid(Definition: TDDDRestClientSettings): boolean;
 var U,P: string;
 begin
   result := false;
-  if Definition.Port='' then
-    exit;
-  if Definition.Server='' then
-    Definition.Server := 'localhost';
-  if Definition.UserName='' then
-    if TLoginForm.Login(Application.Mainform.Caption,Format('Credentials for %s:%s',
-        [Definition.Server,Definition.Port]),U,P,true,'') then begin
-      Definition.UserName := StringToUTF8(U);
-      Definition.HashedPassword := TSQLAuthUser.ComputeHashedPassword(StringToUTF8(P));
+  if Definition.ORM.User='' then
+    if TLoginForm.Login(Application.Mainform.Caption,Format('Credentials for %s',
+        [Definition.ORM.ServerName]),U,P,true,'') then begin
+      Definition.ORM.User := StringToUTF8(U);
+      Definition.ORM.PasswordPlain := P;
     end else
       exit;
   result := true;
 end;
 
-function TAdminMainForm.Open(const Definition: TAdministratedDaemonClientDefinition): boolean;
+function TAdminForm.Open(Definition: TDDDRestClientSettings): boolean;
 var temp: TForm;
-    version: Variant;
 begin
-  result := true;
+  result := false;
   if Assigned(fAdmin) then
     exit;
   try
-    temp := CreateTempForm(Format('Connecting to %s:%s...',[Definition.Server,Definition.Port]));
+    temp := CreateTempForm(Format('Connecting to %s...',[Definition.ORM.ServerName]));
     try
       Application.ProcessMessages;
       fClient := AdministratedDaemonClient(Definition);
       fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
       version := _JsonFast(fAdmin.DatabaseExecute('','#version'));
-      Caption := Format('%s - %s %s via %s:%s',[ExeVersion.ProgramName,
-        version.prog,version.version,Definition.Server,Definition.Port]);
+      Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
+        version.prog,version.version,Definition.ORM.ServerName]);
       fDefinition := Definition;
+      result := true;
     finally
       temp.Free;
     end;
@@ -85,18 +85,19 @@ begin
     on E: Exception do begin
       ShowException(E);
       FreeAndNil(fClient);
-      result := false;
     end;
   end;
 end;
 
-procedure TAdminMainForm.FormShow(Sender: TObject);
+procedure TAdminForm.FormShow(Sender: TObject);
 var i,n: integer;
 begin
-  if (fClient=nil) or (fAdmin=nil) or (fPage<>nil) then begin
+  if (fClient=nil) or (fAdmin=nil) then begin
     Close;
     exit;
   end;
+  if fPage<>nil then
+    exit; // show again after hide
   if LogFrameClass=nil then
     LogFrameClass := TLogFrame;
   if DBFrameClass=nil then
@@ -111,7 +112,7 @@ begin
   fPages[0] := TSynPage.Create(self);
   fPages[0].Caption := 'log';
   fPages[0].PageControl := fPage;
-  fLogFrame := LogFrameClass.Create(fPages[0]);
+  fLogFrame := LogFrameClass.Create(self);
   fLogFrame.Parent := fPages[0];
   fLogFrame.Align := alClient;
   fLogFrame.Admin := fAdmin;
@@ -121,8 +122,9 @@ begin
       fPages[i+1] := TSynPage.Create(self);
       fPages[i+1].Caption := UTF8ToString(fDatabases[i]);
       fPages[i+1].PageControl := fPage;
-      fDBFrame[i] := DBFrameClass.Create(fPages[i+1]);
+      fDBFrame[i] := DBFrameClass.Create(self);
       with fDBFrame[i] do begin
+        Name := format('DBFrame%d',[i]);
         Parent := fPages[i+1];
         Align := alClient;
         DatabaseName := fDatabases[i];
@@ -136,21 +138,33 @@ begin
   end;
 end;
 
-procedure TAdminMainForm.FormDestroy(Sender: TObject);
-var i: integer;
+procedure TAdminForm.EndLog;
 begin
-  if  fLogFrame<>nil then begin
+  if fLogFrame<>nil then
+  try
+    Screen.Cursor := crHourGlass;
     if fLogFrame.Callback<>nil then
       fClient.Services.CallBackUnRegister(fLogFrame.Callback);
     fLogFrame.Closing;
+  finally
+    Screen.Cursor := crDefault;
   end;
+end;
+
+procedure TAdminForm.FormDestroy(Sender: TObject);
+var i: integer;
+begin
+  Endlog;
+  if fLogFrame<>nil then
+    fLogFrame.Admin := nil;
   for i := 0 to high(fDBFrame) do
     fDBFrame[i].Admin := nil;
   fAdmin := nil;
+  fDefinition.Free;
   FreeAndNil(fClient);
 end;
 
-procedure TAdminMainForm.FormKeyDown(Sender: TObject; var Key: Word;
+procedure TAdminForm.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var pageIndex: integer;
 begin
@@ -188,12 +202,14 @@ begin
     end;
 end;
 
-procedure TAdminMainForm.FormCreate(Sender: TObject);
+procedure TAdminForm.FormCreate(Sender: TObject);
 begin
   DefaultFont.Name := 'Tahoma';
   DefaultFont.Size := 9;
   Caption := Format('%s %s',[ExeVersion.ProgramName,ExeVersion.Version.Detailed]);
 end;
+
+
 
 end.
 

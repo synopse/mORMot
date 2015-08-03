@@ -22,6 +22,8 @@ type
     tmrRefresh: TTimer;
     edtExistingLogKB: TEdit;
     lblExistingLogKB: TLabel;
+    btnStopLog: TButton;
+    spl2: TSplitter;
     procedure chklstEventsDrawItem(Control: TWinControl; Index: Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure chklstEventsClick(Sender: TObject);
@@ -32,6 +34,7 @@ type
     procedure drwgrdEventsClick(Sender: TObject);
     procedure btnSearchNextClick(Sender: TObject);
     procedure chklstEventsDblClick(Sender: TObject);
+    procedure btnStopLogClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FEventCaption: array[TSynLogInfo] of string;
@@ -47,6 +50,8 @@ type
   public
     Admin: IAdministratedDaemon;
     Callback: ISynLogCallback;
+    OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean of object;
     constructor Create(Owner: TComponent); override;
     procedure Closing;
   end;
@@ -54,6 +59,9 @@ type
   TLogFrameClass = class of TLogFrame;
 
 implementation
+
+uses
+  dddToolsAdminMain;
 
 {$R *.dfm}
 
@@ -69,6 +77,8 @@ type
 procedure TLogFrameCallback.Log(Level: TSynLogInfo; const Text: RawUTF8);
 begin
   Owner.ReceivedOne(Text);
+  if Assigned(Owner.OnLogReceived) then
+    Owner.OnLogReceived(Owner,Level,Text);
 end;
 
 const
@@ -105,8 +115,7 @@ begin
 end;
 
 constructor TLogFrame.Create(Owner: TComponent);
-var E: TSynLogInfo;
-    F: TSynLogFilter;
+var F: TSynLogFilter;
     M: TMenuItem;
 begin
   inherited;
@@ -119,12 +128,30 @@ begin
       FMenuFilterAll := M;
     pmFilter.Items.Add(M);
   end;
+  btnStopLogClick(nil);
+end;
+
+procedure TLogFrame.btnStopLogClick(Sender: TObject);
+var E: TSynLogInfo;
+begin
+  chklstEvents.Top := 56;
+  chklstEvents.Items.Clear;
   for E := succ(sllNone) to high(E) do begin
     FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
     chklstEvents.Items.AddObject(FEventCaption[E],pointer(ord(E)));
   end;
   chklstEvents.Height := 8+chklstEvents.Count*chklstEvents.ItemHeight;
   pmFilterClick(FMenuFilterAll);
+  if Sender=nil then
+    exit;
+  btnStartLog.Show;
+  btnStopLog.Hide;
+  edtExistingLogKB.Show;
+  lblExistingLogKB.Show;
+  edtSearch.Hide;
+  btnSearchNext.Hide;
+  drwgrdEvents.RowCount := 0;
+  (Owner as TAdminForm).EndLog;
 end;
 
 procedure TLogFrame.pmFilterClick(Sender: Tobject);
@@ -174,7 +201,10 @@ begin
     for i := chklstEvents.Count-1 downto 0 do
       if not chklstEvents.Checked[i] then
         chklstEvents.Items.Delete(i);
+    chklstEvents.Height := 8+chklstEvents.Count*chklstEvents.ItemHeight;
+    btnStopLog.Top := chklstEvents.Top+chklstEvents.Height+8;
     btnStartLog.Hide;
+    btnStopLog.Show;
     edtExistingLogKB.Hide;
     lblExistingLogKB.Hide;
     edtSearch.Show;
@@ -214,6 +244,8 @@ end;
 procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
 begin
   tmrRefresh.Enabled := false;
+  if fLog=nil then
+    exit; // avoid GPF
   if tmrRefresh.Tag=1 then begin
     tmrRefresh.Tag := 0;
     drwgrdEvents.ColCount := 4;
@@ -336,7 +368,6 @@ end;
 procedure TLogFrame.Closing;
 begin
   Callback := nil;
-  Admin := nil;
   FreeAndNil(fLog);
 end;
 
@@ -363,6 +394,7 @@ begin
       exit;
     end;
 end;
+
 
 end.
 

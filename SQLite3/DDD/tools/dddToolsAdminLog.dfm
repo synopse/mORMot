@@ -4,26 +4,34 @@ object LogFrame: TLogFrame
   Width = 516
   Height = 367
   TabOrder = 0
+  object spl2: TSplitter
+    Left = 0
+    Top = 275
+    Width = 516
+    Height = 3
+    Cursor = crVSplit
+    Align = alBottom
+  end
   object pnlLeft: TPanel
     Left = 0
     Top = 0
     Width = 145
-    Height = 278
+    Height = 275
     Align = alLeft
     TabOrder = 0
     DesignSize = (
       145
-      278)
+      275)
     object lblExistingLogKB: TLabel
       Left = 12
-      Top = 50
+      Top = 34
       Width = 56
       Height = 13
       Caption = 'Existing KB:'
     end
     object edtSearch: TEdit
       Left = 8
-      Top = 16
+      Top = 8
       Width = 101
       Height = 21
       Hint = 'Search (Ctrl+F, F3 for next) '
@@ -36,7 +44,7 @@ object LogFrame: TLogFrame
     end
     object btnSearchNext: TButton
       Left = 113
-      Top = 14
+      Top = 6
       Width = 20
       Height = 23
       Hint = 'Search Next (F3)'
@@ -50,7 +58,7 @@ object LogFrame: TLogFrame
     end
     object chklstEvents: TCheckListBox
       Left = 8
-      Top = 72
+      Top = 56
       Width = 129
       Height = 105
       ItemHeight = 13
@@ -62,7 +70,7 @@ object LogFrame: TLogFrame
     end
     object btnStartLog: TButton
       Left = 16
-      Top = 16
+      Top = 6
       Width = 113
       Height = 25
       Caption = 'Start Logging'
@@ -71,33 +79,43 @@ object LogFrame: TLogFrame
     end
     object edtExistingLogKB: TEdit
       Left = 72
-      Top = 48
+      Top = 32
       Width = 57
       Height = 21
       Hint = 'How many KB of log text should be transmitted at Start'
       ParentShowHint = False
       ShowHint = True
       TabOrder = 4
-      Text = '256'
+      Text = '512'
+    end
+    object btnStopLog: TButton
+      Left = 16
+      Top = 168
+      Width = 113
+      Height = 25
+      Caption = 'Stop Logging'
+      TabOrder = 5
+      Visible = False
+      OnClick = btnStopLogClick
     end
   end
   object pnlRight: TPanel
     Left = 145
     Top = 0
     Width = 371
-    Height = 278
+    Height = 275
     Align = alClient
     TabOrder = 1
     object spl1: TSplitter
       Left = 1
       Top = 1
-      Height = 276
+      Height = 273
     end
     object drwgrdEvents: TDrawGrid
       Left = 4
       Top = 1
       Width = 366
-      Height = 276
+      Height = 273
       Align = alClient
       ColCount = 3
       DefaultColWidth = 100

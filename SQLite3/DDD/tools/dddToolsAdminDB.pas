@@ -45,6 +45,7 @@ type
   end;
 
   TDBFrameClass = class of TDBFrame;
+  TDBFrameDynArray = array of TDBFrame;
 
 
 implementation

@@ -1,4 +1,4 @@
-object AdminMainForm: TAdminMainForm
+object AdminForm: TAdminForm
   Left = 379
   Top = 162
   Width = 697

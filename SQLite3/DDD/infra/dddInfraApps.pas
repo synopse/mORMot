@@ -250,20 +250,8 @@ type
     property Client: TDDDRestClient read fClient;
   end;
 
-type
-  /// set of parameters use by AdministratedDaemonClient() function to connect
-  // to a IAdministratedDaemon service
-  TAdministratedDaemonClientDefinition = record
-    Server,Port: AnsiString;
-    RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8;
-  end;
-
-/// initialize a AdministratedDaemonClient() function definition
-function NewAdministratedDaemon(const Server,Port: AnsiString;
-  const RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8): TAdministratedDaemonClientDefinition;
-
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
-function AdministratedDaemonClient(const Definition: TAdministratedDaemonClientDefinition): TSQLHttpClientWebsockets;
+function AdministratedDaemonClient(Definition: TDDDRestClientSettings): TSQLHttpClientWebsockets;
 
 
 { ----- Implements Thread Processing to access a TCP server }
@@ -1442,30 +1430,14 @@ begin
   end;
 end;
 
-function NewAdministratedDaemon(const Server,Port: AnsiString;
-  const RootURI,UserName,HashedPassword,WebSocketPassword: RawUTF8): TAdministratedDaemonClientDefinition;
+function AdministratedDaemonClient(Definition: TDDDRestClientSettings): TSQLHttpClientWebsockets;
 begin
-  result.Server := Server;
-  result.Port := Port;
-  result.RootURI := RootURI;
-  result.UserName := UserName;
-  result.HashedPassword := HashedPassword;
-  result.WebSocketPassword := WebSocketPassword;
-end;
-
-function AdministratedDaemonClient(const Definition: TAdministratedDaemonClientDefinition): TSQLHttpClientWebsockets;
-begin
-  with Definition do begin
-    result := TSQLHttpClientWebsockets.Create(server,port,TSQLModel.Create([],RootURI));
-    try
-      result.Model.Owner := result;
-      result.SetUser(UserName,HashedPassword,true);
-      result.WebSocketsConnect(WebSocketPassword);
-      result.ServiceDefine(IAdministratedDaemon,sicShared);
-    except
-      result.Free;
-      raise;
-    end;
+  result := Definition.NewRestClientInstance(nil) as TSQLHttpClientWebsockets;
+  try
+    result.ServiceDefine(IAdministratedDaemon,sicShared);
+  except
+    result.Free;
+    raise;
   end;
 end;
 
