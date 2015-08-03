@@ -12267,8 +12267,13 @@ type
       aSortedCompare: TUTF8Compare=nil): boolean;
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
-    // - it will return Unassigned if the path does not match the data
+    // - it will return Unassigned if the path does match the supplied aPath
     function GetValueByPath(const aPath: RawUTF8): variant; overload;
+    /// retrieve a value, given its path
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - it will return FALSE if the path does not match the supplied aPath
+    // - returns TRUE and set the found value in aValue
+    function GetValueByPath(const aPath: RawUTF8; out aValue: variant): boolean; overload;
     /// retrieve a value, given its path
     // - path is defined as a list of names, e.g. ['doc','glossary','title']
     // - it will return Unassigned if the path does not match the data
@@ -34340,6 +34345,20 @@ begin
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
   if Dest.VType>=varNull then
     result := variant(Dest); // copy
+end;
+
+function TDocVariantData.GetValueByPath(const aPath: RawUTF8; out aValue: variant): boolean;
+var Dest: TVarData;
+begin
+  result := false;
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or
+     (Kind<>dvObject) then
+    exit;
+  DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
+  if Dest.VType=varEmpty then
+    exit;
+  aValue := variant(Dest); // copy
+  result := true;
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
