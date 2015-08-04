@@ -1820,18 +1820,22 @@ function TJSONVariantData.ToJSON: string;
 var i: integer;
 begin
   case VKind of
-  jvObject: begin
-    result := '{';
-    for i := 0 to VCount-1 do
-      result := result+StringToJSON(Names[i])+':'+ValueToJSON(Values[i])+',';
-    result[length(result)] := '}';
+  jvObject:
+    if VCount=0 then
+      result := '{}' else begin
+      result := '{';
+      for i := 0 to VCount-1 do
+        result := result+StringToJSON(Names[i])+':'+ValueToJSON(Values[i])+',';
+      result[length(result)] := '}';
   end;
-  jvArray: begin
-    result := '[';
-    for i := 0 to VCount-1 do
-      result := result+ValueToJSON(Values[i])+',';
-    result[length(result)] := ']';
-  end;
+  jvArray:
+    if VCount=0 then
+      result := '[]' else begin
+      result := '[';
+      for i := 0 to VCount-1 do
+        result := result+ValueToJSON(Values[i])+',';
+      result[length(result)] := ']';
+    end;
   else result := 'null';
   end;
 end;

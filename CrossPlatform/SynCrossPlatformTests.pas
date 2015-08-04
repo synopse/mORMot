@@ -424,6 +424,9 @@ begin
   js := '';
   i := 1;
   check(not GetNextCSV(js,i,json2));
+  doc := JsonVariant('{}');
+  js := doc;
+  check(js='{}');
 end;
 
 procedure TSynCrossPlatformTests.Model;
