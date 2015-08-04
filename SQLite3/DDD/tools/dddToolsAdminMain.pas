@@ -32,6 +32,7 @@ type
     DBFrameClass: TDBFrameClass;
     Version: Variant;
     function Open(Definition: TDDDRestClientSettings): Boolean;
+    function GetState: Variant;
     procedure EndLog;
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
@@ -87,6 +88,13 @@ begin
       FreeAndNil(fClient);
     end;
   end;
+end;
+
+
+function TAdminForm.GetState: Variant;
+begin
+  if fAdmin<>nil then
+    result := _JsonFast(fAdmin.DatabaseExecute('','#state'));
 end;
 
 procedure TAdminForm.FormShow(Sender: TObject);

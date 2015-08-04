@@ -161,8 +161,10 @@ type
   TDDDRestDaemon = class(TDDDAdministratedRestDaemon)
   protected
     fAdministrationHTTPServer: TSQLHttpServer;
+    fPreviousMonitorTix: Int64;
     // returns the current state from fRest.Stat() + system memory
     function InternalRetrieveState(var Status: variant): boolean; override;
+    procedure InternalLogMonitoring; virtual;
   public
     /// initialize the thread with the supplied parameters
     constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
@@ -798,6 +800,15 @@ destructor TDDDRestDaemon.Destroy;
 begin
   FreeAndNil(fAdministrationHTTPServer);
   inherited Destroy;
+end;
+
+procedure TDDDRestDaemon.InternalLogMonitoring;
+var status: variant;
+begin
+  if fLogClass<>nil then
+  with fLogClass.Family do
+    if (sllMonitoring in Level) and InternalRetrieveState(status) then
+      SynLog.Log(sllMonitoring,'%',[status],Self);
 end;
 
 function TDDDRestDaemon.InternalRetrieveState(
