@@ -14453,6 +14453,7 @@ type
     fRootRedirectGet: RawUTF8;
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
+    fOnIdleLastTix: cardinal;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
@@ -14628,6 +14629,8 @@ type
     // !end;
     // - consider using a TInjectableObjectClass implementation for pure IoC/DI
     OnServiceCreateInstance: TOnServiceCreateInstance;
+    /// event trigerred when URI() is called, and at least 128 ms is elapsed
+    OnIdle: TNotifyEvent;
     /// this property can be used to specify the URI parmeters to be used
     // for query paging
     // - is set by default to PAGINGPARAMETERS_YAHOO constant by
@@ -36119,6 +36122,7 @@ const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
   ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
+    elapsed: cardinal;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -36212,6 +36216,13 @@ begin
       end;
     InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
+  end;
+  if Assigned(OnIdle) then begin
+    elapsed := GetTickCount64 shr 7; // trigger every 128 ms
+    if elapsed<>fOnIdleLastTix then begin
+      OnIdle(self);
+      fOnIdleLastTix := elapsed;
+    end;
   end;
 end;
 

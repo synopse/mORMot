@@ -19481,12 +19481,15 @@ end;
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
 var now: Int64;
 begin
-  now := GetTickCount64;
-  if (Interval>0) and (now-PreviousTix>Interval) then begin
-    PreviousTix := now;
-    result := true;
-  end else
-    result := false;
+  if Interval<=0 then
+    result := false else begin
+    now := GetTickCount64;
+    if now-PreviousTix>Interval then begin
+      PreviousTix := now;
+      result := true;
+    end else
+      result := false;
+  end;
 end;
 
 {$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
