@@ -34,6 +34,7 @@ unit SynCrtSock;
   - Eric Grange
   - EvaF
   - Maciej Izak (hnb)
+  - Marius Maximus
   - Pavel (mpv)
 
   Alternatively, the contents of this file may be used under the terms of
@@ -2649,11 +2650,14 @@ begin
   end;
 end;
 
+type
+  PCrtSocket = ^TCrtSocket;
+
 function OutputSock(var F: TTextRec): integer;
 begin
   if F.BufPos=0 then
     result := 0 else
-    if TCrtSocket(F.Handle).TrySndLow(F.BufPtr,F.BufPos) then begin
+    if PCrtSocket(@F.UserData)^.TrySndLow(F.BufPtr,F.BufPos) then begin
       F.BufPos := 0;
       result := 0;
     end else
@@ -2670,7 +2674,7 @@ begin
   F.BufEnd := 0;
   F.BufPos := 0;
   result := -1; // on socket error -> raise ioresult error
-  Sock := TCrtSocket(F.Handle);
+  Sock := PCrtSocket(@F.UserData)^;
   if (Sock=nil) or (Sock.Sock=-1) then
     exit; // file closed = no socket -> error
   if Sock.TimeOut<>0 then begin // will wait for pending data?
@@ -2694,12 +2698,10 @@ begin
 end;
 
 function CloseSock(var F: TTextRec): integer;
-var Sock: TCRTSocket;
 begin
-  Sock := TCrtSocket(F.Handle);
-  if Sock<>nil then
-    Sock.Close;
-  F.Handle := 0; // Sock := nil
+  if PCrtSocket(@F.UserData)^<>nil then
+    PCrtSocket(@F.UserData)^.Close;
+  PCrtSocket(@F.UserData)^ := nil;
   Result := 0;
 end;
 
@@ -2971,7 +2973,7 @@ begin
   GetMem(fSockIn,sizeof(TTextRec)+InputBufferSize);
   fillchar(SockIn^,sizeof(TTextRec),0);
   with TTextRec(SockIn^) do begin
-    Handle := PtrInt(self);
+    PCrtSocket(@UserData)^ := self;
     Mode := fmClosed;
     BufSize := InputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
@@ -2992,7 +2994,7 @@ begin
   GetMem(fSockOut,sizeof(TTextRec)+OutputBufferSize);
   fillchar(SockOut^,sizeof(TTextRec),0);
   with TTextRec(SockOut^) do begin
-    Handle := PtrInt(self);
+    PCrtSocket(@UserData)^ := self;
     Mode := fmClosed;
     BufSize := OutputBufferSize;
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
