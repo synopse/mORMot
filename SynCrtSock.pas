@@ -2826,15 +2826,19 @@ begin
       Str(VInteger,tmp);
       SockSend(@tmp[1],length(tmp));
     end;
+    vtInt64:    begin
+      Str(VInteger,tmp);
+      SockSend(@tmp[1],length(tmp));
+    end;
   end;
-  SockSend(@CRLF, 2);
+  SockSend(@CRLF,2);
 end;
 
 procedure TCrtSocket.SockSend(const Line: SockString);
 begin
   if Line<>'' then
     SockSend(pointer(Line),length(Line));
-  SockSend(@CRLF, 2);
+  SockSend(@CRLF,2);
 end;
 
 procedure TCrtSocket.SockSendFlush;
@@ -3840,61 +3844,63 @@ begin
 end;
 
 procedure THttpServerResp.Execute;
-procedure HandleRequestsProcess;
-var StartTick, StopTick, Tick: cardinal;
-    pending: TCrtSocketPending;
-begin
-  {$ifdef USETHREADPOOL}
-  if fThreadPool<>nil then
-    InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
-  {$endif}
-  try
-  try
-    repeat
-      StartTick := GetTickCount;
-      StopTick := StartTick+fServer.ServerKeepAliveTimeOut;
-      repeat // within this loop, break=wait for next command, exit=quit
-        if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
-          exit; // server is down -> close connection
-        pending := fServerSock.SockReceivePending(50); // 50 ms timeout
-        if (fServer=nil) or fServer.Terminated then
-          exit; // server is down -> disconnect the client
-        case pending of
-        cspSocketError:
-          exit; // socket error -> disconnect the client
-        cspNoData: begin
-          Tick := GetTickCount;  // wait for keep alive timeout
-          if Tick<StartTick then // time wrap after continuous run for 49.7 days
-            break; // reset Ticks count + retry
-          if Tick>=StopTick then
-            exit; // reached time out -> close connection
-        end;
-        cspDataAvailable: begin
-          // get request and headers
-          if not fServerSock.GetRequest(True) then
-            // fServerSock connection was down or headers are not correct
-            exit;
-          // calc answer and send response
-          fServer.Process(fServerSock,ConnectionID,self);
-          // keep connection only if necessary
-          if fServerSock.KeepAliveClient then
-            break else
-            exit;
-        end;
-        end;
-       until false;
-    until false;
-  finally
+
+  procedure HandleRequestsProcess;
+  var StartTick, StopTick, Tick: cardinal;
+      pending: TCrtSocketPending;
+  begin
     {$ifdef USETHREADPOOL}
     if fThreadPool<>nil then
-      InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
+      InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
     {$endif}
+    try
+    try
+      repeat
+        StartTick := GetTickCount;
+        StopTick := StartTick+fServer.ServerKeepAliveTimeOut;
+        repeat // within this loop, break=wait for next command, exit=quit
+          if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
+            exit; // server is down -> close connection
+          pending := fServerSock.SockReceivePending(50); // 50 ms timeout
+          if (fServer=nil) or fServer.Terminated then
+            exit; // server is down -> disconnect the client
+          case pending of
+          cspSocketError:
+            exit; // socket error -> disconnect the client
+          cspNoData: begin
+            Tick := GetTickCount;  // wait for keep alive timeout
+            if Tick<StartTick then // time wrap after continuous run for 49.7 days
+              break; // reset Ticks count + retry
+            if Tick>=StopTick then
+              exit; // reached time out -> close connection
+          end;
+          cspDataAvailable: begin
+            // get request and headers
+            if not fServerSock.GetRequest(True) then
+              // fServerSock connection was down or headers are not correct
+              exit;
+            // calc answer and send response
+            fServer.Process(fServerSock,ConnectionID,self);
+            // keep connection only if necessary
+            if fServerSock.KeepAliveClient then
+              break else
+              exit;
+          end;
+          end;
+         until false;
+      until false;
+    finally
+      {$ifdef USETHREADPOOL}
+      if fThreadPool<>nil then
+        InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
+      {$endif}
+    end;
+    except
+      on E: Exception do
+        ; // any exception will silently disconnect the client
+    end;
   end;
-  except
-    on E: Exception do
-      ; // any exception will silently disconnect the client
-  end;
-end;
+
 var aSock: TSocket;
     i: integer;
 begin
