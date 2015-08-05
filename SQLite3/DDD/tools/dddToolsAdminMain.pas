@@ -12,12 +12,7 @@ uses
   dddToolsAdminDB, dddToolsAdminLog;
 
 type
-  TAdminForm = class(TForm)
-    procedure FormShow(Sender: TObject);
-    procedure FormDestroy(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
-    procedure FormCreate(Sender: TObject);
+  TAdminControl = class(TWinControl)
   protected
     fClient: TSQLHttpClientWebsockets;
     fAdmin: IAdministratedDaemon;
@@ -31,11 +26,24 @@ type
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
-    function Open(Definition: TDDDRestClientSettings): Boolean;
+    destructor Destroy; override;
+    function Open(Definition: TDDDRestClientSettings): boolean;
+    procedure Show;
     function GetState: Variant;
     procedure EndLog;
+    procedure FormKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
+  end;
+
+  TAdminForm = class(TForm)
+    procedure FormCreate(Sender: TObject);
+    procedure FormShow(Sender: TObject);
+  protected
+    fFrame: TAdminControl;
+  public
+    property Frame: TAdminControl read fFrame;
   end;
 
 var
@@ -62,7 +70,7 @@ begin
   result := true;
 end;
 
-function TAdminForm.Open(Definition: TDDDRestClientSettings): boolean;
+function TAdminControl.Open(Definition: TDDDRestClientSettings): boolean;
 var temp: TForm;
 begin
   result := false;
@@ -75,8 +83,6 @@ begin
       fClient := AdministratedDaemonClient(Definition);
       fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
       version := _JsonFast(fAdmin.DatabaseExecute('','#version'));
-      Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
-        version.prog,version.version,Definition.ORM.ServerName]);
       fDefinition := Definition;
       result := true;
     finally
@@ -91,20 +97,16 @@ begin
 end;
 
 
-function TAdminForm.GetState: Variant;
+function TAdminControl.GetState: Variant;
 begin
   if fAdmin<>nil then
     result := _JsonFast(fAdmin.DatabaseExecute('','#state'));
 end;
 
-procedure TAdminForm.FormShow(Sender: TObject);
+procedure TAdminControl.Show;
 var i,n: integer;
 begin
-  if (fClient=nil) or (fAdmin=nil) then begin
-    Close;
-    exit;
-  end;
-  if fPage<>nil then
+  if (fClient=nil) or (fAdmin=nil) or (fPage<>nil) then
     exit; // show again after hide
   if LogFrameClass=nil then
     LogFrameClass := TLogFrame;
@@ -146,7 +148,7 @@ begin
   end;
 end;
 
-procedure TAdminForm.EndLog;
+procedure TAdminControl.EndLog;
 begin
   if fLogFrame<>nil then
   try
@@ -159,7 +161,7 @@ begin
   end;
 end;
 
-procedure TAdminForm.FormDestroy(Sender: TObject);
+destructor TAdminControl.Destroy;
 var i: integer;
 begin
   Endlog;
@@ -170,9 +172,10 @@ begin
   fAdmin := nil;
   fDefinition.Free;
   FreeAndNil(fClient);
+  inherited Destroy;
 end;
 
-procedure TAdminForm.FormKeyDown(Sender: TObject; var Key: Word;
+procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var pageIndex: integer;
 begin
@@ -210,14 +213,26 @@ begin
     end;
 end;
 
+
+{ TAdminForm }
+
 procedure TAdminForm.FormCreate(Sender: TObject);
 begin
   DefaultFont.Name := 'Tahoma';
   DefaultFont.Size := 9;
   Caption := Format('%s %s',[ExeVersion.ProgramName,ExeVersion.Version.Detailed]);
+  fFrame := TAdminControl.Create(self);
+  fFrame.Parent := self;
+  fFrame.Align := alClient;
+  OnKeyDown := fFrame.FormKeyDown;
 end;
 
-
+procedure TAdminForm.FormShow(Sender: TObject);
+begin
+  fFrame.Show;
+  Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
+    fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
+end;
 
 end.
 

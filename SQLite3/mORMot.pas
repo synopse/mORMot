@@ -25088,9 +25088,7 @@ const null_vardata: TVarData = (VType: varNull);
 
 procedure TPropInfo.SetDefaultValue(Instance: TObject);
 var Item: TObject;
-    {$ifdef PUBLISHRECORD}
-    rec: pointer;
-    {$endif}
+    addr: pointer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
@@ -25119,11 +25117,18 @@ begin
       Item.Free;
     end;
   end;
+  tkDynArray: begin
+    addr := GetFieldAddr(Instance);
+    if PPointer(addr)^<>nil then
+      if ObjArraySerializers.Find(PropType{$ifndef FPC}^{$endif})<>nil then
+        ObjArrayClear(addr^) else
+        DynArrayClear(addr,PropType{$ifndef FPC}^{$endif});
+  end;
   {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
-    rec := GetFieldAddr(Instance);
-    RecordClear(rec^,PropType{$ifndef FPC}^{$endif});
-    FillcharFast(rec^,PropType^.RecordType^.Size,0);
+    addr := GetFieldAddr(Instance);
+    RecordClear(addr^,PropType{$ifndef FPC}^{$endif});
+    FillcharFast(addr^,PropType^.RecordType^.Size,0);
   end;
   {$endif}
   end;

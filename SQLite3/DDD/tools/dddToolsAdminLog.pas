@@ -151,7 +151,8 @@ begin
   edtSearch.Hide;
   btnSearchNext.Hide;
   drwgrdEvents.RowCount := 0;
-  (Owner as TAdminForm).EndLog;
+  drwgrdEvents.Tag := 0;
+  (Owner as TAdminControl).EndLog;
 end;
 
 procedure TLogFrame.pmFilterClick(Sender: Tobject);
@@ -247,13 +248,16 @@ begin
   if fLog=nil then
     exit; // avoid GPF
   if tmrRefresh.Tag=1 then begin
-    tmrRefresh.Tag := 0;
+    tmrRefresh.Tag := 2;
     drwgrdEvents.ColCount := 4;
     drwgrdEvents.ColWidths[2] := 30;
     drwgrdEvents.ColWidths[3] := 2000;
   end;
   drwgrdEvents.RowCount := FLog.Count;
-  //drwgrdEvents.TopRow := FLog.Count-drwgrdEvents.VisibleRowCount;
+  if drwgrdEvents.Tag=0 then begin
+    drwgrdEvents.Row := FLog.Count-1;
+    drwgrdEvents.Tag := 1;
+  end;
   drwgrdEvents.Invalidate;
 end;
 
