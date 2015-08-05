@@ -2811,23 +2811,28 @@ begin
   for i := 0 to high(Values) do
   with Values[i] do
   case VType of
-    vtString:     SockSend(@VString^[1],pByte(VString)^);
-    vtAnsiString: SockSend(VAnsiString,length(SockString(VAnsiString)));
+    vtString:
+      SockSend(@VString^[1],pByte(VString)^);
+    vtAnsiString:
+      SockSend(VAnsiString,length(SockString(VAnsiString)));
 {$ifdef UNICODE}
     vtUnicodeString: begin
       tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
       SockSend(@tmp[1],length(tmp));
     end;
 {$endif}
-    vtPChar:      SockSend(VPChar,StrLen(VPChar));
-    vtChar:       SockSend(@VChar,1);
-    vtWideChar:   SockSend(@VWideChar,1); // only ansi part of the character
-    vtInteger:    begin
+    vtPChar:
+      SockSend(VPChar,StrLen(VPChar));
+    vtChar:
+      SockSend(@VChar,1);
+    vtWideChar:
+      SockSend(@VWideChar,1); // only ansi part of the character
+    vtInteger: begin
       Str(VInteger,tmp);
       SockSend(@tmp[1],length(tmp));
     end;
-    vtInt64:    begin
-      Str(VInteger,tmp);
+    vtInt64: begin
+      Str(VInt64^,tmp);
       SockSend(@tmp[1],length(tmp));
     end;
   end;

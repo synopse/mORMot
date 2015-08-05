@@ -253,7 +253,7 @@ begin
     drwgrdEvents.ColWidths[3] := 2000;
   end;
   drwgrdEvents.RowCount := FLog.Count;
-  drwgrdEvents.TopRow := FLog.Count-drwgrdEvents.VisibleRowCount;
+  //drwgrdEvents.TopRow := FLog.Count-drwgrdEvents.VisibleRowCount;
   drwgrdEvents.Invalidate;
 end;
 

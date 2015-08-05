@@ -1067,8 +1067,8 @@ begin
   end;
 end;
 
-function TDDDSocketThread.TrySend(
-  const aFrame: RawByteString; ImmediateDisconnectAfterError: boolean): Boolean;
+function TDDDSocketThread.TrySend(const aFrame: RawByteString;
+  ImmediateDisconnectAfterError: boolean): Boolean;
 var tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
 begin
   fSafe.Lock;
