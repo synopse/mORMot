@@ -733,9 +733,11 @@ unit SynCommons;
 interface
 
 uses
+{$ifndef LVCL}
 {$ifndef FPC}
 {$ifndef HASFASTMM4}
   FastMM4,
+{$endif}
 {$endif}
 {$endif}
 {$ifdef MSWINDOWS}
@@ -43294,7 +43296,11 @@ begin // e.g. Darwin
     FAllocatedReserved.fBytes := TotalAllocated+TotalFree;
   end;
 {$else}
-  GetMemoryManagerState(Heap);
+{$ifdef LVCL}
+  tot := 0;
+  res := 0;
+{$else}
+  GetMemoryManagerState(Heap); // direct access to FastMM4 statistics
   tot := Heap.TotalAllocatedMediumBlockSize+Heap.TotalAllocatedLargeBlockSize;
   res := Heap.ReservedMediumBlockAddressSpace+Heap.ReservedLargeBlockAddressSpace;
   for sb := 0 to high(Heap.SmallBlockTypeStates) do
@@ -43302,6 +43308,7 @@ begin // e.g. Darwin
       inc(tot,UseableBlockSize*AllocatedBlockCount);
       inc(res,ReservedAddressSpace);
     end;
+{$endif LVCL}
   FAllocatedUsed.fBytes := tot;
   FAllocatedReserved.fBytes := res;
 {$endif FPC}
