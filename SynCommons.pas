@@ -6974,6 +6974,12 @@ type
 function ObjectToJSON(Value: TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
+/// will serialize set of TObject into its UTF-8 JSON representation
+// - follows ObjectToJSON()/TTextWriter.WriterObject() functions output
+// - if Names is not supplied, the corresponding class names would be used
+function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
+  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+
 
 type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
@@ -24706,6 +24712,30 @@ begin
     finally
       Free;
     end;
+end;
+
+function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
+  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+var i,n: integer;
+begin
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  try
+    n := length(Names);
+    Add('{');
+    for i := 0 to high(Values) do
+    if Values[i]<>nil then begin
+      if i<n then
+        AddFieldName(Names[i]) else
+        AddPropName(PShortString(PPointer(PPtrInt(Values[i])^+vmtClassName)^)^);
+      WriteObject(Values[i],Options);
+      Add(',');
+    end;
+    CancelLastComma;
+    Add('}');
+    SetText(result);
+  finally
+    Free;
+  end;
 end;
 
 function UrlEncode(const svar: RawUTF8): RawUTF8;
