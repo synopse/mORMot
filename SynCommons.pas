@@ -10127,7 +10127,7 @@ var
     nprocs: integer;
     uts: UtsName;
   end;
-  
+
 {$ifdef KYLIX3}
 
 /// compatibility function for Linux
@@ -42951,6 +42951,7 @@ end;
 { ************ Unit-Testing classes and functions }
 
 function KB(bytes: Int64): RawUTF8;
+var hi,rem: cardinal;
 begin
   if bytes>=1024*1024 then begin
     if bytes>=1024*1024*1024 then begin
@@ -42958,9 +42959,15 @@ begin
       result := ' GB';
     end else
       result := ' MB';
-    result := UInt32ToUtf8(bytes shr 20)+'.'+
-              UInt32ToUtf8((PtrUInt(bytes) and pred(1 shl 20))div (102*1024))+
-              result;
+    rem := (PtrUInt(bytes) and pred(1 shl 20))div (102*1024);
+    hi := bytes shr 20;
+    if rem=10 then begin
+      rem := 0;
+      inc(hi);
+    end;
+    if rem<>0 then
+      result := FormatUTF8('%.%%',[hi,rem,result]) else
+      result := FormatUTF8('%%',[hi,result]);
   end else
   if bytes>1023*9 then
     result := UInt32ToUtf8(PtrUInt(bytes) shr 10)+' KB' else

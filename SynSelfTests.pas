@@ -2651,6 +2651,15 @@ begin
   Check(IntToThousandString(-10000)='-10,000');
   Check(IntToThousandString(-100000)='-100,000');
   Check(IntToThousandString(-1000000)='-1,000,000');
+  Check(KB(1024)='1024 B');
+  Check(KB(16384)='16 KB');
+  Check(KB(3*1024*1024-800*1024)='2.2 MB');
+  Check(KB(3*1024*1024)='3 MB');
+  Check(KB(3*1024*1024+512*1024)='3.5 MB');
+  Check(KB(3*1024*1024+1024)='3 MB');
+  Check(KB(maxInt)='2 GB');
+  Check(KB(3294963200)='3 GB');
+  Check(KB(4294963200)='4 GB');
   Check(Int64ToUtf8(-maxInt)='-2147483647');
   Check(Int64ToUtf8(-1)='-1');
   Check(Int64ToUtf8(-9223372036854775807)='-9223372036854775807');
