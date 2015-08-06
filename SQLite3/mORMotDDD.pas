@@ -2228,6 +2228,7 @@ var rest: TSQLRest;
     valid: Boolean;
     status: variant;
     mem: TSynMonitorMemory;
+    disk: TSynMonitoryDisk;
 begin
   result := '';
   if SQL='' then
@@ -2266,6 +2267,7 @@ begin
       end;
       {$endif}
       mem := TSynMonitorMemory.Create;
+      disk := TSynMonitoryDisk.Create; // current drive
       result := JSONEncode(['host',Host,'user',User,
         {$ifdef CPUINTEL}'sse2',cfSSE2 in CpuFeatures,
           'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
@@ -2275,20 +2277,19 @@ begin
           szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]),
         'wow64',IsWow64{,'env',value}{$else}
         nprocs,'os',FormatUTF8('%-% %',[uts.sysname,uts.release,uts.version])
-        {$endif},'mem',mem]);
+        {$endif},'mem',mem,'disk',disk]);
+      disk.Free;
       mem.Free;
       exit;
     end;
     4: result := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
     else
       result := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings|#settings full.path=value|#version|#computer|#log'+
-        '|#help|#time|#model|#rest|#interfaces|#stats|#stats(method)|'+
-        '#stats(interface.method)|#services|#sessions|#get url|#post url"';
+        '|#state|#settings|#settings full.path=value|#version|#computer|#log|#help"';
     end;
   rest := PublishedORM(DatabaseName);
   if rest<>nil then
-    result := rest.AdministrationExecute(DatabaseName,SQL);
+    rest.AdministrationExecute(DatabaseName,SQL,result);
 end;
 
 function TDDDAdministratedDaemon.DatabaseList: TRawUTF8DynArray;

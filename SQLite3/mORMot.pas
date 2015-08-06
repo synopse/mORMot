@@ -13025,7 +13025,7 @@ type
     // a reference time base
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
-    function AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON; virtual;
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); virtual;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
     // aware that the following line may trigger an access violation if
@@ -15057,7 +15057,7 @@ type
     property ServiceMethodStat[const aMethod: RawUTF8]: TSynMonitorInputOutput
       read GetServiceMethodStat;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
-    function AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON; override;
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); override;
     /// compute a JSON description of all available services, and its public URI
     // - the JSON object matches the TServicesPublishedInterfaces record type
     // - used by TSQLRestClientURI.ServicePublishOwnInterfaces to register all
@@ -30313,15 +30313,19 @@ begin
 end;
 {$endif}
 
-function TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON);
 var table: integer;
 begin
   if (SQL<>'') and (SQL[1]='#') then begin
     // pseudo SQL for a given TSQLRest[Server] instance
-    case IdemPCharArray(@SQL[2],['TIME','MODEL','REST']) of
+    case IdemPCharArray(@SQL[2],['TIME','MODEL','REST','HELP']) of
     0: result := Int64ToUtf8(ServerTimeStamp);
     1: result := ObjectToJSON(Model);
     2: result := ObjectToJSON(self);
+    3: begin
+      result[length(result)] := '|';
+      result := result+'#time|#model|#rest"';
+    end;
     end;
   end else
   if isSelect(pointer(SQL)) then begin
@@ -36400,7 +36404,8 @@ begin
   end;
 end;
 
-function TSQLRestServer.AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+procedure TSQLRestServer.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+  var result: RawJSON);
 var isAjax: boolean;
     name,interf,method: RawUTF8;
     obj: TObject;
@@ -36410,7 +36415,7 @@ begin
   if (SQL<>'') and (SQL[1]='#') then begin
     P := @SQL[2];
     case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
-      'GET','POST']) of
+      'GET','POST','HELP']) of
     0: result := ServicesPublishedInterfaces;
     1: begin
       name := copy(SQL,8,length(SQL)-8);
@@ -36438,15 +36443,20 @@ begin
       URI(call);
       result := call.OutBody;
     end;
-    else
-      result := inherited AdministrationExecute(DatabaseName,SQL);
+    7: begin
+      inherited;
+      result[length(result)] := '|';
+      result := result+'#interfaces|#stats|#stats(method)|'+
+        '#stats(interface.method)|#services|#sessions|#get url|#post url"';
+    end;
+    else inherited AdministrationExecute(DatabaseName,SQL,result);
     end;
   end else begin
     isAjax := not NoAJAXJSON;
     if isAjax then
       NoAJAXJSON := true; // force smaller content
     try
-      result := inherited AdministrationExecute(DatabaseName,SQL);
+      inherited; // will execute the SQL
     finally
       NoAjaxJson := not isAjax;
     end;

@@ -746,12 +746,16 @@ uses
   {$ifndef LVCL}
   Registry,
   {$endif}
-{$endif}
+{$else MSWINDOWS}
 {$ifdef KYLIX3}
   Types,
   LibC,
   SynKylix,
 {$endif}
+{$ifdef FPC}
+  BaseUnix,
+{$endif}
+{$endif MSWINDOWS}
   Classes,
 {$ifndef LVCL}
   SyncObjs, // for TEvent and TCriticalSection
@@ -13069,6 +13073,8 @@ type
     property Text: RawUTF8 read GetAsText;
   end;
 
+  {$M-}
+
   /// value object able to gather information about the current system memory
   TSynMonitorMemory = class(TSynPersistent)
   protected
@@ -13127,7 +13133,38 @@ type
     {$endif}
   end;
 
-  {$M-}
+  /// value object able to gather information about a system drive
+  TSynMonitoryDisk = class(TSynPersistent)
+  protected
+    fName: RawUTF8;
+    fVolumeName: RawUTF8;
+    fAvailableSize: TSynMonitorSize;
+    fFreeSize: TSynMonitorSize;
+    fTotalSize: TSynMonitorSize;
+    fLastDiskInfoRetrievedTix: cardinal;
+    procedure RetrieveDiskInfo; virtual;
+    function GetName: RawUTF8;
+    function GetAvailable: TSynMonitorSize;
+    function GetFree: TSynMonitorSize;
+    function GetTotal: TSynMonitorSize;
+  public
+    /// initialize the class, and its nested TSynMonitorSize instances
+    constructor Create; override;
+    /// finalize the class, and its nested TSynMonitorSize instances
+    destructor Destroy; override;
+  published
+    /// the disk name
+    property Name: RawUTF8 read GetName;
+    /// the volume name
+    property VolumeName: RawUTF8 read fVolumeName write fVolumeName;
+    /// space currently available on this disk for the current user
+    // - may be less then FreeSize, if user quotas are specified
+    property AvailableSize: TSynMonitorSize read GetAvailable;
+    /// free space currently available on this disk
+    property FreeSize: TSynMonitorSize read GetFree;
+    /// total space
+    property TotalSize: TSynMonitorSize read GetTotal;
+  end;
 
 
 {$ifdef MSWINDOWS}
@@ -13626,7 +13663,7 @@ implementation
 {$ifdef FPC}
 uses
   {$ifdef Linux}
-  SynFPCLinux, BaseUnix, Unix, dynlibs, Linux,
+  SynFPCLinux, Unix, dynlibs, Linux,
   {$ifndef Darwin}
   SysCall,
   {$endif}
@@ -43364,6 +43401,108 @@ begin
   tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
   if fLastMemoryInfoRetrievedTix<>tix then begin
     fLastMemoryInfoRetrievedTix := tix;
+    RetrieveInfo;
+  end;
+end;
+
+
+{ TSynMonitoryDisk }
+
+constructor TSynMonitoryDisk.Create;
+begin
+  fAvailableSize := TSynMonitorSize.Create;
+  fFreeSize := TSynMonitorSize.Create;
+  fTotalSize := TSynMonitorSize.Create;
+end;
+
+destructor TSynMonitoryDisk.Destroy;
+begin
+  fAvailableSize.Free;
+  fFreeSize.Free;
+  fTotalSize.Free;
+  inherited;
+end;
+
+function TSynMonitoryDisk.GetName: RawUTF8;
+begin
+  RetrieveDiskInfo;
+  result := fName;
+end;
+
+function TSynMonitoryDisk.GetAvailable: TSynMonitorSize;
+begin
+  RetrieveDiskInfo;
+  result := fAvailableSize;
+end;
+
+function TSynMonitoryDisk.GetFree: TSynMonitorSize;
+begin
+  RetrieveDiskInfo;
+  result := fFreeSize;
+end;
+
+function TSynMonitoryDisk.GetTotal: TSynMonitorSize;
+begin
+  RetrieveDiskInfo;
+  result := fTotalSize;
+end;
+
+{$ifdef MSWINDOWS}
+function GetDiskFreeSpaceExA(lpDirectoryName: PAnsiChar;
+  var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
+  lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+{$endif}
+
+procedure TSynMonitoryDisk.RetrieveDiskInfo;
+  procedure RetrieveInfo;
+  {$ifdef MSWINDOWS}
+  var tmp: array[byte] of AnsiChar;
+      dummy,flags: DWORD;
+      dn: RawUTF8;
+  begin
+    if fName='' then
+      fName := SysUtils.UpperCase(ExtractFileDrive(GetCurrentDir));
+    dn := fName;
+    if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
+      dn := dn+'\';
+    if fVolumeName='' then begin
+      tmp[0] := #0;
+      GetVolumeInformationA(pointer(dn),tmp,sizeof(tmp),nil,dummy,flags,nil,0);
+      SetString(fVolumeName,PAnsiChar(@tmp),StrLen(@tmp));
+    end;
+    GetDiskFreeSpaceExA(pointer(dn),fAvailableSize.fBytes,fTotalSize.fBytes,
+      fFreeSize.fBytes);
+  {$else}
+  {$ifdef KYLIX3}
+  var fs: TStatFs64;
+      h: THandle;
+  begin
+    if fName='' then
+      fName := '.';
+    h := FileOpen(fName,fmShareDenyNone);
+    fstatfs64(h,fs);
+    FileClose(h);
+    fAvailableSize.fBytes := fs.f_bavail*fs.f_bsize;
+    fFreeSize.fBytes := fAvailableSize.fBytes;
+    fTotalSize.fBytes := fs.f_blocks*fs.f_bsize;
+  {$endif}
+  {$ifdef FPC}
+  var fs: pstatfs;
+  begin
+    if fName='' then
+      fName := '.';
+    fpStatFS(fName,fs);
+    fAvailableSize.fBytes := Int64(fs.bavail)*Int64(fs.bsize);
+    fFreeSize.fBytes := fAvailableSize.fBytes;
+    fTotalSize.fBytes := Int64(fs.blocks)*Int64(fs.bsize);
+  {$endif}
+  {$endif}
+  end;
+var tix: cardinal;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastDiskInfoRetrievedTix<>tix then begin
+    fLastDiskInfoRetrievedTix := tix;
     RetrieveInfo;
   end;
 end;
