@@ -468,6 +468,7 @@ begin
   fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
   fPerThread := ptIdentifiedInOnFile;
   fRotateFileAtHour := -1;
+  fRotateFileSize := 128*1024; // 128 MB per rotation log by default
   fAutoFlush := 5;
 end;
 
@@ -513,6 +514,7 @@ begin
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
+    FileExistsAction := acAppend;
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;
     {$ifdef MSWINDOWS}
