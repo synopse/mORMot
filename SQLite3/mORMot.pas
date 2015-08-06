@@ -13009,6 +13009,7 @@ type
     // a "408 Request Time-out" status error
     property AcquireWriteTimeOut: cardinal index execORMWrite
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
+
     /// the current UTC Date and Time, as retrieved from the server
     // - this property will return the timestamp as TTimeLog / Int64
     // after correction from the Server returned time-stamp (if any)
@@ -13023,6 +13024,8 @@ type
     // - or you could use ServerTimeStamp everywhere in your code, when you need
     // a reference time base
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
+    /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
+    function AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON; virtual;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
     // aware that the following line may trigger an access violation if
@@ -15053,6 +15056,8 @@ type
     // not free the returned instance
     property ServiceMethodStat[const aMethod: RawUTF8]: TSynMonitorInputOutput
       read GetServiceMethodStat;
+    /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
+    function AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON; override;
     /// compute a JSON description of all available services, and its public URI
     // - the JSON object matches the TServicesPublishedInterfaces record type
     // - used by TSQLRestClientURI.ServicePublishOwnInterfaces to register all
@@ -15092,7 +15097,7 @@ type
     // - this method IS thread-safe, and call internaly fSessions.Lock
     procedure SessionsLoadFromFile(const aFileName: TFileName;
       andDeleteExistingFileAfterRead: boolean);
-    /// retrieve all current session information as a JSON array 
+    /// retrieve all current session information as a JSON array
     function SessionsAsJson: RawJSON;
 
     /// register a Service class on the server side
@@ -30308,6 +30313,26 @@ begin
 end;
 {$endif}
 
+function TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+var table: integer;
+begin
+  if (SQL<>'') and (SQL[1]='#') then begin
+    // pseudo SQL for a given TSQLRest[Server] instance
+    case IdemPCharArray(@SQL[2],['TIME','MODEL','REST']) of
+    0: result := Int64ToUtf8(ServerTimeStamp);
+    1: result := ObjectToJSON(Model);
+    2: result := ObjectToJSON(self);
+    end;
+  end else
+  if isSelect(pointer(SQL)) then begin
+    table := Model.GetTableIndexFromSQLSelect(SQL,true);
+    if table>=0 then
+      result := ExecuteJson([Model.Tables[table]],SQL) else
+      ExecuteJson([],SQL);
+  end else
+    Execute(SQL);
+end;
+
 function TSQLRest.EngineUpdateFieldIncrement(TableModelIndex: integer;
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var Value: Int64;
@@ -36372,6 +36397,59 @@ begin
     Ctxt.Returns(json);
   finally
     W.Free;
+  end;
+end;
+
+function TSQLRestServer.AdministrationExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+var isAjax: boolean;
+    name,interf,method: RawUTF8;
+    obj: TObject;
+    call: TSQLRestURIParams;
+    P: PUTF8Char;
+begin
+  if (SQL<>'') and (SQL[1]='#') then begin
+    P := @SQL[2];
+    case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
+      'GET','POST']) of
+    0: result := ServicesPublishedInterfaces;
+    1: begin
+      name := copy(SQL,8,length(SQL)-8);
+      obj := ServiceMethodStat[name];
+      if obj=nil then begin
+        Split(name,'.',interf,method);
+        obj := Services[interf];
+        if obj<>nil then
+          obj := (obj as TServiceFactoryServer).Stat[method] else
+          obj := nil;
+      end;
+      if obj<>nil then
+        result := ObjectToJSON(obj);
+    end;
+    2: result := FullStatsAsJson;
+    3: result := Services.AsJson;
+    4: result := SessionsAsJson;
+    5,6: begin
+      fillchar(call,SizeOf(call),0);
+      call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+      call.Method := GetNextItem(P,' '); // GET or POST
+      call.Url := Model.Root;
+      if P<>nil then
+        call.Url := call.Url+'/'+RawUTF8(P);
+      URI(call);
+      result := call.OutBody;
+    end;
+    else
+      result := inherited AdministrationExecute(DatabaseName,SQL);
+    end;
+  end else begin
+    isAjax := not NoAJAXJSON;
+    if isAjax then
+      NoAJAXJSON := true; // force smaller content
+    try
+      result := inherited AdministrationExecute(DatabaseName,SQL);
+    finally
+      NoAjaxJson := not isAjax;
+    end;
   end;
 end;
 

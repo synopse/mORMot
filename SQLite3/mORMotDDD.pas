@@ -55,6 +55,9 @@ unit mORMotDDD;
 interface
 
 uses
+{$ifdef MSWINDOWS}
+  Windows,
+{$endif}
   SysUtils,
   Classes,
   Contnrs,
@@ -2219,30 +2222,21 @@ begin
 end;
 
 function TDDDAdministratedDaemon.DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
-var table: integer;
-    rest: TSQLRest;
-    serv: TSQLRestServer absolute rest;
-    isAjax: Boolean;
-    obj: TObject;
-    name,value,interf,method: RawUTF8;
+var rest: TSQLRest;
+    name,value: RawUTF8;
     doc: TDocVariantData;
     valid: Boolean;
-    P: PUTF8Char;
     status: variant;
-    call: TSQLRestURIParams;
+    mem: TSynMonitorMemory;
 begin
   result := '';
   if SQL='' then
     exit;
   if SQL[1]='#' then
-    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','HELP']) of
-    0: begin
-      if InternalRetrieveState(status) then
-        result := VariantSaveJSON(status);
-      exit;
-    end;
-    1: begin
-      if fInternalSettings<>nil then begin
+    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG','HELP']) of
+    0: if InternalRetrieveState(status) then
+         result := VariantSaveJSON(status);
+    1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           Split(copy(SQL,11,maxInt),'=',name,value);
           if (name<>'') and (value<>'') then begin
@@ -2253,79 +2247,48 @@ begin
         end;
         result := ObjectToJSON(fInternalSettings);
       end;
+    2: result := JSONEncode(['prog',ExeVersion.ProgramName,
+         'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
+         'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
+         'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
+    3: with ExeVersion,SystemInfo {$ifdef MSWINDOWS},OSVersionInfo {$endif} do begin
+      {$ifdef MSWINDOWS_INCLUDESENV}
+      P := pointer(GetEnvironmentStringsA);
+      while P^<>#0 do begin
+        L := StrLen(P);
+        if (L>0) and (P^<>'=') then begin
+          if value<>'' then
+            value := value+#10;
+          SetString(name,PAnsiChar(P),L);
+          value := value+name;
+        end;
+        inc(P,table+1);
+      end;
+      {$endif}
+      mem := TSynMonitorMemory.Create;
+      result := JSONEncode(['host',Host,'user',User,
+        {$ifdef CPUINTEL}'sse2',cfSSE2 in CpuFeatures,
+          'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
+        {$endif}'cpucount',
+        {$ifdef MSWINDOWS}dwNumberOfProcessors,'os',FormatUTF8(
+          '% % (%.%.%)',[GetEnumNameTrimed(TypeInfo(TWindowsVersion),OSVersion),
+          szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]),
+        'wow64',IsWow64{,'env',value}{$else}
+        nprocs,'os',FormatUTF8('%-% %',[uts.sysname,uts.release,uts.version])
+        {$endif},'mem',mem]);
+      mem.Free;
       exit;
     end;
-    2: begin
-      result := JSONEncode(['prog',ExeVersion.ProgramName,
-        'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
-        'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true)]);
-      exit;
-    end;
-    3: begin
+    4: result := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
+    else
       result := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings|#settings full.path=value|#version'+
+        '|#state|#settings|#settings full.path=value|#version|#computer|#log'+
         '|#help|#time|#model|#rest|#interfaces|#stats|#stats(method)|'+
         '#stats(interface.method)|#services|#sessions|#get url|#post url"';
     end;
-    end;
   rest := PublishedORM(DatabaseName);
-  if rest=nil then
-    exit;
-  if SQL[1]='#' then begin // pseudo SQL for a given TSQLRest[Server] instance
-    P := @SQL[2];
-    case IdemPCharArray(P,['TIME','MODEL','REST']) of
-    0: result := Int64ToUtf8(rest.ServerTimeStamp);
-    1: result := ObjectToJSON(rest.Model);
-    2: result := ObjectToJSON(rest);
-    else if rest.InheritsFrom(TSQLRestServer) then
-      case IdemPCharArray(P,['INTERFACES','STATS(','STATS',
-        'SERVICES','SESSIONS','GET','POST']) of
-      0: result := serv.ServicesPublishedInterfaces;
-      1: begin
-        name := copy(SQL,8,length(SQL)-8);
-        obj := serv.ServiceMethodStat[name];
-        if obj=nil then begin
-          Split(name,'.',interf,method);
-          obj := serv.Services[interf];
-          if obj<>nil then
-            obj := (obj as TServiceFactoryServer).Stat[method] else
-            obj := nil;
-        end;
-        if obj<>nil then
-          result := ObjectToJSON(obj);
-      end;
-      2: result := serv.FullStatsAsJson;
-      3: result := serv.Services.AsJson;
-      4: result := serv.SessionsAsJson;
-      5,6: begin
-        fillchar(call,SizeOf(call),0);
-        call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
-        call.Method := GetNextItem(P,' '); // GET or POST
-        call.Url := serv.Model.Root;
-        if P<>nil then
-          call.Url := call.Url+'/'+RawUTF8(P);
-        serv.URI(call);
-        result := call.OutBody;
-      end;
-      end;
-    end;
-    exit;
-  end;
-  if isSelect(pointer(SQL)) then begin
-    isAjax := rest.InheritsFrom(TSQLRestServer) and not serv.NoAjaxJson;
-    if isAjax then
-      TSQLRestServer(rest).NoAjaxJson := true; // force smaller content
-    try
-      table := rest.Model.GetTableIndexFromSQLSelect(SQL,true);
-      if table>=0 then
-        result := rest.ExecuteJson([rest.Model.Tables[table]],SQL) else
-        rest.ExecuteJson([],SQL);
-    finally
-      if isAjax then
-        serv.NoAjaxJson := false;
-    end;
-  end else
-    rest.Execute(SQL);
+  if rest<>nil then
+    result := rest.AdministrationExecute(DatabaseName,SQL);
 end;
 
 function TDDDAdministratedDaemon.DatabaseList: TRawUTF8DynArray;

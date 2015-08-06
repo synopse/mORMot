@@ -987,7 +987,7 @@ var ctxt: THttpServerRequest;
     status: cardinal;
 begin
   result := false;
-  if fHttpServer.InheritsFrom(TWebSocketServerRest) then
+  if (self<>nil) and fHttpServer.InheritsFrom(TWebSocketServerRest) then
   try // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
     ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
