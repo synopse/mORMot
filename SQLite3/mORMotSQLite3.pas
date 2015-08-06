@@ -473,6 +473,8 @@ type
     // - there are cases where this method will fail and return FALSE: consider
     //   shuting down the server, replace the file, then relaunch the server instead
     function RestoreGZ(const BackupFileName: TFileName): boolean;
+    /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); override;
 
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
@@ -1753,6 +1755,44 @@ begin
   end;
 end;
 {$endif}
+
+procedure TSQLRestServerDB.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+  var result: RawJSON);
+var new,cmd,fn: RawUTF8;
+    bfn: TFileName;
+begin
+  inherited AdministrationExecute(DatabaseName,SQL,result);
+  if (SQL<>'') and (SQL[1]='#') then begin
+    case IdemPCharArray(@SQL[2],['VERSION','HELP','DB','BACKUP']) of
+    0: new := FormatUTF8('"sqlite3":?}',[],[sqlite3.Version],true);
+    1: begin
+      result[length(result)] := '|';
+      result := result+'#db|#backup localfilename"';
+    end;
+    2: result := ObjectToJSON(DB,[woFullExpand]);
+    3: begin
+      split(SQL,' ',cmd,fn);
+      if fn='' then
+        fn := FormatUTF8('% %',[NowToString(false),DB.FileNameWithoutPath]);
+      if (fn<>' ') and (PosEx('..',fn)=0) then begin
+        bfn := UTF8ToString(fn);
+        if ExtractFilePath(bfn)='' then // put in local data folder is not set
+          bfn := ExtractFilePath(DB.FileName)+bfn;
+        if DB.BackupBackground(bfn,4*1024,1,nil) then // 4*1024*4096=16MB step
+          result := JsonEncode(['started',bfn]) else
+          result := '"Backup failed to start"';
+      end;
+    end;
+    else exit;
+    end;
+    if new<>'' then begin
+      if result='' then
+        result := '{' else
+        result[length(result)] := ',';
+      result := result+new;
+    end;
+  end;
+end;
 
 procedure TSQLRestServerDB.FlushInternalDBCache;
 begin

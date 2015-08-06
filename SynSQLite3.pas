@@ -2632,6 +2632,8 @@ type
     fBusyTimeout: Integer;
     fOpenV2Flags: Integer;
     fBackupBackgroundInProcess: TSQLDatabaseBackupThread;
+    fBackupBackgroundLastTime: RawUTF8;
+    fBackupBackgroundLastFileName: TFileName;
     {$ifdef WITHLOG}
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
@@ -3020,6 +3022,10 @@ type
     /// is set to TRUE while a BackupBackground() process is still running
     // - see also BackupBackgroundWaitUntilFinished() method
     property BackupBackgroundInProcess: boolean read GetBackupBackgroundInProcess;
+    /// how much time did the latest BackupBackground() finished process take
+    property BackupBackgroundLastTime: RawUTF8 read fBackupBackgroundLastTime;
+    /// the latest BackupBackground() process file name
+    property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
     property SQLite3Library: TSQLite3Library read GetSQLite3Library;
   end;
@@ -3072,6 +3078,7 @@ type
     fStepNumberToFinish, fStepNumberTotal: integer;
     fOnProgress: TSQLDatabaseBackupEvent;
     fError: Exception;
+    fTimer: TPrecisionTimer;
     /// main process
     procedure Execute; override;
   public
@@ -5281,6 +5288,7 @@ constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
   Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
   OnProgress: TSQLDatabaseBackupEvent);
 begin
+  fTimer.Start;
   fBackup := Backup;
   fSourceDB := Source;
   fDestDB := Dest;
@@ -5332,7 +5340,9 @@ begin
       NotifyProgressAndContinue(backupSuccess);
     finally
       sqlite3.backup_finish(fBackup);
+      fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fDestDB.FileName);
       fDestDB.Free; // close destination backup database
+      fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
       fSourceDB.Lock;
       fSourceDB.fBackupBackgroundInProcess := nil;
       fSourceDB.Unlock;
