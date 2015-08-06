@@ -757,6 +757,7 @@ type
     procedure AddErrorMessage(Error: cardinal);
     procedure AddStackTrace(Stack: PPtrUInt);
     procedure ComputeFileName; virtual;
+    function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
@@ -941,12 +942,14 @@ type
     // - should usually not be used directly, unless you ensure it is safe
     property Writer: TTextWriter read fWriter;
   published
-    /// the associated logging family
-    property GenericFamily: TSynLogFamily read fFamily;
     /// the associated file name containing the log
     // - this is accurate only with the default implementation of the class:
     // any child may override it with a custom logging mechanism
     property FileName: TFileName read fFileName;
+    /// the current size, in bytes, of the associated file containing the log
+    property FileSize: Int64 read GetFileSize;
+    /// the associated logging family
+    property GenericFamily: TSynLogFamily read fFamily;
   end;
 
   /// used by TSynLogFile to refer to a method profiling in a .log file
@@ -3215,8 +3218,6 @@ var WithinEvents: boolean;
     Env: PAnsiChar;
     P: PUTF8Char;
     L: Integer;
-    {$else}
-    uts: UtsName;
     {$endif}
 procedure NewLine;
 begin
@@ -3260,17 +3261,15 @@ begin
       AddShort(' Wow64='); Add(integer(IsWow64));
     end;
     {$else}
-    {$ifdef KYLIX3}
     AddShort(' CPU=');
-    Add(LibC.get_nprocs); Add('/'); Add(LibC.get_nprocs_conf);
-    AddShort(' OS=');
-    uname(uts);
-    {$else}
-    AddShort(' CPU=unknown OS=');
-    FPUname(uts);
+    Add(SystemInfo.nprocs);
+    {$ifdef KYLIX3}
+    Add('/'); Add(LibC.get_nprocs_conf);
     {$endif}
-    AddNoJSONEscape(@uts.sysname); Add('-'); AddNoJSONEscape(@uts.release);
-    AddReplace(@uts.version,' ','-');
+    AddShort(' OS=');
+    AddNoJSONEscape(@SystemInfo.uts.sysname); Add('-');
+    AddNoJSONEscape(@SystemInfo.uts.release);
+    AddReplace(@SystemInfo.uts.version,' ','-');
     AddShort(' Wow64=0');
     {$endif}
     AddShort(' Freq='); Add(fFrequencyTimeStamp);
@@ -3599,6 +3598,19 @@ begin
     fWriter.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriter.EchoAdd(fFamily.fEchoRemoteEvent);
+end;
+
+function TSynLog.GetFileSize: Int64;
+begin
+  if fWriterStream<>nil then begin
+    EnterCriticalSection(GlobalThreadLock);
+    try
+      result := fWriterStream.Size;
+    finally
+      LeaveCriticalSection(GlobalThreadLock);
+    end;
+   end else
+    result := 0;
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);

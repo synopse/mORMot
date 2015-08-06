@@ -10118,6 +10118,12 @@ procedure SleepHiRes(ms: cardinal);
 
 {$else MSWINDOWS}
 
+var
+  SystemInfo: record
+    nprocs: integer;
+    uts: UtsName;
+  end;
+  
 {$ifdef KYLIX3}
 
 /// compatibility function for Linux
@@ -19432,6 +19438,16 @@ begin
 end;
 
 {$else}
+
+procedure RetrieveSystemInfo;
+begin
+  {$ifdef KYLIX3}
+  SystemInfo.nprocs := LibC.get_nprocs;
+  uname(SystemInfo.uts);
+  {$else}
+  FPUname(SystemInfo.uts);
+  {$endif}
+end;
 
 {$ifdef KYLIX3}
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
@@ -50190,9 +50206,7 @@ initialization
   {$endif CPUARM}
   {$endif FPC}
   InitSynCommonsConversionTables;
-  {$ifdef MSWINDOWS}
   RetrieveSystemInfo;
-  {$endif MSWINDOWS}
   SetExecutableVersion(0,0,0);
   // some type definition assertions
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
