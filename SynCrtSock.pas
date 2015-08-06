@@ -2956,15 +2956,13 @@ begin
 end;
 
 procedure TCrtSocket.SockSend(P: pointer; Len: integer);
+var cap: integer;
 begin
   if Len<=0 then
     exit;
-  if PByte(fSndBuf)=nil then
-    if Len<2048 then // 2048 is still FASTMM4 small block size
-      SetLength(fSndBuf,2048) else
-      SetLength(fSndBuf,Len) else
-    if Len+fSndBufLen>pInteger(PAnsiChar(pointer(fSndBuf))-4)^ then
-      SetLength(fSndBuf,pInteger(PAnsiChar(pointer(fSndBuf))-4)^+Len+2048);
+  cap := Length(fSndBuf);
+  if Len+fSndBufLen>cap then
+    SetLength(fSndBuf,len+cap+cap shr 3+2048);
   move(P^,PAnsiChar(pointer(fSndBuf))[fSndBufLen],Len);
   inc(fSndBufLen,Len);
 end;
@@ -4096,7 +4094,7 @@ begin
       while P^>#13 do inc(P);
       if PDeb<>P then begin // add any not void line
         if length(Headers)<=n then
-          SetLength(Headers,n+10);
+          SetLength(Headers,n+n shr 3+8);
         SetString(Headers[n],PDeb,P-PDeb);
         inc(n);
       end;
@@ -4107,10 +4105,8 @@ end;
 
 function THttpSocket.HeaderGetText: SockString;
 var i,L,n: integer;
-    V: PtrInt;
     P: PAnsiChar;
-begin
-  // much faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10;
+begin // faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10
   result := '';
   n := length(Headers);
   if n=0 then
@@ -4118,15 +4114,13 @@ begin
   L := n*2; // #13#10 size
   dec(n);
   for i := 0 to n do
-    if pointer(Headers[i])<>nil then
-      inc(L,PInteger(PAnsiChar(pointer(Headers[i]))-4)^); // fast add length(List[i])
+    inc(L,length(Headers[i]));
   SetLength(result,L);
   P := pointer(result);
   for i := 0 to n do begin
-    V := PtrInt(PAnsiChar(Headers[i]));
-    if V<>0 then begin
-      L := PInteger(V-4)^;  // L := length(List[i])
-      move(pointer(V)^,P^,L);
+    L := length(Headers[i]);
+    if L>0 then begin
+      move(pointer(Headers[i])^,P^,L);
       inc(P,L);
     end;
     PWord(P)^ := 13+10 shl 8;
