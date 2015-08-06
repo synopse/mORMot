@@ -2653,6 +2653,8 @@ type
     procedure SetCacheSize(const Value: cardinal);
     function GetPageSize: cardinal;
     procedure SetPageSize(const Value: cardinal);
+    function GetPageCount: cardinal;
+    function GetFileSize: Int64;
     function GetMemoryMappedMB: cardinal;
     procedure SetMemoryMappedMB(const Value: cardinal);
     function GetLimit(Category: TSQLLimitCategory): integer;
@@ -2968,6 +2970,11 @@ type
     // is not in WAL journal mode then VACUUM will change the page size to the
     // new value for the newly created database file
     property PageSize: cardinal read GetPageSize write SetPageSize;
+    /// return the total number of pages in the database file
+    property PageCount: cardinal read GetPageCount;
+    /// return the total number of bytes in the database file
+    // - computes PageSize*PageCount
+    property FileSize: Int64 read GetFileSize;
     /// query or change the Write-Ahead Logging mode for the database
     // - beginning with version 3.7 of the SQLite3 engine, a new "Write-Ahead Log"
     // option (hereafter referred to as "WAL") is optionaly available
@@ -4369,6 +4376,17 @@ end;
 procedure TSQLDataBase.SetPageSize(const Value: cardinal);
 begin
   ExecuteNoException('PRAGMA page_size='+UInt32ToUTF8(Value));
+end;
+
+function TSQLDataBase.GetPageCount: cardinal;
+begin
+  result := ExecuteNoExceptionInt64('PRAGMA page_count');
+end;
+
+function TSQLDataBase.GetFileSize: Int64;
+begin
+  result := GetPageCount;
+  result := result*GetPageSize;
 end;
 
 procedure TSQLDataBase.SetSynchronous(const Value: TSQLSynchronousMode);
