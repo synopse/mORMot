@@ -43468,7 +43468,7 @@ procedure TSynMonitoryDisk.RetrieveDiskInfo;
       dn: RawUTF8;
   begin
     if fName='' then
-      fName := SysUtils.UpperCase(ExtractFileDrive(GetCurrentDir));
+      fName := UpperCase(StringToUTF8(ExtractFileDrive(GetCurrentDir)));
     dn := fName;
     if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
       dn := dn+'\';
