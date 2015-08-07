@@ -72,6 +72,7 @@ end;
 
 function TAdminControl.Open(Definition: TDDDRestClientSettings): boolean;
 var temp: TForm;
+    exec: TServiceCustomAnswer;
 begin
   result := false;
   if Assigned(fAdmin) then
@@ -82,7 +83,8 @@ begin
       Application.ProcessMessages;
       fClient := AdministratedDaemonClient(Definition);
       fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
-      version := _JsonFast(fAdmin.DatabaseExecute('','#version'));
+      exec := fAdmin.DatabaseExecute('','#version');
+      version := _JsonFast(exec.Content);
       fDefinition := Definition;
       result := true;
     finally
@@ -96,11 +98,13 @@ begin
   end;
 end;
 
-
 function TAdminControl.GetState: Variant;
+var exec: TServiceCustomAnswer;
 begin
-  if fAdmin<>nil then
-    result := _JsonFast(fAdmin.DatabaseExecute('','#state'));
+  if fAdmin<>nil then begin
+    exec := fAdmin.DatabaseExecute('','#state');
+    result := _JsonFast(exec.Content);
+  end;
 end;
 
 procedure TAdminControl.Show;

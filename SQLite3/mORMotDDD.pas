@@ -219,7 +219,10 @@ type
     function DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray;
     /// execute a SQL query on an internal database
     // - the database name should match one existing in the DatabaseList
-    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+    // - the supplied SQL parameter may be #cmd internal commands: in this case,
+    // the database name may not be mandatory 
+    // - will return JSON most of the time, but may return binary if needed
+    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): TServiceCustomAnswer;
     /// used to subscribe for real-time remote log monitoring
     // - allows to track the specified log events, with a callback
     // - you can specify a number of KB of existing log content to send to the
@@ -838,7 +841,7 @@ type
     function DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray; virtual;
     /// IAdministratedDaemon command to execute a SQL query on an internal database
     // - you may override this method to implement addition "pseudo-SQL" commands
-    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON; virtual;
+    function DatabaseExecute(const DatabaseName,SQL: RawUTF8): TServiceCustomAnswer; virtual;
     /// IAdministratedDaemon command to subscribe to a set of events for
     // real-time remote monitoring of the specified log events
     procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
@@ -2221,7 +2224,7 @@ begin
   result := nil;
 end;
 
-function TDDDAdministratedDaemon.DatabaseExecute(const DatabaseName,SQL: RawUTF8): RawJSON;
+function TDDDAdministratedDaemon.DatabaseExecute(const DatabaseName,SQL: RawUTF8): TServiceCustomAnswer;
 var rest: TSQLRest;
     name,value: RawUTF8;
     doc: TDocVariantData;
@@ -2230,13 +2233,14 @@ var rest: TSQLRest;
     mem: TSynMonitorMemory;
     disk: TSynMonitoryDisk;
 begin
-  result := '';
+  result.Header := JSON_CONTENT_TYPE_HEADER_VAR;
+  result.Status := HTML_SUCCESS;
   if SQL='' then
     exit;
   if SQL[1]='#' then
     case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG','HELP']) of
     0: if InternalRetrieveState(status) then
-         result := VariantSaveJSON(status);
+         result.Content := VariantSaveJSON(status);
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           Split(copy(SQL,11,maxInt),'=',name,value);
@@ -2246,9 +2250,9 @@ begin
             JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
           end;
         end;
-        result := ObjectToJSON(fInternalSettings);
+        result.Content := ObjectToJSON(fInternalSettings);
       end;
-    2: result := JSONEncode(['prog',ExeVersion.ProgramName,
+    2: result.Content := JSONEncode(['prog',ExeVersion.ProgramName,
          'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
          'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
          'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
@@ -2268,7 +2272,7 @@ begin
       {$endif}
       mem := TSynMonitorMemory.Create;
       disk := TSynMonitoryDisk.Create; // current drive
-      result := JSONEncode(['host',Host,'user',User,
+      result.Content := JSONEncode(['host',Host,'user',User,
         {$ifdef CPUINTEL}'sse2',cfSSE2 in CpuFeatures,
           'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
         {$endif}'cpucount',
@@ -2282,14 +2286,14 @@ begin
       mem.Free;
       exit;
     end;
-    4: result := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
+    4: result.Content := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
     else
-      result := '"Enter either a SQL request, or one of the following commands:|'+
+      result.Content := '"Enter either a SQL request, or one of the following commands:|'+
         '|#state|#settings|#settings full.path=value|#version|#computer|#log|#help"';
     end;
   rest := PublishedORM(DatabaseName);
   if rest<>nil then
-    rest.AdministrationExecute(DatabaseName,SQL,result);
+    rest.AdministrationExecute(DatabaseName,SQL,RawJSON(result.Content));
 end;
 
 function TDDDAdministratedDaemon.DatabaseList: TRawUTF8DynArray;

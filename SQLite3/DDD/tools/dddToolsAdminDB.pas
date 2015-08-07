@@ -104,10 +104,11 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
   end;
 
 var sql,res: RawUTF8;
-    mmo,cmd: string;
+    mmo,cmd,ctyp: string;
     SelStart, SelLength,i : integer;
     table: TSQLTable;
     P: PUTF8Char;
+    exec: TServiceCustomAnswer;
 begin
   if (Sender<>nil) and Sender.InheritsFrom(TMenuItem) then begin
     mmo := TMenuItem(Sender).Hint;
@@ -131,7 +132,11 @@ begin
   Screen.Cursor := crHourGlass;
   try
     try
-      fJson := Admin.DatabaseExecute(DatabaseName,sql);
+      exec := Admin.DatabaseExecute(DatabaseName,sql);
+      ctyp := FindIniNameValue(pointer(exec.Content),HEADER_CONTENT_TYPE_UPPER);
+      if ctyp='' then
+        fJSON := exec.Content else
+        fJSON := '';
     except
       on E: Exception do
         fJSON := ObjectToJSON(E);
