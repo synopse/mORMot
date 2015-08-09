@@ -9418,7 +9418,7 @@ type
     // - contains 0 if parameter is not a register
     // - contains 1 for EAX, 2 for EDX and 3 for ECX registers (for x86)
     // - contains 1 for RCX/XMM0L, 2 for RDX/XMM1L, 3 for R8/XMM2L, and
-    // 4 for R9/XMM3L, with a backing store on the stack (for x64)
+    // 4 for R9/XMM3L, with a backing store on the stack (for Wub64)
     RegisterIdent: integer;
     /// size (in bytes) of this argument on the stack
     SizeInStack: integer;
@@ -46237,15 +46237,30 @@ const
   // maximum stack size at method execution must match .PARAMS 64 (minus 4 regs)
   MAX_EXECSTACK = 60*8;
 
+  {$ifdef LINUX}
+  REGRDI = 1;
+  REGRSI = 2;
+  REGRDX = 3;
+  REGRCX = 4;
+  REGR8 = 5;
+  REGR9 = 6;
+  {$else}
   REGRCX = 1;
   REGRDX = 2;
   REGR8 = 3;
   REGR9 = 4;
+  {$endif}
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
   REGXMM3 = 4;
-  REG_FIRST = REGRCX;
+  {$ifdef LINUX}
+  REGXMM4 = 5;
+  REGXMM5 = 6;
+  REGXMM6 = 7;
+  REGXMM7 = 8;
+  {$endif}
+  REG_FIRST = 1;
   REG_LAST = REGR9;
 
   // x64 calling convention under Linux: rax,rsi,rdi,rcx,rdx,r8,r9 + xmm0..xmm7
@@ -46302,9 +46317,16 @@ type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
   TFakeCallStack = packed record
     {$ifdef CPU64}
+    {$ifdef LINUX}
+    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7: double;
+    {$else}
     XMM1, XMM2, XMM3: double;
+    {$endif}
     MethodIndex: PtrUInt;
     Frame, Ret: pointer;
+    {$ifdef LINUX}
+    RDI, RSI, RDX, RCX, R8, R9: pointer;
+    {$endif}
     RCX, RDX, R8, R9: pointer;
     {$else}
     EDX, ECX, MethodIndex, EBP, Ret: Cardinal;
@@ -46463,10 +46485,12 @@ begin
     if ValueType>smvSelf then begin
       case RegisterIdent of
       {$ifdef CPU64}
-      REGRCX: begin
+      REG_FIRST: begin
         RaiseError('unexpected self',[]);
         V := nil; // make compiler happy
       end;
+      {$ifdef LINUX}
+      {$else}
       REGRDX: if ValueType in CONST_STOREDINXMM then
                 V := @aCall.XMM1 else
                 V := @aCall.RDX;
@@ -46476,6 +46500,7 @@ begin
       REGR9:  if ValueType in CONST_STOREDINXMM then
                 V := @aCall.XMM3 else
                 V := @aCall.R9;
+      {$endif}
       {$else}
       REGEAX: begin V := nil; RaiseError('unexpected self',[]); end;
       REGEDX: V := @aCall.EDX;
