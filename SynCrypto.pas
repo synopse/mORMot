@@ -680,21 +680,24 @@ type
   TMD5In = array[0..15] of cardinal;
   /// 128 bits memory block for MD5 hash digest storage
   TMD5Digest = array[0..15] of Byte;
+  PMD5Digest = ^TMD5Digest;
   PMD5 = ^TMD5;
   TMD5Buf = array[0..3] of cardinal;
 
   /// handle MD5 hashing
   TMD5 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    buf: TMD5Buf;
-    bytes: array[0..1] of cardinal;
     in_: TMD5In;
-    procedure Finalize;
+    bytes: array[0..1] of cardinal;
   public
+    buf: TMD5Buf;
     /// initialize MD5 context for hashing
     procedure Init;
     /// update the MD5 context with some data
     procedure Update(const buffer; Len: cardinal);
+    /// finalize the MD5 hash process
+    // - the resulting hash digest would be stored in buf public variable
+    procedure Finalize;
     /// finalize and compute the resulting MD5 hash Digest of all data
     // affected to Update() method
     procedure Final(out result: TMD5Digest); overload;
@@ -5117,12 +5120,11 @@ begin
 end;
 {$else} // MD5 don't use CPU pipelines: this optimized asm is only 10-15% faster
 asm // eax=buf:TMD5Buf edx=in_:TMD5In
-  sub esp,24
-  mov [esp],ebx
-  mov [esp+4H],esi
-  mov [esp+8H],edi
-  mov [esp+0CH],ebp
-  mov [esp+14H],eax
+  push ebx
+  push esi
+  push edi
+  push ebp
+  push eax
   mov esi,eax
   mov ebp,edx
   mov eax,[esi]
@@ -5657,16 +5659,15 @@ asm // eax=buf:TMD5Buf edx=in_:TMD5In
   lea ebx,[esi+ebx-14792C6FH]
   rol ebx,21
   add ebx,ecx
-  mov esi,[esp+14H]
+  pop esi
   add [esi],eax
   add [esi+4H],ebx
   add [esi+8H],ecx
   add [esi+0CH],edx
-  mov ebx,[esp]
-  mov esi,[esp+4H]
-  mov edi,[esp+8H]
-  mov ebp,[esp+0CH]
-  add esp,24
+  pop ebp
+  pop edi
+  pop esi
+  pop ebx
 end;
 {$endif}
 
