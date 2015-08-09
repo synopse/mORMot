@@ -13126,8 +13126,10 @@ type
     property Safe: TSynLocker read fSafe;
     /// read-only access to the TSynLog instance of the associated REST instance 
     property Log: TSynLog read fLog;
+    /// publishes the thread running state
+    property Terminated;
   end;
-  {$M-}
+  {$M-} 
 
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
@@ -42081,10 +42083,7 @@ begin
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
       if (PropValue=nil) or wasString or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content
-      V := GetInteger(PropValue,err); // PtrInt is enough (TID=Int64 uneeded)
-      if err<>0 then
-        exit;
-      TSQLRecord(Value).fID := V;
+      SetID(PropValue,TSQLRecord(Value).fID);
       continue;
     end;
     P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName);
