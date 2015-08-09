@@ -3336,9 +3336,9 @@ begin
   Check(not IPNUSL('abcD','ABcF',4));
   Check(not IPNUSL('abcD','ABcFG',4));
   Check(IPNUSL('abcDe','ABcdE',5));
-  Check(IdemPropNameUSameLen(abcde,abcdf,0));
-  Check(IdemPropNameUSameLen(abcde,nil,0));
-  Check(IdemPropNameUSameLen(nil,abcdf,0));
+  Check(IPNUSL('ABcdE','abCDF',0));
+  Check(IPNUSL('ABcdE','',0));
+  Check(IPNUSL('','abCDF',0));
   Check(IdemPropNameUSameLen(abcde,abcdf,1));
   Check(IdemPropNameUSameLen(abcde,abcdf,2));
   Check(IdemPropNameUSameLen(abcde,abcdf,3));
@@ -7893,8 +7893,26 @@ begin
 end;
 
 procedure TTestCryptographicRoutines._MD5;
+var i,n: integer;
+    md: TMD5;
+    dig,dig2: TMD5Digest;
+    tmp: TByteDynArray;
 begin
-  Check(MD5SelfTest);
+  check(MD5SelfTest);
+  check(htdigest('agent007','download area','secret')=
+    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65');
+  check(MD5('')='d41d8cd98f00b204e9800998ecf8427e');
+  check(MD5('a')='0cc175b9c0f1b6a831c399e269772661');
+  check(MD5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')='d174ab98d277d9f5a5611c2c9f419d9f');
+  SetLength(tmp,256);
+  for n := 256-80 to 256 do begin
+    md.Init;
+    for i := 1 to n do
+      md.Update(tmp[0],1);
+    md.Final(dig);
+    md.Full(pointer(tmp),n,dig2);
+    check(CompareMem(@dig,@dig2,sizeof(dig)));
+  end;
 end;
 
 procedure TTestCryptographicRoutines._RC4;

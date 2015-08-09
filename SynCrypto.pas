@@ -678,6 +678,7 @@ type
   end;
 
   TMD5In = array[0..15] of cardinal;
+  PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
   TMD5Digest = array[0..15] of Byte;
   PMD5Digest = ^TMD5Digest;
@@ -5710,9 +5711,30 @@ end;
 
 procedure TMD5.Full(Buffer: pointer; Len: integer; out Digest: TMD5Digest);
 begin
-  Init;
-  Update(Buffer^,Len);
-  Finalize;
+  buf[0] := $67452301;
+  buf[1] := $efcdab89;
+  buf[2] := $98badcfe;
+  buf[3] := $10325476;
+  bytes[0] := Len;
+  while Len>=SizeOf(TMD5In) do begin
+    MD5Transform(buf,PMD5In(Buffer)^);
+    inc(PMD5In(Buffer));
+    dec(Len,SizeOf(TMD5In));
+  end;
+  MoveFast(Buffer^,in_,Len);
+  Buffer := PAnsiChar(@in_)+Len;
+  PByte(Buffer)^ := $80;
+  inc(PByte(Buffer));
+  inc(len);
+  if len<=56 then
+    FillcharFast(Buffer^,56-Len,0) else begin
+    FillcharFast(Buffer^,64-Len,0);
+    MD5Transform(buf,in_);
+    FillcharFast(in_,56,0);
+  end;
+  in_[14] := bytes[0] shl 3;
+  in_[15] := bytes[0] shr 29;
+  MD5Transform(buf,in_);
   Digest := TMD5Digest(buf);
 end;
 
@@ -5820,8 +5842,11 @@ end;
 
 function MD5SelfTest: boolean;
 begin
-  result := htdigest('agent007','download area','secret')=
-    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65';
+  result := (htdigest('agent007','download area','secret')=
+    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65') and
+    (MD5('')='d41d8cd98f00b204e9800998ecf8427e') and
+    (MD5('a')='0cc175b9c0f1b6a831c399e269772661') and
+    (MD5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')='d174ab98d277d9f5a5611c2c9f419d9f');
 end;
 
 
