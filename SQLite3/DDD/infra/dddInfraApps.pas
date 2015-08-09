@@ -309,11 +309,13 @@ type
   TDDDSynCrtSocket = class(TInterfacedObjectLocked,IDDDSocket)
   protected
     fSocket: TCrtSocket;
-    fOwner: TDDDSocketThread;
+    fOwner: TThread;
+    fHost,fPort: SockString;
     fOutput: TSynLocker; // input lock is TInterfacedObjectLocked.Safe
   public
     /// initialize the internal TCrtSocket instance
-    constructor Create(aOwner: TDDDSocketThread); reintroduce; virtual;
+    constructor Create(aOwner: TThread; const aHost,aPort: SockString;
+      aSocketTimeout: integer); reintroduce; virtual;
     /// finalize the internal TCrtSocket instance
     destructor Destroy; override;
     /// call TCrtSocket.OpenBind
@@ -331,7 +333,7 @@ type
     /// read-only access to the associated processing thread
     // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
     // would point to this instance
-    property Owner: TDDDSocketThread read fOwner;
+    property Owner: TThread read fOwner;
   published
     /// read-only access to the associated processing socket
     property Socket: TCrtSocket read fSocket;
@@ -379,14 +381,14 @@ type
     fExceptionClass: ExceptClass;
     fLatencyActions: TDDDMockedSocketLatencies;
     fLatencyMS: integer;
-    fOwner: TDDDSocketThread;
+    fOwner: TThread;
     function GetPendingInBytes: integer;
     function GetPendingOutBytes: integer;
     procedure CheckLatency(Action: TDDDMockedSocketLatency);
     procedure CheckRaiseException(Action: TDDDMockedSocketException);
   public
     /// initialize the mocked socket instance 
-    constructor Create(aOwner: TDDDSocketThread); reintroduce; virtual; 
+    constructor Create(aOwner: TThread); reintroduce; virtual; 
     /// add some bytes to the internal fake input storage
     // - would be made accessible to the DataInPending/DataIn methods
     // - the supplied buffer would be gathered to any previous MockDataIn()
@@ -446,7 +448,7 @@ type
     /// read-only access to the associated processing thread
     // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
     // would point to this instance
-    property Owner: TDDDSocketThread read fOwner;
+    property Owner: TThread read fOwner;
   published
     /// how many bytes are actually in the internal input buffer
     property PendingInBytes: integer read GetPendingInBytes;
@@ -912,7 +914,7 @@ begin
   try
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
       fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
-      fSocket := TDDDSynCrtSocket.Create(self);
+      fSocket := TDDDSynCrtSocket.Create(self,fHost,fPort,fSettings.SocketTimeout);
     fSocket.Connect;
     FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
@@ -1093,11 +1095,14 @@ end;
 
 { TDDDSynCrtSocket }
 
-constructor TDDDSynCrtSocket.Create(aOwner: TDDDSocketThread);
+constructor TDDDSynCrtSocket.Create(aOwner: TThread; const aHost,aPort: SockString;
+  aSocketTimeout: integer);
 begin
   inherited Create;
   fOwner := aOwner;
-  fSocket := TCrtSocket.Create(fOwner.Settings.SocketTimeout);
+  fHost := aHost;
+  fPort := aPort;
+  fSocket := TCrtSocket.Create(aSocketTimeout);
   fOutput.Init;
 end;
 
@@ -1110,7 +1115,7 @@ end;
 
 procedure TDDDSynCrtSocket.Connect;
 begin
-  fSocket.OpenBind(fOwner.Host,fOwner.Port,False);
+  fSocket.OpenBind(fHost,fPort,False);
   fSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
 end;
 
@@ -1159,7 +1164,7 @@ end;
 
 { TDDDMockedSocket }
 
-constructor TDDDMockedSocket.Create(aOwner: TDDDSocketThread);
+constructor TDDDMockedSocket.Create(aOwner: TThread);
 begin
   inherited Create;
   fOwner := aOwner;
@@ -1220,10 +1225,11 @@ begin
     finally
       fSafe.UnLock; // wait outside the instance lock
     end;
-    if (result<>0) or fOwner.Terminated or (aTimeOut=0) then
+    if (result<>0) or ((fOwner<>nil) and TSQLRestThread(fOwner).Terminated) or
+       (aTimeOut=0) then
       break;
     sleep(1); // emulate blocking process, just like a regular socket
-    if fOwner.Terminated then
+    if (fOwner<>nil) and TSQLRestThread(fOwner).Terminated then
       break; 
   until GetTickCount64>endTix; // warning: 10-16 ms resolution under Windows
 end;
@@ -1337,7 +1343,7 @@ begin
   finally
     fSafe.UnLock; // wait outside the instance lock
   end;
-  while (waitMS>0) and not fOwner.Terminated do begin
+  while (waitMS>0) and not ((fOwner<>nil) and TSQLRestThread(fOwner).Terminated) do begin
     sleep(1); // do not use GetTickCount64 (poor resolution under Windows)
     dec(waitMS);
   end;

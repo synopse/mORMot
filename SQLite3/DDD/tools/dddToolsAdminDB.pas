@@ -103,8 +103,8 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
     result.OnClick := btnExecClick;
   end;
 
-var sql,res: RawUTF8;
-    mmo,cmd,ctyp: string;
+var sql,res,ctyp: RawUTF8;
+    mmo,cmd: string;
     SelStart, SelLength,i : integer;
     table: TSQLTable;
     P: PUTF8Char;
