@@ -311,11 +311,12 @@ type
     fSocket: TCrtSocket;
     fOwner: TThread;
     fHost,fPort: SockString;
+    fInternalBufferSize: integer;
     fOutput: TSynLocker; // input lock is TInterfacedObjectLocked.Safe
   public
     /// initialize the internal TCrtSocket instance
     constructor Create(aOwner: TThread; const aHost,aPort: SockString;
-      aSocketTimeout: integer); reintroduce; virtual;
+      aSocketTimeout,aInternalBufferSize: integer); reintroduce; virtual;
     /// finalize the internal TCrtSocket instance
     destructor Destroy; override;
     /// call TCrtSocket.OpenBind
@@ -914,7 +915,7 @@ begin
   try
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
       fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
-      fSocket := TDDDSynCrtSocket.Create(self,fHost,fPort,fSettings.SocketTimeout);
+      fSocket := TDDDSynCrtSocket.Create(self,fHost,fPort,fSettings.SocketTimeout,32768);
     fSocket.Connect;
     FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
@@ -1096,13 +1097,16 @@ end;
 { TDDDSynCrtSocket }
 
 constructor TDDDSynCrtSocket.Create(aOwner: TThread; const aHost,aPort: SockString;
-  aSocketTimeout: integer);
+  aSocketTimeout,aInternalBufferSize: integer);
 begin
   inherited Create;
   fOwner := aOwner;
   fHost := aHost;
   fPort := aPort;
   fSocket := TCrtSocket.Create(aSocketTimeout);
+  if aInternalBufferSize<512 then
+    aInternalBufferSize := 512;
+  fInternalBufferSize := aInternalBufferSize;
   fOutput.Init;
 end;
 
@@ -1116,7 +1120,7 @@ end;
 procedure TDDDSynCrtSocket.Connect;
 begin
   fSocket.OpenBind(fHost,fPort,False);
-  fSocket.CreateSockIn(tlbsCRLF,65536); // use SockIn safe buffer
+  fSocket.CreateSockIn(tlbsCRLF,fInternalBufferSize); // use SockIn safe buffer
 end;
 
 function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; ContentLength: integer): integer;
