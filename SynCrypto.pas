@@ -5688,7 +5688,7 @@ procedure TMD5.Finalize;
 var count: Integer;
     p: ^Byte;
 begin
-  count := bytes[0] and $3f;  // Number of bytes in
+  count := bytes[0] and $3f;  // number of pending bytes in
   p := @in_;
   Inc(p,count);
   // Set the first char of padding to 0x80.  There is always room
@@ -5725,15 +5725,16 @@ begin
   Buffer := PAnsiChar(@in_)+Len;
   PByte(Buffer)^ := $80;
   inc(PByte(Buffer));
-  inc(len);
-  if len<=56 then
-    FillcharFast(Buffer^,56-Len,0) else begin
-    FillcharFast(Buffer^,64-Len,0);
+  Len := 55-Len;
+  if Len>=0 then
+    FillcharFast(Buffer^,Len,0) else begin
+    FillcharFast(Buffer^,Len+8,0);
     MD5Transform(buf,in_);
     FillcharFast(in_,56,0);
   end;
-  in_[14] := bytes[0] shl 3;
-  in_[15] := bytes[0] shr 29;
+  Len := bytes[0];
+  in_[14] := Len shl 3;
+  in_[15] := Len shr 29;
   MD5Transform(buf,in_);
   Digest := TMD5Digest(buf);
 end;
@@ -5758,8 +5759,8 @@ begin
   t := bytes[0];
   Inc(bytes[0],len);
   if bytes[0]<t then
-    Inc(bytes[1]);  // Carry from low to high
-  t := 64-(t and 63);  // Space available in in_ (at least 1)
+    Inc(bytes[1]);  // 64 bit carry from low to high
+  t := 64-(t and 63);  // space available in in_ (at least 1)
   if t>len then begin
     MoveFast(p^,Pointer(PtrUInt(@in_)+64-t)^,len);
     exit;

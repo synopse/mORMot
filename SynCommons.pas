@@ -30390,7 +30390,7 @@ asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         shl      edx,cl              // shift back again
         bsf      edx,edx             // find first 1-bit
         jnz      @L2                 // found
-        // Main loop,search 16 bytes at a time
+        // Main loop, search 16 bytes at a time
 @L1:    add      rax,10H             // increment pointer by 16
         movdqa   xmm1,[rax]          // read 16 bytes aligned
         pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
@@ -30676,7 +30676,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         shl      edx,cl              // shift back again
         bsf      edx,edx             // find first 1-bit
         jnz      @A200               // found
-        // Main loop,search 16 bytes at a time
+        // Main loop, search 16 bytes at a time
 @A100:  add      eax,10H             // increment pointer by 16
         movdqa   xmm1,[eax]          // read 16 bytes aligned
         pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
