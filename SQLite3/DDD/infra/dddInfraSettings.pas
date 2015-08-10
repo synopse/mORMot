@@ -468,6 +468,7 @@ begin
   fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
   fPerThread := ptIdentifiedInOnFile;
   fRotateFileAtHour := -1;
+  fRotateFileCount := 20;
   fRotateFileSize := 128*1024; // 128 MB per rotation log by default
   fAutoFlush := 5;
 end;
