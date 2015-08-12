@@ -456,6 +456,7 @@ type
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
     /// the associated communication socket
     // - on the server side, is a THttpServerSocket
+    // - access to this instance is protected by Safe.Lock/Unlock
     property Socket: TCrtSocket read fSocket;
     /// how many frames have been processed by this connection
     property ProcessCount: integer read fProcessCount;
@@ -1402,33 +1403,38 @@ var data: RawByteString;
     pending: integer;
 begin
   result := false;
-  pending := fSocket.SockInPending(TimeOut);
-  if pending<0 then
-    if IgnoreExceptions then
-      exit else
-      raise ESynBidirSocket.Create('SockInPending() Error');
-  if pending<2 then
-    exit; // not enough data available
-  GetHeader;
-  Frame.opcode := opcode;
-  GetData(Frame.payload);
-  while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
-    GetHeader;
-    if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
+  Safe.Lock;
+  try
+    pending := fSocket.SockInPending(TimeOut);
+    if pending<0 then
       if IgnoreExceptions then
         exit else
-        raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
-          [self,OpcodeText(opcode)^,OpcodeText(Frame.opcode)^]);
-    GetData(data);
-    Frame.payload := Frame.payload+data;
+        raise ESynBidirSocket.Create('SockInPending() Error');
+    if pending<2 then
+      exit; // not enough data available
+    GetHeader;
+    Frame.opcode := opcode;
+    GetData(Frame.payload);
+    while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
+      GetHeader;
+      if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
+        if IgnoreExceptions then
+          exit else
+          raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
+            [self,OpcodeText(opcode)^,OpcodeText(Frame.opcode)^]);
+      GetData(data);
+      Frame.payload := Frame.payload+data;
+    end;
+    {$ifdef UNICODE}
+    if opcode=focText then
+      SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
+    {$endif}
+    Log(frame,'GetFrame');
+    SetLastPingTicks;
+    result := true;
+  finally
+    Safe.UnLock;
   end;
-  {$ifdef UNICODE}
-  if opcode=focText then
-    SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
-  {$endif}
-  Log(frame,'GetFrame');
-  SetLastPingTicks;
-  result := true;
 end;
 
 procedure TWebSocketProcess.ProcessStart;
@@ -1455,40 +1461,45 @@ function TWebSocketProcess.SendFrame(
 var hdr: TFrameHeader;
     len: cardinal;
 begin
-  Log(frame,'SendFrame');
+  Safe.Lock;
   try
-    result := true;
-    len := Length(Frame.payload);
-    hdr.first := byte(Frame.opcode) or FRAME_FIN;
-    if fMaskSentFrames<>0 then begin
-      hdr.mask := (GetTickCount64 xor PtrInt(self))*Random(MaxInt);
-      ProcessMask(pointer(Frame.payload),hdr.mask,len);
-    end;
-    if len<FRAME_LEN2BYTES then begin
-      hdr.len8 := len or fMaskSentFrames;
-      fSocket.SockSend(@hdr,2);
-    end else
-    if len<65536 then begin
-      hdr.len8 := FRAME_LEN2BYTES or fMaskSentFrames;
-      hdr.len32 := swap(len);
-      fSocket.SockSend(@hdr,4);
-    end else begin
-      hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
-      hdr.len64 := bswap32(len);
-      hdr.len32 := 0;
-      fSocket.SndLow(@hdr,10+fMaskSentFrames shr 5);
-      // huge payload sent outside TCrtSock buffers
-      fSocket.SndLow(pointer(Frame.payload),len);
+    Log(frame,'SendFrame');
+    try
+      result := true;
+      len := Length(Frame.payload);
+      hdr.first := byte(Frame.opcode) or FRAME_FIN;
+      if fMaskSentFrames<>0 then begin
+        hdr.mask := (GetTickCount64 xor PtrInt(self))*Random(MaxInt);
+        ProcessMask(pointer(Frame.payload),hdr.mask,len);
+      end;
+      if len<FRAME_LEN2BYTES then begin
+        hdr.len8 := len or fMaskSentFrames;
+        fSocket.SockSend(@hdr,2);
+      end else
+      if len<65536 then begin
+        hdr.len8 := FRAME_LEN2BYTES or fMaskSentFrames;
+        hdr.len32 := swap(len);
+        fSocket.SockSend(@hdr,4);
+      end else begin
+        hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
+        hdr.len64 := bswap32(len);
+        hdr.len32 := 0;
+        fSocket.SndLow(@hdr,10+fMaskSentFrames shr 5);
+        // huge payload sent outside TCrtSock buffers
+        fSocket.SndLow(pointer(Frame.payload),len);
+        SetLastPingTicks;
+        exit;
+      end;
+      if fMaskSentFrames<>0 then
+        fSocket.SockSend(@hdr.mask,4);
+      fSocket.SockSend(pointer(Frame.payload),len);
+      fSocket.SockSendFlush; // send at once up to 64 KB
       SetLastPingTicks;
-      exit;
+    except
+      result := false;
     end;
-    if fMaskSentFrames<>0 then
-      fSocket.SockSend(@hdr.mask,4);
-    fSocket.SockSend(pointer(Frame.payload),len);
-    fSocket.SockSendFlush; // send at once up to 64 KB
-    SetLastPingTicks;
-  except
-    result := false;
+  finally
+    Safe.UnLock;
   end;
 end;
 
