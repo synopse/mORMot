@@ -939,13 +939,13 @@ function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 // - is used internally by this unit to compute an AES Initialization Vector
 procedure FillRandom(var IV: TAESBlock); overload;
 
-/// apply the XOR operation to the supplied binary buffers for 16 bytes
-procedure XorBlock16(A,B: PCardinalArray); {$ifdef HASINLINE}inline;{$endif} overload;
+/// apply the XOR operation to the supplied binary buffers of 16 bytes
+procedure XorBlock16(A,B: {$ifdef CPU64}PInt64Array{$else}PCardinalArray{$endif}); {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// apply the XOR operation to the supplied binary buffers for 16 bytes
-procedure XorBlock16(A,B,C: PCardinalArray); {$ifdef HASINLINE}inline;{$endif} overload;
+/// apply the XOR operation to the supplied binary buffers of 16 bytes
+procedure XorBlock16(A,B,C: {$ifdef CPU64}PInt64Array{$else}PCardinalArray{$endif}); {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// apply the XOR operation to the supplied binary buffers for a given number of bytes
+/// apply the XOR operation to the supplied binary buffers
 procedure XorBlockN(A,B,C: PByteArray; Count: integer); {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the HTDigest for a user and a realm, according to a supplied password
@@ -6052,19 +6052,19 @@ end;
 { TAESAbstract }
 
 {$ifdef CPU64}
-procedure XorBlock16(A,B: PInt64Array); inline; overload;
+procedure XorBlock16(A,B: PInt64Array);
 begin
   A[0] := A[0] xor B[0];
   A[1] := A[1] xor B[1];
 end;
 
-procedure XorBlock16(A,B,C: PInt64Array); inline; overload;
+procedure XorBlock16(A,B,C: PInt64Array);
 begin
   B[0] := A[0] xor C[0];
   B[1] := A[1] xor C[1];
 end;
 {$else}
-procedure XorBlock16(A,B: PCardinalArray); {$ifdef HASINLINE}inline;{$endif} overload;
+procedure XorBlock16(A,B: PCardinalArray);
 begin
   A[0] := A[0] xor B[0];
   A[1] := A[1] xor B[1];
@@ -6072,7 +6072,7 @@ begin
   A[3] := A[3] xor B[3];
 end;
 
-procedure XorBlock16(A,B,C: PCardinalArray); {$ifdef HASINLINE}inline;{$endif} overload;
+procedure XorBlock16(A,B,C: PCardinalArray);
 begin
   B[0] := A[0] xor C[0];
   B[1] := A[1] xor C[1];
@@ -6081,7 +6081,7 @@ begin
 end;
 {$endif}
 
-procedure XorBlockN(A,B,C: PByteArray; Count: integer); {$ifdef HASINLINE}inline;{$endif}
+procedure XorBlockN(A,B,C: PByteArray; Count: integer);
 var i: integer;
 begin
   for i := 0 to Count-1 do
