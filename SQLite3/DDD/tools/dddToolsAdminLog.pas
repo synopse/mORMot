@@ -243,6 +243,7 @@ begin
 end;
 
 procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
+var moveToLast: boolean;
 begin
   tmrRefresh.Enabled := false;
   if fLog=nil then
@@ -253,8 +254,9 @@ begin
     drwgrdEvents.ColWidths[2] := 30;
     drwgrdEvents.ColWidths[3] := 2000;
   end;
+  moveToLast := drwgrdEvents.Row=drwgrdEvents.RowCount-1;
   drwgrdEvents.RowCount := FLog.Count;
-  if drwgrdEvents.Tag=0 then begin
+  if (drwgrdEvents.Tag=0) or moveToLast then begin
     drwgrdEvents.Row := FLog.Count-1;
     drwgrdEvents.Tag := 1;
   end;
