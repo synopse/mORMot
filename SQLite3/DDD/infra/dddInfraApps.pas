@@ -595,7 +595,7 @@ var name,param: RawUTF8;
   var msg: RawUTF8;
   begin
     if Success then begin
-      msg := 'Run';
+      msg := 'Successfully executed';
       TextColor(ccWhite);
     end else begin
       msg := FormatUTF8('Error % "%" occured with',
