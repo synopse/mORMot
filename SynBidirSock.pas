@@ -1935,6 +1935,7 @@ function THttpClientWebSockets.Request(const url, method: SockString;
   KeepAlive: cardinal; const header, Data, DataType: SockString;
   retry: boolean): integer;
 var Ctxt: THttpServerRequest;
+    block: TWebSocketProcessNotifyCallback;
 begin
   if fProcess<>nil then
     if fProcess.fClientThread.fThreadState>sRun then
@@ -1945,7 +1946,10 @@ begin
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
         Ctxt.Prepare(url,method,header,data,dataType);
-        result := fProcess.NotifyCallback(Ctxt,wscBlockWithAnswer);
+        if FindIniNameValue(Pointer(header),'SEC-WEBSOCKETS-REST: ')='NonBlocking' then
+          block := wscNonBlockWithoutAnswer else
+          block := wscBlockWithAnswer;
+        result := fProcess.NotifyCallback(Ctxt,block);
         HeaderSetText(Ctxt.OutCustomHeaders);
         Content := Ctxt.OutContent;
         ContentType := Ctxt.OutContentType;

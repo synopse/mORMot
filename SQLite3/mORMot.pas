@@ -14244,6 +14244,7 @@ type
     fRead: QWord;
     fUpdated: QWord;
     fDeleted: QWord;
+    // [Write: boolean] per-table statistics
     fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
   public
     /// initialize the instance
@@ -32849,8 +32850,9 @@ function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
   'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+var u: RawUTF8;
 {$ifdef WITHLOG}
-var Log: ISynLog; // for Enter auto-leave to work with FPC
+   Log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
   if (self=nil) or (method<Low(NAME)) then
@@ -32858,8 +32860,8 @@ begin
     {$ifdef WITHLOG}
     Log := fLogClass.Enter(self,pointer(aMethodName),true);
     {$endif}
-    result := URI(Model.getURICallBack(aMethodName,aTable,aID),
-      NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
+    u := Model.getURICallBack(aMethodName,aTable,aID);
+    result := URI(u,NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
     InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
       sllServiceReturn);
   end;
@@ -46763,18 +46765,12 @@ begin
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [Server,ParamInterfaceInfo^.Name]);
   FakeID := GetInteger(GetJSONField(Par,Par)); // GetInteger returns a PtrInt
-  if FakeID=0 then
-    raise EInterfaceFactoryException.CreateUTF8(
-      '%.ExecuteCallback FakeID=% for % parameter at %',
-      [self,FakeID,ParamInterfaceInfo^.Name,URIWithoutSignature]);
   if Par=nil then
     Par := @NULL_SHORTSTRING; // allow e.g. '[12345]'
-  if ParamInterfaceInfo=TypeInfo(IInvokable) then begin // IInvokable=pointer
-    pointer(Obj) := pointer(FakeID);
+  if (FakeID=0) or (ParamInterfaceInfo=TypeInfo(IInvokable)) then begin
+    pointer(Obj) := pointer(FakeID); // Obj = IInvokable(FakeID)
     exit;
   end;
-  if Par=nil then
-    Par := @NULL_SHORTSTRING; // as expected by TServiceMethodExecute
   factory := TInterfaceFactory.Get(ParamInterfaceInfo);
   instance := TInterfacedObjectFakeServer.Create(self,factory,FakeID);
   pointer(Obj) := instance.fFakeInterface;

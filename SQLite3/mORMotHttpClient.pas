@@ -678,7 +678,7 @@ function TSQLHttpClientWebsockets.FakeCallbackUnregister(
   Factory: TInterfaceFactory; FakeCallbackID: integer;
   Instance: pointer): boolean;
 var ws: THttpClientWebSockets;
-    body,resp: RawUTF8;
+    body,head,resp: RawUTF8;
 begin
   ws := WebSockets;
   if ws=nil then
@@ -688,7 +688,8 @@ begin
     exit;
   end;
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
-  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp)=HTML_SUCCESS;
+  head := 'Sec-WebSockets-REST: NonBlocking';
+  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTML_SUCCESS;
 end;
 
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
