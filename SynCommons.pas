@@ -5093,6 +5093,11 @@ procedure ObjArrayClear(var aObjArray);
 // - e.g. aObjArray may be defined as "array of array of TSynFilter"
 procedure ObjArrayObjArrayClear(var aObjArray);
 
+/// wrapper to release all items stored in several T*ObjArray dynamic arrays
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+procedure ObjArraysClear(const aObjArray: array of pointer);
+
+
 
 {$ifndef DELPHI5OROLDER}
 
@@ -12878,6 +12883,11 @@ procedure TextBackground(Color: TConsoleColor);
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
+
+{$ifdef MSWINDOWS}
+/// low-level access to the keyboard state of a given key
+function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
+{$endif}
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
 // - under Windows, will use the OEM_CHARSET encoding
@@ -38461,6 +38471,14 @@ begin
   end;
 end;
 
+procedure ObjArraysClear(const aObjArray: array of pointer);
+var i: integer;
+begin
+  for i := 0 to high(aObjArray) do
+    if aObjArray[i]<>nil then
+      ObjArrayClear(aObjArray[i]^);
+end;
+
 {$ifndef DELPHI5OROLDER}
 
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
@@ -42841,13 +42859,7 @@ begin
     SetConsoleTextAttribute(StdOut,TextAttr);
 end;
 
-procedure ConsoleWaitForEnterKey;
-{$ifdef DELPHI5OROLDER}
-begin
-  readln;
-end;
-{$else}
-  function KeyPressed(ExpectedKey: Word):Boolean;
+function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
   var lpNumberOfEvents: DWORD;
       lpBuffer: TInputRecord;
       lpNumberOfEventsRead : DWORD;
@@ -42868,9 +42880,16 @@ end;
           FlushConsoleInputBuffer(nStdHandle);
     end;
   end;
+
+procedure ConsoleWaitForEnterKey;
+{$ifdef DELPHI5OROLDER}
+begin
+  readln;
+end;
+{$else}
 var msg: TMsg;
 begin
-  while not KeyPressed(VK_RETURN) do begin
+  while not ConsoleKeyPressed(VK_RETURN) do begin
     {$ifndef LVCL}
     if GetCurrentThreadID=MainThreadID then
       CheckSynchronize{$ifdef WITHUXTHEME}(1000){$endif}  else
