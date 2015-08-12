@@ -4983,9 +4983,9 @@ type
     // ready to be serialized as a JSON object
     // - if there is no value stored (i.e. Count=0), set null
     procedure AsDocVariant(out DocVariant: variant;
-      ExtendedJson: boolean=false); overload;
+      ExtendedJson: boolean=false; ValueAsString: boolean=true); overload;
     /// compute a TDocVariant document from the stored values
-    function AsDocVariant(ExtendedJson: boolean=false): variant; overload; {$ifdef HASINLINE}inline;{$endif}
+    function AsDocVariant(ExtendedJson: boolean=false; ValueAsString: boolean=true): variant; overload; {$ifdef HASINLINE}inline;{$endif}
     /// merge the stored values into a TDocVariant document
     // - existing properties would be updated, then new values will be added to
     // the supplied TDocVariant instance, ready to be serialized as a JSON object
@@ -12361,6 +12361,11 @@ type
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUTF8; const aValue: variant;
       wasAdded: PBoolean=nil): integer;
+    /// add a value in this document
+    // - this function expects a UTF-8 text for the value, which would be
+    // converted to a variant number, if possible
+    // - if Update=TRUE, will set the property, even if it is existing
+    function AddValueFromText(const aName,aValue: RawUTF8; Update: boolean=false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that VKind=dvObject, otherwise it won't do anything
@@ -33991,6 +33996,22 @@ begin
   result := AddValue(tmp,aValue);
 end;
 
+function TDocVariantData.AddValueFromText(const aName,aValue: RawUTF8; Update: boolean): integer;
+begin
+  if aName='' then begin
+    result := -1;
+    exit;
+  end;
+  result := GetValueIndex(aName);
+  if (not Update) and (dvoCheckForDuplicatedNames in VOptions) and (result>=0) then
+    raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
+  if result<0 then
+    result := InternalAdd(aName);
+  VarClear(VValue[result]);
+  if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result])) then
+    RawUTF8ToVariant(aValue,VValue[result]);
+end;
+
 function TDocVariantData.AddItem(const aValue: variant): integer;
 begin
   SetVariantByValue(aValue,VValue[InternalAdd('')]);
@@ -42860,26 +42881,26 @@ begin
 end;
 
 function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
-  var lpNumberOfEvents: DWORD;
-      lpBuffer: TInputRecord;
-      lpNumberOfEventsRead : DWORD;
-      nStdHandle: THandle;
-  begin
-    result := false;
-    nStdHandle := GetStdHandle(STD_INPUT_HANDLE);
-    lpNumberOfEvents := 0;
-    GetNumberOfConsoleInputEvents(nStdHandle,lpNumberOfEvents);
-    if lpNumberOfEvents<>0 then begin
-      PeekConsoleInput(nStdHandle,lpBuffer,1,lpNumberOfEventsRead);
-      if lpNumberOfEventsRead<>0 then
-        if lpBuffer.EventType=KEY_EVENT then
-          if lpBuffer.Event.KeyEvent.bKeyDown and
-             ((ExpectedKey=0) or (lpBuffer.Event.KeyEvent.wVirtualKeyCode=ExpectedKey)) then
-            result := true else
-            FlushConsoleInputBuffer(nStdHandle) else
-          FlushConsoleInputBuffer(nStdHandle);
-    end;
+var lpNumberOfEvents: DWORD;
+    lpBuffer: TInputRecord;
+    lpNumberOfEventsRead : DWORD;
+    nStdHandle: THandle;
+begin
+  result := false;
+  nStdHandle := GetStdHandle(STD_INPUT_HANDLE);
+  lpNumberOfEvents := 0;
+  GetNumberOfConsoleInputEvents(nStdHandle,lpNumberOfEvents);
+  if lpNumberOfEvents<>0 then begin
+    PeekConsoleInput(nStdHandle,lpBuffer,1,lpNumberOfEventsRead);
+    if lpNumberOfEventsRead<>0 then
+      if lpBuffer.EventType=KEY_EVENT then
+        if lpBuffer.Event.KeyEvent.bKeyDown and
+           ((ExpectedKey=0) or (lpBuffer.Event.KeyEvent.wVirtualKeyCode=ExpectedKey)) then
+          result := true else
+          FlushConsoleInputBuffer(nStdHandle) else
+        FlushConsoleInputBuffer(nStdHandle);
   end;
+end;
 
 procedure ConsoleWaitForEnterKey;
 {$ifdef DELPHI5OROLDER}
@@ -49582,7 +49603,7 @@ begin
     RawUTF8ToVariant(List[i].Value,result);
 end;
 
-procedure TSynNameValue.AsDocVariant(out DocVariant: variant; ExtendedJson: boolean);
+procedure TSynNameValue.AsDocVariant(out DocVariant: variant; ExtendedJson,ValueAsString: boolean);
 var ndx: integer;
 begin
   if Count>0 then
@@ -49593,15 +49614,17 @@ begin
     SetLength(VValue,VCount);
     for ndx := 0 to VCount-1 do begin
       VName[ndx] := List[ndx].Name;
-      RawUTF8ToVariant(List[ndx].Value,VValue[ndx]);
+      if ValueAsString or
+         not GetNumericVariantFromJSON(pointer(List[ndx].Value),TVarData(VValue[ndx])) then
+        RawUTF8ToVariant(List[ndx].Value,VValue[ndx]);
     end;
   end else
     TVarData(DocVariant).VType := varNull;
 end;
 
-function TSynNameValue.AsDocVariant(ExtendedJson: boolean): variant;
+function TSynNameValue.AsDocVariant(ExtendedJson,ValueAsString: boolean): variant;
 begin
-  AsDocVariant(result,ExtendedJson);
+  AsDocVariant(result,ExtendedJson,ValueAsString);
 end;
 
 function TSynNameValue.MergeDocVariant(var DocVariant: variant;
