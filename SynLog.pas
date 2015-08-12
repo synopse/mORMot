@@ -728,7 +728,7 @@ type
     fThreadContexts: array of TSynLogThreadContext;
     fThreadContextCount: integer;
     fCurrentLevel: TSynLogInfo;
-    fInternalFlags: set of (logHeaderWritten);
+    fInternalFlags: set of (logHeaderWritten, logInitDone);
     {$ifdef FPC}
     function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
@@ -750,6 +750,7 @@ type
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINE}inline;{$endif}
     procedure LogCurrentTime;
+    procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
     {$ifndef DELPHI5OROLDER}
     procedure AddMemoryStats; virtual;
@@ -3212,6 +3213,21 @@ begin
   {$endif}
 end;
 
+procedure TSynLog.LogFileInit;
+begin
+  if not QueryPerformanceFrequency(fFrequencyTimeStamp) then begin
+    fFamily.HighResolutionTimeStamp := false;
+    fFrequencyTimeStamp := 0;
+  end else
+    if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
+      fFamily.HighResolutionTimeStamp := false;
+  if InstanceMapFile=nil then
+    GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
+  fStreamPositionAfterHeader := fWriter.WrittenBytes;
+  QueryPerformanceCounter(fStartTimeStamp);
+  Include(fInternalFlags,logInitDone);
+end;
+
 procedure TSynLog.LogFileHeader;
 var WithinEvents: boolean;
     {$ifdef MSWINDOWS}
@@ -3229,14 +3245,6 @@ begin
     fWriter.Add(#13);
 end;
 begin
-  if not QueryPerformanceFrequency(fFrequencyTimeStamp) then begin
-    fFamily.HighResolutionTimeStamp := false;
-    fFrequencyTimeStamp := 0;
-  end else
-    if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
-      fFamily.HighResolutionTimeStamp := false;
-  if InstanceMapFile=nil then
-    GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   WithinEvents := fWriter.WrittenBytes>0;
   // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
   if WithinEvents then begin
@@ -3303,9 +3311,9 @@ begin
     FlushToStream;
     EchoReset; // header is not to be sent to console
   end;
-  fStreamPositionAfterHeader := fWriter.WrittenBytes;
-  QueryPerformanceCounter(fStartTimeStamp);
   Include(fInternalFlags,logHeaderWritten);
+  if not (logInitDone in fInternalFlags) then
+    LogFileInit;
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -3363,7 +3371,9 @@ begin
     if fWriter=nil then
       CreateLogWriter; // file creation should be thread-safe
     if not (logHeaderWritten in fInternalFlags) then
-      LogFileHeader;
+      LogFileHeader else
+      if not (logInitDone in fInternalFlags) then
+        LogFileInit;
     if (not (sllEnter in fFamily.Level)) and (Level in fFamily.fLevelStackTrace) then
        for i := 0 to fThreadContext^.RecursionCount-1 do begin
          fWriter.AddChars(' ',i+24-byte(fFamily.HighResolutionTimeStamp));
