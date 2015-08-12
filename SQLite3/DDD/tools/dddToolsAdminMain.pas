@@ -75,7 +75,7 @@ var temp: TForm;
     exec: TServiceCustomAnswer;
 begin
   result := false;
-  if Assigned(fAdmin) then
+  if Assigned(fAdmin) or (Definition.Orm.User='') then
     exit;
   try
     temp := CreateTempForm(Format('Connecting to %s...',[Definition.ORM.ServerName]));
@@ -136,6 +136,8 @@ begin
       fPages[i+1] := TSynPage.Create(self);
       fPages[i+1].Caption := UTF8ToString(fDatabases[i]);
       fPages[i+1].PageControl := fPage;
+      if i=0 then
+        fPage.ActivePageIndex := 1;
       fDBFrame[i] := DBFrameClass.Create(self);
       with fDBFrame[i] do begin
         Name := format('DBFrame%d',[i]);
@@ -146,7 +148,6 @@ begin
         Open;
       end;
     end;
-    fPage.ActivePageIndex := 1;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
   end;
@@ -168,11 +169,14 @@ end;
 destructor TAdminControl.Destroy;
 var i: integer;
 begin
-  Endlog;
-  if fLogFrame<>nil then
+  if fLogFrame<>nil then begin
+    Endlog;
     fLogFrame.Admin := nil;
+    fLogFrame := nil;
+  end;
   for i := 0 to high(fDBFrame) do
     fDBFrame[i].Admin := nil;
+  fDBFrame := nil;
   fAdmin := nil;
   fDefinition.Free;
   FreeAndNil(fClient);

@@ -4,8 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, Grids, StdCtrls, ExtCtrls,
-  SynCommons, mORMot, mORMotDDD, mORMotUI, Menus;
+  Dialogs, Grids, StdCtrls, ExtCtrls, Menus,
+  SynCommons, mORMot, mORMotDDD, mORMotUI, SynMustache;
 
 type
   TDBFrame = class(TFrame)
@@ -51,6 +51,15 @@ type
 implementation
 
 {$R *.dfm}
+
+const
+  WRAPPER_TEMPLATE = '{{#soa.services}}'#13#10'{{#methods}}'#13#10+
+  '#get {{uri}}/{{methodName}}{{#hasInParams}}?{{#args}}{{#dirInput}}{{argName}}={{typeSource}}'+
+  '{{#commaInSingle}}&{{/commaInSingle}}{{/dirInput}}{{/args}}{{/hasInParams}}'#13#10+
+  '{{#hasOutParams}}'#13#10' { {{#args}}{{#dirOutput}}{{jsonQuote argName}}: {{typeSource}}'+
+  '{{#commaOutResult}},{{/commaOutResult}} {{/dirOutput}}{{/args}} }'#13#10+
+  '{{/hasOutParams}}{{/methods}}'#13#10'{{/soa.services}}'#13#10'{{#enumerates}}{{name}}: '+
+  '{{#values}}{{EnumTrim .}}={{-index0}}{{^-last}}, {{/-last}}{{/values}}'#13#10'{{/enumerates}}';
 
 { TDBFrame }
 
@@ -109,6 +118,7 @@ var sql,res,ctyp: RawUTF8;
     table: TSQLTable;
     P: PUTF8Char;
     exec: TServiceCustomAnswer;
+    ctxt: variant;
 begin
   if (Sender<>nil) and Sender.InheritsFrom(TMenuItem) then begin
     mmo := TMenuItem(Sender).Hint;
@@ -149,6 +159,7 @@ begin
   if sql[1]='#' then begin
     drwgrdResult.Hide;
     mmoResult.Align := alClient;
+    mmoResult.ScrollBars := ssBoth;
     if fJson<>'' then
       if IdemPropNameU(sql,'#help') then begin
         fJson := UnQuoteSQLString(fJson);
@@ -162,12 +173,18 @@ begin
           end;
         end;
       end else
+      if IdemPropNameU(sql,'#wrapper') then begin
+        ctxt := _JsonFast(fJson);
+        res := TSynMustache.Parse(WRAPPER_TEMPLATE).Render(
+          ctxt,nil,TSynMustache.HelpersGetStandardList,nil,true);
+      end else
         JSONBufferReformat(pointer(fJson),res);
     mmoResult.Text := UTF8ToString(res);
     fJson := '';
   end else begin
     mmoResult.Text := '';
     mmoResult.Align := alBottom;
+    mmoResult.ScrollBars := ssVertical;
     mmoResult.Height := 100;
     table := TSQLTableJSON.Create('',pointer(fJson),length(fJSON));
     fGrid := TSQLTableToGrid.Create(drwgrdResult,table,nil);

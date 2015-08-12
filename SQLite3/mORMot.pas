@@ -36415,11 +36415,19 @@ var isAjax: boolean;
     obj: TObject;
     call: TSQLRestURIParams;
     P: PUTF8Char;
+
+  procedure PrepareCall;
+  begin
+    fillchar(call,SizeOf(call),0);
+    call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+    call.Url := Model.Root;
+  end;
+
 begin
   if (SQL<>'') and (SQL[1]='#') then begin
     P := @SQL[2];
     case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
-      'GET','POST','HELP']) of
+      'GET','POST','WRAPPER','HELP']) of
     0: result := ServicesPublishedInterfaces;
     1: begin
       name := copy(SQL,8,length(SQL)-8);
@@ -36438,19 +36446,24 @@ begin
     3: result := Services.AsJson;
     4: result := SessionsAsJson;
     5,6: begin
-      fillchar(call,SizeOf(call),0);
-      call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+      PrepareCall;
       call.Method := GetNextItem(P,' '); // GET or POST
-      call.Url := Model.Root;
       if P<>nil then
         call.Url := call.Url+'/'+RawUTF8(P);
       URI(call);
       result := call.OutBody;
     end;
     7: begin
+      PrepareCall;
+      call.Method := 'GET';
+      call.Url := call.Url+'/wrapper/context';
+      URI(call);
+      result := call.OutBody;
+    end;
+    8: begin
       inherited;
       result[length(result)] := '|';
-      result := result+'#interfaces|#stats|#stats(method)|'+
+      result := result+'#interfaces|#wrapper|#stats|#stats(method)|'+
         '#stats(interface.method)|#services|#sessions|#get url|#post url"';
     end;
     else inherited AdministrationExecute(DatabaseName,SQL,result);
