@@ -2074,9 +2074,14 @@ function isBlobHex(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SQL corresponding to a WHERE clause
-// - returns directly the Where value if it starts by ORDER/GROUP/LIMIT/OFFSET/JOIN
+// - returns directly the Where value if it starts with one the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 // - otherwise, append ' WHERE '+Where
 function SQLFromWhere(const Where: RawUTF8): RawUTF8;
+
+/// find out if the supplied WHERE clause starts with one of the
+// ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
@@ -26922,12 +26927,17 @@ begin
   end;
 end;
 
+function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
+begin
+  result := IdemPCharArray(pointer(Where),['ORDER BY ','GROUP BY ',
+    'LIMIT ','OFFSET ','LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0;
+end;
+
 function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 begin
   if Where='' then
     result := '' else
-  if IdemPCharArray(pointer(Where),['ORDER BY ','GROUP BY ','LIMIT ','OFFSET ',
-    'LEFT ','RIGHT ','INNER ','OUTER ','JOIN '])>=0 then
+  if SQLWhereIsEndClause(Where) then
     result := ' '+Where else
     result := ' WHERE '+Where;
 end;
@@ -44194,6 +44204,7 @@ var P: PPropInfo;
     IsObjCustomIndex: integer;
     WS: WideString;
     tmp: RawByteString;
+    dyn: TDynArray;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     {$endif}
@@ -44417,7 +44428,20 @@ begin
         end;
         tkDynArray: begin
           HR(P);
-          AddDynArrayJSON(P^.GetDynArray(Value));
+          P^.GetDynArray(Value,dyn);
+          if dyn.IsObjArray then begin
+            inc(fHumanReadableLevel);
+            Add('[');
+            for c := 0 to dyn.Count-1 do begin
+              WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+              Add(',');
+            end;
+            CancelLastComma;
+            dec(fHumanReadableLevel);
+            HR;
+            Add(']');
+          end else
+            AddDynArrayJSON(dyn);
         end;
         {$ifdef PUBLISHRECORD}
         tkRecord{$ifdef FPC},tkObject{$endif}: begin
