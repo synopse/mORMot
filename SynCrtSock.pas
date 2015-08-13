@@ -2506,7 +2506,7 @@ end;
 function TURI.PortInt: integer;
 var err: integer;
 begin
-  Val(string(Server),result,err);
+  Val(string(Port),result,err);
   if err<>0 then
     result := 0;
 end;
