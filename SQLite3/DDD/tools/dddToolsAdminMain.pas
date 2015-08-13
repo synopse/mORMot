@@ -30,6 +30,8 @@ type
     function Open(Definition: TDDDRestClientSettings): boolean;
     procedure Show;
     function GetState: Variant;
+    function AddPage(const aCaption: RawUTF8): TSynPage;
+    function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame;
     procedure EndLog;
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -122,32 +124,14 @@ begin
   fPage.Parent := self;
   fPage.Align := alClient;
   n := length(fDatabases);
-  SetLength(fPages,n+1);
-  fPages[0] := TSynPage.Create(self);
-  fPages[0].Caption := 'log';
-  fPages[0].PageControl := fPage;
   fLogFrame := LogFrameClass.Create(self);
-  fLogFrame.Parent := fPages[0];
+  fLogFrame.Parent := AddPage('log');
   fLogFrame.Align := alClient;
   fLogFrame.Admin := fAdmin;
   if n>0 then begin
-    SetLength(fDBFrame,n);
-    for i := 0 to n-1 do begin
-      fPages[i+1] := TSynPage.Create(self);
-      fPages[i+1].Caption := UTF8ToString(fDatabases[i]);
-      fPages[i+1].PageControl := fPage;
-      if i=0 then
-        fPage.ActivePageIndex := 1;
-      fDBFrame[i] := DBFrameClass.Create(self);
-      with fDBFrame[i] do begin
-        Name := format('DBFrame%d',[i]);
-        Parent := fPages[i+1];
-        Align := alClient;
-        DatabaseName := fDatabases[i];
-        Admin := fAdmin;
-        Open;
-      end;
-    end;
+    for i := 0 to n-1 do 
+      AddDBFrame(fDatabases[i],fDatabases[i],DBFrameClass).Open;
+    fPage.ActivePageIndex := 1;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
   end;
@@ -240,6 +224,34 @@ begin
   fFrame.Show;
   Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
     fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
+end;
+
+function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
+var n: integer;
+begin
+  n := length(fPages);
+  SetLength(fPages,n+1);
+  result := TSynPage.Create(self);
+  result.Caption := UTF8ToString(aCaption);
+  result.PageControl := fPage;
+  fPages[n] := result;
+end;
+
+function TAdminControl.AddDBFrame(const aCaption,aDatabaseName: RawUTF8;
+  aClass: TDBFrameClass): TDBFrame;
+var page: TSynPage;
+    n: integer;
+begin
+  page := AddPage(aCaption);
+  n := length(fDBFrame);
+  SetLength(fDBFrame,n+1);
+  result := aClass.Create(self);
+  result.Name := format('DBFrame%s',[aCaption]);
+  result.Parent := page;
+  result.Align := alClient;
+  result.Admin := fAdmin;
+  result.DatabaseName := aDatabaseName;
+  fDBFrame[n] := result;
 end;
 
 end.

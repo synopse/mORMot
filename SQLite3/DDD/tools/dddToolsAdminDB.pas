@@ -21,11 +21,11 @@ type
     btnHistory: TButton;
     btnCmd: TButton;
     pmCmd: TPopupMenu;
-    procedure lstTablesDblClick(Sender: TObject);
-    procedure btnExecClick(Sender: TObject);
-    procedure drwgrdResultClick(Sender: TObject);
-    procedure btnHistoryClick(Sender: TObject);
-    procedure btnCmdClick(Sender: TObject);
+    procedure lstTablesDblClick(Sender: TObject); virtual;
+    procedure btnExecClick(Sender: TObject); virtual;
+    procedure drwgrdResultClick(Sender: TObject); virtual;
+    procedure btnHistoryClick(Sender: TObject); virtual;
+    procedure btnCmdClick(Sender: TObject); virtual;
   protected
     fmmoResultRow: integer;
     fGrid: TSQLTableToGrid;
@@ -33,6 +33,8 @@ type
     fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
     procedure AddSQL(SQL: string; AndExec: boolean);
+    function ExecSQL(const SQL: RawUTF8): RawUTF8;
+    procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer; var Text: string): boolean;
     procedure LogClick(Sender: TObject);
     procedure LogDblClick(Sender: TObject);
@@ -40,7 +42,7 @@ type
   public
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
-    procedure Open;
+    procedure Open; virtual;
     destructor Destroy; override;
   end;
 
@@ -90,6 +92,16 @@ begin
   i := lstTables.ItemIndex;
   if i>=0 then
     AddSQL('select * from '+lstTables.Items[i]+' limit 1000',true);
+end;
+
+procedure TDBFrame.SetResult(const JSON: RawUTF8);
+begin
+  FreeAndNil(fGrid);
+  drwgrdResult.Hide;
+  mmoResult.Align := alClient;
+  mmoResult.ScrollBars := ssBoth;
+  mmoResult.Text := UTF8ToString(JSON);
+  fJson := '';
 end;
 
 procedure TDBFrame.btnExecClick(Sender: TObject);
@@ -143,7 +155,7 @@ begin
   try
     try
       exec := Admin.DatabaseExecute(DatabaseName,sql);
-      ctyp := FindIniNameValue(pointer(exec.Content),HEADER_CONTENT_TYPE_UPPER);
+      ctyp := FindIniNameValue(pointer(exec.Header),HEADER_CONTENT_TYPE_UPPER);
       if ctyp='' then
         fJSON := exec.Content else
         fJSON := '';
@@ -157,9 +169,6 @@ begin
   FreeAndNil(fGrid);
   fmmoResultRow := 0;
   if sql[1]='#' then begin
-    drwgrdResult.Hide;
-    mmoResult.Align := alClient;
-    mmoResult.ScrollBars := ssBoth;
     if fJson<>'' then
       if IdemPropNameU(sql,'#help') then begin
         fJson := UnQuoteSQLString(fJson);
@@ -179,8 +188,7 @@ begin
           ctxt,nil,TSynMustache.HelpersGetStandardList,nil,true);
       end else
         JSONBufferReformat(pointer(fJson),res);
-    mmoResult.Text := UTF8ToString(res);
-    fJson := '';
+    SetResult(res);
   end else begin
     mmoResult.Text := '';
     mmoResult.Align := alBottom;
@@ -349,6 +357,13 @@ procedure TDBFrame.btnCmdClick(Sender: TObject);
 begin
   with ClientToScreen(btnCmd.BoundsRect.TopLeft) do
     pmCmd.Popup(X,Y+btnCmd.Height);
+end;
+
+function TDBFrame.ExecSQL(const SQL: RawUTF8): RawUTF8;
+var exec: TServiceCustomAnswer;
+begin
+  exec := Admin.DatabaseExecute(DatabaseName,sql);
+  result := exec.Content;
 end;
 
 end.
