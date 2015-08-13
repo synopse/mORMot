@@ -15,7 +15,7 @@ uses
   {$endif}
   SynCommons, SynZip, mORMot, SynSQLite3, SynSQLite3Static,
   mORMoti18n, mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
-  SynTaskDialog,
+  SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
   SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC, SynDBRemote,
   {$ifdef USEZEOS}
   SynDBZeos,

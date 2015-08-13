@@ -342,6 +342,7 @@ type
     fStaticStatementTimer: TPrecisionTimer;
     fStatementSQL: RawUTF8;
     fStatementGenericSQL: RawUTF8;
+    fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
     /// list of TSQLVirtualTableModuleServerDB registered external modules
     // - is a TList and not a TObjectList since instances will be destroyed by
@@ -720,24 +721,24 @@ end;
 
 procedure TSQLRestServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
   ForceCacheStatement: boolean);
-var i, maxParam,sqlite3param: integer;
+var i, sqlite3param: integer;
     Types: TSQLParamTypeDynArray;
     Nulls: TSQLFieldBits;
     Values: TRawUTF8DynArray;
 begin
   // prepare statement
   fStatementSQL := SQL;
-  fStatementGenericSQL := ExtractInlineParameters(SQL,Types,Values,maxParam,Nulls);
-  PrepareStatement(ForceCacheStatement or (maxParam<>0));
+  fStatementGenericSQL := ExtractInlineParameters(SQL,Types,Values,fStatementMaxParam,Nulls);
+  PrepareStatement(ForceCacheStatement or (fStatementMaxParam<>0));
   // bind parameters
-  if maxParam=0 then
+  if fStatementMaxParam=0 then
     exit;
   sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
-  if sqlite3param<>maxParam then
+  if sqlite3param<>fStatementMaxParam then
     raise EORMException.CreateUTF8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
-      [self,fStatementGenericSQL,maxParam,sqlite3param]);
-  for i := 0 to maxParam-1 do
+      [self,fStatementGenericSQL,fStatementMaxParam,sqlite3param]);
+  for i := 0 to fStatementMaxParam-1 do
   if i in Nulls then
     fStatement^.BindNull(i+1) else
     case Types[i] of
@@ -761,12 +762,16 @@ begin
       fStatementTimer := nil;
     end;
   finally
-    if fStatement=@fStaticStatement then
-      fStaticStatement.Close else
-      fStatement^.BindReset; // release bound RawUTF8 ASAP
-    fStatement := nil;
+    if fStatement<>nil then begin
+      if fStatement=@fStaticStatement then
+        fStaticStatement.Close else
+        if fStatementMaxParam<>0 then
+          fStatement^.BindReset; // release bound RawUTF8 ASAP
+      fStatement := nil;
+    end;
     fStatementSQL := '';
     fStatementGenericSQL := '';
+    fStatementMaxParam := 0;
     if E<>nil then
       fStatementLastException := FormatUTF8('% %',[E,ObjectToJSONDebug(E)]);
   end;

@@ -10,6 +10,7 @@ uses
 {$WARN UNIT_PLATFORM OFF}
   FileCtrl,
 {$WARN UNIT_PLATFORM ON}
+  SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
   SynCommons, SynLog, mORMotHttpServer;
 
 type
