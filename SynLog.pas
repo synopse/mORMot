@@ -3280,6 +3280,7 @@ begin
     AddReplace(@SystemInfo.uts.version,' ','-');
     AddShort(' Wow64=0');
     {$endif}
+    QueryPerformanceFrequency(fFrequencyTimeStamp);
     AddShort(' Freq='); Add(fFrequencyTimeStamp);
     if IsLibrary then begin
       AddShort(' Instance=');
@@ -3968,8 +3969,6 @@ begin
     fWow64 := aWow64='1';
     {$endif}
     SetInt64(PBeg,fFreq);
-    if fFreq=0 then
-      exit;
     while (PBeg<PEnd) and (PBeg^>' ') do inc(PBeg);
     if IdemPChar(PBeg,' INSTANCE=') then // only available for a library log
       SetString(fInstanceName,PBeg+10,PEnd-PBeg-10);
