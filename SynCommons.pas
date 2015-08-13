@@ -6586,6 +6586,10 @@ type
     /// same as AddDynArrayJSON(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
+    /// append a T*ObjArray dynamic array as a JSON array
+    // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+    procedure AddObjArrayJSON(const aObjArray;
+      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
     // a custom serialization, in case of a previous registration via
@@ -7945,6 +7949,11 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 procedure JSONDecode(var JSON: RawUTF8;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+/// wrapper to serialize a T*ObjArray dynamic array as JSON
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayToJSON(const aObjArray;
+  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 type
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
@@ -38481,6 +38490,17 @@ begin
   end;
 end;
 
+function ObjArrayToJSON(const aObjArray; Options: TTextWriterWriteObjectOptions): RawUTF8;
+begin
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  try
+    AddObjArrayJSON(aObjArray,Options);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
 procedure ObjArrayObjArrayClear(var aObjArray);
 var i: integer;
     a: TPointerDynArray absolute aObjArray;
@@ -39488,6 +39508,20 @@ begin
   InternalJSONWriter.AddDynArrayJSON(aTypeInfo,aValue);
   AddJSONEscape(fInternalJSONWriter);
   Add('"');
+end;
+
+procedure TTextWriter.AddObjArrayJSON(const aObjArray;
+  Options: TTextWriterWriteObjectOptions);
+var i: integer;
+    a: TObjectDynArray absolute aObjArray;
+begin
+  Add('[');
+  for i := 0 to length(a)-1 do begin
+    WriteObject(a[i],Options);
+    Add(',');
+  end;
+  CancelLastComma;
+  Add(']');
 end;
 
 procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
