@@ -66,15 +66,21 @@ unit SynTaskDialog;
   - bottom buttons use better looking TButton component
   - bottom buttons won't trim expected shortcut definition, in emulated mode
   - added OnButtonClicked property and associated SetElementText() method
+  - fix the Windows Vista Alt key VCL bug (QC 37403) for Delphi 6/7/2006
   - now compiles and run in Win64 platform (Delphi XE2+)
 
 }
 
 interface
 
+{$I Synopse.inc}
+
 {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
   {$ifndef VER140} // Delphi 6
     {$define WITHUXTHEME} // Themes unit exists till Delphi 7
+  {$endif}
+  {$ifndef ISDELPHI2007ANDUP}
+    {$define FIXVCLALTKEY} // fix QC 37403 for Delphi 6/7/2006
   {$endif}
 {$ENDIF}
 
@@ -83,6 +89,9 @@ uses
   Menus,
   {$ifdef USETMSPACK}
   AdvGlowButton, AdvMenus, TaskDialog, TaskDialogEx,
+  {$endif}
+  {$ifdef WITHUXTHEME}
+  Themes,
   {$endif}
   Graphics, Forms, Controls, StdCtrls, ExtCtrls, Buttons;
 
@@ -519,14 +528,34 @@ begin
   end;
 end;
 
+{$ifdef FIXVCLALTKEY}
+var
+  WndProcHook: HHOOK = 0;
+
+function HookedWndProcFunc(nCode: Integer; wParam: WPARAM; lParam: LPARAM): LRESULT; stdcall;
+begin
+  if nCode=HC_ACTION then
+    if PCWPSTRUCT(lParam).message=WM_UPDATEUISTATE then
+      InvalidateRect(PCWPSTRUCT(lParam).hwnd,nil,false);
+  result := CallNextHookEx(WndProcHook,nCode,wParam,lParam);
+end;
+{$endif}
+
 procedure InitComCtl6;
 var OSVersionInfo: TOSVersionInfo;
 begin
   OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
   GetVersionEx(OSVersionInfo);
   if OSVersionInfo.dwMajorVersion<6 then
-    @TaskDialogIndirect := nil else
+    @TaskDialogIndirect := nil else begin
     @TaskDialogIndirect := GetProcAddress(GetModuleHandle(comctl32),'TaskDialogIndirect');
+    {$ifdef FIXVCLALTKEY}
+    {$WARN SYMBOL_PLATFORM OFF}
+    if (DebugHook=0) {$ifdef WITHUXTHEME}and ThemeServices.ThemesEnabled{$endif} then
+      WndProcHook := SetWindowsHookEx(WH_CALLWNDPROC,HookedWndProcFunc,0,GetCurrentThreadID);
+    {$WARN SYMBOL_PLATFORM ON}
+    {$endif}
+  end;
 end;
 
 type
@@ -1147,8 +1176,11 @@ initialization
   BitmapArrow.Transparent := true;
 
 finalization
+  {$ifdef FIXVCLALTKEY}
+  if WndProcHook<>0 then
+    UnhookWindowsHookEx(WndProcHook);
+  {$endif}
   DefaultFont.Free;
   BitmapArrow.Free;
   BitmapOK.Free;
-
 end.
