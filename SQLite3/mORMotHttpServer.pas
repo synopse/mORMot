@@ -533,6 +533,12 @@ type
   {$M-}
 
 
+var
+  /// a global hook variable, able to enhance WebSockets logging
+  // - when a TSQLHttpServer is created from a TSQLHttpServerDefinition
+  HttpServerFullWebSocketsLog: Boolean;
+
+  
 implementation
 
 
@@ -1028,6 +1034,7 @@ const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticat
 var a: TSQLHttpServerRestAuthentication;
     kind: TSQLHttpServerOptions;
     thrdCnt: integer;
+    websock: TWebSocketServerRest;
 begin
   if aDefinition=nil then
     raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
@@ -1048,8 +1055,11 @@ begin
       aServer.AuthenticationUnregisterAll;
       aServer.AuthenticationRegister(AUTH[a]);
     end;
-  if aDefinition.WebSocketPassword<>'' then
-    WebSocketsEnable(aServer,aDefinition.PasswordPlain);
+  if aDefinition.WebSocketPassword<>'' then begin
+    websock := WebSocketsEnable(aServer,aDefinition.PasswordPlain);
+    if HttpServerFullWebSocketsLog then
+      websock.Settings.SetFullLog;
+  end;
 end;
 
 
@@ -1066,7 +1076,7 @@ begin
   fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
   inherited Create(AnsiString(UInt32ToUtf8(aPort)),fServer,'+',HTTP_DEFAULT_MODE,nil,1);
   fEvent := aEvent;
-  AccessControlAllowOrigin := '*'; // e.g. when called from AJAX/SMS
+  SetAccessControlAllowOrigin('*'); // e.g. when called from AJAX/SMS
 end;
 
 destructor TSQLHTTPRemoteLogServer.Destroy;

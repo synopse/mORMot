@@ -834,15 +834,14 @@ end;
 function TSQLHttpClientWebsockets.WebSocketsConnect(
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
   aWebSocketsCompression: boolean): RawUTF8;
-var error: RawUTF8;
 begin
-  error := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
-  if error='' then
+  result := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
+  if result='' then
     if not ServerTimeStampSynchronize then
-      error := 'ServerTimeStampSynchronize';
-  if error<>'' then
+      result := 'ServerTimeStampSynchronize';
+  if result<>'' then
     raise ECommunicationException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
-      [self,Server,Port,Model.Root,error]);
+      [self,Server,Port,Model.Root,result]);
 end;
 
 
