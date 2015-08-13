@@ -5260,7 +5260,8 @@ begin
       if WasPrepared<>nil then
         WasPrepared^ := true;
     end else begin
-      Statement.Reset;
+      if Statement.Request<>0 then
+        Statement.Reset;
       if WasPrepared<>nil then
         WasPrepared^ := false;
     end;
