@@ -395,7 +395,7 @@ type
     // - used only if WebSocketLog global variable is set
     procedure SetFullLog;
   end;
-
+                              
   /// points to parameters to be used for WebSockets process
   // - using a pointer/reference type will allow in-place modification of
   // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
@@ -420,6 +420,7 @@ type
     fSettings: TWebSocketProcessSettings;
     fInvalidPingSendCount: cardinal;
     fProcessCount: integer;
+    fSafeIn, fSafeOut: TSynLocker;
     /// low level WebSockets framing protocol
     function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
     function SendFrame(const Frame: TWebSocketFrame): boolean;
@@ -1308,6 +1309,8 @@ begin
   fSettings := aSettings;
   fIncoming := TWebSocketFrameList.Create;
   fOutgoing := TWebSocketFrameList.Create;
+  fSafeIn.Init;
+  fSafeOut.Init;
 end;
 
 destructor TWebSocketProcess.Destroy;
@@ -1332,6 +1335,8 @@ begin
   fProtocol.Free;
   fOutgoing.Free;
   fIncoming.Free;
+  fSafeIn.Done;
+  fSafeOut.Done;
   inherited Destroy;
 end;
 
@@ -1403,7 +1408,7 @@ var data: RawByteString;
     pending: integer;
 begin
   result := false;
-  Safe.Lock;
+  fSafeIn.Lock;
   try
     pending := fSocket.SockInPending(TimeOut);
     if pending<0 then
@@ -1433,7 +1438,7 @@ begin
     SetLastPingTicks;
     result := true;
   finally
-    Safe.UnLock;
+    fSafeIn.UnLock;
   end;
 end;
 
@@ -1448,7 +1453,7 @@ begin
 end;
 
 procedure TWebSocketProcess.ProcessStop;
-begin 
+begin
   if Assigned(fSettings.OnClientDisconnected) then
   try
     fSettings.OnClientDisconnected(Self);
@@ -1461,7 +1466,7 @@ function TWebSocketProcess.SendFrame(
 var hdr: TFrameHeader;
     len: cardinal;
 begin
-  Safe.Lock;
+  fSafeOut.Lock;
   try
     Log(frame,'SendFrame');
     try
@@ -1499,7 +1504,7 @@ begin
       result := false;
     end;
   finally
-    Safe.UnLock;
+    fSafeOut.UnLock;
   end;
 end;
 
@@ -1546,7 +1551,6 @@ begin
   end;
   InterlockedIncrement(fProcessCount);
   try
-    // now we should be alone on the wire -> send REST request
     if not SendFrame(request) then
       exit;
     if aMode=wscBlockWithoutAnswer then begin
