@@ -2891,11 +2891,14 @@ function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: bo
 procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
   const DestPtr: array of PRawUTF8); overload;
 
-/// fast replacement of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
+/// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
-/// fast replace of a specified char into a given string
+/// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
+
+/// fast replace of all #9 chars by a given string
+function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
 
 /// format a text content with quotes
 // - UTF-8 version of the function available in SysUtils
@@ -17927,21 +17930,23 @@ begin
 end;
 
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
-procedure Process(j: integer);
-var i: integer;
-begin
-  Result := '';
-  i := 1;
-  repeat
-    Result := Result+Copy(S,i,j-i)+NewPattern;
-    i := j+length(OldPattern);
-    j := PosEx(OldPattern, S, i);
-    if j=0 then begin
-      Result := Result+Copy(S, i, maxInt);
-      break;
-    end;
-  until false;
-end;
+
+  procedure Process(j: integer);
+  var i: integer;
+  begin
+    Result := '';
+    i := 1;
+    repeat
+      Result := Result+Copy(S,i,j-i)+NewPattern;
+      i := j+length(OldPattern);
+      j := PosEx(OldPattern, S, i);
+      if j=0 then begin
+        Result := Result+Copy(S, i, maxInt);
+        break;
+      end;
+    until false;
+  end;
+
 var j: integer;
 begin
   if (S='') or (OldPattern=NewPattern) then
@@ -17951,6 +17956,42 @@ begin
       result := S else
       Process(j);
   end;
+end;
+
+function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
+
+  procedure Process(S,D,T: PAnsiChar; TLen: integer);
+  begin
+    repeat
+      if S^=#0 then
+        break else
+      if S^<>#9 then begin
+        D^ := S^;
+        inc(D);
+        inc(S);
+      end else begin
+        move(T^,D^,TLen);
+        inc(D,TLen);
+        inc(S);
+      end;
+    until false;
+  end;
+
+var L,i,n,ttl: integer;
+begin
+  ttl := length(TabText);
+  L := Length(Source);
+  n := 0;
+  if ttl<>0 then
+    for i := 1 to L do
+      if Source[i]=#9 then
+        inc(n);
+  if n=0 then begin
+    result := Source;
+    exit;
+  end;
+  SetLength(result,L+n*pred(ttl));
+  Process(pointer(Source),pointer(result),pointer(TabText),ttl);
 end;
 
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
