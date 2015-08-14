@@ -587,6 +587,8 @@ type
 
     procedure FontChanged(Sender: TObject);
     procedure SetTopRow(const Value: integer);
+    function GetTextStr: string;
+    procedure SetTextStr(const Value: string);
   protected
     SelAttrs_Size: integer;
     SelAttrs: TSelAttrs;
@@ -742,6 +744,7 @@ type
     property Color default clWindow;
 
     property Font: TFont read FFont write SetFont;
+    property Text: string read GetTextStr write SetTextStr;
 
     property GutterWidth: integer read FGutterWidth write SetGutterWidth;
     property GutterColor: TColor read FGutterColor write SetGutterColor default clBtnFace;
@@ -809,6 +812,9 @@ type
   end;
 
   TMemoEx = class(TCustomMemoEx)
+  public
+    class procedure JSONLineAttr(Sender: TObject; const Line: String;
+      index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
   published
     property TabOrder;
     property BorderStyle;
@@ -834,7 +840,7 @@ type
     property CursorBeyondEOL;
     property SelForeColor;
     property SelBackColor;
-
+    property Text;
     property StripInvisible;
 
     property OnAfterLoad;
@@ -7001,6 +7007,77 @@ begin
     Handled := true;
   end else
     inherited;
+end;
+
+function TCustomMemoEx.GetTextStr: string;
+begin
+  result := FLines.GetTextStr;
+end;
+
+procedure TCustomMemoEx.SetTextStr(const Value: string);
+begin
+  FLines.SetTextStr(Value);
+end;
+
+
+{ TMemoEx }
+
+class procedure TMemoEx.JSONLineAttr(Sender: TObject; const Line: String;
+  index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
+var i,c: integer;
+    FC: TColor;
+begin
+  FC := clWindowText;
+  i := 0;
+  if Line<>'' then
+  repeat
+    case Line[i+1] of
+      #0: break;
+      '{','}': begin
+        Attrs[i].FC := clGreen; Attrs[i].Style := [fsBold];
+        inc(i);
+      end;
+      '[',']': begin
+        Attrs[i].FC := clNavy; Attrs[i].Style := [fsBold];
+        inc(i);
+      end;
+      '"': begin
+        repeat
+          Attrs[i].FC := clOlive;
+          inc(i);
+          if Line[i+1]=#0 then
+            exit;
+        until (Line[i+1]='"') and (Line[i]<>'\');
+        Attrs[i].FC := clOlive;
+        inc(i);
+      end;
+      '-','0'..'9': begin
+        repeat
+          Attrs[i].FC := clNavy;
+          inc(i);
+        until not (Line[i+1] in ['0'..'9','e','E','+','-']);
+      end;
+      '_','a'..'z','A'..'Z','$': begin
+        // see SynCommons.IsJsonIdentifierFirstChar
+        c := PInteger(PAnsiChar(pointer(Line))+i)^;
+        if (c=ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24) or
+           (c=ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24) or
+           (c=ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24) then
+          repeat
+            Attrs[i].FC := clNavy; Attrs[i].Style := [fsBold];
+            inc(i);
+          until not (Line[i+1] in ['a'..'z']) else
+          repeat
+            Attrs[i].FC := clMaroon;
+            inc(i);
+          until not (Line[i+1] in ['_','0'..'9','a'..'z','A'..'Z','.','[',']']);
+      end;
+      else begin
+        Attrs[i].FC := FC;
+        inc(i);
+      end;
+    end;
+  until false;
 end;
 
 initialization
