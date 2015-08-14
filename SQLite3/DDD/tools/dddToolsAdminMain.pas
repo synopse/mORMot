@@ -27,7 +27,7 @@ type
     DBFrameClass: TDBFrameClass;
     Version: Variant;
     destructor Destroy; override;
-    function Open(Definition: TDDDRestClientSettings): boolean;
+    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel=nil): boolean;
     procedure Show;
     function GetState: Variant;
     function AddPage(const aCaption: RawUTF8): TSynPage;
@@ -35,6 +35,7 @@ type
     procedure EndLog;
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    property Client: TSQLHttpClientWebsockets read fClient;
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
   end;
@@ -72,7 +73,7 @@ begin
   result := true;
 end;
 
-function TAdminControl.Open(Definition: TDDDRestClientSettings): boolean;
+function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel): boolean;
 var temp: TForm;
     exec: TServiceCustomAnswer;
 begin
@@ -83,7 +84,7 @@ begin
     temp := CreateTempForm(Format('Connecting to %s...',[Definition.ORM.ServerName]));
     try
       Application.ProcessMessages;
-      fClient := AdministratedDaemonClient(Definition);
+      fClient := AdministratedDaemonClient(Definition,Model);
       fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
       exec := fAdmin.DatabaseExecute('','#version');
       version := _JsonFast(exec.Content);
@@ -192,6 +193,8 @@ begin
       btnExecClick(nil);
       Key := 0;
     end;
+    VK_F5:
+      btnCmdClick(btnCmd);
     VK_F9:
       btnExecClick(btnExec);
     ord('A'):

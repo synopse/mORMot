@@ -5,6 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, ExtCtrls, Menus,
+  {$ifndef UNICODE}SynMemoEx,{$endif}
   SynCommons, mORMot, mORMotDDD, mORMotUI, SynMustache;
 
 type
@@ -14,7 +15,6 @@ type
     pnlTop: TPanel;
     mmoSQL: TMemo;
     btnExec: TButton;
-    mmoResult: TMemo;
     drwgrdResult: TDrawGrid;
     spl1: TSplitter;
     spl2: TSplitter;
@@ -40,8 +40,10 @@ type
     procedure LogDblClick(Sender: TObject);
     procedure LogSearch(Sender: TObject);
   public
+    mmoResult: {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif};
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
+    constructor Create(AOwner: TComponent); override;
     procedure Open; virtual;
     destructor Destroy; override;
   end;
@@ -64,6 +66,25 @@ const
   '{{#values}}{{EnumTrim .}}={{-index0}}{{^-last}}, {{/-last}}{{/values}}'#13#10'{{/enumerates}}';
 
 { TDBFrame }
+
+constructor TDBFrame.Create(AOwner: TComponent);
+begin
+  inherited;
+  mmoResult := {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif}.Create(self);
+  mmoResult.Name := 'mmoResult';
+  mmoResult.Parent := pnlRight;
+  mmoResult.Align := alClient;
+  mmoResult.Font.Height := -11;
+  mmoResult.Font.Name := 'Consolas';
+  mmoResult.ReadOnly := True;
+  mmoResult.ScrollBars := ssVertical;
+  mmoResult.Text := '';
+  {$ifndef UNICODE}
+  mmoResult.RightMargin := 130;
+  mmoResult.RightMarginVisible := true;
+  mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
+  {$endif}
+end;
 
 procedure TDBFrame.Open;
 var tables: TRawUTF8DynArray;
@@ -99,8 +120,16 @@ begin
   FreeAndNil(fGrid);
   drwgrdResult.Hide;
   mmoResult.Align := alClient;
+  mmoResult.WordWrap := false;
   mmoResult.ScrollBars := ssBoth;
-  mmoResult.Text := UTF8ToString(JSON);
+  {$ifndef UNICODE}
+  mmoResult.RightMarginVisible := false;
+  if (JSON='') or (JSON[1] in ['A'..'Z','#']) then
+    mmoResult.OnGetLineAttr := nil else
+    mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
+  mmoResult.TopRow := 0;
+  {$endif}
+  mmoResult.Text := UTF8ToString(StringReplaceTabs(JSON,'    '));
   fJson := '';
 end;
 
@@ -187,11 +216,12 @@ begin
         res := TSynMustache.Parse(WRAPPER_TEMPLATE).Render(
           ctxt,nil,TSynMustache.HelpersGetStandardList,nil,true);
       end else
-        JSONBufferReformat(pointer(fJson),res);
+        JSONBufferReformat(pointer(fJson),res,jsonUnquotedPropName);
     SetResult(res);
   end else begin
     mmoResult.Text := '';
     mmoResult.Align := alBottom;
+    mmoResult.WordWrap := true;
     mmoResult.ScrollBars := ssVertical;
     mmoResult.Height := 100;
     table := TSQLTableJSON.Create('',pointer(fJson),length(fJSON));
@@ -241,6 +271,9 @@ begin
   if (R>0) and (R<>fmmoResultRow) and (fGrid<>nil) then begin
     fmmoResultRow := R;
     fGrid.Table.ToDocVariant(R,row);
+    {$ifndef UNICODE}
+    mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
+    {$endif}
     mmoResult.Text := UTF8ToString(VariantToUTF8(row));
   end;
 end;
@@ -365,6 +398,7 @@ begin
   exec := Admin.DatabaseExecute(DatabaseName,sql);
   result := exec.Content;
 end;
+
 
 end.
 

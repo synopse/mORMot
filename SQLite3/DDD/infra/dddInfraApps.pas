@@ -253,7 +253,8 @@ type
   end;
 
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
-function AdministratedDaemonClient(Definition: TDDDRestClientSettings): TSQLHttpClientWebsockets;
+function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
+   Model: TSQLModel=nil): TSQLHttpClientWebsockets;
 
 
 { ----- Implements Thread Processing to access a TCP server }
@@ -1451,9 +1452,10 @@ begin
   end;
 end;
 
-function AdministratedDaemonClient(Definition: TDDDRestClientSettings): TSQLHttpClientWebsockets;
+function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
+  Model: TSQLModel): TSQLHttpClientWebsockets;
 begin
-  result := Definition.NewRestClientInstance(nil) as TSQLHttpClientWebsockets;
+  result := Definition.NewRestClientInstance(nil,Model) as TSQLHttpClientWebsockets;
   try
     result.ServiceDefine(IAdministratedDaemon,sicShared);
   except

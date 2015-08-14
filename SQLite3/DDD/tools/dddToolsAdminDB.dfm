@@ -96,7 +96,7 @@ object DBFrame: TDBFrame
         Top = 72
         Width = 43
         Height = 25
-        Hint = 'Launch a pseudo-command'
+        Hint = 'Launch a pseudo-command (F5)'
         Anchors = [akTop, akRight]
         Caption = '#cmd'
         ParentShowHint = False
@@ -105,22 +105,6 @@ object DBFrame: TDBFrame
         TabOrder = 3
         OnClick = btnCmdClick
       end
-    end
-    object mmoResult: TMemo
-      Left = 1
-      Top = 233
-      Width = 563
-      Height = 105
-      Align = alClient
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clWindowText
-      Font.Height = -11
-      Font.Name = 'Consolas'
-      Font.Style = []
-      ParentFont = False
-      ReadOnly = True
-      ScrollBars = ssVertical
-      TabOrder = 1
     end
     object drwgrdResult: TDrawGrid
       Left = 1
@@ -134,7 +118,7 @@ object DBFrame: TDBFrame
       Font.Name = 'Tahoma'
       Font.Style = []
       ParentFont = False
-      TabOrder = 2
+      TabOrder = 1
       Visible = False
       OnClick = drwgrdResultClick
     end
