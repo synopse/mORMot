@@ -6577,6 +6577,21 @@ type
     // automatic RawUTF8 quoting if necessary
     constructor Create(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
       const ParamsSQLWhere, BoundsSQLWhere: array of const); overload;
+    /// this constructor initializes the object as above, and fills its content
+    // from a supplied JSON content
+    // - is a wrapper around Create + FillFrom() methods
+    // - use JSON data, as exported by GetJSONValues(), expanded or not
+    // - make an internal copy of the JSONTable RawUTF8 before calling
+    // FillFrom() below
+    constructor CreateFrom(const JSONRecord: RawUTF8); overload;
+    /// this constructor initializes the object as above, and fills its content
+    // from a supplied JSON buffer
+    // - is a wrapper around Create + FillFrom() methods
+    // - use JSON data, as exported by GetJSONValues(), expanded or not
+    // - the data inside P^ is modified (unescaped and transformed in-place):
+    // don't call CreateFrom(pointer(JSONRecord)) but CreateFrom(JSONRecord) which
+    // makes a temporary copy of the JSONRecord text variable before parsing
+    constructor CreateFrom(P: PUTF8Char); overload;
 
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
@@ -7115,7 +7130,7 @@ type
     // - use JSON data, as exported by GetJSONValues()
     // - JSON data may be expanded or not
     // - make an internal copy of the JSONTable RawUTF8 before calling
-    // FillFrom() below}
+    // FillFrom() below
     // - if FieldBits is defined, it will store the identified field index
     procedure FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits=nil); overload;
     /// fill all published properties of this object from a JSON result
@@ -27206,6 +27221,18 @@ begin
   Create;
   if aClient<>nil then
     aClient.Retrieve(FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),self);
+end;
+
+constructor TSQLRecord.CreateFrom(const JSONRecord: RawUTF8);
+begin
+  Create;
+  FillFrom(JSONRecord);
+end;
+
+constructor TSQLRecord.CreateFrom(P: PUTF8Char);
+begin
+  Create;
+  FillFrom(P);
 end;
 
 class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer;
