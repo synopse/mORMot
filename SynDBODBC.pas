@@ -29,6 +29,8 @@ unit SynDBODBC;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - zed
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -1302,7 +1304,6 @@ end;
 
 function TODBCStatement.ColumnBlob(Col: integer): RawByteString;
 var res: TSQLDBStatementGetCol;
-    offs: integer;
 begin
   res := GetCol(Col,ftBlob);
   case res of
@@ -1311,14 +1312,11 @@ begin
     else
     with fColumns[Col] do begin
       result := copy(fColData[Col],1,ColumnDataSize);
-      offs := 0;
       while res=colDataTruncated do begin
-        inc(offs,ColumnDataSize);
         res := GetColNextChunk(Col);
         if ColumnDataSize<=0 then
           break;
-        SetLength(result,offs+ColumnDataSize);
-        move(pointer(fColData[Col])^,PByteArray(result)^[offs],ColumnDataSize);
+        result := result+copy(fColData[Col],1,ColumnDataSize);
       end;
     end;
   end;

@@ -4528,7 +4528,7 @@ end;
 procedure TSQLRequest.Bind(Param: Integer; const Value: RawUTF8);
 var tmp: pointer;
 begin
-  // note that the official SQLite3 documentation is measleading:
+  // note that the official SQLite3 documentation is missleading:
   // sqlite3.bind_text(Text_bytes) must EXCLUDE the null terminator, otherwise a
   // #0 is appended to all column values -> so length(Value) is needed below
   if pointer(Value)=nil then
