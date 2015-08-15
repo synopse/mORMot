@@ -159,6 +159,8 @@ type
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
+    procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
+    procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
     function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; virtual;
     function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
   public
@@ -271,6 +273,8 @@ type
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
       const values: array of PRawByteString; var contentType,content: RawByteString): Boolean; override;
+    procedure AfterGetFrame(var frame: TWebSocketFrame); override;
+    procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
     function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; override;
     function FrameType(const frame: TWebSocketFrame): RawUTF8; override;
     function SendFrames(Owner: TWebSocketProcess;
@@ -423,7 +427,7 @@ type
     fSafeIn, fSafeOut: TSynLocker;
     /// low level WebSockets framing protocol
     function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
-    function SendFrame(const Frame: TWebSocketFrame): boolean;
+    function SendFrame(var Frame: TWebSocketFrame): boolean;
     /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
     procedure ProcessStart; virtual;
     procedure ProcessStop; virtual;
@@ -733,6 +737,14 @@ end;
 
 { TWebSocketProtocol }
 
+procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
+begin // nothing done by default
+end;
+
+procedure TWebSocketProtocol.BeforeSendFrame(var frame: TWebSocketFrame);
+begin // nothing done by default
+end;
+
 constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8);
 begin
   fName := aName;
@@ -828,13 +840,17 @@ end;
 
 function TWebSocketProtocolChat.SendFrame(Sender: THttpServerResp;
   const frame: TWebSocketFrame): boolean;
+var tmp: TWebSocketFrame; // SendFrame() may change frame content
 begin
   result := false;
   if (self=nil) or (Sender=nil) or TThreadHook(Sender).Terminated or
      not (Frame.opcode in [focText,focBinary]) then
     exit;
-  if (Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)=Sender then
-    result := (Sender as TWebSocketServerResp).fProcess.SendFrame(frame)
+  if (Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender then
+    exit;
+  tmp.opcode := frame.opcode;
+  SetString(tmp.payload,PAnsiChar(Pointer(frame.payload)),length(frame.payload));
+  result := (Sender as TWebSocketServerResp).fProcess.SendFrame(tmp)
 end;
 
 
@@ -1088,22 +1104,26 @@ end;
 procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
-var tmp,value: RawByteString;
-    item: RawUTF8;
+var item: RawUTF8;
     i: integer;
 begin
   frame.opcode := focBinary;
-  for i := 0 to high(Values) do begin
-    VarRecToUTF8(Values[i],item);
-    tmp := tmp+item+#1;
+  with TFileBufferWriter.Create(TRawByteStringStream) do
+  try
+    WriteBinary(Head);
+    Write1(1);
+    for i := 0 to high(Values) do
+    with Values[i] do begin
+      VarRecToUTF8(Values[i],item);
+      Write(item);
+    end;
+    Write(ContentType);
+    WriteBinary(Content);
+    Flush;
+    frame.payload := TRawByteStringStream(Stream).DataString;
+  finally
+    Free;
   end;
-  tmp := tmp+ContentType+#1+Content;
-  if fCompressed then
-    SynLZCompress(pointer(tmp),length(tmp),value,512) else
-    value := tmp;
-  if fEncryption<>nil then
-    value := fEncryption.EncryptPKCS7(value,true);
-  frame.payload := Head+#1+value;
 end;
 
 function TWebSocketProtocolBinary.FrameIs(const frame: TWebSocketFrame;
@@ -1129,37 +1149,58 @@ begin
     result := copy(frame.payload,1,i-1);
 end;
 
-function TWebSocketProtocolBinary.FrameDecompress(
-  const frame: TWebSocketFrame; const Head: RawUTF8;
-  const values: array of PRawByteString; var contentType,content: RawByteString): Boolean;
-var tmp,value: RawByteString;
-    i: integer;
-    P: PUTF8Char;
+
+procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
+var value: RawByteString;
+begin
+  if frame.opcode<>focBinary then
+    exit;
+  if fCompressed then
+    SynLZCompress(pointer(frame.payload),length(frame.payload),value,512) else
+    value := frame.payload;
+  if fEncryption<>nil then
+    frame.payload := fEncryption.EncryptPKCS7(value,true) else
+    frame.payload := value;
+end;
+
+procedure TWebSocketProtocolBinary.AfterGetFrame(var frame: TWebSocketFrame);
+var value: RawByteString;
+begin
+  if frame.opcode<>focBinary then
+    exit;
+  if fEncryption<>nil then
+    frame.payload := fEncryption.DecryptPKCS7(frame.payload,true);
+  if fCompressed then begin
+    SynLZDecompress(pointer(frame.payload),length(frame.payload),value);
+    frame.payload := value;
+  end;
+end;
+
+function TWebSocketProtocolBinary.FrameDecompress(const frame: TWebSocketFrame;
+  const Head: RawUTF8; const values: array of PRawByteString;
+  var contentType,content: RawByteString): Boolean;
+var i: integer;
+    P: PByte;
 begin
   result := false;
   if not FrameIs(frame,Head) then
     exit;
-  tmp := copy(frame.payload,length(Head)+2,maxInt);
-  if fEncryption<>nil then
-    tmp := fEncryption.DecryptPKCS7(tmp,true);
-  if fCompressed then
-    SynLZDecompress(pointer(tmp),length(tmp),value) else
-    value := tmp;
-  if length(value)<4 then
-    exit;
-  P := pointer(value);
+  P := pointer(frame.payload);
+  inc(P,Length(Head)+1);
   for i := 0 to high(values) do
-    values[i]^ := GetNextItem(P,#1);
-  contentType := GetNextItem(P,#1);
-  if P<>nil then
-    SetString(content,P,length(value)-(P-pointer(value)));
+    values[i]^ := FromVarString(P);
+  contentType := FromVarString(P);
+  i := length(frame.payload)-(PAnsiChar(P)-pointer(frame.payload));
+  if i<0 then
+    exit;
+  SetString(content,PAnsiChar(P),i);
   result := true;
 end;
 
 function TWebSocketProtocolBinary.SendFrames(Owner: TWebSocketProcess;
   var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
 var jumboFrame: TWebSocketFrame;
-    fr: TDynArray;
+    i: integer;
 begin
   if (FramesCount=0) or (Owner=nil) then begin
     result := true;
@@ -1170,10 +1211,22 @@ begin
     result := Owner.SendFrame(Frames[0]);
     exit;
   end;
-  fr.Init(TypeInfo(TWebSocketFrameDynArray),Frames);
-  fr.UseExternalCount(FramesCount);
   jumboFrame.opcode := focBinary;
-  jumboFrame.payload := 'frames'#1+fr.SaveTo; // each frame is already encrypted
+  with TFileBufferWriter.Create(TRawByteStringStream) do
+  try
+    WriteBinary('frames'#1);
+    dec(FramesCount);
+    WriteVarUInt32(FramesCount);
+    for i := 0 to FramesCount do
+      if Frames[i].opcode=focBinary then
+        Write(Frames[i].payload) else
+        raise ESynBidirSocket.CreateUTF8('%.SendFrames[%]: Unexpected opcode=%',
+          [self,i,ord(Frames[i].opcode)]);
+    Flush;
+    jumboFrame.payload := TRawByteStringStream(Stream).DataString;
+  finally
+    Free;
+  end;
   FramesCount := 0;
   Frames := nil;
   result := Owner.SendFrame(jumboFrame); // send all frames at once
@@ -1181,23 +1234,25 @@ end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(Sender: TWebSocketProcess;
   var request: TWebSocketFrame; const info: RawUTF8);
-var jumbo,jumboInfo: RawByteString;
-    i: integer;
-    frames: TWebSocketFrameDynArray;
+var jumboInfo: RawByteString;
+    n,i: integer;
+    frame: TWebSocketFrame;
+    P: PByte;
 begin
   if FrameIs(request,'frames') then begin
-    jumbo := copy(request.payload,8,maxInt);
-    if DynArrayLoad(frames,pointer(jumbo),TypeInfo(TWebSocketFrameDynArray))=nil then
-      raise ESynBidirSocket.CreateUTF8(
-        'Invalid content for %.ProcessIncomingFrame(frames)',[self]);
-    for i := 0 to high(frames) do begin
+    P := pointer(request.payload);
+    inc(P,7); // jump 'frames'#1
+    n := FromVarUInt32(P);
+    for i := 0 to n do begin
       if i=0 then
         jumboInfo:= 'Sec-WebSocket-Frame: [0]' else
-      if i=high(frames) then
+      if i=n then
         jumboInfo := 'Sec-WebSocket-Frame: [1]' else
         jumboInfo := '';
-      Sender.Log(frames[i],'GetSubFrame');
-      inherited ProcessIncomingFrame(Sender,frames[i],jumboInfo);
+      frame.opcode := focBinary;
+      frame.payload := FromVarString(P);
+      Sender.Log(frame,'GetSubFrame');
+      inherited ProcessIncomingFrame(Sender,frame,jumboInfo);
     end;
   end else
     inherited ProcessIncomingFrame(Sender,request,info);
@@ -1434,6 +1489,8 @@ begin
     if opcode=focText then
       SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
     {$endif}
+    if (fProtocol<>nil) and (Frame.payload<>'') then
+      fProtocol.AfterGetFrame(Frame);
     Log(frame,'GetFrame');
     SetLastPingTicks;
     result := true;
@@ -1462,7 +1519,7 @@ begin
 end;
 
 function TWebSocketProcess.SendFrame(
-  const Frame: TWebSocketFrame): boolean;
+  var Frame: TWebSocketFrame): boolean;
 var hdr: TFrameHeader;
     len: cardinal;
 begin
@@ -1471,6 +1528,8 @@ begin
     Log(frame,'SendFrame');
     try
       result := true;
+      if (fProtocol<>nil) and (Frame.payload<>'') then
+        fProtocol.BeforeSendFrame(Frame);
       len := Length(Frame.payload);
       hdr.first := byte(Frame.opcode) or FRAME_FIN;
       if fMaskSentFrames<>0 then begin
