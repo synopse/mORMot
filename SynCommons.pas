@@ -6168,7 +6168,11 @@ type
   // one used in the MongoDB extended syntax, is not JSON compatible: do not
   // use it e.g. with AJAX clients, but is would be handled as expected by all
   // our units as valid JSON input, without previous correction
-  TTextWriterJSONFormat = (jsonCompact, jsonHumanReadable, jsonUnquotedPropName);
+  // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
+  // property names
+  TTextWriterJSONFormat = (
+    jsonCompact, jsonHumanReadable,
+    jsonUnquotedPropName, jsonUnquotedPropNameCompact);
 
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
@@ -39605,14 +39609,14 @@ begin
       Add('[');
       inc(JSON);
     end else begin
-      if Format<>jsonCompact then
+      if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
         AddCRAndIndent;
       inc(fHumanReadableLevel);
       Add('[');
       repeat
         if JSON=nil then
           exit;
-        if Format<>jsonCompact then
+        if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
           AddCRAndIndent;
         JSON := AddJSONReformat(JSON,Format,@objEnd);
         if objEnd=']' then
@@ -39620,7 +39624,7 @@ begin
         Add(objEnd);
       until false;
       dec(fHumanReadableLevel);
-      if Format<>jsonCompact then
+      if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
         AddCRAndIndent;
     end;
     Add(']');
@@ -39629,7 +39633,7 @@ begin
     repeat inc(JSON) until not(JSON^ in [#1..' ']);
     Add('{');
     inc(fHumanReadableLevel);
-    if Format<>jsonCompact then
+    if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
       AddCRAndIndent;
     if JSON^='}' then
       repeat inc(JSON) until not(JSON^ in [#1..' ']) else
@@ -39637,13 +39641,14 @@ begin
       Name := GetJSONPropName(JSON);
       if Name=nil then
         exit;
-      if (Format=jsonUnquotedPropName) and JsonPropNameValid(Name) then
+      if (Format in [jsonUnquotedPropName,jsonUnquotedPropNameCompact]) and
+         JsonPropNameValid(Name) then
         AddNoJSONEscape(Name,StrLen(Name)) else begin
         Add('"');
         AddJSONEscape(Name);
         Add('"');
       end;
-      if Format=jsonCompact then
+      if Format in [jsonCompact,jsonUnquotedPropNameCompact] then
         Add(':') else
         Add(':',' ');
       if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
@@ -39651,11 +39656,11 @@ begin
       if objEnd='}' then
         break;
       Add(objEnd);
-      if Format<>jsonCompact then
+      if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
         AddCRAndIndent;
     until false;
     dec(fHumanReadableLevel);
-    if Format<>jsonCompact then
+      if not (Format in [jsonCompact,jsonUnquotedPropNameCompact]) then
       AddCRAndIndent;
     Add('}');
   end;
