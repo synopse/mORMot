@@ -7590,6 +7590,8 @@ type
     //!   Check(list.GetAsInteger(i,YearOfBirth)<10000);
     procedure FieldIndexExisting(const FieldNames: array of RawUTF8;
       const FieldIndexes: array of PInteger); overload;
+    /// retrieve all field names as a RawUTF8 dynamic array
+    function FieldNames: TRawUTF8DynArray;
     /// get the Field content (encoded as UTF-8 text) from a property name
     // - return nil if not found
     function FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
@@ -21531,6 +21533,14 @@ begin
       raise ESQLTableException.CreateUTF8(
         '%.FieldIndexExisting() FieldIndexes["%"]=nil',[self,FieldNames[i]]) else
       FieldIndexes[i]^ := FieldIndexExisting(FieldNames[i]);
+end;
+
+function TSQLTable.FieldNames: TRawUTF8DynArray;
+var i: integer;
+begin
+  SetLength(result,FieldCount);
+  for i := 0 to FieldCount-1 do
+    SetString(result[i],PAnsiChar(fResults[i]),StrLen(fResults[i]));
 end;
 
 function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
