@@ -7233,6 +7233,10 @@ type
     // ! Detail.Main := Main.AsTSQLRecord;
     // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
+    // - if the stored ID is bigger than 32 bits, then it would raise an
+    // EORMException: in this case, you should use a TID / T*ID kind of
+    // published property, and not a TSQLRecord, which is limited to the
+    // pointer size 
     property AsTSQLRecord: pointer read GetIDAsPointer;
     /// this property is set to true, if any published property is a BLOB (TSQLRawBlob)
     property HasBlob: boolean read GetHasBlob;
@@ -28468,7 +28472,13 @@ begin
     // (will return 0 if current instance is nil)
     result := self else
     // was called from a real TSQLRecord instance
-    result := pointer(fID);
+    {$ifndef CPU64}
+    if fID>MaxInt then
+      raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which '+
+        'cannot be stored in a pointer/TSQLRecord 32 bit instance: use '+
+        'a TID/T*ID published field for 64 bit IDs',[self,fID]) else
+    {$endif}
+      result := pointer(fID);
   {$else}
   if PtrUInt(self)<$100000 then // rough estimation, but works in practice
     result := self else
