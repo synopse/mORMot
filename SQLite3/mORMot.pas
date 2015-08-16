@@ -22068,7 +22068,7 @@ begin
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
-    SetString(Result,P,StrLen(P));
+    SetString(Result,PAnsiChar(P),StrLen(P));
   end;
 end;
 

@@ -30,7 +30,7 @@ type
     fmmoResultRow: integer;
     fGrid: TSQLTableToGrid;
     fJson: RawJSON;
-    fPreviousSQL: RawUTF8;
+    fSQL,fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
     procedure AddSQL(SQL: string; AndExec: boolean);
     function ExecSQL(const SQL: RawUTF8): RawUTF8;
@@ -39,10 +39,13 @@ type
     procedure LogClick(Sender: TObject);
     procedure LogDblClick(Sender: TObject);
     procedure LogSearch(Sender: TObject);
+    procedure GridToVariant(var result: variant); virtual;
   public
     mmoResult: {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif};
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
+    AssociatedModel: TSQLModel;
+    AssociatedRecord: TSQLRecordClass;
     constructor Create(AOwner: TComponent); override;
     procedure Open; virtual;
     destructor Destroy; override;
@@ -153,7 +156,7 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
     result.OnClick := btnExecClick;
   end;
 
-var sql,res,ctyp: RawUTF8;
+var res,ctyp: RawUTF8;
     mmo,cmd: string;
     SelStart, SelLength,i : integer;
     table: TSQLTable;
@@ -177,13 +180,13 @@ begin
   if SelLength>10 then
     mmo := mmoSQL.SelText else
     mmo := mmoSQL.Lines.Text;
-  sql := Trim(StringToUTF8(mmo));
-  if sql='' then
+  fSQL := Trim(StringToUTF8(mmo));
+  if fSQL='' then
     exit;
   Screen.Cursor := crHourGlass;
   try
     try
-      exec := Admin.DatabaseExecute(DatabaseName,sql);
+      exec := Admin.DatabaseExecute(DatabaseName,fSQL);
       ctyp := FindIniNameValue(pointer(exec.Header),HEADER_CONTENT_TYPE_UPPER);
       if ctyp='' then
         fJSON := exec.Content else
@@ -197,9 +200,9 @@ begin
   end;
   FreeAndNil(fGrid);
   fmmoResultRow := 0;
-  if sql[1]='#' then begin
+  if fSQL[1]='#' then begin
     if fJson<>'' then
-      if IdemPropNameU(sql,'#help') then begin
+      if IdemPropNameU(fSQL,'#help') then begin
         fJson := UnQuoteSQLString(fJson);
         res := StringReplaceAll(fJson,'|',#13#10' ');
         if pmCmd.Items.Count=0 then begin
@@ -211,7 +214,7 @@ begin
           end;
         end;
       end else
-      if IdemPropNameU(sql,'#wrapper') then begin
+      if IdemPropNameU(fSQL,'#wrapper') then begin
         ctxt := _JsonFast(fJson);
         res := TSynMustache.Parse(WRAPPER_TEMPLATE).Render(
           ctxt,nil,TSynMustache.HelpersGetStandardList,nil,true);
@@ -240,16 +243,17 @@ begin
     mmoSQL.SelLength := SelLength;
     mmoSQL.SetFocus;
   end;
-  if ((fJson<>'') or ((sql[1]='#') and (PosEx(' ',sql)>0))) and
-     (sql<>fPreviousSQL) then begin
-    AppendToTextFile(sql,fSQLLogFile);
-    fPreviousSQL := sql;
+  if ((fJson<>'') or ((fSQL[1]='#') and (PosEx(' ',fSQL)>0))) and
+     (fSQL<>fPreviousSQL) then begin
+    AppendToTextFile(fSQL,fSQLLogFile);
+    fPreviousSQL := fSQL;
   end;
 end;
 
 destructor TDBFrame.Destroy;
 begin
   FreeAndNil(fGrid);
+  FreeAndNil(AssociatedModel);
   inherited;
 end;
 
@@ -263,18 +267,54 @@ begin
     result := false;
 end;
 
+procedure TDBFrame.GridToVariant(var result: variant);
+var ndx,f: integer;
+    rec: TSQLRecordProperties;
+    props: PVariant;
+    doc: PDocVariantData;
+begin
+  fGrid.Table.ToDocVariant(fmmoResultRow,result);
+  doc := _Safe(result);
+  if doc.Count=0 then
+    exit;
+  if AssociatedModel=nil then begin
+    if AssociatedRecord=nil then
+      exit;
+    rec := AssociatedRecord.RecordProps;
+    for f := 0 to fGrid.Table.FieldCount-1 do
+      if not rec.IsFieldName(fGrid.Table.GetU(0,f)) then
+        exit;
+  end else begin
+    ndx := AssociatedModel.GetTableIndexFromSQLSelect(fSQL,false);
+    if ndx<0 then
+      exit;
+    rec := AssociatedModel.TableProps[ndx].Props;
+  end;
+  for f := 0 to rec.Fields.Count-1 do
+    case rec.Fields.List[f].SQLFieldType of
+    sftBoolean:
+      if doc.GetAsPVariant(rec.Fields.List[f].Name,props) then
+        props^ := props^<>0;
+    sftVariant:
+      if doc.GetAsPVariant(rec.Fields.List[f].Name,props) and VarIsStr(props^) then
+        props^ := _Json(VariantToUTF8(props^),JSON_OPTIONS_NAMEVALUE[true]);
+    end;
+end;
+
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);
 var R: integer;
     row: variant;
+    json: RawUTF8;
 begin
   R := drwgrdResult.Row;
   if (R>0) and (R<>fmmoResultRow) and (fGrid<>nil) then begin
     fmmoResultRow := R;
-    fGrid.Table.ToDocVariant(R,row);
+    GridToVariant(row);
     {$ifndef UNICODE}
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
     {$endif}
-    mmoResult.Text := UTF8ToString(VariantToUTF8(row));
+    JSONBufferReformat(pointer(VariantToUTF8(row)),json,jsonUnquotedPropNameCompact);
+    mmoResult.Text := UTF8ToString(json);
   end;
 end;
 

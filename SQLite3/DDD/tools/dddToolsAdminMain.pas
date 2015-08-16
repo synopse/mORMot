@@ -112,6 +112,7 @@ end;
 
 procedure TAdminControl.Show;
 var i,n: integer;
+    f: TDBFrame;
 begin
   if (fClient=nil) or (fAdmin=nil) or (fPage<>nil) then
     exit; // show again after hide
@@ -130,9 +131,14 @@ begin
   fLogFrame.Align := alClient;
   fLogFrame.Admin := fAdmin;
   if n>0 then begin
-    for i := 0 to n-1 do 
-      AddDBFrame(fDatabases[i],fDatabases[i],DBFrameClass).Open;
-    fPage.ActivePageIndex := 1;
+    for i := 0 to n-1 do begin
+      f := AddDBFrame(fDatabases[i],fDatabases[i],DBFrameClass);
+      f.Open;
+      if i=0 then
+        fPage.ActivePageIndex := 1 else
+        if IdemPropNameU(fDatabases[i],fDatabases[i-1]+'Log') then
+          f.AssociatedRecord := TSQLRecordServiceLog;
+    end;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
   end;
