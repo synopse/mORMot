@@ -6,7 +6,7 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, ExtCtrls, Menus,
   {$ifndef UNICODE}SynMemoEx,{$endif}
-  SynCommons, mORMot, mORMotDDD, mORMotUI, SynMustache;
+  SynCommons, mORMot, mORMotDDD, mORMotHttpClient, mORMotUI, SynMustache;
 
 type
   TDBFrame = class(TFrame)
@@ -42,10 +42,11 @@ type
     procedure GridToVariant(var result: variant); virtual;
   public
     mmoResult: {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif};
+    Client: TSQLHttpClientWebsockets;
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
     AssociatedModel: TSQLModel;
-    AssociatedRecord: TSQLRecordClass;
+    AssociatedTables: TSQLRecordClassDynArray;
     constructor Create(AOwner: TComponent); override;
     procedure Open; virtual;
     destructor Destroy; override;
@@ -160,6 +161,7 @@ var res,ctyp: RawUTF8;
     mmo,cmd: string;
     SelStart, SelLength,i : integer;
     table: TSQLTable;
+    tables: TSQLRecordClassDynArray;
     P: PUTF8Char;
     exec: TServiceCustomAnswer;
     ctxt: variant;
@@ -183,27 +185,31 @@ begin
   fSQL := Trim(StringToUTF8(mmo));
   if fSQL='' then
     exit;
-  Screen.Cursor := crHourGlass;
-  try
+  if IdemPropNameU(fSQL,'#client') then begin
+    fJSON := ObjectToJSON(Client);
+  end else begin
+    Screen.Cursor := crHourGlass;
     try
-      exec := Admin.DatabaseExecute(DatabaseName,fSQL);
-      ctyp := FindIniNameValue(pointer(exec.Header),HEADER_CONTENT_TYPE_UPPER);
-      if ctyp='' then
-        fJSON := exec.Content else
-        fJSON := '';
-    except
-      on E: Exception do
-        fJSON := ObjectToJSON(E);
+      try
+        exec := Admin.DatabaseExecute(DatabaseName,fSQL);
+        ctyp := FindIniNameValue(pointer(exec.Header),HEADER_CONTENT_TYPE_UPPER);
+        if ctyp='' then
+          fJSON := exec.Content else
+          fJSON := '';
+      except
+        on E: Exception do
+          fJSON := ObjectToJSON(E);
+      end;
+    finally
+      Screen.Cursor := crDefault;
     end;
-  finally
-    Screen.Cursor := crDefault;
   end;
   FreeAndNil(fGrid);
   fmmoResultRow := 0;
   if fSQL[1]='#' then begin
     if fJson<>'' then
       if IdemPropNameU(fSQL,'#help') then begin
-        fJson := UnQuoteSQLString(fJson);
+        fJson := Trim(UnQuoteSQLString(fJson))+'|#client'#13#10;
         res := StringReplaceAll(fJson,'|',#13#10' ');
         if pmCmd.Items.Count=0 then begin
           P := pointer(res);
@@ -227,7 +233,10 @@ begin
     mmoResult.WordWrap := true;
     mmoResult.ScrollBars := ssVertical;
     mmoResult.Height := 100;
-    table := TSQLTableJSON.Create('',pointer(fJson),length(fJSON));
+    if AssociatedModel<>nil then
+      tables := AssociatedModel.Tables else
+      tables := AssociatedTables;
+    table := TSQLTableJSON.CreateFromTables(tables,'',pointer(fJson),length(fJSON));
     fGrid := TSQLTableToGrid.Create(drwgrdResult,table,nil);
     fGrid.SetAlignedByType(sftCurrency,alRight);
     fGrid.SetFieldFixedWidth(100);
@@ -268,37 +277,8 @@ begin
 end;
 
 procedure TDBFrame.GridToVariant(var result: variant);
-var ndx,f: integer;
-    rec: TSQLRecordProperties;
-    props: PVariant;
-    doc: PDocVariantData;
 begin
-  fGrid.Table.ToDocVariant(fmmoResultRow,result);
-  doc := _Safe(result);
-  if doc.Count=0 then
-    exit;
-  if AssociatedModel=nil then begin
-    if AssociatedRecord=nil then
-      exit;
-    rec := AssociatedRecord.RecordProps;
-    for f := 0 to fGrid.Table.FieldCount-1 do
-      if not rec.IsFieldName(fGrid.Table.GetU(0,f)) then
-        exit;
-  end else begin
-    ndx := AssociatedModel.GetTableIndexFromSQLSelect(fSQL,false);
-    if ndx<0 then
-      exit;
-    rec := AssociatedModel.TableProps[ndx].Props;
-  end;
-  for f := 0 to rec.Fields.Count-1 do
-    case rec.Fields.List[f].SQLFieldType of
-    sftBoolean:
-      if doc.GetAsPVariant(rec.Fields.List[f].Name,props) then
-        props^ := props^<>0;
-    sftVariant:
-      if doc.GetAsPVariant(rec.Fields.List[f].Name,props) and VarIsStr(props^) then
-        props^ := _Json(VariantToUTF8(props^),JSON_OPTIONS_NAMEVALUE[true]);
-    end;
+  fGrid.Table.ToDocVariant(fmmoResultRow,result,JSON_OPTIONS_NAMEVALUE[true]);
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);

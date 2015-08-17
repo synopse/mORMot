@@ -22,6 +22,7 @@ type
     fLogFrame: TLogFrame;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
+    procedure OnPageChange(Sender: TObject);
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
@@ -125,6 +126,7 @@ begin
   fPage.ControlStyle := fPage.ControlStyle+[csClickEvents]; // enable OnDblClick
   fPage.Parent := self;
   fPage.Align := alClient;
+  fPage.OnChange := OnPageChange;
   n := length(fDatabases);
   fLogFrame := LogFrameClass.Create(self);
   fLogFrame.Parent := AddPage('log');
@@ -136,8 +138,10 @@ begin
       f.Open;
       if i=0 then
         fPage.ActivePageIndex := 1 else
-        if IdemPropNameU(fDatabases[i],fDatabases[i-1]+'Log') then
-          f.AssociatedRecord := TSQLRecordServiceLog;
+        if IdemPropNameU(fDatabases[i],fDatabases[i-1]+'Log') then begin
+          SetLength(f.AssociatedTables,1);
+          f.AssociatedTables[0] := TSQLRecordServiceLog;
+        end;
     end;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
@@ -214,27 +218,6 @@ begin
     end;
 end;
 
-
-{ TAdminForm }
-
-procedure TAdminForm.FormCreate(Sender: TObject);
-begin
-  DefaultFont.Name := 'Tahoma';
-  DefaultFont.Size := 9;
-  Caption := Format('%s %s',[ExeVersion.ProgramName,ExeVersion.Version.Detailed]);
-  fFrame := TAdminControl.Create(self);
-  fFrame.Parent := self;
-  fFrame.Align := alClient;
-  OnKeyDown := fFrame.FormKeyDown;
-end;
-
-procedure TAdminForm.FormShow(Sender: TObject);
-begin
-  fFrame.Show;
-  Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
-    fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
-end;
-
 function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
 var n: integer;
 begin
@@ -258,9 +241,39 @@ begin
   result.Name := format('DBFrame%s',[aCaption]);
   result.Parent := page;
   result.Align := alClient;
+  result.Client := fClient;
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
   fDBFrame[n] := result;
+end;
+
+procedure TAdminControl.OnPageChange(Sender: TObject);
+var ndx: cardinal;
+begin
+  ndx := fPage.ActivePageIndex-1;
+  if ndx>=cardinal(Length(fDBFrame)) then
+    exit;
+end;
+
+
+{ TAdminForm }
+
+procedure TAdminForm.FormCreate(Sender: TObject);
+begin
+  DefaultFont.Name := 'Tahoma';
+  DefaultFont.Size := 9;
+  Caption := Format('%s %s',[ExeVersion.ProgramName,ExeVersion.Version.Detailed]);
+  fFrame := TAdminControl.Create(self);
+  fFrame.Parent := self;
+  fFrame.Align := alClient;
+  OnKeyDown := fFrame.FormKeyDown;
+end;
+
+procedure TAdminForm.FormShow(Sender: TObject);
+begin
+  fFrame.Show;
+  Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
+    fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
 end;
 
 end.
