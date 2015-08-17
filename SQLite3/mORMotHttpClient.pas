@@ -223,6 +223,7 @@ type
     // the TSQLRestClientURI.SetUser() information, and Definition.DatabaseName
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
+  published
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -262,7 +263,7 @@ type
     function InternalCheckOpen: boolean; override;
     /// overridden protected method to close HTTP connection
     procedure InternalClose; override;
-  public
+  published
     /// internal HTTP/1.1 compatible client
     // - can be used e.g. to access SendTimeout and ReceiveTimeout properties
     property Socket: THttpClientSocket read fSocket;

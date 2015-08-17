@@ -16728,6 +16728,7 @@ type
     function ServiceRetrieveAssociated(const aInterface: TGUID;
       out URI: TSQLRestServerURIDynArray): boolean; overload;
 
+  published
     /// low-level error code, as returned by server
     // - check this value about HTML_* constants
     // - HTML_SUCCESS or HTML_CREATED mean no error
@@ -16745,19 +16746,6 @@ type
     // into LastErrorCode/LastErrorMessage properties
     property LastErrorException: ExceptClass read fLastErrorException;
 
-    /// this Event is called in case of remote authentication failure
-    // - client software can ask the user to enter a password and user name
-    // - if no event is specified, the URI() method will return directly
-    // an HTML_FORBIDDEN "403 Forbidden" error code
-    property OnAuthentificationFailed: TOnAuthentificationFailed
-      read fOnAuthentificationFailed write fOnAuthentificationFailed;
-    /// this Event is called when a user is authenticated
-    // - is called always, on each TSQLRestClientURI.SetUser call
-    // - you can check the SessionUser property to retrieve the current
-    // authenticated user, or nil if authentication failed
-    // - could be used to refresh the User Interface layout according to
-    // current authenticated user rights
-    property OnSetUser: TNotifyEvent read fOnSetUser write fOnSetUser;
     /// maximum additional retry occurence
     // - defaut is 0, i.e. will retry once
     // - set OnAuthentificationFailed to nil in order to avoid any retry
@@ -16766,6 +16754,24 @@ type
     /// if the client shall retry once in case of "408 REQUEST TIMEOUT" error
     property RetryOnceOnTimeout: Boolean
       read fRetryOnceOnTimeout write fRetryOnceOnTimeout;
+    /// the current session ID as set after a successfull SetUser() method call
+    // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
+    // is not started yet - i.e. if SetUser() call failed
+    // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
+    // is not enabled - i.e. after a fresh Create() without SetUser() call
+    property SessionID: cardinal read fSessionID;
+  public
+    /// the current user as set by SetUser() method
+    // - returns nil if no User is currently authenticated
+    // - only available fields by default are LogonName and PasswordHashHexa:
+    // you can run code similar to the following to fill all needed properties:
+    // !  if fClient.SessionUser<>nil then
+    // !  begin
+    // !    fClient.Retrieve('LogonName=?',[],[fClient.SessionUser.LogonName],
+    // !      fClient.SessionUser); // fill ID, DisplayName, GroupRights
+    // !    fClient.RetrieveBlobFields(fClient.SessionUser); // optional Data
+    // !  end;
+    property SessionUser: TSQLAuthUser read fSessionUser;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -16782,23 +16788,19 @@ type
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
 {$endif}
-    /// the current user as set by SetUser() method
-    // - returns nil if no User is currently authenticated
-    // - only available fields by default are LogonName and PasswordHashHexa:
-    // you can run code similar to the following to fill all needed properties:
-    // !  if fClient.SessionUser<>nil then
-    // !  begin
-    // !    fClient.Retrieve('LogonName=?',[],[fClient.SessionUser.LogonName],
-    // !      fClient.SessionUser); // fill ID, DisplayName, GroupRights
-    // !    fClient.RetrieveBlobFields(fClient.SessionUser); // optional Data
-    // !  end;
-    property SessionUser: TSQLAuthUser read fSessionUser;
-    /// the current session ID as set after a successfull SetUser() method call
-    // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
-    // is not started yet - i.e. if SetUser() call failed
-    // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
-    // is not enabled - i.e. after a fresh Create() without SetUser() call
-    property SessionID: cardinal read fSessionID;
+    /// this Event is called in case of remote authentication failure
+    // - client software can ask the user to enter a password and user name
+    // - if no event is specified, the URI() method will return directly
+    // an HTML_FORBIDDEN "403 Forbidden" error code
+    property OnAuthentificationFailed: TOnAuthentificationFailed
+      read fOnAuthentificationFailed write fOnAuthentificationFailed;
+    /// this Event is called when a user is authenticated
+    // - is called always, on each TSQLRestClientURI.SetUser call
+    // - you can check the SessionUser property to retrieve the current
+    // authenticated user, or nil if authentication failed
+    // - could be used to refresh the User Interface layout according to
+    // current authenticated user rights
+    property OnSetUser: TNotifyEvent read fOnSetUser write fOnSetUser;
   end;
 
   /// Rest client with remote access to a server through a dll

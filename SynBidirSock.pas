@@ -155,6 +155,10 @@ type
   protected
     fName: RawUTF8;
     fURI: RawUTF8;
+    fFramesInCount: integer;
+    fFramesInBytes: QWord;
+    fFramesOutCount: integer;
+    fFramesOutBytes: QWord;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -179,6 +183,14 @@ type
     /// the optional URI on which this protocol would be enabled
     // - leave to '' if any URI should match
     property URI: RawUTF8 read fURI;
+    /// how many frames have been received by this instance
+    property FramesInCount: integer read fFramesInCount;
+    /// how many frames have been sent by this instance
+    property FramesOutCount: integer read fFramesOutCount;
+    /// how many (uncompressed) bytes have been received by this instance
+    property FramesInBytes: QWord read fFramesInBytes;
+    /// how many (uncompressed) bytes have been sent by this instance
+    property FramesOutBytes: QWord read fFramesOutBytes;
   end;
 
   /// callback event triggered by TWebSocketProtocolChat for any incoming message
@@ -269,6 +281,8 @@ type
   protected
     fEncryption: TAESAbstract;
     fCompressed: boolean;
+    fFramesInBytesSocket: QWord;
+    fFramesOutBytesSocket: QWord;
     procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
       const Content,ContentType: RawByteString; var frame: TWebSocketFrame); override;
     function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
@@ -281,6 +295,9 @@ type
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
+    function GetEncrypted: boolean;
+    function GetFramesInCompression: integer;
+    function GetFramesOutCompression: integer;
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
@@ -298,9 +315,21 @@ type
     /// - AES-CFB 256 bit encryption will be enabled on this protocol if the
     // aKey parameter supplied, after been hashed using SHA-256 algorithm
     constructor Create(const aURI, aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
+  published
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
+    /// defines if AES encryption is enabled during the transmission
+    // - is set to TRUE by default
+    property Encrypted: boolean read GetEncrypted;
+    /// how many bytes have been received by this instance from the wire
+    property FramesInBytesSocket: QWord read fFramesInBytesSocket;
+    /// how many bytes have been sent by this instance to the wire
+    property FramesOutBytesSocket: QWord read fFramesOutBytesSocket;
+    /// compression ratio of frames received by this instance
+    property FramesInCompression: integer read GetFramesInCompression;
+    /// compression ratio of frames Sent by this instance
+    property FramesOutCompression: integer read GetFramesOutCompression;
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
@@ -463,13 +492,16 @@ type
     // - on the server side, is a THttpServerSocket
     // - access to this instance is protected by Safe.Lock/Unlock
     property Socket: TCrtSocket read fSocket;
-    /// how many frames have been processed by this connection
+    /// how many frames are currently processed by this connection
     property ProcessCount: integer read fProcessCount;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
     // - could be nil if the connection is in standard HTTP/1.1 mode
     property Protocol: TWebSocketProtocol read fProtocol;
+    /// how many invalid heartbeat frames have been sent
+    // -  a non 0 value indicates a connection problem
+    property InvalidPingSendCount: cardinal read fInvalidPingSendCount;
   end;
 
 
@@ -738,11 +770,15 @@ end;
 { TWebSocketProtocol }
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
-begin // nothing done by default
+begin 
+  inc(fFramesInCount);
+  inc(fFramesInBytes,length(frame.payload)+2);
 end;
 
 procedure TWebSocketProtocol.BeforeSendFrame(var frame: TWebSocketFrame);
-begin // nothing done by default
+begin
+  inc(fFramesOutCount);
+  inc(fFramesOutBytes,length(frame.payload)+2);
 end;
 
 constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8);
@@ -1153,27 +1189,31 @@ end;
 procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
 var value: RawByteString;
 begin
-  if frame.opcode<>focBinary then
-    exit;
-  if fCompressed then
-    SynLZCompress(pointer(frame.payload),length(frame.payload),value,512) else
-    value := frame.payload;
-  if fEncryption<>nil then
-    frame.payload := fEncryption.EncryptPKCS7(value,true) else
-    frame.payload := value;
+  inherited BeforeSendFrame(frame);
+  if frame.opcode=focBinary then begin
+    if fCompressed then
+      SynLZCompress(pointer(frame.payload),length(frame.payload),value,512) else
+      value := frame.payload;
+    if fEncryption<>nil then
+      frame.payload := fEncryption.EncryptPKCS7(value,true) else
+      frame.payload := value;
+  end;
+  inc(fFramesOutBytesSocket,length(frame.payload)+2);
 end;
 
 procedure TWebSocketProtocolBinary.AfterGetFrame(var frame: TWebSocketFrame);
 var value: RawByteString;
 begin
-  if frame.opcode<>focBinary then
-    exit;
-  if fEncryption<>nil then
-    frame.payload := fEncryption.DecryptPKCS7(frame.payload,true);
-  if fCompressed then begin
-    SynLZDecompress(pointer(frame.payload),length(frame.payload),value);
-    frame.payload := value;
+  inc(fFramesInBytesSocket,length(frame.payload)+2);
+  if frame.opcode=focBinary then begin
+    if fEncryption<>nil then
+      frame.payload := fEncryption.DecryptPKCS7(frame.payload,true);
+    if fCompressed then begin
+      SynLZDecompress(pointer(frame.payload),length(frame.payload),value);
+      frame.payload := value;
+    end;
   end;
+  inherited AfterGetFrame(frame);
 end;
 
 function TWebSocketProtocolBinary.FrameDecompress(const frame: TWebSocketFrame;
@@ -1256,6 +1296,27 @@ begin
     end;
   end else
     inherited ProcessIncomingFrame(Sender,request,info);
+end;
+
+function TWebSocketProtocolBinary.GetEncrypted: boolean;
+begin
+  result := (self<>nil) and (fEncryption<>nil);
+end;
+
+function TWebSocketProtocolBinary.GetFramesInCompression: integer;
+begin
+  if (self=nil) or (fFramesInBytes=0) then
+    result := 0 else
+    result := (fFramesInBytesSocket*100) div fFramesInBytes;
+  result := 100-result;
+end;
+
+function TWebSocketProtocolBinary.GetFramesOutCompression: integer;
+begin
+  if (self=nil) or (fFramesOutBytes=0) then
+    result := 0 else
+    result := (fFramesOutBytesSocket*100) div fFramesOutBytes;
+  result := 100-result;
 end;
 
 
