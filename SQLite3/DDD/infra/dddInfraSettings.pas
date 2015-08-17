@@ -86,11 +86,8 @@ type
     fInitialJsonContent: RawUTF8;
     procedure SetProperties(Instance: TObject); virtual;
     // inherited constructors should use this method to initialize the content
-    procedure SetJsonContent(JsonContent: PUTF8Char); virtual;
+    procedure SetJsonContent(const JsonContent: RawUTF8); virtual;
   public
-    /// returns TRUE if the content did change according to its initial state
-    // - will be used e.g. to update the file content on disk only if worth it
-    function WasModified: Boolean;
     /// the JSON content, as specified when creating the instance
     // - will allow SettingsDidChange to check if has changed
     // - here the JSON content is stored with default ObjectToJSON() options,
@@ -437,26 +434,24 @@ implementation
 
 { TDDDAppSettingsAbstract }
 
-procedure TDDDAppSettingsAbstract.SetJsonContent(
-  JsonContent: PUTF8Char);
+procedure TDDDAppSettingsAbstract.SetJsonContent(const JsonContent: RawUTF8);
 var valid: boolean;
+    tmp: RawUTF8;
 begin
-  if JsonContent=nil then
+  if JsonContent='' then
     exit;
-  RemoveCommentsFromJSON(JsonContent);
-  JSONToObject(self,JsonContent,valid);
-  if valid then
-    fInitialJsonContent := ObjectToJSON(self,[]);
+  fInitialJsonContent := JsonContent;
+  tmp := JsonContent;
+  UniqueString(AnsiString(tmp));
+  RemoveCommentsFromJSON(pointer(tmp));
+  JSONToObject(self,pointer(tmp),valid);
+  if not valid then
+    fInitialJsonContent := '';
 end;
 
 procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
 begin
   CopyObject(self,Instance);
-end;
-
-function TDDDAppSettingsAbstract.WasModified: Boolean;
-begin
-  result := ObjectToJSON(self,[])<>fInitialJsonContent;
 end;
 
 
@@ -484,16 +479,16 @@ begin
     fSettingsJsonFileName := aSettingsJsonFileName else
     fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
   fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
-  SetJsonContent(Pointer(AnyTextFileToRawUTF8(fSettingsJsonFileName,true)));
+  SetJsonContent(AnyTextFileToRawUTF8(fSettingsJsonFileName,true));
 end;
 
 procedure TDDDAppSettingsFile.UpdateFile;
 var new: RawUTF8;
 begin
-  if not WasModified then
-    exit;
   new := ObjectToJSON(Self,[woHumanReadable,woStoreStoredFalse,
     woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
+  if new=fInitialJsonContent then
+    exit;
   FileFromString(new,fSettingsJsonFileName);
 end;
 
