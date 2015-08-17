@@ -7500,7 +7500,8 @@ type
     // - Row parameter numbering starts from 1 to RowCount
     // - this method will return a TDocVariant containing a copy of all
     // field values of this row, uncoupled to the TSQLTable instance life time
-    procedure ToDocVariant(Row: integer; out doc: variant); overload;
+    procedure ToDocVariant(Row: integer; out doc: variant;
+      options: TDocVariantOptions=JSON_OPTIONS_FAST); overload;
     /// retrieve all row values as a dynamic array of variants, ready to be
     // accessed via late-binding
     // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
@@ -21542,11 +21543,10 @@ begin
 end;
 
 function TSQLTable.FieldNames: TRawUTF8DynArray;
-var i: integer;
 begin
-  SetLength(result,FieldCount);
-  for i := 0 to FieldCount-1 do
-    SetString(result[i],PAnsiChar(fResults[i]),StrLen(fResults[i]));
+  if length(fFieldNames)<>fFieldCount then
+    InitFieldNames;
+  result := fFieldNames;
 end;
 
 function TSQLTable.FieldValue(const FieldName: RawUTF8; Row: integer): PUTF8Char;
@@ -21818,7 +21818,8 @@ end;
 var
   SQLTableRowVariantType: TCustomVariantType = nil;
 
-procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant);
+procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
+  options: TDocVariantOptions);
 var Values: TVariantDynArray;
     V: PPUtf8CharArray;
     f: integer;
@@ -21834,7 +21835,7 @@ begin
   for f := 0 to fFieldCount-1 do
     ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true,
       fFieldType[f].ContentTypeInfo);
-  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,JSON_OPTIONS_FAST);
+  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
