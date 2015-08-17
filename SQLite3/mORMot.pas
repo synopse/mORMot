@@ -46602,10 +46602,14 @@ begin
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
       case ValueType of
-      smvDynArray:
+      smvDynArray: begin
         DynArrays[IndexVar].Init(ArgTypeInfo,V^);
-      smvInterface:
+      end;
+      smvInterface: begin
         InterfaceWrite(Params,method^,method^.Args[arg],V^);
+        Value[arg] := V;
+        continue;
+      end;
       end;
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
@@ -46790,6 +46794,7 @@ procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
 begin
   W.Add(fClient.fClient.FakeCallbackRegister(
     fClient,aMethod,aParamInfo,aParamValue));
+  W.Add(',');
 end;
 
 constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContext;
