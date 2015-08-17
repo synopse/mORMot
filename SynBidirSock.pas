@@ -159,6 +159,7 @@ type
     fFramesInBytes: QWord;
     fFramesOutCount: integer;
     fFramesOutBytes: QWord;
+    fLastError: string;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -183,6 +184,8 @@ type
     /// the optional URI on which this protocol would be enabled
     // - leave to '' if any URI should match
     property URI: RawUTF8 read fURI;
+    /// the last error message, during frame processing
+    property LastError: string read fLastError;
     /// how many frames have been received by this instance
     property FramesInCount: integer read fFramesInCount;
     /// how many frames have been sent by this instance
@@ -420,8 +423,9 @@ type
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
+    // - set logBinaryFrameContent if you want the binary frame content to be logged
     // - used only if WebSocketLog global variable is set to a TSynLog class
-    LogDetails: set of (logHeartbeat,logTextFrameContent);
+    LogDetails: set of (logHeartbeat,logTextFrameContent,logBinaryFrameContent);
     /// will set the default values
     procedure SetDefaults;
     /// will set LogDetails to its highest level of verbosity
@@ -763,7 +767,7 @@ end;
 
 procedure TWebSocketProcessSettings.SetFullLog;
 begin
-  LogDetails := [logHeartbeat,logTextFrameContent];
+  LogDetails := [logHeartbeat,logTextFrameContent,logBinaryFrameContent];
 end;
 
 
@@ -902,7 +906,8 @@ var Ctxt: THttpServerRequest;
 begin
   if not (request.opcode in [focText,focBinary]) then
     exit; // ignore e.g. from TWebSocketServerResp.ProcessStart/ProcessStop
-  if FrameIs(request,'request') then begin
+  if FrameIs(request,'request') then
+  try
     Ctxt := Sender.ComputeContext(onRequest);
     try
       if not FrameToInput(request,noAnswer,Ctxt) then
@@ -918,6 +923,9 @@ begin
     finally
       Ctxt.Free;
     end;
+  except
+    on E: Exception do
+      fLastError := Format('%s [%s]',[E.ClassName,E.Message]);
   end else
     Sender.fIncoming.Push(request);
 end;
@@ -1142,23 +1150,24 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
   var frame: TWebSocketFrame);
 var item: RawUTF8;
     i: integer;
+    W: TFileBufferWriter;
 begin
   frame.opcode := focBinary;
-  with TFileBufferWriter.Create(TRawByteStringStream) do
+  W := TFileBufferWriter.Create(TRawByteStringStream);
   try
-    WriteBinary(Head);
-    Write1(1);
+    W.WriteBinary(Head);
+    W.Write1(1);
     for i := 0 to high(Values) do
     with Values[i] do begin
       VarRecToUTF8(Values[i],item);
-      Write(item);
+      W.Write(item);
     end;
-    Write(ContentType);
-    WriteBinary(Content);
-    Flush;
-    frame.payload := TRawByteStringStream(Stream).DataString;
+    W.Write(ContentType);
+    W.WriteBinary(Content);
+    W.Flush;
+    frame.payload := TRawByteStringStream(W.Stream).DataString;
   finally
-    Free;
+    W.Free;
   end;
 end;
 
@@ -1241,6 +1250,7 @@ function TWebSocketProtocolBinary.SendFrames(Owner: TWebSocketProcess;
   var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
 var jumboFrame: TWebSocketFrame;
     i: integer;
+    W: TFileBufferWriter;
 begin
   if (FramesCount=0) or (Owner=nil) then begin
     result := true;
@@ -1252,20 +1262,20 @@ begin
     exit;
   end;
   jumboFrame.opcode := focBinary;
-  with TFileBufferWriter.Create(TRawByteStringStream) do
+  W := TFileBufferWriter.Create(TRawByteStringStream);
   try
-    WriteBinary('frames'#1);
+    W.WriteBinary('frames'#1);
     dec(FramesCount);
-    WriteVarUInt32(FramesCount);
+    W.WriteVarUInt32(FramesCount);
     for i := 0 to FramesCount do
       if Frames[i].opcode=focBinary then
-        Write(Frames[i].payload) else
+        W.Write(Frames[i].payload) else
         raise ESynBidirSocket.CreateUTF8('%.SendFrames[%]: Unexpected opcode=%',
           [self,i,ord(Frames[i].opcode)]);
-    Flush;
-    jumboFrame.payload := TRawByteStringStream(Stream).DataString;
+    W.Flush;
+    jumboFrame.payload := TRawByteStringStream(W.Stream).DataString;
   finally
-    Free;
+    W.Free;
   end;
   FramesCount := 0;
   Frames := nil;
@@ -1291,7 +1301,7 @@ begin
         jumboInfo := '';
       frame.opcode := focBinary;
       frame.payload := FromVarString(P);
-      Sender.Log(frame,'GetSubFrame');
+      Sender.Log(frame,FormatUTF8('GetSubFrame(%/%)',[i,n]));
       inherited ProcessIncomingFrame(Sender,frame,jumboInfo);
     end;
   end else
@@ -1546,12 +1556,12 @@ begin
       GetData(data);
       Frame.payload := Frame.payload+data;
     end;
+    if (fProtocol<>nil) and (Frame.payload<>'') then
+      fProtocol.AfterGetFrame(Frame);
     {$ifdef UNICODE}
     if opcode=focText then
       SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
     {$endif}
-    if (fProtocol<>nil) and (Frame.payload<>'') then
-      fProtocol.AfterGetFrame(Frame);
     Log(frame,'GetFrame');
     SetLastPingTicks;
     result := true;
@@ -1787,8 +1797,24 @@ begin
   Safe.UnLock;
 end;
 
+procedure LogEscape(const s: RawUTF8; var result: RawUTF8);
+var i: integer;
+begin
+  with TTextWriter.CreateOwnedStream do
+  try
+    for i := 1 to length(s) do
+      if s[i]<' ' then
+        Add('#',AnsiChar(48+ord(s[i]))) else
+        Add(s[i]);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
   const aMethodName: RawUTF8; aEvent: TSynLogInfo);
+var content: RawUTF8;
 begin
   if WebSocketLog<>nil then
   with WebSocketLog.Family do
@@ -1797,10 +1823,13 @@ begin
      not (frame.opcode in [focPing,focPong]) then
     if (frame.opcode=focText) and
        (logTextFrameContent in fSettings.LogDetails) then
-    SynLog.Log(aEvent,'%.%(%) focText %',[Self.ClassType,aMethodName,
-      Protocol.FrameType(frame),frame.PayLoad]) else
-    SynLog.Log(aEvent,'%.%(%) % len=%',[Self.ClassType,aMethodName,
-      Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad)]);
+      SynLog.Log(aEvent,'%.% type=% focText %',[self.ClassType,aMethodName,
+        Protocol.FrameType(frame),frame.PayLoad]) else begin
+      if logBinaryFrameContent in fSettings.LogDetails then
+        LogEscape(frame.PayLoad,content);
+      SynLog.Log(aEvent,'%.% type=% % len=% %',[self.ClassType,aMethodName,
+        Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content]);
+    end;
 end;
 
 
