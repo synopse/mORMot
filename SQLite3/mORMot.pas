@@ -28089,19 +28089,20 @@ begin
   if fFill<>nil then begin
     if fFill.fJoinedFields then
       // free all TSQLRecord instances created by TSQLRecord.CreateJoined
-      for i := 0 to high(props.JoinedFields) do
+      for i := 0 to length(props.JoinedFields)-1 do
         props.JoinedFields[i].GetInstance(self).Free;
     fFill.Free; // call UnMap -> release fTable instance if necessary
   end;
   // free all TSQLRecordMany instances created by TSQLRecord.Create
-  if pointer(props.ManyFields)<>nil then
-    for i := 0 to high(props.ManyFields) do
+  if props.ManyFields<>nil then
+    for i := 0 to length(props.ManyFields)-1 do
       props.ManyFields[i].GetInstance(self).Free;
   // free any registered T*ObjArray
   if props.DynArrayFieldsHasObjArray then
-    for i := 0 to high(props.DynArrayFields) do
-      if props.DynArrayFields[i].ObjArray<>nil then
-        ObjArrayClear(props.DynArrayFields[i].fPropInfo^.GetFieldAddr(self)^);
+    for i := 0 to length(props.DynArrayFields)-1 do
+      with props.DynArrayFields[i] do
+      if ObjArray<>nil then
+        ObjArrayClear(fPropInfo^.GetFieldAddr(self)^);
   inherited;
 end;
 
@@ -46602,18 +46603,20 @@ begin
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
       case ValueType of
-      smvDynArray: begin
+      smvDynArray:
         DynArrays[IndexVar].Init(ArgTypeInfo,V^);
-      end;
-      smvInterface: begin
-        InterfaceWrite(Params,method^,method^.Args[arg],V^);
-        Value[arg] := V;
-        continue;
-      end;
       end;
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
-        AddJSON(Params,V);
+        case ValueType of
+        smvInterface:
+          InterfaceWrite(Params,method^,method^.Args[arg],V^);
+        smvDynArray: begin
+          Params.AddDynArrayJSON(DynArrays[IndexVar]);
+          Params.Add(',');
+        end;
+        else AddJSON(Params,V);
+        end;
     end;
     Params.CancelLastComma;
     Params.SetText(ParamsJSON);
@@ -49617,9 +49620,16 @@ var i: integer;
 begin
   try
     for i := 0 to High(fLogRestBatch) do begin
-      if fLogRestBatch[i].Count>0 then
-        fLogRestBatch[i].Rest.BatchSend(fLogRestBatch[i]);
-      fLogRestBatch[i].Free;
+      with fLogRestBatch[i] do
+      if Count>0 then begin
+        Safe.Lock;
+        try
+          Rest.BatchSend(fLogRestBatch[i]);
+        finally
+          Safe.Unlock;
+        end;
+      end;
+      FreeAndNil(fLogRestBatch[i]);
     end;
     if InstanceCreation<>sicPerThread then
       EnterCriticalSection(fInstanceLock);
@@ -50213,7 +50223,7 @@ function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
       for j := 0 to High(fLogRestBatch) do
         if fLogRestBatch[j].Rest=LogRest then begin
           LogRestBatch := fLogRestBatch[j];
-          exit;
+          exit; // already assigned to the very same TSQLRest instance
         end;
       LogRestBatch := TSQLRestBatchLocked.Create(LogRest,
         LogRest.Model.Tables[ndx],10000);
@@ -50317,7 +50327,7 @@ begin
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvObject:     WR.WriteObject(PPointer(V)^,[woStoreStoredFalse]);
-  smvInterface:  WR.AddShort('null'); // already written by InterfaceWrite()
+  smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   {$ifndef NOVARIANTS}
   smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
