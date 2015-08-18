@@ -45,6 +45,7 @@ type
     Client: TSQLHttpClientWebsockets;
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
+    Tables: TRawUTF8DynArray;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
     constructor Create(AOwner: TComponent); override;
@@ -91,8 +92,7 @@ begin
 end;
 
 procedure TDBFrame.Open;
-var tables: TRawUTF8DynArray;
-    i: integer;
+var i: integer;
 begin
   fSQLLogFile := ChangeFileExt(ExeVersion.ProgramFileName,'.history');
   drwgrdResult.Align := alClient;
@@ -100,9 +100,9 @@ begin
   try
     BeginUpdate;
     Clear;
-    tables := Admin.DatabaseTables(DatabaseName);
-    for i := 0 to high(tables) do
-      Add(UTF8ToString(tables[i]));
+    Tables := Admin.DatabaseTables(DatabaseName);
+    for i := 0 to high(Tables) do
+      Add(UTF8ToString(Tables[i]));
   finally
     EndUpdate;
   end;

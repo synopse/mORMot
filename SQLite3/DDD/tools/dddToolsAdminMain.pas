@@ -22,20 +22,20 @@ type
     fLogFrame: TLogFrame;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
-    procedure OnPageChange(Sender: TObject);
+    procedure OnPageChange(Sender: TObject); virtual;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
     destructor Destroy; override;
-    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel=nil): boolean;
-    procedure Show;
-    function GetState: Variant;
-    function AddPage(const aCaption: RawUTF8): TSynPage;
-    function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame;
-    procedure EndLog;
+    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel=nil): boolean; virtual;
+    procedure Show; virtual;
+    function GetState: Variant; virtual;
+    function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
+    function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame; virtual;
+    procedure EndLog; virtual;
     procedure FormKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
+      Shift: TShiftState); virtual;
     property Client: TSQLHttpClientWebsockets read fClient;
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
@@ -137,11 +137,7 @@ begin
       f := AddDBFrame(fDatabases[i],fDatabases[i],DBFrameClass);
       f.Open;
       if i=0 then
-        fPage.ActivePageIndex := 1 else
-        if IdemPropNameU(fDatabases[i],fDatabases[i-1]+'Log') then begin
-          SetLength(f.AssociatedTables,1);
-          f.AssociatedTables[0] := TSQLRecordServiceLog;
-        end;
+        fPage.ActivePageIndex := 1;
     end;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
