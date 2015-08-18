@@ -434,6 +434,11 @@ type
   TSQLHttpClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
 
+var
+  /// a global hook variable, able to enhance WebSockets logging
+  // - checked by TSQLHttpClientWebsockets.WebSocketsConnect() 
+  HttpClientFullWebSocketsLog: Boolean;
+
 
 implementation
 
@@ -836,6 +841,8 @@ function TSQLHttpClientWebsockets.WebSocketsConnect(
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
   aWebSocketsCompression: boolean): RawUTF8;
 begin
+  if HttpClientFullWebSocketsLog then
+    WebSockets.Settings.SetFullLog;
   result := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
   if result='' then
     if not ServerTimeStampSynchronize then
