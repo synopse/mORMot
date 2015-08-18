@@ -36485,59 +36485,58 @@ var isAjax: boolean;
   end;
 
 begin
-  if (SQL<>'') and (SQL[1]='#') then begin
-    P := @SQL[2];
-    case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
-      'GET','POST','WRAPPER','HELP']) of
-    0: result := ServicesPublishedInterfaces;
-    1: begin
-      name := copy(SQL,8,length(SQL)-8);
-      obj := ServiceMethodStat[name];
-      if obj=nil then begin
-        Split(name,'.',interf,method);
-        obj := Services[interf];
+  isAjax := not NoAjaxJson;
+  if isAjax then
+    NoAjaxJson := true; // reduce memory use from a Delphi (ToolsAdmin) tool
+  try
+    if (SQL<>'') and (SQL[1]='#') then begin
+      P := @SQL[2];
+      case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
+        'GET','POST','WRAPPER','HELP']) of
+      0: result := ServicesPublishedInterfaces;
+      1: begin
+        name := copy(SQL,8,length(SQL)-8);
+        obj := ServiceMethodStat[name];
+        if obj=nil then begin
+          Split(name,'.',interf,method);
+          obj := Services[interf];
+          if obj<>nil then
+            obj := (obj as TServiceFactoryServer).Stat[method] else
+            obj := nil;
+        end;
         if obj<>nil then
-          obj := (obj as TServiceFactoryServer).Stat[method] else
-          obj := nil;
+          result := ObjectToJSON(obj);
       end;
-      if obj<>nil then
-        result := ObjectToJSON(obj);
-    end;
-    2: result := FullStatsAsJson;
-    3: result := Services.AsJson;
-    4: result := SessionsAsJson;
-    5,6: begin
-      PrepareCall;
-      call.Method := GetNextItem(P,' '); // GET or POST
-      if P<>nil then
-        call.Url := call.Url+'/'+RawUTF8(P);
-      URI(call);
-      result := call.OutBody;
-    end;
-    7: begin
-      PrepareCall;
-      call.Method := 'GET';
-      call.Url := call.Url+'/wrapper/context';
-      URI(call);
-      result := call.OutBody;
-    end;
-    8: begin
-      inherited;
-      result[length(result)] := '|';
-      result := result+'#interfaces|#wrapper|#stats|#stats(method)|'+
-        '#stats(interface.method)|#services|#sessions|#get url|#post url"';
-    end;
-    else inherited AdministrationExecute(DatabaseName,SQL,result);
-    end;
-  end else begin
-    isAjax := not NoAJAXJSON;
-    if isAjax then
-      NoAJAXJSON := true; // force smaller content
-    try
+      2: result := FullStatsAsJson;
+      3: result := Services.AsJson;
+      4: result := SessionsAsJson;
+      5,6: begin
+        PrepareCall;
+        call.Method := GetNextItem(P,' '); // GET or POST
+        if P<>nil then
+          call.Url := call.Url+'/'+RawUTF8(P);
+        URI(call);
+        result := call.OutBody;
+      end;
+      7: begin
+        PrepareCall;
+        call.Method := 'GET';
+        call.Url := call.Url+'/wrapper/context';
+        URI(call);
+        result := call.OutBody;
+      end;
+      8: begin
+        inherited;
+        result[length(result)] := '|';
+        result := result+'#interfaces|#wrapper|#stats|#stats(method)|'+
+          '#stats(interface.method)|#services|#sessions|#get url|#post url"';
+      end;
+      else inherited AdministrationExecute(DatabaseName,SQL,result);
+      end;
+    end else
       inherited; // will execute the SQL
-    finally
-      NoAjaxJson := not isAjax;
-    end;
+  finally
+    NoAjaxJson := not isAjax;
   end;
 end;
 
