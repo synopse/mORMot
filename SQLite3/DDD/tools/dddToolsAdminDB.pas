@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, ExtCtrls, Menus,
-  {$ifndef UNICODE}SynMemoEx,{$endif}
+  SynMemoEx,
   SynCommons, mORMot, mORMotDDD, mORMotHttpClient, mORMotUI, SynMustache;
 
 type
@@ -41,7 +41,7 @@ type
     procedure LogSearch(Sender: TObject);
     procedure GridToVariant(var result: variant); virtual;
   public
-    mmoResult: {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif};
+    mmoResult: TMemoEx;
     Client: TSQLHttpClientWebsockets;
     Admin: IAdministratedDaemon;
     DatabaseName: RawUTF8;
@@ -75,7 +75,7 @@ const
 constructor TDBFrame.Create(AOwner: TComponent);
 begin
   inherited;
-  mmoResult := {$ifdef UNICODE}TMemo{$else}TMemoEx{$endif}.Create(self);
+  mmoResult := TMemoEx.Create(self);
   mmoResult.Name := 'mmoResult';
   mmoResult.Parent := pnlRight;
   mmoResult.Align := alClient;
@@ -84,11 +84,9 @@ begin
   mmoResult.ReadOnly := True;
   mmoResult.ScrollBars := ssVertical;
   mmoResult.Text := '';
-  {$ifndef UNICODE}
   mmoResult.RightMargin := 130;
   mmoResult.RightMarginVisible := true;
   mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-  {$endif}
 end;
 
 procedure TDBFrame.Open;
@@ -126,13 +124,11 @@ begin
   mmoResult.Align := alClient;
   mmoResult.WordWrap := false;
   mmoResult.ScrollBars := ssBoth;
-  {$ifndef UNICODE}
   mmoResult.RightMarginVisible := false;
   if (JSON='') or (JSON[1] in ['A'..'Z','#']) then
     mmoResult.OnGetLineAttr := nil else
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
   mmoResult.TopRow := 0;
-  {$endif}
   mmoResult.Text := UTF8ToString(StringReplaceTabs(JSON,'    '));
   fJson := '';
 end;
@@ -290,9 +286,7 @@ begin
   if (R>0) and (R<>fmmoResultRow) and (fGrid<>nil) then begin
     fmmoResultRow := R;
     GridToVariant(row);
-    {$ifndef UNICODE}
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-    {$endif}
     JSONBufferReformat(pointer(VariantToUTF8(row)),json,jsonUnquotedPropNameCompact);
     mmoResult.Text := UTF8ToString(json);
   end;

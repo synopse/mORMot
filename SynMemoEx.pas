@@ -57,8 +57,10 @@ unit SynMemoEx;
   * find (text) command
   * a lot of bug fixes
 
-}
+  Version 1.18
+  - Unicode compatibility
 
+}
 
 interface
 
@@ -82,35 +84,23 @@ interface
 {$UNDEF MEMOEX_COMPLETION}
 {$ENDIF MEMOEX_EDITOR}
 
-{$define RA_D4H} // Delphi 4 and UP
-
 { $D-,L-} // avoid jumping in the source for any EComplete exceptions e.g.
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms,
-  ExtCtrls, StdCtrls, ClipBrd, Menus;
-
-
+  Windows, Messages, SysUtils, Classes, Types, Graphics, Controls, Forms,
+  ExtCtrls, StdCtrls, ClipBrd, Menus {$ifdef UNICODE}, UITypes{$endif};
 
 const
-
-  RAEditorCompletionChars = #8+
-    '_0123456789QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm'+
-    '…÷” ≈Ќ√Ўў«’Џ‘џ¬јѕ–ќЋƒ∆Ёя„—ћ»“№Ѕё®йцукенгшщзхъфывапролджэ€чсмитьбюЄ';
-  Separators : set of char = [#00,' ','-',#13, #10,'.',',','/','\',
-    ':','+','%','*','(',')',';','=','{','}','[',']', '{', '}', '|', '!', '@'];
-
+  RAEditorCompletionChars: set of AnsiChar = [#8, '_', '0'..'9', 'A'..'Z', 'a'..'z'];
+  Separators: set of AnsiChar = [#00, ' ', '-', #13, #10, '.', ',', '/', '\', ':', '+', '%', '*', '(', ')', ';', '=', '{', '}', '[', ']', '{', '}', '|', '!', '@'];
   GutterRightMargin = 2;
-
   WM_EDITCOMMAND = WM_USER + $101;
-
   RA_EX_STYLE_DEFAULT = 0;
-
-  RA_CASE_CONVERT_UPPER   = 0;
-  RA_CASE_CONVERT_LOWER   = 1;
-  RA_CASE_CONVERT_INVERT  = 2;
+  RA_CASE_CONVERT_UPPER = 0;
+  RA_CASE_CONVERT_LOWER = 1;
+  RA_CASE_CONVERT_INVERT = 2;
 
 type
   TRAControlScrollBar95 = class
@@ -121,8 +111,8 @@ type
     FMax: Integer;
     FSmallChange: TScrollBarInc;
     FLargeChange: TScrollBarInc;
-    FPage : integer;
-    FHandle : hWnd;
+    FPage: integer;
+    FHandle: hWnd;
     FOnScroll: TScrollEvent;
    // FVisible : boolean;
     procedure SetParam(index, Value: Integer);
@@ -132,17 +122,16 @@ type
     procedure Scroll(ScrollCode: TScrollCode; var ScrollPos: Integer); dynamic;
   public
     constructor Create;
-    procedure SetParams(AMin, AMax, APosition, APage : integer);
+    procedure SetParams(AMin, AMax, APosition, APage: integer);
     procedure DoScroll(var Message: TWMScroll);
-
     property Kind: TScrollBarKind read FKind write FKind default sbHorizontal;
     property SmallChange: TScrollBarInc read FSmallChange write FSmallChange default 1;
     property LargeChange: TScrollBarInc read FLargeChange write FLargeChange default 1;
-    property Min  : Integer index 0 read FMin write SetParam default 0;
-    property Max  : Integer index 1 read FMax write SetParam default 100;
-    property Position : Integer index 2 read FPosition write SetParam default 0;
-    property Page : integer index 3 read FPage write SetParam;
-    property Handle : hWnd read FHandle write FHandle;
+    property Min: Integer index 0 read FMin write SetParam default 0;
+    property Max: Integer index 1 read FMax write SetParam default 100;
+    property Position: Integer index 2 read FPosition write SetParam default 0;
+    property Page: integer index 3 read FPage write SetParam;
+    property Handle: hWnd read FHandle write FHandle;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
    // property Visible : boolean read FVisible write SetVisible;
   end;
@@ -153,13 +142,16 @@ type
   end;
 
   PLineAttr = ^TLineAttr;
+
   TLineAttr = packed record
     FC, BC: TColor;
     case integer of
-    0: (Style: TFontStyles;
+      0:
+        (Style: TFontStyles;
         ex_style: byte;
         underlined: boolean);
-    1: (LastInteger: integer);
+      1:
+        (LastInteger: integer);
   end;
 
   TCustomMemoEx = class;
@@ -167,44 +159,59 @@ type
   TWordUnderCursor = record // for TOnWordClick
     Text: string;
     Style: integer;
-    CaretX, CaretY,
-    ParaIndex, ParaOffset: integer;
+    CaretX, CaretY, ParaIndex, ParaOffset: integer;
     TextStart: integer;
     Shift: TShiftState;
   end;
 
   TLineAttrs = array of TLineAttr;
-  TSelAttrs  = array of boolean;
-  TOnGetLineAttr = procedure (Sender: TObject; const Line: string; index: integer;
-    const SelAttrs: TSelAttrs; var Attrs: TLineAttrs) of object;
+
+  TSelAttrs = array of boolean;
+
+  TOnGetLineAttr = procedure(Sender: TObject; const Line: string; index: integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs) of object;
+
   TOnChangeStatus = TNotifyEvent;
-  TOnChangeClipboardState = procedure (Sender: TObject; const CanPaste: boolean) of object;
-  TOnWordClick = procedure (Sender: TObject; const Clicked: TWordUnderCursor) of object;
-  TOnMouseOver = procedure (Sender: TObject; WordStyle: word; var _Cursor: TCursor) of object;
-  TOnBreakLine = procedure (Sender: TObject; const Original: string; var _New: string) of object;
-  TOnConcatLine = procedure (Sender: TObject; const Original: string; var _New: string) of object;
-  TOnTextInsert = procedure (Sender: TObject; var Text: string) of object;
-  TOnCaseConversion = function (Sender: TObject; Conversion: byte; const Text: string): string of object;
-  TOnInsertBlock = function (Sender: TObject; var Text: string): boolean of object;
-  TOnSaveBlock = procedure (Sender: TObject; const Text: string) of object;
-  TOnInsertMacro = function (Sender: TObject; MacroID: integer): string of object;
-  TOnBlockOperation = function (Sender: TObject; MacroID: integer; const Text: string): string of object;
-  TOnSetCaretPos = procedure (Sender: TObject; CaretX, CaretY: integer) of object;
-  TOnClipboardPaste = function (Sender: TObject): boolean of object;
+
+  TOnChangeClipboardState = procedure(Sender: TObject; const CanPaste: boolean) of object;
+
+  TOnWordClick = procedure(Sender: TObject; const Clicked: TWordUnderCursor) of object;
+
+  TOnMouseOver = procedure(Sender: TObject; WordStyle: word; var _Cursor: TCursor) of object;
+
+  TOnBreakLine = procedure(Sender: TObject; const Original: string; var _New: string) of object;
+
+  TOnConcatLine = procedure(Sender: TObject; const Original: string; var _New: string) of object;
+
+  TOnTextInsert = procedure(Sender: TObject; var Text: string) of object;
+
+  TOnCaseConversion = function(Sender: TObject; Conversion: byte; const Text: string): string of object;
+
+  TOnInsertBlock = function(Sender: TObject; var Text: string): boolean of object;
+
+  TOnSaveBlock = procedure(Sender: TObject; const Text: string) of object;
+
+  TOnInsertMacro = function(Sender: TObject; MacroID: integer): string of object;
+
+  TOnBlockOperation = function(Sender: TObject; MacroID: integer; const Text: string): string of object;
+
+  TOnSetCaretPos = procedure(Sender: TObject; CaretX, CaretY: integer) of object;
+
+  TOnClipboardPaste = function(Sender: TObject): boolean of object;
 
   {$IFDEF MEMOEX_COMPLETION}
-  TOnPreprocessCompletion = function (Sender: TObject; const ID, Text: string): string of object;
+  TOnPreprocessCompletion = function(Sender: TObject; const ID, Text: string): string of object;
   {$ENDIF}
 
   PAutoChangeWord = ^TAutoChangeWord;
+
   TAutoChangeWord = record
     OldWord, NewWord: string;
   end;
 
   PParagraph = ^TParagraph;
+
   TParagraph = record
-    FPreCount,
-    FCount: integer; // length(FString) = FStrings[0..FCount-1]
+    FPreCount, FCount: integer; // length(FString) = FStrings[0..FCount-1]
     FStrings: array of string;
     FObject: TObject;
   end;
@@ -215,17 +222,14 @@ type
     FList: array of TParagraph;
     FParaLinesCount, FCount: integer;
     FOnChanging: TNotifyEvent;
-
     FOnAfterLoad: TNotifyEvent;
     FOnBeforeSave: TNotifyEvent;
-
     procedure Recount(Index: integer);
     function _GetString(ParaIndex: integer): string;
     procedure _PutString(ParaIndex: integer; const S: string);
     procedure ReformatParagraph(ParaIndex: integer);
     procedure Reformat;
     procedure CheckLength(const st: string);
-
     procedure Grow;
     procedure InsertItem(Index: integer; const S: string);
   protected
@@ -244,28 +248,21 @@ type
     procedure SetInternal(Index: integer; const Value: string);
     procedure SetInternalParaStr(Index: integer; const Value: string);
     function GetCount: Integer; override; // make compiler happy
-
     function AddParaStr(ParaIndex: integer; const S: string): integer;
-
     procedure ReLine; // complete line with spaces until caret X pos
-
     property Internal[Index: integer]: string write SetInternal;
     property InternalParaStrings[Index: integer]: string write SetInternalParaStr;
   public
     constructor Create;
     destructor Destroy; override;
     procedure Clear; override;
-
     procedure BeginUpdate;
     procedure EndUpdate;
-
     function Add(const S: string): integer; override;
     procedure Delete(Index: integer); override;
     procedure Insert(Index: integer; const S: string); override;
-
     procedure LoadFromFile(const FileName: string); override;
     procedure SaveToFile(const FileName: string); override;
-
     procedure SetLockText(const Text: string);
     function GetTextLength: integer; // fast get length(Text) value
     function HasText: boolean; // true if Text<>''
@@ -274,7 +271,6 @@ type
     procedure Caret2Paragraph(X, Y: integer; out ParaIndex, IndexOffs: integer);
     procedure Paragraph2Caret(ParaIndex, IndexOffs: integer; out X, Y: integer);
     function GetParaOffs(ParaIndex: integer): integer; // in global Text[] string
-
     property ParaLineCount: integer read FParaLinesCount;
     property ParaStrings[Index: integer {=ParaY}]: string read GetParaString write PutParaString;
     property Paragraphs[Index: integer]: PParagraph read GetParagraph; // = FList[index]
@@ -288,7 +284,9 @@ type
     X, Y: integer;
     Valid: boolean;
   end;
+
   TBookMarkNum = 0..9;
+
   TBookMarks = array[TBookMarkNum] of TBookMark;
 
   TEditorClient = class
@@ -325,11 +323,8 @@ type
     Key1, Key2: Word;
     Shift1, Shift2: TShiftState;
     Command: TEditCommand;
-    constructor Create(const ACommand: TEditCommand; const AKey1: word;
-      const AShift1: TShiftState);
-    constructor Create2(const ACommand: TEditCommand; const AKey1: word;
-      const AShift1: TShiftState; const AKey2: word;
-      const AShift2: TShiftState);
+    constructor Create(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState);
+    constructor Create2(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
   end;
 
   TKeyboard = class
@@ -338,15 +333,11 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Add(const ACommand: TEditCommand; const AKey1: word;
-      const AShift1: TShiftState);
-    procedure Add2(const ACommand: TEditCommand; const AKey1: word;
-      const AShift1: TShiftState; const AKey2: word;
-      const AShift2: TShiftState);
+    procedure Add(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState);
+    procedure Add2(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
     procedure Clear;
     function Command(const AKey: word; const AShift: TShiftState): TEditCommand;
-    function Command2(const AKey1: word; const AShift1: TShiftState;
-      const AKey2: word; const AShift2: TShiftState): TEditCommand;
+    function Command2(const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState): TEditCommand;
     {$IFDEF MEMOEX_DEFLAYOUT}
     procedure SetDefLayout;
     {$ENDIF MEMOEX_DEFLAYOUT}
@@ -385,7 +376,9 @@ type
   {$ENDIF MEMOEX_UNDO}
 
   {$IFDEF MEMOEX_COMPLETION}
+
   TCompletion = class;
+
   TOnCompletion = procedure(Sender: TObject; var Cancel: boolean) of object;
   {$ENDIF MEMOEX_COMPLETION}
 
@@ -451,7 +444,6 @@ type
     FEditBuffer: string;
     FPEditBuffer: PChar;
     FEditBufferSize: integer;
-
     FCompound: integer;
     { FMacro - buffer of TEditCommand, each command represents by two chars }
     FMacro: TMacro;
@@ -510,7 +502,6 @@ type
     FOnCompletionMeasureItem: TMeasureItemEvent;
     FOnPreprocessCompletion: TOnPreprocessCompletion;
     {$ENDIF MEMOEX_COMPLETION}
-
     FDrawBitmap: TBitmap;
     FFont: TFont;
     FWantTabs: boolean;
@@ -520,10 +511,7 @@ type
     NextClipViewer: THandle;
     scbVertWidth, scbHorzHeight: integer;
     Max_X: integer;
-
-    mouse_down,
-    mouse_dragged,
-    double_clicked: boolean;
+    mouse_down, mouse_dragged, double_clicked: boolean;
     FWordUnderCursor: TWordUnderCursor;
     FClipPasteRtfBackSlashConvert: boolean;
 {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
@@ -541,15 +529,11 @@ type
     procedure DoCompletionTemplate(var Cancel: boolean);
     function DoPreprocessCompletion(const ID, OldText: string): string;
     {$ENDIF MEMOEX_COMPLETION}
-
     procedure ScrollTimer(Sender: TObject);
-
     procedure ReLine;
     function GetDefTabStop(const X: integer; const Next: Boolean): integer;
-    function GetTabStop(const X, Y: integer; const What: TTabStop;
-      const Next: Boolean): integer;
+    function GetTabStop(const X, Y: integer; const What: TTabStop; const Next: Boolean): integer;
     function GetBackStop(const X, Y: integer): integer;
-
     procedure TextAllChangedInternal(const Unselect: Boolean);
 
     { property }
@@ -571,20 +555,15 @@ type
     procedure SetRightMarginVisible(Value: boolean);
     procedure SetRightMargin(Value: integer);
     procedure SetRightMarginColor(Value: TColor);
-
-    function ExtractStringWithStyle(XX, YY: integer; const From: string; Style: word;
-      const LineAttrs: TLineAttrs; out start: integer): string;
-    procedure GetWordUnderCursor(X, Y: integer; aShift: TShiftState=[]);
-
+    function ExtractStringWithStyle(XX, YY: integer; const From: string; Style: word; const LineAttrs: TLineAttrs; out start: integer): string;
+    procedure GetWordUnderCursor(X, Y: integer; aShift: TShiftState = []);
     function GetAfterLoad: TNotifyEvent;
     procedure SetAfterLoad(Value: TNotifyEvent);
     function GetBeforeSave: TNotifyEvent;
     procedure SetBeforeSave(Value: TNotifyEvent);
-
     procedure SetWordWrap(Value: boolean);
     procedure SetStripInvisible(Value: boolean);
     procedure SetSelectedText(Value: boolean);
-
     procedure FontChanged(Sender: TObject);
     procedure SetTopRow(const Value: integer);
     function GetTextStr: string;
@@ -592,16 +571,13 @@ type
   protected
     SelAttrs_Size: integer;
     SelAttrs: TSelAttrs;
-
     property FSelectedText: boolean read FSelected write SetSelectedText;
-
-    procedure Resize; {$IFDEF RA_D4H}override; {$ELSE}dynamic; {$ENDIF RA_D4H}
+    procedure Resize; override;
     procedure CreateWnd; override;
     procedure CreateParams(var Params: TCreateParams); override;
     procedure Loaded; override;
     procedure Paint; override;
-    procedure ScrollBarScroll(Sender: TObject; ScrollCode: TScrollCode; var
-      ScrollPos: integer);
+    procedure ScrollBarScroll(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: integer);
     procedure Scroll(const Vert: boolean; const ScrollPos: integer);
     procedure PaintLine(const Line: integer; ColBeg, ColEnd: integer);
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -610,7 +586,6 @@ type
     procedure KeyPress(var Key: Char); override;
     procedure InsertChar(const Key: Char);
     {$ENDIF MEMOEX_EDITOR}
-
     procedure SetSel(const ASelX, ASelY: integer);
     function GetAttrDelta(StartFrom, EndTo: integer; const LineAttrs: TLineAttrs): integer;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
@@ -632,14 +607,12 @@ type
     {$IFDEF MEMOEX_UNDO}
     procedure CantUndo;
     {$ENDIF MEMOEX_UNDO}
-
     procedure SetCaretInternal(X, Y: integer);
     procedure ValidateEditBuffer;
     procedure SetXY(X, Y: integer);
 
     {$IFDEF MEMOEX_EDITOR}
-    procedure ChangeBookMark(const BookMark: TBookMarkNum; const Valid:
-      boolean);
+    procedure ChangeBookMark(const BookMark: TBookMarkNum; const Valid: boolean);
     procedure InsertText(const Text: string);
     {$ENDIF MEMOEX_EDITOR}
     procedure BeginRecord;
@@ -654,8 +627,7 @@ type
     procedure StatusChanged; dynamic;
     procedure SelectionChanged; dynamic;
     procedure ClipboardChanged; dynamic;
-    procedure GetLineAttr(Line, LineIdx, LineOffs, LineLen, ColBeg, ColEnd: integer;
-       const ALine: string; var FAttrs: TLineAttrs); virtual;
+    procedure GetLineAttr(Line, LineIdx, LineOffs, LineLen, ColBeg, ColEnd: integer; const ALine: string; var FAttrs: TLineAttrs); virtual;
     procedure GutterPaint(Canvas: TCanvas; const Rect: TRect); dynamic;
     procedure BookmarkChanged(BookMark: integer); dynamic;
     {$IFDEF MEMOEX_COMPLETION}
@@ -667,9 +639,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Invalidate; override;
-
     procedure WndProc(var Message: TMessage); override;
-
     procedure SetLeftTop(ALeftCol, ATopRow: integer);
     procedure ClipBoardCopy;
     procedure ClipBoardPaste;
@@ -688,7 +658,6 @@ type
     procedure BeginUpdate;
     procedure EndUpdate;
     procedure MakeRowVisible(ARow: integer);
-
     procedure Command(ACommand: TEditCommand); virtual;
     procedure PostCommand(ACommand: TEditCommand);
     {$IFDEF MEMOEX_EDITOR}
@@ -699,18 +668,15 @@ type
     {$ENDIF}
     procedure BeginCompound;
     procedure EndCompound;
-
     function GetText(Position: longint; Buffer: PChar; Count: longint): longint;
-
     function IsUndoEmpty: boolean;
-
     procedure MouseWheelScroll(Delta: integer);
 
 {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
     property ClipProtect: boolean read FClipProtect write FClipProtect; // AB
 {$endif}
-    property ClipPasteRtfBackSlashConvert: boolean // AB: rtf
-      read FClipPasteRtfBackSlashConvert write FClipPasteRtfBackSlashConvert;
+    property ClipPasteRtfBackSlashConvert:boolean // AB: rtf
+ read FClipPasteRtfBackSlashConvert write FClipPasteRtfBackSlashConvert;
     property LeftCol: integer read FLeftCol;
     property TopRow: integer read FTopRow write SetTopRow;
     property VisibleColCount: integer read FVisibleColCount;
@@ -742,17 +708,15 @@ type
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
     property Cursor default crIBeam;
     property Color default clWindow;
-
     property Font: TFont read FFont write SetFont;
     property Text: string read GetTextStr write SetTextStr;
-
     property GutterWidth: integer read FGutterWidth write SetGutterWidth;
     property GutterColor: TColor read FGutterColor write SetGutterColor default clBtnFace;
     property RightMarginVisible: boolean read FRightMarginVisible write SetRightMarginVisible default true;
     property RightMargin: integer read FRightMargin write SetRightMargin default 80;
     property RightMarginColor: TColor read FRightMarginColor write SetRightMarginColor default clBtnFace;
     property InsertMode: boolean index 0 read FInsertMode write SetMode default true;
-    property ReadOnly: boolean index 1 read FReadOnly write SetMode default false;
+    property readonly: boolean index 1 read FReadOnly write SetMode default false;
     property DoubleClickLine: boolean read FDoubleClickLine write FDoubleClickLine default false;
     {$IFDEF MEMOEX_COMPLETION}
     property Completion: TCompletion read FCompletion write FCompletion;
@@ -766,14 +730,11 @@ type
     property CursorBeyondEOL: Boolean read FCursorBeyondEOL write FCursorBeyondEOL default true;
     property SelForeColor: TColor read FclSelectFC write FclSelectFC;
     property SelBackColor: TColor read FclSelectBC write FclSelectBC;
-
     property StripInvisible: boolean read FStripInvisible write SetStripInvisible default false;
     property WantTabs: boolean read FWantTabs write FWantTabs default true;
     property WordWrap: boolean read FWordWrap write SetWordWrap default true;
-
     property OnAfterLoad: TNotifyEvent read GetAfterLoad write SetAfterLoad;
     property OnBeforeSave: TNotifyEvent read GetBeforeSave write SetBeforeSave;
-
     property OnGetLineAttr: TOnGetLineAttr read FOnGetLineAttr write FOnGetLineAttr;
     property OnChangeStatus: TOnChangeStatus read FOnChangeStatus write FOnChangeStatus;
     property OnChangeClipboardState: TOnChangeClipboardState read FOnChangeClipboardState write FOnChangeClipboardState;
@@ -813,8 +774,7 @@ type
 
   TMemoEx = class(TCustomMemoEx)
   public
-    class procedure JSONLineAttr(Sender: TObject; const Line: String;
-      index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
+    class procedure JSONLineAttr(Sender: TObject; const Line: string; index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
   published
     property TabOrder;
     property BorderStyle;
@@ -826,7 +786,7 @@ type
     property RightMargin;
     property RightMarginColor;
     property InsertMode;
-    property ReadOnly;
+    property readonly;
     property DoubleClickLine;
     {$IFDEF MEMOEX_COMPLETION}
     property Completion;
@@ -842,10 +802,8 @@ type
     property SelBackColor;
     property Text;
     property StripInvisible;
-
     property OnAfterLoad;
     property OnBeforeSave;
-
     property OnEnter;
     property OnExit;
     property OnGetLineAttr;
@@ -886,7 +844,7 @@ type
     {$ENDIF MEMOEX_COMPLETION}
 
     { TCustomControl }
-    property Align;
+    property align;
     property Enabled;
     property Color;
     property Ctl3D;
@@ -898,7 +856,6 @@ type
     property ShowHint;
     property TabStop;
     property Visible;
-    {$IFDEF RA_D4H}
     property Anchors;
     property AutoSize;
     property BiDiMode;
@@ -907,10 +864,8 @@ type
     property DockSite;
     property DragKind;
     property ParentBiDiMode;
-
     property WantTabs default true;
     property WordWrap default true;
-
     property OnCanResize;
     property OnConstrainedResize;
     property OnDockDrop;
@@ -919,7 +874,6 @@ type
     property OnGetSiteInfo;
     property OnStartDock;
     property OnUnDock;
-    {$ENDIF RA_D4H}
   end;
 
   {$IFDEF MEMOEX_COMPLETION}
@@ -952,10 +906,8 @@ type
     procedure OnTimer(Sender: TObject);
     procedure FindSelItem(var Eq: boolean);
     procedure ReplaceWord(const ANewString: string);
-
     function Cmp1(const S1, S2: string): integer;
     function Cmp2(const S1, S2: string): boolean;
-
     procedure AutoChangeChanged(Sender: TObject);
     procedure ClearAutoChangeList;
     procedure UpdateAutoChange;
@@ -978,10 +930,8 @@ type
     property Mode: TCompletionList read FMode write FMode;
     property Items: TStringList read FItems;
   published
-    property DropDownCount: integer read FDropDownCount write FDropDownCount
-      default 6;
-    property DropDownWidth: integer read FDropDownWidth write FDropDownWidth
-      default 300;
+    property DropDownCount: integer read FDropDownCount write FDropDownCount default 6;
+    property DropDownWidth: integer read FDropDownWidth write FDropDownWidth default 300;
     property Enabled: boolean read FEnabled write FEnabled default false;
     property Separator: string read FSeparator write FSeparator;
     property Identifers: TStrings index 0 read FIdentifers write SetStrings;
@@ -1020,14 +970,12 @@ const
   ecSelPrevWord = ecPrevWord + 2;
   ecSelNextWord = ecPrevWord + 3;
   ecSelWord = ecPrevWord + 4;
-
   ecWindowTop = ecSelWord + 1;
   ecWindowBottom = ecWindowTop + 1;
   ecPrevPage = ecWindowTop + 2;
   ecNextPage = ecWindowTop + 3;
   ecSelPrevPage = ecWindowTop + 4;
   ecSelNextPage = ecWindowTop + 5;
-
   ecBeginLine = ecSelNextPage + 1;
   ecEndLine = ecBeginLine + 1;
   ecBeginDoc = ecBeginLine + 2;
@@ -1037,10 +985,8 @@ const
   ecSelBeginDoc = ecBeginLine + 6;
   ecSelEndDoc = ecBeginLine + 7;
   ecSelAll = ecBeginLine + 8;
-
   ecScrollLineUp = ecSelAll + 1;
   ecScrollLineDown = ecScrollLineUp + 1;
-
   ecInsertPara = ecCommandFirst + 101;
   ecBackspace = ecInsertPara + 1;
   ecDelete = ecInsertPara + 2;
@@ -1049,27 +995,21 @@ const
   ecBackTab = ecInsertPara + 5;
   ecIndent = ecInsertPara + 6;
   ecUnindent = ecInsertPara + 7;
-
   ecDeleteSelected = ecInsertPara + 10;
   ecClipboardCopy = ecInsertPara + 11;
   ecClipboardCut = ecClipboardCopy + 1;
   ecClipBoardPaste = ecClipboardCopy + 2;
-
   ecDeleteLine = ecClipBoardPaste + 1;
   ecDeleteWord = ecDeleteLine + 1;
-
   ecToUpperCase = ecDeleteLine + 2;
   ecToLowerCase = ecToUpperCase + 1;
   ecChangeCase = ecToUpperCase + 2;
-
   ecUndo = ecChangeCase + 1;
   ecRedo = ecUndo + 1;
   ecBeginCompound = ecUndo + 2; { not implemented }
   ecEndCompound = ecUndo + 3; { not implemented }
-
   ecBeginUpdate = ecUndo + 4;
   ecEndUpdate = ecUndo + 5;
-
   ecSetBookmark0 = ecEndUpdate + 1;
   ecSetBookmark1 = ecSetBookmark0 + 1;
   ecSetBookmark2 = ecSetBookmark0 + 2;
@@ -1080,7 +1020,6 @@ const
   ecSetBookmark7 = ecSetBookmark0 + 7;
   ecSetBookmark8 = ecSetBookmark0 + 8;
   ecSetBookmark9 = ecSetBookmark0 + 9;
-
   ecGotoBookmark0 = ecSetBookmark9 + 1;
   ecGotoBookmark1 = ecGotoBookmark0 + 1;
   ecGotoBookmark2 = ecGotoBookmark0 + 2;
@@ -1091,18 +1030,14 @@ const
   ecGotoBookmark7 = ecGotoBookmark0 + 7;
   ecGotoBookmark8 = ecGotoBookmark0 + 8;
   ecGotoBookmark9 = ecGotoBookmark0 + 9;
-
   ecCompletionIdentifers = ecGotoBookmark9 + 1;
   ecCompletionTemplates = ecCompletionIdentifers + 1;
-
   ecRecordMacro = ecCompletionTemplates + 1;
   ecPlayMacro = ecRecordMacro + 1;
   ecBeginRecord = ecRecordMacro + 2;
   ecEndRecord = ecRecordMacro + 3;
-
   ecSaveBlock = ecEndRecord + 1;
   ecInsertBlock = ecSaveBlock + 1;
-
   ecInsertMacro0 = ecInsertBlock + 1;
   ecInsertMacro1 = ecInsertMacro0 + 1;
   ecInsertMacro2 = ecInsertMacro0 + 2;
@@ -1139,7 +1074,6 @@ const
   ecInsertMacroX = ecInsertMacro0 + 33;
   ecInsertMacroY = ecInsertMacro0 + 34;
   ecInsertMacroZ = ecInsertMacro0 + 35;
-
   ecBlockOpA = ecInsertMacroZ + 1;
   ecBlockOpB = ecBlockOpA + 1;
   ecBlockOpC = ecBlockOpA + 2;
@@ -1166,192 +1100,203 @@ const
   ecBlockOpX = ecBlockOpA + 23;
   ecBlockOpY = ecBlockOpA + 24;
   ecBlockOpZ = ecBlockOpA + 25;
-
   ecBackword = ecBlockOpZ + 1;
   ecScrollPageUp = ecBackword + 1;
   ecScrollPageDown = ecScrollPageUp + 1;
-
   twoKeyCommand = High(word);
 
 const
-  __Brackets = ['(',')','[',']','{','}'];
-  __StdWordDelims = [#0..' ',',','.',';','\',':','''','`']{ + __Brackets};
+  __Brackets =['(', ')', '[', ']', '{', '}'];
+  __StdWordDelims =[#0..' ', ',', '.', ';', '\', ':', '''', '`']{ + __Brackets};
 
 procedure Register;
 
-function Max(x,y:integer):integer;
-function Min(x,y:integer):integer;
+function Max(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 
+function Min(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 
 implementation
 
 uses
   Consts, RTLConsts;
 
+{$ifdef UNICODE}
+function PosEx(const SubStr, S: string; Offset: Integer = 1): Integer; inline;
+begin
+  Result := System.Pos(SubStr, S, Offset);
+end;
+{$else}
 function PosEx(const SubStr, S: AnsiString; Offset: Cardinal = 1): Integer;
 // Faster Equivalent of Delphi 7 StrUtils.PosEx
 asm
-  push    ebx
-  push    esi
-  push    edx              {@Str}
-  test    eax, eax
-  jz      @@NotFound       {Exit if SubStr = ''}
-  test    edx, edx
-  jz      @@NotFound       {Exit if Str = ''}
-  mov     esi, ecx
-  mov     ecx,[edx-4]     {Length(Str)}
-  mov     ebx,[eax-4]     {Length(SubStr)}
-  add     ecx, edx
-  sub     ecx, ebx        {Max Start Pos for Full Match}
-  lea     edx,[edx+esi-1] {Set Start Position}
-  cmp     edx, ecx
-  jg      @@NotFound       {StartPos > Max Start Pos}
-  cmp     ebx, 1           {Length(SubStr)}
-  jle     @@SingleChar     {Length(SubStr) <= 1}
-  push    edi
-  push    ebp
-  lea     edi,[ebx-2]     {Length(SubStr) - 2}
-  mov     esi, eax
-  movzx   ebx,[eax]       {Search Character}
+        push    ebx
+        push    esi
+        push    edx              {@Str}
+        test    eax, eax
+        jz      @@NotFound       {Exit if SubStr = ''}
+        test    edx, edx
+        jz      @@NotFound       {Exit if Str = ''}
+        mov     esi, ecx
+        mov     ecx, [edx - 4]     {Length(Str)}
+        mov     ebx, [eax - 4]     {Length(SubStr)}
+        add     ecx, edx
+        sub     ecx, ebx        {Max Start Pos for Full Match}
+        lea     edx, [edx + esi - 1] {Set Start Position}
+        cmp     edx, ecx
+        jg      @@NotFound       {StartPos > Max Start Pos}
+        cmp     ebx, 1           {Length(SubStr)}
+        jle     @@SingleChar     {Length(SubStr) <= 1}
+        push    edi
+        push    ebp
+        lea     edi, [ebx - 2]     {Length(SubStr) - 2}
+        mov     esi, eax
+        movzx   ebx, [eax]       {Search Character}
 @@Loop:                    {Compare 2 Characters per Loop}
-  cmp     bl,[edx]
-  jne     @@NotChar1
-  mov     ebp, edi         {Remainder}
+        cmp     bl, [edx]
+        jne     @@NotChar1
+        mov     ebp, edi         {Remainder}
 @@Char1Loop:
-  movzx   eax, word ptr [esi+ebp]
-  cmp     ax,[edx+ebp]
-  jne     @@NotChar1
-  sub     ebp, 2
-  jnc     @@Char1Loop
-  pop     ebp
-  pop     edi
-  jmp     @@SetResult
+        movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp]
+        jne     @@NotChar1
+        sub     ebp, 2
+        jnc     @@Char1Loop
+        pop     ebp
+        pop     edi
+        jmp     @@SetResult
 @@NotChar1:
-  cmp     bl,[edx+1]
-  jne     @@NotChar2
-  mov     ebp, edi         {Remainder}
+        cmp     bl, [edx + 1]
+        jne     @@NotChar2
+        mov     ebp, edi         {Remainder}
 @@Char2Loop:
-  movzx   eax, word ptr [esi+ebp]
-  cmp     ax,[edx+ebp+1]
-  jne     @@NotChar2
-  sub     ebp, 2
-  jnc     @@Char2Loop
-  pop     ebp
-  pop     edi
-  jmp     @@CheckResult
+        movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp + 1]
+        jne     @@NotChar2
+        sub     ebp, 2
+        jnc     @@Char2Loop
+        pop     ebp
+        pop     edi
+        jmp     @@CheckResult
 @@NotChar2:
-  lea     edx,[edx+2]
-  cmp     edx, ecx         {Next Start Position <= Max Start Position}
-  jle     @@Loop
-  pop     ebp
-  pop     edi
-  jmp     @@NotFound
+        lea     edx, [edx + 2]
+        cmp     edx, ecx         {Next Start Position <= Max Start Position}
+        jle     @@Loop
+        pop     ebp
+        pop     edi
+        jmp     @@NotFound
 @@SingleChar:
-  jl      @@NotFound       {Needed for Zero-Length Non-NIL Strings}
-  movzx   eax,[eax]       {Search Character}
+        jl      @@NotFound       {Needed for Zero-Length Non-NIL Strings}
+        movzx   eax, [eax]       {Search Character}
 @@CharLoop:
-  cmp     al,[edx]
-  je      @@SetResult
-  cmp     al,[edx+1]
-  je      @@CheckResult
-  lea     edx,[edx+2]
-  cmp     edx, ecx
-  jle     @@CharLoop
+        cmp     al, [edx]
+        je      @@SetResult
+        cmp     al, [edx + 1]
+        je      @@CheckResult
+        lea     edx, [edx + 2]
+        cmp     edx, ecx
+        jle     @@CharLoop
 @@NotFound:
-  xor     eax, eax
-  pop     edx
-  pop     esi
-  pop     ebx
-  ret
+        XOR     eax, eax
+        pop     edx
+        pop     esi
+        pop     ebx
+        ret
 @@CheckResult:             {Check within AnsiString}
-  cmp     edx, ecx
-  jge     @@NotFound
-  add     edx, 1
+        cmp     edx, ecx
+        jge     @@NotFound
+        add     edx, 1
 @@SetResult:
-  pop     ecx              {@Str}
-  pop     esi
-  pop     ebx
-  neg     ecx
-  lea     eax,[edx+ecx+1]
+        pop     ecx              {@Str}
+        pop     esi
+        pop     ebx
+        neg     ecx
+        lea     eax, [edx + ecx + 1]
 end;
+{$endif UNICODE}
 
-
-
-function StringReplaceAll(const S, OldPattern, NewPattern: AnsiString): AnsiString;
+function StringReplaceAll(const S, OldPattern, NewPattern: string): string;
 // fast replacement of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
-procedure Process(j: integer);
-var i: integer;
-begin
-  Result := '';
-  i := 1;
-  repeat
-    Result := Result+Copy(S,i,j-i)+NewPattern;
-    i := j+length(OldPattern);
-    j := PosEx(OldPattern, S, i);
-    if j=0 then begin
-      Result := Result+Copy(S, i, maxInt);
-      break;
-    end;
-  until false;
-end;
-var j: integer;
+
+  procedure Process(j: integer);
+  var
+    i: integer;
+  begin
+    Result := '';
+    i := 1;
+    repeat
+      Result := Result + Copy(S, i, j - i) + NewPattern;
+      i := j + length(OldPattern);
+      j := PosEx(OldPattern, S, i);
+      if j = 0 then
+      begin
+        Result := Result + Copy(S, i, maxInt);
+        break;
+      end;
+    until false;
+  end;
+
+var
+  j: integer;
 begin
   j := PosEx(OldPattern, S);
-  if j=0 then
-    result := S else
+  if j = 0 then
+    result := S
+  else
     Process(j);
 end;
 
 const
-  StIdSymbols = ['_', '0'..'9', 'A'..'Z', 'a'..'z', 'ј'..'я', 'а'..'€'];
-  _StIdSymbols = ['>','<','''', '"', '`','!','@','#','$','%','^','&','*','/','?'] + __Brackets + StIdSymbols + [#127..#255];
-  _AutoChangePunctuation = [' ','`','~','!','@','#','$','%','^','&','*','(',')','_','-','+','=',';',':','''','"','[',']','{','}',',','.','/','?','<','>'];
+  StIdSymbols =
+    ['_', '0'..'9', 'A'..'Z', 'a'..'z', 'ј'..'я', 'а'..'€'];
+  _StIdSymbols =
+    ['>', '<', '''', '"', '`', '!', '@', '#', '$', '%', '^', '&', '*', '/', '?'] + __Brackets + StIdSymbols + [#127..#255];
+  _AutoChangePunctuation: set of AnsiChar =
+    [' ', '`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '-', '+', '=', ';', ':', '''', '"', '[', ']', '{', '}', ',', '.', '/', '?', '<', '>'];
 
-function Max(x,y:integer):integer;
+function Max(x, y: integer): integer;
 begin
   if x > y then
-    Result := x else
+    Result := x
+  else
     Result := y;
 end;
 
-function Min(x,y:integer):integer;
+function Min(x, y: integer): integer;
 begin
   if x < y then
-    Result := x else
+    Result := x
+  else
     Result := y;
 end;
 
-function HasChar(Ch : Char; const S : string) : boolean;
-begin
-  Result := PosEx(Ch, S) > 0;
-end;
-
-function GetWordOnPosEx(const S : string; const P : integer; out iBeg, iEnd : integer) : string;
+function GetWordOnPosEx(const S: string; const P: integer; out iBeg, iEnd: integer): string;
 begin
   Result := '';
   if (P > Length(S)) or (P < 1) then
     exit;
   iBeg := P;
-  if S[P] in Separators then
-    if (P < 1) or (S[P-1] in Separators) then
+  if {$ifdef UNICODE} (S[P] < #255) and {$endif} (AnsiChar(S[P]) in Separators) then
+    if (P < 1) or ({$ifdef UNICODE}(S[P - 1] < #255) and {$endif} (AnsiChar(S[P - 1]) in Separators)) then
       inc(iBeg)
-    else if not (S[P-1] in Separators) then
+    else if {$ifdef UNICODE} (S[P - 1] > #255) or {$endif} not (AnsiChar(S[P - 1]) in Separators) then
       dec(iBeg);
   while iBeg >= 1 do
-    if S[iBeg] in Separators then
-      break else
+    if {$ifdef UNICODE} (S[iBeg] < #255) and {$endif} (AnsiChar(S[iBeg]) in Separators) then
+      break
+    else
       dec(iBeg);
   inc(iBeg);
   iEnd := P;
   while iEnd <= Length(S) do
-    if S[iEnd] in Separators then
-      break else
+    if {$ifdef UNICODE} (S[iEnd] < #255) and {$endif} (AnsiChar(S[iEnd]) in Separators) then
+      break
+    else
       inc(iEnd);
   if iEnd > iBeg then
-    Result := Copy(S, iBeg, iEnd - iBeg) else
+    Result := Copy(S, iBeg, iEnd - iBeg)
+  else
     Result := S[P];
 end;
-
 
 var
   CF_MEMOEX: integer = 0; // indicates MemoEx clipboard
@@ -1365,7 +1310,7 @@ begin
   Result := false;
   if SelText <> '' then
   begin
-    Data := GlobalAlloc(GMEM_MOVEABLE or GMEM_ZEROINIT, length(SelText) + 1);
+    Data := GlobalAlloc(GMEM_MOVEABLE or GMEM_ZEROINIT, (length(SelText) + 1) * SizeOf(char));
     if Data <> 0 then
     begin
       _Text := GlobalLock(Data);
@@ -1373,27 +1318,34 @@ begin
       begin
         StrCopy(_Text, PChar(SelText));
         GlobalUnlock(Data);
+        {$ifdef UNICODE}
+        fmt := CF_UNICODETEXT;
+        {$else}
         if FontCharset = OEM_CHARSET then
-          fmt := CF_OEMTEXT else
+          fmt := CF_OEMTEXT
+        else
           fmt := CF_TEXT;
+        {$endif}
         if OpenClipboard(Handle) then
         begin
           EmptyClipboard;
           SetClipboardData(fmt, Data);
-          SetClipboardData(CF_MEMOEX,0); // indicates from MemoEx
+          SetClipboardData(CF_MEMOEX, 0); // indicates from MemoEx
           CloseClipboard;
           Result := true;
         end
-          else GlobalFree(Data);
+        else
+          GlobalFree(Data);
       end
-        else GlobalFree(Data);
+      else
+        GlobalFree(Data);
     end;
   end;
 end;
 
 function _PasteFromClipboard(Handle: THandle; FontCharset: TFontCharset;
-  {$ifdef CLIPBOARDPROTECT}const InternalClip: string;{$endif}
-  DeleteCRLF: boolean = true): string;
+  {$ifdef CLIPBOARDPROTECT}const InternalClip: string; {$endif}
+    DeleteCRLF: boolean = true): string;
 var
   fmtText, fmtOEMText: boolean;
   Data: HGLOBAL;
@@ -1403,41 +1355,68 @@ var
   i: integer;
 begin
 {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
-  if IsClipboardFormatAvailable(CF_MEMOEX) and (InternalClip<>'') then begin
+  if IsClipboardFormatAvailable(CF_MEMOEX) and (InternalClip <> '') then
+  begin
     result := InternalClip;
     exit;
   end;
 {$endif}
   Result := '';
+  {$ifdef UNICODE}
+  fmtText := IsClipboardFormatAvailable(CF_UNICODETEXT);
+  fmtOEMText := IsClipboardFormatAvailable(CF_TEXT);
+  {$else}
   fmtText := IsClipboardFormatAvailable(CF_TEXT);
   fmtOEMText := IsClipboardFormatAvailable(CF_OEMTEXT);
+  {$endif}
   if fmtText or fmtOEMText then
     if OpenClipboard(Handle) then
     begin
+      {$ifdef UNICODE}
       if not fmtText then
-        fmt := CF_OEMTEXT else
+        fmt := CF_TEXT
+      else
+        fmt := CF_UNICODETEXT;
+      {$else}
+      if not fmtText then
+        fmt := CF_OEMTEXT
+      else
         fmt := CF_TEXT;
+      {$endif}
       Data := GetClipboardData(fmt);
-      if Data <> 0 then begin
+      if Data <> 0 then
+      begin
         _Text := GlobalLock(Data);
-        if Assigned(_Text) then begin
+        if Assigned(_Text) then
+        begin
+          {$ifdef UNICODE}
+          if fmt = CF_TEXT then
+            Txt := _Text
+          else
+            Txt := UnicodeString(AnsiString(PAnsiChar(_Text)));
+          {$else}
           Txt := _Text;
           if (FontCharset = OEM_CHARSET) and (fmt = CF_TEXT) then
-            CharToOEM(PChar(Txt), PChar(Txt)) else
-          if (FontCharset = DEFAULT_CHARSET) and (fmt = CF_OEMTEXT) then
+            CharToOEM(PChar(Txt), PChar(Txt))
+          else if (FontCharset = DEFAULT_CHARSET) and (fmt = CF_OEMTEXT) then
             OEMToChar(PChar(Txt), PChar(Txt));
-          if DeleteCRLF then begin
+          {$endif}
+          if DeleteCRLF then
+          begin
             i := 1;
             while i <= length(Txt) do
-              if Txt[i] in [#10, #13] then
-                System.Delete(Txt, i, 1) else begin
-                if Txt[i]<' ' then // prevent TAB bug
+              if Ord(Txt[i]) in [10, 13] then
+                System.Delete(Txt, i, 1)
+              else
+              begin
+                if Txt[i] < ' ' then // prevent TAB bug
                   Txt[i] := ' ';
                 inc(i);
               end;
-          end else
+          end
+          else
             for i := 1 to length(Txt) do
-              if Txt[i] in [#1..#9,#11,#12,#14..#31] then // prevent TAB bug
+              if ord(Txt[i]) in [1..9, 11, 12, 14..31] then // prevent TAB bug
                 Txt[i] := ' ';
           Result := Txt;
           GlobalUnlock(Data);
@@ -1447,43 +1426,51 @@ begin
     end;
 end;
 
-function GetWordOnPos(const S : string; const P : integer) : string;
-var i, Beg : integer;
+function GetWordOnPos(const S: string; const P: integer): string;
+var
+  i, Beg: integer;
 begin
   Result := '';
-  if (P > Length(S)) or (P < 1) then exit;
+  if (P > Length(S)) or (P < 1) then
+    exit;
   for i := P downto 1 do
-    if S[i] in Separators then
+    if {$ifdef UNICODE} (S[i] < #255) and {$endif} (AnsiChar(S[i]) in Separators) then
       break;
   Beg := i + 1;
   for i := P to Length(S) do
-    if S[i] in Separators then
+    if {$ifdef UNICODE} (S[i] < #255) and {$endif} (AnsiChar(S[i]) in Separators) then
       break;
   if i > Beg then
-    Result := Copy(S, Beg, i-Beg) else
+    Result := Copy(S, Beg, i - Beg)
+  else
     Result := S[P];
 end;
 
-function SubStr(const S : string; const index : integer; const Separator : string) : string;
+function SubStr(const S: string; const index: integer; const Separator: string): string;
 // used on word completion
-var i : integer;
-    pB, pE : PChar;
+var
+  i: integer;
+  pB, pE: PChar;
 begin
   Result := '';
-  if (index < 0) or ((index = 0) and (Length(S) > 0) and (S[1] = Separator)) then exit;
+  if (index < 0) or ((index = 0) and (Length(S) > 0) and (S[1] = Separator)) then
+    exit;
   pB := PChar(S);
-  for i := 1 to index do begin
+  for i := 1 to index do
+  begin
     pB := StrPos(pB, PChar(Separator));
-    if pB = nil then exit;
-    pB := pB+Length(Separator);
+    if pB = nil then
+      exit;
+    pB := pB + Length(Separator);
   end;
-  pE := StrPos(pB+1, PChar(Separator));
-  if pE = nil then pE := PChar(S)+Length(S);
+  pE := StrPos(pB + 1, PChar(Separator));
+  if pE = nil then
+    pE := PChar(S) + Length(S);
   if not (StrLIComp(pB, PChar(Separator), Length(Separator)) = 0) then
-    SetString(Result, pB, pE-pB);
+    SetString(Result, pB, pE - pB);
 end;
 
-function KeyPressed(VK: integer) : boolean;
+function KeyPressed(VK: integer): boolean;
 begin
   Result := GetKeyState(VK) and $8000 = $8000;
 end;
@@ -1499,49 +1486,61 @@ begin
 end;
 
 const
-  SBKIND : array[TScrollBarKind] of integer = (SB_HORZ, SB_VERT);
+  SBKIND: array[TScrollBarKind] of integer = (SB_HORZ, SB_VERT);
 
-procedure TRAControlScrollBar95.SetParams(AMin, AMax, APosition, APage : integer);
+procedure TRAControlScrollBar95.SetParams(AMin, AMax, APosition, APage: integer);
 var
-  SCROLLINFO : TSCROLLINFO;
+  SCROLLINFO: TSCROLLINFO;
 begin
   if AMax < AMin then
     raise EInvalidOperation.Create(SScrollBarRange);
-  if APosition < AMin then APosition := AMin;
-  if APosition > AMax then APosition := AMax;
-  if Handle > 0 then begin
-    with SCROLLINFO do begin
+  if APosition < AMin then
+    APosition := AMin;
+  if APosition > AMax then
+    APosition := AMax;
+  if Handle > 0 then
+  begin
+    with SCROLLINFO do
+    begin
       cbSize := sizeof(TSCROLLINFO);
       fMask := SIF_DISABLENOSCROLL;
-      if (AMin >= 0) or (AMax >= 0) then fMask := fMask or SIF_RANGE;
-      if APosition >= 0 then fMask := fMask or SIF_POS;
-      if APage >= 0 then fMask := fMask or SIF_PAGE;
+      if (AMin >= 0) or (AMax >= 0) then
+        fMask := fMask or SIF_RANGE;
+      if APosition >= 0 then
+        fMask := fMask or SIF_POS;
+      if APage >= 0 then
+        fMask := fMask or SIF_PAGE;
       nPos := APosition;
       nMin := AMin;
       nMax := AMax;
       nPage := APage;
     end;
-    SetScrollInfo(
-      Handle,         // handle of window with scroll bar
-      SBKIND[Kind] ,  // scroll bar flag
+    SetScrollInfo(Handle,         // handle of window with scroll bar
+      SBKIND[Kind],  // scroll bar flag
       SCROLLINFO,     // pointer to structure with scroll parameters
       true            // redraw flag
-    );
+);
   end;
 end;
 
 procedure TRAControlScrollBar95.SetParam(index, Value: Integer);
 begin
   case index of
-    0 : FMin := Value;
-    1 : FMax := Value;
-    2 : FPosition := Value;
-    3 : FPage := Value;
+    0:
+      FMin := Value;
+    1:
+      FMax := Value;
+    2:
+      FPosition := Value;
+    3:
+      FPage := Value;
   end;
   if FMax < FMin then
     raise EInvalidOperation.Create(SScrollBarRange);
-  if FPosition < FMin then FPosition := FMin;
-  if FPosition > FMax then FPosition := FMax;
+  if FPosition < FMin then
+    FPosition := FMin;
+  if FPosition > FMax then
+    FPosition := FMax;
   SetParams(FMin, FMax, FPosition, FPage);
 end;
 
@@ -1576,8 +1575,10 @@ begin
       scBottom:
         NewPos := FMax;
     end;
-    if NewPos < FMin then NewPos := FMin;
-    if NewPos > FMax then NewPos := FMax;
+    if NewPos < FMin then
+      NewPos := FMin;
+    if NewPos > FMax then
+      NewPos := FMax;
     ScrollPos := NewPos;
     Scroll(TScrollCode(ScrollCode), ScrollPos);
   end;
@@ -1595,7 +1596,6 @@ end;
 {$IFDEF MEMOEX_UNDO}
 
 type
-
   TCaretUndo = class(TUndo)
   private
     FCaretX, FCaretY: integer;
@@ -1610,8 +1610,7 @@ type
     FText: string;
     FOffset, FParaOffset: integer;
   public
-    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer;
-      const AText: string);
+    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AText: string);
     procedure Undo; override;
   end;
 
@@ -1624,8 +1623,7 @@ type
     FOldText, FNewText: string;
     FOffset: integer;
   public
-    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer;
-      const AOldText, ANewText: string);
+    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AOldText, ANewText: string);
     procedure Undo; override;
   end;
 
@@ -1646,8 +1644,7 @@ type
     FBeg, FEnd: integer;
     FText, FNewText: string;
   public
-    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer;
-      const ABeg, AEnd: integer; const AText, ANewText: string);
+    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const ABeg, AEnd: integer; const AText, ANewText: string);
     procedure Undo; override;
   end;
 
@@ -1656,9 +1653,7 @@ type
     FSelBlock: boolean; { vertical block }
     FSelBegX, FSelBegY, FSelEndX, FSelEndY, FSelOffs: integer;
   public
-    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer;
-      const AText: string; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX,
-      ASelEndY, ASelOffs: integer);
+    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AText: string; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX, ASelEndY, ASelOffs: integer);
     procedure Undo; override;
   end;
 
@@ -1667,8 +1662,7 @@ type
     FSelBlock: boolean; { vertical block }
     FSelBegX, FSelBegY, FSelEndX, FSelEndY: integer;
   public
-    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer;
-      const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX, ASelEndY: integer);
+    constructor Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX, ASelEndY: integer);
     procedure Undo; override;
   end;
 
@@ -1697,38 +1691,44 @@ begin
 end;
 
 function ANSIChangeCase(const S: string): string;
-var i: integer;
-    Up: ANSIChar;
+var
+  i: integer;
+  Up: char;
 begin
   Result := S;
-  for i := 1 to Length(Result) do begin
+  for i := 1 to Length(Result) do
+  begin
     Up := upcase(Result[i]);
     if Result[i] = Up then
-      Result[i] := chr(ord(Result[i])+32) else
+      Result[i] := chr(ord(Result[i]) + 32)
+    else
       Result[i] := Up;
   end;
 end;
 
 function StringDynArrayGetSize(V: PIntegerArray; FCount: integer): integer;
 // Siz := StringDynArrayGetSize(pointer(FStrings),FCount);
-var i: integer;
+var
+  i: integer;
 begin
   result := 0;
-  for i := 0 to FCount-1 do
-    if V^[i]<>0 then // very fast inc(Result, length(FStrings[i-1])
-      inc(result,PInteger(V^[i]-4)^);
+  for i := 0 to FCount - 1 do
+    if V^[i] <> 0 then // very fast inc(Result, length(FStrings[i-1])
+      inc(result, PInteger(V^[i] - 4)^);
 end;
 
 function StringDynArrayToPChar(V: PIntegerArray; FCount: integer; P: PChar): PChar;
 // StringDynArrayToPChar(pointer(FStrings),FCount,pointer(Result))
-var i, Size: integer;
+var
+  i, Size: integer;
 begin
-  for i := 0 to FCount-1 do
-  if V^[i]<>0 then begin
-    size := PInteger(V^[i]-4)^;
-    move(pointer(V^[i])^,P^,size);
-    inc(P,size);
-  end;
+  for i := 0 to FCount - 1 do
+    if V^[i] <> 0 then
+    begin
+      size := PInteger(V^[i] - 4)^;
+      move(pointer(V^[i])^, P^, size * SizeOf(char));
+      inc(P, size);
+    end;
   result := P;
 end;
 
@@ -1752,27 +1752,33 @@ begin
 end;
 
 procedure TEditorStrings.Recount(Index: integer);
-var i: integer;
+var
+  i: integer;
 begin
-  if FCount=0 then exit;
-  if Index=0 then begin
+  if FCount = 0 then
+    exit;
+  if Index = 0 then
+  begin
     FList[0].FPreCount := 0;
     inc(Index);
   end;
   for i := Index to FCount - 1 do
-    with FList[i-1] do
+    with FList[i - 1] do
       FList[i].FPreCount := FPreCount + FCount;
 end;
 
 procedure TEditorStrings.Index2ParaIndex(Index: integer; out Para, ParaIndex: integer);
-var L, H, I: integer;
+var
+  L, H, I: integer;
 begin
- if (not FMemoEx.FWordWrap) or (FParaLinesCount = FCount) then begin
+  if (not FMemoEx.FWordWrap) or (FParaLinesCount = FCount) then
+  begin
     Para := Index;
     if Para > FCount - 1 then
       Para := FCount - 1;
     ParaIndex := 0;
-  end else
+  end
+  else
   begin
     { fast find paragraph index using MinMax (binary search) algo }
     Para := -1;
@@ -1783,33 +1789,37 @@ begin
     begin
       I := (L + H) shr 1;
       with FList[I] do
-      if Index > FPreCount + FCount - 1 then
-        L := I + 1 else begin
-        H := I - 1;
-        if (Index <= FPreCount + FCount - 1) and (Index >= FPreCount) then
-        begin // found
-          Para := I;
-          ParaIndex := Index - FPreCount;
-          break;
+        if Index > FPreCount + FCount - 1 then
+          L := I + 1
+        else
+        begin
+          H := I - 1;
+          if (Index <= FPreCount + FCount - 1) and (Index >= FPreCount) then
+          begin // found
+            Para := I;
+            ParaIndex := Index - FPreCount;
+            break;
+          end;
         end;
-      end;
     end;
   end;
 end;
 
 procedure ListIndexError(Index: integer);
 // outside procedure -> no temp string -> less heap
-function ReturnAddr: Pointer;
-asm
-  MOV     EAX,[EBP+4]
-end;
+
+  function ReturnAddr: Pointer;
+  asm
+        MOV     EAX, [EBP + 4]
+  end;
+
 begin
   raise EStringListError.CreateFmt(SListIndexError, [Index]) at ReturnAddr;
 end;
 
-function TEditorStrings.GetParagraphByIndex(
-  Index: integer; out ParaIndex, IndexOffs: integer): string;
-var _P, _PI: integer;
+function TEditorStrings.GetParagraphByIndex(Index: integer; out ParaIndex, IndexOffs: integer): string;
+var
+  _P, _PI: integer;
 begin
   IndexOffs := 0;
   ParaIndex := 0;
@@ -1819,12 +1829,12 @@ begin
     ListIndexError(Index);
   ParaIndex := _P;
   result := _GetString(_P);
-  IndexOffs := StringDynArrayGetSize(pointer(FList[_P].FStrings),_PI);
+  IndexOffs := StringDynArrayGetSize(pointer(FList[_P].FStrings), _PI);
 end;
 
-procedure TEditorStrings.Caret2Paragraph(
-  X, Y: integer; out ParaIndex, IndexOffs: integer);
-var _P, _PI: integer;
+procedure TEditorStrings.Caret2Paragraph(X, Y: integer; out ParaIndex, IndexOffs: integer);
+var
+  _P, _PI: integer;
 begin
   ParaIndex := 0;
   IndexOffs := 0;
@@ -1832,43 +1842,52 @@ begin
   if (_P = -1) or (_PI = -1) then
     ListIndexError(Y);
   ParaIndex := _P;
-  IndexOffs := X+StringDynArrayGetSize(pointer(FList[_P].FStrings),_PI);
+  IndexOffs := X + StringDynArrayGetSize(pointer(FList[_P].FStrings), _PI);
 end;
 
-procedure TEditorStrings.Paragraph2Caret(
-  ParaIndex, IndexOffs: integer; out X, Y: integer);
-var i, j, k: integer;
-    found: boolean;
+procedure TEditorStrings.Paragraph2Caret(ParaIndex, IndexOffs: integer; out X, Y: integer);
+var
+  i, j, k: integer;
+  found: boolean;
 begin
   X := 0;
   Y := ParaIndex;
   found := false;
   k := 0;
   for i := 0 to FCount - 1 do
-  with Flist[i] do begin
-    if i >= Y then begin
-      for j := 0 to FCount - 1 do begin
-        inc(X, length(FStrings[j]));
-        if X >= IndexOffs then begin
-          found := true;
-          Y := k + j;
-          X := IndexOffs - (X - length(FStrings[j]));
-          break;
+    with Flist[i] do
+    begin
+      if i >= Y then
+      begin
+        for j := 0 to FCount - 1 do
+        begin
+          inc(X, length(FStrings[j]));
+          if X >= IndexOffs then
+          begin
+            found := true;
+            Y := k + j;
+            X := IndexOffs - (X - length(FStrings[j]));
+            break;
+          end;
         end;
+        if found then
+          break;
       end;
-      if found then break;
+      inc(k, FCount);
     end;
-    inc(k, FCount);
-  end;
-  if not found then begin
-    if X > 0 then begin
+  if not found then
+  begin
+    if X > 0 then
+    begin
       Y := k;
       X := length(FList[Y].FStrings[FList[Y].FCount - 1]);
       exit;
     end;
     Y := FCount - 1;
     if Y >= 0 then
-      X := length(FList[Y].FStrings[FList[Y].FCount - 1]) else begin
+      X := length(FList[Y].FStrings[FList[Y].FCount - 1])
+    else
+    begin
       X := 0;
       Y := 0;
     end;
@@ -1876,12 +1895,13 @@ begin
 end;
 
 function TEditorStrings.GetParaOffs(ParaIndex: integer): integer;
-var i: integer;
+var
+  i: integer;
 begin
-  Result := ParaIndex*2;
-  for i := 0 to ParaIndex -1 do
-  with FList[i] do
-    inc(Result, StringDynArrayGetSize(pointer(FStrings),FCount));
+  Result := ParaIndex * 2;
+  for i := 0 to ParaIndex - 1 do
+    with FList[i] do
+      inc(Result, StringDynArrayGetSize(pointer(FStrings), FCount));
 end;
 
 procedure TEditorStrings.ReformatParagraph(ParaIndex: integer);
@@ -1890,49 +1910,61 @@ var // full rewrite by AB: much faster and use less ram
   c, d, b: PChar;
   L: integer;
 begin
-  with FList[ParaIndex] do begin
+  with FList[ParaIndex] do
+  begin
     dec(FParaLinesCount, FCount);
     FPreCount := 0;
-    if FMemoEx.FWordWrap then begin
+    if FMemoEx.FWordWrap then
+    begin
       s := _GetString(ParaIndex); // whole paragraph text in s
       L := FMemoEx.FRightMargin;
-      if length(s)<=L then begin
-        if FCount>1 then begin
-          SetLength(FStrings,1);
+      if length(s) <= L then
+      begin
+        if FCount > 1 then
+        begin
+          SetLength(FStrings, 1);
           FCount := 1;
           FStrings[0] := s;
         end;
-      end else begin
+      end
+      else
+      begin
         FCount := 0;
         c := @s[1]; // UniqueString() because we change FStrings[0] below
         d := c;
         b := c;
-        while (c^<>#0) do begin
-          if c^=' ' then
+        while (c^ <> #0) do
+        begin
+          if c^ = ' ' then
             b := c; // b = last ' '
-          if ((c-d)>=L) then begin
+          if ((c - d) >= L) then
+          begin
             inc(FCount);
-            if FCount>=length(FStrings) then
-              Setlength(FStrings,FCount+10);
-            if b=d then
-              b := d+L; // if no ' '
-            SetString(FStrings[FCount-1],d,b-d+1);
-            c := b+1;
+            if FCount >= length(FStrings) then
+              Setlength(FStrings, FCount + 10);
+            if b = d then
+              b := d + L; // if no ' '
+            SetString(FStrings[FCount - 1], d, b - d + 1);
+            c := b + 1;
             b := c;
             d := c;
-            if c^=#0 then break;
+            if c^ = #0 then
+              break;
           end;
           inc(c);
         end;
-        if d<>c then begin // append last chars (if any) as last line
+        if d <> c then
+        begin // append last chars (if any) as last line
           inc(FCount);
-          SetString(FStrings[FCount-1],d,c-d);
+          SetString(FStrings[FCount - 1], d, c - d);
         end;
-        Setlength(FStrings,FCount); // set exact line count
+        Setlength(FStrings, FCount); // set exact line count
       end;
-    end else if FCount>1 then begin // something to reformat only if FCount>1
+    end
+    else if FCount > 1 then
+    begin // something to reformat only if FCount>1
       s := _GetString(ParaIndex);
-      SetLength(FStrings,1);
+      SetLength(FStrings, 1);
       FCount := 1;
       FStrings[0] := s;
     end;
@@ -1985,9 +2017,10 @@ begin
   dec(FParaLinesCount, FList[Index].FCount);
   Dec(FCount);
   Finalize(FList[Index]); // avoid memory bug: release deleted FStrings
-  if Index < FCount then begin
+  if Index < FCount then
+  begin
     System.Move(FList[Index + 1], FList[Index], (FCount - Index) * SizeOf(TParagraph));
-    FillChar(FList[FCount],sizeof(TParagraph),0); // avoid memory bug
+    FillChar(FList[FCount], sizeof(TParagraph), 0); // avoid memory bug
     Recount(Index);
   end;
   Changed;
@@ -2007,7 +2040,7 @@ begin
     Grow;
   if Index < FCount then
     System.Move(FList[Index], FList[Index + 1], (FCount - Index) * SizeOf(TParagraph));
-  fillchar(FList[Index],sizeof(TParagraph),0); // avoid memory bug
+  fillchar(FList[Index], sizeof(TParagraph), 0); // avoid memory bug
   Inc(FCount);
   AddParaStr(Index, S);
   Changed;
@@ -2018,7 +2051,8 @@ function TEditorStrings.AddParaStr(ParaIndex: integer; const S: string): integer
 begin
   if (ParaIndex < 0) or (ParaIndex >= FCount) then
     ListIndexError(ParaIndex);
-  with FList[ParaIndex] do begin
+  with FList[ParaIndex] do
+  begin
     inc(FCount);
     inc(FParaLinesCount);
     SetLength(FStrings, FCount);
@@ -2033,8 +2067,10 @@ end;
 
 procedure TEditorStrings.Changed;
 begin
-  if (csLoading in FMemoEx.ComponentState) then exit;
-  if FMemoEx.FUpdateLock = 0 then begin
+  if (csLoading in FMemoEx.ComponentState) then
+    exit;
+  if FMemoEx.FUpdateLock = 0 then
+  begin
     FMemoEx.TextAllChanged;
     if Assigned(FMemoEx.FOnChange) then
       FMemoEx.FOnChange(Self);
@@ -2049,14 +2085,15 @@ end;
 
 procedure TEditorStrings.Clear;
 begin
-  if FCount <> 0 then begin
+  if FCount <> 0 then
+  begin
     Changing;
     FCount := 0;
     FParaLinesCount := 0;
     Finalize(FList); // free all memory
     Changed;
   end;
-  fMemoEx.SetCaret(0,0);
+  fMemoEx.SetCaret(0, 0);
 end;
 
 procedure TEditorStrings.BeginUpdate;
@@ -2073,16 +2110,18 @@ end;
 function TEditorStrings._GetString(ParaIndex: integer): string;
 begin
   with FList[ParaIndex] do
-  if FCount>1 then begin
-    SetString(Result,nil,StringDynArrayGetSize(pointer(FStrings),FCount));
-    StringDynArrayToPChar(pointer(FStrings),FCount,pointer(Result));
-  end else
-    result := FStrings[0];
+    if FCount > 1 then
+    begin
+      SetString(Result, nil, StringDynArrayGetSize(pointer(FStrings), FCount));
+      StringDynArrayToPChar(pointer(FStrings), FCount, pointer(Result));
+    end
+    else
+      result := FStrings[0];
 end;
 
 function TEditorStrings.Get(Index: integer): string;
 begin
-  if cardinal(Index)>=cardinal(FCount) then
+  if cardinal(Index) >= cardinal(FCount) then
     ListIndexError(Index);
   Result := _GetString(Index);
 end;
@@ -2095,10 +2134,13 @@ begin
 end;
 
 function TEditorStrings.GetParaString(Index: integer): string;
-var _P, _PI: integer;
+var
+  _P, _PI: integer;
 begin
   if not FMemoEx.FWordWrap or (FParaLinesCount = FCount) then
-    Result := Get(Index) else begin
+    Result := Get(Index)
+  else
+  begin
     Index2ParaIndex(Index, _P, _PI);
     if (_P = -1) or (_PI = -1) then
       ListIndexError(Index);
@@ -2107,13 +2149,15 @@ begin
 end;
 
 procedure TEditorStrings.Grow;
-var Delta: integer;
+var
+  Delta: integer;
 begin
   Delta := length(FList);
-  if Delta>64*4 then
-    inc(Delta,Delta shr 2) else
-    inc(Delta,64); // AB
-  SetLength(FList,Delta);
+  if Delta > 64 * 4 then
+    inc(Delta, Delta shr 2)
+  else
+    inc(Delta, 64); // AB
+  SetLength(FList, Delta);
 end;
 
 procedure TEditorStrings._PutString(ParaIndex: integer; const S: string);
@@ -2123,7 +2167,8 @@ begin
   old_count := FList[ParaIndex].FCount;
   old_precount := FList[ParaIndex].FPreCount;
   dec(FParaLinesCount, FList[ParaIndex].FCount);
-  with FList[ParaIndex] do begin
+  with FList[ParaIndex] do
+  begin
     FCount := 1;
     SetLength(FStrings, 1);
     FStrings[0] := S;
@@ -2132,13 +2177,15 @@ begin
   inc(FParaLinesCount);
   ReformatParagraph(ParaIndex);
   if old_count <> FList[ParaIndex].FCount then
-    Recount(ParaIndex) else
+    Recount(ParaIndex)
+  else
     FList[ParaIndex].FPreCount := old_precount;
 end;
 
 procedure TEditorStrings.Put(Index: integer; const S: string);
 begin
-  if (Index < 0) or (Index >= FCount) then ListIndexError(Index);
+  if (Index < 0) or (Index >= FCount) then
+    ListIndexError(Index);
   CheckLength(S);
   Changing;
   _PutString(Index, S);
@@ -2147,22 +2194,27 @@ end;
 
 procedure TEditorStrings.PutObject(Index: Integer; AObject: TObject);
 begin
-  if (Index < 0) or (Index >= FCount) then ListIndexError(Index);
+  if (Index < 0) or (Index >= FCount) then
+    ListIndexError(Index);
   FList[Index].FObject := AObject;
 end;
 
 function TEditorStrings.GetObject(Index: Integer): TObject;
 begin
-  if (Index < 0) or (Index >= FCount) then ListIndexError(Index);
+  if (Index < 0) or (Index >= FCount) then
+    ListIndexError(Index);
   result := FList[Index].FObject;
 end;
 
 procedure TEditorStrings.PutParaString(Index: integer; const S: string);
-var _P, _PI: integer;
-    old_count, old_precount: integer;
+var
+  _P, _PI: integer;
+  old_count, old_precount: integer;
 begin
   if not FMemoEx.FWordWrap then
-    Put(Index, S) else begin
+    Put(Index, S)
+  else
+  begin
     Index2ParaIndex(Index, _P, _PI);
     if (_P = -1) or (_PI = -1) then
       ListIndexError(Index);
@@ -2173,7 +2225,8 @@ begin
     FList[_P].FStrings[_PI] := S;
     ReformatParagraph(_P);
     if old_count <> FList[_P].FCount then
-      Recount(_P) else
+      Recount(_P)
+    else
       FList[_P].FPreCount := old_precount;
     Changed;
   end;
@@ -2181,7 +2234,10 @@ end;
 
 procedure TEditorStrings.SetUpdateState(Updating: Boolean);
 begin
-  if Updating then Changing else Changed;
+  if Updating then
+    Changing
+  else
+    Changed;
 end;
 
 procedure TEditorStrings.SetTextStr(const Value: string);
@@ -2191,7 +2247,7 @@ begin
   dec(FMemoEx.FUpdateLock);
   if FMemoEx.FUpdateLock = 0 then
   begin
-    {$IFDEF MEMOEX_EDITOR}FMemoEx.CantUndo;{$ENDIF MEMOEX_EDITOR}
+    {$IFDEF MEMOEX_EDITOR}    FMemoEx.CantUndo; {$ENDIF MEMOEX_EDITOR}
     FMemoEx.TextAllChanged;
     FMemoEx.SetCaretInternal(0, 0);
   end;
@@ -2199,13 +2255,15 @@ end;
 
 procedure TEditorStrings.ReLine;
 // complete line with spaces if caret X is after real chars
-var L: integer;
+var
+  L: integer;
 begin
   inc(FMemoEx.FUpdateLock);
   try
     {$IFDEF MEMOEX_UNDO}
     if FParaLinesCount = 0 then
-      L := FMemoEx.FCaretX else
+      L := FMemoEx.FCaretX
+    else
       L := Length(ParaStrings[FParaLinesCount - 1]);
     while FMemoEx.FCaretY > FParaLinesCount - 1 do
     begin
@@ -2219,10 +2277,9 @@ begin
     begin
       L := FMemoEx.FCaretX - Length(ParaStrings[FMemoEx.FCaretY]);
       {$IFDEF MEMOEX_UNDO}
-      TReLineUndo.Create(FMemoEx, Length(ParaStrings[FMemoEx.FCaretY]),
-        FMemoEx.FCaretY, StringOfChar(' ',L));
+      TReLineUndo.Create(FMemoEx, Length(ParaStrings[FMemoEx.FCaretY]), FMemoEx.FCaretY, StringOfChar(' ', L));
       {$ENDIF MEMOEX_UNDO}
-      PutParaString(FMemoEx.FCaretY, ParaStrings[FMemoEx.FCaretY] + StringOfChar(' ',L));
+      PutParaString(FMemoEx.FCaretY, ParaStrings[FMemoEx.FCaretY] + StringOfChar(' ', L));
     end;
   finally
     dec(FMemoEx.FUpdateLock);
@@ -2260,19 +2317,26 @@ begin
 end;
 
 function TEditorStrings.GetTextStr: string;
-var i,sizetot: integer;
+var
+  i, sizetot: integer;
   P: PChar;
 begin
 //  result := inherited GetTextStr; exit; 8 times slower than code below
   SizeTot := GetTextLength;
   Setlength(Result, Sizetot);
   P := Pointer(Result);
-  for i := 0 to FCount-1 do
-  with FList[i] do begin
-    P := StringDynArrayToPChar(pointer(FStrings),FCount,P); // line
-    pWord(P)^ := $0A0D; inc(P,2); // CRLF
-  end;
-  assert((p-pointer(result))=sizeTot);
+  for i := 0 to FCount - 1 do
+    with FList[i] do
+    begin
+      P := StringDynArrayToPChar(pointer(FStrings), FCount, P); // line
+      {$ifdef UNICODE}
+      pCardinal(P)^ := $000A000D;
+      {$else}
+      pWord(P)^ := $0A0D;
+      {$endif}
+      inc(P, 2); // CRLF
+    end;
+  assert((p - pointer(result)) = sizeTot);
 end;
 
 function TEditorStrings.GetCount: Integer;
@@ -2281,22 +2345,24 @@ begin
 end;
 
 function TEditorStrings.GetTextLength: integer;
-var i: integer;
+var
+  i: integer;
 begin
-  Result := FCount*2; // CRLF char size
-  for i := 0 to FCount-1 do
-  with FList[i] do
-    inc(Result,StringDynArrayGetSize(pointer(FStrings),FCount));
+  Result := FCount * 2; // CRLF char size
+  for i := 0 to FCount - 1 do
+    with FList[i] do
+      inc(Result, StringDynArrayGetSize(pointer(FStrings), FCount));
 end;
 
 function TEditorStrings.HasText: boolean;
-var i: integer;
+var
+  i: integer;
 begin
   result := true;
-  for i := 0 to FCount-1 do
-  with FList[i] do
-    if StringDynArrayGetSize(pointer(FStrings),FCount)<>0 then
-      exit;
+  for i := 0 to FCount - 1 do
+    with FList[i] do
+      if StringDynArrayGetSize(pointer(FStrings), FCount) <> 0 then
+        exit;
   result := false;
 end;
 
@@ -2348,7 +2414,8 @@ begin
 end;
 
 procedure TGutter.Paint;
-var Rect: TRect;
+var
+  Rect: TRect;
 begin
   with FMemoEx, Canvas do
   begin
@@ -2357,7 +2424,7 @@ begin
     Rect.Left := 0;
     Rect.Top := EditorClient.Top;
     Rect.Right := GutterWidth;
-    Rect.Bottom := Rect.Top+EditorClient.Height;
+    Rect.Bottom := Rect.Top + EditorClient.Height;
     FillRect(Rect);
     Pen.Width := 1;
     Pen.Color := Color;
@@ -2374,9 +2441,6 @@ begin
   with FMemoEx do
     GutterPaint(Canvas, Rect);
 end;
-
-
-
 
 constructor TCustomMemoEx.Create(AOwner: TComponent);
 begin
@@ -2396,14 +2460,21 @@ begin
   FUndoBuffer.FMemoEx := Self;
   FGroupUndo := true;
   {$ENDIF MEMOEX_UNDO}
-
   FDrawBitmap := TBitmap.Create;
 
   FFont := TFont.Create;
   with FFont do
   begin
-    Name := 'Courier New';
-    Size := 10;
+    if Screen.Fonts.IndexOf('Consolas')>=0 then
+    begin
+      Name := 'Consolas';
+      Size := 9;
+    end
+    else
+    begin
+      Name := 'Courier New';
+      Size := 10;
+    end;
     Pitch := fpFixed;
     OnChange := FontChanged;
   end;
@@ -2503,8 +2574,10 @@ end;
 
 procedure TCustomMemoEx.Invalidate;
 begin
-  if (csLoading in ComponentState) then exit;
-  if FUpdateLock = 0 then inherited;
+  if (csLoading in ComponentState) then
+    exit;
+  if FUpdateLock = 0 then
+    inherited;
 end;
 
 procedure TCustomMemoEx.Loaded;
@@ -2525,9 +2598,8 @@ end;
 
 procedure TCustomMemoEx.CreateParams(var Params: TCreateParams);
 const
-  BorderStyles: array [TBorderStyle] of cardinal = (0, WS_BORDER);
-  ScrollStyles: array [TScrollStyle] of cardinal = (0, WS_HSCROLL, WS_VSCROLL,
-                                                      WS_HSCROLL or WS_VSCROLL);
+  BorderStyles: array[TBorderStyle] of cardinal = (0, WS_BORDER);
+  ScrollStyles: array[TScrollStyle] of cardinal = (0, WS_HSCROLL, WS_VSCROLL, WS_HSCROLL or WS_VSCROLL);
 begin
   inherited CreateParams(Params);
   with Params do
@@ -2554,8 +2626,10 @@ end;
 procedure TCustomMemoEx.CreateWnd;
 begin
   inherited CreateWnd;
-  if FScrollBars in [ssHorizontal, ssBoth] then scbHorz.Handle := Handle;
-  if FScrollBars in [ssVertical, ssBoth] then scbVert.Handle := Handle;
+  if FScrollBars in [ssHorizontal, ssBoth] then
+    scbHorz.Handle := Handle;
+  if FScrollBars in [ssVertical, ssBoth] then
+    scbVert.Handle := Handle;
   FAllRepaint := true;
 end;
 
@@ -2572,7 +2646,8 @@ procedure TCustomMemoEx.PaintSelection;
 var
   iR: integer;
 begin
-  for iR := FUpdateSelBegY to FUpdateSelEndY do PaintLine(iR, -1, -1);
+  for iR := FUpdateSelBegY to FUpdateSelEndY do
+    PaintLine(iR, -1, -1);
 end;
 
 procedure TCustomMemoEx.SetUnSelected;
@@ -2581,8 +2656,7 @@ begin
   begin
     FSelectedText := false;
     {$IFDEF MEMOEX_UNDO}
-    TUnselectUndo.Create(Self, FCaretX, FCaretY, FSelBlock, FSelBegX, FSelBegY,
-      FSelEndX, FSelEndY);
+    TUnselectUndo.Create(Self, FCaretX, FCaretY, FSelBlock, FSelBegX, FSelBegY, FSelEndX, FSelEndY);
     {$ENDIF MEMOEX_UNDO}
     PaintSelection;
   end;
@@ -2595,19 +2669,17 @@ end;
 
 function TCustomMemoEx.CalcCellRect(const X, Y: integer): TRect;
 begin
-  Result := Bounds(
-    EditorClient.Left + X * FCellRect.Width + 1,
-    EditorClient.Top + Y * FCellRect.Height,
-    FCellRect.Width,
-    FCellRect.Height)
+  Result := Bounds(EditorClient.Left + X * FCellRect.Width + 1, EditorClient.Top + Y * FCellRect.Height, FCellRect.Width, FCellRect.Height)
 end;
 
 procedure TCustomMemoEx.Paint;
-var iR: integer;
-    ECR: TRect;
-    BX, EX, BY, EY: integer;
+var
+  iR: integer;
+  ECR: TRect;
+  BX, EX, BY, EY: integer;
 begin
-  if FUpdateLock > 0 then exit;
+  if FUpdateLock > 0 then
+    exit;
   {$IFDEF MEMOEX_NOOPTIMIZE}
   FAllRepaint := true;
   {$ENDIF}
@@ -2629,14 +2701,17 @@ end;
 
 procedure TCustomMemoEx.BeginUpdate;
 begin
-  if self=nil then exit;
+  if self = nil then
+    exit;
   inc(FUpdateLock);
 end;
 
 procedure TCustomMemoEx.EndUpdate;
 begin
-  if self=nil then exit;
-  if FUpdateLock = 0 then Exit; { Error ? }
+  if self = nil then
+    exit;
+  if FUpdateLock = 0 then
+    Exit; { Error ? }
   dec(FUpdateLock);
   if FUpdateLock = 0 then
   begin
@@ -2661,9 +2736,11 @@ end;
 procedure TCustomMemoEx.UpdateEditorSize(const FullUpdate: boolean = true; const RepaintGutter: boolean = true);
 const
   BiggestSymbol = 'W';
-var Size: TSize;
+var
+  Size: TSize;
 begin
-  if (csLoading in ComponentState) then exit;
+  if (csLoading in ComponentState) then
+    exit;
   if FullUpdate then
   begin
     EditorClient.Canvas.Font := Font;
@@ -2685,14 +2762,16 @@ begin
   FRows := -1;
   Rows := FLines.ParaLineCount;
   if FWordWrap then
-    Cols := FRightMargin else
+    Cols := FRightMargin
+  else
     Cols := Max_X;
   if RepaintGutter then
     FGutter.Invalidate;
 end;
 
 procedure TCustomMemoEx.PaintLine(const Line: integer; ColBeg, ColEnd: integer);
-var Ch: string;
+var
+  Ch: string;
   R: TRect;
   F, k, x, i, j, iC, jC, SL, MX, PX, PY: integer;
   T, S: string;
@@ -2709,13 +2788,17 @@ begin
   j := 0;
   i := ColBeg;
   if (Line > -1) and (Line < FLines.ParaLineCount) then
-    with FDrawBitmap do begin
+    with FDrawBitmap do
+    begin
       T := FLines.GetParagraphByIndex(Line, PY, PX);
       S := FLines.ParaStrings[Line];
-      if not FWordWrap then begin
+      if not FWordWrap then
+      begin
         iC := ColBeg;
         jC := ColEnd;
-      end else begin
+      end
+      else
+      begin
         iC := 0;
         jC := length(T);
       end;
@@ -2725,10 +2808,12 @@ begin
 
       SL := Length(S);
       if SL > ColEnd then
-        MX := ColEnd else
+        MX := ColEnd
+      else
         MX := SL;
 
-      if FStripInvisible and FReadOnly and (ColBeg > 0) then begin
+      if FStripInvisible and FReadOnly and (ColBeg > 0) then
+      begin
         x := PX + ColBeg;
         if x >= SelAttrs_Size then
           x := SelAttrs_Size - 1;
@@ -2738,106 +2823,120 @@ begin
       end;
 
       while i < MX do
-        with Canvas do begin
+        with Canvas do
+        begin
           iC := i + 1;
           jC := iC + 1;
           if iC <= SL then
-            Ch := S[iC] else
+            Ch := S[iC]
+          else
             Ch := ' ';
-          if (iC + PX > SelAttrs_Size) or (jC + PX > SelAttrs_Size) then break;
+          if (iC + PX > SelAttrs_Size) or (jC + PX > SelAttrs_Size) then
+            break;
           LA := FAttrs[iC + PX - 1];
           if SelAttrs[iC + PX - 1] then
-            with LA do begin
+            with LA do
+            begin
               FC := FclSelectFC;
               BC := FclSelectBC;
             end;
-          while (jC <= MX) and (jC + PX <= SelAttrs_Size) do begin
+          while (jC <= MX) and (jC + PX <= SelAttrs_Size) do
+          begin
             // append chars with same attrs into Ch
             LB := FAttrs[jC + PX - 1];
             if SelAttrs[jC + PX - 1] then
-              with LB do begin
+              with LB do
+              begin
                 FC := FclSelectFC;
                 BC := FclSelectBC;
               end;
-            if (LA.FC=LB.FC) and (LA.BC=LB.BC) and
-               (LA.LastInteger=LB.LastInteger) then begin
+            if (LA.FC = LB.FC) and (LA.BC = LB.BC) and (LA.LastInteger = LB.LastInteger) then
+            begin
               if jC <= SL then
-                Ch := Ch + S[jC] else
+                Ch := Ch + S[jC]
+              else
                 Ch := Ch + ' ';
               inc(jC);
             end
-              else break;
+            else
+              break;
           end;
-          if (not ((LA.BC = LA.FC) and FStripInvisible)) or not ReadOnly then begin
+          if (not ((LA.BC = LA.FC) and FStripInvisible)) or not readonly then
+          begin
             // draw Ch into bitmap
             Brush.Color := LA.BC;
             Font.Color := LA.FC;
             Font.Style := LA.Style;
-            R.Left := EditorClient.Left + (i-FLeftCol-j)*FCellRect.Width + 1;
+            R.Left := EditorClient.Left + (i - FLeftCol - j) * FCellRect.Width + 1;
             R.Top := 0;
-            R.Right := R.Left+FCellRect.Width * Length(Ch);
+            R.Right := R.Left + FCellRect.Width * Length(Ch);
             R.Bottom := FCellRect.Height;
             FillRect(R);
             TextOut(R.Left, 0, Ch);
           end
-            else inc(j, length(Ch));
+          else
+            inc(j, length(Ch));
           i := jC - 1;
         end;
-    end else begin
-      FDrawBitmap.Canvas.Brush.Color := Color;
-      FDrawBitmap.Canvas.FillRect(Bounds(EditorClient.Left, 0, 1, FCellRect.Height));
-    end;
+    end
+  else
+  begin
+    FDrawBitmap.Canvas.Brush.Color := Color;
+    FDrawBitmap.Canvas.FillRect(Bounds(EditorClient.Left, 0, 1, FCellRect.Height));
+  end;
 
-  R := Bounds(CalcCellRect(i - j - FLeftCol, Line - FTopRow).Left,
-              0, (FLeftCol + FVisibleColCount - i{ - j} + 10) * FCellRect.Width,
-              FCellRect.Height);
+  R := Bounds(CalcCellRect(i - j - FLeftCol, Line - FTopRow).Left, 0, (FLeftCol + FVisibleColCount - i{ - j}  + 10) * FCellRect.Width, FCellRect.Height);
   FDrawBitmap.Canvas.Brush.Color := Color;
   FDrawBitmap.Canvas.FillRect(R);
 
-  R := Bounds(EditorClient.Left, (Line - FTopRow) * FCellRect.Height,
-              (FVisibleColCount + 2) * FCellRect.Width, FCellRect.Height);
+  R := Bounds(EditorClient.Left, (Line - FTopRow) * FCellRect.Height, (FVisibleColCount + 2) * FCellRect.Width, FCellRect.Height);
 
-  if FRightMarginVisible and (FRightMargin > FLeftCol) and
-     (FRightMargin < FLastVisibleCol + 3) then
-    with FDrawBitmap.Canvas do begin
+  if FRightMarginVisible and (FRightMargin > FLeftCol) and (FRightMargin < FLastVisibleCol + 3) then
+    with FDrawBitmap.Canvas do
+    begin
       Pen.Color := FRightMarginColor;
       F := CalcCellRect(FRightMargin - FLeftCol, 0).Left;
       MoveTo(F, 0);
       LineTo(F, FCellRect.Height);
     end;
 
-  BitBlt(EditorClient.Canvas.Handle, R.Left, R.Top, R.Right - R.Left,
-          FCellRect.Height, FDrawBitmap.Canvas.Handle, R.Left, 0, SRCCOPY );
+  BitBlt(EditorClient.Canvas.Handle, R.Left, R.Top, R.Right - R.Left, FCellRect.Height, FDrawBitmap.Canvas.Handle, R.Left, 0, SRCCOPY);
 end;
 
+procedure TCustomMemoEx.GetLineAttr(Line, LineIdx, LineOffs, LineLen, ColBeg, ColEnd: integer; const ALine: string; var FAttrs: TLineAttrs);
 
-procedure TCustomMemoEx.GetLineAttr(Line, LineIdx, LineOffs, LineLen, ColBeg, ColEnd: integer;
-   const ALine: string; var FAttrs: TLineAttrs);
-procedure SetAttrs(A: pLineAttr; count: integer);
-var i: integer;
-begin
-  assert(sizeof(TLineAttr)=12);
-  for i := 1 to Count do begin
-    A^.FC := clWindowText;
-    A^.BC := clWindow;
-    A^.LastInteger := 0;
-    inc(A);
-  end;
-end;
-procedure ChangeSelectedAttr;
-  procedure DoChange(const iBeg, iEnd: integer);
-  var i: integer;
+  procedure SetAttrs(A: pLineAttr; count: integer);
+  var
+    i: integer;
   begin
-    if (iBeg + LineOffs < SelAttrs_Size) and (iEnd + LineOffs < SelAttrs_Size) then
-      for i := iBeg + LineOffs to iEnd + LineOffs do
-        SelAttrs[i] := true;
+    for i := 1 to Count do
+    begin
+      A^.FC := clWindowText;
+      A^.BC := clWindow;
+      A^.LastInteger := 0;
+      inc(A);
+    end;
   end;
-begin
-  if SelAttrs_Size > 0 then
-     FillChar(SelAttrs[0], SelAttrs_Size, 0);
-  if not FSelected then exit;
-  if (LineIdx = FSelBegY) and (LineIdx = FSelEndY) then
-    DoChange(FSelBegX, Min(LineLen - 1, FSelEndX - 1 + integer(FInclusive))) else
+
+  procedure ChangeSelectedAttr;
+
+    procedure DoChange(const iBeg, iEnd: integer);
+    var
+      i: integer;
+    begin
+      if (iBeg + LineOffs < SelAttrs_Size) and (iEnd + LineOffs < SelAttrs_Size) then
+        for i := iBeg + LineOffs to iEnd + LineOffs do
+          SelAttrs[i] := true;
+    end;
+
+  begin
+    if SelAttrs_Size > 0 then
+      FillChar(SelAttrs[0], SelAttrs_Size, 0);
+    if not FSelected then
+      exit;
+    if (LineIdx = FSelBegY) and (LineIdx = FSelEndY) then
+      DoChange(FSelBegX, Min(LineLen - 1, FSelEndX - 1 + integer(FInclusive)))
+    else
     begin
       if LineIdx = FSelBegY then
         DoChange(FSelBegX, LineLen - 1);
@@ -2846,31 +2945,30 @@ begin
       if LineIdx = FSelEndY then
         DoChange(0, Min(LineLen - 1, FSelEndX - 1 + integer(FInclusive)));
     end
-end;
+  end;
+
 begin
-  if SelAttrs_Size <> length(ALine) + 1 then begin
+  if SelAttrs_Size <> length(ALine) + 1 then
+  begin
     SelAttrs_Size := length(ALine) + 1;
     SetLength(SelAttrs, SelAttrs_Size);
   end;
   ChangeSelectedAttr;
 
   SetLength(FAttrs, SelAttrs_Size);
-  SetAttrs(@Fattrs[0],SelAttrs_Size);
+  SetAttrs(@FAttrs[0], SelAttrs_Size);
 
   if (ALine <> '') and Assigned(FOnGetLineAttr) then
     FOnGetLineAttr(Self, ALine, Line, SelAttrs, FAttrs);
 end;
 
-
-
-procedure TCustomMemoEx.ScrollBarScroll(Sender: TObject; ScrollCode: TScrollCode;
-  var ScrollPos: integer);
+procedure TCustomMemoEx.ScrollBarScroll(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: integer);
 begin
   case ScrollCode of
     scLineUp..scPageDown, scTrack:
       if Sender = scbVert then
-        Scroll(true, ScrollPos) else
-      if Sender = scbHorz then
+        Scroll(true, ScrollPos)
+      else if Sender = scbHorz then
         Scroll(false, ScrollPos);
   end;
 end;
@@ -2892,32 +2990,34 @@ begin
         R := EditorClient.ClientRect;
         R.Bottom := R.Top + CellRect.Height * (FVisibleRowCount + 1); {??}
         RClip := R;
-        ScrollDC(
-          EditorClient.Canvas.Handle,                   // handle of device context
+        ScrollDC(EditorClient.Canvas.Handle,            // handle of device context
           0,                                            // horizontal scroll units
           (OldFTopRow - ScrollPos) * FCellRect.Height,  // vertical scroll units
           R,                                            // address of structure for scrolling rectangle
           RClip,                                        // address of structure for clipping rectangle
           0,                                            // handle of scrolling region
           @RUpdate                                      // address of structure for update rectangle
-          );
+        );
         InvalidateRect(Handle, @RUpdate, false);
         if Assigned(OnPaintGutter) then
           Gutter.Paint;
       end
-        else Invalidate;
+      else
+        Invalidate;
       Update;
     end
-      else {Horizontal Scroll}
+    else {Horizontal Scroll}
     begin
       FLeftCol := ScrollPos;
       Invalidate;
     end;
   end
-    else { FUpdateLock > 0 }
+  else { FUpdateLock > 0 }
   begin
-    if Vert then FTopRow := ScrollPos
-      else FLeftCol := ScrollPos;
+    if Vert then
+      FTopRow := ScrollPos
+    else
+      FLeftCol := ScrollPos;
   end;
   FLastVisibleRow := FTopRow + FVisibleRowCount - 1;
   FLastVisibleCol := FLeftCol + FVisibleColCount - 1;
@@ -2930,13 +3030,11 @@ begin
     FOnScroll(Self);
 end;
 
-
-
 procedure TCustomMemoEx.PaintCaret(bShow: boolean);
 begin
   if not bShow then
-    HideCaret(Handle) else
-  if Focused then
+    HideCaret(Handle)
+  else if Focused then
   begin
     with CalcCellRect(FCaretX - FLeftCol, FCaretY - FTopRow) do
       SetCaretPos(Left - 1, Top + 1);
@@ -2954,14 +3052,14 @@ begin
   X := Min(X, Max_X);
   X := Max(X, 0);
   if Y < FTopRow then
-    SetLeftTop(FLeftCol, Y) else
-  if Y > Max(FLastVisibleRow, 0) then
+    SetLeftTop(FLeftCol, Y)
+  else if Y > Max(FLastVisibleRow, 0) then
     SetLeftTop(FLeftCol, Y - FVisibleRowCount + 1);
   if X < 0 then
     X := 0;
   if X < FLeftCol then
-    SetLeftTop(X, FTopRow) else
-  if X > FLastVisibleCol then
+    SetLeftTop(X, FTopRow)
+  else if X > FLastVisibleCol then
     SetLeftTop(X - FVisibleColCount {+ 1}, FTopRow);
   with CalcCellRect(X - FLeftCol, Y - FTopRow) do
     SetCaretPos(Left - 1, Top + 1);
@@ -2989,21 +3087,21 @@ begin
     StatusChanged;
 end;
 
-procedure TCustomMemoEx.SetCaretAtParaPos(const ParaIndex,IndexOffs: integer);
-var X,Y: integer;
+procedure TCustomMemoEx.SetCaretAtParaPos(const ParaIndex, IndexOffs: integer);
+var
+  X, Y: integer;
 begin
-  Lines.Paragraph2Caret(ParaIndex,IndexOffs,X,Y);
-  SetCaret(X,Y);
+  Lines.Paragraph2Caret(ParaIndex, IndexOffs, X, Y);
+  SetCaret(X, Y);
 end;
 
 procedure TCustomMemoEx.SetCaretPosition(const index, Pos: integer);
 begin
   if index = 0 then
-    SetCaret(Pos, FCaretY) else
+    SetCaret(Pos, FCaretY)
+  else
     SetCaret(FCaretX, Pos)
 end;
-
-
 
 procedure TCustomMemoEx.KeyDown(var Key: Word; Shift: TShiftState);
 var
@@ -3014,12 +3112,13 @@ var
 begin
   {$IFDEF MEMOEX_COMPLETION}
   if FCompletion.FVisible then
-    if FCompletion.DoKeyDown(Key, Shift) then exit
-      else
+    if FCompletion.DoKeyDown(Key, Shift) then
+      exit
+    else
+
   else
     FCompletion.FTimer.Enabled := false;
   {$ENDIF MEMOEX_COMPLETION}
-
   if (Key = VK_TAB) and ((Shift = []) or (Shift = [ssShift])) then
     if ((FReadOnly) or (not FWantTabs)) then
     begin
@@ -3027,8 +3126,10 @@ begin
       if Assigned(Form) then
       begin
         Key := 0;
-        if Shift = [] then Form.Perform(WM_NEXTDLGCTL, 0, 0)
-          else Form.Perform(WM_NEXTDLGCTL, 1, 0);
+        if Shift = [] then
+          Form.Perform(WM_NEXTDLGCTL, 0, 0)
+        else
+          Form.Perform(WM_NEXTDLGCTL, 1, 0);
       end;
       exit;
     end;
@@ -3040,7 +3141,7 @@ begin
     WaitSecondKey := false;
     IgnoreKeyPress := true;
   end
-    else
+  else
   begin
     inherited KeyDown(Key, Shift);
     Key1 := Key;
@@ -3051,7 +3152,8 @@ begin
       IgnoreKeyPress := true;
       WaitSecondKey := true;
     end
-      else IgnoreKeyPress := Com > 0;
+    else
+      IgnoreKeyPress := Com > 0;
   end;
   if (Com > 0) and (Com <> twoKeyCommand) then
   begin
@@ -3060,7 +3162,8 @@ begin
     Command(Com);
   end;
   {$IFDEF MEMOEX_COMPLETION}
-  if (Com = ecBackSpace) then FCompletion.DoKeyPress(#8);
+  if (Com = ecBackSpace) then
+    FCompletion.DoKeyPress(#8);
   {$ENDIF MEMOEX_COMPLETION}
   {$ENDIF MEMOEX_EDITOR}
 end;
@@ -3079,7 +3182,8 @@ begin
     IgnoreKeyPress := false;
     exit
   end;
-  if FReadOnly then exit;
+  if FReadOnly then
+    exit;
   PaintCaret(false);
   inherited KeyPress(Key);
 
@@ -3094,10 +3198,12 @@ var
 begin
   i := length(PAutoChangeWord(Item1)^.OldWord);
   j := length(PAutoChangeWord(Item2)^.OldWord);
-  if i = j then Result := 0
+  if i = j then
+    Result := 0
+  else if i > j then
+    Result := 1
   else
-    if i > j then Result := 1
-    else Result := -1;
+    Result := -1;
 end;
 
 procedure TCustomMemoEx.InsertChar(const Key: Char);
@@ -3115,19 +3221,18 @@ procedure TCustomMemoEx.InsertChar(const Key: Char);
     begin
       s := PAutoChangeWord(FCompletion.FAutoChangeList[i])^.OldWord;
       k := length(s);
-      if j < k then break
-      else
-        if j = k then
-          if t = s then
-          begin
-            Result := true;
-            NewWord := PAutoChangeWord(FCompletion.FAutoChangeList[i])^.NewWord;
-            break;
-          end;
+      if j < k then
+        break
+      else if j = k then
+        if t = s then
+        begin
+          Result := true;
+          NewWord := PAutoChangeWord(FCompletion.FAutoChangeList[i])^.NewWord;
+          break;
+        end;
     end;
   end;
   {$ENDIF}
-
 var
   S: string;
   {$IFDEF MEMOEX_COMPLETION}
@@ -3138,153 +3243,164 @@ var
   oldChar: string;
   i, _X, _Y, Y: integer;
   b: boolean;
+  KeyAnsiChar: AnsiChar;
 begin
   ReLine;
-  case Key of
-    #32..#255:
+  if Key < #32 then
+    exit;
+  {$ifdef UNICODE}
+  if Key > #255 then
+    KeyAnsiChar := #255
+  else
+  {$endif}
+    KeyAnsiChar := AnsiChar(Key);
+  {$IFDEF MEMOEX_COMPLETION}
+  if not (KeyAnsiChar in RAEditorCompletionChars) then
+    FCompletion.DoKeyPress(Key);
+  {$ENDIF MEMOEX_COMPLETION}
+  DeleteSelected;
+  FLines.Caret2Paragraph(FCaretX, FCaretY, FParaY, FParaX);
+  {$IFDEF MEMOEX_COMPLETION}
+  str_pos := 0;
+  if (KeyAnsiChar in _AutoChangePunctuation) and (FCompletion.FAutoChangeList.Count > 0) then
+  begin
+    S := FLines[FParaY];
+    AutoChanged := false;
+    AddKeyToNewStr := false;
+    str_pos := FParaX - 1;
+    k1 := length(PAutoChangeWord(FCompletion.FAutoChangeList[0])^.OldWord);
+    k2 := length(PAutoChangeWord(FCompletion.FAutoChangeList[FCompletion.FAutoChangeList.Count - 1])^.OldWord);
+    while (str_pos > -1) and (FParaX - str_pos <= k2) do
+    begin
+      if FParaX - str_pos >= k1 then
       begin
-        {$IFDEF MEMOEX_COMPLETION}
-        if not HasChar(Key, RAEditorCompletionChars) then
-          FCompletion.DoKeyPress(Key);
-        {$ENDIF MEMOEX_COMPLETION}
-        begin
-          DeleteSelected;
-          FLines.Caret2Paragraph(FCaretX, FCaretY, FParaY, FParaX);
-          {$IFDEF MEMOEX_COMPLETION}
-          new_str := '';
-          old_str := '';
-          str_pos := 0;
-          if (Key in _AutoChangePunctuation) and (FCompletion.FAutoChangeList.Count > 0) then
-          begin
-            S := FLines[FParaY];
-            AutoChanged := false;
-            AddKeyToNewStr := false;
-            str_pos := FParaX - 1;
-            k1 := length(PAutoChangeWord(FCompletion.FAutoChangeList[0])^.OldWord);
-            k2 := length(PAutoChangeWord(FCompletion.FAutoChangeList[FCompletion.FAutoChangeList.Count - 1])^.OldWord);
-            while (str_pos > -1) and (FParaX - str_pos <= k2) do
-            begin
-              if FParaX - str_pos >= k1 then
-              begin
-                old_str := System.Copy(S, str_pos + 1, FParaX - str_pos);
-                AutoChanged := GetAutoChangeWord(old_str, new_str); //  замен€ем подстроку без знака?
-                if not AutoChanged then
-                  AutoChanged := GetAutoChangeWord(old_str + Key, new_str) //  замен€ем подстроку со знаком?
-                else AddKeyToNewStr := true;
-                if AutoChanged then
-                  if ((str_pos > 0) and (S[str_pos] in _AutoChangePunctuation)) or (str_pos = 0) then break
-                  else AutoChanged := false;
-              end;
-              dec(str_pos);
-            end;
-            if AutoChanged then
-              if AddKeyToNewStr then
-                if GetAutoChangeWord(Key, T) then new_str := new_str + T
-                else new_str := new_str + Key
-              else
-            else
-              begin
-                AutoChanged := GetAutoChangeWord(Key, new_str);
-                if AutoChanged then
-                begin
-                  str_pos := FParaX;  //  замен€ем 1, только что введенный, знак
-                  old_str := '';
-                end;
-              end;
-          end
-          else AutoChanged := false;
-          if AutoChanged then
-          begin
-            {
-              str_pos
-              S
-              old_str
-              new_str
-            }
-
-            {$IFDEF MEMOEX_UNDO}
-            //  undo
-            BeginCompound;
-            TCaretUndo.Create(Self, FCaretX, FCaretY);
-            FLines.Paragraph2Caret(FParaY, str_pos, _X, _Y);
-            if (length(old_str) + integer(not FInsertMode) > 0) and (length(S) > 0) then
-            begin
-              if FInsertMode then T := old_str
-              else T := old_str + S[FParaX + 1];
-              TDeleteUndo.Create(Self, _X, _Y, T);
-            end;
-            if length(new_str) > 0 then TInsertUndo.Create(Self, _X, _Y, new_str);
-            EndCompound;
-            {$ENDIF}
-
-            k1 := FLines.Paragraphs[FParaY].FCount;
-            System.Delete(S, str_pos + 1, length(old_str) + integer(not FInsertMode));
-            System.Insert(new_str, S, str_pos + 1);
-            FLines.Internal[FParaY] := S;
-            B := k1 <> FLines.Paragraphs[FParaY].FCount;
-            FParaX := str_pos + length(new_str);
-          end
+        old_str := System.Copy(S, str_pos + 1, FParaX - str_pos);
+        AutoChanged := GetAutoChangeWord(old_str, new_str); //  замен€ем подстроку без знака?
+        if not AutoChanged then
+          AutoChanged := GetAutoChangeWord(old_str + Key, new_str) //  замен€ем подстроку со знаком?
+        else
+          AddKeyToNewStr := true;
+        if AutoChanged then
+          if ((str_pos > 0) and ({$ifdef UNICODE}(S[str_pos] < #255) and {$endif}
+            (AnsiChar(S[str_pos]) in _AutoChangePunctuation))) or (str_pos = 0) then
+            break
           else
-          {$ENDIF MEMOEX_COMPLETION}
-            begin
-              S := FLines.ParaStrings[FCaretY];
-              if FInsertMode then
-              begin
-                {$IFDEF MEMOEX_UNDO}
-                TInsertUndo.Create(Self, FCaretX, FCaretY, Key);
-                {$ENDIF MEMOEX_UNDO}
-                Insert(Key, S, FCaretX + 1);
-              end
-              else
-                begin
-                  if FCaretX + 1 <= Length(S) then
-                  begin
-                    oldChar := S[FCaretX + 1];
-                    S[FCaretX + 1] := Key;
-                  end
-                  else
-                    begin
-                      oldChar := '';
-                      S := S + Key;
-                    end;
-                  {$IFDEF MEMOEX_UNDO}
-                  TOverwriteUndo.Create(Self, FCaretX, FCaretY, oldChar, Key);
-                  {$ENDIF MEMOEX_UNDO}
-                end;
-
-              Y := FCaretY;
-              i := FLines.Paragraphs[FParaY].FCount;
-              FLines.InternalParaStrings[Y] := S;
-              inc(FParaX);
-
-              B := i <> FLines.Paragraphs[FParaY].FCount;
-            end;
-
-          i := RepaintParagraph(FCaretY);
-
-          if B then
-          begin
-            UpdateEditorSize(false);
-            RedrawFrom(i + 1);
-          end;
-
-          FLines.Paragraph2Caret(FParaY, FParaX, _X, _Y);
-          SetCaretInternal(_X, _Y);
-
-          Changed;
-        end;
-        {$IFDEF MEMOEX_COMPLETION}
-        if HasChar(Key, RAEditorCompletionChars) then
-          FCompletion.DoKeyPress(Key);
-        {$ENDIF MEMOEX_COMPLETION}
+            AutoChanged := false;
       end;
+      dec(str_pos);
+    end;
+    if AutoChanged then
+      if AddKeyToNewStr then
+        if GetAutoChangeWord(Key, T) then
+          new_str := new_str + T
+        else
+          new_str := new_str + Key
+      else
+
+    else
+    begin
+      AutoChanged := GetAutoChangeWord(Key, new_str);
+      if AutoChanged then
+      begin
+        str_pos := FParaX;  //  замен€ем 1, только что введенный, знак
+        old_str := '';
+      end;
+    end;
+  end
+  else
+    AutoChanged := false;
+  if AutoChanged then
+  begin
+    {
+      str_pos
+      S
+      old_str
+      new_str
+    }
+    {$IFDEF MEMOEX_UNDO}
+    //  undo
+    BeginCompound;
+    TCaretUndo.Create(Self, FCaretX, FCaretY);
+    FLines.Paragraph2Caret(FParaY, str_pos, _X, _Y);
+    if (length(old_str) + integer(not FInsertMode) > 0) and (length(S) > 0) then
+    begin
+      if FInsertMode then
+        T := old_str
+      else
+        T := old_str + S[FParaX + 1];
+      TDeleteUndo.Create(Self, _X, _Y, T);
+    end;
+    if length(new_str) > 0 then
+      TInsertUndo.Create(Self, _X, _Y, new_str);
+    EndCompound;
+    {$ENDIF}
+    k1 := FLines.Paragraphs[FParaY].FCount;
+    System.Delete(S, str_pos + 1, length(old_str) + integer(not FInsertMode));
+    System.Insert(new_str, S, str_pos + 1);
+    FLines.Internal[FParaY] := S;
+    B := k1 <> FLines.Paragraphs[FParaY].FCount;
+    FParaX := str_pos + length(new_str);
+  end
+  else
+  {$ENDIF MEMOEX_COMPLETION}
+  begin
+    S := FLines.ParaStrings[FCaretY];
+    if FInsertMode then
+    begin
+        {$IFDEF MEMOEX_UNDO}
+      TInsertUndo.Create(Self, FCaretX, FCaretY, Key);
+        {$ENDIF MEMOEX_UNDO}
+      Insert(Key, S, FCaretX + 1);
+    end
+    else
+    begin
+      if FCaretX + 1 <= Length(S) then
+      begin
+        oldChar := S[FCaretX + 1];
+        S[FCaretX + 1] := Key;
+      end
+      else
+      begin
+        oldChar := '';
+        S := S + Key;
+      end;
+          {$IFDEF MEMOEX_UNDO}
+      TOverwriteUndo.Create(Self, FCaretX, FCaretY, oldChar, Key);
+          {$ENDIF MEMOEX_UNDO}
+    end;
+
+    Y := FCaretY;
+    i := FLines.Paragraphs[FParaY].FCount;
+    FLines.InternalParaStrings[Y] := S;
+    inc(FParaX);
+
+    B := i <> FLines.Paragraphs[FParaY].FCount;
   end;
+
+  i := RepaintParagraph(FCaretY);
+
+  if B then
+  begin
+    UpdateEditorSize(false);
+    RedrawFrom(i + 1);
+  end;
+
+  FLines.Paragraph2Caret(FParaY, FParaX, _X, _Y);
+  SetCaretInternal(_X, _Y);
+
+  Changed;
+
+  {$IFDEF MEMOEX_COMPLETION}
+  if KeyAnsiChar in RAEditorCompletionChars then
+    FCompletion.DoKeyPress(Key);
+  {$ENDIF MEMOEX_COMPLETION}
 end;
 
 {$ENDIF MEMOEX_EDITOR}
 
 procedure TCustomMemoEx.RedrawFrom(YFrom: integer);
-var i: integer;
+var
+  i: integer;
 begin
   for i := YFrom - 1 to FLastVisibleRow + 1 do
     PaintLine(i, -1, -1);
@@ -3309,7 +3425,7 @@ end;
 
 function TCustomMemoEx.IsUndoEmpty: boolean;
 begin
-{$IFDEF MEMOEX_EDITOR} Result := FUndoBuffer.FPtr < 0;{$endif}
+{$IFDEF MEMOEX_EDITOR}   Result := FUndoBuffer.FPtr < 0; {$endif}
 end;
 
 function TCustomMemoEx.YinBounds(AY: integer): boolean;
@@ -3317,18 +3433,18 @@ begin
   Result := (AY > -1) and (AY < FLines.ParaLineCount);
 end;
 
-function TCustomMemoEx.DoChangeCase(const st: string;
-  Conversion: byte): string;
+function TCustomMemoEx.DoChangeCase(const st: string; Conversion: byte): string;
 begin
   if Assigned(FOnCaseConversion) then
-    Result := FOnCaseConversion(Self, Conversion, st) else
+    Result := FOnCaseConversion(Self, Conversion, st)
+  else
     case Conversion of
       RA_CASE_CONVERT_UPPER:
         Result := ANSIUpperCase(st);
       RA_CASE_CONVERT_LOWER:
         Result := ANSILowerCase(st);
-      else
-        Result := ANSIChangeCase(st);
+    else
+      Result := ANSIChangeCase(st);
     end;
 end;
 
@@ -3342,7 +3458,6 @@ var
   {$IFDEF MEMOEX_UNDO}
   CaretUndo: boolean;
   {$ENDIF MEMOEX_UNDO}
-
 type
   TPr = procedure of object;
 
@@ -3398,7 +3513,6 @@ begin
   {$IFDEF MEMOEX_UNDO}
   CaretUndo := true;
   {$ENDIF MEMOEX_UNDO}
-
   PaintCaret(false);
 
  { macro recording }
@@ -3413,68 +3527,91 @@ begin
 
         ecLeft, ecRight, ecSelLeft, ecSelRight:
           begin
-            if Com([ecSelLeft, ecSelRight]) and not FSelected then SetSel1(X, Y);
+            if Com([ecSelLeft, ecSelRight]) and not FSelected then
+              SetSel1(X, Y);
             B := Com([ecLeft, ecSelLeft]);
-            if B then dec(X) else inc(X);
+            if B then
+              dec(X)
+            else
+              inc(X);
             if (not FCursorBeyondEOL) and (YinBounds(Y)) then
             begin
               _Y := 0;
-              if (B) and (X < 0) then _Y := -1
-                else
-              if (not B) and (X > length(FLines.ParaStrings[Y])) then _Y := 1;
+              if (B) and (X < 0) then
+                _Y := -1
+              else if (not B) and (X > length(FLines.ParaStrings[Y])) then
+                _Y := 1;
               if (_Y <> 0) and (YinBounds(Y + _Y)) then
               begin
                 Y := Y + _Y;
-                if B then X := length(FLines.ParaStrings[Y])
-                  else X := 0;
-              end
+                if B then
+                  X := length(FLines.ParaStrings[Y])
                 else
-              if X > length(FLines.ParaStrings[Y]) then X := length(FLines.ParaStrings[Y]);
+                  X := 0;
+              end
+              else if X > length(FLines.ParaStrings[Y]) then
+                X := length(FLines.ParaStrings[Y]);
             end
-              else if not CursorBeyondEOL then X := 0;
-            if Com([ecSelLeft, ecSelRight]) then SetSel1(X, Y)
-              else SetUnSelected;
+            else if not CursorBeyondEOL then
+              X := 0;
+            if Com([ecSelLeft, ecSelRight]) then
+              SetSel1(X, Y)
+            else
+              SetUnSelected;
           end;
         ecUp, ecDown, ecSelUp, ecSelDown:
           if (Com([ecUp, ecSelUp]) and (Y > 0)) or (Com([ecDown, ecSelDown]) and ((Y < FRows - 1) or (FCursorBeyondEOF))) then
           begin
-            if Com([ecSelUp, ecSelDown]) and not FSelected then SetSel1(X, Y);
-            if Com([ecUp, ecSelUp]) then dec(Y)
-              else inc(Y);
+            if Com([ecSelUp, ecSelDown]) and not FSelected then
+              SetSel1(X, Y);
+            if Com([ecUp, ecSelUp]) then
+              dec(Y)
+            else
+              inc(Y);
             if (not FCursorBeyondEOL) and (YinBounds(Y)) then
-              if X > length(FLines.ParaStrings[Y]) then X := length(FLines.ParaStrings[Y]);
-            if Com([ecSelUp, ecSelDown]) then SetSel1(X, Y)
-              else SetUnSelected;
+              if X > length(FLines.ParaStrings[Y]) then
+                X := length(FLines.ParaStrings[Y]);
+            if Com([ecSelUp, ecSelDown]) then
+              SetSel1(X, Y)
+            else
+              SetUnSelected;
           end;
         ecPrevWord, ecSelPrevWord:
           if FLines.ParaLineCount > 0 then
           begin
             S := FLines.ParaStrings[Y];
-            if X > length(S) then X := length(S);
+            if X > length(S) then
+              X := length(S);
             if X = 0 then
               if Y > 0 then
               begin
                 dec(Y);
                 X := length(FLines.ParaStrings[Y]);
               end
-                else
               else
+
+            else
             begin
-              if (ACommand = ecSelPrevWord) and not FSelected then SetSel1(FCaretX, FCaretY);
+              if (ACommand = ecSelPrevWord) and not FSelected then
+                SetSel1(FCaretX, FCaretY);
               B := false;
               for F := X - 1 downto 0 do
                 if B then
-                  if (S[F + 1] in Separators) then
+                  if {$ifdef UNICODE} (S[F + 1] < #255) and {$endif} (AnsiChar(S[F + 1]) in Separators) then
                   begin
                     X := F + 1;
                     break;
                   end
-                    else
-                else
-                  if not (S[F + 1] in Separators) then B := true;
-              if X = FCaretX then X := 0;
-              if ACommand = ecSelPrevWord then SetSel1(X, Y)
-                else SetUnselected;
+                  else
+
+                else if {$ifdef UNICODE} (S[F + 1] > #255) or {$endif} not (AnsiChar(S[F + 1]) in Separators) then
+                  B := true;
+              if X = FCaretX then
+                X := 0;
+              if ACommand = ecSelPrevWord then
+                SetSel1(X, Y)
+              else
+                SetUnselected;
               if (not B) and (X = 0) and (Y > 0) then
               begin
                 FCaretX := X;
@@ -3502,28 +3639,32 @@ begin
                   end;
               end;
             end
-              else
+            else
             begin
-              if (ACommand = ecSelNextWord) and not FSelected then SetSel1(FCaretX, FCaretY);
+              if (ACommand = ecSelNextWord) and not FSelected then
+                SetSel1(FCaretX, FCaretY);
               S := FLines.ParaStrings[Y];
               B := false;
               for F := X to Length(S) - 1 do
                 if B then
-                  if not (S[F + 1] in Separators) then
+                  if {$ifdef UNICODE} (S[F + 1] > #255) or {$endif} not (AnsiChar(S[F + 1]) in Separators) then
                   begin
                     X := F;
                     break;
                   end
-                    else
-                else
-                  if (S[F + 1] in Separators) then B := true;
+                  else
+
+                else if {$ifdef UNICODE} (S[F + 1] < #255) and {$endif} (AnsiChar(S[F + 1]) in Separators) then
+                  B := true;
               if X = FCaretX then
               begin
                 B := X <> length(S);
                 X := length(S);
               end;
-              if ACommand = ecSelNextWord then SetSel1(X, Y)
-                else SetUnselected;
+              if ACommand = ecSelNextWord then
+                SetSel1(X, Y)
+              else
+                SetUnselected;
               if (not B) and (X = length(S)) and (Y < FLines.ParaLineCount - 1) then
               begin
                 FCaretX := X;
@@ -3532,11 +3673,9 @@ begin
               end;
             end;
           end;
-        ecScrollLineUp, ecScrollLineDown,
-        ecScrollPageUp, ecScrollPageDown:
+        ecScrollLineUp, ecScrollLineDown, ecScrollPageUp, ecScrollPageDown:
           begin
-            if not ((ACommand = ecScrollLineDown) and (Y >= FLines.ParaLineCount - 1)
-              and (Y = FTopRow)) then
+            if not ((ACommand = ecScrollLineDown) and (Y >= FLines.ParaLineCount - 1) and (Y = FTopRow)) then
             begin
               case ACommand of
                 ecScrollLineUp:
@@ -3545,46 +3684,47 @@ begin
                   F := 1;
                 ecScrollPageUp:
                   F := -scbVert.LargeChange;
-                else
-                  F := scbVert.LargeChange;
+              else
+                F := scbVert.LargeChange;
               end;
               scbVert.Position := scbVert.Position + F;
               Scroll(true, scbVert.Position);
             end;
             if Y < FTopRow then
-              Y := FTopRow else
-            if Y > FLastVisibleRow then
+              Y := FTopRow
+            else if Y > FLastVisibleRow then
               Y := FLastVisibleRow;
           end;
-        ecBeginLine, ecSelBeginLine, ecBeginDoc, ecSelBeginDoc,
-          ecEndLine, ecSelEndLine, ecEndDoc, ecSelEndDoc:
+        ecBeginLine, ecSelBeginLine, ecBeginDoc, ecSelBeginDoc, ecEndLine, ecSelEndLine, ecEndDoc, ecSelEndDoc:
           begin
             if Com([ecSelBeginLine, ecSelBeginDoc, ecSelEndLine, ecSelEndDoc]) and not FSelected then
               SetSel1(FCaretX, Y);
-            if Com([ecBeginLine, ecSelBeginLine]) then X := 0
-              else
-            if Com([ecBeginDoc, ecSelBeginDoc]) then
+            if Com([ecBeginLine, ecSelBeginLine]) then
+              X := 0
+            else if Com([ecBeginDoc, ecSelBeginDoc]) then
             begin
               X := 0;
               Y := 0;
               SetLeftTop(0, 0);
             end
-              else
-            if Com([ecEndLine, ecSelEndLine]) then
+            else if Com([ecEndLine, ecSelEndLine]) then
             begin
-              if FLines.ParaLineCount > 0 then X := Length(FLines.ParaStrings[Y])
-                else X := 0;
-            end
+              if FLines.ParaLineCount > 0 then
+                X := Length(FLines.ParaStrings[Y])
               else
-            if Com([ecEndDoc, ecSelEndDoc]) then
+                X := 0;
+            end
+            else if Com([ecEndDoc, ecSelEndDoc]) then
               if FLines.ParaLineCount > 0 then
               begin
                 Y := FLines.ParaLineCount - 1;
                 X := Length(FLines.ParaStrings[Y]);
                 SetLeftTop(X - FVisibleColCount, Y - FVisibleRowCount + 1{ div 2});
               end;
-            if Com([ecSelBeginLine, ecSelBeginDoc, ecSelEndLine, ecSelEndDoc]) then SetSel1(X, Y)
-              else SetUnSelected;
+            if Com([ecSelBeginLine, ecSelBeginDoc, ecSelEndLine, ecSelEndDoc]) then
+              SetSel1(X, Y)
+            else
+              SetUnSelected;
           end;
         ecPrevPage:
           begin
@@ -3617,8 +3757,10 @@ begin
             scbVert.Position := scbVert.Position + scbVert.LargeChange;
             Scroll(true, scbVert.Position);
             Y := Y + FVisibleRowCount;
-            if Y <= FLines.ParaLineCount - 1 then SetSel1(X, Y)
-              else SetSel1(X, FLines.ParaLineCount - 1);
+            if Y <= FLines.ParaLineCount - 1 then
+              SetSel1(X, Y)
+            else
+              SetSel1(X, FLines.ParaLineCount - 1);
             EndUpdate;
           end;
         ecSelWord:
@@ -3665,7 +3807,8 @@ begin
             S := FLines[FParaY];
             S2 := Copy(S, FParaX + 1, length(S));
             T := S2;
-            if Assigned(FOnBreakLine) then FOnBreakLine(Self, S, S2);
+            if Assigned(FOnBreakLine) then
+              FOnBreakLine(Self, S, S2);
             if S2 = T then
             begin
               {$IFDEF MEMOEX_UNDO}
@@ -3673,8 +3816,8 @@ begin
               TInsertUndo.Create(Self, FCaretX, FCaretY, #13#10);
               CaretUndo := false;
               {$ENDIF MEMOEX_UNDO}
-
-              if FAutoIndent then F := length(S2) - length(TrimLeft(S2));
+              if FAutoIndent then
+                F := length(S2) - length(TrimLeft(S2));
               FLines.Insert(FParaY + 1, S2);
               FLines.Internal[FParaY] := Copy(S, 1, FParaX);
               inc(Y);
@@ -3687,19 +3830,20 @@ begin
                 if X > F then
                 begin
                   {$IFDEF MEMOEX_UNDO}
-                  TInsertUndo.Create(Self, 0, Y, StringOfChar(' ',X - F));
+                  TInsertUndo.Create(Self, 0, Y, StringOfChar(' ', X - F));
                   {$ENDIF MEMOEX_UNDO}
-                  FLines.Internal[FParaY + 1] := StringOfChar(' ',X - F) + S2;
+                  FLines.Internal[FParaY + 1] := StringOfChar(' ', X - F) + S2;
                 end;
               end
-                else
-              if (FAutoIndent) and (S2 = '') then X := length(FLines.ParaStrings[FCaretY])
-                else X := 0;
+              else if (FAutoIndent) and (S2 = '') then
+                X := length(FLines.ParaStrings[FCaretY])
+              else
+                X := 0;
               {$IFDEF MEMOEX_UNDO}
               EndCompound;
               {$ENDIF MEMOEX_UNDO}
             end
-              else
+            else
             begin
               T := Copy(S, 1, FParaX) + #13#10 + S2 + #13#10;
               F := FLines.GetParaOffs(FParaY);
@@ -3717,7 +3861,6 @@ begin
               TInsertUndo.Create(Self, 0, _Y, T);
               EndCompound;
               {$ENDIF MEMOEX_UNDO}
-
               FLines.SetLockText(S2);
               inc(Y);
               X := 0;
@@ -3740,29 +3883,32 @@ begin
               Command(ecEndUpdate);
               Command(ecEndCompound);
             end
-              else Command(ecBackspace);
+            else
+              Command(ecBackspace);
             Complete;
           end;
         ecBackspace:
           if not FReadOnly then
           begin
-            if FSelected then begin
+            if FSelected then
+            begin
               DoAndCorrectXY(DeleteSelected);
               Changed;
             end
-            else begin
+            else
+            begin
               ReLine;
               FLines.Caret2Paragraph(X, Y, FParaY, FParaX);
               if X > 0 then
               begin
                 if FBackSpaceUnindents then
-                  X := GetBackStop(FCaretX, FCaretY) else
+                  X := GetBackStop(FCaretX, FCaretY)
+                else
                   X := FCaretX - 1;
                 S := Copy(FLines.ParaStrings[FCaretY], X + 1, FCaretX - X);
                 dec(FParaX, length(S));
                 F := FLines.Paragraphs[FParaY].FCount;
-                FLines.InternalParaStrings[Y] := Copy(FLines.ParaStrings[Y], 1, X) +
-                     Copy(FLines.ParaStrings[Y], FCaretX + 1, Length(FLines.ParaStrings[Y]));
+                FLines.InternalParaStrings[Y] := Copy(FLines.ParaStrings[Y], 1, X) + Copy(FLines.ParaStrings[Y], FCaretX + 1, Length(FLines.ParaStrings[Y]));
                 FLines.Paragraph2Caret(FParaY, FParaX, X, Y);
                 {$IFDEF MEMOEX_UNDO}
                 TBackspaceUndo.Create(Self, X, Y, S);
@@ -3777,8 +3923,7 @@ begin
                 end;
                 Changed;
               end
-                else
-              if Y > 0 then
+              else if Y > 0 then
               begin
                 if FParaX > 0 then
                 begin
@@ -3795,27 +3940,29 @@ begin
                   CaretUndo := false;
                   {$ENDIF MEMOEX_UNDO}
                 end
-                else
-                  if FParaY > 0 then begin
-                    inc(FUpdateLock);
-                    S := FLines[FParaY - 1];
-                    S2 := FLines[FParaY];
-                    if Assigned(FOnConcatLine) then FOnConcatLine(Self, S, S2);
+                else if FParaY > 0 then
+                begin
+                  inc(FUpdateLock);
+                  S := FLines[FParaY - 1];
+                  S2 := FLines[FParaY];
+                  if Assigned(FOnConcatLine) then
+                    FOnConcatLine(Self, S, S2);
                     {$IFDEF MEMOEX_UNDO}
-                    CaretUndo := false;
-                    FLines.Paragraph2Caret(FParaY - 1, 0, F, _Y);
-                    BeginCompound;
-                    TCaretUndo.Create(Self, X, Y);
-                    TDeleteUndo.Create(Self, 0, _Y, FLines[FParaY - 1] + #13#10 + FLines[FParaY] + #13#10);
-                    TInsertUndo.Create(Self, 0, _Y, S + S2 + #13#10);
-                    EndCompound;
+                  CaretUndo := false;
+                  FLines.Paragraph2Caret(FParaY - 1, 0, F, _Y);
+                  BeginCompound;
+                  TCaretUndo.Create(Self, X, Y);
+                  TDeleteUndo.Create(Self, 0, _Y, FLines[FParaY - 1] + #13#10 + FLines[FParaY] + #13#10);
+                  TInsertUndo.Create(Self, 0, _Y, S + S2 + #13#10);
+                  EndCompound;
                     {$ENDIF MEMOEX_UNDO}
-                    FLines.Internal[FParaY - 1] := S + S2;
-                    FLines.Delete(FParaY);
-                    dec(FUpdateLock);
-                    FLines.Paragraph2Caret(FParaY - 1, length(S), X, Y);
-                  end
-                  else Complete;
+                  FLines.Internal[FParaY - 1] := S + S2;
+                  FLines.Delete(FParaY);
+                  dec(FUpdateLock);
+                  FLines.Paragraph2Caret(FParaY - 1, length(S), X, Y);
+                end
+                else
+                  Complete;
                 UpdateEditorSize(false);
                 F := RepaintParagraph(Y);
                 RedrawFrom(F + 1);
@@ -3826,27 +3973,26 @@ begin
         ecDelete:
           if not FReadOnly then
           begin
-            if FLines.ParaLineCount = 0 then FLines.Add('');
+            if FLines.ParaLineCount = 0 then
+              FLines.Add('');
             if FSelected then
             begin
               DoAndCorrectXY(DeleteSelected);
               Changed;
             end
-              else
+            else
             begin
               ReLine;
               FLines.Caret2Paragraph(X, Y, FParaY, FParaX);
               if X < Length(FLines.ParaStrings[Y]) then
               begin
                 {$IFDEF MEMOEX_UNDO}
-                TDeleteUndo.Create(Self, FCaretX, FCaretY, FLines.ParaStrings[Y] [X + 1]);
+                TDeleteUndo.Create(Self, FCaretX, FCaretY, FLines.ParaStrings[Y][X + 1]);
                 CaretUndo := false;
                 {$ENDIF MEMOEX_UNDO}
-
                 F := FLines.Paragraphs[FParaY].FCount;
 
-                FLines.InternalParaStrings[Y] := Copy(FLines.ParaStrings[Y], 1, X) +
-                  Copy(FLines.ParaStrings[Y], X + 2, Length(FLines.ParaStrings[Y]));
+                FLines.InternalParaStrings[Y] := Copy(FLines.ParaStrings[Y], 1, X) + Copy(FLines.ParaStrings[Y], X + 2, Length(FLines.ParaStrings[Y]));
                 FLines.Paragraph2Caret(FParaY, FParaX, X, Y);
 
                 B := F <> FLines.Paragraphs[FParaY].FCount;
@@ -3859,8 +4005,7 @@ begin
 
                 Changed;
               end
-                else
-              if (Y >= 0) and (Y <= FLines.ParaLineCount - 2) then
+              else if (Y >= 0) and (Y <= FLines.ParaLineCount - 2) then
               begin
                 S := FLines[FParaY];
                 if FParaX < length(S) then
@@ -3869,18 +4014,18 @@ begin
                   TDeleteUndo.Create(Self, FCaretX, FCaretY, System.Copy(S, FParaX + 1, 1));
                   CaretUndo := false;
                   {$ENDIF MEMOEX_UNDO}
-
                   System.Delete(S, FParaX + 1, 1);
                   FLines.Internal[FParaY] := S;
                   FLines.Paragraph2Caret(FParaY, FParaX, X, Y);
                 end
-                  else
+                else
                 begin
                   inc(FUpdateLock);
 
                   S := FLines[FParaY];
                   S2 := FLines[FParaY + 1];
-                  if Assigned(FOnConcatLine) then FOnConcatLine(Self, S, S2);
+                  if Assigned(FOnConcatLine) then
+                    FOnConcatLine(Self, S, S2);
 
                   {$IFDEF MEMOEX_UNDO}
                   CaretUndo := false;
@@ -3892,7 +4037,6 @@ begin
                   TInsertUndo.Create(Self, 0, _Y, S + S2 + #13#10);
                   EndCompound;
                   {$ENDIF MEMOEX_UNDO}
-
                   FLines.Internal[FParaY] := S + S2;
                   FLines.Delete(FParaY + 1);
 
@@ -3913,10 +4057,12 @@ begin
           begin
             if FSelected then
             begin
-              if ACommand = ecTab then PostCommand(ecIndent)
-                else PostCommand(ecUnindent);
-            end
+              if ACommand = ecTab then
+                PostCommand(ecIndent)
               else
+                PostCommand(ecUnindent);
+            end
+            else
             begin
               ReLine;
               X := GetTabStop(FCaretX, FCaretY, tsTabStop, ACommand = ecTab);
@@ -3924,13 +4070,12 @@ begin
               begin
                 S := FLines.ParaStrings[FCaretY];
                 FLines.Caret2Paragraph(FCaretX, FCaretY, FParaY, FParaX);
-                S2 := StringOfChar(' ',X - FCaretX);
+                S2 := StringOfChar(' ', X - FCaretX);
 
                 {$IFDEF MEMOEX_UNDO}
                 TInsertTabUndo.Create(Self, FCaretX, FCaretY, S2);
                 CaretUndo := false;
                 {$ENDIF MEMOEX_UNDO}
-
                 Insert(S2, S, FCaretX + 1);
 
                 F := FLines.Paragraphs[FParaY].FCount;
@@ -3949,26 +4094,25 @@ begin
 
                 Changed;
               end
-                else    // ????
+              else    // ????
+
             end;
           end;
         ecIndent:
-          if not FReadOnly and FSelected and (FSelBegY <> FSelEndY) and
-            (FSelBegX = 0) and (FSelEndX = 0) then
+          if not FReadOnly and FSelected and (FSelBegY <> FSelEndY) and (FSelBegX = 0) and (FSelEndX = 0) then
           begin
             F := FindNotBlankCharPos(FLines.ParaStrings[FCaretY]);
-            S2 := StringOfChar(' ',GetDefTabStop(F, true) - FCaretX);
+            S2 := StringOfChar(' ', GetDefTabStop(F, true) - FCaretX);
             S := SelText;
             S := StringReplaceAll(S, #13#10, #13#10 + S2);
             Delete(S, Length(S) - Length(S2) + 1, Length(S2));
             SetSelText1(S2 + S)
           end;
         ecUnIndent:
-          if not FReadOnly and FSelected and (FSelBegY <> FSelEndY) and
-            (FSelBegX = 0) and (FSelEndX = 0) then
+          if not FReadOnly and FSelected and (FSelBegY <> FSelEndY) and (FSelBegX = 0) and (FSelEndX = 0) then
           begin
             F := FindNotBlankCharPos(FLines.ParaStrings[FCaretY]);
-            S2 := StringOfChar(' ',GetDefTabStop(F, true) - FCaretX);
+            S2 := StringOfChar(' ', GetDefTabStop(F, true) - FCaretX);
             S := SelText;
             S := StringReplaceAll(S, #13#10 + S2, #13#10);
             for iBeg := 1 to Length(S2) do
@@ -3984,13 +4128,15 @@ begin
             StatusChanged;
           end;
         ecClipBoardCut:
-          if not FReadOnly then DoAndCorrectXY(ClipBoardCut);
+          if not FReadOnly then
+            DoAndCorrectXY(ClipBoardCut);
         {$ENDIF MEMOEX_EDITOR}
         ecClipBoardCopy:
           ClipBoardCopy;
         {$IFDEF MEMOEX_EDITOR}
         ecClipBoardPaste:
-          if not FReadOnly then DoAndCorrectXY(ClipBoardPaste);
+          if not FReadOnly then
+            DoAndCorrectXY(ClipBoardPaste);
         ecDeleteSelected:
           if not FReadOnly and FSelected then
             DoAndCorrectXY(DeleteSelected);
@@ -3998,7 +4144,9 @@ begin
           if not FReadOnly then
           begin
             if length(FLines.ParaStrings[Y]) = 0 then
-              Command(ecDelete) else begin
+              Command(ecDelete)
+            else
+            begin
               Command(ecBeginCompound);
               Command(ecBeginUpdate);
               Command(ecSelNextWord);
@@ -4018,7 +4166,8 @@ begin
             Command(ecBeginLine);
             Command(ecSelEndLine);
             Command(ecDeleteSelected);
-            if B then Command(ecDelete);
+            if B then
+              Command(ecDelete);
             Command(ecEndUpdate);
             Command(ecEndCompound);
             Complete;
@@ -4063,7 +4212,6 @@ begin
         ecEndCompound:
           EndCompound;
         {$ENDIF MEMOEX_UNDO}
-
         ecSetBookmark0..ecSetBookmark9:
           ChangeBookMark(ACommand - ecSetBookmark0, true);
         ecGotoBookmark0..ecGotoBookmark9:
@@ -4076,7 +4224,8 @@ begin
           if (Assigned(FOnInsertMacro)) and (not FReadOnly) then
           begin
             S := FOnInsertMacro(Self, ACommand - ecInsertMacro0);
-            if S = '' then exit;
+            if S = '' then
+              exit;
             InsertTextAtCurrentPos(S);
             PaintCaret(true);
             Complete;
@@ -4116,11 +4265,13 @@ begin
             Complete;
           end;
         ecSaveBlock:
-          if (FSelected) and (Assigned(FOnSaveBlock)) then FOnSaveBlock(Self, SelText);
+          if (FSelected) and (Assigned(FOnSaveBlock)) then
+            FOnSaveBlock(Self, SelText);
         ecInsertBlock:
           if (not FReadOnly) and (Assigned(FOnInsertBlock)) then
           begin
-            if FOnInsertBlock(Self, S) then InsertTextAtCurrentPos(S);
+            if FOnInsertBlock(Self, S) then
+              InsertTextAtCurrentPos(S);
             PaintCaret(true);
             Complete;
           end;
@@ -4128,13 +4279,15 @@ begin
 
       {$IFDEF MEMOEX_UNDO}
       if CaretUndo then
-        SetCaret(X, Y) else
+        SetCaret(X, Y)
+      else
         SetCaretInternal(X, Y);
       {$ELSE}
       SetCaret(X, Y);
       {$ENDIF MEMOEX_UNDO}
     except
-      on E: EComplete do { OK };
+      on E: EComplete do { OK }
+        ;
     end;
   finally
     // dec(FUpdateLock);
@@ -4150,7 +4303,8 @@ end; { PostCommand }
 
 procedure TCustomMemoEx.ClipboardChanged;
 begin
-  if (csLoading in ComponentState) or (csDestroying in ComponentState) then exit;
+  if (csLoading in ComponentState) or (csDestroying in ComponentState) then
+    exit;
   if Assigned(FOnChangeClipboardState) then
     FOnChangeClipboardState(Self, IsClipboardFormatAvailable(CF_TEXT) or IsClipboardFormatAvailable(CF_OEMTEXT));
 end;
@@ -4161,129 +4315,131 @@ var
   pt, temp: TPoint;
 begin
   case Message.Msg of
-  {$IFNDEF RA_D4H}
-  WM_SIZE:
-    begin
-      inherited WndProc(Message);
-      if not (csLoading in ComponentState) then Resize;
-      exit;
-    end;
-  {$ENDIF RA_D4H}
-  CM_COLORCHANGED:
-    begin
-      Message.Result := 0;
-      Invalidate;
-      exit;
-    end;
-  WM_MOUSEWHEEL:
-    begin
-      MouseWheelHandler(Message);
-      Message.Result := 0;
-      exit;
-    end;
-  WM_SYSCHAR:
-    if Message.wParam = VK_BACK then
-    begin
-      Message.Result := 0;
-      exit;
-    end;
-  WM_ERASEBKGND:
-    begin
+    CM_COLORCHANGED:
+      begin
+        Message.Result := 0;
+        Invalidate;
+        exit;
+      end;
+    WM_MOUSEWHEEL:
+      begin
+        MouseWheelHandler(Message);
+        Message.Result := 0;
+        exit;
+      end;
+    WM_SYSCHAR:
+      if Message.wParam = VK_BACK then
+      begin
+        Message.Result := 0;
+        exit;
+      end;
+    WM_ERASEBKGND:
+      begin
       {$IFDEF MEMOEX_NOOPTIMIZE}
-      inherited WndProc(Message);
-      Message.Result := 1;
+        inherited WndProc(Message);
+        Message.Result := 1;
       {$ELSE}
-      Message.Result := 0;
+        Message.Result := 0;
       {$ENDIF}
-      exit;
-    end;
-  WM_SETFOCUS:
-    begin
-      Form := GetParentForm(Self);
-      if (Form <> nil) and (not Form.SetFocusedControl(Self)) then exit;
-      CreateCaret(Handle, 0, 2, CellRect.Height - 2);
-      PaintCaret(true);
-      DoEnter;
-    end;
-  WM_KILLFOCUS:
-    begin
-      if csFocusing in ControlState then exit;
+        exit;
+      end;
+    WM_SETFOCUS:
+      begin
+        Form := GetParentForm(Self);
+        if (Form <> nil) and (not Form.SetFocusedControl(Self)) then
+          exit;
+        CreateCaret(Handle, 0, 2, CellRect.Height - 2);
+        PaintCaret(true);
+        DoEnter;
+      end;
+    WM_KILLFOCUS:
+      begin
+        if csFocusing in ControlState then
+          exit;
       {$IFDEF MEMOEX_COMPLETION}
-      if FCompletion.FVisible then FCompletion.CloseUp(false);
+        if FCompletion.FVisible then
+          FCompletion.CloseUp(false);
       {$ENDIF MEMOEX_COMPLETION}
-      DestroyCaret;
-      DoExit;
-    end;
-  WM_GETDLGCODE:
-    begin
-      inherited WndProc(Message);
-      TWMGetDlgCode(Message).Result := DLGC_WANTARROWS or DLGC_WANTCHARS;
-      if FWantTabs then TWMGetDlgCode(Message).Result := TWMGetDlgCode(Message).Result or DLGC_WANTTAB;
-      exit;
-    end;
-  WM_HSCROLL:
-    begin
-      scbHorz.DoScroll(TWMHScroll(Message));
-      exit;
-    end;
-  WM_VSCROLL:
-    begin
-      scbVert.DoScroll(TWMVScroll(Message));
-      exit;
-    end;
-  WM_SETTINGCHANGE:
-    begin
-      scbVertWidth := GetSystemMetrics(SM_CXVSCROLL);
-      scbHorzHeight := GetSystemMetrics(SM_CYHSCROLL);
-    end;
-  WM_EDITCOMMAND:
-    begin
-      Command(Message.WParam);
-      Message.Result := ord(true);
-      exit;
-    end;
-  WM_CHANGECBCHAIN:
-    begin
-      Message.Result := 0;
-      if TWMChangeCBChain(Message).Remove = NextClipViewer then NextClipViewer := TWMChangeCBChain(Message).Next
-        else SendMessage(NextClipViewer, WM_CHANGECBCHAIN, TWMChangeCBChain(Message).Remove, TWMChangeCBChain(Message).Next);
-      exit;
-    end;
-  WM_DRAWCLIPBOARD:
-    begin
-      ClipboardChanged;
-      SendMessage(NextClipViewer, WM_DRAWCLIPBOARD, 0, 0);
-      exit;
-    end;
-  WM_DESTROY:
+        DestroyCaret;
+        DoExit;
+      end;
+    WM_GETDLGCODE:
+      begin
+        inherited WndProc(Message);
+        TWMGetDlgCode(Message).Result := DLGC_WANTARROWS or DLGC_WANTCHARS;
+        if FWantTabs then
+          TWMGetDlgCode(Message).Result := TWMGetDlgCode(Message).Result or DLGC_WANTTAB;
+        exit;
+      end;
+    WM_HSCROLL:
+      begin
+        scbHorz.DoScroll(TWMHScroll(Message));
+        exit;
+      end;
+    WM_VSCROLL:
+      begin
+        scbVert.DoScroll(TWMVScroll(Message));
+        exit;
+      end;
+    WM_SETTINGCHANGE:
+      begin
+        scbVertWidth := GetSystemMetrics(SM_CXVSCROLL);
+        scbHorzHeight := GetSystemMetrics(SM_CYHSCROLL);
+      end;
+    WM_EDITCOMMAND:
+      begin
+        Command(Message.WParam);
+        Message.Result := ord(true);
+        exit;
+      end;
+    WM_CHANGECBCHAIN:
+      begin
+        Message.Result := 0;
+        if TWMChangeCBChain(Message).Remove = NextClipViewer then
+          NextClipViewer := TWMChangeCBChain(Message).Next
+        else
+          SendMessage(NextClipViewer, WM_CHANGECBCHAIN, TWMChangeCBChain(Message).Remove, TWMChangeCBChain(Message).Next);
+        exit;
+      end;
+    WM_DRAWCLIPBOARD:
+      begin
+        ClipboardChanged;
+        SendMessage(NextClipViewer, WM_DRAWCLIPBOARD, 0, 0);
+        exit;
+      end;
+    WM_DESTROY:
       ChangeClipboardChain(Handle, NextClipViewer);
-  WM_CONTEXTMENU:
-    begin
-      pt := SmallPointToPoint(TWMContextMenu(Message).Pos);
-      if pt.X < 0 then temp := pt
-      else temp := ScreenToClient(pt);
-      if PtInRect(ClientRect, temp) then
-        GetWordUnderCursor(temp.X, temp.Y);
-    end;
-  WM_COPY:
-    begin
-      PostCommand(ecClipboardCopy);
-      Message.Result := ord(true);
-      exit;
-    end;
+    WM_CONTEXTMENU:
+      begin
+        pt := SmallPointToPoint(TWMContextMenu(Message).Pos);
+        if pt.X < 0 then
+          temp := pt
+        else
+          temp := ScreenToClient(pt);
+        if PtInRect(ClientRect, temp) then
+          GetWordUnderCursor(temp.X, temp.Y);
+      end;
+    WM_COPY:
+      begin
+        PostCommand(ecClipboardCopy);
+        Message.Result := ord(true);
+        exit;
+      end;
   {$IFDEF MEMOEX_EDITOR}
-  WM_CUT:
-    begin
-      if not FReadOnly then PostCommand(ecClipboardCut);
-      Message.Result := ord(true);
-      exit;
-    end;
-  WM_PASTE:
-    begin
-      if not FReadOnly then PostCommand(ecClipBoardPaste);
-      Message.Result := ord(true);
-      exit;
-    end;
+    WM_CUT:
+      begin
+        if not FReadOnly then
+          PostCommand(ecClipboardCut);
+        Message.Result := ord(true);
+        exit;
+      end;
+    WM_PASTE:
+      begin
+        if not FReadOnly then
+          PostCommand(ecClipBoardPaste);
+        Message.Result := ord(true);
+        exit;
+      end;
   {$ENDIF}
   end;
   inherited WndProc(Message);
@@ -4292,7 +4448,8 @@ end;
 {$IFDEF MEMOEX_EDITOR}
 
 procedure TCustomMemoEx.SetXY(X, Y: integer);
-var X1, Y1: integer;
+var
+  X1, Y1: integer;
 begin
   X1 := FLeftCol;
   Y1 := FTopRow;
@@ -4304,21 +4461,22 @@ begin
   SetCaret(X, Y);
 end;
 
-procedure TCustomMemoEx.ChangeBookMark(const BookMark: TBookMarkNum; const
-  Valid: boolean);
+procedure TCustomMemoEx.ChangeBookMark(const BookMark: TBookMarkNum; const Valid: boolean);
 begin
   if Valid then
     with FBookMarks[Bookmark] do
-    if Valid and (Y = FCaretY) then
-      Valid := false else begin
-      X := FCaretX;
-      Y := FCaretY;
-      Valid := true;
-    end
+      if Valid and (Y = FCaretY) then
+        Valid := false
+      else
+      begin
+        X := FCaretX;
+        Y := FCaretY;
+        Valid := true;
+      end
   else
     with FBookMarks[Bookmark] do
-    if Valid then
-      SetXY(X, Y);
+      if Valid then
+        SetXY(X, Y);
   BookmarkChanged(BookMark);
 end;
 {$ENDIF}
@@ -4331,7 +4489,8 @@ end;
 procedure TCustomMemoEx.SelectionChanged;
 begin
   if not (csLoading in ComponentState) then
-    if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
+    if Assigned(FOnSelectionChange) then
+      FOnSelectionChange(Self);
 end;
 
 procedure TCustomMemoEx.SetSel(const ASelX, ASelY: integer);
@@ -4356,10 +4515,12 @@ var
   SelX, SelY: integer;
 begin
   if ASelX < 0 then
-    SelX := 0 else
+    SelX := 0
+  else
     SelX := ASelX;
   if ASelY < 0 then
-    SelY := 0 else
+    SelY := 0
+  else
     SelY := ASelY;
   if not FSelected then
   begin
@@ -4371,11 +4532,10 @@ begin
     FSelBegY := SelY;
     FSelected := true;
   end
-    else
+  else
   begin
     {$IFDEF MEMOEX_UNDO}
-    TSelectUndo.Create(Self, FCaretX, FCaretY, FSelBlock, FSelBegX, FSelBegY,
-      FSelEndX, FSelEndY);
+    TSelectUndo.Create(Self, FCaretX, FCaretY, FSelBlock, FSelBegX, FSelBegY, FSelEndX, FSelEndY);
     {$ENDIF MEMOEX_UNDO}
     FUpdateSelBegX := FSelBegX;
     FUpdateSelBegY := FSelBegY;
@@ -4391,8 +4551,7 @@ begin
       FSelEndX := FSelStartX;
       FSelEndY := FSelStartY;
     end
-      else
-    if (SelY > FSelStartY) or ((SelY = FSelStartY) and (SelX >= FSelStartX)) then
+    else if (SelY > FSelStartY) or ((SelY = FSelStartY) and (SelX >= FSelStartX)) then
     begin
       FSelBegX := FSelStartX;
       FSelBegY := FSelStartY;
@@ -4410,7 +4569,6 @@ begin
     FUpdateSelEndY := FSelEndY;
 end;
 
-
 procedure TCustomMemoEx.Mouse2Cell(const X, Y: integer; var CX, CY: integer);
 begin
   CX := Round((X - EditorClient.Left) / FCellRect.Width);
@@ -4420,8 +4578,10 @@ end;
 procedure TCustomMemoEx.Mouse2Caret(const X, Y: integer; var CX, CY: integer);
 begin
   Mouse2Cell(X, Y, CX, CY);
-  if CX < 0 then CX := 0;
-  if CY < 0 then CY := 0;
+  if CX < 0 then
+    CX := 0;
+  if CY < 0 then
+    CY := 0;
   CX := CX + FLeftCol;
   CY := CY + FTopRow;
   if CX > FLastVisibleCol then
@@ -4434,44 +4594,54 @@ procedure TCustomMemoEx.CaretCoord(const X, Y: integer; var CX, CY: integer);
 begin
   CX := X - FLeftCol;
   CY := Y - FTopRow;
-  if CX < 0 then CX := 0;
-  if CY < 0 then CY := 0;
+  if CX < 0 then
+    CX := 0;
+  if CY < 0 then
+    CY := 0;
   CX := FCellRect.Width * CX;
   CY := FCellRect.Height * CY;
 end;
 
-function TCustomMemoEx.ExtractStringWithStyle(XX, YY: integer; const From: string;
-  Style: word; const LineAttrs: TLineAttrs; out start: integer): string;
-var i: integer;
-    last: integer;
+function TCustomMemoEx.ExtractStringWithStyle(XX, YY: integer; const From: string; Style: word; const LineAttrs: TLineAttrs; out start: integer): string;
+var
+  i: integer;
+  last: integer;
 begin
-  if Style <> RA_EX_STYLE_DEFAULT then begin
+  if Style <> RA_EX_STYLE_DEFAULT then
+  begin
     start := XX;
     last := XX;
     if XX <= length(From) then
       for i := XX downto 0 do
         if LineAttrs[i].ex_style = Style then
-          start := i else
+          start := i
+        else
           break;
     for i := XX + 1 to length(From) - 1 do
       if LineAttrs[i].ex_style = Style then
-        last := i else
+        last := i
+      else
         break;
-    result := copy(From,start+1,last-start+1);
-  end else
+    result := copy(From, start + 1, last - start + 1);
+  end
+  else
     start := XX;
 end;
 
 { strip invisible }
 function TCustomMemoEx.GetAttrDelta(StartFrom, EndTo: integer; const LineAttrs: TLineAttrs): integer;
-var  i, j: integer;
+var
+  i, j: integer;
 begin
   Result := 0;
-  if (ReadOnly) and (FStripInvisible) then begin
+  if (readonly) and (FStripInvisible) then
+  begin
     j := EndTo;
     i := StartFrom;
-    while (i <= j) and (i < SelAttrs_Size) do begin
-      if LineAttrs[i].FC = LineAttrs[i].BC then begin
+    while (i <= j) and (i < SelAttrs_Size) do
+    begin
+      if LineAttrs[i].FC = LineAttrs[i].BC then
+      begin
         inc(Result);
         inc(j);
       end;
@@ -4480,8 +4650,7 @@ begin
   end;
 end;
 
-function TCustomMemoEx.DoMouseWheel(Shift: TShiftState;
-  WheelDelta: integer; MousePos: TPoint): boolean;
+function TCustomMemoEx.DoMouseWheel(Shift: TShiftState; WheelDelta: integer; MousePos: TPoint): boolean;
 begin
   MouseWheelScroll(WheelDelta);
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
@@ -4492,13 +4661,13 @@ var
   i: integer;
 begin
   i := Mouse.WheelScrollLines;
-  if Delta > 0 then i := -i;
+  if Delta > 0 then
+    i := -i;
   scbVert.Position := scbVert.Position + i;
   Scroll(true, scbVert.Position);
 end;
 
-procedure TCustomMemoEx.MouseDown(Button: TMouseButton; Shift: TShiftState; X,
-  Y: integer);
+procedure TCustomMemoEx.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 var
   XX, YY: integer;
 begin
@@ -4508,16 +4677,20 @@ begin
     exit;
   end;
   {$IFDEF MEMOEX_COMPLETION}
-  if FCompletion.FVisible then FCompletion.CloseUp(false);
+  if FCompletion.FVisible then
+    FCompletion.CloseUp(false);
   {$ENDIF MEMOEX_COMPLETION}
-  if Button <> mbRight then begin // right click = popup menu -> no caret change
+  if Button <> mbRight then
+  begin // right click = popup menu -> no caret change
     mouse_down := true;
     mouse_dragged := false;
     Mouse2Caret(X, Y, XX, YY);
     PaintCaret(false);
-    if (Button = mbLeft) and (not (ssShift in Shift)) then SetUnSelected;
+    if (Button = mbLeft) and (not (ssShift in Shift)) then
+      SetUnSelected;
     SetFocus;
-    if YinBounds(YY) then begin
+    if YinBounds(YY) then
+    begin
       if not FCursorBeyondEOL then
         if XX > length(FLines.ParaStrings[YY]) then
           XX := length(FLines.ParaStrings[YY]);
@@ -4539,26 +4712,31 @@ var
   s: string;
 begin
   double_clicked := true;
-  if Assigned(FOnDblClick) then FOnDblClick(Self);
-  if FDoubleClickLine then begin
+  if Assigned(FOnDblClick) then
+    FOnDblClick(Self);
+  if FDoubleClickLine then
+  begin
     PaintCaret(false);
     SetSel(0, FCaretY);
-    if FCaretY = FLines.ParaLineCount - 1 then begin
+    if FCaretY = FLines.ParaLineCount - 1 then
+    begin
       SetSel(Length(FLines.ParaStrings[FCaretY]), FCaretY);
       SetCaret(Length(FLines.ParaStrings[FCaretY]), FCaretY);
-    end else begin
+    end
+    else
+    begin
       SetSel(0, FCaretY + 1);
       SetCaret(0, FCaretY + 1);
     end;
     PaintCaret(true);
   end
-    else
-  if YinBounds(FCaretY) then begin
+  else if YinBounds(FCaretY) then
+  begin
     s := FLines.GetParagraphByIndex(FCaretY, PY, PX);
     GetLineAttr(PY, FCaretY, PX, length(s), 0, length(s), s, FAttrs);
     i := GetAttrDelta(PX, FCaretX + PX, FAttrs);
-    if GetWordOnPosEx(FLines.ParaStrings[FCaretY] + ' ', FCaretX + 1 + i,
-      iBeg, iEnd) <> '' then begin
+    if GetWordOnPosEx(FLines.ParaStrings[FCaretY] + ' ', FCaretX + 1 + i, iBeg, iEnd) <> '' then
+    begin
       PaintCaret(false);
       SetSel(iBeg - 1, FCaretY);
       SetSel(iEnd - 1, FCaretY);
@@ -4568,24 +4746,30 @@ begin
   end;
 end;
 
-procedure TCustomMemoEx.GetWordUnderCursor(X, Y: integer; aShift: TShiftState=[]);
-var XX, YY, PX, PY, i: integer;
-    s: string;
-    FAttrs: TLineAttrs;
-    start, delta: integer;
+procedure TCustomMemoEx.GetWordUnderCursor(X, Y: integer; aShift: TShiftState = []);
+var
+  XX, YY, PX, PY, i: integer;
+  s: string;
+  FAttrs: TLineAttrs;
+  start, delta: integer;
 begin
   Mouse2Caret(X, Y, XX, YY);
-  if YinBounds(YY) then begin
+  if YinBounds(YY) then
+  begin
     s := FLines.GetParagraphByIndex(YY, PY, PX);
     GetLineAttr(PY, YY, PX, length(s), 0, length(s), s, FAttrs);
     delta := GetAttrDelta(PX, XX + PX, FAttrs);
     i := XX + PX + delta;
-    with FWordUnderCursor do begin
-      if (i > 0) and (i < SelAttrs_Size) then begin
+    with FWordUnderCursor do
+    begin
+      if (i > 0) and (i < SelAttrs_Size) then
+      begin
         Style := FAttrs[i - 1].ex_style;
         Text := ExtractStringWithStyle(i, YY, s, Style, FAttrs, start);
-        TextStart := FLines.GetParaOffs(PY) + start+1 - delta;
-      end else begin
+        TextStart := FLines.GetParaOffs(PY) + start + 1 - delta;
+      end
+      else
+      begin
         Text := ''; // mark no word found
         TextStart := 0;
       end;
@@ -4598,13 +4782,13 @@ begin
   end;
 end;
 
-procedure TCustomMemoEx.MouseUp(Button: TMouseButton; Shift: TShiftState;
-  X, Y: integer);
+procedure TCustomMemoEx.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 begin
   timerScroll.Enabled := false;
   mouse_down := false;
   if (Button = mbLeft) and (not mouse_dragged) then
-    if Assigned(FOnWordClick) then begin
+    if Assigned(FOnWordClick) then
+    begin
       GetWordUnderCursor(X, Y, Shift);
       if FWordUnderCursor.Text <> '' then
         FOnWordClick(Self, FWordUnderCursor);
@@ -4621,7 +4805,8 @@ var
 begin
   MouseMoveY := Y;
   Mouse2Caret(X, Y, MouseMoveXX, MouseMoveYY);
-  if X < FGutterWidth then Cursor := crArrow;
+  if X < FGutterWidth then
+    Cursor := crArrow;
   if (Shift = [ssLeft]) and (mouse_down) then
   begin
     mouse_dragged := true;
@@ -4631,26 +4816,31 @@ begin
     begin
       if not FCursorBeyondEOL then
         if YinBounds(MouseMoveYY) then
-          if MouseMoveXX > length(FLines.ParaStrings[MouseMoveYY]) then MouseMoveXX := length(FLines.ParaStrings[MouseMoveYY])
+          if MouseMoveXX > length(FLines.ParaStrings[MouseMoveYY]) then
+            MouseMoveXX := length(FLines.ParaStrings[MouseMoveYY])
           else
-        else MouseMoveXX := 0;
+
+        else
+          MouseMoveXX := 0;
       SetSel(MouseMoveXX, MouseMoveYY);
       SetCaret(MouseMoveXX, MouseMoveYY);
     end;
     timerScroll.Enabled := (Y < 0) or (Y > ClientHeight);
     PaintCaret(true);
   end
-    else
-  if (Assigned(FOnMouseOver)) and (YinBounds(MouseMoveYY)) then
+  else if (Assigned(FOnMouseOver)) and (YinBounds(MouseMoveYY)) then
   begin
     S := FLines.GetParagraphByIndex(MouseMoveYY, PY, PX);
     GetLineAttr(PY, MouseMoveYY, PX, length(S), 0, MouseMoveXX + 1 + PX, S, FAttrs);
     i := MouseMoveXX + PX + GetAttrDelta(PX, MouseMoveXX + PX, FAttrs) - 1;
-    if i < SelAttrs_Size then begin
+    if i < SelAttrs_Size then
+    begin
       C := crIBeam;
       FOnMouseOver(Self, FAttrs[i].ex_style, C);
-      if C <> Cursor then Cursor := C;
-    end else
+      if C <> Cursor then
+        Cursor := C;
+    end
+    else
       Cursor := crIBeam;
   end;
   inherited MouseMove(Shift, X, Y);
@@ -4661,12 +4851,12 @@ begin
   if (MouseMoveY < 0) or (MouseMoveY > ClientHeight) then
   begin
     if (MouseMoveY < -20) then
-      dec(MouseMoveYY, FVisibleRowCount) else
-    if (MouseMoveY < 0) then
-      dec(MouseMoveYY) else
-    if (MouseMoveY > ClientHeight + 20) then
-      inc(MouseMoveYY, FVisibleRowCount) else
-    if (MouseMoveY > ClientHeight) then
+      dec(MouseMoveYY, FVisibleRowCount)
+    else if (MouseMoveY < 0) then
+      dec(MouseMoveYY)
+    else if (MouseMoveY > ClientHeight + 20) then
+      inc(MouseMoveYY, FVisibleRowCount)
+    else if (MouseMoveY > ClientHeight) then
       inc(MouseMoveYY);
     PaintCaret(false);
     SetSel(MouseMoveXX, MouseMoveYY);
@@ -4674,7 +4864,6 @@ begin
     PaintCaret(true);
   end;
 end;
-
 
 function TCustomMemoEx.GetRealOffs(DefOffs, Index: integer): integer;
 var
@@ -4686,30 +4875,41 @@ begin
     l := length(FLines.ParaStrings[Index]);
     if l > 0 then
       if Result > l then
-        Result := l else
-    else Result := 0;
+        Result := l
+      else
+
+    else
+      Result := 0;
   end;
 end;
 
 function TCustomMemoEx.GetSelText: string;
-var sb, se: integer;
+var
+  sb, se: integer;
 begin
   Result := '';
-  if not FSelected then exit;
-  if not FSelBlock then begin
-    if (FSelBegY < 0) or (FSelBegY > FLines.ParaLineCount - 1) or (FSelEndY < 0) or
-      (FSelEndY > FLines.ParaLineCount - 1) then begin Err; Exit; end;
+  if not FSelected then
+    exit;
+  if not FSelBlock then
+  begin
+    if (FSelBegY < 0) or (FSelBegY > FLines.ParaLineCount - 1) or (FSelEndY < 0) or (FSelEndY > FLines.ParaLineCount - 1) then
+    begin
+      Err;
+      Exit;
+    end;
     sb := GetRealOffs(FSelBegX, FSelBegY);
     se := GetRealOffs(FSelEndX, FSelEndY);
-    if (se = sb) and (FSelBegY = FSelEndY) then exit;
-    if FSelBegY<>FSelEndY then begin
+    if (se = sb) and (FSelBegY = FSelEndY) then
+      exit;
+    if FSelBegY <> FSelEndY then
+    begin
       sb := PosFromCaret(sb, FSelBegY);
       se := PosFromCaret(se, FSelEndY);
-      Result := System.Copy(FLines.Text,
-        sb + 1, se - sb + integer(FInclusive));
-    end else begin // AB faster if without #13
-      result := system.Copy(FLines.ParaStrings[FSelBegY],
-        sb + 1, se - sb + integer(FInclusive));
+      Result := System.Copy(FLines.Text, sb + 1, se - sb + integer(FInclusive));
+    end
+    else
+    begin // AB faster if without #13
+      result := system.Copy(FLines.ParaStrings[FSelBegY], sb + 1, se - sb + integer(FInclusive));
     end;
   end;
 end;
@@ -4718,12 +4918,13 @@ function TCustomMemoEx.GetSelLength: integer;
 begin
 //  Result := Length(GetSelText);
   Result := 0;
-  if not FSelected then exit;
-  if not FSelBlock then begin
-    if (FSelBegY < 0) or (FSelBegY > FLines.ParaLineCount - 1) or (FSelEndY < 0) or
-      (FSelEndY > FLines.ParaLineCount - 1) then Exit;
-    result := PosFromCaret(FSelEndX, FSelEndY) - PosFromCaret(FSelBegX, FSelBegY)
-       + integer(FInclusive);
+  if not FSelected then
+    exit;
+  if not FSelBlock then
+  begin
+    if (FSelBegY < 0) or (FSelBegY > FLines.ParaLineCount - 1) or (FSelEndY < 0) or (FSelEndY > FLines.ParaLineCount - 1) then
+      Exit;
+    result := PosFromCaret(FSelEndX, FSelEndY) - PosFromCaret(FSelBegX, FSelBegY) + integer(FInclusive);
 //    result := GetRealOffs(FSelEndX, FSelEndY) - GetRealOffs(FSelBegX, FSelBegY) + integer(FInclusive);
   end;
 end;
@@ -4748,14 +4949,16 @@ begin
 end;
 
 procedure TCustomMemoEx.ClipBoardCopy;
-var s: string;
+var
+  s: string;
 begin
-  if not FSelBlock then begin
+  if not FSelBlock then
+  begin
     s := GetSelText;
 {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
     FClip := s;
-    if FClipProtect and (length(s)>2000) then
-      setLength(s,2000);
+    if FClipProtect and (length(s) > 2000) then
+      setLength(s, 2000);
 {$endif}
     _CopyToClipboard(Handle, s, Font.Charset);
   end;
@@ -4770,16 +4973,26 @@ var
   function GetWordOnPos2(S: string; P: integer): string;
   begin
     Result := '';
-    if P < 1 then exit;
-    if (S[P] in Separators) and ((P < 1) or (S[P - 1] in Separators)) then
+    if P < 1 then
+      exit;
+    if {$ifdef UNICODE} (S[P] < #255) and {$endif} (AnsiChar(S[P]) in Separators) and ((P < 1) or ({$ifdef UNICODE}(S[P - 1] < #255) and {$endif} (AnsiChar(S[P - 1]) in Separators))) then
       inc(P);
     iBeg := P;
-    while iBeg >= 1 do if S[iBeg] in Separators then break else dec(iBeg);
+    while iBeg >= 1 do
+      if {$ifdef UNICODE} (S[iBeg] < #255) and {$endif} (AnsiChar(S[iBeg]) in Separators) then
+        break
+      else
+        dec(iBeg);
     inc(iBeg);
     iEnd := P;
-    while iEnd <= Length(S) do if S[iEnd] in Separators then break else inc(iEnd);
+    while iEnd <= Length(S) do
+      if {$ifdef UNICODE} (S[iEnd] < #255) and {$endif} (AnsiChar(S[iEnd]) in Separators) then
+        break
+      else
+        inc(iEnd);
     if iEnd > iBeg then
-      Result := Copy(S, iBeg, iEnd - iBeg) else
+      Result := Copy(S, iBeg, iEnd - iBeg)
+    else
       Result := S[P];
   end;
 
@@ -4814,15 +5027,15 @@ begin
 end;
 
 procedure TCustomMemoEx.ReplaceWord2(const NewString: string);
-var S, S1, W: string;
-    P, X, Y: integer;
-    iBeg, iEnd: integer;
-    NewCaret: integer;
+var
+  S, S1, W: string;
+  P, X, Y: integer;
+  iBeg, iEnd: integer;
+  NewCaret: integer;
 begin
   PaintCaret(false);
   if FCaretX > Length(FLines.ParaStrings[FCaretY]) then
-    FLines.InternalParaStrings[FCaretY] := FLines.ParaStrings[FCaretY] +
-      StringOfChar(' ',FCaretX - Length(FLines.ParaStrings[FCaretY]));
+    FLines.InternalParaStrings[FCaretY] := FLines.ParaStrings[FCaretY] + StringOfChar(' ', FCaretX - Length(FLines.ParaStrings[FCaretY]));
   S := FLines.Text;
   P := PosFromCaret(FCaretX, FCaretY);
   W := Trim(GetWordOnPosEx(S, P, iBeg, iEnd));
@@ -4851,7 +5064,8 @@ var
   P: integer;
   X, Y: integer;
 begin
-  if Text <> '' then   begin
+  if Text <> '' then
+  begin
     PaintCaret(false);
     BeginUpdate;
     Reline;
@@ -4859,15 +5073,18 @@ begin
     TInsertUndo.Create(Self, FCaretX, FCaretY, Text);
     {$ENDIF MEMOEX_UNDO}
     P := PosFromCaret(FCaretX, FCaretY);
-    if PosEx(#13,text)>0 then begin // insert with #13 -> old slow method
+    if PosEx(#13, text) > 0 then
+    begin // insert with #13 -> old slow method
       S := FLines.Text;
       Insert(Text, S, P + 1);
       FLines.SetLockText(S);
-    end else begin // new fast method from AB
+    end
+    else
+    begin // new fast method from AB
       S := FLines.ParaStrings[FCaretY];
       while FCaretX > Length(S) do
         S := S + ' ';
-      insert(text,S,FCaretX+1);
+      insert(text, S, FCaretX + 1);
       FLines.InternalParaStrings[FCaretY] := S; // will call reformat paragraph
     end;
     CaretFromPos(P + Length(Text), X, Y);
@@ -4879,7 +5096,8 @@ begin
 end;
 
 procedure TCustomMemoEx.InsertTextAtCurrentPos(const _Text: string);
-var S: string;
+var
+  S: string;
 begin
   BeginUpdate;
   S := AdjustLineBreaks(_Text);
@@ -4894,54 +5112,66 @@ end;
 function CountChar(P: PChar; Ch: char): integer;
 begin
   result := 0;
-  if P<>nil then
-  while P^<>#0 do begin
-    if P^=Ch then
-      inc(result);
-    inc(P);
-  end;
+  if P <> nil then
+    while P^ <> #0 do
+    begin
+      if P^ = Ch then
+        inc(result);
+      inc(P);
+    end;
 end;
 
 function RtfBackSlash(const Text: string): string;
-procedure Replace(S,D: PChar);
-begin // faster than PosEx()+Insert()
-  repeat
-    if S^='\' then begin
-      D[0] := '\';
-      D[1] := '\';
-      inc(D,2);
-      inc(S);
-    end else
-    if S^=#0 then begin
-      D^ := S^;
-      break;
-    end else begin
-      D^ := S^;
-      inc(D);
-      inc(S);
-    end;
-  until false;
-end;
-var i: integer;
+
+  procedure Replace(S, D: PChar);
+  begin // faster than PosEx()+Insert()
+    repeat
+      if S^ = '\' then
+      begin
+        D[0] := '\';
+        D[1] := '\';
+        inc(D, 2);
+        inc(S);
+      end
+      else if S^ = #0 then
+      begin
+        D^ := S^;
+        break;
+      end
+      else
+      begin
+        D^ := S^;
+        inc(D);
+        inc(S);
+      end;
+    until false;
+  end;
+
+var
+  i: integer;
 begin
-  i := CountChar(pointer(Text),'\');
-  if i=0 then
-    result := Text else begin
-    SetLength(result,length(Text)+i);
-    Replace(pointer(Text),pointer(result));
+  i := CountChar(pointer(Text), '\');
+  if i = 0 then
+    result := Text
+  else
+  begin
+    SetLength(result, length(Text) + i);
+    Replace(pointer(Text), pointer(result));
   end;
 end;
 
 procedure TCustomMemoEx.ClipBoardPaste;
-var ClipS: string;
+var
+  ClipS: string;
 begin
-  if ReadOnly then exit;
+  if readonly then
+    exit;
   if Assigned(OnClipboardPaste) and OnClipboardPaste(Self) then
     Exit;
-  ClipS := _PasteFromClipboard(Handle, Font.Charset, {$ifdef CLIPBOARDPROTECT}FClip,{$endif} false);
-  if ClipPasteRtfBackSlashConvert and
-     not IsClipboardFormatAvailable(CF_MEMOEX) then
-    InsertTextAtCurrentPos(RtfBackSlash(ClipS)) else // not from TMemoEx -> '\' -> '\\'
+  ClipS := _PasteFromClipboard(Handle, Font.Charset, {$ifdef CLIPBOARDPROTECT}FClip, {$endif} false);
+  if ClipPasteRtfBackSlashConvert and not IsClipboardFormatAvailable(CF_MEMOEX) then
+    InsertTextAtCurrentPos(RtfBackSlash(ClipS))
+  else // not from TMemoEx -> '\' -> '\\'
     InsertTextAtCurrentPos(ClipS);
 end;
 
@@ -4952,26 +5182,30 @@ begin
 end;
 
 procedure TCustomMemoEx.DeleteSelected;
-var S, S1: string;
-    iBeg, X, Y: integer;
+var
+  S, S1: string;
+  iBeg, X, Y: integer;
 begin
   if FSelected then
   begin
     S1 := GetSelText;
     FSelectedText := false;
-    if S1 = '' then exit;
+    if S1 = '' then
+      exit;
     PaintCaret(false);
 
     iBeg := PosFromCaret(FSelBegX, FSelBegY);
     {$IFDEF MEMOEX_UNDO}
-    TDeleteSelectedUndo.Create(Self, FCaretX, FCaretY, S1, FSelBlock,
-      FSelBegX, FSelBegY, FSelEndX, FSelEndY, iBeg);
+    TDeleteSelectedUndo.Create(Self, FCaretX, FCaretY, S1, FSelBlock, FSelBegX, FSelBegY, FSelEndX, FSelEndY, iBeg);
     {$ENDIF MEMOEX_UNDO}
-    if FSelBegY<>FSelEndY then begin // delete with #13 -> old slow method
+    if FSelBegY <> FSelEndY then
+    begin // delete with #13 -> old slow method
       S := FLines.Text;
       Delete(S, iBeg + 1, length(S1));
       FLines.SetLockText(S);
-    end else begin // new fast method from AB
+    end
+    else
+    begin // new fast method from AB
       s := FLines.ParaStrings[FSelBegY];
       while FSelBegX > Length(S) do
         S := S + ' ';
@@ -4982,12 +5216,12 @@ begin
     SetCaretInternal(X, Y);
     Changed;
     UpdateEditorSize(false);
-    if FUpdateLock = 0 then Invalidate;
+    if FUpdateLock = 0 then
+      Invalidate;
     PaintCaret(true);
   end;
 end;
 {$ENDIF MEMOEX_EDITOR}
-
 
 procedure TCustomMemoEx.SetGutterWidth(AWidth: integer);
 begin
@@ -5044,7 +5278,7 @@ begin
       scbHorz.Max := FCols;
       scbHorz.Min := 0;
     end
-      else
+    else
     begin
       scbHorz.Min := 0;
       scbHorz.Max := 0;
@@ -5065,7 +5299,7 @@ begin
       scbVert.Max := FRows - FVisibleRowCount;
       scbVert.Min := 0;
     end
-      else
+    else
     begin
       scbVert.Min := 0;
       scbVert.Max := 0;
@@ -5131,7 +5365,6 @@ begin
   end;
 end;
 
-
 procedure TCustomMemoEx.Changed;
 begin
   FModified := true;
@@ -5149,49 +5382,61 @@ begin
 end;
 
 procedure TCustomMemoEx.CaretFromPos(Pos: integer; var X, Y: integer);
-var i, j, k: integer;
+var
+  i, j, k: integer;
 begin
   k := 0;
   X := -1;
   Y := -1;
   for i := 0 to FLines.Count - 1 do
-  with FLines.FList[i] do begin
-    for j := 0 to FCount - 1 do begin
-      inc(Y);
-      inc(k, length(FStrings[j]));
-      if k >= Pos then begin
-        X := Pos - (k - length(FStrings[j]));
-        exit;
+    with FLines.FList[i] do
+    begin
+      for j := 0 to FCount - 1 do
+      begin
+        inc(Y);
+        inc(k, length(FStrings[j]));
+        if k >= Pos then
+        begin
+          X := Pos - (k - length(FStrings[j]));
+          exit;
+        end;
       end;
+      inc(k, 2);
     end;
-    inc(k, 2);
-  end;
   Y := FLines.ParaLineCount - 1;
-  if Y >= 0 then X := length(FLines.ParaStrings[Y]);
+  if Y >= 0 then
+    X := length(FLines.ParaStrings[Y]);
 end;
 
 function TCustomMemoEx.PosFromCaret(X, Y: integer): integer;
-var i, j, k: integer;
+var
+  i, j, k: integer;
 begin
   if Y > FLines.ParaLineCount - 1 then // if after eof -> get max len
-    Result := GetTextLen else
-  if Y < 0 then // before bof -> -1
-    Result := -1 else begin
+    Result := GetTextLen
+  else if Y < 0 then // before bof -> -1
+    Result := -1
+  else
+  begin
     Result := 0; // get position
     k := 0;
     for i := 0 to FLines.FCount - 1 do
-    with FLines.FList[i] do begin
-      if k + (FCount - 1) < Y then begin
-        inc(Result,StringDynArrayGetSize(pointer(FStrings),FCount)+2);
-        inc(k, FCount);
-      end else begin
-        for j := 0 to FCount - 1 do
-          if k + j < Y then
-           inc(Result, length(FStrings[j]));
-        inc(Result, X);
-        break;
+      with FLines.FList[i] do
+      begin
+        if k + (FCount - 1) < Y then
+        begin
+          inc(Result, StringDynArrayGetSize(pointer(FStrings), FCount) + 2);
+          inc(k, FCount);
+        end
+        else
+        begin
+          for j := 0 to FCount - 1 do
+            if k + j < Y then
+              inc(Result, length(FStrings[j]));
+          inc(Result, X);
+          break;
+        end;
       end;
-    end;
   end;
 end;
 
@@ -5201,23 +5446,26 @@ var
 begin
   Mouse2Caret(X, Y, X1, Y1);
   if (X1 < 0) or (Y1 < 0) then
-    Result := -1 else
+    Result := -1
+  else
     Result := PosFromCaret(X1, Y1);
 end;
 
 function TCustomMemoEx.GetTextLen: integer;
-var i: integer;
+var
+  i: integer;
 begin
-  Result := FLines.FCount*2; // #13+#10 for each line
-  for i := 0 to FLines.FCount-1 do
-  with FLines.FList[i] do
-    inc(Result,StringDynArrayGetSize(pointer(FStrings),FCount));
+  Result := FLines.FCount * 2; // #13+#10 for each line
+  for i := 0 to FLines.FCount - 1 do
+    with FLines.FList[i] do
+      inc(Result, StringDynArrayGetSize(pointer(FStrings), FCount));
 end;
 
 function TCustomMemoEx.GetSelStart: integer;
 begin
   if FSelectedText then
-    Result := PosFromCaret(GetRealOffs(FSelBegX, FSelBegY), FSelBegY) + 1 else
+    Result := PosFromCaret(GetRealOffs(FSelBegX, FSelBegY), FSelBegY) + 1
+  else
     Result := PosFromCaret(GetRealOffs(FCaretX, FCaretY), FCaretY) + 1;
 end;
 
@@ -5235,7 +5483,8 @@ begin
   if (ARow < FTopRow) or (ARow > FLastVisibleRow) then
   begin
     ARow := FCaretY - Trunc(VisibleRowCount / 2);
-    if ARow < 0 then ARow := 0;
+    if ARow < 0 then
+      ARow := 0;
     SetLeftTop(FLeftCol, ARow);
   end;
 end;
@@ -5266,7 +5515,8 @@ var
   PB: ^boolean;
 begin
   case index of
-    0: PB := @FInsertMode;
+    0:
+      PB := @FInsertMode;
   else {1 :}
     PB := @FReadOnly;
   end;
@@ -5281,11 +5531,10 @@ end;
 
 function TCustomMemoEx.GetWordOnCaret: string;
 begin
-  Result := GetWordOnPos(FLines.ParaStrings[CaretY], CaretX+1);
+  Result := GetWordOnPos(FLines.ParaStrings[CaretY], CaretX + 1);
 end;
 
-function TCustomMemoEx.GetTabStop(const X, Y: integer; const What: TTabStop;
-  const Next: Boolean): integer;
+function TCustomMemoEx.GetTabStop(const X, Y: integer; const What: TTabStop; const Next: Boolean): integer;
 
   procedure UpdateTabStops;
   var
@@ -5295,13 +5544,15 @@ function TCustomMemoEx.GetTabStop(const X, Y: integer; const What: TTabStop;
     function ProcessString: boolean;
     begin
       Result := false;
-      if (What = tsTabStop) and (length(S) > 0) then FTabPos[length(S) - 1] := true;
+      if (What = tsTabStop) and (length(S) > 0) then
+        FTabPos[length(S) - 1] := true;
       while i <= length(S) do
       begin
         if S[i] = ' ' then
         begin
           FTabPos[i - 1] := true;
-          if i >= X then Result := true;
+          if i >= X then
+            Result := true;
         end;
         inc(i);
       end;
@@ -5315,24 +5566,26 @@ function TCustomMemoEx.GetTabStop(const X, Y: integer; const What: TTabStop;
       i := 1;
       while Y - j >= 0 do
       begin
-        S := TrimRight(FLines.ParaStrings[Y-j]);
-        if ProcessString then break;
-        if i >= Max_X div 4 then Break;
-        if j >= FVisibleRowCount*2 then Break;
+        S := TrimRight(FLines.ParaStrings[Y - j]);
+        if ProcessString then
+          break;
+        if i >= Max_X div 4 then
+          Break;
+        if j >= FVisibleRowCount * 2 then
+          Break;
         inc(j);
       end;
     end
-    else
-      if (What=tsAutoIndent) and FAutoIndent then
+    else if (What = tsAutoIndent) and FAutoIndent then
+    begin
+      FLines.Index2ParaIndex(Y, i, j);
+      if i - 1 >= 0 then
       begin
-        FLines.Index2ParaIndex(Y, i, j);
-        if i - 1 >= 0 then
-        begin
-          S := FLines[i-1];
-          i := 1;
-          ProcessString;
-        end;
+        S := FLines[i - 1];
+        i := 1;
+        ProcessString;
       end;
+    end;
   end;
 
 var
@@ -5348,24 +5601,23 @@ begin
         Result := i - 1;
         exit;
       end
-      else
-        if (not FTabPos[i]) and (i > 0) then
-          if FTabPos[i - 1] then
-          begin
-            Result := i;
-            Exit;
-          end;
+      else if (not FTabPos[i]) and (i > 0) then
+        if FTabPos[i - 1] then
+        begin
+          Result := i;
+          Exit;
+        end;
     if Result = X then
       Result := GetDefTabStop(X, true);
   end
-  else
-    if Result = X then
-      Result := GetDefTabStop(X, false);
+  else if Result = X then
+    Result := GetDefTabStop(X, false);
 end;
 
 function TCustomMemoEx.GetDefTabStop(const X: integer; const Next: Boolean): integer;
-var S: string;
-    i: integer;
+var
+  S: string;
+  i: integer;
 begin
   S := Trim(SubStr(FTabStops, 0, ' '));
   try
@@ -5374,12 +5626,13 @@ begin
     i := 8;
   end;
   if i = 0 then
-    Result := X else
-    if i > X then
-      Result := i else
-      if X mod i = 0 then
-        Result := X + i else
-        Result := ((X div i) + 1) * i;
+    Result := X
+  else if i > X then
+    Result := i
+  else if X mod i = 0 then
+    Result := X + i
+  else
+    Result := ((X div i) + 1) * i;
 end;
 
 function TCustomMemoEx.GetBackStop(const X, Y: integer): integer;
@@ -5403,19 +5656,21 @@ function TCustomMemoEx.GetBackStop(const X, Y: integer): integer;
           FTabPos[i - 1] := true;
           Break;
         end;
-      if i = 1 then Break;
-      if j >= FVisibleRowCount * 2 then Break;
+      if i = 1 then
+        Break;
+      if j >= FVisibleRowCount * 2 then
+        Break;
       inc(j);
     end;
   end;
 
-var i: integer;
-    S: string;
+var
+  i: integer;
+  S: string;
 begin
   Result := X - 1;
   S := TrimRight(FLines.ParaStrings[Y]);
-  if (Trim(Copy(S, 1, X)) = '') and
-    ((X + 1 > Length(S)) or (S[X + 1] <> ' ')) then
+  if (Trim(Copy(S, 1, X)) = '') and ((X + 1 > Length(S)) or (S[X + 1] <> ' ')) then
   begin
     UpdateBackStops;
     for i := X downto 0 do
@@ -5472,17 +5727,14 @@ begin
   end;
 end;
 
-
-constructor TEditKey.Create(const ACommand: TEditCommand; const AKey1: word;
-  const AShift1: TShiftState);
+constructor TEditKey.Create(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState);
 begin
   Key1 := AKey1;
   Shift1 := AShift1;
   Command := ACommand;
 end;
 
-constructor TEditKey.Create2(const ACommand: TEditCommand; const AKey1: word;
-  const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
+constructor TEditKey.Create2(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
 begin
   Key1 := AKey1;
   Shift1 := AShift1;
@@ -5503,29 +5755,28 @@ begin
   inherited Destroy;
 end;
 
-procedure TKeyboard.Add(const ACommand: TEditCommand; const AKey1: word;
-  const AShift1: TShiftState);
+procedure TKeyboard.Add(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState);
 begin
   List.Add(TEditKey.Create(ACommand, AKey1, AShift1));
 end;
 
-procedure TKeyboard.Add2(const ACommand: TEditCommand; const AKey1: word;
-  const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
+procedure TKeyboard.Add2(const ACommand: TEditCommand; const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState);
 begin
   List.Add(TEditKey.Create2(ACommand, AKey1, AShift1, AKey2, AShift2));
 end;
 
 procedure TKeyboard.Clear;
-var i: integer;
+var
+  i: integer;
 begin
   for i := 0 to List.Count - 1 do
     TObject(List[i]).Free;
   List.Clear;
 end;
 
-function TKeyboard.Command(const AKey: word; const AShift: TShiftState):
-  TEditCommand;
-var i: integer;
+function TKeyboard.Command(const AKey: word; const AShift: TShiftState): TEditCommand;
+var
+  i: integer;
 begin
   Result := 0;
   for i := 0 to List.Count - 1 do
@@ -5533,22 +5784,21 @@ begin
       if (Key1 = AKey) and (Shift1 = AShift) then
       begin
         if Key2 = 0 then
-          Result := Command else
+          Result := Command
+        else
           Result := twoKeyCommand;
         Exit;
       end;
 end;
 
-function TKeyboard.Command2(const AKey1: word; const AShift1: TShiftState;
-  const AKey2: word; const AShift2: TShiftState): TEditCommand;
+function TKeyboard.Command2(const AKey1: word; const AShift1: TShiftState; const AKey2: word; const AShift2: TShiftState): TEditCommand;
 var
   i: integer;
 begin
   Result := 0;
   for i := 0 to List.Count - 1 do
     with TEditKey(List[i]) do
-      if (Key1 = AKey1) and (Shift1 = AShift1) and
-        (Key2 = AKey2) and (Shift2 = AShift2) then
+      if (Key1 = AKey1) and (Shift1 = AShift1) and (Key2 = AKey2) and (Shift2 = AShift2) then
       begin
         Result := Command;
         Exit;
@@ -5783,7 +6033,7 @@ begin
   Add2(ecInsertBlock, ord('K'), [ssCtrl], ord('R'), [ssCtrl]);
   Add2(ecSaveBlock, ord('K'), [ssCtrl], ord('W'), [ssCtrl]);
 
-  Add(ecRecordMacro, ord('R'), [ssCtrl,ssShift]);
+  Add(ecRecordMacro, ord('R'), [ssCtrl, ssShift]);
   Add(ecPlayMacro, ord('P'), [ssCtrl]);
 
   Add2(ecBlockOpA, ord('B'), [ssCtrl], ord('A'), [ssCtrl]);
@@ -5865,11 +6115,14 @@ end;
 
 procedure TUndoBuffer.Add(AUndo: TUndo);
 begin
-  if (self=nil) or InUndo then exit;
+  if (self = nil) or InUndo then
+    exit;
   if FCancelUndo then
-    Clear else
+    Clear
+  else
     FMemoEx.StatusChanged;
-  while (Count > 0) and (FPtr < Count - 1) do begin
+  while (Count > 0) and (FPtr < Count - 1) do
+  begin
     TUndo(Items[FPtr + 1]).Free;
     inherited Delete(FPtr + 1);
   end;
@@ -5888,11 +6141,7 @@ begin
     begin
       Compound := 0;
       UndoClass := LastUndo.ClassType;
-      while (LastUndo <> nil) and
-        ((UndoClass = LastUndo.ClassType) or
-        (LastUndo is TDeleteTrailUndo) or
-        (LastUndo is TReLineUndo) or
-        (Compound > 0)) do
+      while (LastUndo <> nil) and ((UndoClass = LastUndo.ClassType) or (LastUndo is TDeleteTrailUndo) or (LastUndo is TReLineUndo) or (Compound > 0)) do
       begin
         if LastUndo.ClassType = TBeginCompoundUndo then
         begin
@@ -5903,10 +6152,10 @@ begin
           inc(Compound);
         LastUndo.Undo;
         dec(FPtr);
-        if (UndoClass = TDeleteTrailUndo) or
-          (UndoClass = TReLineUndo) then
+        if (UndoClass = TDeleteTrailUndo) or (UndoClass = TReLineUndo) then
           UndoClass := LastUndo.ClassType;
-        if not FMemoEx.FGroupUndo then break;
+        if not FMemoEx.FGroupUndo then
+          break;
         // FMemoEx.Paint; {DEBUG !!!!!!!!!}
       end;
       if FMemoEx.FUpdateLock = 0 then
@@ -5928,9 +6177,10 @@ begin
 end;
 
 procedure TUndoBuffer.Clear;
-var i: integer;
+var
+  i: integer;
 begin // AB: memory leak correction
-  for i := 0 to Count-1 do
+  for i := 0 to Count - 1 do
     TUndo(Items[i]).Free;
   inherited;
   FCancelUndo := false;
@@ -5939,7 +6189,8 @@ end;
 
 procedure TUndoBuffer.Delete;
 begin
-  if Count > 0 then begin
+  if Count > 0 then
+  begin
     TUndo(Items[Count - 1]).Free;
     inherited Delete(Count - 1);
   end;
@@ -5948,7 +6199,8 @@ end;
 function TUndoBuffer.LastUndo: TUndo;
 begin
   if (FPtr >= 0) and (Count > 0) then
-    Result := TUndo(Items[FPtr]) else
+    Result := TUndo(Items[FPtr])
+  else
     Result := nil;
 end;
 
@@ -5977,8 +6229,7 @@ end;
 
 {* TCaretUndo}
 
-constructor TCaretUndo.Create(const AMemoEx: TCustomMemoEx;
-                              const ACaretX, ACaretY: integer);
+constructor TCaretUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer);
 begin
   inherited Create(AMemoEx);
   FCaretX := ACaretX;
@@ -6006,8 +6257,7 @@ end;
 
 {* TInsertUndo}
 
-constructor TInsertUndo.Create(const AMemoEx: TCustomMemoEx;
-                               const ACaretX, ACaretY: integer; const AText: string);
+constructor TInsertUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AText: string);
 var
   i: integer;
 begin
@@ -6018,8 +6268,9 @@ begin
 end;
 
 procedure TInsertUndo.Undo;
-var S, Text: string;
-    _P, _PI: integer;
+var
+  S, Text: string;
+  _P, _PI: integer;
 begin
   Text := '';
   with UndoBuffer do
@@ -6028,19 +6279,24 @@ begin
     begin
       Text := TInsertUndo(LastUndo).FText + Text;
       dec(FPtr);
-      if not FMemoEx.FGroupUndo then break;
+      if not FMemoEx.FGroupUndo then
+        break;
     end;
     inc(FPtr);
   end;
-  with TInsertUndo(UndoBuffer.Items[UndoBuffer.FPtr]) do begin
-    if PosEx(#13,text)>0 then begin
+  with TInsertUndo(UndoBuffer.Items[UndoBuffer.FPtr]) do
+  begin
+    if PosEx(#13, text) > 0 then
+    begin
       S := FMemoEx.FLines.Text;
       Delete(S, FOffset + 1, Length(Text));
       FMemoEx.FLines.SetLockText(S);
-    end else begin // new fast method by AB
+    end
+    else
+    begin // new fast method by AB
       FMemoEx.FLines.Index2ParaIndex(FCaretY, _P, _PI);
       s := FMemoEX.FLines[_P];
-      delete(s,FParaOffset+1,length(Text));
+      delete(s, FParaOffset + 1, length(Text));
       FMemoEx.FLines[_P] := S; // contient reformat paragraph
     end;
     FMemoEx.SetCaretInternal(FCaretX, FCaretY);
@@ -6050,8 +6306,7 @@ end;
 
 { TOverwriteUndo }
 
-constructor TOverwriteUndo.Create(const AMemoEx: TCustomMemoEx;
-  const ACaretX, ACaretY: integer; const AOldText, ANewText: string);
+constructor TOverwriteUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AOldText, ANewText: string);
 var
   i, j: integer;
 begin
@@ -6075,11 +6330,13 @@ begin
       OldText := TOverwriteUndo(LastUndo).FOldText + OldText;
       NewText := TOverwriteUndo(LastUndo).FNewText + NewText;
       dec(FPtr);
-      if not FMemoEx.FGroupUndo then break;
+      if not FMemoEx.FGroupUndo then
+        break;
     end;
     inc(FPtr);
   end;
-  with TOverwriteUndo(UndoBuffer.Items[UndoBuffer.FPtr]) do begin
+  with TOverwriteUndo(UndoBuffer.Items[UndoBuffer.FPtr]) do
+  begin
     S := FMemoEx.FLines.Text;
     Delete(S, FOffset + 1, Length(NewText));
     Insert(OldText, S, FOffset + 1);
@@ -6110,7 +6367,8 @@ begin
       end;
       Text := TDeleteUndo(LastUndo).FText + Text;
       dec(FPtr);
-      if not FMemoEx.FGroupUndo then break;
+      if not FMemoEx.FGroupUndo then
+        break;
     end;
     inc(FPtr);
   end;
@@ -6149,7 +6407,8 @@ begin
       end;
       Text := Text + TDeleteUndo(LastUndo).FText;
       dec(FPtr);
-      if not FMemoEx.FGroupUndo then break;
+      if not FMemoEx.FGroupUndo then
+        break;
     end;
     inc(FPtr);
   end;
@@ -6168,8 +6427,7 @@ end;
 
 {* TReplaceUndo}
 
-constructor TReplaceUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY:
-  integer; const ABeg, AEnd: integer; const AText, ANewText: string);
+constructor TReplaceUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const ABeg, AEnd: integer; const AText, ANewText: string);
 begin
   inherited Create(AMemoEx, ACaretX, ACaretY);
   FBeg := ABeg;
@@ -6192,9 +6450,7 @@ end;
 
 {* TDeleteSelectedUndo}
 
-constructor TDeleteSelectedUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX,
-  ACaretY: integer; const AText: string; const ASelBlock: boolean; const ASelBegX, ASelBegY,
-  ASelEndX, ASelEndY, ASelOffs: integer);
+constructor TDeleteSelectedUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const AText: string; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX, ASelEndY, ASelOffs: integer);
 begin
   inherited Create(AMemoEx, ACaretX, ACaretY, AText);
   FSelBlock := ASelBlock;
@@ -6206,7 +6462,8 @@ begin
 end;
 
 procedure TDeleteSelectedUndo.Undo;
-var S, Text: string;
+var
+  S, Text: string;
 begin
   Text := '';
   with UndoBuffer do
@@ -6215,7 +6472,8 @@ begin
     begin
       Text := TDeleteUndo(LastUndo).FText + Text;
       dec(FPtr);
-      if not FMemoEx.FGroupUndo then break;
+      if not FMemoEx.FGroupUndo then
+        break;
     end;
     inc(FPtr);
   end;
@@ -6239,9 +6497,7 @@ end;
 
 {* TSelectUndo}
 
-constructor TSelectUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX,
-  ACaretY: integer; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX,
-  ASelEndY: integer);
+constructor TSelectUndo.Create(const AMemoEx: TCustomMemoEx; const ACaretX, ACaretY: integer; const ASelBlock: boolean; const ASelBegX, ASelBegY, ASelEndX, ASelEndY: integer);
 begin
   inherited Create(AMemoEx, ACaretX, ACaretY);
   FSelBlock := ASelBlock;
@@ -6288,7 +6544,7 @@ procedure TCustomMemoEx.DoCompletionIdentifer(var Cancel: boolean);
 begin
   CompletionIdentifer(Cancel);
   if Assigned(FOnCompletionIdentifer) then
-   FOnCompletionIdentifer(Self, Cancel);
+    FOnCompletionIdentifer(Self, Cancel);
 end;
 
 procedure TCustomMemoEx.DoCompletionTemplate(var Cancel: boolean);
@@ -6301,7 +6557,8 @@ end;
 function TCustomMemoEx.DoPreprocessCompletion(const ID, OldText: string): string;
 begin
   if Assigned(FOnPreprocessCompletion) then
-    Result := FOnPreprocessCompletion(Self, ID, OldText) else
+    Result := FOnPreprocessCompletion(Self, ID, OldText)
+  else
     Result := OldText;
 end;
 
@@ -6319,12 +6576,9 @@ type
     procedure CreateWnd; override;
     procedure DestroyWnd; override;
     procedure MouseMove(Shift: TShiftState; X, Y: integer); override;
-    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y:
-      integer); override;
-    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
-      override;
-    procedure DrawItem(Index: integer; Rect: TRect; State: TOwnerDrawState);
-      override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer); override;
+    procedure DrawItem(Index: integer; Rect: TRect; State: TOwnerDrawState); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -6370,8 +6624,10 @@ end;
 function TCompletion.GetItems: TStrings;
 begin
   case FMode of
-    cmIdentifers: Result := FIdentifers;
-    cmTemplates: Result := FTemplates;
+    cmIdentifers:
+      Result := FIdentifers;
+    cmTemplates:
+      Result := FTemplates;
   else
     Result := nil;
   end;
@@ -6399,7 +6655,8 @@ begin
       iEnd := P
     end;
     CaretFromPos(iBeg, CX, CY);
-    if CX < 1 then CX := FCaretX + 1;
+    if CX < 1 then
+      CX := FCaretX + 1;
     NewString := DoPreprocessCompletion(W, ANewString);
     case FMode of
       cmIdentifers:
@@ -6409,12 +6666,14 @@ begin
         end;
       cmTemplates:
         begin
-          S1 := StringReplaceAll(NewString, FCRLF, #13#10 + StringOfChar(' ',CX - 1));
+          S1 := StringReplaceAll(NewString, FCRLF, #13#10 + StringOfChar(' ', CX - 1));
           S1 := StringReplaceAll(S1, FCaretChar, '');
           NewCaret := Pos(FCaretChar, NewString) - 1;
-          if NewCaret = -1 then NewCaret := Length(NewString);
+          if NewCaret = -1 then
+            NewCaret := Length(NewString);
           for i := 1 to NewCaret do
-            if S1[i] = #13 then inc(LNum);
+            if S1[i] = #13 then
+              inc(LNum);
         end
     else
       raise EMemoExError.Create('Invalid MemoEx Completion Mode');
@@ -6443,7 +6702,7 @@ end;
 procedure TCompletion.DoKeyPress(Key: Char);
 begin
   if FVisible then
-    if HasChar(Key, RAEditorCompletionChars) then
+    if {$ifdef UNICODE} (Key < #127) and {$endif}(AnsiChar(Key) in RAEditorCompletionChars) then
       SelectItem
     else
       CloseUp(true)
@@ -6455,8 +6714,10 @@ function TCompletion.DoKeyDown(Key: Word; Shift: TShiftState): boolean;
 begin
   Result := true;
   case Key of
-    VK_ESCAPE: CloseUp(false);
-    VK_RETURN: CloseUp(true);
+    VK_ESCAPE:
+      CloseUp(false);
+    VK_RETURN:
+      CloseUp(true);
     VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT:
       FPopupList.Perform(WM_KEYDOWN, Key, 0);
   else
@@ -6469,17 +6730,21 @@ var
   Eq: boolean;
   Cancel: boolean;
 begin
-  if FMemoEx.FReadOnly then exit;
-  if FPopupList.Visible then CloseUp(false);
+  if FMemoEx.FReadOnly then
+    exit;
+  if FPopupList.Visible then
+    CloseUp(false);
   FMode := AMode;
   case FMode of
-    cmIdentifers: DropDown(AMode, true);
+    cmIdentifers:
+      DropDown(AMode, true);
     cmTemplates:
       begin
         Cancel := false;
         // FMemoEx.DoCompletionIdentifer(Cancel);
         FMemoEx.DoCompletionTemplate(Cancel);
-        if Cancel or (FTemplates.Count = 0) then exit;
+        if Cancel or (FTemplates.Count = 0) then
+          exit;
         MakeItems;
         FindSelItem(Eq);
         if Eq then
@@ -6490,8 +6755,7 @@ begin
   end;
 end;
 
-procedure TCompletion.DropDown(const AMode: TCompletionList; const ShowAlways:
-  boolean);
+procedure TCompletion.DropDown(const AMode: TCompletionList; const ShowAlways: boolean);
 var
   ItemCount: integer;
   P: TPoint;
@@ -6508,15 +6772,16 @@ begin
   begin
     Cancel := false;
     case FMode of
-      cmIdentifers: FMemoEx.DoCompletionIdentifer(Cancel);
+      cmIdentifers:
+        FMemoEx.DoCompletionIdentifer(Cancel);
       cmTemplates:
         FMemoEx.DoCompletionTemplate(Cancel)
     end;
     MakeItems;
     FindSelItem(Eq);
     // Cancel := not Visible and (ItemIndex = -1);
-    if Cancel or (FItems.Count = 0) or (((ItemIndex = -1) or Eq) and not
-      ShowAlways) then exit;
+    if Cancel or (FItems.Count = 0) or (((ItemIndex = -1) or Eq) and not ShowAlways) then
+      exit;
     FPopupList.Items := FItems;
     FPopupList.ItemHeight := FItemHeight;
     FVisible := true;
@@ -6537,28 +6802,31 @@ begin
     P.Y := ClientOrigin.Y + P.Y;
     Dec(P.X, 2 * SysBorderWidth);
     Dec(P.Y, SysBorderHeight);
-    if ItemCount > FDropDownCount then ItemCount := FDropDownCount;
+    if ItemCount > FDropDownCount then
+      ItemCount := FDropDownCount;
     PopupHeight := ItemHeight * ItemCount + 2;
     Y := P.Y;
     if (Y + PopupHeight) > Screen.Height then
     begin
       Y := P.Y - PopupHeight - FCellRect.Height + 1;
-      if Y < 0 then Y := P.Y;
+      if Y < 0 then
+        Y := P.Y;
     end;
     PopupWidth := FDropDownWidth;
-    if PopupWidth = 0 then PopupWidth := Width + 2 * SysBorderWidth;
+    if PopupWidth = 0 then
+      PopupWidth := Width + 2 * SysBorderWidth;
   end;
   FPopupList.Left := P.X;
   FPopupList.Top := Y;
   FPopupList.Width := PopupWidth;
   FPopupList.Height := PopupHeight;
-  SetWindowPos(FPopupList.Handle, HWND_TOP, P.X, Y, 0, 0,
-    SWP_NOSIZE or SWP_NOACTIVATE or SWP_SHOWWINDOW);
+  SetWindowPos(FPopupList.Handle, HWND_TOP, P.X, Y, 0, 0, SWP_NOSIZE or SWP_NOACTIVATE or SWP_SHOWWINDOW);
   FPopupList.Visible := true;
 end;
 
 function TCompletion.Cmp1(const S1, S2: string): integer;
-var T1, T2: string;
+var
+  T1, T2: string;
 begin
   T1 := FMemoEx.DoChangeCase(S1, RA_CASE_CONVERT_LOWER);
   T2 := FMemoEx.DoChangeCase(S2, RA_CASE_CONVERT_LOWER);
@@ -6566,7 +6834,8 @@ begin
 end;
 
 function TCompletion.Cmp2(const S1, S2: string): boolean;
-var T1, T2: string;
+var
+  T1, T2: string;
 begin
   T1 := FMemoEx.DoChangeCase(S1, RA_CASE_CONVERT_LOWER);
   T2 := FMemoEx.DoChangeCase(S2, RA_CASE_CONVERT_LOWER);
@@ -6574,8 +6843,9 @@ begin
 end;
 
 procedure TCompletion.MakeItems;
-var i: integer;
-    S: string;
+var
+  i: integer;
+  S: string;
 begin
   FItems.Clear;
   case FMode of
@@ -6589,14 +6859,17 @@ begin
         for i := 0 to FTemplates.Count - 1 do
           if Cmp1(FTemplates[i], S) = 0 then
             FItems.Add(FTemplates[i]);
-        if FItems.Count = 0 then FItems.Assign(FTemplates);
+        if FItems.Count = 0 then
+          FItems.Assign(FTemplates);
       end;
   end;
 end;
 
 procedure TCompletion.FindSelItem(var Eq: boolean);
+
   function FindFirst(Ss: TSTrings; S: string): integer;
-  var i: integer;
+  var
+    i: integer;
   begin
     for i := 0 to Ss.Count - 1 do
       if Cmp1(Ss[i], S) = 0 then
@@ -6606,29 +6879,37 @@ procedure TCompletion.FindSelItem(var Eq: boolean);
       end;
     Result := -1;
   end;
-var S: string;
+
+var
+  S: string;
 begin
   with FMemoEx do
     if FLines.Count > 0 then
-      S := GetWordOnPos(FLines.ParaStrings[CaretY], CaretX) else
+      S := GetWordOnPos(FLines.ParaStrings[CaretY], CaretX)
+    else
       S := '';
   if Trim(S) = '' then
-    ItemIndex := -1 else
+    ItemIndex := -1
+  else
     ItemIndex := FindFirst(FItems, S);
   Eq := (ItemIndex > -1) and Cmp2(Trim(SubStr(FItems[ItemIndex], 0, FSeparator)), S);
 end;
 
 procedure TCompletion.SelectItem;
-var Cancel: boolean;
-    Param: boolean;
+var
+  Cancel: boolean;
+  Param: boolean;
 begin
   FindSelItem(Param);
   Cancel := not Visible and (ItemIndex = -1);
   case FMode of
-    cmIdentifers: FMemoEx.DoCompletionIdentifer(Cancel);
-    cmTemplates: FMemoEx.DoCompletionTemplate(Cancel);
+    cmIdentifers:
+      FMemoEx.DoCompletionIdentifer(Cancel);
+    cmTemplates:
+      FMemoEx.DoCompletionTemplate(Cancel);
   end;
-  if Cancel or (GetItems.Count = 0) then CloseUp(false);
+  if Cancel or (GetItems.Count = 0) then
+    CloseUp(false);
 end;
 
 procedure TCompletion.CloseUp(const Apply: boolean);
@@ -6640,8 +6921,10 @@ begin
   FTimer.Enabled := false;
   if Apply and (ItemIndex > -1) then
     case FMode of
-      cmIdentifers: ReplaceWord(SubStr(FItems[ItemIndex], 0, FSeparator));
-      cmTemplates: ReplaceWord(SubStr(FItems[ItemIndex], 2, FSeparator));
+      cmIdentifers:
+        ReplaceWord(SubStr(FItems[ItemIndex], 0, FSeparator));
+      cmTemplates:
+        ReplaceWord(SubStr(FItems[ItemIndex], 2, FSeparator));
     end;
 end;
 
@@ -6651,7 +6934,8 @@ begin
 end;
 
 procedure TCompletion.ClearAutoChangeList;
-var i: integer;
+var
+  i: integer;
 begin
   for i := 0 to FAutoChangeList.Count - 1 do
     Dispose(FAutoChangeList[i]);
@@ -6664,8 +6948,10 @@ begin
 end;
 
 procedure TCompletion.AutoChangeChanged(Sender: TObject);
+
   procedure AddAutoChangeWord(const OldWord, NewWord: string);
-  var ACW: PAutoChangeWord;
+  var
+    ACW: PAutoChangeWord;
   begin
     if OldWord <> '' then
     begin
@@ -6675,21 +6961,25 @@ procedure TCompletion.AutoChangeChanged(Sender: TObject);
       FAutoChangeList.Add(ACW);
     end;
   end;
-var i: integer;
+
+var
+  i: integer;
 begin
   ClearAutoChangeList;
   for i := 0 to FAutoChange.Count - 1 do
-    AddAutoChangeWord(SubStr(FAutoChange.Strings[i], 0, FSeparator),
-                      SubStr(FAutoChange.Strings[i], 1, FSeparator));
+    AddAutoChangeWord(SubStr(FAutoChange.Strings[i], 0, FSeparator), SubStr(FAutoChange.Strings[i], 1, FSeparator));
   FAutoChangeList.Sort(AutoChangeCompare);
 end;
 
 procedure TCompletion.SetStrings(index: integer; AValue: TStrings);
 begin
   case index of
-    0: FIdentifers.Assign(AValue);
-    1: FTemplates.Assign(AValue);
-    2: FAutoChange.Assign(AValue);
+    0:
+      FIdentifers.Assign(AValue);
+    1:
+      FTemplates.Assign(AValue);
+    2:
+      FAutoChange.Assign(AValue);
   end;
 end;
 
@@ -6716,7 +7006,6 @@ procedure TCompletion.SetInterval(AValue: cardinal);
 begin
   FTimer.Interval := AValue;
 end;
-
 
 constructor TMemoExCompletionList.Create(AOwner: TComponent);
 begin
@@ -6748,7 +7037,7 @@ begin
   inherited CreateParams(Params);
   with Params do
   begin
-    Style := Style {or WS_POPUP} or WS_BORDER;
+    Style := Style {or WS_POPUP}  or WS_BORDER;
     ExStyle := ExStyle or WS_EX_TOOLWINDOW;
     WindowClass.Style := WindowClass.Style or CS_SAVEBITS;
   end;
@@ -6777,7 +7066,8 @@ begin
   if KeyPressed(VK_LBUTTON) then
   begin
     F := ItemAtPos(Point(X, Y), true);
-    if F > -1 then ItemIndex := F;
+    if F > -1 then
+      ItemIndex := F;
     FTimer.Enabled := (Y < 0) or (Y > ClientHeight);
     if (Y < -ItemHeight) or (Y > ClientHeight + ItemHeight) then
       FTimer.Interval := 50
@@ -6792,22 +7082,20 @@ begin
   end;
 end;
 
-procedure TMemoExCompletionList.MouseDown(Button: TMouseButton; Shift:
-  TShiftState; X, Y: integer);
+procedure TMemoExCompletionList.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 var
   F: integer;
 begin
   MouseCapture := true;
   F := ItemAtPos(Point(X, Y), true);
-  if F > -1 then ItemIndex := F;
+  if F > -1 then
+    ItemIndex := F;
 end;
 
-procedure TMemoExCompletionList.MouseUp(Button: TMouseButton; Shift:
-  TShiftState; X, Y: integer);
+procedure TMemoExCompletionList.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 begin
   MouseCapture := false;
-  (Owner as TCustomMemoEx).FCompletion.CloseUp(
-    (Button = mbLeft) and PtInRect(ClientRect, Point(X, Y)));
+  (Owner as TCustomMemoEx).FCompletion.CloseUp((Button = mbLeft) and PtInRect(ClientRect, Point(X, Y)));
 end;
 
 procedure TMemoExCompletionList.OnTimer(Sender: TObject);
@@ -6828,8 +7116,7 @@ begin
   Message.Result := 1;
 end;
 
-procedure TMemoExCompletionList.DrawItem(Index: integer; Rect: TRect; State:
-  TOwnerDrawState);
+procedure TMemoExCompletionList.DrawItem(Index: integer; Rect: TRect; State: TOwnerDrawState);
 var
   Offset, W: integer;
   S: string;
@@ -6843,12 +7130,10 @@ begin
     with (Owner as TCustomMemoEx).FCompletion do
       case FMode of
         cmIdentifers:
-          Canvas.TextOut(Rect.Left + Offset, Rect.Top, SubStr(Items[Index], 1,
-            Separator));
+          Canvas.TextOut(Rect.Left + Offset, Rect.Top, SubStr(Items[Index], 1, Separator));
         cmTemplates:
           begin
-            Canvas.TextOut(Rect.Left + Offset, Rect.Top, SubStr(Items[Index], 1,
-              Separator));
+            Canvas.TextOut(Rect.Left + Offset, Rect.Top, SubStr(Items[Index], 1, Separator));
             Canvas.Font.Style := [fsBold];
             S := SubStr(Items[Index], 0, Separator);
             W := Canvas.TextWidth(S);
@@ -6875,29 +7160,30 @@ begin
   end;
 end; { ValidateEditBuffer }
 
-function TCustomMemoEx.GetText(Position: longint; Buffer: PChar;
-  Count: longint): longint;
+function TCustomMemoEx.GetText(Position: longint; Buffer: PChar; Count: longint): longint;
 begin
   ValidateEditBuffer;
   if Position <= FEditBufferSize then
   begin
     Result := Min(FEditBufferSize - Position, Count);
-    Move(FPEditBuffer[Position], Buffer[0], Result);
+    Move(FPEditBuffer[Position], Buffer[0], Result * SizeOf(char));
   end
   else
     Result := 0;
 end;
 
 procedure TCustomMemoEx.SetWordWrap(Value: boolean);
-var p, x,y: integer; // AB : don't loose position
+var
+  p, x, y: integer; // AB : don't loose position
 begin
-  if Value <> FWordWrap then begin
-    p := PosFromCaret(CaretX,CaretY);
+  if Value <> FWordWrap then
+  begin
+    p := PosFromCaret(CaretX, CaretY);
     FWordWrap := Value;
     FLines.Reformat;
     CantUndo;
-    CaretFromPos(p,x,y);
-    SetCaret(0,Y); // aller en dйbut de ligne (sinon risque de bug)
+    CaretFromPos(p, x, y);
+    SetCaret(0, Y); // aller en dйbut de ligne (sinon risque de bug)
   end;
 end;
 
@@ -6906,7 +7192,8 @@ begin
   if Value <> FStripInvisible then
   begin
     FStripInvisible := Value;
-    if FReadOnly then Invalidate;
+    if FReadOnly then
+      Invalidate;
   end;
 end;
 
@@ -6944,40 +7231,46 @@ end;
 
 procedure TCustomMemoEx.SetSelectedText(Value: boolean);
 begin
-  if FSelected <> Value then begin
+  if FSelected <> Value then
+  begin
     FSelected := Value;
     SelectionChanged;
   end;
 end;
 
 function TCustomMemoEx.FindNext(const text: string; ignCase: boolean): boolean;
-var X, Found, para, paraIndex: integer;
-    UpText: string;
+var
+  X, Found, para, paraIndex: integer;
+  UpText: string;
 begin
   if ignCase then
     UpText := UpperCase(Text);
   SetUnSelected;
-  X := FCaretX+1; // ignore chars for first string
-  FLines.Index2ParaIndex(FCaretY,para,paraIndex);
-  while para<FLines.FCount do // search in all paragraphs
-  with FLines.FList[para] do begin
-    while paraIndex<FCount do begin // search in this paragraph
-      if ignCase then
-        Found := PosEx(UpText,UpperCase(FStrings[paraIndex]),X) else
-        Found := PosEx(text,FStrings[paraIndex],X);
-      if Found>0 then begin
-        SetSel(Found-1,FPreCount+paraIndex);
-        SetSel(FSelStartX+length(text),FSelStartY);
-        SetCaret(FSelEndX,FSelEndY);
-        result := true;
-        exit;
+  X := FCaretX + 1; // ignore chars for first string
+  FLines.Index2ParaIndex(FCaretY, para, paraIndex);
+  while para < FLines.FCount do // search in all paragraphs
+    with FLines.FList[para] do
+    begin
+      while paraIndex < FCount do
+      begin // search in this paragraph
+        if ignCase then
+          Found := PosEx(UpText, UpperCase(FStrings[paraIndex]), X)
+        else
+          Found := PosEx(text, FStrings[paraIndex], X);
+        if Found > 0 then
+        begin
+          SetSel(Found - 1, FPreCount + paraIndex);
+          SetSel(FSelStartX + length(text), FSelStartY);
+          SetCaret(FSelEndX, FSelEndY);
+          result := true;
+          exit;
+        end;
+        X := 1;         // now whole lines are searched
+        inc(paraIndex); // next line of this paragraph
       end;
-      X := 1;         // now whole lines are searched
-      inc(paraIndex); // next line of this paragraph
+      inc(para);      // next paragraph
+      paraIndex := 0; // begin with first line
     end;
-    inc(para);      // next paragraph
-    paraIndex := 0; // begin with first line
-  end;
   result := false;  // not found
 end;
 
@@ -6988,24 +7281,26 @@ end;
 
 procedure TCustomMemoEx.SetTopRow(const Value: integer);
 begin
-  SetLeftTop(0,Value);
+  SetLeftTop(0, Value);
 end;
 
-procedure TCustomMemoEx.DoContextPopup(MousePos: TPoint;
-  var Handled: Boolean);
-var aPopupMenu: TPopupMenu;
+procedure TCustomMemoEx.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+var
+  aPopupMenu: TPopupMenu;
 begin
-  if InvalidPoint(MousePos) then begin
+  if InvalidPoint(MousePos) then
+  begin
     // in case of menu from keyboard -> show popupmenu at caret position
     aPopupMenu := GetPopupMenu;
-    if (aPopupMenu=nil) or not aPopupMenu.AutoPopup then
+    if (aPopupMenu = nil) or not aPopupMenu.AutoPopup then
       exit;
     SendCancelMode(nil);
     aPopupMenu.PopupComponent := Self;
-    with ClientToScreen(CalcCellRect(FCaretX-FLeftCol,FCaretY-FTopRow).TopLeft) do
-      aPopupMenu.Popup(X,Y);
+    with ClientToScreen(CalcCellRect(FCaretX - FLeftCol, FCaretY - FTopRow).TopLeft) do
+      aPopupMenu.Popup(X, Y);
     Handled := true;
-  end else
+  end
+  else
     inherited;
 end;
 
@@ -7022,64 +7317,84 @@ end;
 
 { TMemoEx }
 
-class procedure TMemoEx.JSONLineAttr(Sender: TObject; const Line: String;
-  index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
-var i,c: integer;
-    FC: TColor;
+class procedure TMemoEx.JSONLineAttr(Sender: TObject; const Line: string; index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
+var
+  i, c: integer;
+  FC: TColor;
 begin
   FC := clWindowText;
   i := 0;
-  if Line<>'' then
-  repeat
-    case Line[i+1] of
-      #0: break;
-      '{','}': begin
-        Attrs[i].FC := clGreen; Attrs[i].Style := [fsBold];
-        inc(i);
-      end;
-      '[',']': begin
-        Attrs[i].FC := clNavy; Attrs[i].Style := [fsBold];
-        inc(i);
-      end;
-      '"': begin
-        repeat
-          Attrs[i].FC := clOlive;
-          inc(i);
-          if Line[i+1]=#0 then
-            exit;
-        until (Line[i+1]='"') and (Line[i]<>'\');
-        Attrs[i].FC := clOlive;
-        inc(i);
-      end;
-      '-','0'..'9': begin
-        repeat
-          Attrs[i].FC := clNavy;
-          inc(i);
-        until not (Line[i+1] in ['0'..'9','e','E','+','-']);
-      end;
-      '_','a'..'z','A'..'Z','$': begin
-        // see SynCommons.IsJsonIdentifierFirstChar
-        c := PInteger(PAnsiChar(pointer(Line))+i)^;
-        if (c=ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24) or
-           (c=ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24) or
-           (c=ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24) then
-          repeat
-            Attrs[i].FC := clNavy; Attrs[i].Style := [fsBold];
+  if Line <> '' then
+    repeat
+      case Line[i + 1] of
+        #0:
+          break;
+        '{', '}':
+          begin
+            Attrs[i].FC := clGreen;
+            Attrs[i].Style := [fsBold];
             inc(i);
-          until not (Line[i+1] in ['a'..'z']) else
-          repeat
-            Attrs[i].FC := clMaroon;
+          end;
+        '[', ']':
+          begin
+            Attrs[i].FC := clNavy;
+            Attrs[i].Style := [fsBold];
             inc(i);
-          until not (Line[i+1] in ['_','0'..'9','a'..'z','A'..'Z','.','[',']']);
+          end;
+        '"':
+          begin
+            repeat
+              Attrs[i].FC := clOlive;
+              inc(i);
+              if Line[i + 1] = #0 then
+                exit;
+            until (Line[i + 1] = '"') and (Line[i] <> '\');
+            Attrs[i].FC := clOlive;
+            inc(i);
+          end;
+        '-', '0'..'9':
+          begin
+            repeat
+              Attrs[i].FC := clNavy;
+              inc(i);
+            until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
+              not (AnsiChar(Line[i + 1]) in ['0'..'9', 'e', 'E', '+', '-']);
+          end;
+        '_', 'a'..'z', 'A'..'Z', '$':
+          begin
+            // see SynCommons.IsJsonIdentifierFirstChar
+            {$ifdef UNICODE}
+            c := ord(Line[i + 1]) + ord(Line[i + 2]) shl 8 + ord(Line[i + 3]) shl 16 + ord(Line[i + 4]) shl 24;
+            {$else}
+            c := PInteger(PAnsiChar(pointer(Line)) + i)^;
+            {$endif}
+            if (c = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24) or
+               (c = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) or
+               (c = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24) then
+              repeat
+                Attrs[i].FC := clNavy;
+                Attrs[i].Style := [fsBold];
+                inc(i);
+              until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
+                not (AnsiChar(Line[i + 1]) in ['a'..'z'])
+            else
+              repeat
+                Attrs[i].FC := clMaroon;
+                inc(i);
+              until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
+                not (AnsiChar(Line[i + 1]) in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']);
+          end;
+      else
+        begin
+          Attrs[i].FC := FC;
+          inc(i);
+        end;
       end;
-      else begin
-        Attrs[i].FC := FC;
-        inc(i);
-      end;
-    end;
-  until false;
+    until false;
 end;
 
 initialization
   CF_MEMOEX := RegisterClipBoardFormat('CF_MEMOEX');
+
 end.
+
