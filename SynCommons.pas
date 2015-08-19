@@ -25324,7 +25324,7 @@ var i: integer;
 begin
   if length(NameValuePairs)<2 then
     result := '' else
-    with TTextWriter.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream do
     try
       for i := 1 to length(NameValuePairs) shr 1 do begin
         Add(NameValuePairs[i*2-2],twNone);
