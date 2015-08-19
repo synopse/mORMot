@@ -102,11 +102,54 @@ begin
   end;
 end;
 
+const COUNT2 = 100000;
+
+procedure Test2;
+var db: TSQLRestClientDB;
+    res: TIDDynArray;
+    i: Integer;
+    indy: TSQLIndy;
+    timer: TPrecisionTimer;
+begin
+  DeleteFile('test2.db3');
+  db := TSQLRestClientDB.Create(TSQLModel.Create([TSQLIndy]),nil,'test2.db3',TSQLRestServerDB);
+  try
+    db.Model.Owner := db;
+    db.DB.LockingMode := lmExclusive;
+    db.DB.Synchronous := smOff;
+    db.Server.CreateMissingTables;
+    timer.Start;
+    db.BatchStart(TSQLIndy);
+    indy := TSQLIndy.Create;
+    try
+      for i := 1 to COUNT2 do begin
+        indy.indikey := IntToString(i);
+        indy.hasdata := i and 1=0;
+        indy.sex := 'Male';
+        indy.famc := i;
+        indy.fams := i*10;
+        indy.todo := i+100;
+        indy.firstancestralloop := i*2;
+        db.BatchAdd(indy,true);
+      end;
+    finally
+      indy.Free;
+    end;
+    writeln('Prepared ',COUNT2,' rows in ',timer.Stop);
+    timer.Start;
+    db.BatchSend(res);
+    write('Inserted ',COUNT2,' rows in ',timer.Stop);
+    writeln(' i.e. ',timer.PerSec(COUNT2),' per second');
+  finally
+    db.Free;
+  end;
+end;
+
 begin
   try
     Test;
-    //if DebugHook<>0 then
-      readln;
+    // Test2
+    readln;
   except
     on E: Exception do
       ConsoleShowFatalException(E);
