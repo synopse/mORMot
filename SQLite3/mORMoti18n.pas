@@ -768,7 +768,7 @@ end;
 function LanguageAbrToIndex(const value: RawUTF8): TLanguages;
 // LanguageAbrToIndex('GR')=1
 begin
-  if length(value)=2 then
+  if length(value)>=2 then
     result := LanguageAbrToIndex(pointer(Value)) else
     result := LANGUAGE_NONE;
 end;
