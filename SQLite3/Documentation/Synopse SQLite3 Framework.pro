@@ -7639,6 +7639,7 @@ $ "POST",{"FirstName":"+¬ÅtqCXW3√Ç\"","LastName":"New","YearOfBirth":2000, "Year
 $  ]}
 If {\f1\fs20 BatchAdd} implies only simple fields (which is the default), those fields name won't be transmitted, and the following would be emitted in the JSON stream, to reduce needed bandwith:
 $  "SIMPLE",["‚Äö@‚Ä¢≈"H‚Ä m¬£¬ g","New",1000,1519],
+By default, @*BLOB@ fields are excluded from the {\f1\fs20 Batch} content: only simple fields are send. But {\f1\fs20 BatchAdd BatchUpdate} methods (or corresponding {\f1\fs20 TSQLRestBatch} {\f1\fs20 Add} or {\f1\fs20 Update} methods) could contain a custom list of fields to be transmitted, in which you could specify any {\f1\fs20 TSQLRawBlob} field: the binary BLOB content would be encoded as {\i @*Base64@} within the JSON process, and you may definitively gain some resource and speed in such case. Of course, all the data should be small enough to be stored in memory, so the BLOB fields should better be up to some dozen of MB - use several {\f1\fs20 Batch} instances in a loop, if you have a huge set of data.
 On success, the following JSON stream will be received from the server:
 $ [200,200,...]
 This array of results is either the HTTP status codes (here 200 means OK), or the inserted new ID (for a {\f1\fs20 BatchAdd} command).
