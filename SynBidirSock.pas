@@ -1665,7 +1665,7 @@ var request,answer: TWebSocketFrame;
     start,max: Int64;
 begin
   WebSocketLog.Add.Log(sllDebug,'%.NotifyCallback(%,%)',[ClassType,aRequest.URL,
-     GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^]);
+     GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^],self);
   result := STATUS_NOTFOUND;
   if (fProtocol=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
@@ -1713,7 +1713,7 @@ begin
   fOutgoing.Safe.Lock;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
-      WebSocketLog.Add.Log(sllError,'%.ProcessLoop SendFrames',[self]);
+      WebSocketLog.Add.Log(sllError,'%.ProcessLoop SendFrames',[ClassType],self);
   finally
     fOutgoing.Safe.UnLock;
   end;
@@ -1824,11 +1824,11 @@ begin
     if (frame.opcode=focText) and
        (logTextFrameContent in fSettings.LogDetails) then
       SynLog.Log(aEvent,'%.% type=% focText %',[self.ClassType,aMethodName,
-        Protocol.FrameType(frame),frame.PayLoad]) else begin
+        Protocol.FrameType(frame),frame.PayLoad],self) else begin
       if logBinaryFrameContent in fSettings.LogDetails then
         LogEscape(frame.PayLoad,content);
       SynLog.Log(aEvent,'%.% type=% % len=% %',[self.ClassType,aMethodName,
-        Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content]);
+        Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
     end;
 end;
 
@@ -1993,8 +1993,8 @@ function TWebSocketServerRest.WebSocketsCallback(
   Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal;
 var connection: TWebSocketServerResp;
 begin
-  WebSocketLog.Add.Log(sllTrace,'%.WebSocketsCallback(%) on %',
-    [ClassType,Ctxt.URL,Ctxt.ConnectionID]);
+  WebSocketLog.Add.Log(sllTrace,'%.WebSocketsCallback url=% socket=%',
+    [ClassType,Ctxt.URL,Ctxt.ConnectionID],self);
   if Ctxt=nil then
     connection := nil else
     connection := IsActiveWebSocket(Ctxt.ConnectionID);
@@ -2002,7 +2002,7 @@ begin
     //  this request is a websocket, on a non broken connection
     result := connection.NotifyCallback(Ctxt,aMode) else begin
     WebSocketLog.Add.Log(sllError,'%.WebSocketsCallback(%) on inactive socket %',
-      [ClassType,Ctxt.URL,Ctxt.ConnectionID]);
+      [ClassType,Ctxt.URL,Ctxt.ConnectionID],self);
     result := STATUS_NOTFOUND;
   end;
 end;
@@ -2233,7 +2233,7 @@ begin
     fThreadState := sClosed else
     fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'%.Execute: ThreadState=%',[ClassType,
-    GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(fThreadState))^]);
+    GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(fThreadState))^],self);
 end;
 
 
