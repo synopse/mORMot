@@ -11305,6 +11305,7 @@ type
     fClient: TSQLRestClientURI;
     fForcedURI: RawUTF8;
     fParamsAsJSONObject: boolean;
+    fResultAsJSONObject: boolean;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -11347,13 +11348,23 @@ type
     // Client.ServerTimeStamp := TimeLogNowUTC to avoid an unsupported
     // ServerTimeStampSynchronize call)
     property ForcedURI: RawUTF8 read fForcedURI write fForcedURI;
-    /// set to TRUE to send the interface's methods parmaters as JSON object
+    /// set to TRUE to send the interface's methods parameters as JSON object
     // - by default (FALSE), any method execution will send a JSON array with
     // all CONST/VAR parameters, in order
     // - TRUE will generate a JSON object instead, with the CONST/VAR parameter
     // names as field names - may be useful e.g. when working with a non
     // mORMot server
     property ParamsAsJSONObject: boolean read fParamsAsJSONObject write fParamsAsJSONObject;
+    /// set to TRUE to expect the interface's methods result to be a JSON object
+    // without the {"result":... } nesting
+    // - by default (FALSE), any method execution will return a JSON array with
+    // all VAR/OUT parameters, within a {"result":...,id:...} layout
+    // - TRUE will expect a simple JSON object instead, with the VAR/OUT parameter
+    // names as field names (and "Result" for any function result) - may be
+    // useful e.g. when working with JavaScript clients
+    // - this value can be overridden by setting ForceServiceResultAsJSONObject
+    // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
+    property ResultAsJSONObjectWithoutResult: boolean read fResultAsJSONObject write fResultAsJSONObject;
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -49294,10 +49305,11 @@ begin
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
               [PtrInt(fake.fFakeInterface),Values[0].Name]));
-          if withLog then
-            fRest.InternalLog('I%() internal call',[fake.fService.fInterface.
-              Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName],sllDebug);
           fake.fService.ExecuteMethod(Ctxt);
+          if withLog then
+            fRest.InternalLog('I%() returned %',[Ctxt.Service.fInterface.
+              Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName,
+              Ctxt.Call^.OutStatus],sllDebug);
         end else
           Ctxt.Success;
         exit;
@@ -51332,16 +51344,23 @@ begin
     if (sllServiceReturn in fRest.fLogFamily.Level) and (resp<>'') then
       Log.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
     {$endif}
-    JSONDecode(resp,['result','id'],Values,True);
-    if Values[0]=nil then begin // assume ID=0 if no "id":... value
-      if aErrorMsg<>nil then
-        aErrorMsg^ := 'Invalid returned JSON content: expects {"result":...}';
-      exit;
+    if fResultAsJSONObject then begin
+      if aResult<>nil then
+        aResult^ := resp;
+      if aClientDrivenID<>nil then
+        aClientDrivenID^ := 0;
+    end else begin
+      JSONDecode(resp,['result','id'],Values,True);
+      if Values[0]=nil then begin // assume ID=0 if no "id":... value
+        if aErrorMsg<>nil then
+          aErrorMsg^ := 'Invalid returned JSON content: expects {"result":...}, got '+resp;
+        exit;
+      end;
+      if aResult<>nil then
+        aResult^ := Values[0];
+      if aClientDrivenID<>nil then
+        aClientDrivenID^ := GetCardinal(Values[1]);
     end;
-    if aResult<>nil then
-      aResult^ := Values[0];
-    if aClientDrivenID<>nil then
-      aClientDrivenID^ := GetCardinal(Values[1]);
   end else begin // free answer returned in TServiceCustomAnswer
     fRest.InternalLog('TServiceCustomAnswer(%) returned len=%',[head,length(resp)],sllServiceReturn);
     aServiceCustomAnswer^.Header := head;
