@@ -35521,7 +35521,7 @@ begin
   SetLength(fInput,n);
   {$ifdef WITHLOG}
   if LogInputIdent<>'' then
-    Log.Add.Log(sllDebug,LogInputIdent,TypeInfo(TRawUTF8DynArray),fInput);
+    Log.Add.Log(sllDebug,LogInputIdent,TypeInfo(TRawUTF8DynArray),fInput,self);
   {$endif}
 end;
 
@@ -46463,6 +46463,7 @@ type
   public
     constructor Create(aClient: TServiceFactoryClient;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+    destructor Destroy; override;
   end;
 
   TInterfacedObjectFakeServer = class(TInterfacedObjectFake)
@@ -46805,9 +46806,15 @@ procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
   const aMethod: TServiceMethod; const aParamInfo: TServiceMethodArgument;
   aParamValue: Pointer);
 begin
-  W.Add(fClient.fClient.FakeCallbackRegister(
-    fClient,aMethod,aParamInfo,aParamValue));
+  W.Add(fClient.fClient.FakeCallbackRegister(fClient,aMethod,aParamInfo,aParamValue));
   W.Add(',');
+end;
+
+destructor TInterfacedObjectFakeClient.Destroy;
+begin
+  fClient.fClient.InternalLog('%(%).Destroy I%',
+    [ClassType,pointer(self),fClient.InterfaceURI],sllTrace);
+  inherited Destroy;
 end;
 
 constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContext;
@@ -46823,6 +46830,8 @@ end;
 
 destructor TInterfacedObjectFakeServer.Destroy;
 begin
+  fServer.InternalLog('%(%:%).Destroy I%',
+    [ClassType,pointer(self),fClientDrivenID,fService.InterfaceURI],sllTrace);
   if fServer.Services<>nil then
     with (fServer.Services as TServiceContainerServer) do
       if fFakeCallbacks<>nil then

@@ -1659,8 +1659,8 @@ begin
   result := @fSettings;
 end;
 
-function TWebSocketProcess.NotifyCallback(
-  aRequest: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal;
+function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
+  aMode: TWebSocketProcessNotifyCallback): cardinal;
 var request,answer: TWebSocketFrame;
     start,max: Int64;
 begin
@@ -1675,7 +1675,6 @@ begin
   if aMode=wscNonBlockWithoutAnswer then begin
     // add to the internal sending list for asynchronous sending
     fOutgoing.Push(request);
-    Log(request,'NotifyCallback');
     result := STATUS_SUCCESS;
     exit;
   end;
@@ -1709,7 +1708,6 @@ end;
 
 procedure TWebSocketProcess.SendPendingOutgoingFrames;
 begin
-  WebSocketLog.Enter(self);
   fOutgoing.Safe.Lock;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
@@ -1798,14 +1796,19 @@ begin
 end;
 
 procedure LogEscape(const s: RawUTF8; var result: RawUTF8);
-var i: integer;
+var i,L: integer;
 begin
-  with TTextWriter.CreateOwnedStream do
+  with TTextWriter.CreateOwnedStream(800) do
   try
-    for i := 1 to length(s) do
-      if s[i]<' ' then
-        Add('#',AnsiChar(48+ord(s[i]))) else
-        Add(s[i]);
+    L := length(s);
+    if L>200 then
+      L := 200;
+    for i := 1 to L do
+      if s[i] in [' '..#126] then
+        Add(s[i]) else begin
+        Add('#');
+        AddU(ord(s[i]));
+      end;
     SetText(result);
   finally
     Free;
@@ -2089,6 +2092,7 @@ function THttpClientWebSockets.Request(const url, method: SockString;
   retry: boolean): integer;
 var Ctxt: THttpServerRequest;
     block: TWebSocketProcessNotifyCallback;
+    resthead: RawUTF8;
 begin
   if fProcess<>nil then
     if fProcess.fClientThread.fThreadState>sRun then
@@ -2099,7 +2103,8 @@ begin
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
         Ctxt.Prepare(url,method,header,data,dataType);
-        if FindIniNameValue(Pointer(header),'SEC-WEBSOCKETS-REST: ')='NonBlocking' then
+        resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKETS-REST: ');
+        if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else
           block := wscBlockWithAnswer;
         result := fProcess.NotifyCallback(Ctxt,block);

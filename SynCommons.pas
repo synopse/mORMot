@@ -49683,7 +49683,8 @@ begin
     RawUTF8ToVariant(List[i].Value,result);
 end;
 
-procedure TSynNameValue.AsDocVariant(out DocVariant: variant; ExtendedJson,ValueAsString: boolean);
+procedure TSynNameValue.AsDocVariant(out DocVariant: variant;
+  ExtendedJson,ValueAsString: boolean);
 var ndx: integer;
 begin
   if Count>0 then
