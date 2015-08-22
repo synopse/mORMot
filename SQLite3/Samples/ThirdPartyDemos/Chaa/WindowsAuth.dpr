@@ -39,6 +39,8 @@ begin
     FreeSecContext(ServerSecContext);
 
     Writeln('Authentified as: "',UserName,'"');
+    writeln('Press [Enter] to continue');
+    readln;
   except
     on E: Exception do
       ConsoleShowFatalException(E);
@@ -47,6 +49,4 @@ end;
 
 begin
   Test;
-  writeln('Press [Enter] to continue');
-  readln;
 end.
