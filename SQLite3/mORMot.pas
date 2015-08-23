@@ -36490,7 +36490,7 @@ var isAjax: boolean;
 
   procedure PrepareCall;
   begin
-    fillchar(call,SizeOf(call),0);
+    FillcharFast(call,SizeOf(call),0);
     call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
     call.Url := Model.Root;
   end;
@@ -49467,7 +49467,7 @@ asm
     mov rcx,[r12].TCallMethodArgs.StackAddr
     lea rdx,[rsp+$20]
     mov r8, [r12].TCallMethodArgs.StackSize
-    call Move
+    call qword ptr [MoveFast]
     // call method
     mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
     mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]

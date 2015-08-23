@@ -16631,7 +16631,7 @@ asm // eax=@Dest text=edx len=ecx
     mov byte ptr [ebx+ecx],0
 @1: mov eax,edx
     mov edx,ebx
-    call Move
+    call dword ptr [MoveFast]
     pop ebx
 end;
 {$endif}
@@ -17974,7 +17974,7 @@ function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
         inc(D);
         inc(S);
       end else begin
-        move(T^,D^,TLen);
+        MoveFast(T^,D^,TLen);
         inc(D,TLen);
         inc(S);
       end;
@@ -20584,19 +20584,19 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
     push edi
     push ebp
     mov ebx,edx
-    xor edx,edx
     mov esi,eax
     mov eax,ecx
-    lea ecx,[edx+3]
+    mov edx,1431655766 // faster eax=len div 3 using reciprocal
+    sar ecx,31
+    imul edx
+    mov eax,edx
+    sub eax,ecx
     mov edi,offset b64
-    div ecx
-    or eax,eax
     mov ebp,eax
     push eax
     jz @z
     // edi=b64 ebx=sp esi=rp ebp=len div 3
     xor eax,eax
-    nop
 @1: // read 3 bytes from sp
     movzx edx,byte ptr [ebx]
     shl edx,16
@@ -29835,7 +29835,7 @@ asm // faster version by AB
   movzx ecx,byte ptr [edx].TFieldTable.NameLen
   mov edx,[edx+ecx].TFieldTable.Size
   xor ecx,ecx
-  jmp FillChar *)
+  jmp dword ptr [FillCharFast] *)
         movzx ecx,byte ptr [edx].TFieldTable.NameLen
         push ebx
         mov ebx,eax
@@ -30103,7 +30103,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         sub ecx,eax
         mov eax,esi
         jle @nomov2
-        call move
+        call dword ptr [MoveFast]
 @nomov2:pop edi
         pop esi
         pop ebx
