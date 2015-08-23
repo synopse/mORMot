@@ -112,6 +112,7 @@ unit SynGdiPlus;
    - fixed ticket [84dae0a2da] about EMR_BITBLT, thanks to Pierre le Riche
    - implemented clipping - ticket [ba90f15370] - thanks to Pierre le Riche
    - TGDIPlusEnum.DrawText() now handles ETO_GLYPH_INDEX option
+   - fixed ticket [125fc8d280] about random crash in TSynPicture.LoadFromStream 
    - implemented multi-page support for TTiffImage - thanks sllimr7139 for
      the patch!
 
@@ -596,7 +597,7 @@ type
       aSmoothing: TSmoothingMode=smAntiAlias;
       aTextRendering: TTextRenderingHint=trhClearTypeGridFit): THandle;
     /// internal method used for GDI32 metafile loading
-    function MetaFileToStream(Source: TMetafile; out hGlobal: THandle): IStream;
+    function MetaFileToStream(Source: TMetafile): IStream;
     /// return true if DrawAntiAliased() method will use native GDI+ conversion,
     // i.e. if GDI+ installed version is 1.1
     property NativeConvertToEmfPlus: boolean read getNativeConvertToEmfPlus;
@@ -1142,7 +1143,7 @@ begin
   end;
   fStream := nil;
   if fGlobal<>0 then begin
-    GlobalFree(fGlobal);
+    GlobalFree(fGlobal); // fDeleteOnRelease=false -> manual release
     fGlobal := 0;
   end;
   fGlobalLen := 0;
@@ -1328,7 +1329,7 @@ begin
   P := GlobalLock(fGlobal);
   Stream.Read(P^,fGlobalLen);
   GlobalUnlock(fGlobal);
-  CreateStreamOnHGlobal(fGlobal, true, fStream); // now fStream = data
+  CreateStreamOnHGlobal(fGlobal,false,fStream); // fDeleteOnRelease=false
   LoadFromIStream(fStream);
 end;
 
@@ -1408,7 +1409,7 @@ begin
     PParams := @Params;
   end;
   end;
-  CreateStreamOnHGlobal(0, true, fStream);
+  CreateStreamOnHGlobal(0,true,fStream); // fDeleteOnRelease=true
   try
     result := Gdip.SaveImageToStream(fImage,fStream,@Encoders[Format],PParams);
     if result<>stOk then
@@ -2228,15 +2229,16 @@ begin
   end;
 end;
 
-function TGDIPlusFull.MetaFileToStream(Source: TMetafile; out hGlobal: THandle): IStream;
+function TGDIPlusFull.MetaFileToStream(Source: TMetafile): IStream;
 var Length: cardinal;
+    hGlobal: THandle;
 begin
   Length := GetEnhMetaFileBits(Source.Handle, 0, nil);
   hGlobal := GlobalAlloc(GMEM_MOVEABLE, Length+128);
   if GetEnhMetaFileBits(Source.Handle, Length, GlobalLock(hGlobal))<>length then
     assert(false);
   GlobalUnlock(hGlobal);
-  CreateStreamOnHGlobal(hGlobal, TRUE, result);
+  CreateStreamOnHGlobal(hGlobal, true, result); // fDeleteOnRelease=true
 end;
 
 function TGDIPlusFull.ConvertToEmfPlus(Source: TMetafile; Dest: HDC;
@@ -2244,7 +2246,6 @@ function TGDIPlusFull.ConvertToEmfPlus(Source: TMetafile; Dest: HDC;
 var Ref: TGDIPlusEnum;
     flag: BOOL;
     EmfPlusImg: integer;
-    hGlobal: THandle;
     pstm: IStream;
     Img: TSynPicture;
     GR: TGdipRect;
@@ -2259,7 +2260,7 @@ begin
   fillchar(Ref,sizeof(Ref),0);
   if NativeConvertToEmfPlus then begin
     // let GDI+ 1.1 make the conversion
-    pstm := MetaFileToStream(Source,hGlobal);
+    pstm := MetaFileToStream(Source);
     try
       Img := TSynPicture.Create;
       try
@@ -2280,8 +2281,7 @@ begin
         Img.Free;
       end;
     finally
-      pstm :=  nil;
-      GlobalFree(hGlobal);
+      pstm :=  nil; // will also release hGlobal
     end;
   end else begin
     // our manual (and not 100% complete yet) conversion
