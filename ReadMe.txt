@@ -190,6 +190,8 @@ http://synopse.info/fossil/reportlist
 You can also monitor/fork our projects on GitHub:
 https://github.com/synopse/mORMot
 
+You may also install it as a Delphinus package: Delphinus-Support
+
 Don't forget to download the documentation (available online or as pdf files,
 created by our SynProject tool).
 In particular, you should take a look at all general introduction chapters
