@@ -188,8 +188,8 @@ begin
   if Sender=btnLVCL then
     BatchFile := 'GitCommitLVCL.bat' else
     BatchFile := 'GitCommit.bat';
-  WinExecAndWait32(format('%s%s "%s" "%s" "%s" "%s"',
-      [fBatPath,BatchFile,fFossilRepository,fGitRepository,fGitExe,DescFile]),
+  WinExecAndWait32(format('%s%s "%s" "%s" "%s" "%s" "%s"',
+      [fBatPath,BatchFile,fFossilRepository,fGitRepository,fGitExe,DescFile,fDevPath]),
      fGitRepository,SW_SHOWNORMAL,INFINITE);
 end;
 
