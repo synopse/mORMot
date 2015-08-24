@@ -1540,7 +1540,8 @@ begin
     if pending<0 then
       if IgnoreExceptions then
         exit else
-        raise ESynBidirSocket.Create('SockInPending() Error');
+        raise ESynBidirSocket.CreateUTF8('SockInPending() Error % on %:%',
+          [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port]);
     if pending<2 then
       exit; // not enough data available
     GetHeader;
