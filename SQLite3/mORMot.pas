@@ -7501,7 +7501,8 @@ type
     // - this method will return a TDocVariant containing a copy of all
     // field values of this row, uncoupled to the TSQLTable instance life time
     procedure ToDocVariant(Row: integer; out doc: variant;
-      options: TDocVariantOptions=JSON_OPTIONS_FAST); overload;
+      options: TDocVariantOptions=JSON_OPTIONS_FAST;
+      expandTimeLogAsText: boolean=false); overload;
     /// retrieve all row values as a dynamic array of variants, ready to be
     // accessed via late-binding
     // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
@@ -17534,7 +17535,8 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 // - sftUnknown and sftMany would set a varEmpty (Unassigned) value
 // - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
-  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer);
+  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
+  options: TDocVariantOptions=JSON_OPTIONS_FAST);
 {$endif}
 
 const
@@ -18412,7 +18414,8 @@ const
 
 {$ifndef NOVARIANTS}
 procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
-  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer);
+  var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
+  options: TDocVariantOptions);
 const
   /// map our available types for any SQL field property into variant values
   // - varNull will be used to store a true variant instance from JSON
@@ -18472,10 +18475,10 @@ begin
       end;
     end;
     if createValueTempCopy then begin
-      tempCopy := Value;
+      SetString(tempCopy,PAnsiChar(Value),StrLen(Value));
       Value := pointer(tempCopy);
     end;
-    GetVariantFromJSON(Value,false,variant(result),@JSON_OPTIONS[true]);
+    GetVariantFromJSON(Value,false,variant(result),@options);
   end;
   end;
 end;
@@ -21830,10 +21833,11 @@ var
   SQLTableRowVariantType: TCustomVariantType = nil;
 
 procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
-  options: TDocVariantOptions);
+  options: TDocVariantOptions; expandTimeLogAsText: boolean);
 var Values: TVariantDynArray;
     V: PPUtf8CharArray;
     f: integer;
+    t: TTimeLogBits;
 begin
   if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
@@ -21845,8 +21849,14 @@ begin
   V := @fResults[Row*FieldCount];
   for f := 0 to fFieldCount-1 do
     ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true,
-      fFieldType[f].ContentTypeInfo);
+      fFieldType[f].ContentTypeInfo,options);
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
+  if expandTimeLogAsText then
+    for f := 0 to fFieldCount-1 do
+      if (fFieldType[f].ContentType in [sftTimeLog,sftModTime,sftCreateTime]) and
+         VariantToInt64(Values[f],t.Value) then
+        TDocVariantData(doc).AddValue(
+          fFieldNames[f]+'_As_Text',RawUTF8ToVariant(t.Text(true,' ')));
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);

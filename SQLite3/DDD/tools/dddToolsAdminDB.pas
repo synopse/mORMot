@@ -274,7 +274,7 @@ end;
 
 procedure TDBFrame.GridToVariant(var result: variant);
 begin
-  fGrid.Table.ToDocVariant(fmmoResultRow,result,JSON_OPTIONS_NAMEVALUE[true]);
+  fGrid.Table.ToDocVariant(fmmoResultRow,result,JSON_OPTIONS_NAMEVALUE[true],true);
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);
