@@ -532,6 +532,7 @@ unit SynCommons;
   - added TPropNameList record/object to maintain a stack-based list of names
   - speeed enhancement for TRawUTF8List.Add()
   - new TRawUTF8List.SaveToStream and SaveToFile methods
+  - new TRawUTF8List.PopFirst and PopLast methods
   - added optional aOwnObjects parameter to TRawUTF8List.Create() constructor
   - new TRawUTF8List.GetObjectByName() method
   - refactoring of CaseSensitive property for TRawUTF8List / TRawUTF8ListHashed
@@ -7286,9 +7287,15 @@ type
     /// delete a stored RawUTF8 item, and its associated TObject, from
     // a given Name when stored as 'Name=Value' pairs
     // - raise no exception in case of out of range supplied index
-    function DeleteFromName(const Name: RawUTF8): PtrInt;
+    function DeleteFromName(const Name: RawUTF8): PtrInt; virtual;
     /// update Value from an existing Name=Value, then optinally delete the entry
     procedure UpdateValue(const Name: RawUTF8; var Value: RawUTF8; ThenDelete: boolean);
+    /// retrieve and delete the first RawUTF8 item in the list
+    // - could be used as a FIFO
+    function PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean; virtual;
+    /// retrieve and delete the last RawUTF8 item in the list
+    // - could be used as a FILO
+    function PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean; virtual;
     /// erase all stored RawUTF8 items
     // - and corresponding objects (if aOwnObjects was true at constructor)
     procedure Clear; virtual;
@@ -7401,9 +7408,14 @@ type
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
+    /// add a RawUTF8 item in the stored Strings[] list
+    // - just a wrapper over Add() using Safe.Lock/Unloack
+    // - warning: this method WON'T update the internal hash array: use
+    // AddObjectIfNotExisting() method instead 
+    function LockedAdd(const aText: RawUTF8): PtrInt; virtual; 
     /// find a RawUTF8 item in the stored Strings[] list
     // - just a wrapper over IndexOf() using Safe.Lock/Unloack
-    function LockedIndexOf(const aText: RawUTF8): PtrInt; virtual;
+    function IndexOf(const aText: RawUTF8): PtrInt; override;
     /// find a RawUTF8 item in the stored Strings[] list
     // - just a wrapper over GetObjectByName() using Safe.Lock/Unloack
     // - warning: the object instance should remain in the list, so the caller
@@ -7411,11 +7423,19 @@ type
     function LockedGetObjectByName(const aText: RawUTF8): TObject; virtual;
     /// add a RawUTF8 item in the internal storage, with an optional object
     // - just a wrapper over AddObjectIfNotExisting() using Safe.Lock/Unloack
-    function LockedAddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
-      wasAdded: PBoolean=nil): PtrInt; virtual;
+    function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
+      wasAdded: PBoolean=nil): PtrInt; override;
     /// find and delete an RawUTF8 item in the stored Strings[] list
-    // - just a wrapper over DeleteFromName() using Safe.Lock/Unloack
-    function LockedDeleteFromName(const aText: RawUTF8): PtrInt; virtual;
+    // - just a wrapper over inherited DeleteFromName() using Safe.Lock/Unloack
+    function DeleteFromName(const aText: RawUTF8): PtrInt; override;
+    /// retrieve and delete the first RawUTF8 item in the list
+    // - could be used as a FIFO
+    // - just a wrapper over inherited PopFirst() using Safe.Lock/Unloack
+    function PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean; override;
+    /// retrieve and delete the last RawUTF8 item in the list
+    // - could be used as a FILO
+    // - just a wrapper over inherited PopLast() using Safe.Lock/Unloack
+    function PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean; override;
   end;
 
   /// This class is able to emulate a TStringList with our native UTF-8 string
@@ -44531,6 +44551,30 @@ begin
   end;
 end;
 
+function TRawUTF8List.PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean;
+begin
+  result := fCount>0;
+  if not result then
+    exit;
+  aText := fList[0];
+  if (aObject<>nil) and (fObjects<>nil) then
+    aObject^ := fObjects[0];
+  Delete(0);
+end;
+
+function TRawUTF8List.PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean;
+var ndx: integer;
+begin
+  result := fCount>0;
+  if not result then
+    exit;
+  ndx := fCount-1;
+  aText := fList[ndx];
+  if (aObject<>nil) and (fObjects<>nil) then
+    aObject^ := fObjects[ndx];
+  Delete(ndx);
+end;
+
 
 { TObjectListHashedAbstract}
 
@@ -44894,11 +44938,21 @@ begin
   inherited;
 end;
 
-function TRawUTF8ListHashedLocked.LockedIndexOf(const aText: RawUTF8): PtrInt;
+function TRawUTF8ListHashedLocked.LockedAdd(const aText: RawUTF8): PtrInt;
 begin
   fSafe.Lock;
   try
-    result := IndexOf(aText);
+    result := inherited Add(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.IndexOf(const aText: RawUTF8): PtrInt;
+begin
+  fSafe.Lock;
+  try
+    result := inherited IndexOf(aText);
   finally
     fSafe.UnLock;
   end;
@@ -44908,33 +44962,52 @@ function TRawUTF8ListHashedLocked.LockedGetObjectByName(const aText: RawUTF8): T
 begin
   fSafe.Lock;
   try
-    result := GetObjectByName(aText);
+    result := inherited GetObjectByName(aText);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TRawUTF8ListHashedLocked.LockedAddObjectIfNotExisting(const aText: RawUTF8;
+function TRawUTF8ListHashedLocked.AddObjectIfNotExisting(const aText: RawUTF8;
   aObject: TObject; wasAdded: PBoolean): PtrInt;
 begin
   fSafe.Lock;
   try
-    result := AddObjectIfNotExisting(aText,aObject,wasAdded);
+    result := inherited AddObjectIfNotExisting(aText,aObject,wasAdded);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TRawUTF8ListHashedLocked.LockedDeleteFromName(const aText: RawUTF8): PtrInt;
+function TRawUTF8ListHashedLocked.DeleteFromName(const aText: RawUTF8): PtrInt;
 begin
   fSafe.Lock;
   try
-    result := DeleteFromName(aText);
+    result := inherited DeleteFromName(aText);
   finally
     fSafe.UnLock;
   end;
 end;
 
+function TRawUTF8ListHashedLocked.PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := inherited PopFirst(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := inherited PopLast(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
 
 { TRawUTF8MethodList }
 
