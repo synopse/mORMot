@@ -91,6 +91,7 @@ type
   TDDDDaemon = class
   protected
     fSettings: TDDDAdministratedDaemonSettingsFile;
+    fSettingsRef: IUnknown;
     /// the service/daemon will be stopped when this interface is set to nil
     fDaemon: IAdministratedDaemon;
     /// this abstract method should be overriden to return a new service/daemon
@@ -538,13 +539,13 @@ begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
   fSettings := aSettings;
+  fSettingsRef := aSettings;
 end;
 
 destructor TDDDDaemon.Destroy;
 begin
   fDaemon := nil;
   inherited;
-  fSettings.Free;
 end;
 
 {$ifdef MSWINDOWS} // to support Windows Services
