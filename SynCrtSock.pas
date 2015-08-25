@@ -726,6 +726,7 @@ type
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
   {$endif}
 
+  {$M+}
   /// a simple TThread with a "Terminate" event run in the thread context
   // - the TThread.OnTerminate event is run within Synchronize() so did not
   // match our expectations to be able to release the resources in the thread
@@ -753,6 +754,7 @@ type
     procedure Start;
     {$endif}
   end;
+  {$M-}
 
 {$ifdef USETHREADPOOL}
   TSynThreadPoolTHttpServer = class;
