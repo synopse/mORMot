@@ -22,9 +22,5 @@
             "recursive": true,
             "filter": "*.*;*"
         }
-    ],
-    
-    "projects":
-    [
     ]
 }
