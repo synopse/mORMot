@@ -9446,7 +9446,7 @@ type
     // - contains 0 if parameter is not a register
     // - contains 1 for EAX, 2 for EDX and 3 for ECX registers (for x86)
     // - contains 1 for RCX/XMM0L, 2 for RDX/XMM1L, 3 for R8/XMM2L, and
-    // 4 for R9/XMM3L, with a backing store on the stack (for Wub64)
+    // 4 for R9/XMM3L, with a backing store on the stack (for Win64)
     RegisterIdent: integer;
     /// size (in bytes) of this argument on the stack
     SizeInStack: integer;
@@ -46360,6 +46360,9 @@ const
   REGR8 = 3;
   REGR9 = 4;
   {$endif}
+  REG_FIRST = 1;
+  REG_LAST = REGR9;
+
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
@@ -46369,9 +46372,10 @@ const
   REGXMM5 = 6;
   REGXMM6 = 7;
   REGXMM7 = 8;
+  REG_XMMCOUNT = REGXMM7;
+  {$else}
+  REG_XMMCOUNT = 0;
   {$endif}
-  REG_FIRST = 1;
-  REG_LAST = REGR9;
 
   // x64 calling convention under Linux: rax,rsi,rdi,rcx,rdx,r8,r9 + xmm0..xmm7
   // see http://www.yankeerino.com/windowsx64callingconvention.bhs
@@ -46386,6 +46390,7 @@ const
   REGECX = 3;
   REG_FIRST = REGEAX;
   REG_LAST = REGECX;
+  REG_XMMCOUNT = 0;
 
 {$endif CPU64}
 
@@ -46436,8 +46441,9 @@ type
     Frame, Ret: pointer;
     {$ifdef LINUX}
     RDI, RSI, RDX, RCX, R8, R9: pointer;
-    {$endif}
+    {$else}
     RCX, RDX, R8, R9: pointer;
+    {$endif}
     {$else}
     EDX, ECX, MethodIndex, EBP, Ret: Cardinal;
     {$endif}
@@ -47416,22 +47422,38 @@ end;
 
 {$ifdef CPU64}
 procedure x64FakeStub; {$ifdef FPC} assembler; {$endif}
+{$ifdef LINUX}
+var smetndx, sxmm7, sxmm6, sxmm5, sxmm4, sxmm3, sxmm2, sxmm1, sxmm0: pointer;
+{$else}
 var smetndx, sxmm3, sxmm2, sxmm1: pointer;
+{$endif}
 asm // mov ax,{MethodIndex}; jmp x64FakeStub
   {$ifdef FPC}
   {$else}
   .params 2 // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
   {$endif}
   and rax,$ffff
+  {$ifdef LINUX}
+  movsd sxmm0,xmm0
+  movsd sxmm4,xmm4
+  movsd sxmm5,xmm5
+  movsd sxmm6,xmm6
+  movsd sxmm7,xmm7
+  {$endif}
   movsd sxmm1,xmm1
   movsd sxmm2,xmm2
   movsd sxmm3,xmm3
   mov smetndx,rax
+  {$ifdef LINUX}
+  // TODO: check RDI, RSI, RDX, RCX, R8, R9 on [rbp+...]
+  lea rsi,sxmm1 // TFakeCallStack address as 2nd parameter
+  {$else}
   mov [rbp+$50],rcx
   mov [rbp+$58],rdx
   mov [rbp+$60],r8
   mov [rbp+$68],r9
-  lea rdx,sxmm1
+  lea rdx,sxmm1 // TFakeCallStack address as 2nd parameter
+  {$endif}
   call TInterfacedObjectFake.FakeCall
   // FakeCall should set Int64 result in method result, and float in aCall.XMM1
   movsd xmm0,sxmm1
@@ -49452,7 +49474,7 @@ type
   PCallMethodArgs = ^TCallMethodArgs;
   TCallMethodArgs = record
     StackSize, StackAddr, method: PtrInt;
-    Regs: array[REG_FIRST..REG_LAST] of PtrInt;
+    Regs: array[REG_FIRST..REG_LAST+REG_XMMCOUNT] of PtrInt;
     res64: Int64Rec;
     resKind: TServiceMethodValueType;
   end;
@@ -49465,8 +49487,42 @@ end;
 {$else}
 {$ifdef CPU64}
 {$ifdef FPC}
-begin
-  raise EInterfaceFactoryException.Create('FPC+x64 not supported/tested yet');
+var r12sav: pointer;
+asm
+    mov r12sav,r12
+    mov r12,Args
+    // copy stack content (if any)
+    mov RDI,[r12].TCallMethodArgs.StackAddr
+    lea RSI,[rsp+$20]
+    mov RDX, [r12].TCallMethodArgs.StackSize
+    call Move
+    // call method
+    mov RDI,[r12+TCallMethodArgs.Regs+REGRDI*8-8]
+    mov RSI,[r12+TCallMethodArgs.Regs+REGRSI*8-8]
+    mov RDX, [r12+TCallMethodArgs.Regs+REGRDX *8-8]
+    mov RCX, [r12+TCallMethodArgs.Regs+REGRCX *8-8]
+    mov R8,[r12+TCallMethodArgs.Regs+REGR8*8-8]
+    mov R9,[r12+TCallMethodArgs.Regs+REGR9*8-8]
+    movsd xmm0,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM0*8-8]
+    movsd xmm1,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM1*8-8]
+    movsd xmm2,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM2*8-8]
+    movsd xmm3,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM3*8-8]
+    movsd xmm4,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM4*8-8]
+    movsd xmm5,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM5*8-8]
+    movsd xmm6,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM6*8-8]
+    movsd xmm7,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM7*8-8]
+    call [r12].TCallMethodArgs.method
+    // retrieve result
+    mov [r12].TCallMethodArgs.res64,rax
+    mov cl,[r12].TCallMethodArgs.resKind
+    cmp cl,smvDouble
+    je @d
+    cmp cl,smvDateTime
+    je @d
+    cmp cl,smvCurrency
+    jne @e
+@d: movsd [r12].TCallMethodArgs.res64,xmm0
+@e: mov r12,r12sav
 end;
 {$else}
 asm
