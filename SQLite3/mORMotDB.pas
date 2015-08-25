@@ -1238,6 +1238,7 @@ end;
 
 function TSQLRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
   const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
+const CHUNK_SIZE = 200;
 var i,n: integer;
     aSQLWhereUpper: RawUTF8;
     InClause: TIDDynArray;
@@ -1260,12 +1261,13 @@ begin
        // see http://www.sqlite.org/compile.html#enable_update_delete_limit
        IdemPChar(pointer(aSQLWhereUpper),'ORDER BY ') or
        (PosEx(' FROM ',aSQLWhereUpper)>0) then begin
-      SetLength(InClause,200); // send by chunks
-      for i := 0 to length(IDs) div Length(InClause) do begin
-        if length(IDs)<(i+1)*length(InClause) then
-          n := length(IDs)-i*length(InClause) else
-          n := length(InClause);
-        MoveFast(IDs[i*length(InClause)],InClause[0],n*sizeof(TID));
+      SetLength(InClause,CHUNK_SIZE); // send by chunks
+      for i := 0 to length(IDs) div CHUNK_SIZE do begin
+        n := length(IDs);
+        if n<(i+1)*CHUNK_SIZE then
+          dec(n,i*CHUNK_SIZE) else
+          n := CHUNK_SIZE;
+        MoveFast(IDs[i*CHUNK_SIZE],InClause[0],n*sizeof(TID));
         if ExecuteInlined('delete from % where %',[fTableName,Int64DynArrayToCSV(
             TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
