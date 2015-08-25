@@ -40404,7 +40404,7 @@ begin
   if Len>0 then
   case CodePage of
   CP_UTF8, CP_RAWBYTESTRING:
-    Add(PUTF8Char(P),0,Escape);  // direct write of RawUTF8/RawByteString content
+    Add(PUTF8Char(P),Len,Escape);  // direct write of RawUTF8/RawByteString content
   CP_UTF16:
     AddW(PWord(P),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
