@@ -3717,6 +3717,34 @@ begin // JsonHas(VariantField,'PropName') returns TRUE if matches a JSON object 
   end;
 end;
 
+procedure InternalJsonSet(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+var doc: TDocVariantData;
+    json: PUTF8Char;
+    tmp: RawUTF8;
+    v: PVariant;
+begin // JsonSet(VariantField,'PropName','abc') to set a value
+      // JsonSet(VariantField,'Obj1.Obj2.PropName','def') to set by path
+  if not CheckNumberOfArgs(Context,3,argc) then
+    exit;
+  if sqlite3.value_type(argv[0])<>SQLITE_TEXT then
+    sqlite3.result_null(Context) else begin
+    json := sqlite3.value_text(argv[0]);
+    SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+    doc.InitJSONInPlace(pointer(tmp),JSON_OPTIONS_FAST);
+    v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]),false);
+    if v<>nil then begin
+      json := sqlite3.value_text(argv[2]);
+      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      VariantLoadJSON(v^,pointer(tmp),nil,@JSON_OPTIONS[true]);
+      RawUTF8ToSQlite3Context(doc.ToJSON,Context,false);
+    end else begin
+      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      RawUTF8ToSQlite3Context(tmp,Context,false);
+    end;
+  end;
+end;
+
 constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8='';
   aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
 var result: integer;
@@ -4346,6 +4374,7 @@ begin
   // JSON related functions (ORM would store a variant as JSON UTF-8 text)
   sqlite3.create_function(DB,'JSONGET',2,SQLITE_ANY,nil,InternalJsonGet,nil,nil);
   sqlite3.create_function(DB,'JSONHAS',2,SQLITE_ANY,nil,InternalJsonHas,nil,nil);
+  sqlite3.create_function(DB,'JSONSET',3,SQLITE_ANY,nil,InternalJsonSet,nil,nil);
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);

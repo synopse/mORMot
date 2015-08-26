@@ -12340,6 +12340,13 @@ type
     // slightly slower GetValueByPath() overloaded method, if any nested object
     // may be of another type (e.g. a TBSONVariant)
     function GetValueByPath(const aDocVariantPath: array of RawUTF8): variant; overload;
+    /// retrieve a reference to a value, given its path
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - if the supplied aPath does not match any object, it will return nil
+    // unless addIfNotExisting=true and it would add the new object
+    // - if aPath is found (or added), it will return a pointer to the
+    // corresponding value  
+    function GetPVariantByPath(const aPath: RawUTF8; addIfNotExisting: boolean=false): PVariant;
     /// retrieve an dvObject, from a property name in the dvArray document
     // - returns false if no object in the dvArray contains the supplied
     // "aPropName":"aPropValue" property
@@ -34552,6 +34559,37 @@ begin
     exit;
   aValue := variant(Dest); // copy
   result := true;
+end;
+
+function TDocVariantData.GetPVariantByPath(const aPath: RawUTF8;
+  addIfNotExisting: boolean=false): PVariant;
+var p{,ppar}: integer;
+    path: TRawUTF8DynArray;
+    par: PVariant;
+begin
+  result := nil;
+  if (DocVariantType=nil) or (VType<>DocVariantVType) or (aPath='') then
+    exit;
+  CSVToRawUTF8DynArray(pointer(aPath),path,'.');
+  par := @self;
+//  ppar := -1;
+  if (Kind=dvObject) and (Count>0) then
+    for p := 0 to length(path)-1 do begin
+      if _Safe(par^).GetAsPVariant(path[p],result) then
+        par := result else begin
+        result := nil;
+        //ppar := p;
+        break;
+      end;
+    end;
+  if par=result then // found
+    exit;
+  if not addIfNotExisting then begin
+    result := nil;
+    exit;
+  end;
+  { TODO: add if not existing }
+  result := nil;
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
