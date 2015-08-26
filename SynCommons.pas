@@ -519,6 +519,7 @@ unit SynCommons;
   - added TTextWriter.EchoAdd() and EchoRemove() methods
   - added QuickSortIndexedPUTF8Char() and FastFindIndexedPUTF8Char()
   - added overloaded QuickSortInteger() for synchronous sort of two arrays
+  - fixed potential critical issue [99fe8a1eba] in SortDynArrayInt64/Cardinal
   - added GetNextItem64() Int64Scan() Int64ScanExists() QuickSortInt64()
     FastFindInt64Sorted() AddInt64() CSVToInt64DynArray() Int64DynArrayToCSV()
     and VariantToInt64() functions (used during TID=Int64 introduction in ORM)
@@ -35606,17 +35607,33 @@ end;
 
 function SortDynArrayCardinal(const A,B): integer;
 begin
-  result := Int64(cardinal(A))-Int64(cardinal(B));
+  if cardinal(A)<cardinal(B) then
+    result := -1 else
+  if cardinal(A)>cardinal(B) then
+    result := 1 else
+    result := 0;
 end;
 
 function SortDynArrayInt64(const A,B): integer;
 begin
-  result := Int64(A)-Int64(B);
+  if Int64(A)<Int64(B) then
+    result := -1 else
+  if Int64(A)>Int64(B) then
+    result := 1 else
+    result := 0;
 end;
 
 function SortDynArrayPointer(const A,B): integer;
 begin
+  {$ifdef CPU64}
+  if PtrInt(A)<PtrInt(B) then
+    result := -1 else
+  if PtrInt(A)>PtrInt(B) then
+    result := 1 else
+    result := 0;
+  {$else}
   result := PtrInt(A)-PtrInt(B);
+  {$endif}
 end;
 
 function SortDynArraySingle(const A,B): integer;
@@ -35745,84 +35762,79 @@ end;
 
 {$ifndef NOVARIANTS}
 
-const ICMP: array[TVariantRelationship] of integer = (0,-1,1,1);
-
-function SortDynArrayVariant(const A,B): integer;
-  procedure CompareAsString;
-  var UA,UB: RawUTF8;
-      wasString: boolean;
-  begin
-    VariantToUTF8(variant(A),UA,wasString);
-    VariantToUTF8(variant(B),UB,wasString);
-    result := StrComp(pointer(UA),pointer(UB));
-  end;
+function SortDynArrayVariantCompareAsString(const A,B: variant): integer;
+var UA,UB: RawUTF8;
+    wasString: boolean;
 begin
-  if TVarData(A).VType=varVariant or varByRef then
-    result := SortDynArrayVariant(TVarData(A).VPointer^,B) else
-  if TVarData(B).VType=varVariant or varByRef then
-    result := SortDynArrayVariant(A,TVarData(B).VPointer^) else
-  if TVarData(A).VType=TVarData(B).VType then
-    case TVarData(A).VType of // optimized value comparison
+  VariantToUTF8(A,UA,wasString);
+  VariantToUTF8(B,UB,wasString);
+  result := StrComp(pointer(UA),pointer(UB));
+end;
+
+function SortDynArrayVariantCompareAsStringI(const A,B: variant): integer;
+var UA,UB: RawUTF8;
+    wasString: boolean;
+begin
+  VariantToUTF8(A,UA,wasString);
+  VariantToUTF8(B,UB,wasString);
+  result := StrIComp(pointer(UA),pointer(UB));
+end;
+
+function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
+type
+  TSortDynArrayVariantComp = function(const A,B: variant): integer;
+const
+  CMP: array[boolean] of TSortDynArrayVariantComp = (
+    SortDynArrayVariantCompareAsString,SortDynArrayVariantCompareAsStringI);
+  ICMP: array[TVariantRelationship] of integer = (0,-1,1,1);
+begin
+  if A.VType=varVariant or varByRef then
+    result := SortDynArrayVariantComp(PVarData(A.VPointer)^,B,caseInsensitive) else
+  if B.VType=varVariant or varByRef then
+    result := SortDynArrayVariantComp(A,PVarData(B.VPointer)^,caseInsensitive) else
+  if A.VType=B.VType then
+    case A.VType of // optimized value comparison if A and B share the same type
     varNull,varEmpty:
       result := 0;
     varString: // RawUTF8 most of the time (e.g. from TDocVariant)
-      result := StrComp(TVarData(A).VAny,TVarData(B).VAny);
+      if caseInsensitive then
+        result := StrIComp(A.VAny,B.VAny) else
+        result := StrComp(A.VAny,B.VAny);
     varInteger:
-      result := TVarData(A).VInteger-TVarData(B).VInteger;
+      result := A.VInteger-B.VInteger;
     varInt64,varCurrency:
-      result := TVarData(A).VInt64-TVarData(B).VInt64;
+      if A.VInt64<B.VInt64 then
+        result := -1 else
+      if A.VInt64>B.VInt64 then
+        result := 1 else
+        result := 0;
     varDouble:
-      result := SortDynArrayDouble(TVarData(A).VDouble,TVarData(B).VDouble);
+      if A.VDouble<B.VDouble then
+        result := -1 else
+      if A.VDouble>B.VDouble then
+        result := 1 else
+        result := 0;
     varBoolean:
-      result := ord(TVarData(A).VBoolean)-ord(TVarData(B).VBoolean);
+      result := ord(A.VBoolean)-ord(B.VBoolean);
     else
-      if TVarData(A).VType and VTYPE_STATIC=0 then
+      if A.VType and VTYPE_STATIC=0 then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
-        CompareAsString;
+        result := CMP[caseInsensitive](variant(A),variant(B));
     end else
-    if (TVarData(A).VType and VTYPE_STATIC=0) and
-       (TVarData(B).VType and VTYPE_STATIC=0) then
+    if (A.VType and VTYPE_STATIC=0) and
+       (B.VType and VTYPE_STATIC=0) then
       result := ICMP[VarCompareValue(variant(A),variant(B))] else
-      CompareAsString;
+      result := CMP[caseInsensitive](variant(A),variant(B));
+end;
+
+function SortDynArrayVariant(const A,B): integer;
+begin
+  result := SortDynArrayVariantComp(TVarData(A),TVarData(B),false);
 end;
 
 function SortDynArrayVariantI(const A,B): integer;
-  procedure CompareAsString;
-  var UA,UB: RawUTF8;
-      wasString: boolean;
-  begin
-    VariantToUTF8(variant(A),UA,wasString);
-    VariantToUTF8(variant(B),UB,wasString);
-    result := StrIComp(pointer(UA),pointer(UB));
-  end;
 begin
-  if TVarData(A).VType=varVariant or varByRef then
-    result := SortDynArrayVariant(TVarData(A).VPointer^,B) else
-  if TVarData(B).VType=varVariant or varByRef then
-    result := SortDynArrayVariant(A,TVarData(B).VPointer^) else
-  if TVarData(A).VType=TVarData(B).VType then
-    case TVarData(A).VType of // optimized value comparison
-    varNull,varEmpty:
-      result := 0;
-    varString: // RawUTF8 most of the time (e.g. from TDocVariant)
-      result := StrIComp(TVarData(A).VAny,TVarData(B).VAny);
-    varInteger:
-      result := TVarData(A).VInteger-TVarData(B).VInteger;
-    varInt64,varCurrency:
-      result := TVarData(A).VInt64-TVarData(B).VInt64;
-    varDouble:
-      result := SortDynArrayDouble(TVarData(A).VDouble,TVarData(B).VDouble);
-    varBoolean:
-      result := ord(TVarData(A).VBoolean)-ord(TVarData(B).VBoolean);
-    else
-      if TVarData(A).VType and VTYPE_STATIC=0 then
-        result := ICMP[VarCompareValue(variant(A),variant(B))] else
-        CompareAsString;
-    end else
-    if (TVarData(A).VType and VTYPE_STATIC=0) and
-       (TVarData(B).VType and VTYPE_STATIC=0) then
-      result := ICMP[VarCompareValue(variant(A),variant(B))] else
-      CompareAsString;
+  result := SortDynArrayVariantComp(TVarData(A),TVarData(B),true);
 end;
 
 {$endif}
