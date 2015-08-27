@@ -7150,14 +7150,14 @@ $netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
 :  Custom Encodings
-By default, the {\i deflate} algorithm (the one used in {\f1\fs20 .zip} archives) is registered by {\f1\fs20 TSQLHttpClientGeneric}. Its {\f1\fs20 Compression} property is therefore set to {\f1\fs20 [hcDeflate]}.
-You may consider other encoding, .
-:   SynLZ compression
-On the client side, if you set the {\f1\fs20 TSQLHttpClientGeneric.Compression} property as such:
+:   SynLZ/deflate compression
+On the client side, the {\f1\fs20 TSQLHttpClientGeneric.Compression} property is by default set as such:
 ! MyClient.Compression := [hcSynLZ];
 It will enable {\i @*SynLZ@} compression in the HTTP headers:
 $ ACCEPT-ENCODING: synlz
 Our {\i SynLZ} is efficient, especially on @*JSON@ content, and very fast on the server side. It would therefore use less resources than {\f1\fs20 hcDeflate}, so may be preferred when balancing the resource / concurrent client ratio.
+You may include {\f1\fs20 hcDeflate} to the property, if you want to support this zip-derivated compression algorithm, e.g. from browsers or any HTTP library. In terms of CPU resources, {\f1\fs20 hcDeflate} would be more consumming than {\f1\fs20 hcSynLZ}, but will obtain a slightly better compression ratio.
+If both {\f1\fs20 [hcSynLZ,hcDeflate]} are defined, {\i mORMot} clients would use {\i SynLZ} compression, while other clients (e.g. browsers which do not know about the {\i SynLZ} encoding), would use the standard {\i deflate} compression.
 :151   AES encryption over HTTP
 In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and @**AES@-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
 Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
@@ -7169,9 +7169,9 @@ Once those parameters have been set, a new proprietary encoding will be defined 
 $ ACCEPT-ENCODING: synshaaes
 Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CFB/256 scheme.\line On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
-:   Upgrade to WebSockets between mORMot nodes
-It has been reported that some Internet {\i @*Proxies@} or {\i Service Providers} (@*ISP@) do not handle properly custom {\f1\fs20 ACCEPT-ENCODING} headers. In practice, {\f1\fs20 hcSynLZ} or {\f1\fs20 hcSynShaAes} may have routing issues over the Internet. For safety, the default {\f1\fs20 TSQLHttpClientGeneric.Compression} property is therefore set to {\f1\fs20 [hcDeflate]}, which is widely known and accepted (even by browsers).
-For fast and safe communication between {\i mORMot} nodes, you may consider our {\i @*WebSockets@} client/server implementation instead - see @150@. It implements a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. And, last but not least, it features real-time callbacks, if needed. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server, from stable {\i mORMot} clients, e.g. in a {\i mORMot} @*Cloud@. Then RESTful (AJAX/mobile) clients, may rely on plain HTTP, with {\f1\fs20 hcDeflate} compression.
+:   Prefer WebSockets between mORMot nodes
+As we just saw, defining {\f1\fs20 hcSynShaAes} would only be used between {\i mORMot} nodes, if both do support the encoding. There is no insurance that content would be encrypted during transmission, e.g. if the client did not define {\f1\fs20 synshaaes}.
+Therefore, for truly safe communication between {\i mORMot} nodes, you may consider our {\i @*WebSockets@} client/server implementation instead - see @150@. It implements a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. And, last but not least, it features real-time callbacks, if needed. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server, from stable {\i mORMot} clients, e.g. in a {\i mORMot} @*Cloud@. Then RESTful (AJAX/mobile) clients, may rely on plain HTTP, with {\f1\fs20 hcDeflate} compression.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.

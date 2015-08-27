@@ -113,9 +113,8 @@ unit mORMotHttpClient;
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
        compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES:
        hcDeflate will in fact use gzip content encoding, since deflate/gzip is
-       not consistent in practice among clients - default is set to [hcDeflate],
-       since it appears that some proxies or ISP do not like custom encodings,
-       like hcSynLZ or hcSynShaAes
+       not consistent in practice among clients - default is set to [hcSynzip],
+       which seems to be a good compromise before compression rate and CPU use
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
      - added ConnectTimeout optional parameter (thanks hnb for the patch!)
@@ -169,8 +168,7 @@ type
   // SynLZ compression), via SynCrypto.CompressShaAes() function
   // - here hcDeflate will use in fact gzip content encoding, since deflate
   // is inconsistent between browsers: http://stackoverflow.com/a/9186091/458259
-  // - TSQLHttpClientGeneric.Compression default property is [hcDeflate],
-  // which sounds the more stable over all HTTP proxies or ISPs 
+  // - TSQLHttpClientGeneric.Compression default property is [hcSynLZ]
   TSQLHttpCompression = (hcSynLZ, hcDeflate, hcSynShaAes);
 
   /// set of available compressions schemes
@@ -233,21 +231,17 @@ type
     // - default is 20000, i.e. 20 seconds
     property KeepAliveMS: cardinal read fKeepAliveMS write SetKeepAliveMS;
     /// the compression algorithms usable with this client
-    // - default is [hcDeflate], which is a widely known compression algorithm,
-    // but may be resource consumming on the server side
-    // - if you include hcSynLZ, our SynLZ algorithm which will provide good
-    // compression, with very low CPU use on server side: it will a bit
-    // less efficient than hcDeflate (in terms of compression ratio), but
-    // would consumme much less resources
+    // - equals [hcSynLZ] by default, since our SynLZ algorithm provides a good
+    // compression, with very low CPU use on server side
+    // - you may include hcDeflate, which will have a better compression ratio, 
+    // be recognized by all browsers and libraries, but would consumme much
+    // more CPU resources than hcSynLZ
     // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
     // the content (after SynLZ compression), if it is enabled on the server side:
     // ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
-    // - note that some proxies - or Internet Service Providers - do not handle
-    // custom ACCEPT-ENCODING: header content properly, so may have random issues
-    // with hcSynLz and hcSynShaAes: for fast and safe communication between stable
-    // mORMot nodes, consider using TSQLHttpClientWebSockets, leaving plain
-    // HTTP + hcDeflate for AJAX or non mORMot clients (which would also allows
-    // real-time callbacks)
+    // - for fast and safe communication between stable mORMot nodes, consider
+    // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
+    // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
     /// the Server IP address
     property Server: AnsiString read fServer;
@@ -523,7 +517,7 @@ begin
   fServer := aServer;
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
-  fCompression := [hcDeflate]; // widely known and accepted, but slower than SynLZ
+  fCompression := [hcSynLZ]; // may add hcDeflate for AJAX clients
   fConnectTimeout := ConnectTimeout;
   fSendTimeout := SendTimeout;
   fReceiveTimeout := ReceiveTimeout;
