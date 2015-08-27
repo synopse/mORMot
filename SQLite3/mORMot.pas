@@ -739,6 +739,7 @@ unit mORMot;
     - new TServiceMethodExecute class replacing TServiceMethod.InternalExecute:
       allows incoming parameters to be encoded as a JSON object, in
       addition to the standard JSON array - see request [48e30e0e05]
+    - allow stubed/mocked interfaces to be exposed as SOA services 
     - added optional CustomFields parameter to TSQLRest.Update() - and in case
       of a previous *FillPrepare() call, only the retrieved fields are updated
     - added TSQLRestServer.AcquireExecutionMode[] AcquireExecutionLockedTimeOut[]
@@ -10467,6 +10468,7 @@ type
     fLog: TDynArray;
     fLogCount: integer;
     fInterfaceExpectedTraceHash: cardinal;
+    fLastInterfacedObjectFake: TInterfacedObject;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     function Implements(aInterface: PTypeInfo): boolean; override;
     procedure InternalGetInstance(out aStubbedInterface); virtual;
@@ -10728,6 +10730,9 @@ type
     // - typical output is a list of calls separated by commas:
     // $ Add(10,20)=[30],Divide(20,0) error "divide by zero"
     property LogAsText: RawUTF8 read GetLogAsText;
+    /// returns the last created TInterfacedObject instance
+    // - e.g. corresponding to the out aStubbedInterface parameter of Create()
+    property LastInterfacedObjectFake: TInterfacedObject read fLastInterfacedObjectFake;
   published
     /// access to the registered Interface RTTI information
     property InterfaceFactory: TInterfaceFactory read fInterface;
@@ -11025,7 +11030,7 @@ type
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
     fImplementationClassKind: (ickBlank,
-      ickWithCustomCreate, ickInjectable, ickFromInjectedResolver);
+      ickWithCustomCreate, ickInjectable, ickFromInjectedResolver, ickFake);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
@@ -48064,11 +48069,12 @@ begin
 end;
 
 procedure TInterfaceStub.InternalGetInstance(out aStubbedInterface);
+var fake: TInterfacedObjectFake;
 begin
-  with TInterfacedObjectFake.Create(fInterface,Invoke,InstanceDestroyed) do begin
-    pointer(aStubbedInterface) := @fVTable;
-    _AddRef;
-  end;
+  fake := TInterfacedObjectFake.Create(fInterface,Invoke,InstanceDestroyed);
+  pointer(aStubbedInterface) := @fake.fVTable;
+  fake._AddRef;
+  fLastInterfacedObjectFake := fake;
 end;
 
 function TInterfaceStub.InternalCheck(aValid,aExpectationFailed: boolean;
@@ -49636,17 +49642,27 @@ begin
     raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
       [self,InterfaceURI,fRest]) else
   fImplementationClass := aImplementationClass;
-  if aRestServer.Services.Implements(fInterface.fInterfaceTypeInfo) then
-    fImplementationClassKind := ickFromInjectedResolver else
-  if fImplementationClass.InheritsFrom(TInjectableObject) then
-    fImplementationClassKind := ickInjectable else
-  if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
-    fImplementationClassKind := ickWithCustomCreate;
-  fImplementationClassInterfaceEntry :=
-    fImplementationClass.GetInterfaceEntry(fInterface.fInterfaceIID);
-  if fImplementationClassInterfaceEntry=nil then
-    raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
-      [self,fImplementationClass,fInterfaceURI]) else
+  if fImplementationClass.InheritsFrom(TInterfacedObjectFake) then begin
+    fImplementationClassKind := ickFake;
+    if aSharedInstance=nil then
+      raise EServiceException.CreateUTF8('%.Create: no Shared Instance for %/I%',
+        [self,fImplementationClass,fInterfaceURI]);
+    if (aSharedInstance as TInterfacedObjectFake).Factory.fInterfaceTypeInfo<>aInterface then
+      raise EServiceException.CreateUTF8('%.Create: shared % instance does not implement I%',
+        [self,fImplementationClass,fInterfaceURI]) else
+  end else begin
+    if aRestServer.Services.Implements(fInterface.fInterfaceTypeInfo) then
+      fImplementationClassKind := ickFromInjectedResolver else
+    if fImplementationClass.InheritsFrom(TInjectableObject) then
+      fImplementationClassKind := ickInjectable else
+    if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
+      fImplementationClassKind := ickWithCustomCreate;
+    fImplementationClassInterfaceEntry :=
+      fImplementationClass.GetInterfaceEntry(fInterface.fInterfaceIID);
+    if fImplementationClassInterfaceEntry=nil then
+      raise EServiceException.CreateUTF8('%.Create: % does not implement I%',
+        [self,fImplementationClass,fInterfaceURI]) else
+  end;
   if (fInterface.MethodIndexCallbackReleased>=0) and
      (InstanceCreation<>sicShared) then
     raise EServiceException.CreateUTF8('%.Create: I%() should be run as sicShared',
@@ -49661,11 +49677,12 @@ begin
         fSharedInstance := aSharedInstance else
         raise EServiceException.CreateUTF8('%.Create: % shared instance '+
           'does not inherit from %',[self,aSharedInstance,fImplementationClass]);
-    if (fSharedInstance=nil) or
-       not GetInterfaceFromEntry(
-         fSharedInstance,fImplementationClassInterfaceEntry,fSharedInterface) then
-      raise EServiceException.CreateUTF8('%.Create: % is no implementation of I%',
-        [self,fSharedInstance,fInterfaceURI]);
+    if fImplementationClassKind<>ickFake then
+      if (fSharedInstance=nil) or
+         not GetInterfaceFromEntry(
+           fSharedInstance,fImplementationClassInterfaceEntry,fSharedInterface) then
+        raise EServiceException.CreateUTF8('%.Create: % is no implementation of I%',
+          [self,fSharedInstance,fInterfaceURI]);
   end;
   sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
     if (aTimeOutSec=0) and (InstanceCreation<>sicPerThread) then
@@ -49943,6 +49960,7 @@ procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
 var Inst: TServiceFactoryServerInstance;
     WR: TTextWriter;
     entry: PInterfaceEntry;
+    instancePtr: pointer;
     dolock: boolean;
     exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
@@ -50039,11 +50057,17 @@ begin
     stats := nil;
   exec := nil;
   try
-    if Inst.Instance.ClassType=fImplementationClass then
-      entry := fImplementationClassInterfaceEntry else begin
-      entry := Inst.Instance.GetInterfaceEntry(fInterface.fInterfaceIID);
-      if entry=nil then
-        exit;
+    if fImplementationClassKind=ickFake then
+      if Inst.Instance<>fSharedInstance then
+        exit else
+        instancePtr := @TInterfacedObjectFake(Inst.Instance).fVTable else begin
+      if Inst.Instance.ClassType=fImplementationClass then
+        entry := fImplementationClassInterfaceEntry else begin
+        entry := Inst.Instance.GetInterfaceEntry(fInterface.fInterfaceIID);
+        if entry=nil then
+          exit;
+      end;
+      instancePtr := PAnsiChar(Inst.Instance)+entry^.IOffset;
     end;
     if optExecInPerInterfaceThread in fExecution[Ctxt.ServiceMethodIndex].Options then
       if fBackgroundThread=nil then
@@ -50065,10 +50089,9 @@ begin
         {$endif}
         exec.OnCallback := Ctxt.ExecuteCallback;
         with fExecution[Ctxt.ServiceMethodIndex] do
-        if LogRest<>nil then 
+        if LogRest<>nil then
           exec.OnExecute := OnExecuteMethod;
-        if exec.ExecuteJson([PAnsiChar(Inst.Instance)+entry^.IOffset],
-           Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
+        if exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
           Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
           Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
         end else begin
