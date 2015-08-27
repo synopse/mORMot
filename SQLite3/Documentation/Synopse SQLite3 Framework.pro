@@ -1872,7 +1872,7 @@ The {\f1\fs20 SynCommons.pas} unit features the {\f1\fs20 @**TSynTimeZone@} clas
 In practice, you may use {\f1\fs20 TSynTimeZone.Default}, which would return an instance read from the current version of the registry under {\i Windows}, and would attempt to load the information named after the executable file name (appended as a {\f1\fs20 .tz} extension) on other Operating Systems.\line You may therefore write:
 ! aLocalTime := TSynTimeZone.Default.NowToLocal(aTimeZoneID);
 Similarly, you may use {\f1\fs20 TSynTimeZone.UtcToLocal} or {\f1\fs20 TSynTimeZone.LocalToUtc} methods, with the proper {\f1\fs20 TZ} identifier.
-You would have to create the needed {\f1\fs20 .tz} compressed file under a Windows machine, then provide this file together with any {\i Linux} server executable, in its very same folder. On a cloud-like system, you may store this information in a centralized server, e.g. via a dedicated service - see @63@ - generated from a single reference {\i Windows} system via {\f1\fs20 TSynTimeZone.SaveToBuffer}, and later on use {\f1\fs20 TSynTimeZone.LoadFromBuffer} to decode it from all your cloud nodes. The main benefit is that the time information would stay consistent whatever system it runs on, as you may expect.
+You would have to create the needed {\f1\fs20 .tz} compressed file under a Windows machine, then provide this file together with any {\i Linux} server executable, in its very same folder. On a @*Cloud@-like system, you may store this information in a centralized server, e.g. via a dedicated service - see @63@ - generated from a single reference {\i Windows} system via {\f1\fs20 TSynTimeZone.SaveToBuffer}, and later on use {\f1\fs20 TSynTimeZone.LoadFromBuffer} to decode it from all your cloud nodes. The main benefit is that the time information would stay consistent whatever system it runs on, as you may expect.
 Your User Interface could retrieve the IDs and ready to be displayed text from {\f1\fs20 TSynTimeZone.Ids} and {\f1\fs20 TSynTimeZone.Displays} properties, as plain {\f1\fs20 TStrings} instance, which index would follow the {\f1\fs20 TSynTimeZone.Zone[]} internal information.
 As a nice side effect, the {\f1\fs20 TSynTimeZone} binary internal storage has been found out to be very efficient, and much faster than a manual reading of the {\i Windows} registry. Complex local time calculation could be done on the server side, with no fear of breaking down your processing performances.
 \page
@@ -7149,7 +7149,16 @@ $httpcfg delete ssl -i 0.0.0.0:8005
 $netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
-:151  AES encryption over HTTP
+:  Custom Encodings
+By default, the {\i deflate} algorithm (the one used in {\f1\fs20 .zip} archives) is registered by {\f1\fs20 TSQLHttpClientGeneric}. Its {\f1\fs20 Compression} property is therefore set to {\f1\fs20 [hcDeflate]}.
+You may consider other encoding, .
+:   SynLZ compression
+On the client side, if you set the {\f1\fs20 TSQLHttpClientGeneric.Compression} property as such:
+! MyClient.Compression := [hcSynLZ];
+It will enable {\i @*SynLZ@} compression in the HTTP headers:
+$ ACCEPT-ENCODING: synlz
+Our {\i SynLZ} is efficient, especially on @*JSON@ content, and very fast on the server side. It would therefore use less resources than {\f1\fs20 hcDeflate}, so may be preferred when balancing the resource / concurrent client ratio.
+:151   AES encryption over HTTP
 In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and @**AES@-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
 Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
@@ -7158,10 +7167,11 @@ On the client side, you can just set the {\f1\fs20 TSQLHttpClientGeneric.Compres
 ! MyClient.Compression := [hcSynShaAes];
 Once those parameters have been set, a new proprietary encoding will be defined in the HTTP headers:
 $ ACCEPT-ENCODING: synshaaes
-Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CTR/256 encryption.
+Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and encoded using the very secure AES-CFB/256 scheme.\line On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
-On both client and server side, this encryption will use @*AES-NI@ hardware instructions, if available on the CPU it runs on. It would ensure that security is enhanced not at the price of performance and scalability.
-You may note that our {\i @*WebSockets@} client/server implementation - see @150@ - is also able to use a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server.
+:   Upgrade to WebSockets between mORMot nodes
+It has been reported that some Internet {\i @*Proxies@} or {\i Service Providers} (@*ISP@) do not handle properly custom {\f1\fs20 ACCEPT-ENCODING} headers. In practice, {\f1\fs20 hcSynLZ} or {\f1\fs20 hcSynShaAes} may have routing issues over the Internet. For safety, the default {\f1\fs20 TSQLHttpClientGeneric.Compression} property is therefore set to {\f1\fs20 [hcDeflate]}, which is widely known and accepted (even by browsers).
+For fast and safe communication between {\i mORMot} nodes, you may consider our {\i @*WebSockets@} client/server implementation instead - see @150@. It implements a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. And, last but not least, it features real-time callbacks, if needed. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server, from stable {\i mORMot} clients, e.g. in a {\i mORMot} @*Cloud@. Then RESTful (AJAX/mobile) clients, may rely on plain HTTP, with {\f1\fs20 hcDeflate} compression.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
@@ -8493,7 +8503,7 @@ Similarly, you may add a dependency to the VCL, via a reference to the {\f1\fs20
 !!  Vcl.Forms,
 !  mORMot,
 !  ...
-If you later want to use {\f1\fs20 @*FMX@}, or {\f1\fs20 LCL} (from @*Lazarus@) in your application, or want to use your {\f1\fs20 MyDataModel} unit on a pure server application without any GUI, you are stuck. The new {\i Windows @*Nano Server@} architecture, which targets the cloud and won't offer any GUI to the server applications, would even be very sensitive to the dependency chain of the executable.
+If you later want to use {\f1\fs20 @*FMX@}, or {\f1\fs20 LCL} (from @*Lazarus@) in your application, or want to use your {\f1\fs20 MyDataModel} unit on a pure server application without any GUI, you are stuck. The new {\i Windows @*Nano Server@} architecture, which targets the @*Cloud@ and won't offer any GUI to the server applications, would even be very sensitive to the dependency chain of the executable.
 Note that if you are used to developed in RAD mode, the units generated by the IDE wizards come with some default references in the {\f1\fs20 uses} clause of the generated {\f1\fs20 .pas} file. So take care of not introducing any coupling to your own business code!
 As a general rule, our ORM/SOA framework source code tries to avoid such dependencies. All OS-specificities are centralized in our {\f1\fs20 SynCommons.pas} unit, and there is no dependency to the VCL when it is not mandatory, e.g. in {\f1\fs20 mORMot.pas}.
 Following the RAD approach, you may start from your UI, i.e. defining the needed classes in the unit where you visual form (may be VCL or FMX) is defined. Don't follow this tempting, but dangerous path!
@@ -10766,7 +10776,7 @@ At this time, the only missing feature of {\i mORMot}'s SOA is transactional pro
 ;{\i @*Event Sourcing@} and @*Unit Of Work@ design patterns have been added to the {\i mORMot} official road map, in order to handle @*transaction@s on the SOA side, relying on ORM for its data persistence, but not depending on database transactional abilities. In fact, transactions should better be implemented at SOA level, as we do want transactions to be database agnostic ({\i @*SQLite3@} has a limited per-connection transactional scheme, and we do not want to rely on the DB layer for this feature). {\i Event Sourcing} sounds to be a nice pattern to implement a strong and efficient transactional process in our framework - see @http://bliki.abdullin.com/event-sourcing/why
 :86Cross-Platform clients
 %cartoon07.png
-Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the Cloud, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
+Current version of the main framework units target only {\i Win32} / {\i Win64} systems under Delphi, and (in a preliminary state) {\i Windows} or {\i @*Linux@} under FPC.\line It allows to make easy self-hosting of {\i mORMot} servers for local business applications in any corporation, or pay cheap hosting in the @*Cloud@, since {\i mORMot} CPU and RAM expectations are much lower than a regular {\f1\fs20 IIS-WCF-MSSQL-.Net} stack.\line But in a @17@, you would probably need to create clients for platforms outside the support platform sets world, especially mobile devices or AJAX applications.
 A set of @**cross-platform@ client units is therefore available in the {\f1\fs20 CrossPlatform} sub-folder of the source code repository. It allows writing any client in modern {\i object pascal} language, for:
 - Any version of {\i Delphi}, on any platform ({\i Mac @*OSX@}, or any mobile supported devices);
 - {\i @*FreePascal@} Compiler (in 2.6.4, 2.7.1 or 3.1.1 branches);
@@ -12416,7 +12426,7 @@ Take a look at the {\f1\fs20 mORMotMVC.pas} unit: you will discover that every a
 We could identify several implementation patterns of a {\i mORMot} server and its clients:
 - Stand-alone application, either in the same process or locally on the same computer;
 - Private self-hosting, e.g. in a corporate network, with a {\i mORMot} executable or service publishing some content to clients locally or over the Internet (directly from a DMZ or via a VPN);
-- Cloud hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization;
+- @**Cloud@ hosting, using a dedicated server in a data-center, or any cloud solution based on virtualization;
 - Mixed hosting, using @*CDN@ network services to cache most of the requests of your {\i mORMot} server.
 As we already stated, our @35@ allow all these patterns.\line We will now detail some hosting schemes.
 \page
@@ -12427,7 +12437,7 @@ In practice, a {\i mORMot} server expects much lower hardware requirements (in C
 As a consequence, the potential implementation schemes could be hosted as such:
 - Stand-alone application, without any explicit server;
 - Self-hosted service running on the corporate file server, or on a small dedicated VM or recycled computer (for best performance, just put your data on a new SSD on the old hardware PC);
-- Cloud services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients;
+- @*Cloud@ services running {\i Windows Server}, with minimal configuration: {\f1\fs20 IIS}, {\f1\fs20 .Net} or {\f1\fs20 MS SQL} are not necessary at all - a cheap virtual system with 512 MB of memory is enough to run your {\i mORMot} service and serve hundredths of clients;
 - {\i Linux} servers, with no dependency (even latest version of {\i SQlite3} is statically linked to the executables), using even less hardware resource - but remember that this platform is very new to the framework.
 In the cloud, since every resource used is monitored and billed, you would like to minimize RAM use: you should better take a look at @http://www.delphitools.info/2013/11/20/moving-hosts-now-settled and @http://www.delphitools.info/2013/11/29/flush-windows-file-cache for practical advices and feedbacks.
 About the edition of {\i Windows} to be used, of course IT people will ensure you that {\i Windows Server} is mandatory. But from our tests, you will obtain pretty good results, even with a regular Windows 7 or 8 version of the operating system. On the other side, it is not serious to envisage hosting a server on Windows XP, which is not supported any more by Microsoft - even if technically a {\i mORMot} server will work very well on this deprecated platform.
@@ -14665,7 +14675,7 @@ $   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
 $   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
 $   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
 $   /lib/ld-linux.so.2 (0xb774d000)
-There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a cloud-based solution, or a self-hosted office server, software requirements are pretty low.
+There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a @*cloud@-based solution, or a self-hosted office server, software requirements are pretty low.
 : CrossKylix support
 The framework source code can also be cross-compiled under Delphi into a {\i @*Linux@} executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for {\i Linux}) compiler into the Delphi Windows IDE.
 {\i CrossKylix} has indeed several known drawbacks:

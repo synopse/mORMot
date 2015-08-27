@@ -113,7 +113,9 @@ unit mORMotHttpClient;
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
        compression schemes at runtime, i.e. SynLZ, deflate or SynLZ+SHA/AES:
        hcDeflate will in fact use gzip content encoding, since deflate/gzip is
-       not consistent in practice among clients
+       not consistent in practice among clients - default is set to [hcDeflate],
+       since it appears that some proxies or ISP do not like custom encodings,
+       like hcSynLZ or hcSynShaAes
      - added SendTimeout and ReceiveTimeout optional parameters (in ms) to
        TSQLHttpClientWinHTTP / TSQLHttpClientWinINet constructors [bfe485b678]
      - added ConnectTimeout optional parameter (thanks hnb for the patch!)
@@ -163,10 +165,12 @@ type
   // - with hcSynLZ, the 440 KB JSON for TTestClientServerAccess._TSQLHttpClient
   // is compressed into 106 KB with no speed penalty (it's even a bit faster)
   // whereas hcDeflate with its level set to 1 (fastest), is 25 % slower
-  // - hcSynShaAes will use SHA-256/AES-256-CTR to encrypt the content (after
+  // - hcSynShaAes will use SHA-256/AES-256-CFB to encrypt the content (after
   // SynLZ compression), via SynCrypto.CompressShaAes() function
   // - here hcDeflate will use in fact gzip content encoding, since deflate
   // is inconsistent between browsers: http://stackoverflow.com/a/9186091/458259
+  // - TSQLHttpClientGeneric.Compression default property is [hcDeflate],
+  // which sounds the more stable over all HTTP proxies or ISPs 
   TSQLHttpCompression = (hcSynLZ, hcDeflate, hcSynShaAes);
 
   /// set of available compressions schemes
@@ -229,12 +233,21 @@ type
     // - default is 20000, i.e. 20 seconds
     property KeepAliveMS: cardinal read fKeepAliveMS write SetKeepAliveMS;
     /// the compression algorithms usable with this client
-    // - default is [hcSynLZ], i.e. our SynLZ algorithm which will provide
-    // good compression, with very low CPU use on server side: it will a bit
-    // less efficient than hcDeflate, but consume much less resources
-    // - if you set [hcSynShaAes], it will use SHA-256/AES-256-CTR to encrypt the
-    // content (after SynLZ compression), if it is enabled on the server side:
+    // - default is [hcDeflate], which is a widely known compression algorithm,
+    // but may be resource consumming on the server side
+    // - if you include hcSynLZ, our SynLZ algorithm which will provide good
+    // compression, with very low CPU use on server side: it will a bit
+    // less efficient than hcDeflate (in terms of compression ratio), but
+    // would consumme much less resources
+    // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
+    // the content (after SynLZ compression), if it is enabled on the server side:
     // ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
+    // - note that some proxies - or Internet Service Providers - do not handle
+    // custom ACCEPT-ENCODING: header content properly, so may have random issues
+    // with hcSynLz and hcSynShaAes: for fast and safe communication between stable
+    // mORMot nodes, consider using TSQLHttpClientWebSockets, leaving plain
+    // HTTP + hcDeflate for AJAX or non mORMot clients (which would also allows
+    // real-time callbacks)
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
     /// the Server IP address
     property Server: AnsiString read fServer;
@@ -510,7 +523,7 @@ begin
   fServer := aServer;
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
-  fCompression := [hcSynLZ];
+  fCompression := [hcDeflate]; // widely known and accepted, but slower than SynLZ
   fConnectTimeout := ConnectTimeout;
   fSendTimeout := SendTimeout;
   fReceiveTimeout := ReceiveTimeout;
@@ -609,7 +622,7 @@ begin
       {$endif}
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
-        // global SHA-256 / AES-256-CTR encryption + SynLZ compression
+        // global SHA-256 / AES-256-CFB encryption + SynLZ compression
         fSocket.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
       if hcSynLz in Compression then
         // SynLZ is very fast and efficient, perfect for a Delphi Client
@@ -889,7 +902,7 @@ begin
       fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
-        // global SHA-256 / AES-256-CTR encryption + SynLZ compression
+        // global SHA-256 / AES-256-CFB encryption + SynLZ compression
         fRequest.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
       if hcSynLz in Compression then
         // SynLZ is very fast and efficient, perfect for a Delphi Client
