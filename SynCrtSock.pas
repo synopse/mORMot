@@ -146,6 +146,9 @@ unit SynCrtSock;
     and TCrtSocket.CreateSockOut methods
   - renamed misleading TCrtSocket.Snd method as overloaded SockSend, and
     refactored public fields as read/only properties
+  - fixed long-standing random bug occuring when a TCrtSocket connection is
+    closed then reopened (e.g. when THttpClientSocket.Request does its retrial);
+    thanks hnb for the patch!
   - added THttpServerRequest.UseSSL property to check if connection is secured
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
@@ -2755,6 +2758,7 @@ type
 
 procedure TCrtSocket.Close;
 begin
+  fSndBufLen := 0; // always reset (e.g. in case of further Open)
   if (SockIn<>nil) or (SockOut<>nil) then begin
     ioresult; // reset ioresult value if SockIn/SockOut were used
     if SockIn<>nil then begin
