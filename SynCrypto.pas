@@ -475,6 +475,9 @@ type
     // - this abstract method will set CV from AES.Context, and fIn/fOut
     // from BufIn/BufOut
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+    /// read-only access to the internal CV block, which may be have just been
+    // used by Encrypt/Decrypt methods
+    property CV: TAESBlock read fCV;
   end;
 
   /// handle AES cypher/uncypher without chaining (ECB)
@@ -1023,7 +1026,7 @@ var
 // - the key is global to the whole process
 procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractClass=nil);
 
-/// encrypt data content using the AES-256/CTR algorithm, after SynLZ compression
+/// encrypt data content using the AES-256/CFB algorithm, after SynLZ compression
 // - as expected by THttpSocket.RegisterCompress()
 // - will return 'synshaaes' as ACCEPT-ENCODING: header parameter
 // - will use global CompressShaAesKey / CompressShaAesClass variables to be set
