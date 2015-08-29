@@ -2400,10 +2400,11 @@ end;
 
 function TGDIPages.GetColumnRec(col: integer): TColRec;
 begin
-  result.ColLeft := 0;
-  result.ColRight := 0;
   if Cardinal(col)<Cardinal(length(fColumns)) then
-    result := fColumns[col];
+    result := fColumns[col] else begin
+    result.ColLeft := 0;
+    result.ColRight := 0;
+  end;
 end;
 
 procedure TGDIPages.PrintColumnHeaders;

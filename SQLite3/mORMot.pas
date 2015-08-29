@@ -10417,7 +10417,7 @@ type
   /// used to keep track of one stubbed method call
   TInterfaceStubLog = {$ifdef UNICODE}record{$else}object{$endif}
     /// call timestamp, in milliseconds
-    // - under Windows, is filled with GetTickCount64() API returned value
+    // - is filled with GetTickCount64() API returned value
     TimeStamp64: Int64;
     /// set to TRUE if this calls failed
     // - i.e. if EInterfaceFactoryException was raised for TInterfaceStub, or

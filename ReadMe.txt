@@ -8,6 +8,7 @@ An Open Source Client-Server ORM/SOA framework
 
 Contributors
   Alexander (sha)
+  Alexander (volax)
   AlexPirate
   Alfred Glaenzer (alf)
   Arnaud Bouchez
@@ -30,7 +31,10 @@ Contributors
   Goran Despalatovic (gigo)
   Joe (jokusoft)
   Jordi Tudela
+  Leon Oosthuizen
+  Maciej Izak (hnb)
   Mario Moretti
+  Marius Maximus (mariuszekpl)
   Martin Suer
   Mazinsw
   MChaos
