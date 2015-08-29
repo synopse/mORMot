@@ -107,6 +107,7 @@ type
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
     FRemoteLogService: TSQLHTTPRemoteLogServer; // from mORMotHTTPServer
+    FEventsRemoteViewSet: TSynLogInfos;
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
     procedure BtnFilterMenu(Sender: TObject);
@@ -295,8 +296,9 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
-  for E := succ(sllNone) to high(E) do 
+  for E := succ(sllNone) to high(E) do
     FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
+  FEventsRemoteViewSet := [];
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -387,6 +389,7 @@ begin
         ndx := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
     end;
     List.RowCount := FLogSelectedCount;
+    FEventsRemoteViewSet := Sets;        // Remember set for filtering incoming remote log
   end else
     List.RowCount := FLog.Count;
   SetListItem(ndx);
@@ -986,6 +989,8 @@ begin
 end;
 
 procedure TMainLogView.btnServerLaunchClick(Sender: TObject);
+var E: TSynLogInfo;
+    i, BestFitHeight: integer;
 begin
   if FRemoteLogService=nil then
   try
@@ -1007,6 +1012,36 @@ begin
   List.ColWidths[2] := 2000;
   FLogSelected := nil;
   FLogSelectedCount := 0;
+
+  // Filtered remote log view support
+  FEventsRemoteViewSet := LOG_VERBOSE;
+  EventsList.Items.Clear;
+  EventsList.Items.BeginUpdate;
+  try
+    for E := succ(sllNone) to high(E) do begin
+      EventsList.Items.AddObject(FEventCaption[E],pointer(ord(E)));
+      EventsList.Checked[EventsList.Count-1] := true;
+    end;
+    for i := 1 to FilterMenu.Items.Count-1 do
+      FilterMenu.Items[i].Visible := true;
+  finally
+    EventsList.Items.EndUpdate;
+  end;
+  EventsList.Height := 8+EventsList.Count*EventsList.ItemHeight;
+  EventsList.Show;
+  btnListClear.Top := EventsList.Top+EventsList.Height+12;
+  btnListClear.Width := EventsList.width div 2 - 2;
+  btnListSave.Top := btnListClear.Top;
+  btnListSave.Width := btnListClear.Width;
+  btnListSave.Left := btnListClear.Left + btnListClear.Width + 4;
+  if (btnListSave.Top + btnListSave.Height+12) > ImageLogo.top then begin
+    BestFitHeight := height + btnListSave.Top + btnListSave.Height+12 - ImageLogo.top;
+    if BestFitHeight > Screen.Height then
+      height := Screen.Height
+    else
+      height := BestFitHeight;
+  end;
+
   lblServerRoot.Hide;
   lblServerPort.Hide;
   edtServerRoot.Hide;
@@ -1037,8 +1072,9 @@ begin
     withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
     if withoutThreads and (FLog.EventThread<>nil) then
-      tmrRefresh.Tag := 1; 
-    AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
+      tmrRefresh.Tag := 1;
+    if FLog.EventLevel[FLog.Count-1] in FEventsRemoteViewSet then
+      AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
   tmrRefresh.Enabled := true; // MUCH faster than Synchronize() to use a timer
 end;
@@ -1052,8 +1088,9 @@ begin
     List.ColWidths[2] := 30;
     List.ColWidths[3] := 2000;
   end;
-  List.RowCount := FLog.Count;
-  List.TopRow := FLog.Count-List.VisibleRowCount;
+  List.RowCount := FLogSelectedCount;
+  if FLogSelectedCount > 0 then
+    List.TopRow := FLogSelectedCount-List.VisibleRowCount;
   List.Invalidate;
 end;
 
