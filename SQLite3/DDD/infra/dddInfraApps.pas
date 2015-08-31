@@ -1060,12 +1060,12 @@ begin
   with TJSONSerializer.CreateOwnedStream do
   try
     WriteObject(FMonitoring);
+    CancelLastChar('}');
     if fRest.InheritsFrom(TSQLRestServer) then begin
-      CancelLastChar('}');
       AddShort(',"Rest":');
       AddNoJSONEscapeUTF8(TSQLRestServer(fRest).FullStatsAsJson);
-      Add('}');
     end;
+    Add(',"Version":"%"}',[ExeVersion.Version.Detailed]);
     SetText(result);
   finally
     Free;
