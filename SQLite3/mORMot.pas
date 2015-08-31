@@ -30158,7 +30158,8 @@ function TSQLRestBatch.Update(Value: TSQLRecord;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 var Props: TSQLRecordProperties;
     FieldBits: TSQLFieldBits;
-    ID, tableIndex: integer;
+    ID: TID;
+    tableIndex: integer;
 begin
   result := -1;
   if (Value=nil) or (fBatch=nil) then
