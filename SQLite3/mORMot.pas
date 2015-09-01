@@ -2493,6 +2493,7 @@ type
   TEnumType = record
   {$endif}
     /// specify ordinal storage size and sign
+    // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
     /// first value of enumeration type, typicaly 0
     MinValue: Longint;
@@ -18836,7 +18837,7 @@ var i: integer;
 begin
   i := fPropInfo.GetOrdProp(Instance);
   if fSQLFieldType=sftBoolean then
-    W.AddString(JSON_BOOLEAN[boolean(i)]) else
+    W.AddString(JSON_BOOLEAN[i<>0]) else
     W.Add(i);
 end;
 
@@ -18857,7 +18858,7 @@ begin
     wasSQLString^ := false;
   i := fPropInfo.GetOrdProp(Instance);
   if (fSQLFieldType=sftBoolean) and not ToSQL then
-    result := JSON_BOOLEAN[boolean(i)] else
+    result := JSON_BOOLEAN[i<>0] else
     Int32ToUtf8(i,result);
 end;
 
@@ -18870,9 +18871,8 @@ begin
       i := Ord(IdemPropNameU(Value,'TRUE') or IdemPropNameU(Value,'YES')) else
       i := fEnumType^.GetEnumNameValue(pointer(Value),length(Value)) else
     if fSQLFieldType=sftBoolean then // normalize boolean values range to 0,1
-      if Boolean(i) then
-        i := 1 else
-        i := 0;
+      if i<>0 then
+        i := 1;
   if cardinal(i)>cardinal(fEnumType^.MaxValue) then
     Value := '' else // only set a valid value
     Int32ToUtf8(i,Value);
@@ -18893,9 +18893,8 @@ begin
         i := 0;  // only set a valid text value
     end else
     if fSQLFieldType=sftBoolean then // normalize boolean values range to 0,1
-      if Boolean(i) then
-        i := 1 else
-        i := 0;
+      if i<>0 then
+        i := 1;
   end;
   fPropInfo.SetOrdProp(Instance,i);
 end;
@@ -26422,6 +26421,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         exit;
       end else
       {$endif}
+      if @self=TypeInfo(WordBool) then begin // circumvent a Delphi RTTI bug
+        result := sftBoolean;
+        exit;
+      end else
       begin
         result := sftEnumerate;
         exit;
@@ -26699,9 +26702,11 @@ end;
 function TEnumType.GetEnumName(const Value): PShortString;
 var Ordinal: integer;
 begin
-  if MaxValue<=255 then
-    Ordinal := byte(Value) else
-    Ordinal := word(Value);
+  case OrdType of // MaxValue does not work e.g. with WordBool
+  otSByte, otUByte: Ordinal := byte(Value);
+  otSWord, otUWord: Ordinal := word(Value);
+  else              Ordinal := integer(Value);
+  end;
   result := GetEnumNameOrd(Ordinal);
 end;
 
@@ -26959,19 +26964,19 @@ end;
 
 function TEnumType.SizeInStorageAsEnum: Integer;
 begin
-  case MaxValue of
-  0..255:     result := 1;
-  256..65535: result := 2;
-  else        result := 4;
+  case OrdType of // MaxValue does not work e.g. with WordBool
+  otSByte, otUByte: result := 1;
+  otSWord, otUWord: result := 2;
+  else              result := 4;
   end;
 end;
 
 procedure TEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
 begin
-  case MaxValue of
-  0..255:     byte(Value) := Ordinal;
-  256..65535: word(Value) := Ordinal;
-  else        integer(Value) := Ordinal;
+  case OrdType of // MaxValue does not work e.g. with WordBool
+  otSByte, otUByte: byte(Value) := Ordinal;
+  otSWord, otUWord: word(Value) := Ordinal;
+  else              integer(Value) := Ordinal;
   end;
 end;
 

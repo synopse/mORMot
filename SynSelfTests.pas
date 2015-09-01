@@ -5464,6 +5464,8 @@ begin
       Check(O.Sets=O2.Sets);
       Check(ObjectEquals(O,O2));
     end;
+    with PTypeInfo(TypeInfo(WordBool))^.EnumBaseType^ do
+      Check(SizeInStorageAsEnum=2);
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
     Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
