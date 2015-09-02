@@ -82,7 +82,8 @@ unit mORMotDB;
   - TSQLRestServerStaticExternal renamed TSQLRestStorageExternal
   - huge performance boost when inserting individual data rows, by maintaining
     the IDs in memory instead of executing "select max(id)" - added new property
-    EngineAddUseSelectMaxID to unset this optimization
+    EngineAddUseSelectMaxID to unset this optimization, and alternate
+    OnEngineAddComputeID and EngineAddIgnoreID properties for [201348a0af6]
   - new function VirtualTableExternalRegisterAll(), to register all tables
     of a mORMot model to be handled via a specified database
   - TSQLRestStorageExternal.AdaptSQLForEngineList() will now use the generic
@@ -163,6 +164,15 @@ uses
   SynDB;
 
 type
+  TSQLRestStorageExternal = class;
+
+  /// event handler called to customize the computation of a new ID
+  // - should set Handled=TRUE if a new ID has been computed and returned
+  // - Handled=FALSE would let the default ID computation take place
+  // - note that execution of this method would be protected by a mutex, so
+  // it would be thread-safe
+  TOnEngineAddComputeID = function(Sender: TSQLRestStorageExternal; var Handled: Boolean): TID of object;
+
   /// REST server with direct access to a SynDB-based external database
   // - handle all REST commands, using the external SQL database connection,
   // and prepared statements
@@ -176,8 +186,11 @@ type
     fProperties: TSQLDBConnectionProperties;
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
     fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
-    fEngineUseSelectMaxID: Boolean;
+    // ID handling during Add/Insert 
+    fEngineAddUseSelectMaxID: Boolean;
     fEngineLockedMaxID: TID;
+    fOnEngineAddComputeID: TOnEngineAddComputeID;
+    fEngineAddIgnoreID: boolean;
     /// external column layout as retrieved by fProperties
     // - used internaly to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
@@ -331,8 +344,8 @@ type
     /// reset the internal cache of external table maximum ID
     // - next EngineAdd/BatchAdd will execute SELECT max(ID) FROM externaltable
     // - is a lighter alternative to EngineAddUseSelectMaxID=TRUE, since this
-    // method may be used only when some records have been inserted into the
-    // external database outside this class scope (e.g. by legacy code)
+    // method may be used only once, when some records have been inserted into
+    // the external database outside this class scope (e.g. by legacy code)
     procedure EngineAddForceSelectMaxID;
 
     /// retrieve the REST server instance corresponding to an external TSQLRecord
@@ -353,9 +366,24 @@ type
     // outside this engine
     // - you can set EngineAddUseSelectMaxID=true to execute a slower
     // 'select max(ID) from TableName' SQL statement before each EngineAdd()
-    // - a lighter alternative may be to call EngineAddForceSelectMaxID only when required
-    property EngineAddUseSelectMaxID: Boolean read fEngineUseSelectMaxID
-      write fEngineUseSelectMaxID;
+    // - a lighter alternative may be to call EngineAddForceSelectMaxID only
+    // when required, i.e. when the external DB has just been modified
+    // by a third-party/legacy SQL process
+    property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
+      write fEngineAddUseSelectMaxID;
+    /// disable internal ID generation for INSERT
+    // - by default, a new ID will be set (either with 'select max(ID)' or via
+    // the OnEngineLockedNextID event)
+    // - define this property to TRUE so that no ID would be computed or set:
+    // in this case, the ID is expected to be supplied
+    property EngineAddIgnoreID: boolean read fEngineAddIgnoreID write fEngineAddIgnoreID;
+    /// define an alternate method of compute the ID for INSERT
+    // - by default, a new ID will be with 'select max(ID)', and an internal
+    // counter (unless EngineAddUseSelectMaxID is true)
+    // - you can specify a custom callback, which may compute the ID as
+    // expected (e.g. using a SQL sequence)
+    property OnEngineAddComputeID: TOnEngineAddComputeID read
+      fOnEngineAddComputeID write fOnEngineAddComputeID;
   end;
 
   /// A Virtual Table cursor for reading a TSQLDBStatement content
@@ -981,18 +1009,30 @@ begin
 end;
 
 function TSQLRestStorageExternal.EngineLockedNextID: TID;
-procedure RetrieveFromDB;
-// fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
-// (not all DB engines handle autoincrement feature - e.g. Oracle does not)
-var Rows: ISQLDBRows;
+
+  procedure RetrieveFromDB;
+  // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
+  // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
+  var Rows: ISQLDBRows;
+  begin
+    Rows := ExecuteDirect('select max(%) from %',
+      [StoredClassProps.ExternalDB.RowIDFieldName,fTableName],[],true);
+    if (Rows<>nil) and Rows.Step then
+      fEngineLockedMaxID := Rows.ColumnInt(0) else
+      fEngineLockedMaxID := 0;
+  end;
+
+var handled: boolean;
 begin
-  Rows := ExecuteDirect('select max(%) from %',
-    [StoredClassProps.ExternalDB.RowIDFieldName,fTableName],[],true);
-  if (Rows<>nil) and Rows.Step then
-    fEngineLockedMaxID := Rows.ColumnInt(0) else
-    fEngineLockedMaxID := 0;
-end;
-begin
+  if (self=nil) or fEngineAddIgnoreID then begin
+    result := 0;
+    exit;
+  end;
+  if Assigned(fOnEngineAddComputeID) then begin
+    result := fOnEngineAddComputeID(self,handled);
+    if handled then
+      exit;
+  end;
   if (fEngineLockedMaxID=0) or EngineAddUseSelectMaxID then
     RetrieveFromDB;
   inc(fEngineLockedMaxID);
