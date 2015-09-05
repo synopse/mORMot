@@ -1817,7 +1817,7 @@ function TSQLRestServerDB.InternalBatchStart(
 begin
   result := false; // means BATCH mode not supported
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
-    fAcquireExecution[execORMWrite].Safe.UnLock;
+    fAcquireExecution[execORMWrite].Safe.Lock;
     try
       if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) or (fBatchIDCount<>0) then
         raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
