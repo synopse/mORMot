@@ -351,7 +351,7 @@
       {$define ISDELPHIXE8}
     {$ifend}
     {$if CompilerVersion >= 30.0}
-      {$define ISDELPHIXE9}
+      {$define ISDELPHI10}
     {$ifend}
   {$ELSE}
     // Delphi 5 or older
