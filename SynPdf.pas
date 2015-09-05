@@ -2751,10 +2751,6 @@ function PdfRect(const Box: TPdfBox): TPdfRect; overload; {$ifdef HASINLINE}inli
 /// wrapper to create a temporary PDF box
 function PdfBox(Left, Top, Width, Height: Single): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
 
-/// return the number of glyphs in the supplied text
-// - work with MBCS strings
-function _GetCharCount(Text: PAnsiChar): integer;
-
 /// reverse char orders for every hebrew and arabic words
 // - just reverse all the chars in the supplied buffer
 procedure L2R(W: PWideChar; L: integer);
@@ -3192,7 +3188,7 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   SetLength(Data,L+1);
   D := pointer(Data);
   D^ := AnsiChar(pgcBookmark);
-  Move(pointer(aBookmarkName)^,D[1],L);
+  MoveFast(pointer(aBookmarkName)^,D[1],L);
   Windows.GdiComment(MetaHandle,L+1,D);
 end;
 
@@ -3206,7 +3202,7 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   D := pointer(Data);
   D[0] := AnsiChar(pgcOutline);
   D[1] := AnsiChar(aLevel);
-  Move(pointer(aTitle)^,D[2],L);
+  MoveFast(pointer(aTitle)^,D[2],L);
   Windows.GdiComment(MetaHandle,L+2,D);
 end;
 
@@ -3220,7 +3216,7 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   D := pointer(Data);
   D^ := AnsiChar(pgcLink);
   PRect(D+1)^ := aRect;
-  Move(pointer(aBookmarkName)^,D[1+sizeof(TRect)],L);
+  MoveFast(pointer(aBookmarkName)^,D[1+sizeof(TRect)],L);
   Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
 end;
 
@@ -4128,23 +4124,6 @@ begin
   result.Height := Height;
 end;
 
-function _GetCharCount(Text: PAnsiChar): integer;
-begin
-  if SysLocale.FarEast then begin
-    result := 0;
-    if Text<>nil then
-      while true do
-        if Text[result]=#0 then
-          break else
-        if not (Text[result] in LeadBytes) then
-          inc(result) else
-          if Text[result+1]=#0 then // avoid GPF
-            break else
-            inc(result,2);
-  end else
-    result := SynCommons.StrLen(pointer(Text));
-end;
-
 function CombineTransform(xform1, xform2: XFORM): XFORM;
 begin
   Result.eM11 := xform1.eM11 * xform2.eM11 + xform1.eM12 * xform2.eM21;
@@ -4203,6 +4182,7 @@ begin
   Result.eDy := fIntOffsetY;
 end;
 
+
 { TPdfWrite }
 
 function TPdfWrite.Add(c: AnsiChar): TPdfWrite;
@@ -4229,7 +4209,7 @@ begin
     inc(B,2);
   end else begin
     P := StrInt32(@t[15],Value);
-    Move(P^,B^,@t[15]-P);
+    MoveFast(P^,B^,@t[15]-P);
     inc(B,@t[15]-P);
   end;
   result := self;
@@ -4239,13 +4219,17 @@ function TPdfWrite.Add(const Text: RawByteString): TPdfWrite;
 var L: integer;
 begin
   if PtrInt(Text)<>0 then begin
-    L := PInteger(PtrInt(Text)-4)^; // fast L := length(Text)
+    {$ifdef HASINLINE}
+    L := length(Text);
+    {$else}
+    L := PInteger(PtrInt(Text)-4)^;
+    {$endif}
     if BEnd-B<=L then begin
       Save;
       inc(fDestStreamPosition,L);
       fDestStream.Write(pointer(Text)^,L);
     end else begin
-      Move(pointer(Text)^,B^,L);
+      MoveFast(pointer(Text)^,B^,L);
       inc(B,L);
     end;
   end;
@@ -4259,7 +4243,7 @@ begin
     inc(fDestStreamPosition,Len);
     fDestStream.Write(Text^,Len);
   end else begin
-    Move(Text^,B^,Len);
+    MoveFast(Text^,B^,Len);
     inc(B,Len);
   end;
   result := self;
@@ -4278,7 +4262,7 @@ begin
     Value := 0;
   StrUInt32(@t[15],Value);
   inc(DigitCount); // includes trailing t[15]=' '
-  Move(t[16-DigitCount],B^,DigitCount);
+  MoveFast(t[16-DigitCount],B^,DigitCount);
   inc(B,DigitCount);
   result := self;
 end;
@@ -4295,7 +4279,7 @@ begin
     if Buffer[L-1]='0' then // '3.00' -> '3'
       dec(L,3) else
       dec(L); // '3.40' -> '3.4'
-  Move(Buffer[1],B^,L);
+  MoveFast(Buffer[1],B^,L);
   inc(B,L);
   result := self;
 end;
@@ -4496,7 +4480,7 @@ begin
         dec(L,2) else // '3.40' -> '3.4 '
         else inc(L);  // '3.45' -> '3.45 '
     Buffer[L] := ' '; // append space at the end
-    Move(Buffer[1],B^,L);
+    MoveFast(Buffer[1],B^,L);
     inc(B,L);
   end;
   result := self;
@@ -4522,7 +4506,7 @@ begin
   str(Value:0:Decimals,Buffer);
   L := ord(Buffer[0])+1;
   Buffer[L] := ' '; // append space at the end
-  Move(Buffer[1],B^,L);
+  MoveFast(Buffer[1],B^,L);
   inc(B,L);
   result := self;
 end;
@@ -4611,7 +4595,7 @@ var tmp: array of WideChar; // faster than SynUnicode for a temp buffer
     i: integer;
 begin
   SetLength(tmp,L);
-  move(W^,tmp[0],L*2);
+  MoveFast(W^,tmp[0],L*2);
   dec(L);
   for i := 0 to L do
     W[i] := tmp[L-i];
@@ -4649,7 +4633,7 @@ procedure DefaultAppend;
 var tmpU: array of WideChar;
 begin
   SetLength(tmpU,L+1); // we need the text to be ending with #0
-  move(W^,tmpU[0],L*2);
+  MoveFast(W^,tmpU[0],L*2);
   AddUnicodeHexTextNoUniScribe(pointer(tmpU),WinAnsiTTF,false,Canvas);
 end;
 begin
@@ -4689,8 +4673,8 @@ begin
   max := L+2; // should be big enough
   SetLength(items,max);
   count := 0;
-  FillChar(AScriptControl, SizeOf(TScriptControl), 0);
-  FillChar(AScriptState, SizeOf(TScriptState), 0);
+  FillCharFast(AScriptControl, SizeOf(TScriptControl), 0);
+  FillCharFast(AScriptState, SizeOf(TScriptState), 0);
   if ScriptApplyDigitSubstitution(nil,@AScriptControl,@AScriptState) <> 0 then
     exit;
   if Canvas.RightToLeftText then
@@ -4913,7 +4897,7 @@ begin
   end else begin
     t[14] := ' ';
     P := StrInt32(@t[14],Value);
-    Move(P^,B^,@t[15]-P);
+    MoveFast(P^,B^,@t[15]-P);
     inc(B,@t[15]-P);
   end;
   result := self;
@@ -5211,7 +5195,7 @@ begin
   FScreenLogPixels := GetDeviceCaps(FDC, LOGPIXELSY);
   FCanvas := TPdfCanvas.Create(Self); // need FScreenLogPixels
   // retrieve true type fonts available for all charsets
-  FillChar(LFont, sizeof(LFont), 0);
+  FillCharFast(LFont, sizeof(LFont), 0);
   LFont.lfCharset := DEFAULT_CHARSET; // enumerate ALL fonts
   EnumFontFamiliesExW(FDC, LFont, @EnumFontsProcW, PtrInt(@FTrueTypeFonts), 0);
   QuickSortRawUTF8(FTrueTypeFonts,length(FTrueTypeFonts),nil,@StrIComp);
@@ -6164,13 +6148,13 @@ begin
   w := B.Width;
   h := B.Height;
   if ForceNoBitmapReuse then
-    fillchar(Hash,sizeof(Hash),0) else begin
+    FillCharFast(Hash,sizeof(Hash),0) else begin
     row := PERROW[B.PixelFormat];
     if row=0 then begin
       B.PixelFormat := pf24bit;
       row := 24;
     end;
-    fillchar(Hash,sizeof(Hash),row);
+    FillCharFast(Hash,sizeof(Hash),row);
     if B.Palette<>0 then begin
       nPals := 0;
       if (GetObject(B.Palette,sizeof(nPals),@nPals)<>0) and (nPals>0) then begin
@@ -6394,7 +6378,7 @@ end;
 procedure InitializeLogFontW(const aFontName: RawUTF8; aStyle: TFontStyles;
   var aFont: TLogFontW);
 begin
-  fillchar(AFont,sizeof(AFont),0);
+  FillCharFast(AFont,sizeof(AFont),0);
   with aFont do begin
     lfHeight := -1000;
     if fsBold in AStyle then
@@ -6470,7 +6454,7 @@ begin
   result := fDoc.GetRegisteredTrueTypeFont(FontIndex+1,AStyle,ACharSet);
   if result=nil then begin
     // a font of this kind is not already registered -> create it
-    fillchar(AFont,sizeof(AFont),0);
+    FillCharFast(AFont,sizeof(AFont),0);
     with AFont do begin
       lfHeight := -1000;
       if fsBold in AStyle then
@@ -7674,7 +7658,7 @@ begin
     SetLength(fUsedWide,fUsedWideChar.Count+100);
   n := fUsedWideChar.Count-1;
   if result<n then
-    Move(fUsedWide[result],fUsedWide[result+1],(n-result)*4);
+    MoveFast(fUsedWide[result],fUsedWide[result+1],(n-result)*4);
   // create associated Unicode Font if necessary
   if UnicodeFont=nil then
     CreateAssociatedUnicodeFont;
@@ -9371,7 +9355,7 @@ begin
 
   with obj[aLogFont^.ihFont-1] do begin
     kind := OBJ_FONT;
-    move(aLogFont^.elfw.elfLogFont,LogFont,sizeof(LogFont));
+    MoveFast(aLogFont^.elfw.elfLogFont,LogFont,sizeof(LogFont));
     LogFont.lfPitchAndFamily := TM.tmPitchAndFamily;
     if LogFont.lfOrientation<>0 then
       FontSpec.angle := LogFont.lfOrientation div 10 else // -360..+360
@@ -9627,7 +9611,7 @@ begin
         end;
         OBJ_FONT: begin
           font.spec := FontSpec;
-          move(LogFont,font.LogFont,sizeof(LogFont));
+          MoveFast(LogFont,font.LogFont,sizeof(LogFont));
         end;
       end;
   end;
@@ -9840,7 +9824,7 @@ begin
     with DC[nDC] do
     if not ClipRgnNull then begin
       MetaRgn := IntersectClipRect(ClipRgn, MetaRgn);
-      fillchar(ClipRgn,sizeof(ClipRgn),0);
+      FillCharFast(ClipRgn,sizeof(ClipRgn),0);
       ClipRgnNull := True;
     end;
   except
@@ -9975,7 +9959,7 @@ begin
   if R.emrtext.nChars>0 then
   with DC[nDC] do begin
     SetLength(tmp,R.emrtext.nChars+1); // faster than WideString for our purpose
-    Move(pointer(PtrUInt(@R)+R.emrtext.offString)^,tmp[0],R.emrtext.nChars*2);
+    MoveFast(pointer(PtrUInt(@R)+R.emrtext.offString)^,tmp[0],R.emrtext.nChars*2);
     ASignY := 1;
     ASignX := 1;
     if (Canvas.FWorldFactorY) < 0 then
@@ -10525,8 +10509,8 @@ begin
   L := Length(tmp);
   if L>SizeOf(dest) then
     L := SizeOf(dest) else
-    Move(PDF_PADDING,dest[L],SizeOf(dest)-L);
-  Move(pointer(tmp)^,dest,L);
+    MoveFast(PDF_PADDING,dest[L],SizeOf(dest)-L);
+  MoveFast(pointer(tmp)^,dest,L);
 end;
 const HASHSIZE: array[elRC4_40..elRC4_128] of integer = (5,16);
       DICT: array[elRC4_40..elRC4_128] of record V,R,L: integer end =
@@ -10575,7 +10559,7 @@ begin
     for i := 1 to 50 do
       MD5.Full(@Digest,sizeof(Digest),Digest);
   SetLength(fInternalKey,HASHSIZE[fLevel]);
-  move(Digest,fInternalKey[0],HASHSIZE[fLevel]);
+  MoveFast(Digest,fInternalKey[0],HASHSIZE[fLevel]);
   // calc fUserPass content
   case fLevel of
   elRC4_40: begin   // Algorithm 3.4 in PDF reference doc
@@ -10593,8 +10577,8 @@ begin
       RC4.Init(Digest2,SizeOf(Digest2));
       RC4.Encrypt(Digest,Digest,SizeOf(Digest));
     end;
-    Move(Digest,fUserPass,SizeOf(Digest));
-    Move(Digest,fUserPass[SizeOf(Digest)],SizeOf(Digest));
+    MoveFast(Digest,fUserPass,SizeOf(Digest));
+    MoveFast(Digest,fUserPass[SizeOf(Digest)],SizeOf(Digest));
   end;
   end;
   // add encryption dictionary object

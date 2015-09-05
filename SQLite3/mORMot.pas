@@ -28255,7 +28255,7 @@ end;
 function TSQLRecord.EnginePrepareMany(aClient: TSQLRest; const aFormatSQLJoin: RawUTF8;
   const aParamsSQLJoin, aBoundsSQLJoin: array of const;
   out ObjectsClass: TSQLRecordClassDynArray; out SQL: RawUTF8): RawUTF8;
-var aSQLFields, aSQLFrom, aSQLWhere: RawUTF8;
+var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
     aField: string[3];
     aMany: RawUTF8;
     f, n, i, SQLFieldsCount: Integer;
@@ -28425,7 +28425,8 @@ begin
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
   if aFormatSQLJoin<>'' then begin
     aSQLWhere := '';
-    JBeg := pointer(FormatUTF8(aFormatSQLJoin, aParamsSQLJoin));
+    aSQLJoin := FormatUTF8(aFormatSQLJoin, aParamsSQLJoin);
+    JBeg := pointer(aSQLJoin);
     repeat
       J := JBeg;
       while not (ord(J^) in IsIdentifier) do begin
