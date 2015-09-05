@@ -47635,17 +47635,19 @@ begin
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
       inc(PB,ord(PS^[0])+1);
-      inc(PB); // skip Version field (always 2)
+      inc(PB); // skip Version field (always 3)
       {$ifndef CPUARM}
       if PCallingConvention(P)^<>ccRegister then
          RaiseError('method shall use register calling convention',[]);
       {$endif}
       inc(PB,sizeOf(TCallingConvention));
+      P := AlignToPtr(P);// new Alignment
       aResultType := PTypeInfo(ppointer(P)^);
       inc(PP);
       inc(PW); // skip StackSize
       n := PB^;
       inc(PB);
+      P := AlignToPtr(P);// new Alignment
       if aResultType<>nil then  // we have a function
         SetLength(Args,n+1) else
         SetLength(Args,n);
@@ -47661,8 +47663,8 @@ begin
           ArgTypeName := @ArgTypeInfo^.Name;
       end;
       for a := 0 to n-1 do
-      with Args[a] do begin
-        f := PF^;
+      with Args[a],PVmtMethodParam(P)^ do begin
+        f := mORMot.TParamFlags(Flags);
         if pfVar in f then
           ValueDirection := smdVar else
         if pfOut in f then
@@ -47670,9 +47672,7 @@ begin
         ArgsNotResultLast := a;
         if ValueDirection<>smdConst then
           ArgsOutNotResultLast := a;
-        inc(PF);
-        P := AlignToPtr(P);
-        ArgTypeInfo := PTypeInfo(ppointer(P)^);
+          ArgTypeInfo := mORMot.PTypeInfo(ParamType);
         ArgTypeName := @ArgTypeInfo^.Name;
         if a>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
@@ -47685,13 +47685,10 @@ begin
              RaiseError('%: % parameter should be declared as const',
                [ParamName^,ArgTypeName^]);
         end;
-        inc(PP);
-        inc(PB);    // skip ParReg
-        inc(PB,SizeOf(LongInt)); // skip ParOff
-        if PS^='$self' then
+        if Name='$self' then
           ParamName := @CONST_PSEUDO_SELF_NAME else
-          ParamName := PS;
-        Inc(PB,ord(PS^[0])+1);
+          ParamName := @Name;
+        P := AlignToPtr(@Name[ord(Name[0])+1]);
       end;
       {$else FPC}
       PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
