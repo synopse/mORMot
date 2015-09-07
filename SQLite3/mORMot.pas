@@ -22002,6 +22002,7 @@ var f,i,len: integer;
     FieldPropInfo: TSQLPropInfo;
     FieldSize,FieldTableIndex: integer;
     U: PPUTF8Char;
+    tlog: TTimeLog;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
     raise ESQLTableException.CreateUTF8('%.CreateWithColumnTypes() called with % '+
@@ -22038,10 +22039,12 @@ begin
           if U^=nil then  // search for a non void column
             inc(U,FieldCount) else begin
             len := StrLen(U^);
-            if (len in [8,10]) and (cardinal(Iso8601ToTimeLogPUTF8Char(U^,len) shr 26)-1800<300) then
-              FieldType := sftDateTime else // e.g. YYYYMMDD date (Y=1800..2100)
-            if (len>=15) and (Iso8601ToTimeLogPUTF8Char(U^,len)<>0) then
-              FieldType := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
+            tlog := Iso8601ToTimeLogPUTF8Char(U^,len);
+            if tlog<>0 then
+              if (len in [8,10]) and (cardinal(tlog shr 26)-1800<300) then
+                FieldType := sftDateTime else // e.g. YYYYMMDD date (Y=1800..2100)
+              if len>=15 then
+                FieldType := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
             break;
           end;
       end else begin
