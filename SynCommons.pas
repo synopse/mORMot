@@ -34396,11 +34396,11 @@ begin
   if Kind<>dvArray then begin
     if dvoNameCaseSensitive in VOptions then begin
       for result := 0 to VCount-1 do
-        if IdemPropNameU(VName[result],aName) then
+        if VName[result]=aName then
           exit;
     end else
       for result := 0 to VCount-1 do
-        if VName[result]=aName then
+        if IdemPropNameU(VName[result],aName) then
           exit;
     result := -1;
   end else
