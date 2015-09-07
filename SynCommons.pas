@@ -44621,8 +44621,10 @@ begin
   if not result then
     exit;
   aText := fList[0];
-  if (aObject<>nil) and (fObjects<>nil) then
-    aObject^ := fObjects[0];
+  if aObject<>nil then
+    if fObjects<>nil then
+      aObject^ := fObjects[0] else
+      aObject^ := nil;
   Delete(0);
 end;
 
@@ -44634,8 +44636,10 @@ begin
     exit;
   ndx := fCount-1;
   aText := fList[ndx];
-  if (aObject<>nil) and (fObjects<>nil) then
-    aObject^ := fObjects[ndx];
+  if aObject<>nil then
+    if fObjects<>nil then
+      aObject^ := fObjects[ndx] else
+      aObject^ := nil;
   Delete(ndx);
 end;
 
@@ -45057,7 +45061,7 @@ function TRawUTF8ListHashedLocked.PopFirst(out aText: RawUTF8; aObject: PObject=
 begin
   fSafe.Lock;
   try
-    result := inherited PopFirst(aText);
+    result := inherited PopFirst(aText,aObject);
   finally
     fSafe.UnLock;
   end;
@@ -45067,11 +45071,12 @@ function TRawUTF8ListHashedLocked.PopLast(out aText: RawUTF8; aObject: PObject=n
 begin
   fSafe.Lock;
   try
-    result := inherited PopLast(aText);
+    result := inherited PopLast(aText,aObject);
   finally
     fSafe.UnLock;
   end;
 end;
+
 
 { TRawUTF8MethodList }
 
