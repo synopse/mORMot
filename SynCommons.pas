@@ -484,6 +484,7 @@ unit SynCommons;
   - new TDynArray.CopyFrom() method and associated procedure DynArrayCopy()
   - TDynArray will now recognize variant/interface fields
   - new TDynArray.FastLocateSorted FastAddSorted FastLocateOrAddSorted methods
+  - new TPendingTaskList class, for storing e.g. a time-ordered list of tasks
   - code refactoring of TTextWriter to simplify flushing mechanism, and
     allow internal buffer auto-grow if it was found out to be too small (see
     FlushToStream / FlushFinal methods and FlushToStreamNoAutoResize property)
@@ -4900,6 +4901,69 @@ type
   // - could be used to create instances using its virtual constructor
   TSynPersistentClass = class of TSynPersistent;
 
+
+  /// internal item definition, used by TPendingTaskList storage
+  TPendingTaskListItem = packed record
+    /// the task should be executed when TPendingTaskList.GetTimeStamp reaches
+    // this value  
+    TimeStamp: Int64;
+    /// the associated task, stored by representation as raw binary
+    Task: RawByteString;
+  end;
+  /// internal list definition, used by TPendingTaskList storage
+  TPendingTaskListItemDynArray = array of TPendingTaskListItem;
+
+  /// handle a list of tasks, stored as RawByteString, with a time stamp
+  // - internal time stamps would be GetTickCount64 by default, so have a
+  // resolution of about 16 ms under Windows
+  // - you can add tasks to the internal list, to be executed after a given
+  // delay, using a post/peek like algorithm
+  // - execution delays are not expected to be accurate, but are best guess,
+  // according to NextTask call
+  // - this implementation is thread-safe, thanks to the Safe internal locker
+  TPendingTaskList = class(TSynPersistent)
+  protected
+    fCount: Integer;
+    fTask: TPendingTaskListItemDynArray;
+    fTasks: TDynArray;
+    fSafe: TSynLocker;
+    function GetCount: integer;
+    function GetTimeStamp: Int64; virtual;
+  public
+    /// initialize the list memory and resources
+    constructor Create; override;
+    /// finaalize the list memory and resources
+    destructor Destroy; override;
+    /// append a task, specifying a delay in milliseconds from current time
+    procedure AddTask(aMilliSecondsDelayFromNow: integer; const aTask: RawByteString);
+    /// append several tasks, specifying a delay in milliseconds between tasks
+    // - first supplied delay would be computed from the current time, then
+    // it would specify how much time to wait between the next supplied task
+    procedure AddTasks(const aMilliSecondsDelays: array of integer;
+      const aTasks: array of RawByteString);
+    /// retrieve the next pending task
+    // - returns '' if there is no scheduled task available at the current time
+    // - returns the next stack as defined corresponding to its specified delay
+    function NextPendingTask: RawByteString;
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynlocker read fSafe;
+    /// access to the internal TPendingTaskListItem.TimeStamp stored value
+    // - corresponding to the current time
+    // - default implementation is to return GetTickCount64, with a 16 ms
+    // typical resolution under Windows
+    property TimeStamp: Int64 read GetTimeStamp;
+    /// how many pending tasks are currently defined
+    property Count: integer read GetCount;
+    /// direct low-level access to the internal task list
+    // - warning: this dynamic array length is the list capacity: use Count
+    // property to retrieve the exact number of stored items
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block for
+    // thread-safe access to this array
+    // - items are stored in increasing TimeStamp, i.e. the first item is
+    // the next one which would be returned by the NextPendingTask method
+    property Task: TPendingTaskListItemDynArray read fTask;
+  end;
 
   /// store one Name/Value pair, as used by TSynNameValue class
   TSynNameValueItem = record
@@ -44056,7 +44120,7 @@ begin
     {$elseif defined(VER270)}'Delphi XE6'
     {$elseif defined(VER280)}'Delphi XE7'
     {$elseif defined(VER290)}'Delphi XE8'
-    {$elseif defined(VER300)}'Delphi Seattle'
+    {$elseif defined(VER300)}'Delphi 10 Seattle'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
@@ -49640,6 +49704,96 @@ end;
 function TFakeWriterStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   result := Offset;
+end;
+
+
+{ TPendingTaskList }
+
+constructor TPendingTaskList.Create;
+begin
+  fSafe.Init;
+  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray),fTask,djInt64,@fCount);
+end;
+
+destructor TPendingTaskList.Destroy;
+begin
+  fSafe.Done;
+  inherited Destroy;
+end;
+
+function TPendingTaskList.GetTimeStamp: Int64;
+begin
+  result := GetTickCount64;
+end;
+
+procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;
+  const aTask: RawByteString);
+var item: TPendingTaskListItem;
+    ndx: integer;
+begin
+  item.TimeStamp := GetTimeStamp+aMilliSecondsDelayFromNow;
+  item.Task := aTask;
+  fSafe.Lock;
+  try
+    if fTasks.FastLocateSorted(item,ndx) then
+      inc(ndx); // always insert just after an existing timestamp
+    fTasks.FastAddSorted(ndx,item);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TPendingTaskList.AddTasks(
+  const aMilliSecondsDelays: array of integer;
+  const aTasks: array of RawByteString);
+var item: TPendingTaskListItem;
+    i,ndx: integer;
+begin
+  if length(aTasks)<>length(aMilliSecondsDelays) then
+    exit;
+  item.TimeStamp := GetTimeStamp;
+  fSafe.Lock;
+  try
+    for i := 0 to High(aTasks) do begin
+      inc(item.TimeStamp,aMilliSecondsDelays[i]);
+      item.Task := aTasks[i];
+      if fTasks.FastLocateSorted(item,ndx) then
+        inc(ndx); // always insert just after an existing timestamp
+      fTasks.FastAddSorted(ndx,item);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPendingTaskList.GetCount: integer;
+begin
+  if self=nil then
+    result := 0 else begin
+    fSafe.Lock;
+    try
+      result := fCount;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+function TPendingTaskList.NextPendingTask: RawByteString;
+begin
+  result := '';
+  if (self=nil) or (fCount=0) then
+    exit;
+  fSafe.Lock;
+  try
+    if fCount>0 then
+      if GetTimeStamp>=fTask[0].TimeStamp then begin
+        result := fTask[0].Task;
+        fTasks.FastDeleteSorted(0);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
