@@ -10210,7 +10210,7 @@ function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function
 function InterlockedIncrement(var I: Integer): Integer;
-  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifdef PUREPASCAL}{$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}{$endif}
 
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function
@@ -19655,7 +19655,7 @@ end;
 
 function InterlockedIncrement(var I: Integer): Integer;
 begin
-  {$ifdef MSWINDOWS} // AtomicIncrement() may not be available e.g. on Deplhi XE2
+  {$ifdef MSWINDOWS} // AtomicIncrement() may not be available e.g. on Delphi XE2
   result := Windows.InterlockedIncrement(I);
   {$else}
   result := AtomicIncrement(I);
@@ -19664,7 +19664,7 @@ end;
 
 function InterlockedDecrement(var I: Integer): Integer;
 begin
-  {$ifdef MSWINDOWS} // AtomicDecrement() may not be available e.g. on Deplhi XE2
+  {$ifdef MSWINDOWS} // AtomicDecrement() may not be available e.g. on Delphi XE2
   result := Windows.InterlockedDecrement(I);
   {$else}
   result := AtomicDecrement(I);
