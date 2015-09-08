@@ -2234,6 +2234,9 @@ type
   /// available options for JSONToObject() parsing process
   // - by default, function will fail if a JSON field name is not part of the
   // object published properties, unless j2oIgnoreUnknownProperty is defined
+  // - by default, function will check that the supplied JSON value would
+  // be a JSON string when the property is a string, unless j2oIgnoreStringType
+  // is defined and JSON numbers are accepted and stored as text
   // - by default, only simple kind of variant types (string/numbers) are
   // handled: set j2oHandleCustomVariants if you want to handle any custom -
   // in this case , it will handle direct JSON [array] of {object}: but if you
@@ -2245,7 +2248,7 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns
   TJSONToObjectOption = (
-    j2oIgnoreUnknownProperty,
+    j2oIgnoreUnknownProperty, j2oIgnoreStringType,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
     j2oSetterExpectsToFreeTempInstance);
   /// set of options for JSONToObject() parsing process
@@ -42318,24 +42321,25 @@ begin
             exit; // invalid value
           P^.SetOrdProp(Value,V);
         end;
-      {$ifdef FPC}tkAString,{$endif} tkLString:
-        if not wasString then
-          exit else begin
+      {$ifdef FPC}tkAString,{$endif} tkLString: 
+        if wasString or (j2oIgnoreStringType in Options) then begin
           SetString(U,PAnsiChar(PropValue),StrLen(PropValue));
           P^.SetLongStrValue(Value,U);
-        end;
+        end else
+          exit;
       {$ifdef UNICODE}
       tkUString:
-        if not wasString then
-          exit else
-          P^.SetUnicodeStrProp(Value,UTF8DecodeToUnicodeString(PropValue,StrLen(PropValue)));
+        if wasString or (j2oIgnoreStringType in Options) then
+          P^.SetUnicodeStrProp(Value,
+            UTF8DecodeToUnicodeString(PropValue,StrLen(PropValue))) else
+          exit;
       {$endif}
       tkWString:
-        if not wasString then
-          exit else begin
+        if wasString or (j2oIgnoreStringType in Options) then begin
           UTF8ToWideString(PropValue,StrLen(PropValue),WS);
           P^.SetWideStrProp(Value,WS);
-        end;
+        end else
+          exit;
       {$ifdef PUBLISHRECORD}
       tkRecord{$ifdef FPC},tkObject{$endif}:
         if not wasString then

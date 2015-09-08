@@ -688,7 +688,7 @@ begin
     if Ctxt.URIBlobFieldName='' then
       exit;
     value.InitObjectFromPath(Ctxt.URIBlobFieldName,Ctxt.Input['value']);
-    JsonToObject(self,pointer(value.ToJSON),valid); // will update a single field
+    JsonToObject(self,pointer(value.ToJSON),valid,nil,[j2oIgnoreStringType]); 
     if not valid then begin
       Ctxt.Error('Invalid input [%] - expected %',[variant(value),
         RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ')]);
