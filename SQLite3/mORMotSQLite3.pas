@@ -1817,19 +1817,13 @@ function TSQLRestServerDB.InternalBatchStart(
 begin
   result := false; // means BATCH mode not supported
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
-    fAcquireExecution[execORMWrite].Safe.Lock;
-    try
-      if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) or (fBatchIDCount<>0) then
-        raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
-      fBatchMethod := method;
-      fBatchOptions := BatchOptions;
-      fBatchTableIndex := -1;
-      fBatchIDMax := 0; // MainEngineAdd() will search for max(id)
-      result := true; // means BATCH mode is supported
-    finally
-      if not result then
-        fAcquireExecution[execORMWrite].Safe.UnLock;
-    end;
+    if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) or (fBatchIDCount<>0) then
+      raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
+    fBatchMethod := method;
+    fBatchOptions := BatchOptions;
+    fBatchTableIndex := -1;
+    fBatchIDMax := 0; // MainEngineAdd() will search for max(id)
+    result := true; // means BATCH mode is supported
   end;
 end;
 
@@ -1976,7 +1970,6 @@ begin
     fBatchValues := nil;
     fBatchIDCount := 0;
     fBatchID := nil;
-    fAcquireExecution[execORMWrite].Safe.UnLock;
   end;
 end;
 

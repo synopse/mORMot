@@ -37648,7 +37648,8 @@ begin
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
   Count := 0;
-  try // to protect automatic transactions
+  fAcquireExecution[execORMWrite].fSafe.Lock; // multi thread protection 
+  try // to protect automatic transactions and global write lock
   try // to protect InternalBatchStart/Stop locking
     repeat // main loop: process one POST/PUT/DELETE per iteration
       // retrieve method name and associated (static) table
@@ -37822,6 +37823,7 @@ begin
   finally
     if RunningBatchRest<>nil then
       RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
+    fAcquireExecution[execORMWrite].fSafe.UnLock;
   end;
   except
     on Exception do begin
