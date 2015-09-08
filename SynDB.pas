@@ -29,10 +29,11 @@ unit SynDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alexander (volax)
   - Alfred Glaenzer (alf)
   - delphinium
   - Joe (at jokusoftware)
-  - Alexander (volax)
+  - Maciej Izak (hnb)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -4629,14 +4630,16 @@ end;
 
 function TSQLDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   action: TSQLDBSharedTransactionAction): TSQLDBConnection;
-procedure SetResultToSameConnection(index: integer);
-begin
-  result := ThreadSafeConnection;
-  if result<>fSharedTransactions[index].Connection then
-    raise ESQLDBException.CreateUTF8(
-      '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
-        [self,SessionID,result,fSharedTransactions[index].Connection]);
-end;
+
+  procedure SetResultToSameConnection(index: integer);
+  begin
+    result := ThreadSafeConnection;
+    if result<>fSharedTransactions[index].Connection then
+      raise ESQLDBException.CreateUTF8(
+        '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
+          [self,SessionID,result,fSharedTransactions[index].Connection]);
+  end;
+  
 var i,n: integer;
 begin
   n := Length(fSharedTransactions);
@@ -4671,6 +4674,8 @@ begin
         raise ESQLDBException.CreateUTF8(
           '%.SharedTransaction(sessionID=%) already started for sessionID=%',
           [self,SessionID,fSharedTransactions[i].SessionID]);
+      if not result.Connected then
+        result.Connect;
       result.StartTransaction;
       SetLength(fSharedTransactions,n+1);
       fSharedTransactions[n].SessionID := SessionID;
