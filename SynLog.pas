@@ -50,7 +50,7 @@ unit SynLog;
     been changed into a RawUTF8, to please all supported platforms and compilers
   - WARNING: any user of the framework in heavy-loaded multi-threaded application
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
-  - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Windows target platform only)
+  - Delphi XE4/XE5/XE6/XE7/XE8/10Seattle compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix

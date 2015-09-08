@@ -385,9 +385,9 @@ unit SynCommons;
     handle any Unicode content as expected
   - RawByteString is now defined as "= type AnsiString" under non Unicode Delphi
     so that it would be recognized with its own encoding (pseudo code page 65535)
-  - Delphi XE4/XE5/XE6/XE7/XE8 compatibility (Win32/Win64 target platform only
-    for the SynCommons and mORMot* units, but see SynCrossPlatform* units for
-    clients on all other targets, including OSX and the NextGen compilers)
+  - Delphi XE4/XE5/XE6/XE7/XE8/10Seatttle compatibility (Win32/Win64 target
+    platforms only for the SynCommons and mORMot* units, but SynCrossPlatform* 
+    supports clients on all other targets, including OSX and NextGen compilers)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
     kind varString and type RawUTF8 - prior to Delphi 2009, ensure you call
