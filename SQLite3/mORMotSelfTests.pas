@@ -145,7 +145,7 @@ begin
   AddCase(TTestBidirectionalRemoteConnection);
   AddCase(TTestExternalDatabase);
   AddCase(TTestMultiThreadProcess);
-  AddCase(TTestDDDSharedUnits);
+  AddCase([TTestDDDSharedUnits,TTestDDDMultiThread]);
   //exit; // *)
 end;
 {$endif DELPHI5OROLDER}
