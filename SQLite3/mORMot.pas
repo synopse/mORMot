@@ -42015,6 +42015,7 @@ var P: PPropInfo;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     DocVariantOptionsSet: TDocVariantOptions;
+label doProp;
     {$endif}
 begin
   Valid := false;
@@ -42268,6 +42269,10 @@ begin
         if From=nil then
           exit; // invalid '[dynamic array]' content
       end else
+      {$ifndef NOVARIANTS}
+      if Kind=tkVariant then
+        goto doProp else
+      {$endif}
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         repeat inc(From) until not (From^ in [#1..' ']);
         V := 0;
@@ -42318,8 +42323,9 @@ begin
       if From^ in EndOfJSONField then
         inc(From);
     end else begin
-      // normal property value
-      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject);
+doProp: // normal property value
+      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject
+        {$ifndef NOVARIANTS},Kind=tkVariant{$endif});
       if (PropValue=nil) or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content (null has been handled above)
       case Kind of
@@ -47095,7 +47101,7 @@ begin
   try
     F := @InterfaceFactoryCache.List[0];
     for i := 1 to InterfaceFactoryCache.Count do
-      if F^.fInterfaceTypeInfo=aInterface then begin
+       if F^.fInterfaceTypeInfo=aInterface then begin
         result := F^;
         exit; // retrieved from cache
       end else

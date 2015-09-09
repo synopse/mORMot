@@ -7215,7 +7215,7 @@ type
     /// initialize the instance
     constructor Create(aInfo: pointer);
     /// the associated information of this instance
-    // - may be a PTypeInfo value, when caching RTTI information
+    // - may be e.g. a PTypeInfo value, when caching RTTI information
     property Info: pointer read fInfo write fInfo;
   end;
   /// a reference to a TPointerClassHashed instance
@@ -17129,7 +17129,7 @@ begin
     case VType of
     varEmpty,varNull:
       result := ''; // default VariantToUTF8(null)='null'
-    {$ifdef HASVARUSTRING}
+    {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
     varUString:
       result := UnicodeString(VAny);
     else
