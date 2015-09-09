@@ -5828,6 +5828,20 @@ type
     // - will serialize the supplied exception, with an optional error message
     procedure Error(E: Exception; const Format: RawUTF8; const Args: array of const;
       Status: integer=HTML_BADREQUEST); overload;
+    /// implements a method-based service for live update of some settings
+    // - should be called from a method-based service, e.g. Configuration()
+    // - the settings are expected to be stored e.g. in a TSynAutoCreateFields
+    // instance, potentially with nested objects
+    // - accept the following REST methods to read and write the settings:
+    // ! GET http://server:888/root/configuration
+    // ! GET http://server:888/root/configuration/propname
+    // ! GET http://server:888/root/configuration/propname?value=propvalue
+    // - could be used e.g. as such:
+    // ! procedure TMyRestServerMethods.Configuration(Ctxt: TSQLRestServerURIContext);
+    // ! begin //  http://server:888/myrestserver/configuration/name?value=newValue
+    // !   Ctxt.ConfigurationRestMethod(fSettings);
+    // ! end;
+    procedure ConfigurationRestMethod(SettingsStorage: TObject);
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overridden
     // - as input, method should be the method name to be executed,
@@ -34997,6 +35011,29 @@ begin
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
     end;
+end;
+
+procedure TSQLRestServerURIContext.ConfigurationRestMethod(SettingsStorage: TObject);
+var value: TDocVariantData;
+    valid: boolean;
+    config: variant;
+begin
+  URIBlobFieldName := StringReplaceChars(URIBlobFieldName,'/','.');
+  if InputExists['value'] then begin
+    if URIBlobFieldName='' then
+      exit;
+    value.InitObjectFromPath(URIBlobFieldName,Input['value']);
+    JsonToObject(SettingsStorage,pointer(value.ToJSON),valid,nil,[j2oIgnoreStringType]);
+    if not valid then begin
+      Error('Invalid input [%] - expected %',[variant(value),
+        RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ')]);
+      exit;
+    end;
+  end;
+  ObjectToVariant(SettingsStorage,config);
+  if URIBlobFieldName<>'' then
+    config := TDocVariantData(config).GetValueByPath(URIBlobFieldName);
+  ReturnsJson(config,HTML_SUCCESS,true,twJsonEscape,true);
 end;
 
 procedure StatsAddSizeForCall(Stats: TSynMonitorInputOutput; const Call: TSQLRestURIParams);
