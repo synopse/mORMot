@@ -35026,7 +35026,7 @@ begin
     JsonToObject(SettingsStorage,pointer(value.ToJSON),valid,nil,[j2oIgnoreStringType]);
     if not valid then begin
       Error('Invalid input [%] - expected %',[variant(value),
-        RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ')]);
+        RawUTF8ArrayToCSV(ClassFieldNamesAllProps(SettingsStorage.ClassType,true),', ')]);
       exit;
     end;
   end;

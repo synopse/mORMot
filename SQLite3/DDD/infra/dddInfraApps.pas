@@ -305,7 +305,7 @@ type
   end;
 
   /// implements IDDDSocket using a SynCrtSock.TCrtSocket instance
-  // - used by TDDDSocketThread for its default network communication
+  // - used e.g. by TDDDSocketThread for its default network communication
   // - this class will also create two mutexes, one for DataIn/DataInPending,
   // another for DataOut thread-safe process
   TDDDSynCrtSocket = class(TInterfacedObjectLocked,IDDDSocket)
