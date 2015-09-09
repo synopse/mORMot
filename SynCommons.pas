@@ -17129,7 +17129,7 @@ begin
     case VType of
     varEmpty,varNull:
       result := ''; // default VariantToUTF8(null)='null'
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     varUString:
       result := UnicodeString(VAny);
     else
@@ -33202,7 +33202,6 @@ function TSynInvokeableVariantType.SetProperty(const V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
 {$endif}
 var ValueSet: TVarData;
-    WS: PWideString;
     PropName: PAnsiChar;
 {$ifdef UNICODE}
     Buf: array[byte] of AnsiChar; // to avoid heap allocation
@@ -33214,10 +33213,21 @@ begin
 {$else}
   PropName := pointer(Name);
 {$endif}
+  ValueSet.VString := nil; // to avoid GPF in RawUTF8(ValueSet.VString) below
   if Value.VType=varByRef or varOleStr then
-    WS := Value.VPointer else
+    RawUnicodeToUtf8(PPointer(Value.VAny)^,length(PWideString(Value.VAny)^),
+      RawUTF8(ValueSet.VString)) else
   if Value.VType=varOleStr then
-    WS := @Value.VPointer else
+    RawUnicodeToUtf8(Value.VAny,length(WideString(Value.VAny)),
+      RawUTF8(ValueSet.VString)) else
+  {$ifdef HASVARUSTRING}
+  if Value.VType=varByRef or varUString then
+    RawUnicodeToUtf8(PPointer(Value.VAny)^,length(PUnicodeString(Value.VAny)^),
+      RawUTF8(ValueSet.VString)) else
+  if Value.VType=varUString then
+    RawUnicodeToUtf8(Value.VAny,length(UnicodeString(Value.VAny)),
+      RawUTF8(ValueSet.VString)) else
+  {$endif}
   if SetVariantUnRefSimpleValue(variant(Value),ValueSet) then begin
     IntSet(V,ValueSet,PropName);
     result := true;
@@ -33227,10 +33237,8 @@ begin
     result := true;
     exit;
   end;
-  ValueSet.VType := varString; // unpatched RTL do not like WideString values
-  ValueSet.VString := nil; // to avoid GPF in RawUTF8(ValueSet.VString) below
-  RawUnicodeToUtf8(pointer(WS^),length(WS^),RawUTF8(ValueSet.VString));
-  try
+  try // unpatched RTL does not like Unicode values :( -> transmit a RawUTF8
+    ValueSet.VType := varString;
     IntSet(V,ValueSet,PropName);
   finally
     RawUTF8(ValueSet.VString) := ''; // avoid memory leak
