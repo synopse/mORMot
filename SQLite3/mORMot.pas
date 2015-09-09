@@ -16627,7 +16627,8 @@ type
     // - is a wrapper around TSQLRestBatch.Update() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread safe
     // - this method will call BeforeUpdateEvent before TSQLRestBatch.Update
-    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[]): integer;
+    function BatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): integer;
     /// delete a member in current BATCH sequence
     // - is a wrapper around TSQLRestBatch.Update() which will be stored in this
     // TSQLRestClientURI instance - be aware that this won't be thread safe
@@ -33278,12 +33279,12 @@ begin
 end;
 
 function TSQLRestClientURI.BatchUpdate(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits=[]): integer;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self=nil) or (Value=nil) or (fBatchCurrent=nil) or (Value.fID<=0) or
      not BeforeUpdateEvent(Value) then
     result := -1 else
-    result := fBatchCurrent.Update(Value,CustomFields);
+    result := fBatchCurrent.Update(Value,CustomFields,DoNotAutoComputeFields);
 end;
 
 function TSQLRestClientURI.BatchSend(var Results: TIDDynArray): integer;
