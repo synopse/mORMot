@@ -1171,8 +1171,9 @@ unit mORMot;
     - added TSQLRestServerAuthentication.Options, e.g. saoUserByLogonOrID to
       allow login via TSQLAuthUser.ID in addition to LogonName
     - return also "logongroup":TSQLAuthGroup.ID on successful authentication
-    - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck
-      to disable the session timestamp check during URI signature authentication
+    - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck and
+      TimeStampCoherencySeconds properties to tune or disable the session
+      timestamp check during URI signature authentication (default to 5 seconds)
     - new TSQLRestServerAuthenticationNone weak but simple method
     - force almost-random session ID for TSQLRestServer to avoid collision
       after server restart
@@ -13700,8 +13701,11 @@ type
   TSQLRestServerAuthenticationSignedURI = class(TSQLRestServerAuthenticationURI)
   protected
     fNoTimeStampCoherencyCheck: Boolean;
+    fTimeStampCoherencySeconds: cardinal;
     procedure SetNoTimeStampCoherencyCheck(value: boolean);
   public
+    /// initialize the authentication method to a specified server
+    constructor Create(aServer: TSQLRestServer); override;
     /// will check URI-level signature
     // - check session_signature=... parameter to be a valid digital signature
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
@@ -13712,7 +13716,8 @@ type
       var Call: TSQLRestURIParams); override;
     /// allow any order when creating sessions
     // - by default, signed sessions are expected to be sequential, and new
-    // signed session signature can't be older in time than the last one
+    // signed session signature can't be older in time than the last one,
+    // with a tolerance of TimeStampCoherencySeconds
     // - but if your client is asynchronous (e.g. for AJAX requests), session
     // may be rejected due to the delay involved on the client side: you can set
     // this property to TRUE to enabled a weaker but more tolerant behavior
@@ -13720,6 +13725,14 @@ type
     // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
     property NoTimeStampCoherencyCheck: Boolean read fNoTimeStampCoherencyCheck
       write SetNoTimeStampCoherencyCheck;
+    /// time tolerance in seconds for the signature timestamps coherency check
+    // - by default, signed sessions are expected to be sequential, and new
+    // signed session signature can't be older in time than the last one,
+    // with a tolerance time defined by this property
+    // - default value is 5 seconds, which cover most kind of clients (AJAX or
+    // WebSockets), even over a slow Internet connection
+    property TimeStampCoherencySeconds: cardinal read fTimeStampCoherencySeconds
+      write fTimeStampCoherencySeconds;
   end;
 
   /// mORMot secure RESTful authentication scheme
@@ -34906,6 +34919,10 @@ end;
 procedure TSQLRestServerURIContext.AuthenticationFailed(
   Reason: TNotifyAuthenticationFailedReason);
 begin
+  {$ifdef WITHLOG}
+  Log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',[GetEnumName(
+    TypeInfo(TNotifyAuthenticationFailedReason),ord(Reason))^,Call^.Url,Session],self);
+  {$endif}
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
   // which is not what we used, so here we won't send 401 error code but 403
   Call.OutStatus := HTML_FORBIDDEN;
@@ -45658,6 +45675,12 @@ end;
 // Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
 //             Hexa8(TimeStamp)+url))
 
+constructor TSQLRestServerAuthenticationSignedURI.Create(aServer: TSQLRestServer);
+begin
+  inherited Create(aServer);
+  fTimeStampCoherencySeconds := 5;
+end;
+
 procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(value: boolean);
 begin
   if self<>nil then
@@ -45666,7 +45689,7 @@ end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
   Ctxt: TSQLRestServerURIContext): TAuthSession;
-var aTimeStamp, aSignature: cardinal;
+var aTimeStamp, aSignature, aExpectedSignature: cardinal;
     PTimeStamp: PAnsiChar;
     aURLlength: Integer;
 begin
@@ -45680,12 +45703,28 @@ begin
   aURLlength := Ctxt.URISessionSignaturePos-1;
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
-     (fNoTimeStampCoherencyCheck or (aTimeStamp>=result.fLastTimeStamp)) and
-     HexDisplayToCardinal(PTimeStamp+8,aSignature) and
-     (crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
-       pointer(Ctxt.Call^.url),aURLlength)=aSignature) then
-    result.fLastTimeStamp := aTimeStamp else
-    result := nil; // invalid signature
+     (fNoTimeStampCoherencyCheck or (result.fLastTimeStamp=0) or
+      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencySeconds)) then begin
+    aExpectedSignature := crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
+      pointer(Ctxt.Call^.url),aURLlength);
+    if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
+       (aSignature=aExpectedSignature) then begin
+      if aTimeStamp>result.fLastTimeStamp then
+        result.fLastTimeStamp := aTimeStamp;
+      exit;
+    end else begin
+      {$ifdef WITHLOG}
+      Ctxt.Log.Log(sllUserAuth,'Invalid Signature: expected %, got %',
+        [Int64(aExpectedSignature),Int64(aSignature)],self);
+      {$endif}
+    end;
+  end else begin
+    {$ifdef WITHLOG}
+    Ctxt.Log.Log(sllUserAuth,'Invalid TimeStamp: expected >=%, got %',
+      [result.fLastTimeStamp-fTimeStampCoherencySeconds,aTimeStamp],self);
+    {$endif}
+  end;
+  result := nil; // indicates invalid signature
 end;
 
 class procedure TSQLRestServerAuthenticationSignedURI.ClientSessionSign(
