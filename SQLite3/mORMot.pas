@@ -4074,6 +4074,10 @@ function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
 // - will optionally append the property type to the name, e.g 'Age: integer'
 function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean=false): TRawUTF8DynArray;
 
+/// retrieve the field names of all published properties of a class
+// - will optionally append the property type to the name, e.g 'Age: integer'
+function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false): RawUTF8;
+
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
@@ -18118,6 +18122,11 @@ begin
     if IncludePropType then
       result[i] := FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name]) else
       result[i] := props[i]^.Name;
+end;
+
+function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false): RawUTF8;
+begin
+  result := RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ');
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -35044,7 +35053,7 @@ begin
     JsonToObject(SettingsStorage,pointer(value.ToJSON),valid,nil,[j2oIgnoreStringType]);
     if not valid then begin
       Error('Invalid input [%] - expected %',[variant(value),
-        RawUTF8ArrayToCSV(ClassFieldNamesAllProps(SettingsStorage.ClassType,true),', ')]);
+        ClassFieldNamesAllPropsAsText(SettingsStorage.ClassType,true)]);
       exit;
     end;
   end;
@@ -44583,16 +44592,24 @@ begin
           HR(P);
           P^.GetDynArray(Value,dyn);
           if dyn.IsObjArray then begin
-            inc(fHumanReadableLevel);
-            Add('[');
-            for c := 0 to dyn.Count-1 do begin
-              WriteObject(PPointerArray(dyn.Value^)^[c],Options);
-              Add(',');
+            if dyn.Count=0 then begin
+              if woHumanReadableEnumSetAsComment in Options then
+                CustomComment := FormatUTF8('array of {%}',[
+                  ClassFieldNamesAllPropsAsText(
+                    P^.DynArrayIsObjArrayInstance^.ItemClass,true)]);
+              Add('[',']');
+            end else begin
+              inc(fHumanReadableLevel);
+              Add('[');
+              for c := 0 to dyn.Count-1 do begin
+                WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+                Add(',');
+              end;
+              CancelLastComma;
+              dec(fHumanReadableLevel);
+              HR;
+              Add(']');
             end;
-            CancelLastComma;
-            dec(fHumanReadableLevel);
-            HR;
-            Add(']');
           end else
             AddDynArrayJSON(dyn);
         end;
