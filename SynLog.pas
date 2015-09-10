@@ -50,6 +50,7 @@ unit SynLog;
     been changed into a RawUTF8, to please all supported platforms and compilers
   - WARNING: any user of the framework in heavy-loaded multi-threaded application
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
+  - all logged timestamps are now in UTC
   - Delphi XE4/XE5/XE6/XE7/XE8/10Seattle compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
@@ -3235,15 +3236,17 @@ var WithinEvents: boolean;
     P: PUTF8Char;
     L: Integer;
     {$endif}
-procedure NewLine;
-begin
-  if WithinEvents then begin
-    fWriter.AddEndOfLine(sllNewRun);
-    LogCurrentTime;
-    fWriter.AddShort(LOG_LEVEL_TEXT[sllNewRun]);
-  end else
-    fWriter.Add(#13);
-end;
+    
+  procedure NewLine;
+  begin
+    if WithinEvents then begin
+      fWriter.AddEndOfLine(sllNewRun);
+      LogCurrentTime;
+      fWriter.AddShort(LOG_LEVEL_TEXT[sllNewRun]);
+    end else
+      fWriter.Add(#13);
+  end;
+
 begin
   WithinEvents := fWriter.WrittenBytes>0;
   // array of const is buggy under Delphi 5 :( -> use fWriter.Add*() below
@@ -3305,7 +3308,7 @@ begin
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');
-    AddDateTime(Now);
+    AddDateTime(NowUTC);
     if WithinEvents then
       AddEndOfLine(sllNone) else
       Add(#13,#13);

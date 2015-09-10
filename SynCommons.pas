@@ -6402,7 +6402,7 @@ type
     procedure AddChars(aChar: AnsiChar; aCount: integer);
     /// append an Integer Value as a 2 digits String with comma
     procedure Add2(Value: integer);
-    /// append the current date and time, in a log-friendly format
+    /// append the current UTC date and time, in a log-friendly format
     // - e.g. append '20110325 19241502 '
     // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentLogTime;
@@ -39313,7 +39313,7 @@ begin
 end;
 
 var // can be safely made global since timing is multi-thread safe
-  GlobalTime: TSystemTime;
+  GlobalTimeUTC: TSystemTime;
   GlobalClock: cardinal;
 
 procedure TTextWriter.AddCurrentLogTime;
@@ -39325,10 +39325,10 @@ begin
   Ticks := GetTickCount; // this call is very fast (just one integer mul)
   if GlobalClock<>Ticks then begin // typically in range of 10-16 ms
     GlobalClock := Ticks;
-    GetLocalTime(GlobalTime); // avoid slower API call
+    GetSystemTime(GlobalTimeUTC); // avoid slower API call
   end;
-  YearToPChar({$ifdef MSWINDOWS}GlobalTime.wYear{$else}GlobalTime.Year{$endif},B);
-  with GlobalTime do begin
+  YearToPChar({$ifdef MSWINDOWS}GlobalTimeUTC.wYear{$else}GlobalTimeUTC.Year{$endif},B);
+  with GlobalTimeUTC do begin
     PWord(B+4)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMonth{$else}Month{$endif}];
     PWord(B+6)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wDay{$else}Day{$endif}];
     B[8] := ' ';
