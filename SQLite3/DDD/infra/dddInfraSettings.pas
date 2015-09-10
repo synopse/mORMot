@@ -503,6 +503,8 @@ begin
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
+    if Log.RotateFileCount<=0 then
+      HighResolutionTimeStamp := true;
     FileExistsAction := acAppend;
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;

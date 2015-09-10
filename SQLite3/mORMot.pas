@@ -44367,6 +44367,7 @@ var P: PPropInfo;
     WS: WideString;
     tmp: RawByteString;
     dyn: TDynArray;
+    dynObjArray: PClassInstance;
     {$ifndef NOVARIANTS}
     VVariant: variant;
     {$endif}
@@ -44591,12 +44592,12 @@ begin
         tkDynArray: begin
           HR(P);
           P^.GetDynArray(Value,dyn);
-          if dyn.IsObjArray then begin
+          dynObjArray := P^.DynArrayIsObjArrayInstance;
+          if dynObjArray<>nil then begin
             if dyn.Count=0 then begin
               if woHumanReadableEnumSetAsComment in Options then
                 CustomComment := FormatUTF8('array of {%}',[
-                  ClassFieldNamesAllPropsAsText(
-                    P^.DynArrayIsObjArrayInstance^.ItemClass,true)]);
+                  ClassFieldNamesAllPropsAsText(dynObjArray^.ItemClass,true)]);
               Add('[',']');
             end else begin
               inc(fHumanReadableLevel);
