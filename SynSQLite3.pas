@@ -3717,6 +3717,7 @@ begin // JsonHas(VariantField,'PropName') returns TRUE if matches a JSON object 
   end;
 end;
 
+{$ifndef NOVARIANTS}
 procedure InternalJsonSet(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 var doc: TDocVariantData;
@@ -3744,6 +3745,7 @@ begin // JsonSet(VariantField,'PropName','abc') to set a value
     end;
   end;
 end;
+{$endif}
 
 constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8='';
   aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
@@ -4374,7 +4376,9 @@ begin
   // JSON related functions (ORM would store a variant as JSON UTF-8 text)
   sqlite3.create_function(DB,'JSONGET',2,SQLITE_ANY,nil,InternalJsonGet,nil,nil);
   sqlite3.create_function(DB,'JSONHAS',2,SQLITE_ANY,nil,InternalJsonHas,nil,nil);
+  {$ifndef NOVARIANTS}
   sqlite3.create_function(DB,'JSONSET',3,SQLITE_ANY,nil,InternalJsonSet,nil,nil);
+  {$endif}
   // reallocate all TSQLDataBaseSQLFunction for re-Open (TSQLRestServerDB.Backup)
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);

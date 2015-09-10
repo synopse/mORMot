@@ -7066,14 +7066,15 @@ function ObjectToJSON(Value: TObject;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
+{$ifndef NOVARIANTS}
 /// will convert any TObject into a TDocVariant document instance
 // - just a wrapper around Dest := _JsonFast(ObjectToJSON(Value))
 // - this would convert the TObject by representation, using only serializable
 // published properties: do not use this function to store temporary a class
 // instance, but e.g. to store an object values in a NoSQL database
-// - would be used e.g. by VarRecToVariant() function 
+// - would be used e.g. by VarRecToVariant() function
 procedure ObjectToVariant(Value: TObject; var Dest: variant);
-
+{$endif}
 
 type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
