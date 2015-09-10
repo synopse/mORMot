@@ -10460,7 +10460,8 @@ type
     // $ Add(10,20)=[30],
     // or, if WasError is TRUE:
     // $ Divide(20,0) error "divide by zero",
-    procedure AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts);
+    procedure AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts;
+      SepChar: AnsiChar=',');
   end;
 
   /// used to keep track of all stubbed methods calls
@@ -10504,8 +10505,7 @@ type
     procedure IntSetOptions(Options: TInterfaceStubOptions); virtual;
     procedure IntCheckCount(aMethodIndex, aComputed: cardinal; aOperator: TSQLQueryOperator; aCount: cardinal);
     function IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
-      aScope: TInterfaceStubLogLayouts): RawUTF8;
-    function GetLogAsText: RawUTF8;
+      aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
     function GetLogHash: cardinal;
     /// low-level internal constructor
     constructor Create(aFactory: TInterfaceFactory;
@@ -10748,7 +10748,7 @@ type
     /// the stubbed method execution trace converted as text
     // - typical output is a list of calls separated by commas:
     // $ Add(10,20)=[30],Divide(20,0) error "divide by zero"
-    property LogAsText: RawUTF8 read GetLogAsText;
+    function LogAsText(SepChar: AnsiChar=','): RawUTF8;
     /// returns the last created TInterfacedObject instance
     // - e.g. corresponding to the out aStubbedInterface parameter of Create()
     property LastInterfacedObjectFake: TInterfacedObject read fLastInterfacedObjectFake;
@@ -34909,7 +34909,7 @@ begin
       result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication else
     if (Table<>nil) and (Method in Server.fBypassORMAuthentication)  then
       // allow by-pass for a set of HTTP verbs (e.g. mGET)
-      result := true; 
+      result := true;
   end else begin // default unique session if authentication is not enabled
     Session := CONST_AUTHENTICATION_NOT_USED;
     result := true;
@@ -47997,7 +47997,8 @@ begin
     result := CustomResults;
 end;
 
-procedure TInterfaceStubLog.AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts);
+procedure TInterfaceStubLog.AddAsText(WR: TTextWriter; aScope: TInterfaceStubLogLayouts;
+  SepChar: AnsiChar=',');
 begin
   if wName in aScope then
     WR.AddString(Method^.URI);
@@ -48018,7 +48019,7 @@ begin
       WR.AddString(Method^.DefaultResult) else
       WR.AddString(CustomResults);
   end;
-  WR.Add(',');
+  WR.Add(SepChar);
 end;
 
 constructor TOnInterfaceStubExecuteParamsAbstract.Create(aSender: TInterfaceStub;
@@ -48269,7 +48270,7 @@ begin
         with Rules[r] do
         if ExpectedTraceHash<>0 then
           InternalCheck(ExpectedTraceHash=Hash32(IntGetLogAsText(
-             asmndx,Params,[wName,wParams,wResults])),True,
+             asmndx,Params,[wName,wParams,wResults],',')),True,
             'ExpectsTrace(''%'') failed',[fInterface.Methods[m].URI]);
       end;
   finally
@@ -48573,13 +48574,13 @@ begin
     end;
 end;
 
-function TInterfaceStub.GetLogAsText: RawUTF8;
+function TInterfaceStub.LogAsText(SepChar: AnsiChar): RawUTF8;
 begin
-  result := IntGetLogAsText(0,'',[wName,wParams,wResults]);
+  result := IntGetLogAsText(0,'',[wName,wParams,wResults],SepChar);
 end;
 
 function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
-  aScope: TInterfaceStubLogLayouts): RawUTF8;
+  aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
 var i: integer;
     WR: TTextWriter;
     Log: ^TInterfaceStubLog;
@@ -48591,16 +48592,16 @@ begin
       Log := Pointer(fLogs);
       if asmndx<RESERVED_VTABLE_SLOTS then
         for i := 1 to fLogCount do begin
-          Log^.AddAsText(WR,aScope);
+          Log^.AddAsText(WR,aScope,SepChar);
           inc(Log);
         end else
         for i := 1 to fLogCount do begin
           if Log^.Method^.ExecutionMethodIndex=asmndx then
             if (aParams='') or (Log^.Params=aParams) then
-              Log^.AddAsText(WR,aScope);
+              Log^.AddAsText(WR,aScope,SepChar);
           inc(Log);
         end;
-      WR.CancelLastComma;
+      WR.CancelLastChar(SepChar);
       WR.SetText(result);
     finally
       WR.Free;
@@ -48610,7 +48611,7 @@ end;
 
 function TInterfaceStub.GetLogHash: cardinal;
 begin
-  result := Hash32(GetLogAsText);
+  result := Hash32(LogAsText);
 end;
 
 function TInterfaceStub.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
@@ -48740,7 +48741,7 @@ const
   VERIFY_SCOPE: array[TInterfaceMockSpyCheck] of TInterfaceStubLogLayouts = (
     [wName], [wName, wParams], [wName, wParams, wResults]);
 begin
-  InternalCheck(IntGetLogAsText(0,'',VERIFY_SCOPE[aScope])=aTrace,true,
+  InternalCheck(IntGetLogAsText(0,'',VERIFY_SCOPE[aScope],',')=aTrace,true,
     'Verify(''%'',%) failed',[aTrace,IMSC2Text(aScope)^]);
 end;
 
@@ -48749,7 +48750,7 @@ var m: integer;
 begin
   m := fInterface.CheckMethodIndex(aMethodName);
   InternalCheck(
-    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,aParams,[wResults])=aTrace,True,
+    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,aParams,[wResults],',')=aTrace,True,
     'Verify(''%'',''%'',''%'') failed',[aMethodName,aParams,aTrace]);
 end;
 
@@ -48764,7 +48765,7 @@ begin
   if aScope=chkName then
     raise EInterfaceStub.Create(self,fInterface.Methods[m],'Invalid scope for Verify()');
   InternalCheck(
-    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,'',VERIFY_SCOPE[aScope])=aTrace,True,
+    IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,'',VERIFY_SCOPE[aScope],',')=aTrace,True,
     'Verify(''%'',''%'',%) failed',[aMethodName,aTrace,IMSC2Text(aScope)^]);
 end;
 
