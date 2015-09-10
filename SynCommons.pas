@@ -39315,7 +39315,7 @@ end;
 
 var // can be safely made global since timing is multi-thread safe
   GlobalTimeUTC: TSystemTime;
-  GlobalClock: cardinal;
+  GlobalClock: cardinal; // avoid slower API call
 
 procedure TTextWriter.AddCurrentLogTime;
 var Ticks: cardinal;
@@ -39326,7 +39326,11 @@ begin
   Ticks := GetTickCount; // this call is very fast (just one integer mul)
   if GlobalClock<>Ticks then begin // typically in range of 10-16 ms
     GlobalClock := Ticks;
-    GetSystemTime(GlobalTimeUTC); // avoid slower API call
+    {$ifdef MSWINDOWS}
+    GetSystemTime(GlobalTimeUTC);
+    {$else}
+    GetNowUTCSystem(GlobalTimeUTC);
+    {$endif}
   end;
   YearToPChar({$ifdef MSWINDOWS}GlobalTimeUTC.wYear{$else}GlobalTimeUTC.Year{$endif},B);
   with GlobalTimeUTC do begin
