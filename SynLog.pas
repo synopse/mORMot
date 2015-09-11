@@ -1865,6 +1865,9 @@ threadvar
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
+var
+  GlobalCurrentHandleExceptionHooked: boolean; 
+
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   function GetHandleExceptionSynLog: TSynLog;
@@ -2342,28 +2345,31 @@ begin
   fHandleExceptions := (sllExceptionOS in aLevel) or (sllException in aLevel);
   if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog=nil) then begin
     SynLog; // force GlobalCurrentHandleExceptionSynLog definition
-    {$ifdef WITH_MAPPED_EXCEPTIONS}
-    GetUnwinder(oldUnwinder);
-    newUnwinder := oldUnwinder;
-    newUnwinder.RaiseException := HookedRaiseException;
-    SetUnwinder(newUnwinder);
-    {$else}
-    {$ifdef WITH_VECTOREXCEPT}
-    AddVectoredExceptionHandler :=
-      GetProcAddress(GetModuleHandle(kernel32),'AddVectoredExceptionHandler');
-    // RemoveVectoredContinueHandler() is available under 64 bit editions only
-    if Assigned(AddVectoredExceptionHandler) then
-      // available since Windows XP
-      AddVectoredExceptionHandler(0,@SynLogVectoredHandler);
-    {$else WITH_VECTOREXCEPT}
-    {$ifdef WITH_PATCHEXCEPT}
-    PatchCallRtlUnWind;
-    {$else}
-    oldUnWindProc := RTLUnwindProc;
-    RTLUnwindProc := @SynRtlUnwind;
-    {$endif}
-    {$endif WITH_VECTOREXCEPT}
-    {$endif WITH_MAPPED_EXCEPTIONS}
+    if not GlobalCurrentHandleExceptionHooked then begin
+      GlobalCurrentHandleExceptionHooked := true;
+      {$ifdef WITH_MAPPED_EXCEPTIONS}
+      GetUnwinder(oldUnwinder);
+      newUnwinder := oldUnwinder;
+      newUnwinder.RaiseException := HookedRaiseException;
+      SetUnwinder(newUnwinder);
+      {$else}
+      {$ifdef WITH_VECTOREXCEPT}
+      AddVectoredExceptionHandler :=
+        GetProcAddress(GetModuleHandle(kernel32),'AddVectoredExceptionHandler');
+      // RemoveVectoredContinueHandler() is available under 64 bit editions only
+      if Assigned(AddVectoredExceptionHandler) then
+        // available since Windows XP
+        AddVectoredExceptionHandler(0,@SynLogVectoredHandler);
+      {$else WITH_VECTOREXCEPT}
+      {$ifdef WITH_PATCHEXCEPT}
+      PatchCallRtlUnWind;
+      {$else}
+      oldUnWindProc := RTLUnwindProc;
+      RTLUnwindProc := @SynRtlUnwind;
+      {$endif}
+      {$endif WITH_VECTOREXCEPT}
+      {$endif WITH_MAPPED_EXCEPTIONS}
+    end;
   end;
 {$endif NOEXCEPTIONINTERCEPT}
 end;
@@ -2539,23 +2545,24 @@ end;
 function TSynLogFamily.SynLog: TSynLog;
 var ndx: integer;
 begin
-  if self=nil then
-    result := nil else begin
-    if (fPerThreadLog=ptOneFilePerThread) and (fRotateFileCount=0) and
-       (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
-      ndx := SynLogFileIndexThreadVar[fIdent]-1;
-      if ndx>=0 then // SynLogFileList.Safe.Lock/Unlock is not mandatory here
-        result := SynLogFileList.List[ndx] else
-        result := CreateSynLog;
-    end else // for ptMergedInOneFile and ptIdentifiedInOnFile
-      if fGlobalLog<>nil then
-        result := fGlobalLog else
-        result := CreateSynLog;
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog<>result) then
-      GlobalCurrentHandleExceptionSynLog := result;
-    {$endif}
+  if self=nil then begin
+    result := nil;
+    exit;
   end;
+  if (fPerThreadLog=ptOneFilePerThread) and (fRotateFileCount=0) and
+     (fRotateFileSize=0) and (fRotateFileAtHour<0) then begin
+    ndx := SynLogFileIndexThreadVar[fIdent]-1;
+    if ndx>=0 then // SynLogFileList.Safe.Lock/Unlock is not mandatory here
+      result := SynLogFileList.List[ndx] else
+      result := CreateSynLog;
+  end else // for ptMergedInOneFile and ptIdentifiedInOnFile
+    if fGlobalLog<>nil then
+      result := fGlobalLog else
+      result := CreateSynLog;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  if fHandleExceptions and (GlobalCurrentHandleExceptionSynLog<>result) then
+    GlobalCurrentHandleExceptionSynLog := result;
+  {$endif}
 end;
 
 procedure TSynLogFamily.EchoRemoteStart(aClient: TObject;
