@@ -84,6 +84,9 @@ type
   /// generic Exception type
   ESQLRestException = class(ESynException);
 
+  /// URI signature event
+  TOnGetURISignature = procedure(Sender: TObject; var aURI: string) of object;
+
   /// a TDataSet which allows to apply updates on a Restful connection
   // - typical usage may be for instance:
   // ! ds := TSynRestDataSet.Create(MainForm);
@@ -108,6 +111,7 @@ type
     fBaseURL: RawUTF8;
     fCommandText: string;
     fDataSet: TSynBinaryDataSet;
+    fOnGetURISignature: TOnGetURISignature;
     fParams: TParams;
     fProvider: TDataSetProvider;
     fRoot: RawUTF8;
@@ -115,6 +119,7 @@ type
     fTableName: RawUTF8;
     fURI: TURI;
     function BindParams(const aStatement: RawUTF8): RawUTF8;
+    function BuildURI(const aURI: SockString): SockString;
     function GetSQLRecordClass: TSQLRecordClass;
     function GetTableName: string;
     // get the data
@@ -131,7 +136,7 @@ type
     function PSIsSQLBased: Boolean; override;
     function PSIsSQLSupported: Boolean; override;
     {$ifdef ISDELPHIXE3}
-    function PSExecuteStatement(const ASQL: string; AParams: TParams): Integer; overload; override;
+    //function PSExecuteStatement(const ASQL: string; AParams: TParams): Integer; overload; override;
     function PSExecuteStatement(const ASQL: string; AParams: TParams; var ResultSet: TDataSet): Integer; overload; override;
     {$else}
     function PSExecuteStatement(const ASQL: string; AParams: TParams; ResultSet: Pointer=nil): Integer; overload; override;
@@ -152,6 +157,8 @@ type
     property CommandText: string read fCommandText write fCommandText;
     /// the associated SynDB TDataSet, used to retrieve and update data
     property DataSet: TSynBinaryDataSet read fDataSet;
+    /// event to get URI signature
+    property OnGetURISignature: TOnGetURISignature write fOnGetURISignature;
   end;
 
 // JSON columns to binary from a TSQLTableJSON, is not ideal because this code is a almost repeated code.
@@ -159,7 +166,8 @@ procedure JSONColumnsToBinary(const aTable: TSQLTableJSON; W: TFileBufferWriter;
   const Null: TSQLDBProxyStatementColumns;
   const ColTypes: TSQLDBFieldTypeDynArray);
 // convert to binary from a TSQLTableJSON, is not ideal because this code is a almost repeated code.
-function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil): cardinal;
+function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil;
+                      const DefaultDataType: TSQLDBFieldType = SynCommons.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 
 implementation
 
@@ -306,12 +314,14 @@ begin
   end;
 end;
 
-function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil): cardinal;
+function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil;
+                      const DefaultDataType: TSQLDBFieldType = SynCommons.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
     StartPos: cardinal;
     Null: TSQLDBProxyStatementColumns;
     W: TFileBufferWriter;
     ColTypes: TSQLDBFieldTypeDynArray;
+    FieldType: TSQLDBFieldType;
 begin
   FillChar(Null,sizeof(Null),0);
   result := 0;
@@ -326,8 +336,13 @@ begin
       dec(FMax);
       for F := 0 to FMax do begin
         W.Write(aTable.Get(0, F));
-        ColTypes[F] := SQLFIELDTYPETODBFIELDTYPE[aTable.FieldType(F)];
+        FieldType := SQLFIELDTYPETODBFIELDTYPE[aTable.FieldType(F)];
+        if (FieldType = SynCommons.ftUnknown) and (DefaultDataType <> SynCommons.ftUnknown) then
+          FieldType := DefaultDataType;
+        ColTypes[F] := FieldType;
         FieldSize := aTable.FieldLengthMax(F);
+        if (FieldSize = 0) and (FieldType = DefaultDataType) and (DefaultFieldSize <> 0) then
+          FieldSize := DefaultFieldSize;
         W.Write1(ord(ColTypes[F]));
         W.WriteVarUInt32(FieldSize);
       end;
@@ -397,6 +412,18 @@ begin
   Result := StringReplaceAll(Result, ' & ', '&');
 end;
 
+function TSynRestSQLDataSet.BuildURI(const aURI: SockString): SockString;
+var
+  lTmpURI: string;
+begin
+  lTmpURI := aURI;
+  if Assigned(fOnGetURISignature) then
+    fOnGetURISignature(Self, lTmpURI);
+  Result := FormatUTF8('%%' , [fBaseURL, lTmpURI]);
+  if fURI.Https then
+    System.Insert('s', Result, 5);
+end;
+
 function TSynRestSQLDataSet.GetSQLRecordClass: TSQLRecordClass;
 begin
   Result := fSQLModel.Table[GetTableName];
@@ -452,27 +479,36 @@ var
   lDocVar: TDocVariantData;
   lTmp: RawUTF8;
   lResp: TDocVariantData;
+  lErrMsg: RawUTF8;
+  lURI: RawUTF8;
 begin
   Result := '';
   lStatement := BindParams(aStatement);
   if (lStatement <> '') then
     lStatement := '?' + lStatement;
-  Result := TWinHTTP.Get(fBaseURL + fRoot + fTableName + lStatement);
+  lURI := BuildURI(fRoot + fTableName + lStatement);
+  Result := TWinHTTP.Get(lURI);
   if (Result = '') then
-    raise ESynException.CreateUTF8('Cannot get response (timeout?) from %', [fBaseURL + fRoot + fTableName + lStatement]);
+    raise ESynException.CreateUTF8('Cannot get response (timeout?) from %', [lURI]);
   if (Result <> '') then
   begin
     lResp.InitJSON(Result);
     if (lResp.Kind = dvUndefined) then
       raise ESynException.CreateUTF8('Invalid JSON response' + sLineBreak + '%' + sLineBreak + 'from' + sLineBreak + '%',
-                                     [Result, fBaseURL + fRoot + fTableName + lStatement]);
+                                     [Result, lURI]);
     if (lResp.Kind = dvObject) then
       if (lResp.GetValueIndex('errorCode') > -1) then
         if (lResp.GetValueIndex('errorText') > -1) then
+        begin
+          lErrMsg := AnyAnsiToUTF8(lResp.Value['errorText']);
           raise ESynException.CreateUTF8('Error' + sLineBreak + '%' + sLineBreak + 'from' + sLineBreak + '%',
-                                         [lResp.Value['errorText'], fBaseURL + fRoot + fTableName + lStatement])
+                                         [lResp.Value['errorText'], lURI]);
+        end
         else if (lResp.GetValueIndex('error') > -1) then
-          raise ESynException.CreateUTF8('Error' + sLineBreak + '%' + sLineBreak + 'from' + sLineBreak + '%', [lResp.Value['error'], fBaseURL + fRoot + fTableName + lStatement]);
+        begin
+          lErrMsg := AnyAnsiToUTF8(lResp.Value['error']);
+          raise ESynException.CreateUTF8('Error' + sLineBreak + '%' + sLineBreak + 'from' + sLineBreak + '%', [lErrMsg, lURI]);
+        end;
 
     if IsTableFromService then // is the source dataset from a service ?
     begin
@@ -481,11 +517,11 @@ begin
       lDocVar.Clear;
       lDocVar.InitJSON(lTmp);
       if (lDocVar.Kind <> dvArray) then
-        raise ESQLRestException.CreateUTF8('The service % not return an array', [fTableName]);
+        raise ESQLRestException.CreateUTF8('The service % not return an array: <%>', [fTableName, Result]);
       // if the array is empty, nothing to return
       Result := lDocVar.Values[0];
       if (Result = '') or (Result = '[]') or (Result = '{}') then
-        raise ESQLRestException.CreateUTF8('Service % not return a valid array', [fTableName]);
+        raise ESQLRestException.CreateUTF8('Service % not return a valid array: <%>', [fTableName, Result]);
     end;
     lSQLTableJSON := TSQLTableJSON.CreateFromTables([GetSQLRecordClass], '', Result);
     // update info fields for avoid error conversion in JSONToBinary
@@ -593,7 +629,7 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
       lCount := lJSON.Count;
       // update record fields
       for I := 0 to lCount-1 do
-        lRec.SetFieldValue(lJSON.Names[I], PUTF8Char(VariantToUTF8(lJSON.Values[I])));
+        lRec.SetFieldVariant(lJSON.Names[I], lJSON.Values[I]);
       lOccasion := seUpdate;
       if (aOccasion = soInsert) then
         lOccasion := seAdd;
@@ -630,10 +666,11 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
     I: Integer;
     lLastPos: Integer;
     lFieldValues: TStrings;
+    lBlob: TSQLRawBlob;
   begin
     lFieldValues := TStringList.Create;
     try
-      ExtractStrings([','], [], PAnsiChar(ExtractFields(aSQL, aAfterStr, aBeforeStr)), lFieldValues);
+      ExtractStrings([','], [], PChar(ExtractFields(aSQL, aAfterStr, aBeforeStr)), lFieldValues);
       lLastPos := 0;
       with TTextWriter.CreateOwnedStream do
       begin
@@ -643,7 +680,16 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
           if (Pos('=', lFieldValues[I]) = 0) then
             lFieldValues[I] := lFieldValues[I] + '=';
           AddFieldName(Trim(lFieldValues.Names[I]));
-          AddVariant(aParams[I].Value);
+          if (aParams[I].DataType <> ftBlob) then
+            AddVariant(aParams[I].Value)
+          else
+          begin
+            Add('"');
+            lBlob :=  BlobToTSQLRawBlob(PUTF8Char(aParams[I].AsBlob));
+            AddString(lBlob);
+            //WrBase64(PAnsiChar(lBlob), Length(lBlob), False);
+            Add('"');
+          end;
           Add(',');
           lLastPos := I;
         end;
@@ -682,19 +728,14 @@ begin // only execute writes in current implementation
   if IsTableFromService then
     DatabaseError('Cannot apply updates from a service');
   // build the RESTful URL
-  if fURI.Https then
-    lURI := FormatUTF8('https://%:%/%/%/',
-              [fURI.Server, fURI.Port, fSQLModel.Root, StringToUTF8(PSGetTableName)])
-  else
-    lURI := FormatUTF8('http://%:%/%/%/' ,
-              [fURI.Server, fURI.Port, fSQLModel.Root, StringToUTF8(PSGetTableName)]);
+  lURI := FormatUTF8('%/%', [fSQLModel.Root, StringToUTF8(PSGetTableName)]);
   lOccasion := GetSQLOccasion(aSQL);
   case lOccasion of
     soDelete:
     begin
       lID := aParams[0].Value;
-      lURI := lURI + lID;
-      lResult := TWinHTTP.Delete(lURI, '');
+      lURI := lURI + '/' + lID;
+      lResult := TWinHTTP.Delete(BuildURI(lURI), '');
       if (lResult = '') then
         Result := 1;
     end;
@@ -707,7 +748,7 @@ begin // only execute writes in current implementation
         Result := -1;
         lResult := Exception(ExceptObject).Message;
       end;
-      lResult := TWinHTTP.Post(lURI, lJSON);
+      lResult := TWinHTTP.Post(BuildURI(lURI), lJSON);
       if (lResult = '') then
         Result := 1;
     end;
@@ -720,9 +761,9 @@ begin // only execute writes in current implementation
         Result := -1;
         lResult := Exception(ExceptObject).Message;
       end;
-      lID := aParams.ParamByName('ID').AsString;
-      lURI := lURI + lID;
-      lResult := TWinHTTP.Put(lURI, lJSON);
+      lID := aParams.ParamByName('ID').Value;
+      lURI := lURI + '/' + lID;
+      lResult := TWinHTTP.Put(BuildURI(lURI), lJSON);
       if (lResult = '') then
         Result := 1;
     end

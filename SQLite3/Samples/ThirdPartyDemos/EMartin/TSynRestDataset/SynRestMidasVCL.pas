@@ -127,7 +127,11 @@ type
     // from IProviderSupport
     function PSGetCommandText: string; override;
     {$endif}
+    {$IFNDEF NEXTGEN}
+    procedure SetCommandText(Value: WideString); override;
+    {$ELSE}
     procedure SetCommandText(Value: String); override;
+    {$ENDIF !NEXTGEN}
     procedure SetFieldValidateFromSQLRecordSynValidate;
   public
     /// initialize the instance
@@ -362,7 +366,11 @@ begin
 end;
 {$endif ISDELPHI2007ANDUP}
 
+{$IFNDEF NEXTGEN}
+procedure TSynRestDataSet.SetCommandText(Value: WideString);
+{$ELSE}
 procedure TSynRestDataSet.SetCommandText(Value: String);
+{$ENDIF !NEXTGEN}
 begin
   TSynRestSQLDatasetHack(fDataset).SetCommandText(Value);
   inherited SetCommandText(fDataset.CommandText);
