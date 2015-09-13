@@ -35255,6 +35255,7 @@ var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
     SQLisSelect: boolean;
     ResultList: TSQLTableJSON;
+    rec: TSQLRecord;
     P: PUTF8Char;
     i,j,L: integer;
     Blob: PPropInfo;
@@ -35342,8 +35343,17 @@ begin
                 Call.OutBody := Server.MainEngineRetrieve(TableIndex,TableID);
               // cache if expected
               if Call.OutBody='' then
-                Server.fCache.NotifyDeletion(TableIndex,TableID) else
+                Server.fCache.NotifyDeletion(TableIndex,TableID) else begin
+                if ClientKind=ckAjax then begin
+                  rec := Table.CreateFrom(pointer(Call.OutBody));
+                  try // will ensure all fields (e.g. variants) are valid JSON
+                    Call.OutBody := rec.GetJSONValues(true,True,soSelect);
+                  finally
+                    rec.Free;
+                  end;
+                end;
                 Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
+              end;
             end;
             if Call.OutBody<>'' then // if something was found
               Call.OutStatus := HTML_SUCCESS else // 200 OK
@@ -35409,7 +35419,7 @@ begin
         if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
           Call.OutStatus := HTML_SUCCESS;  // 200 OK
           if Server.URIPagingParameters.SendTotalRowsCountFmt<>'' then
-            if Server.NoAJAXJSON then begin
+            if Server.NoAJAXJSON or (ClientKind=ckFramework) then begin
               P := pointer(Call.OutBody);
               L := length(Call.OutBody);
               P := NotExpandedBufferRowCountPos(P,P+L);
@@ -36427,8 +36437,8 @@ begin
       if Call.OutBody<>'' then begin
         len := length(Call.OutHead);
         if (len>=25) and (Call.OutHead[15]='!') and
-         IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
-        inc(fStats.fOutcomingFiles);
+           IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
+          inc(fStats.fOutcomingFiles);
       end;
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
