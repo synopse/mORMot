@@ -3041,8 +3041,8 @@ begin
       HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
     AttrGet(fStatement,OCI_HTYPE_STMT,@StatementType,nil,OCI_ATTR_STMT_TYPE,fError);
     if fExpectResults<>(StatementType=OCI_STMT_SELECT) then
-    raise ESQLDBOracle.CreateUTF8('%: error retrieving results (StatementType=%,%)',
-        [self,StatementType,ord(fExpectResults)]);
+      raise ESQLDBOracle.CreateUTF8('%.SetColumnsForPreparedStatement called with '+
+        'ExpectResults=%, whereas StatementType=%',[self,ord(fExpectResults),StatementType]);
     if not fExpectResults then begin
       fRowCount := 1; // iters=1 by default
       exit; // no row data expected -> leave fColumnCount=0
