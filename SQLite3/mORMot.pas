@@ -5391,6 +5391,10 @@ type
       Context: TSQLRestServerURIContext): boolean;
   end;
 
+  /// used by TSQLRestServerURIContext.ClientKind to identify the
+  // currently connected client
+  TSQLRestServerURIContextClientKind = (ckUnknown, ckFramework, ckAJAX);
+
   /// abstract calling context for a TSQLRestServerCallBack event handler
   // - having a dedicated class avoid changing the implementation methods
   // signature if the framework add some parameters or behavior to it
@@ -5411,8 +5415,10 @@ type
     fInputCookieLastName: RawUTF8;
     fInputCookieLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
+    fUserAgent: RawUTF8;
     fAuthSession: TAuthSession;
     fServiceListInterfaceMethodIndex: integer;
+    fClientKind: TSQLRestServerURIContextClientKind;
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
     fSessionAccessRights: TSQLAccessRights; // session may be deleted meanwhile
@@ -5435,6 +5441,8 @@ type
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
+    function GetUserAgent: RawUTF8;
+    function GetClientKind: TSQLRestServerURIContextClientKind;
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -5729,6 +5737,14 @@ type
     // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
     // - if no Path=/.. is included, it will append '; Path=/'+Server.Model.Root
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
+    /// retrieve the "User-Agent" value from the incoming HTTP headers
+    property UserAgent: RawUTF8 read GetUserAgent;
+    /// identify which kind of client is actually connected
+    // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
+    // set ckFramework on match
+    // - either ckAjax for a classic (AJAX) browser, or any other kind of
+    // HTTP client
+    property ClientKind: TSQLRestServerURIContextClientKind read GetClientKind;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
     property ResourceFileName: TFileName read GetResourceFileName;
@@ -35881,6 +35897,31 @@ begin
   fInputCookieLastName := ''; // cache reset
 end;
 
+function TSQLRestServerURIContext.GetUserAgent: RawUTF8;
+begin
+  if fUserAgent='' then begin
+    result := FindIniNameValue(pointer(Call.InHead),'USER-AGENT: ');
+    if result='' then
+      fUserAgent := '*' else // ensure header is parsed only once
+      fUserAgent := result;
+  end else
+    if fUserAgent='*' then
+      result := '' else
+      result := fUserAgent;
+end;
+
+function TSQLRestServerURIContext.GetClientKind: TSQLRestServerURIContextClientKind;
+var agent: RawUTF8;
+begin
+  if fClientKind=ckUnknown then begin
+    agent := GetUserAgent; // ='' e.g. for WebSockets remote access
+    if (agent='') or (PosEx('mORMot',agent)>0) then
+      fClientKind := ckFramework else
+      fClientKind := ckAjax;
+  end;
+  result := fClientKind;
+end;
+
 function TSQLRestServerURIContext.GetResourceFileName: TFileName;
 begin
   if (URIBlobFieldName='') or (PosEx('..',URIBlobFieldName)>0) then
@@ -36324,7 +36365,7 @@ const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
   ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
-    elapsed: cardinal;
+    elapsed, len: cardinal;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -36383,10 +36424,12 @@ begin
     // 4. returns expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then begin
       inc(fStats.fSuccess);
-      if (Call.OutBody<>'') and
-         (length(Call.OutHead)>=25) and (Call.OutHead[15]='!') and
+      if Call.OutBody<>'' then begin
+        len := length(Call.OutHead);
+        if (len>=25) and (Call.OutHead[15]='!') and
          IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
         inc(fStats.fOutcomingFiles);
+      end;
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
       if Call.OutBody='' then // if no custom error message, compute it now as JSON
@@ -45265,8 +45308,7 @@ begin
       aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
         [User.GroupRights.Ident,User.LogonName,fIDCardinal,fRemoteIP,
-         aCtxt.Call^.LowLevelConnectionID,
-         FindIniNameValue(pointer(fSentHeaders),'USER-AGENT: ')],self);
+         aCtxt.Call^.LowLevelConnectionID,aCtxt.UserAgent],self);
       {$endif}
       exit; // create successfull
     end;

@@ -1375,10 +1375,12 @@ var
 
 
 const
-  /// HTTP header, as defined in the corresponding RFC
+  /// HTTP header name for the content type, as defined in the corresponding RFC
   HEADER_CONTENT_TYPE = 'Content-Type: ';
 
-  /// HTTP header, as defined in the corresponding RFC, in upper case
+  /// HTTP header name for the content type, in upper case
+  // - as defined in the corresponding RFC
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
   HEADER_CONTENT_TYPE_UPPER = 'CONTENT-TYPE: ';
 
   /// MIME content type used for JSON communication (as used by the Microsoft
@@ -1387,6 +1389,10 @@ const
 
   /// HTTP header for MIME content type used for plain JSON
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+JSON_CONTENT_TYPE;
+
+  /// HTTP header for MIME content type used for plain JSON, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
+  JSON_CONTENT_TYPE_HEADER_UPPER = HEADER_CONTENT_TYPE_UPPER+'APPLICATION/JSON';
 
   /// MIME content type used for plain UTF-8 text
   TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';

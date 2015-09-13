@@ -10914,12 +10914,13 @@ begin
   end;
 end;
 {$endif}
-procedure Direct(const URI: RawUTF8; Hash: cardinal);
+procedure Direct(const URI: RawUTF8; Hash: cardinal; const head: RawUTF8='');
 var call: TSQLRestURIParams;
 begin
   fillchar(call,sizeof(call),0);
   call.Method :='GET';
   call.url := URI;
+  call.InHead := head;
   TSQLRestServerAuthenticationDefault.ClientSessionSign(Client,call);
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
   Server.URI(call);
@@ -11168,7 +11169,8 @@ begin
           Server.URIPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
           Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',$79AFDD53);
           Server.NoAJAXJSON := false;
-          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',$69FDAF5D);
+          Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
+            $69FDAF5D,'User-Agent: Ajax');
           Server.NoAJAXJSON := true;
           Server.URIPagingParameters.SendTotalRowsCountFmt := '';
           // test Retrieve() and Delete()
@@ -11991,6 +11993,7 @@ begin
     {$endif}
   end;
   {$ifndef FPC} // FPC dynamic arrays parameters are not consistent with Delphi
+  n1 := 0;
   RecRes := I.ComplexCall(Ints,nil,Str2,Rec1,Rec2,n1,n2);
   Check(length(Str2)=5);
   Check(Str2[0]='ABC');
