@@ -123,6 +123,7 @@ unit SynDBOracle;
   - fixed ticket [aff1352239] to identify 9999-12-31 dates as valid
   - fixed ticket [73aec05724] about potential BLOB/CURSOR resource leaks
   - fixed ticket [e9cab7cd97] about OCI_SUCCESS_WITH_INFO not returning any data
+  - enhanced exception text message as requested by [5c37964b57d]
   - fixed truncated error message in TSQLDBOracleLib.HandleError() method
   - exception during Commit should leave transaction state - see [ca035b8f0da]
   - allow to return NULL columns (ex. "SELECT one, two, NULL AS three FROM table")
@@ -3040,7 +3041,7 @@ begin
       HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
     AttrGet(fStatement,OCI_HTYPE_STMT,@StatementType,nil,OCI_ATTR_STMT_TYPE,fError);
     if fExpectResults<>(StatementType=OCI_STMT_SELECT) then
-    raise ESQLDBOracle.CreateUTF8('%: prepare StatementType=% with ExpectResults=%',
+    raise ESQLDBOracle.CreateUTF8('%: error retrieving results (StatementType=%,%)',
         [self,StatementType,ord(fExpectResults)]);
     if not fExpectResults then begin
       fRowCount := 1; // iters=1 by default
