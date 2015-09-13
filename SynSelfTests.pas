@@ -11990,6 +11990,15 @@ begin
     Rec1.FileExtension := ''; // to avoid memory leak
     {$endif}
   end;
+  {$ifndef FPC} // FPC dynamic arrays parameters are not consistent with Delphi
+  RecRes := I.ComplexCall(Ints,nil,Str2,Rec1,Rec2,n1,n2);
+  Check(length(Str2)=5);
+  Check(Str2[0]='ABC');
+  Check(Str2[1]='DEF');
+  Check(Str2[2]='GHIJK');
+  Check(Str2[3]='one,two,three');
+  Check(Str2[4]='');
+  {$endif}
 end;
 var s: RawUTF8;
 {$ifndef LVCL}
