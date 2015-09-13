@@ -254,7 +254,7 @@ const
 
   /// the kind of HTTP server to be used by default
   // - will define the best available server class, depending on the platform
-  HTTP_DEFAULT_MODE = low(TSQLHttpServerOptions);
+  HTTP_DEFAULT_MODE = {$ifdef ONLYUSEHTTPSOCKET}useHttpSocket{$else}useHttpApiRegisteringURI{$endif};
 
 type
   /// HTTP/1.1 RESTFUL JSON mORMot Server class
