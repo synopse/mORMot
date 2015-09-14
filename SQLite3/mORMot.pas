@@ -27473,7 +27473,7 @@ end;
 
 procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits);
 var tmp: pointer; // FillFrom() modifies the buffer memory: work on a copy
-    buf: array[0..511] of AnsiChar; // avoid a heap allocation in most cases
+    buf: array[0..1023] of AnsiChar; // avoid a heap allocation in most cases
     P: PUTF8Char;
     L: integer;
 begin
@@ -35374,8 +35374,8 @@ begin
               if (ClientKind=ckAjax) and
                  ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
                    TableRecordProps.Props.HasTypeFields<>[]) then begin
-                rec := Table.CreateFrom(pointer(Call.OutBody));
-                try // will ensure all fields (e.g. variants) are valid JSON
+                rec := Table.CreateFrom(Call.OutBody); // cached? -> make private  
+                try // WriteAsJsonNotAsString=true in GetJSONValues() below
                   {$ifndef NOVARIANTS}
                   rec.ForceVariantFieldsOptions; // not extended JSON
                   {$endif}
