@@ -35343,20 +35343,24 @@ begin
                 Call.OutBody := Server.MainEngineRetrieve(TableIndex,TableID);
               // cache if expected
               if Call.OutBody='' then
-                Server.fCache.NotifyDeletion(TableIndex,TableID) else begin
-                if ClientKind=ckAjax then begin
-                  rec := Table.CreateFrom(pointer(Call.OutBody));
-                  try // will ensure all fields (e.g. variants) are valid JSON
-                    Call.OutBody := rec.GetJSONValues(true,True,soSelect);
-                  finally
-                    rec.Free;
-                  end;
-                end;
+                Server.fCache.NotifyDeletion(TableIndex,TableID) else
                 Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
-              end;
             end;
-            if Call.OutBody<>'' then // if something was found
-              Call.OutStatus := HTML_SUCCESS else // 200 OK
+            if Call.OutBody<>'' then begin // if something was found
+              {$ifndef NOVARIANTS}
+              if (ClientKind=ckAjax) and
+                 (sftVariant in TableRecordProps.Props.HasTypeFields) then begin
+                rec := Table.CreateFrom(pointer(Call.OutBody));
+                try // will ensure all fields (e.g. variants) are valid JSON
+                  rec.ForceVariantFieldsOptions; // not extended JSON
+                  Call.OutBody := rec.GetJSONValues(true,True,soSelect);
+                finally
+                  rec.Free;
+                end;
+              end;
+              {$endif}
+              Call.OutStatus := HTML_SUCCESS;
+            end else // 200 OK
               Call.OutStatus := HTML_NOTFOUND;
           end;
       end else
