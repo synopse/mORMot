@@ -4950,7 +4950,7 @@ type
     /// retrieve the next pending task
     // - returns '' if there is no scheduled task available at the current time
     // - returns the next stack as defined corresponding to its specified delay
-    function NextPendingTask: RawByteString;
+    function NextPendingTask: RawByteString; virtual;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynlocker read fSafe;
