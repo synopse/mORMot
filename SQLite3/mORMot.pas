@@ -27814,6 +27814,7 @@ var i: integer;
 begin
   if self<>nil then
   with RecordProps do
+  if sftVariant in HasTypeFields then
   for i := 0 to Fields.Count-1 do
     with TSQLPropInfoRTTIVariant(Fields.List[i]) do
     if (SQLFieldType=sftVariant) and InheritsFrom(TSQLPropInfoRTTIVariant) then
