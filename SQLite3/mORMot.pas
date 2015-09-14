@@ -3943,6 +3943,8 @@ type
   // - resulting JSON content will be UTF-8 encoded
   // - use an internal buffer, faster than string+string
   TJSONSerializer = class(TJSONWriter)
+  protected
+    fWriteAsJsonNotAsString: boolean;
   public
     /// serialize as JSON the published integer, Int64, floating point values,
     // TDateTime (stored as ISO 8601 text), string and enumerate (e.g. boolean)
@@ -3970,6 +3972,13 @@ type
     // be stored as JSON string
     procedure AddTypedJSONWithOptions(aTypeInfo: pointer; var aValue;
       Options: TTextWriterWriteObjectOptions);
+    /// if TRUE, would force TSQLRecord.GetJSONValues to serialize
+    // nested property instances as a JSON object/array, not a JSON string
+    // - i.e. root/table/id REST would be ready-to-be-consummed from AJAX clients
+    // - e.g. TSQLPropInfoRTTIObject.GetJSONValues as a JSON object
+    // - e.g. TSQLPropInfoRTTIDynArray.GetJSONValues as a JSON array
+    property WriteAsJsonNotAsString: boolean
+      read fWriteAsJsonNotAsString write fWriteAsJsonNotAsString;
 
     /// define a custom serialization for a given class
     // - by default, TSQLRecord, TPersistent, TStrings, TCollection classes
@@ -6871,29 +6880,32 @@ type
     // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
   	// and the supplied TJSONSerializer instance will be freed by this method
     procedure GetJSONValuesAndFree(JSON : TJSONSerializer); overload;
-    (** return the UTF-8 encoded JSON objects for the values contained
-      in the current published fields of a TSQLRecord child
-      - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
-        BLOB fields are ignored (use direct access via dedicated methods instead)
-      - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
-      ! {"col1":val11,"col2":"val12"}
-      - if Expand is false, JSON data is serialized (as used in TSQLTableJSON)
-      ! { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-      - if withID is true, then the first ID field value is included *)
+    /// return the UTF-8 encoded JSON objects for the values contained
+    // in the current published fields of a TSQLRecord child
+    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are retrieved:
+    //   BLOB fields are ignored (use direct access via dedicated methods instead)
+    // - if Expand is true, JSON data is an object, for direct use with any Ajax or .NET client:
+    // ! {"col1":val11,"col2":"val12"}
+    // - if Expand is false, JSON data is serialized (as used in TSQLTableJSON)
+    // ! { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+    // - if withID is true, then the first ID field value is included
+    // - if WriteAsJsonNotAsString is TRUE, any sftObject/sftBlobDynArray
+    // property instance would be serialized as a JSON object or array, not a
+    // JSON string (which is the default, as expected by the database storage)
     procedure GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
-      Occasion: TSQLOccasion); overload;
+      Occasion: TSQLOccasion; WriteAsJsonNotAsString: boolean=false); overload;
     /// same as overloaded GetJSONValues(), but returning result into a RawUTF8
     // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
     function GetJSONValues(Expand: boolean; withID: boolean; Occasion: TSQLOccasion;
-      UsingStream: TCustomMemoryStream=nil): RawUTF8; overload;
+      UsingStream: TCustomMemoryStream=nil; WriteAsJsonNotAsString: boolean=false): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; withID: boolean;
-      const Fields: TSQLFieldBits): RawUTF8; overload;
+      const Fields: TSQLFieldBits; WriteAsJsonNotAsString: boolean=false): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; withID: boolean;
-      const FieldsCSV: RawUTF8): RawUTF8; overload;
+      const FieldsCSV: RawUTF8; WriteAsJsonNotAsString: boolean=false): RawUTF8; overload;
     /// will append the record fields as an expanded JSON object
     // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
     // method will add the JSON object directly to any TJSONSerializer
@@ -19505,7 +19517,9 @@ end;
 
 procedure TSQLPropInfoRTTIObject.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  W.WriteObjectAsString(GetInstance(Instance));
+  if W.WriteAsJsonNotAsString then
+    W.WriteObject(GetInstance(Instance)) else
+    W.WriteObjectAsString(GetInstance(Instance));
 end;
 
 
@@ -20267,11 +20281,13 @@ procedure TSQLPropInfoRTTIDynArray.GetJSONValues(Instance: TObject;
   W: TJSONSerializer);
 var tmp: RawByteString;
 begin
-  if fObjArray<>nil then
-    W.AddDynArrayJSONAsString(fPropType,GetFieldAddr(Instance)^) else begin
-    Serialize(Instance,tmp);
-    W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
-  end;
+  if W.WriteAsJsonNotAsString then
+    W.AddDynArrayJSON(fPropType,GetFieldAddr(Instance)^) else
+    if fObjArray<>nil then
+      W.AddDynArrayJSONAsString(fPropType,GetFieldAddr(Instance)^) else begin
+      Serialize(Instance,tmp);
+      W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
+    end;
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
@@ -27823,20 +27839,27 @@ begin
 end;
 
 procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
-  Occasion: TSQLOccasion);
+  Occasion: TSQLOccasion; WriteAsJsonNotAsString: boolean);
+var serializer: TJSONSerializer;
 begin
-  if self<>nil then
+  if self=nil then
+    exit;
   with RecordProps do
-    GetJSONValuesAndFree(CreateJSONWriter(JSON,Expand,withID,SimpleFieldsBits[Occasion],0));
+    serializer := CreateJSONWriter(JSON,Expand,withID,SimpleFieldsBits[Occasion],0);
+  serializer.WriteAsJsonNotAsString := WriteAsJsonNotAsString;
+  GetJSONValuesAndFree(serializer);
 end;
 
 function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
-  const Fields: TSQLFieldBits): RawUTF8;
+  const Fields: TSQLFieldBits; WriteAsJsonNotAsString: boolean): RawUTF8;
 var J: TRawByteStringStream;
+    serializer: TJSONSerializer;
 begin
   J := TRawByteStringStream.Create;
   try
-    GetJSONValuesAndFree(RecordProps.CreateJSONWriter(J,Expand,withID,Fields,0));
+    serializer := RecordProps.CreateJSONWriter(J,Expand,withID,Fields,0);
+    serializer.WriteAsJsonNotAsString := WriteAsJsonNotAsString;
+    GetJSONValuesAndFree(serializer);
     result := J.DataString;
   finally
     J.Free;
@@ -27844,16 +27867,17 @@ begin
 end;
 
 function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
-  const FieldsCSV: RawUTF8): RawUTF8;
+  const FieldsCSV: RawUTF8; WriteAsJsonNotAsString: boolean): RawUTF8;
 var bits: TSQLFieldBits;
 begin
   if RecordProps.FieldBitsFromCSV(FieldsCSV,bits) then
-    result := GetJSONValues(Expand,withID,bits) else
+    result := GetJSONValues(Expand,withID,bits,WriteAsJsonNotAsString) else
     result := '';
 end;
 
 function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
-  Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream=nil): RawUTF8;
+  Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream;
+  WriteAsJsonNotAsString: boolean): RawUTF8;
 var J: TRawByteStringStream;
 begin
   if (not withID) and IsZero(RecordProps.SimpleFieldsBits[Occasion]) then
@@ -27861,12 +27885,12 @@ begin
     result := '' else
   if UsingStream<>nil then begin
     UsingStream.Seek(0,soFromBeginning);
-    GetJSONValues(UsingStream,Expand,withID,Occasion);
+    GetJSONValues(UsingStream,Expand,withID,Occasion,WriteAsJsonNotAsString);
     SetString(result,PAnsiChar(UsingStream.Memory),UsingStream.Seek(0,soFromCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
-      GetJSONValues(J,Expand,withID,Occasion);
+      GetJSONValues(J,Expand,withID,Occasion,WriteAsJsonNotAsString);
       result := J.DataString;
     finally
       J.Free;
@@ -35347,18 +35371,19 @@ begin
                 Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
             end;
             if Call.OutBody<>'' then begin // if something was found
-              {$ifndef NOVARIANTS}
               if (ClientKind=ckAjax) and
-                 (sftVariant in TableRecordProps.Props.HasTypeFields) then begin
+                 ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
+                   TableRecordProps.Props.HasTypeFields<>[]) then begin
                 rec := Table.CreateFrom(pointer(Call.OutBody));
                 try // will ensure all fields (e.g. variants) are valid JSON
+                  {$ifndef NOVARIANTS}
                   rec.ForceVariantFieldsOptions; // not extended JSON
-                  Call.OutBody := rec.GetJSONValues(true,True,soSelect);
+                  {$endif}
+                  Call.OutBody := rec.GetJSONValues(true,true,soSelect,nil,true);
                 finally
                   rec.Free;
                 end;
               end;
-              {$endif}
               Call.OutStatus := HTML_SUCCESS;
             end else // 200 OK
               Call.OutStatus := HTML_NOTFOUND;
