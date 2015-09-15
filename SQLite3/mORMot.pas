@@ -644,6 +644,9 @@ unit mORMot;
       all contract operations shall use it instead of TCollection
     - changed the non expanded JSON format to use lowercase first column names:
       {"fieldCount":1,"values":["col1"... instead of {"FieldCount":1,"Values":[..
+    - ensure root/table/id and root/table?select=...&where=... REST requests
+      return plain standard JSON output for AJAX clients (not mORMot clients)
+    - introducing TSQLRestServerURIContext.UserAgent and ClientKind properties
     - added TSQLTable.FieldLengthMax() and ExpandAsSynUnicode() methods
     - added BlobToBytes() function and TSQLTable.GetBytes/GetStream methods
     - added virtual TSQLRestServer.FlushInternalDBCache method and dedicated
@@ -4862,6 +4865,13 @@ type
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
       var Bits: TSQLFieldBits): boolean; overload;
+    /// set all bits corresponding to the supplied CSV field names, including ID
+    // - returns TRUE on success, FALSE if any field name is not existing
+    // - this overloaded method would identify ID/RowID field name, and set
+    // withID output parameter according to its presence
+    // - if aFieldsCSV='*', Bits will contain all simple fields, and withID=true
+    function FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
+      var Bits: TSQLFieldBits; out withID: boolean): boolean; overload;
     /// set all bits corresponding to the supplied CSV field names
     // - returns the matching fields set
     function FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits; overload;
@@ -4973,6 +4983,11 @@ type
     // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
       const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer; overload;
+    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
+    // - this overloaded method would call FieldBitsFromCSV(aFieldsCSV,bits,withID)
+    // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
+    function CreateJSONWriter(JSON: TStream; Expand: boolean;
+       const aFieldsCSV: RawUTF8; KnownRowsCount: integer): TJSONSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
     /// save the TSQLRecord RTTI into a binary header
@@ -5452,6 +5467,7 @@ type
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetUserAgent: RawUTF8;
     function GetClientKind: TSQLRestServerURIContextClientKind;
+    function GetWriteAsJsonNotAsString: boolean;
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -5753,7 +5769,13 @@ type
     // set ckFramework on match
     // - either ckAjax for a classic (AJAX) browser, or any other kind of
     // HTTP client
+    // - will be used e.g. by ClientWriteAsJsonNotAsString to check if the
+    // current remote client expects standard JSON in all cases  
     property ClientKind: TSQLRestServerURIContextClientKind read GetClientKind;
+    /// identify if the request is about a Table containing nested objects or
+    // arrays, which could be serialized as JSON objects or arrays, instead
+    // of plain JSON string (as stored in the database)
+    property ClientWriteAsJsonNotAsString: boolean read GetWriteAsJsonNotAsString;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
     property ResourceFileName: TFileName read GetResourceFileName;
@@ -5784,8 +5806,11 @@ type
       Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
+    // - you can set WriteAsJsonNotAsString=TRUE to force the returned JSON
+    // object to have its TSQLRecord nested fields serialized as true JSON
+    // arrays or objects, even if they are stored as plain string
     procedure Returns(Value: TObject; Status: integer=HTML_SUCCESS;
-      Handle304NotModified: boolean=false); overload;
+      Handle304NotModified: boolean=false; WriteAsJsonNotAsString: boolean=false); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
     procedure ReturnsJson(const Value: variant; Status: integer=HTML_SUCCESS;
@@ -7170,6 +7195,10 @@ type
     // TSQLRecord.Destroy will call it
     // - used e.g. by FillFrom methods below to avoid any GPF/memory confusion
     procedure FillClose;
+    /// will iterate over all FillPrepare items, appending them as a JSON array
+    // - creates a JSON array of all record rows, using
+    // ! while FillOne do GetJSONValues(W)...
+    procedure AppendFillAsJsonValues(W: TJSONSerializer);
 
     /// fill all published properties of this object from a TSQLTable result row
     // - call FillPrepare() then FillRow(Row)
@@ -20583,6 +20612,10 @@ procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
 var value: Variant;
 begin
   fPropInfo.GetVariantProp(Instance,value);
+  if W.WriteAsJsonNotAsString then
+    with _Safe(value)^ do
+      if Count>0 then
+        Options := JSON_OPTIONS_FAST; // force true JSON serialization
   W.AddVariant(value,twJSONEscape); // even sftNullable should escape strings
 end;
 
@@ -27627,6 +27660,17 @@ procedure TSQLRecord.FillClose;
 begin
   if self<>nil then
     fFill.UnMap;
+end;
+
+procedure TSQLRecord.AppendFillAsJsonValues(W: TJSONSerializer);
+begin
+  W.Add('[');
+  while FillOne do begin
+    GetJSONValues(W);
+    W.Add(',');
+  end;
+  W.CancelLastComma;
+  W.Add(']');
 end;
 
 procedure TSQLRecord.FillValue(PropName: PUTF8Char; Value: PUTF8Char;
@@ -35280,6 +35324,8 @@ var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
     SQLisSelect: boolean;
     ResultList: TSQLTableJSON;
+    JS: TRawByteStringStream;
+    W: TJSONSerializer;
     rec: TSQLRecord;
     P: PUTF8Char;
     i,j,L: integer;
@@ -35372,14 +35418,10 @@ begin
                 Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soSelect);
             end;
             if Call.OutBody<>'' then begin // if something was found
-              if (ClientKind=ckAjax) and
-                 ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
-                   TableRecordProps.Props.HasTypeFields<>[]) then begin
-                rec := Table.CreateFrom(Call.OutBody); // cached? -> make private  
+              if ClientWriteAsJsonNotAsString then begin
+                // force plain standard JSON output for AJAX clients
+                rec := Table.CreateFrom(Call.OutBody); // cached? -> make private
                 try // WriteAsJsonNotAsString=true in GetJSONValues() below
-                  {$ifndef NOVARIANTS}
-                  rec.ForceVariantFieldsOptions; // not extended JSON
-                  {$endif}
                   Call.OutBody := rec.GetJSONValues(true,true,soSelect,nil,true);
                 finally
                   rec.Free;
@@ -35447,8 +35489,27 @@ begin
           SQLFromSelectWhere(SQLSelect,trim(SQLWhere));
         Call.OutBody := Server.InternalListRawUTF8(TableIndex,SQL);
         if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
+          if (SQLSelect<>'RowID') and ClientWriteAsJsonNotAsString then begin
+            // force plain standard JSON output for AJAX clients
+            rec := Table.CreateAndFillPrepare(Call.OutBody);
+            try                                                   
+              with TableRecordProps.Props do
+                W := CreateJSONWriter(TRawByteStringStream.Create,true,SQLSelect,0);
+              try
+                W.WriteAsJsonNotAsString := true; // will do the magic
+                rec.AppendFillAsJsonValues(W);
+                W.SetText(Call.OutBody);
+              finally
+                W.Stream.Free;
+                W.Free;
+              end;
+            finally
+              rec.Free;
+            end;
+          end;
           Call.OutStatus := HTML_SUCCESS;  // 200 OK
           if Server.URIPagingParameters.SendTotalRowsCountFmt<>'' then
+            // insert "totalRows":% optional value to the JSON output
             if Server.NoAJAXJSON or (ClientKind=ckFramework) then begin
               P := pointer(Call.OutBody);
               L := length(Call.OutBody);
@@ -35465,7 +35526,7 @@ begin
               if j>0 then
                 Insert(FormatUTF8(Server.URIPagingParameters.SendTotalRowsCountFmt,
                   [SQLTotalRowsCount]),Call.OutBody,j);
-            end else begin// expanded format -> as {"values":[...],"total":n}
+            end else begin // expanded format -> as {"values":[...],"total":n}
               if SQLTotalRowsCount=0 then // avoid sending fields array
                 Call.OutBody := '[]' else
                 Call.OutBody := trim(Call.OutBody);
@@ -35962,6 +36023,13 @@ begin
   result := fClientKind;
 end;
 
+function TSQLRestServerURIContext.GetWriteAsJsonNotAsString: boolean;
+begin
+  result := (GetClientKind=ckAjax) and
+     ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
+       TableRecordProps.Props.HasTypeFields<>[]);
+end;
+
 function TSQLRestServerURIContext.GetResourceFileName: TFileName;
 begin
   if (URIBlobFieldName='') or (PosEx('..',URIBlobFieldName)>0) then
@@ -35997,11 +36065,11 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Returns(Value: TObject; Status: integer;
-  Handle304NotModified: boolean);
+  Handle304NotModified,WriteAsJsonNotAsString: boolean);
 var json: RawUTF8;
 begin
   if Value.InheritsFrom(TSQLRecord) then
-    json := TSQLRecord(Value).GetJSONValues(true,true,soSelect) else
+    json := TSQLRecord(Value).GetJSONValues(true,true,soSelect,nil,WriteAsJsonNotAsString) else
     json := ObjectToJSON(Value);
   Returns(json,Status,'',Handle304NotModified);
 end;
@@ -44042,6 +44110,15 @@ begin
   end;
 end;
 
+function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand: boolean;
+   const aFieldsCSV: RawUTF8; KnownRowsCount: integer): TJSONSerializer;
+var withID: boolean;
+    bits: TSQLFieldBits;
+begin
+  FieldBitsFromCSV(aFieldsCSV,bits,withID);
+  result := CreateJSONWriter(JSON,Expand,withID,bits,KnownRowsCount);
+end;
+
 function TSQLRecordProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
   var EndOfObject: AnsiChar; ExtendedJSON: boolean): RawUTF8;
 var i: integer;
@@ -44178,6 +44255,39 @@ begin
   P := pointer(aFieldsCSV);
   while P<>nil do begin
     GetNextItemShortString(P,FieldName);
+    FieldName[ord(FieldName[0])+1] := #0; // make PUTF8Char
+    ndx := Fields.IndexByName(@FieldName[1]);
+    if ndx<0 then
+      exit; // invalid field name
+    include(Bits,ndx);
+  end;
+  result := true;
+end;
+
+function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
+  var Bits: TSQLFieldBits; out withID: boolean): boolean;
+var ndx: integer;
+    P: PUTF8Char;
+    FieldName: ShortString;
+begin
+  if (aFieldsCSV='*') and (self<>nil) then begin
+    Bits := SimpleFieldsBits[soSelect];
+    withID := true;
+    result := true;
+    exit;
+  end;
+  FillZero(Bits);
+  withID := false;
+  result := false;
+  if self=nil then
+    exit;
+  P := pointer(aFieldsCSV);
+  while P<>nil do begin
+    GetNextItemShortString(P,FieldName);
+    if IsRowIDShort(FieldName) then begin
+      withID := true;
+      continue;
+    end;
     FieldName[ord(FieldName[0])+1] := #0; // make PUTF8Char
     ndx := Fields.IndexByName(@FieldName[1]);
     if ndx<0 then
