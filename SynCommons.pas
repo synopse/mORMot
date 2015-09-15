@@ -5663,6 +5663,7 @@ const
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
   // - note that due to Delphi compiler restriction, 256 is the maximum value
+  // (this is the maximum number of items in a Delphi set)
   MAX_SQLFIELDS = 64;
 
   /// sometimes, the ID field is included in a bits set

@@ -31,6 +31,7 @@ unit mORMot;
   Contributor(s):
     Alexander (chaa)
     Alfred Glaenzer (alf)
+    Daniel Kuettner
     DigDiver
     EgorovAlex
     Emanuele (lele9)
@@ -3948,6 +3949,7 @@ type
   TJSONSerializer = class(TJSONWriter)
   protected
     fWriteAsJsonNotAsString: boolean;
+    procedure SetWriteAsJsonNotAsString(Value: boolean);
   public
     /// serialize as JSON the published integer, Int64, floating point values,
     // TDateTime (stored as ISO 8601 text), string and enumerate (e.g. boolean)
@@ -3981,7 +3983,7 @@ type
     // - e.g. TSQLPropInfoRTTIObject.GetJSONValues as a JSON object
     // - e.g. TSQLPropInfoRTTIDynArray.GetJSONValues as a JSON array
     property WriteAsJsonNotAsString: boolean
-      read fWriteAsJsonNotAsString write fWriteAsJsonNotAsString;
+      read fWriteAsJsonNotAsString write SetWriteAsJsonNotAsString;
 
     /// define a custom serialization for a given class
     // - by default, TSQLRecord, TPersistent, TStrings, TCollection classes
@@ -35488,7 +35490,8 @@ begin
           SQLFromSelectWhere(SQLSelect,trim(SQLWhere));
         Call.OutBody := Server.InternalListRawUTF8(TableIndex,SQL);
         if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
-          if (SQLSelect<>'RowID') and ClientWriteAsJsonNotAsString then begin
+          if (SQLSelect<>'RowID') and (PosEx('(',SQLSelect)=0) and
+             ClientWriteAsJsonNotAsString then begin
             // force plain standard JSON output for AJAX clients
             rec := Table.CreateAndFillPrepare(Call.OutBody);
             try                                                   
@@ -44283,6 +44286,8 @@ begin
   P := pointer(aFieldsCSV);
   while P<>nil do begin
     GetNextItemShortString(P,FieldName);
+    while (FieldName[0]<>#0) and (FieldName[1]=' ') do
+      delete(FieldName,1,1);
     if IsRowIDShort(FieldName) then begin
       withID := true;
       continue;
@@ -44913,6 +44918,14 @@ begin
     end
   else
     AddShort('null');
+end;
+
+procedure TJSONSerializer.SetWriteAsJsonNotAsString(Value: boolean);
+begin
+  fWriteAsJsonNotAsString := Value;
+  if Value then
+    if (ColNames<>nil) and (ColNames[0]='"RowID":') then
+      ColNames[0] := '"ID":'; // as expected by AJAX
 end;
 
 
