@@ -35324,7 +35324,6 @@ var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
     SQLisSelect: boolean;
     ResultList: TSQLTableJSON;
-    JS: TRawByteStringStream;
     W: TJSONSerializer;
     rec: TSQLRecord;
     P: PUTF8Char;
@@ -35500,7 +35499,7 @@ begin
                 rec.AppendFillAsJsonValues(W);
                 W.SetText(Call.OutBody);
               finally
-                W.Stream.Free;
+                W.Stream.Free; // associated TRawByteStringStream instance
                 W.Free;
               end;
             finally
@@ -37933,7 +37932,7 @@ begin
         3: begin
           // '{"Table":[...,"SIMPLE",[values],...]}' or '[...,"SIMPLE@Table",[values],...]'
           URIMethod := mPOST;
-          Value := Model.TableProps[TableIndex].Props.
+          Value := Model.TableProps[RunTableIndex].Props.
             SaveSimpleFieldsFromJsonArray(Sent,EndOfObject,true);
           ID := 0; // no ID is never transmitted with simple fields
           if (Sent=nil) or (Value='') then
