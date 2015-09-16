@@ -238,6 +238,8 @@ type
     procedure SetAlign(aCol: cardinal; Value: TSQLTableToGridAlign);
     function GetCustomFormat(aCol: cardinal): string;
     procedure SetCustomFormat(aCol: cardinal; const Value: string);
+    function GetGridColumnWidths: RawUTF8;
+    procedure SetGridColumnWidths(const Value: RawUTF8);
   protected
     fOnValueText: TValueTextEvent;
     fOnHintText: THintTextEvent;
@@ -413,6 +415,10 @@ type
     /// retrieves if a row was previously marked
     // - first data row index is 1
     property Marked[RowIndex: integer]: boolean read GetMarked write SetMarked;
+    /// retrieve or define the column widths of this grid, as text
+    // - as a CSV list of the associated DrawGrid.ColWidths[] values
+    property GridColumnWidths: RawUTF8
+      read GetGridColumnWidths write SetGridColumnWidths;
     /// retrieves the index of the sftTimeLog first field
     // - i.e. the field index which can be used for Marked actions
     // - equals -1 if not such field exists
@@ -436,7 +442,7 @@ type
     property OnRightClickCell: TRightClickCellEvent read fOnRightClickCell write fOnRightClickCell;
     /// override this event to be notified when the content is sorted
     property OnSort: TNotifyEvent read fOnsort write fOnsort;
-   end;
+  end;
 
 type
   /// exception class raised by TSynIntegerLabeledEdit
@@ -1588,7 +1594,7 @@ begin
         Aligned[i] := alCenter;
         dec(c,32);
       end;
-      Means[i] := ord(c)+(-ord('A')+1);
+      Means[i] := ord(c)+(1-ord('A'));
     end;
     Table.SetFieldLengthMean(Means);
   end;
@@ -1602,6 +1608,37 @@ begin
   with TDrawGrid(Owner) do
     for i := 0 to ColCount-1 do
       ColWidths[i] := aColumnWidth;
+end;
+
+function TSQLTableToGrid.GetGridColumnWidths: RawUTF8;
+var i: integer;
+    w: RawUTF8;
+begin
+  result := '';
+  if self<>nil then
+    with TDrawGrid(Owner) do
+      for i := 0 to ColCount-1 do begin
+        Int32ToUtf8(ColWidths[i],w);
+        if i=0 then
+          result := w else
+          result := result+','+w;
+      end;
+end;
+
+procedure TSQLTableToGrid.SetGridColumnWidths(const Value: RawUTF8);
+var P: PUTF8Char;
+    i,w: integer;
+begin
+  if self=nil then
+    exit;
+  P := pointer(Value);
+  with TDrawGrid(Owner) do
+    for i := 0 to ColCount-1 do begin
+      w := GetNextItemCardinal(P);
+      if w=0 then
+        w := 100;
+      ColWidths[i] := w;
+    end;
 end;
 
 function TSQLTableToGrid.GetMarked(RowIndex: integer): boolean;
@@ -1898,8 +1935,6 @@ begin
 end;
 
 {$endif}
-
-
 
 { TSynLabeledEdit }
 
