@@ -2089,6 +2089,10 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 
+/// naive search of '... FROM TableName ...' pattern in the supplied SQL
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
+
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
 // - if P if nil or 'null', return sftUnknown
@@ -8724,7 +8728,8 @@ type
     // - reflects the internal private fIsUnique propery
     function GetIsUnique(aTable: TSQLRecordClass; aFieldIndex: integer): boolean;
     /// try to retrieve a table index from a SQL statement
-    // - naive search of '... FROM TableName' pattern in the supplied SQL
+    // - naive search of '... FROM TableName' pattern in the supplied SQL,
+    // using GetTableNameFromSQLSelect() function
     // - if EnsureUniqueTableInFrom is TRUE, it will check that only one Table
     // is in the FROM clause, otherwise it will return the first Table specified
     function GetTableIndexFromSQLSelect(const SQL: RawUTF8; EnsureUniqueTableInFrom: boolean): integer;
@@ -29629,10 +29634,9 @@ begin
     Result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
 end;
 
-function TSQLModel.GetTableIndexFromSQLSelect(const SQL: RawUTF8;
-  EnsureUniqueTableInFrom: boolean): integer;
+function GetTableNameFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): RawUTF8;
 var i,j,k: integer;
-    TableName: RawUTF8;
 begin
   i := PosI(' FROM ',SQL);
   if i>0 then begin
@@ -29644,13 +29648,20 @@ begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
       if (not EnsureUniqueTableInFrom) or (SQL[k]<>',') then begin
-        SetString(TableName,PAnsiChar(PtrInt(SQL)+i-1),j);
-        result := GetTableIndex(TableName);
+        SetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
         exit;
       end;
     end;
   end;
-  result := -1;
+  result := '';
+end;
+
+function TSQLModel.GetTableIndexFromSQLSelect(const SQL: RawUTF8;
+  EnsureUniqueTableInFrom: boolean): integer;
+var TableName: RawUTF8;
+begin
+  TableName := GetTableNameFromSQLSelect(SQL,EnsureUniqueTableInFrom);
+  result := GetTableIndex(TableName);
 end;
 
 function TSQLModel.GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
