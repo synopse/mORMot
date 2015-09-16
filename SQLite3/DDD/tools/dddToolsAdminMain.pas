@@ -20,6 +20,7 @@ type
     fPage: TSynPager;
     fPages: array of TSynPage;
     fLogFrame: TLogFrame;
+    fLogFrames: TLogFrameDynArray;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
     procedure OnPageChange(Sender: TObject); virtual;
@@ -34,7 +35,8 @@ type
     function GetState: Variant; virtual;
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
     function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame; virtual;
-    procedure EndLog; virtual;
+    function AddLogFrame(const aCaption,aEvents,aPattern: RawUTF8; aClass: TLogFrameClass): TLogFrame; virtual;
+    procedure EndLog(aLogFrame: TLogFrame); virtual;
     function CurrentDBFrame: TDBFrame;
     function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
     procedure FormKeyDown(Sender: TObject; var Key: Word;
@@ -147,14 +149,14 @@ begin
   end;
 end;
 
-procedure TAdminControl.EndLog;
+procedure TAdminControl.EndLog(aLogFrame: TLogFrame);
 begin
-  if fLogFrame<>nil then
+  if aLogFrame<>nil then
   try
     Screen.Cursor := crHourGlass;
-    if fLogFrame.Callback<>nil then
-      fClient.Services.CallBackUnRegister(fLogFrame.Callback);
-    fLogFrame.Closing;
+    if aLogFrame.Callback<>nil then
+      fClient.Services.CallBackUnRegister(aLogFrame.Callback);
+    aLogFrame.Closing;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -164,9 +166,14 @@ destructor TAdminControl.Destroy;
 var i: integer;
 begin
   if fLogFrame<>nil then begin
-    Endlog;
+    Endlog(fLogFrame);
     fLogFrame.Admin := nil;
     fLogFrame := nil;
+  end;
+  for i := 0 to high(fLogFrames) do begin
+    EndLog(fLogFrames[i]);
+    fLogFrames[i].Admin := nil;
+    fLogFrames[i] := nil;
   end;
   for i := 0 to high(fDBFrame) do
     fDBFrame[i].Admin := nil;
@@ -179,22 +186,30 @@ end;
 
 procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
-var pageIndex: integer;
-begin
-  pageIndex := fPage.ActivePageIndex;
-  if pageIndex=0 then // log keys
+
+  procedure LogKeys(aLogFrame: TLogFrame);
+  begin
+    if aLogFrame<>nil then
     case Key of
     VK_F3:
-      fLogFrame.btnSearchNextClick(fLogFrame.btnSearchNext);
+      aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext);
     ord('A')..ord('Z'),Ord('0')..ord('9'),32:
-      if (shift=[]) and not fLogFrame.edtSearch.Focused then
-        fLogFrame.edtSearch.Text := fLogFrame.edtSearch.Text+string(Char(Key)) else
+      if (shift=[]) and not aLogFrame.edtSearch.Focused then
+        aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text+string(Char(Key)) else
       if (key=ord('F')) and (ssCtrl in Shift) then begin
-        fLogFrame.edtSearch.SelectAll;
-        fLogFrame.edtSearch.SetFocus;
+        aLogFrame.edtSearch.SelectAll;
+        aLogFrame.edtSearch.SetFocus;
       end;
-    end else
-  if pageIndex<=Length(fDBFrame) then
+    end;
+  end;
+
+var pageIndex,DBCount: integer;
+begin
+  pageIndex := fPage.ActivePageIndex;
+  DBCount := length(fDBFrame);
+  if pageIndex=0 then
+    LogKeys(fLogFrame) else
+  if pageIndex<=DBCount then
     with fDBFrame[pageIndex-1] do
     case Key of
     VK_RETURN:
@@ -214,7 +229,9 @@ begin
     ord('H'):
       if ssCtrl in Shift then
         btnHistoryClick(btnHistory);
-    end;
+    end else
+  if pageIndex-DBCount<Length(fLogFrames) then
+    LogKeys(fLogFrames[pageIndex-DBCount]);
 end;
 
 function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
@@ -245,6 +262,21 @@ begin
   result.DatabaseName := aDatabaseName;
   result.OnAfterExecute := OnAfterExecute;
   fDBFrame[n] := result;
+end;
+
+function TAdminControl.AddLogFrame(const aCaption, aEvents, aPattern: RawUTF8;
+  aClass: TLogFrameClass): TLogFrame;
+var page: TSynPage;
+    n: integer;
+begin
+  page := AddPage(aCaption);
+  result := aClass.CreateCustom(self,fAdmin,aEvents,aPattern);
+  result.Parent := page;
+  result.Align := alClient;
+  n := length(fLogFrames);
+  SetLength(fLogFrames,n+1);
+  fLogFrames[n] := result;
+  fPage.ActivePageIndex := fPage.PageCount-1; 
 end;
 
 procedure TAdminControl.OnPageChange(Sender: TObject);
@@ -296,6 +328,7 @@ begin
   Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
     fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
 end;
+
 
 end.
 

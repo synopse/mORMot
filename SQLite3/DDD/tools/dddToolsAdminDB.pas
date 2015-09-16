@@ -273,11 +273,11 @@ end;
 function TDBFrame.OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
   var Text: string): boolean;
 begin
-  if RowIndex=0 then begin
-    Text := UTF8ToString(Sender.GetU(RowIndex,FieldIndex)); // display true column name
+  if Sender.FieldType(FieldIndex) in [sftBoolean] then
+    result := false else begin
+    Text := Sender.GetString(RowIndex,FieldIndex); // display the value as such
     result := true;
-  end else
-    result := false;
+  end;
 end;
 
 procedure TDBFrame.GridToVariant(var result: variant);

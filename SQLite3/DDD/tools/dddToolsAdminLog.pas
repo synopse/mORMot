@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ExtCtrls, StdCtrls, CheckLst, Menus, Grids,
-  SynCommons, SynLog, mORMotDDD;
+  SynCommons, SynLog, mORMot, mORMotDDD;
 
 type
   TLogFrame = class(TFrame)
@@ -38,9 +38,10 @@ type
   protected
     FLog: TSynLogFile;
     FEventCaption: array[TSynLogInfo] of string;
-    FMenuFilterAll: TMenuItem;
+    FMenuFilterAll,FMenuFilterNone: TMenuItem;
     FEventsAllChecked: boolean;
     FEventsSet: TSynLogInfos;
+    FCallbackPattern: RawUTF8;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
     procedure EventsCheck;
@@ -53,10 +54,14 @@ type
     OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo;
       const Text: RawUTF8): boolean of object;
     constructor Create(Owner: TComponent); override;
+    constructor CreateCustom(Owner: TComponent; const aAdmin: IAdministratedDaemon;
+      const aEvents,aPattern: RawUTF8);
     procedure Closing;
   end;
 
   TLogFrameClass = class of TLogFrame;
+  TLogFrameDynArray = array of TLogFrame;
+  
 
 implementation
 
@@ -71,11 +76,15 @@ type
   TLogFrameCallback = class(TInterfacedObject,ISynLogCallback)
   public
     Owner: TLogFrame;
+    Pattern: RawUTF8;
     procedure Log(Level: TSynLogInfo; const Text: RawUTF8);
   end;
 
 procedure TLogFrameCallback.Log(Level: TSynLogInfo; const Text: RawUTF8);
 begin
+  if Pattern<>'' then
+    if PosI(pointer(Pattern),Text)=0 then
+      exit;
   Owner.ReceivedOne(Text);
   if Assigned(Owner.OnLogReceived) then
     Owner.OnLogReceived(Owner,Level,Text);
@@ -114,21 +123,47 @@ begin
   end;
 end;
 
+var LogFrameCount: integer;
+
 constructor TLogFrame.Create(Owner: TComponent);
 var F: TSynLogFilter;
     M: TMenuItem;
 begin
   inherited;
+  Name := 'LogFrame'+IntToStr(LogFrameCount);;
+  inc(LogFrameCount);
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
     M.Caption := GetCaptionFromEnum(TypeInfo(TSynLogFilter),Ord(F));
     M.Tag := ord(F);
     M.OnClick := pmFilterClick;
     if F=lfAll then
-      FMenuFilterAll := M;
+      FMenuFilterAll := M else
+    if F=lfNone then
+      FMenuFilterNone := M;
     pmFilter.Items.Add(M);
   end;
   btnStopLogClick(nil);
+end;
+
+constructor TLogFrame.CreateCustom(Owner: TComponent; const aAdmin: IAdministratedDaemon;
+  const aEvents, aPattern: RawUTF8);
+var P: PUTF8Char;
+    e: integer;
+begin
+  Create(Owner);
+  pmFilterClick(FMenuFilterNone);
+  P := pointer(aEvents);
+  while P<>nil do begin
+    e := PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType.GetEnumNameValue(
+      pointer(GetNextItem(P)));
+    if e>0 then // ignore e=0=sllNone
+      chklstEvents.Checked[e-1] := True;
+  end;
+  Admin := aAdmin;
+  FCallbackPattern := UpperCase(aPattern);
+  btnStartLogClick(self);
+  btnStopLog.Hide;
 end;
 
 procedure TLogFrame.btnStopLogClick(Sender: TObject);
@@ -137,6 +172,8 @@ begin
   chklstEvents.Top := 56;
   chklstEvents.Items.Clear;
   for E := succ(sllNone) to high(E) do begin
+    if (Sender=Self) and not (E in FEventsSet) then
+      continue; // from TLogFrame.CreateCustom()
     FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
     chklstEvents.Items.AddObject(FEventCaption[E],pointer(ord(E)));
   end;
@@ -152,7 +189,7 @@ begin
   btnSearchNext.Hide;
   drwgrdEvents.RowCount := 0;
   drwgrdEvents.Tag := 0;
-  (Owner as TAdminControl).EndLog;
+  (Owner as TAdminControl).EndLog(self);
 end;
 
 procedure TLogFrame.pmFilterClick(Sender: Tobject);
@@ -187,17 +224,21 @@ end;
 
 procedure TLogFrame.btnStartLogClick(Sender: TObject);
 var cb: TLogFrameCallback;
-    i: integer;
+    kb,i: integer;
 begin
-  EventsCheck;
+  EventsCheck; // fill FEventsSet and FEventsAllChecked
   if integer(FEventsSet)=0 then
     exit;
   cb := TLogFrameCallback.Create;
   cb.Owner := Self;
+  cb.Pattern := FCallbackPattern;
   Callback := cb;
   try
     FLog := TSynLogFile.Create;
-    Admin.SubscribeLog(FEventsSet,Callback,StrToIntDef(edtExistingLogKB.Text,0));
+    if Sender=self then
+      kb := 0 else
+      kb := StrToIntDef(edtExistingLogKB.Text,0);
+    Admin.SubscribeLog(FEventsSet,Callback,kb);
     chklstEvents.Top := lblExistingLogKB.Top;
     for i := chklstEvents.Count-1 downto 0 do
       if not chklstEvents.Checked[i] then
