@@ -27,6 +27,7 @@ type
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
+    OnAfterExecute: TNotifyEvent;
     destructor Destroy; override;
     function Open(Definition: TDDDRestClientSettings; Model: TSQLModel=nil): boolean; virtual;
     procedure Show; virtual;
@@ -34,6 +35,8 @@ type
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
     function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame; virtual;
     procedure EndLog; virtual;
+    function CurrentDBFrame: TDBFrame;
+    function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState); virtual;
     property Client: TSQLHttpClientWebsockets read fClient;
@@ -240,6 +243,7 @@ begin
   result.Client := fClient;
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
+  result.OnAfterExecute := OnAfterExecute;
   fDBFrame[n] := result;
 end;
 
@@ -250,6 +254,27 @@ begin
   if ndx>=cardinal(Length(fDBFrame)) then
     exit;
 end;
+
+function TAdminControl.CurrentDBFrame: TDBFrame;
+var ndx: cardinal;
+begin
+  ndx := fPage.ActivePageIndex-1;
+  if ndx>=cardinal(Length(fDBFrame)) then
+    result := nil else
+    result := fDBFrame[ndx];
+end;
+
+function TAdminControl.FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
+var i: Integer;
+begin
+  for i := 0 to high(fDBFrame) do
+    if IdemPropNameU(fDBFrame[i].DatabaseName,aDatabaseName) then begin
+      result := fDBFrame[i];
+      exit;
+    end;
+  result := nil;
+end;
+
 
 
 { TAdminForm }

@@ -28,11 +28,9 @@ type
     procedure btnCmdClick(Sender: TObject); virtual;
   protected
     fmmoResultRow: integer;
-    fGrid: TSQLTableToGrid;
     fJson: RawJSON;
     fSQL,fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
-    procedure AddSQL(SQL: string; AndExec: boolean);
     function ExecSQL(const SQL: RawUTF8): RawUTF8;
     procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer; var Text: string): boolean;
@@ -41,15 +39,19 @@ type
     procedure LogSearch(Sender: TObject);
     procedure GridToVariant(var result: variant); virtual;
   public
+    DatabaseName: RawUTF8;
     mmoResult: TMemoEx;
+    Grid: TSQLTableToGrid;
+    GridLastTableName: RawUTF8;
     Client: TSQLHttpClientWebsockets;
     Admin: IAdministratedDaemon;
-    DatabaseName: RawUTF8;
     Tables: TRawUTF8DynArray;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
+    OnAfterExecute: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     procedure Open; virtual;
+    procedure AddSQL(SQL: string; AndExec: boolean);
     destructor Destroy; override;
   end;
 
@@ -119,7 +121,7 @@ end;
 
 procedure TDBFrame.SetResult(const JSON: RawUTF8);
 begin
-  FreeAndNil(fGrid);
+  FreeAndNil(Grid);
   drwgrdResult.Hide;
   mmoResult.Align := alClient;
   mmoResult.WordWrap := false;
@@ -200,7 +202,8 @@ begin
       Screen.Cursor := crDefault;
     end;
   end;
-  FreeAndNil(fGrid);
+  FreeAndNil(Grid);
+  GridLastTableName := '';
   fmmoResultRow := 0;
   if fSQL[1]='#' then begin
     if fJson<>'' then
@@ -222,8 +225,11 @@ begin
           ctxt,nil,TSynMustache.HelpersGetStandardList,nil,true);
       end else
         JSONBufferReformat(pointer(fJson),res,jsonUnquotedPropName);
+    if Assigned(OnAfterExecute) then
+      OnAfterExecute(self);
     SetResult(res);
   end else begin
+    GridLastTableName := GetTableNameFromSQLSelect(fSQL,false);
     mmoResult.Text := '';
     mmoResult.Align := alBottom;
     mmoResult.WordWrap := true;
@@ -233,11 +239,13 @@ begin
       tables := AssociatedModel.Tables else
       tables := AssociatedTables;
     table := TSQLTableJSON.CreateFromTables(tables,'',pointer(fJson),length(fJSON));
-    fGrid := TSQLTableToGrid.Create(drwgrdResult,table,nil);
-    fGrid.SetAlignedByType(sftCurrency,alRight);
-    fGrid.SetFieldFixedWidth(100);
-    fGrid.FieldTitleTruncatedNotShownAsHint := true;
-    fGrid.OnValueText := OnText;
+    Grid := TSQLTableToGrid.Create(drwgrdResult,table,nil);
+    Grid.SetAlignedByType(sftCurrency,alRight);
+    Grid.SetFieldFixedWidth(100);
+    Grid.FieldTitleTruncatedNotShownAsHint := true;
+    Grid.OnValueText := OnText;
+    if Assigned(OnAfterExecute) then
+      OnAfterExecute(self);
     drwgrdResult.Options := drwgrdResult.Options-[goRowSelect];
     drwgrdResult.Show;
     if table.RowCount>0 then
@@ -257,7 +265,7 @@ end;
 
 destructor TDBFrame.Destroy;
 begin
-  FreeAndNil(fGrid);
+  FreeAndNil(Grid);
   FreeAndNil(AssociatedModel);
   inherited;
 end;
@@ -274,7 +282,7 @@ end;
 
 procedure TDBFrame.GridToVariant(var result: variant);
 begin
-  fGrid.Table.ToDocVariant(fmmoResultRow,result,JSON_OPTIONS_NAMEVALUE[true],true);
+  Grid.Table.ToDocVariant(fmmoResultRow,result,JSON_OPTIONS_NAMEVALUE[true],true);
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);
@@ -283,7 +291,7 @@ var R: integer;
     json: RawUTF8;
 begin
   R := drwgrdResult.Row;
-  if (R>0) and (R<>fmmoResultRow) and (fGrid<>nil) then begin
+  if (R>0) and (R<>fmmoResultRow) and (Grid<>nil) then begin
     fmmoResultRow := R;
     GridToVariant(row);
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
