@@ -50,7 +50,8 @@ unit SynLog;
     been changed into a RawUTF8, to please all supported platforms and compilers
   - WARNING: any user of the framework in heavy-loaded multi-threaded application
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
-  - all logged timestamps are now in UTC
+  - all logged timestamps are now in much less error-prone UTC by default,
+    unless the TSynLogFamily.LocalTimeStamp property is defined
   - Delphi XE4/XE5/XE6/XE7/XE8/10Seattle compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
@@ -434,6 +435,7 @@ type
     fDefaultExtension: TFileName;
     fBufferSize: integer;
     fHRTimeStamp: boolean;
+    fLocalTimeStamp: boolean;
     fWithUnitName: boolean;
     fNoFile: boolean;
     {$ifdef MSWINDOWS}
@@ -589,6 +591,9 @@ type
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)
     property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
+    /// by default, time logging will use error-safe UTC as reference
+    // - you may set this property to TRUE to store local time instead
+    property LocalTimeStamp: boolean read fLocalTimeStamp write fLocalTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
     // - set to FALSE by default
@@ -3315,7 +3320,9 @@ begin
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');
-    AddDateTime(NowUTC);
+    if fFamily.LocalTimeStamp then
+      AddDateTime(Now) else
+      AddDateTime(NowUTC);
     if WithinEvents then
       AddEndOfLine(sllNone) else
       Add(#13,#13);
@@ -3370,7 +3377,7 @@ begin
     dec(fCurrentTimeStamp,fStartTimeStamp);
     fWriter.AddBinToHexDisplay(@fCurrentTimeStamp,sizeof(fCurrentTimeStamp));
   end else
-    fWriter.AddCurrentLogTime;
+    fWriter.AddCurrentLogTime(fFamily.LocalTimeStamp);
 end;
 
 function TSynLog.LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;

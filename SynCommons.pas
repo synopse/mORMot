@@ -6414,8 +6414,9 @@ type
     procedure Add2(Value: integer);
     /// append the current UTC date and time, in a log-friendly format
     // - e.g. append '20110325 19241502 '
+    // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentLogTime;
+    procedure AddCurrentLogTime(LocalTime: boolean=false);
     /// append a time period, specified in micro seconds
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
@@ -39324,36 +39325,40 @@ begin
 end;
 
 var // can be safely made global since timing is multi-thread safe
-  GlobalTimeUTC: TSystemTime;
-  GlobalClock: cardinal; // avoid slower API call
+  GlobalLogTime: array[boolean] of record
+    time: TSystemTime;
+    clock: cardinal; // avoid slower API call
+  end;
 
-procedure TTextWriter.AddCurrentLogTime;
+procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
 var Ticks: cardinal;
 begin
   if BEnd-B<=17 then
     FlushToStream;
-  inc(B);
-  Ticks := GetTickCount; // this call is very fast (just one integer mul)
-  if GlobalClock<>Ticks then begin // typically in range of 10-16 ms
-    GlobalClock := Ticks;
-    {$ifdef MSWINDOWS}
-    GetSystemTime(GlobalTimeUTC);
-    {$else}
-    GetNowUTCSystem(GlobalTimeUTC);
-    {$endif}
-  end;
-  YearToPChar({$ifdef MSWINDOWS}GlobalTimeUTC.wYear{$else}GlobalTimeUTC.Year{$endif},B);
-  with GlobalTimeUTC do begin
-    PWord(B+4)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMonth{$else}Month{$endif}];
-    PWord(B+6)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wDay{$else}Day{$endif}];
+  with GlobalLogTime[LocalTime] do begin
+    Ticks := GetTickCount; // this call is very fast (just one integer mul)
+    if clock<>Ticks then begin // typically in range of 10-16 ms
+      clock := Ticks;
+      if LocalTime then
+        GetLocalTime(time) else
+        {$ifdef MSWINDOWS}
+        GetSystemTime(time);
+        {$else}
+        GetNowUTCSystem(time);
+        {$endif}
+    end;
+    inc(B);
+    YearToPChar(time.{$ifdef MSWINDOWS}wYear{$else}Year{$endif},B);
+    PWord(B+4)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMonth{$else}Month{$endif}];
+    PWord(B+6)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wDay{$else}Day{$endif}];
     B[8] := ' ';
-    PWord(B+9)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wHour{$else}Hour{$endif}];
-    PWord(B+11)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMinute{$else}Minute{$endif}];
-    PWord(B+13)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wSecond{$else}Second{$endif}];
-    PWord(B+15)^ := TwoDigitLookupW[{$ifdef MSWINDOWS}wMilliseconds shr 4{$else}Millisecond shr 4{$endif}]; // range 0..62 = 16 ms
+    PWord(B+9)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wHour{$else}Hour{$endif}];
+    PWord(B+11)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMinute{$else}Minute{$endif}];
+    PWord(B+13)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wSecond{$else}Second{$endif}];
+    PWord(B+15)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMilliseconds{$else}Millisecond{$endif} shr 4]; // range 0..62 = 16 ms
     B[17] := ' ';
+    inc(B,16);
   end;
-  inc(B,16);
 end;
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
