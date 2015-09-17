@@ -44616,11 +44616,15 @@ begin
         WriteObject(List.List[c],Options);
         Add(',');
       end;
-    oObjectList: // TObjectList will include "ClassName":"TMyObject" field
+    oObjectList: begin
+      if not (woObjectListWontStoreClassName in Options) then
+        // TObjectList will include "ClassName":"TMyObject" field
+        Options := Options+[woStoreClassName];
       for c := 0 to List.Count-1 do begin
-        WriteObject(List.List[c],Options+[woStoreClassName]);
+        WriteObject(List.List[c],Options);
         Add(',');
       end;
+    end;
 {$ifndef LVCL}
     oCollection:
       for c := 0 to Coll.Count-1 do begin

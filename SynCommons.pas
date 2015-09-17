@@ -6212,12 +6212,15 @@ type
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
   // field will be serialized as "***" to prevent security issues (e.g. in log)
+  // - by default, TObjectList will set the woStoreClassName for its nested
+  // objects, unless woObjectListWontStoreClassName is defined
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic,
-    woSQLRawBlobAsBase64, woHideSynPersistentPassword);
+    woSQLRawBlobAsBase64, woHideSynPersistentPassword,
+    woObjectListWontStoreClassName);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
