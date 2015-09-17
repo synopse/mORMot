@@ -230,8 +230,8 @@ begin
       if ssCtrl in Shift then
         btnHistoryClick(btnHistory);
     end else
-  if pageIndex-DBCount<Length(fLogFrames) then
-    LogKeys(fLogFrames[pageIndex-DBCount]);
+  if pageIndex<=Length(fLogFrames)+DBCount then
+    LogKeys(fLogFrames[pageIndex-DBCount-1]);
 end;
 
 function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
