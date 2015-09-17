@@ -1129,88 +1129,90 @@ end;
 function PosEx(const SubStr, S: AnsiString; Offset: Cardinal = 1): Integer;
 // Faster Equivalent of Delphi 7 StrUtils.PosEx
 asm
-        push    ebx
-        push    esi
-        push    edx              {@Str}
-        test    eax, eax
-        jz      @@NotFound       {Exit if SubStr = ''}
-        test    edx, edx
-        jz      @@NotFound       {Exit if Str = ''}
-        mov     esi, ecx
-        mov     ecx, [edx - 4]     {Length(Str)}
-        mov     ebx, [eax - 4]     {Length(SubStr)}
-        add     ecx, edx
-        sub     ecx, ebx        {Max Start Pos for Full Match}
-        lea     edx, [edx + esi - 1] {Set Start Position}
-        cmp     edx, ecx
-        jg      @@NotFound       {StartPos > Max Start Pos}
-        cmp     ebx, 1           {Length(SubStr)}
-        jle     @@SingleChar     {Length(SubStr) <= 1}
-        push    edi
-        push    ebp
-        lea     edi, [ebx - 2]     {Length(SubStr) - 2}
-        mov     esi, eax
-        movzx   ebx, [eax]       {Search Character}
-@@Loop:                    {Compare 2 Characters per Loop}
-        cmp     bl, [edx]
-        jne     @@NotChar1
-        mov     ebp, edi         {Remainder}
-@@Char1Loop:
-        movzx   eax, word ptr[esi + ebp]
-        cmp     ax, [edx + ebp]
-        jne     @@NotChar1
-        sub     ebp, 2
-        jnc     @@Char1Loop
-        pop     ebp
-        pop     edi
-        jmp     @@SetResult
+  push    ebx
+  push    esi
+  push    edx                 // @Str
+  test    eax,eax
+  jz      @@NotFound          // Exit if SubStr = ''
+  test    edx,edx
+  jz      @@NotFound          // Exit if Str = ''
+  mov     esi,ecx
+  mov     ecx,[edx-4]         // Length(Str)
+  mov     ebx,[eax-4]         // Length(Search string)
+  add     ecx,edx
+  sub     ecx,ebx             // ecx = Max Start Pos for Full Match
+  lea     edx,[edx+esi-1]     // edx = Start Position
+  cmp     edx,ecx
+  jg      @@NotFound          // StartPos > Max Start Pos
+  cmp     ebx,1               // Length(SubStr)
+  jle     @@SingleChar        // Length(SubStr) <= 1
+  push    edi
+  push    ebp
+  lea     edi,[ebx-2]         // edi = Length(Search string) - 2
+  mov     esi,eax             // esi = Search string
+  movzx   ebx,byte ptr [eax]  // bl = Search Character
+@@Loop:                       // Compare 2 Characters per Loop
+  cmp     bl,[edx]
+  je      @@Char1Found
 @@NotChar1:
-        cmp     bl, [edx + 1]
-        jne     @@NotChar2
-        mov     ebp, edi         {Remainder}
-@@Char2Loop:
-        movzx   eax, word ptr[esi + ebp]
-        cmp     ax, [edx + ebp + 1]
-        jne     @@NotChar2
-        sub     ebp, 2
-        jnc     @@Char2Loop
-        pop     ebp
-        pop     edi
-        jmp     @@CheckResult
+  cmp     bl,[edx+1]
+  je      @@Char2Found
 @@NotChar2:
-        lea     edx, [edx + 2]
-        cmp     edx, ecx         {Next Start Position <= Max Start Position}
-        jle     @@Loop
-        pop     ebp
-        pop     edi
-        jmp     @@NotFound
-@@SingleChar:
-        jl      @@NotFound       {Needed for Zero-Length Non-NIL Strings}
-        movzx   eax, [eax]       {Search Character}
-@@CharLoop:
-        cmp     al, [edx]
-        je      @@SetResult
-        cmp     al, [edx + 1]
-        je      @@CheckResult
-        lea     edx, [edx + 2]
-        cmp     edx, ecx
-        jle     @@CharLoop
+  lea     edx,[edx+2]
+  cmp     edx,ecx             // Next Start Position <= Max Start Position
+  jle     @@Loop
+  pop     ebp
+  pop     edi
 @@NotFound:
-        XOR     eax, eax
-        pop     edx
-        pop     esi
-        pop     ebx
-        ret
-@@CheckResult:             {Check within AnsiString}
-        cmp     edx, ecx
-        jge     @@NotFound
-        add     edx, 1
+  xor     eax,eax            // returns 0 if not found
+  pop     edx
+  pop     esi
+  pop     ebx
+  ret
+@@Char1Found:
+  mov     ebp,edi             // ebp = Length(Search string) - 2
+@@Char1Loop:
+  movzx   eax,word ptr [esi+ebp]
+  cmp     ax,[edx+ebp]       // Compare 2 Chars per Char1Loop (may include #0)
+  jne     @@NotChar1
+  sub     ebp,2
+  jnc     @@Char1Loop
+  pop     ebp
+  pop     edi
+  jmp     @@SetResult
+@@Char2Found:
+  mov     ebp,edi             // ebp = Length(Search string) - 2
+@@Char2Loop:
+  movzx   eax,word ptr [esi+ebp]
+  cmp     ax,[edx+ebp+1]     // Compare 2 Chars per Char2Loop (may include #0)
+  jne     @@NotChar2
+  sub     ebp,2
+  jnc     @@Char2Loop
+  pop     ebp
+  pop     edi
+  jmp     @@CheckResult
+@@SingleChar:
+  jl      @@NotFound          // Needed for Zero-Length Non-NIL Strings
+  movzx   eax,byte ptr [eax]  // Search Character
+@@CharLoop:
+  cmp     al,[edx]
+  je      @@SetResult
+  cmp     al,[edx+1]
+  je      @@CheckResult
+  lea     edx,[edx+2]
+  cmp     edx,ecx
+  jle     @@CharLoop
+  jmp     @@NotFound
+@@CheckResult:                // Check within AnsiString
+  cmp     edx,ecx
+  jge     @@NotFound
+  add     edx,1
 @@SetResult:
-        pop     ecx              {@Str}
-        pop     esi
-        pop     ebx
-        neg     ecx
-        lea     eax, [edx + ecx + 1]
+  pop     ecx                 // @Str
+  pop     esi
+  pop     ebx
+  neg     ecx
+  lea     eax,[edx+ecx+1]
 end;
 {$endif UNICODE}
 
@@ -7147,9 +7149,6 @@ end;
 
 {$ENDIF MEMOEX_EDITOR}
 
-
-{ TIEditReader support }
-
 procedure TCustomMemoEx.ValidateEditBuffer;
 begin
   if FPEditBuffer = nil then
@@ -7158,7 +7157,7 @@ begin
     FPEditBuffer := PChar(FEditBuffer);
     FEditBufferSize := Length(FEditBuffer);
   end;
-end; { ValidateEditBuffer }
+end;
 
 function TCustomMemoEx.GetText(Position: longint; Buffer: PChar; Count: longint): longint;
 begin
@@ -7183,7 +7182,7 @@ begin
     FLines.Reformat;
     CantUndo;
     CaretFromPos(p, x, y);
-    SetCaret(0, Y); // aller en début de ligne (sinon risque de bug)
+    SetCaret(0, Y); // X=0 to avoid new line length overflow issue
   end;
 end;
 
@@ -7203,9 +7202,6 @@ begin
   Invalidate;
 end;
 
-{
-  OnAfterLoad event
-}
 function TCustomMemoEx.GetAfterLoad: TNotifyEvent;
 begin
   Result := FLines.FOnAfterLoad;
@@ -7216,9 +7212,6 @@ begin
   FLines.FOnAfterLoad := Value;
 end;
 
-{
-  OnBeforeSave event
-}
 function TCustomMemoEx.GetBeforeSave: TNotifyEvent;
 begin
   Result := FLines.FOnBeforeSave;
