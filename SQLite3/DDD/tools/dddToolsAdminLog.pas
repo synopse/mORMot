@@ -26,7 +26,6 @@ type
     spl2: TSplitter;
     procedure chklstEventsDrawItem(Control: TWinControl; Index: Integer;
       Rect: TRect; State: TOwnerDrawState);
-    procedure chklstEventsClick(Sender: TObject);
     procedure btnStartLogClick(Sender: TObject);
     procedure tmrRefreshTimer(Sender: TObject);
     procedure drwgrdEventsDrawCell(Sender: TObject; ACol, ARow: Integer;
@@ -35,8 +34,11 @@ type
     procedure btnSearchNextClick(Sender: TObject);
     procedure chklstEventsDblClick(Sender: TObject);
     procedure btnStopLogClick(Sender: TObject);
+    procedure chklstEventsClickCheck(Sender: TObject);
   protected
     FLog: TSynLogFile;
+    FLogSelected: TIntegerDynArray;
+    FLogSelectedCount: integer;
     FEventCaption: array[TSynLogInfo] of string;
     FMenuFilterAll,FMenuFilterNone: TMenuItem;
     FEventsAllChecked: boolean;
@@ -44,7 +46,7 @@ type
     FCallbackPattern: RawUTF8;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
-    procedure EventsCheck;
+    procedure EventsCheckToEventsSet;
     procedure pmFilterClick(Sender: Tobject);
     procedure ReceivedOne(const Text: RawUTF8);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
@@ -163,7 +165,7 @@ begin
   Admin := aAdmin;
   FCallbackPattern := UpperCase(aPattern);
   btnStartLogClick(self);
-  btnStopLog.Hide;
+  btnStopLog.Hide; { TODO: allow event log closing }
 end;
 
 procedure TLogFrame.btnStopLogClick(Sender: TObject);
@@ -201,17 +203,10 @@ begin
   F := TSynLogFilter(TMenuItem(Sender).Tag);
   for i := 0 to chklstEvents.Count-1 do
     chklstEvents.Checked[i] := TSynLogInfo(chklstEvents.Items.Objects[i]) in LOG_FILTER[F];
-  chklstEventsClick(nil);
+  chklstEventsClickCheck(nil);
 end;
 
-procedure TLogFrame.chklstEventsClick(Sender: TObject);
-begin
-  if not drwgrdEvents.Visible then
-    exit;
-  EventsCheck;
-end;
-
-procedure TLogFrame.EventsCheck;
+procedure TLogFrame.EventsCheckToEventsSet;
 var i: integer;
 begin
   FEventsAllChecked := true;
@@ -226,7 +221,7 @@ procedure TLogFrame.btnStartLogClick(Sender: TObject);
 var cb: TLogFrameCallback;
     kb,i: integer;
 begin
-  EventsCheck; // fill FEventsSet and FEventsAllChecked
+  EventsCheckToEventsSet; // fill FEventsSet and FEventsAllChecked
   if integer(FEventsSet)=0 then
     exit;
   cb := TLogFrameCallback.Create;
@@ -278,14 +273,15 @@ begin
     withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
     if withoutThreads and (FLog.EventThread<>nil) then
-      tmrRefresh.Tag := 1; 
+      tmrRefresh.Tag := 1;
+    if FLog.EventLevel[FLog.Count-1] in FEventsSet then
+      AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
   tmrRefresh.Enabled := true; // MUCH faster than Synchronize() to use a timer
 end;
 
 procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
 var moveToLast: boolean;
-    n: integer;
 begin
   tmrRefresh.Enabled := false;
   if fLog=nil then
@@ -297,10 +293,9 @@ begin
     drwgrdEvents.ColWidths[3] := 2000;
   end;
   moveToLast := drwgrdEvents.Row=drwgrdEvents.RowCount-1;
-  n := FLog.Count;
-  drwgrdEvents.RowCount := n;
+  drwgrdEvents.RowCount := FLogSelectedCount;
   if (drwgrdEvents.Tag=0) or moveToLast then begin
-    drwgrdEvents.Row := n-1;
+    drwgrdEvents.Row := FLogSelectedCount-1;
     drwgrdEvents.Tag := 1;
   end;
   drwgrdEvents.Invalidate;
@@ -321,8 +316,8 @@ begin
       FillRect(Rect) else
     if FLog.EventLevel<>nil then begin
       Brush.Style := bsClear;
-      if cardinal(ARow)<cardinal(FLog.Count) then begin
-        Index := ARow;
+      if cardinal(ARow)<cardinal(FLogSelectedCount) then begin
+        Index := FLogSelected[ARow];
         b := (gdFocused in State) or (gdSelected in State);
         if b then
           Brush.Color := clBlack else
@@ -351,9 +346,9 @@ var i: integer;
     s: string;
 begin
   i := drwgrdEvents.Row;
-  if Cardinal(i)>cardinal(FLog.Count) then
+  if cardinal(i)>=cardinal(FLogSelectedCount) then
     s := '' else
-    s := FLog.Strings[i];
+    s := FLog.Strings[FLogSelected[i]];
   mmoBottom.Text := s;
 end;
 
@@ -374,14 +369,14 @@ begin
   try
     ndx := drwgrdEvents.Row;
     // search from next item
-    for i := ndx+searchnext to FLog.Count-1 do
-      if FLog.LineContains(s,i) then begin
+    for i := ndx+searchnext to FLogSelectedCount-1 do
+      if FLog.LineContains(s,FLogSelected[i]) then begin
         SetListItem(i,s);
         exit;
       end;
     // not found -> search from beginning
     for i := 0 to ndx-1 do
-      if FLog.LineContains(s,i) then begin
+      if FLog.LineContains(s,FLogSelected[i]) then begin
         SetListItem(i,s);
         exit;
       end;
@@ -399,7 +394,7 @@ begin
     drwgrdEvents.Row := Index;
     if (search='') and drwgrdEvents.Visible then
       drwgrdEvents.SetFocus;
-    s := FLog.Strings[Index];
+    s := FLog.Strings[FLogSelected[Index]];
     mmoBottom.Text := s;
     if search<>'' then begin
       ss := UTF8ToString(search);
@@ -418,6 +413,8 @@ procedure TLogFrame.Closing;
 begin
   Callback := nil;
   FreeAndNil(fLog);
+  Finalize(FLogSelected);
+  FLogSelectedCount := 0;
 end;
 
 procedure TLogFrame.chklstEventsDblClick(Sender: TObject);
@@ -431,19 +428,51 @@ begin
     exit;
   E := TSynLogInfo(chklstEvents.Items.Objects[i]);
   // search from next item
-  for i := drwgrdEvents.Row+1 to FLog.Count-1 do
-    if FLog.EventLevel[i]=E then begin
+  for i := drwgrdEvents.Row+1 to FLogSelectedCount-1 do
+    if FLog.EventLevel[FLogSelected[i]]=E then begin
       SetListItem(i);
       exit;
     end;
   // search from beginning
   for i := 0 to drwgrdEvents.Row-1 do
-    if FLog.EventLevel[i]=E then begin
+    if FLog.EventLevel[FLogSelected[i]]=E then begin
       SetListItem(i);
       exit;
     end;
 end;
 
+procedure TLogFrame.chklstEventsClickCheck(Sender: TObject);
+var ndx,i: integer;
+begin
+  if FLog=nil then
+    exit;
+  EventsCheckToEventsSet;
+  ndx := drwgrdEvents.Row;
+  if ndx>=0 then
+    ndx := FLogSelected[ndx];
+  if FEventsAllChecked then begin
+    FLogSelectedCount := FLog.Count;
+    FillIncreasing(pointer(FlogSelected),0,FLogSelectedCount);
+  end else begin
+    FLogSelectedCount := 0;
+    if integer(FEventsSet)=0 then
+      ndx := -1 else begin
+      for i := 0 to FLog.Count-1 do
+        if FLog.EventLevel[i] in FEventsSet then begin
+          FLogSelected[FLogSelectedCount] := i;
+          inc(FLogSelectedCount);
+        end;
+      if ndx>=0 then
+        ndx := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
+    end;
+  end;
+  drwgrdEvents.RowCount := FLogSelectedCount;
+  SetListItem(ndx);
+  if drwgrdEvents.Visible then begin
+    drwgrdEvents.Repaint;
+    drwgrdEventsClick(nil);
+  end;
+end;
 
 end.
 

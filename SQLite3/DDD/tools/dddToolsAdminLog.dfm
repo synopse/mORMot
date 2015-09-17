@@ -61,6 +61,7 @@ object LogFrame: TLogFrame
       Top = 56
       Width = 129
       Height = 105
+      OnClickCheck = chklstEventsClickCheck
       ItemHeight = 13
       PopupMenu = pmFilter
       Style = lbOwnerDrawFixed

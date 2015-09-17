@@ -389,7 +389,7 @@ begin
         ndx := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
     end;
     List.RowCount := FLogSelectedCount;
-    FEventsRemoteViewSet := Sets;        // Remember set for filtering incoming remote log
+    FEventsRemoteViewSet := Sets; // Remember set for filtering incoming remote log
   end else
     List.RowCount := FLog.Count;
   SetListItem(ndx);
