@@ -41,7 +41,6 @@ type
     FLogSelectedCount: integer;
     FEventCaption: array[TSynLogInfo] of string;
     FMenuFilterAll,FMenuFilterNone: TMenuItem;
-    FEventsAllChecked: boolean;
     FEventsSet: TSynLogInfos;
     FCallbackPattern: RawUTF8;
     FLastSearch: RawUTF8;
@@ -209,19 +208,17 @@ end;
 procedure TLogFrame.EventsCheckToEventsSet;
 var i: integer;
 begin
-  FEventsAllChecked := true;
   integer(FEventsSet) := 0;
   for i := 0 to chklstEvents.Count-1 do
     if chklstEvents.Checked[i] then
-      Include(FEventsSet,TSynLogInfo(chklstEvents.Items.Objects[i])) else
-      FEventsAllChecked := false;
+      Include(FEventsSet,TSynLogInfo(chklstEvents.Items.Objects[i]));
 end;
 
 procedure TLogFrame.btnStartLogClick(Sender: TObject);
 var cb: TLogFrameCallback;
     kb,i: integer;
 begin
-  EventsCheckToEventsSet; // fill FEventsSet and FEventsAllChecked
+  EventsCheckToEventsSet; // fill FEventsSet 
   if integer(FEventsSet)=0 then
     exit;
   cb := TLogFrameCallback.Create;
@@ -442,30 +439,18 @@ begin
 end;
 
 procedure TLogFrame.chklstEventsClickCheck(Sender: TObject);
-var ndx,i: integer;
+var selected,ndx: integer;
 begin
   if FLog=nil then
     exit;
   EventsCheckToEventsSet;
-  ndx := drwgrdEvents.Row;
-  if ndx>=0 then
-    ndx := FLogSelected[ndx];
-  if FEventsAllChecked then begin
-    FLogSelectedCount := FLog.Count;
-    FillIncreasing(pointer(FlogSelected),0,FLogSelectedCount);
-  end else begin
-    FLogSelectedCount := 0;
-    if integer(FEventsSet)=0 then
-      ndx := -1 else begin
-      for i := 0 to FLog.Count-1 do
-        if FLog.EventLevel[i] in FEventsSet then begin
-          FLogSelected[FLogSelectedCount] := i;
-          inc(FLogSelectedCount);
-        end;
-      if ndx>=0 then
-        ndx := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
-    end;
-  end;
+  selected := drwgrdEvents.Row;
+  if selected>=0 then
+    ndx := FLogSelected[selected] else
+    ndx := -1;
+  FLogSelectedCount := FLog.EventSelect(FEventsSet,FLogSelected,@ndx);
+  if selected<FLogSelectedCount then
+    drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
   drwgrdEvents.RowCount := FLogSelectedCount;
   SetListItem(ndx);
   if drwgrdEvents.Visible then begin
