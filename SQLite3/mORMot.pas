@@ -996,6 +996,7 @@ unit mORMot;
       RawUTF8 properties, to allow direct handling in external databases
     - added TSQLModelRecordProperties.FTS4WithoutContent() method to allow
       TSQLRecordFTS4 tables let the content be store in another TSQLRecord table
+    - introducing TSQLRecordFTS3Unicode61 and TSQLRecordFTS4Unicode61 classes
     - new protected TSQLRestServer.InternalAdaptSQL method, extracted from URI()
       process to also be called by TSQLRestServer.MultiFieldValues() for proper
       TSQLRestStorage.AdaptSQLForEngineList(SQL) call
@@ -9021,7 +9022,8 @@ type
   // request with the same range for upper case
   // - by default, the "simple" tokenizer is used, but you can inherits from
   // TSQLRecordFTS3Porter class if you want a better English matching, using
-  // the Porter Stemming algorithm - see http:// sqlite.org/fts3.html#tokenizer
+  // the Porter Stemming algorithm, or TSQLRecordFTS3Unicode61 for Unicode
+  // support - see http:// sqlite.org/fts3.html#tokenizer
   // - you can select either the FTS3 engine, or the more efficient (and new)
   // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4 type
   // - in order to make FTS3/FTS4 queries, use the dedicated TSQLRest.FTSMatch
@@ -9053,6 +9055,10 @@ type
   // - see http://sqlite.org/fts3.html#tokenizer
   TSQLRecordFTS3Porter = class(TSQLRecordFTS3);
 
+  /// this base class will create a FTS3 table using the Unicode61 Stemming algorithm
+  // - see http://sqlite.org/fts3.html#tokenizer
+  TSQLRecordFTS3Unicode61 = class(TSQLRecordFTS3);
+
   /// class-reference type (metaclass) of a FTS3/FTS4 virtual table
   TSQLRecordFTS3Class = class of TSQLRecordFTS3;
 
@@ -9080,6 +9086,10 @@ type
   /// this base class will create a FTS4 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
   TSQLRecordFTS4Porter = class(TSQLRecordFTS4);
+
+  /// this base class will create a FTS4 table using the Unicode61 Stemming algorithm
+  // - see http://sqlite.org/fts3.html#tokenizer
+  TSQLRecordFTS4Unicode61 = class(TSQLRecordFTS4);
 
   /// the kind of fields to be available in a Table resulting of
   // a TSQLRecordMany.DestGetJoinedTable() method call
@@ -28013,6 +28023,9 @@ begin
       if InheritsFrom(TSQLRecordFTS3Porter) or
          InheritsFrom(TSQLRecordFTS4Porter) then
         result := result+' tokenize=porter)' else
+      if InheritsFrom(TSQLRecordFTS3Unicode61) or
+         InheritsFrom(TSQLRecordFTS4Unicode61) then
+        result := result+' tokenize=unicode61)' else
         result := result+' tokenize=simple)';
     end;
     rRTree: begin
