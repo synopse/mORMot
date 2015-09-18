@@ -75,6 +75,7 @@ unit SynLog;
     optionally echo the process log to the current console window, using colors
   - added TSynLogFamily.EchoRemoteStart() and EchoRemoteStop methods
   - added TSynLog.Void class function
+  - added TSynLogFile.EventSelect method
   - if new property TSynLogFamily.PerThreadLog is set to ptIdentifiedInOnFile,
     a new column will be added for each logged row - LogViewer has been updated
     to allow easy and efficient multi-thread process logging
@@ -1054,6 +1055,12 @@ type
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
     function EventCount(const aSet: TSynLogInfos): integer;
+    /// add the indexes of all matching events to an array of integers
+    // - the supplied aSelectedIndexes dynamic array should already be allocated
+    // big enough to contain all potential events, i.e. length(aSelectedIndexes)
+    // should be >= Count
+    function EventSelect(const aSet: TSynLogInfos;
+      var aSelectedIndexes: TIntegerDynArray; aSelectedIndex: PInteger): integer;
     /// retrieve the level of an event
     // - is calculated by Create() constructor
     // - EventLevel[] array index is from 0 to Count-1
@@ -3842,10 +3849,33 @@ function TSynLogFile.EventCount(const aSet: TSynLogInfos): integer;
 var i: integer;
 begin
   result := 0;
-  for i := 0 to Count-1 do
-    if fLevels[i] in aSet then
-      inc(result);
+  if integer(aSet)<>0 then
+    for i := 0 to Count-1 do
+      if fLevels[i] in aSet then
+        inc(result);
 end;
+
+function TSynLogFile.EventSelect(const aSet: TSynLogInfos;
+  var aSelectedIndexes: TIntegerDynArray; aSelectedIndex: PInteger): integer;
+var i: integer;
+begin
+  result := 0;
+  if (aSelectedIndex<>nil) and (cardinal(aSelectedIndex^)>=cardinal(Count)) then
+    aSelectedIndex := nil; // nothing to search
+  if integer(aSet)<>0 then
+    for i := 0 to Count-1 do
+      if fLevels[i] in aSet then begin
+        if (aSelectedIndex<>nil) and (aSelectedIndex^<=i) then begin
+          aSelectedIndex^ := result; // found the first matching selected index
+          aSelectedIndex := nil;
+        end;
+        aSelectedIndexes[result] := i;
+        inc(result);
+      end;
+  if aSelectedIndex<>nil then
+    aSelectedIndex^ := -1; // aSelectedIndex^ was not found
+end;
+
 
 function TSynLogFile.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
 begin
