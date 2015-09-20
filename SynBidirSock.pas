@@ -29,6 +29,7 @@ unit SynBidirSock;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred (alf)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -298,7 +299,7 @@ type
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
-    function GetEncrypted: boolean;
+    function GetEncrypted: boolean; 
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
   public
@@ -323,7 +324,8 @@ type
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
     /// defines if AES encryption is enabled during the transmission
-    // - is set to TRUE by default
+    // - is set to TRUE by default, following the aCompressed optional parameter
+    // of the class overloaded Create() constructors 
     property Encrypted: boolean read GetEncrypted;
     /// how many bytes have been received by this instance from the wire
     property FramesInBytesSocket: QWord read fFramesInBytesSocket;
@@ -1498,38 +1500,41 @@ function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;
 var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
-procedure GetHeader;  // SockInRead() below raise a ESynBidirSocket error on failure
-begin
-  FillCharFast(hdr,sizeof(hdr),0);
-  fSocket.SockInRead(@hdr.first,2,false);
-  opcode := TWebSocketFrameOpCode(hdr.first and 15);
-  masked := hdr.len8 and 128<>0;
-  if masked then
-    hdr.len8 := hdr.len8 and 127;
-  if hdr.len8<FRAME_LEN2BYTES then
-    hdr.len32 := hdr.len8 else
-  if hdr.len8=FRAME_LEN2BYTES then begin
-    fSocket.SockInRead(@hdr.len32,2,false);
-    hdr.len32 := swap(hdr.len32);
-  end else
-  if hdr.len8=FRAME_LEN8BYTES then begin
-    fSocket.SockInRead(@hdr.len32,8,false);
-    if hdr.len32<>0 then // size is more than 32 bits -> reject
-      hdr.len32 := maxInt else
-      hdr.len32 := bswap32(hdr.len64);
-    if hdr.len32>1 shl 28 then
-      raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
+
+  procedure GetHeader;  // SockInRead() below raise a ESynBidirSocket error on failure
+  begin
+    FillCharFast(hdr,sizeof(hdr),0);
+    fSocket.SockInRead(@hdr.first,2,false);
+    opcode := TWebSocketFrameOpCode(hdr.first and 15);
+    masked := hdr.len8 and 128<>0;
+    if masked then
+      hdr.len8 := hdr.len8 and 127;
+    if hdr.len8<FRAME_LEN2BYTES then
+      hdr.len32 := hdr.len8 else
+    if hdr.len8=FRAME_LEN2BYTES then begin
+      fSocket.SockInRead(@hdr.len32,2,false);
+      hdr.len32 := swap(word(hdr.len32)); // FPC expects explicit word() cast
+    end else
+    if hdr.len8=FRAME_LEN8BYTES then begin
+      fSocket.SockInRead(@hdr.len32,8,false);
+      if hdr.len32<>0 then // size is more than 32 bits -> reject
+        hdr.len32 := maxInt else
+        hdr.len32 := bswap32(hdr.len64);
+      if hdr.len32>1 shl 28 then
+        raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
+    end;
+    if masked then
+      fSocket.SockInRead(@hdr.mask,4,false);
   end;
-  if masked then
-    fSocket.SockInRead(@hdr.mask,4,false);
-end;
-procedure GetData(var data: RawByteString);
-begin
-  SetString(data,nil,hdr.len32);
-  fSocket.SockInRead(pointer(data),hdr.len32,false);
-  if hdr.mask<>0 then
-    ProcessMask(pointer(data),hdr.mask,hdr.len32);
-end;
+
+  procedure GetData(var data: RawByteString);
+  begin
+    SetString(data,nil,hdr.len32);
+    fSocket.SockInRead(pointer(data),hdr.len32,false);
+    if hdr.mask<>0 then
+      ProcessMask(pointer(data),hdr.mask,hdr.len32);
+  end;
+  
 var data: RawByteString;
     pending: integer;
 begin
@@ -1614,7 +1619,7 @@ begin
       end else
       if len<65536 then begin
         hdr.len8 := FRAME_LEN2BYTES or fMaskSentFrames;
-        hdr.len32 := swap(len);
+        hdr.len32 := swap(word(len)); // FPC expects explicit word() cast
         fSocket.SockSend(@hdr,4);
       end else begin
         hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
