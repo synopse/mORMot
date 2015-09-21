@@ -935,19 +935,19 @@ var
       if Hints.ai_socktype = SOCK_RAW then begin
         Hints.ai_socktype := 0;
         Hints.ai_protocol := 0;
-        Result := GetAddrInfo(pointer(IP), nil, @Hints, Addr);
+        result := GetAddrInfo(pointer(IP), nil, @Hints, Addr);
       end
       else begin
         if (IP = cAnyHost) or (IP = c6AnyHost) then begin
           Hints.ai_flags := AI_PASSIVE;
-          Result := GetAddrInfo(nil, pointer(Port), @Hints, Addr);
+          result := GetAddrInfo(nil, pointer(Port), @Hints, Addr);
         end
         else
           if (IP = cLocalhost) or (IP = c6Localhost) then
-            Result := GetAddrInfo(nil, pointer(Port), @Hints, Addr) else
-            Result := GetAddrInfo(pointer(IP), pointer(Port), @Hints, Addr);
+            result := GetAddrInfo(nil, pointer(Port), @Hints, Addr) else
+            result := GetAddrInfo(pointer(IP), pointer(Port), @Hints, Addr);
       end;
-      if Result = 0 then
+      if result = 0 then
         if (Addr <> nil) then
           Move(Addr^.ai_addr^, Sin, Addr^.ai_addrlen);
     finally
@@ -957,7 +957,7 @@ var
   end;
 
 begin
-  Result := 0;
+  result := 0;
   FillChar(Sin, Sizeof(Sin), 0);
   if not IsNewApi(family) then
   begin
@@ -978,7 +978,7 @@ begin
         Sin.sin_addr.s_addr := inet_addr(pointer(IP));
         if Sin.sin_addr.s_addr = u_long(INADDR_NONE) then begin
           HostEnt := GetHostByName(pointer(IP));
-          Result := WSAGetLastError;
+          result := WSAGetLastError;
           if HostEnt <> nil then
             Sin.sin_addr.S_addr := u_long(Pu_long(HostEnt^.h_addr_list^)^);
         end;
@@ -1010,12 +1010,12 @@ begin
     Hints1.ai_protocol := SockProtocol;
     Hints2.ai_protocol := Hints1.ai_protocol;
     r := GetAddr(IP, Port, Hints1, Sin1);
-    Result := r;
+    result := r;
     sin := sin1;
     if r <> 0 then
       if TwoPass then begin
         r := GetAddr(IP, Port, Hints2, Sin2);
-        Result := r;
+        result := r;
         if r = 0 then
           sin := sin2;
       end;
@@ -1029,18 +1029,18 @@ var p: PAnsiChar;
     hostlen, servlen: integer;
     r: integer;
 begin
-  Result := '';
+  result := '';
   if not IsNewApi(Sin.AddressFamily) then begin
     p := inet_ntoa(Sin.sin_addr);
     if p <> nil then
-      Result := p;
+      result := p;
   end else begin
     hostlen := NI_MAXHOST;
     servlen := NI_MAXSERV;
     r := getnameinfo(@sin, SizeOfVarSin(sin), host, hostlen,
       serv, servlen, NI_NUMERICHOST + NI_NUMERICSERV);
     if r = 0 then
-      Result := host;
+      result := host;
   end;
 end;
 
@@ -1093,8 +1093,8 @@ end;
 function GetSinPort(const Sin: TVarSin): Integer;
 begin
   if (Sin.sin_family = AF_INET6) then
-    Result := ntohs(Sin.sin6_port) else
-    Result := ntohs(Sin.sin_port);
+    result := ntohs(Sin.sin6_port) else
+    result := ntohs(Sin.sin_port);
 end;
 
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;

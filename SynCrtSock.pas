@@ -3624,7 +3624,7 @@ end;
 
 procedure THttpServer.Execute;
 var ClientSock: TSocket;
-    Sin: TVarSin;
+    ClientSin: TVarSin;
 {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
 {$endif}
@@ -3637,7 +3637,7 @@ begin
   if Sock.Sock>0 then
   try
     while not Terminated do begin
-      ClientSock := Accept(Sock.Sock,Sin);
+      ClientSock := Accept(Sock.Sock,ClientSin);
       if ClientSock<0 then
         if Terminated then
           break else begin
@@ -4225,7 +4225,7 @@ begin
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
   {$endif}
-  if GetSockName(aClientSock,Name)=0 then
+  if GetPeerName(aClientSock,Name)=0 then
     GetSinIPFromCache(Name,RemoteIP);
 end;
 
