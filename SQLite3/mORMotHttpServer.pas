@@ -569,7 +569,7 @@ begin
   finally
     fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%,Public=%:%)=%',
       [self,aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
-       JSON_BOOLEAN[Result]],self);
+       BOOL_STR[result]],self);
   end;
 end;
 
@@ -608,7 +608,7 @@ begin
     end;
   finally
     fLog.Add.Log(sllHttp,'%.RemoveServer(Root=%)=%',
-      [self,aServer.Model.Root,JSON_BOOLEAN[Result]],self);
+      [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
 end;
 

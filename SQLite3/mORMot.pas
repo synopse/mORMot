@@ -18951,7 +18951,7 @@ var i: integer;
 begin
   i := fPropInfo.GetOrdProp(Instance);
   if fSQLFieldType=sftBoolean then
-    W.AddString(JSON_BOOLEAN[i<>0]) else
+    W.Add(i<>0) else
     W.Add(i);
 end;
 
@@ -18972,7 +18972,7 @@ begin
     wasSQLString^ := false;
   i := fPropInfo.GetOrdProp(Instance);
   if (fSQLFieldType=sftBoolean) and not ToSQL then
-    result := JSON_BOOLEAN[i<>0] else
+    JSONBoolean(i<>0,result) else
     Int32ToUtf8(i,result);
 end;
 
@@ -44727,7 +44727,7 @@ begin
             HR(P);
             if {$ifdef FPC}(Kind=tkBool){$else}
                (Kind=tkEnumeration) and (P^.PropType^=TypeInfo(boolean)){$endif} then
-              AddString(JSON_BOOLEAN[boolean(V)]) else
+              Add(boolean(V)) else
               if (woFullExpand in Options) or (woHumanReadable in Options) or
                  (woEnumSetsAsText in Options) then
               case Kind of
@@ -50761,7 +50761,7 @@ begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
   case ValueType of
-  smvBoolean:   WR.AddString(JSON_BOOLEAN[PBoolean(V)^]);
+  smvBoolean:   WR.Add(PBoolean(V)^);
   smvEnum..smvInt64:
   case SizeInStorage of
     1: WR.Add(PByte(V)^);

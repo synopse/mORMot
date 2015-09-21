@@ -539,7 +539,7 @@ begin
           W.AddShort('null') else
         case DataType of
         ftBoolean:
-          W.AddString(JSON_BOOLEAN[AsBoolean]);
+          W.Add(AsBoolean);
         ftSmallint, ftInteger, ftWord, ftAutoInc:
           W.Add(AsInteger);
         ftLargeint:

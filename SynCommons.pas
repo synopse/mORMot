@@ -494,7 +494,7 @@ unit SynCommons;
   - added TTextWriter.LastChar and TTextWriter.AddStrings() methods
   - added TTextWriter.ForceContent method
   - added faster TTextWriter.SetText() method in conjuction to Text function
-  - added TTextWriter.Add(const guid: TGUID) overloaded method
+  - added TTextWriter.Add(const guid: TGUID) and Add(Value: boolean) methods
   - TTextWriter.Add(Format..) will now ignore any character afer |, i.e. |$ = $
   - added TTextWriter.AddQuotedStr() and AddStringCopy() methods
   - added TTextWriter.AddVoidRecordJSON() method
@@ -6347,6 +6347,9 @@ type
     {$endif}
     /// append a 32 bit signed Integer Value as text
     procedure Add(Value: PtrInt); overload;
+    /// append a boolean Value as text
+    // - write either 'true' or 'false'
+    procedure Add(Value: boolean); overload;
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
@@ -11266,9 +11269,15 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
   Value: PUTF8Char; ValueLen: integer; Oper: TCompareOperator;
   CaseSensitive: boolean): boolean; overload;
 
+
+/// JSON compatible representation of a boolean value
+// - returns either 'true' or 'false'
+procedure JSONBoolean(value: boolean; var result: RawUTF8);
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
 const
-  /// JSON compatible representation of a boolean value
-  JSON_BOOLEAN: array[boolean] of RawUTF8 = ('false','true');
+  /// can be used e.g. in logs
+  BOOL_STR: array[boolean] of string[5] = ('false','true');
 
   /// can be used to append to most English nouns to form a plural
   PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
@@ -31418,7 +31427,7 @@ begin
     item := GetEnumBaseTypeList(fTypeData,max);
     for i := 0 to max do begin
       aWriter.AddPropName(item^);
-      aWriter.AddString(JSON_BOOLEAN[GetBit(aValue,i)]);
+      aWriter.Add(GetBit(aValue,i));
       aWriter.Add(',');
       inc(PByte(item),ord(item^[0])+1); // next short string
     end;
@@ -32118,6 +32127,13 @@ begin
   result := true;
 end;
 
+procedure JSONBoolean(value: boolean; var result: RawUTF8);
+begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
+  if value then
+    result := 'true' else
+    result := 'false';
+end;
+
 procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte;
   Options: TJSONCustomParserSerializationOptions);
   procedure WriteOneValue(Prop: TJSONCustomParserRTTI; var Value: PByte);
@@ -32125,7 +32141,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       j: integer;
   begin
     case Prop.PropertyType of
-    ptBoolean:   aWriter.AddString(JSON_BOOLEAN[PBoolean(Value)^]);
+    ptBoolean:   aWriter.Add(PBoolean(Value)^);
     ptByte:      aWriter.AddU(PByte(Value)^);
     ptCardinal:  aWriter.AddU(PCardinal(Value)^);
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
@@ -39197,6 +39213,13 @@ begin
 end;
 {$endif}
 
+procedure TTextWriter.Add(Value: boolean);
+begin
+  if Value then
+    AddShort('true') else
+    AddShort('false');
+end;
+
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
 var L: cardinal;
 begin
@@ -39676,7 +39699,7 @@ begin
   varDouble:   AddDouble(VDouble);
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
-  varBoolean:  AddString(JSON_BOOLEAN[VBoolean]);
+  varBoolean:  Add(VBoolean);
   varVariant:  AddVariant(PVariant(VPointer)^,Escape);
   varString: begin
     if Escape=twJSONEscape then
@@ -40825,7 +40848,7 @@ begin
       end;
       Add('"');
     end;
-    vtBoolean:  AddString(JSON_BOOLEAN[VBoolean]);
+    vtBoolean:  Add(VBoolean);
     vtInteger:  Add(VInteger);
     vtInt64:    Add(VInt64^);
     vtExtended: Add(VExtended^,DOUBLE_PRECISION);
@@ -47388,7 +47411,7 @@ begin
   case FieldType of
   // fixed-sized field value
   tftBoolean:
-    W.AddString(JSON_BOOLEAN[PBoolean(FieldBuffer)^]);
+    W.Add(PBoolean(FieldBuffer)^);
   tftUInt8:
     W.Add(PByte(FieldBuffer)^);
   tftUInt16:
@@ -47550,7 +47573,7 @@ begin
   case FieldType of
   // fixed-sized field value
   tftBoolean:
-    result := JSON_BOOLEAN[PBoolean(FieldBuffer)^];
+    JSONBoolean(PBoolean(FieldBuffer)^,result);
   tftUInt8:
     UInt32ToUtf8(PB^,result);
   tftUInt16:
@@ -48003,8 +48026,7 @@ var Curr: Currency;
 begin
   case FieldType of
   tftBoolean:
-    if (SynCommons.GetInteger(pointer(aValue))<>0) or
-       IdemPropNameU(aValue,JSON_BOOLEAN[true]) then
+    if (SynCommons.GetInteger(pointer(aValue))<>0) or IdemPropNameU(aValue,'true') then
       result := #1 else
       result := #0; // store false by default
   tftUInt8, tftUInt16, tftUInt24, tftInt32, tftVarInt32:
@@ -48374,6 +48396,15 @@ begin
   until false;
   result := Default;
 end;
+
+{$ifdef FPC}
+function BooleanNormalize(value: boolean): integer; inline;
+begin
+  if value then
+    result := 1 else
+    result := 0;
+end;
+{$endif}
 
 var
   /// a temporary buffer, big enough for using the SoundEx algorithm

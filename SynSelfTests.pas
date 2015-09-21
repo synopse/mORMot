@@ -4938,7 +4938,7 @@ begin
     check(JsonObjectsByPath(item,'toto,n*')='{"name":"'+name+'"}');
     check(JsonObjectsByPath(item,'fork,toto,owner.id,name')=
       FormatUTF8('{"fork":%,"owner.id":%,"name":"%"}',
-      [JSON_BOOLEAN[fork],owner.id,name]));
+      [BOOL_STR[fork],owner.id,name]));
     check(JsonObjectsByPath(item,'owner.i*')=FormatUTF8('{"owner.id":%}',[owner.id]));
     check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
       '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));

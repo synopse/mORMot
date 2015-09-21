@@ -1921,7 +1921,7 @@ begin
         W.Add(JSVAL_TO_INT(FValue)) else
         W.AddDouble(JSVAL_TO_DOUBLE(FValue));
     JSTYPE_BOOLEAN:
-      W.AddString(JSON_BOOLEAN[JSVAL_TO_BOOLEAN(FValue)=JS_TRUE]);
+      W.Add(JSVAL_TO_BOOLEAN(FValue)=JS_TRUE);
     JSTYPE_OBJECT,
     JSTYPE_FUNCTION: begin
       if JS_Stringify(cx, @FValue, nil, JSVAL_NULL, writeCallback, pointer(W))<>JS_TRUE then begin

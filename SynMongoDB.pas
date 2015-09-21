@@ -2654,7 +2654,7 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
   betTimeStamp:
     goto bin; // internal content will always be written as raw binary
   betBoolean:
-    W.AddString(JSON_BOOLEAN[PBoolean(Element)^]);
+    W.Add(PBoolean(Element)^);
   betDateTime: begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
     W.AddDateTime(UnixMSTimeToDateTime(PInt64(Element)^));
