@@ -1071,6 +1071,8 @@ begin
       continue;
     withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
+    if FLog.Count=0 then
+      continue;
     if withoutThreads and (FLog.EventThread<>nil) then
       tmrRefresh.Tag := 1;
     if FLog.EventLevel[FLog.Count-1] in FEventsRemoteViewSet then
