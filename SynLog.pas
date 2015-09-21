@@ -498,7 +498,8 @@ type
     function GetExistingLog(MaximumKB: cardinal): RawUTF8;
 
     /// you can add some exceptions to be ignored to this list
-    // - for instance, EConvertError may be added to the list
+    // - for instance, EConvertError may be added to the list, as such:
+    // ! TSQLLog.Family.ExceptionIgnore.Add(EConvertError);
     property ExceptionIgnore: TList read fExceptionIgnore;
     /// event called to archive the .log content after a defined delay
     // - Destroy will parse DestinationPath folder for *.log files matching
@@ -723,6 +724,7 @@ type
     fThreadHandleExceptionBackup: TSynLog;
     {$endif}
     fStartTimeStamp: Int64;
+    fStartTimeStampDateTime: TDateTime;
     fCurrentTimeStamp: Int64;
     fFrequencyTimeStamp: Int64;
     fStreamPositionAfterHeader: cardinal;
@@ -1061,6 +1063,9 @@ type
     // should be >= Count
     function EventSelect(const aSet: TSynLogInfos;
       var aSelectedIndexes: TIntegerDynArray; aSelectedIndex: PInteger): integer;
+    /// add a new line to the already parsed content
+    // - overriden method which would identify the freq=%,%,% pseudo-header
+    procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
     /// retrieve the level of an event
     // - is calculated by Create() constructor
     // - EventLevel[] array index is from 0 to Count-1
@@ -3245,6 +3250,9 @@ begin
     GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
   QueryPerformanceCounter(fStartTimeStamp);
+  if fFamily.LocalTimeStamp then
+    fStartTimeStampDateTime := Now else
+    fStartTimeStampDateTime := NowUTC;
   Include(fInternalFlags,logInitDone);
 end;
 
@@ -4091,6 +4099,23 @@ begin
   end;
 end;
 
+procedure TSynLogFile.AddInMemoryLine(const aNewLine: RawUTF8);
+var P: PUTF8Char;
+begin
+  if aNewLine='' then
+    exit;
+  P := pointer(aNewLine);
+  if (PInteger(P)^=ord('f')+ord('r')shl 8+ord('e')shl 16+ord('q')shl 24) and
+     (P[4]='=') then begin
+    inc(P,5);
+    fFreq := GetNextItemInt64(P);
+    fFreqPerDay := fFreq*SecsPerDay;
+    fStartDateTime := GetNextItemDouble(P);
+    fFileName := P;
+  end else
+    inherited AddInMemoryLine(aNewLine);
+end;
+
 procedure TSynLogFile.LogProcSort(Order: TLogProcSortOrder);
 begin
   if (fLogProcNaturalCount<=1) or (Order=fLogProcSortInternalOrder) then
@@ -4405,6 +4430,10 @@ begin
     if ReceiveExistingKB>0 then begin
       EnterCriticalSection(GlobalThreadLock);
       previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
+      if TrackedLog.HighResolutionTimeStamp and (TrackedLog.fGlobalLog<>nil) then
+        with TrackedLog.fGlobalLog do
+        Callback.Log(sllNone,FormatUTF8('freq=%,%,%',
+          [fFrequencyTimeStamp,double(fStartTimeStampDateTime),fFileName]));
       Callback.Log(sllNone,previousContent);
     end;
     Reg.Levels := Levels;

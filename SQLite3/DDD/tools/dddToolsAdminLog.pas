@@ -83,7 +83,7 @@ type
 
 procedure TLogFrameCallback.Log(Level: TSynLogInfo; const Text: RawUTF8);
 begin
-  if Pattern<>'' then
+  if (Pattern<>'') and (Level<>sllNone) then
     if PosI(pointer(Pattern),Text)=0 then
       exit;
   Owner.ReceivedOne(Text);
@@ -260,7 +260,7 @@ var withoutThreads: boolean;
     P: PUTF8Char;
     line: RawUTF8;
 begin
-  if FLog=nil then
+  if (FLog=nil) or (Text='') then
     exit;
   P := pointer(Text);
   repeat // handle multiple log rows in the incoming text
@@ -269,6 +269,8 @@ begin
       continue;
     withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
+    if FLog.Count=0 then
+      continue;
     if withoutThreads and (FLog.EventThread<>nil) then
       tmrRefresh.Tag := 1;
     if FLog.EventLevel[FLog.Count-1] in FEventsSet then
