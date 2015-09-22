@@ -4111,7 +4111,7 @@ begin
     fFreq := GetNextItemInt64(P);
     fFreqPerDay := fFreq*SecsPerDay;
     fStartDateTime := GetNextItemDouble(P);
-    fFileName := P;
+    UTF8DecodeToString(P,StrLen(P),string(fFileName));
   end else
     inherited AddInMemoryLine(aNewLine);
 end;
