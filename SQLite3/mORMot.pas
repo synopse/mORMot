@@ -11110,6 +11110,20 @@ type
   // sicPerUser or sicPerGroup mode
   TServiceFactoryServerInstanceDynArray = array of TServiceFactoryServerInstance;
 
+  /// callback called before any interface-method service execution to allow
+  // its execution
+  // - see Ctxt.Service, Ctxt.ServiceMethodIndex and Ctxt.ServiceParameters
+  // are used to identify the executed method context
+  // - Method parameter would help identify easily the corresponding method, and
+  // would contain in fact Service.InterfaceFactory.Methods[ServiceMethodIndex]
+  // - should return TRUE if the method can be executed
+  // - should return FALSE if the method should not be executed, and set the
+  // corresponding error to the supplied context e.g.
+  // ! Ctxt.Error('Unauthorized method',HTML_NOTALLOWED);
+  // - i.e. called by TSQLRestServerURIContext.InternalExecuteSOAByInterface
+  TOnServiceCanExecute = function(Ctxt: TSQLRestServerURIContext;
+    const Method: TServiceMethod): boolean of object;
+
   /// a service provider implemented on the server side
   // - each registered interface has its own TServiceFactoryServer instance,
   // available as one TSQLServiceContainerServer item from TSQLRest.Services property
@@ -11137,6 +11151,7 @@ type
     fResultAsJSONObjectIfAccept: boolean;
     fResultAsXMLObjectNameSpace: RawUTF8;
     fBackgroundThread: TSynBackgroundThreadMethod;
+    fOnMethodExecute: TOnServiceCanExecute;
     fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
@@ -11304,6 +11319,10 @@ type
     // calls, in a fluent interface
     function SetServiceLog(const aMethod: array of RawUTF8;
       aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil): TServiceFactoryServer;
+    /// you can define here an event to allow/deny execution of any method
+    // of this service, at runtime
+    property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute
+      write fOnMethodExecute;
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -35325,6 +35344,11 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
   Log.Log(sllServiceCall,URI,Server);
   {$endif}
+  if Assigned(Service.OnMethodExecute) and
+     (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
+    if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[
+       ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD)]) then
+      exit; // execution aborted by callback
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
     xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
     if (xml='application/xml') or (xml='text/xml') then
