@@ -135,7 +135,7 @@ uses
 
 type
   /// a debugger symbol, as decoded by TSynMapFile from a .map file
-  TSynMapSymbol = record
+  TSynMapSymbol = packed record
     /// symbol internal name
     Name: RawUTF8;
     /// starting offset of this symbol in the executable
@@ -150,7 +150,7 @@ type
   TSynMapSymbolDynArray = array of TSynMapSymbol;
 
   /// a debugger unit, as decoded by TSynMapFile from a .map file
-  TSynMapUnit = record
+  TSynMapUnit = packed record
     /// Name, Start and Stop of this Unit
     Symbol: TSynMapSymbol;
     /// associated source file name

@@ -15110,7 +15110,7 @@ type
     // own cache and data model - e.g. a branch office server which may server
     // its local client over Ethernet, but communicating to a main mORMot
     // server via Internet, storing the corporate data in the main office server
-    function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorageRemote;
+    function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorageRemote; virtual;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
     // scanned and identified as potentially able to change the internal SQL/JSON
@@ -16102,8 +16102,9 @@ type
     // and optional authentication by a single user
     // - a Model will be created with supplied tables, and owned by the server
     // - if aUserName is set, authentication will be enabled, and the supplied
-    // credentials will be used to authenticate a single user -
-    // aHashedPassword matching TSQLAuthUser.PasswordHashHexa expectations
+    // credentials will be used to authenticate a single user, member of the
+    // 'Supervisor' group - in this case, aHashedPassword value should match
+    // TSQLAuthUser.PasswordHashHexa expectations
     constructor CreateWithOwnedAuthenticatedModel(
       const Tables: array of TSQLRecordClass; const aUserName, aHashedPassword: RawUTF8;
       aRoot: RawUTF8='root');
@@ -40758,7 +40759,7 @@ begin
     try
       User.LogonName := aUserName;
       User.PasswordHashHexa := aHashedPassword;
-      User.GroupRights := TSQLAuthGroup(1);
+      User.GroupRights := TSQLAuthGroup(2); // member of 'Supervisor' group
       Add(User,true);
     finally
       User.Free;

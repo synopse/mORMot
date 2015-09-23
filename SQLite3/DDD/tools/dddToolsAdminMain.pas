@@ -212,11 +212,6 @@ begin
   if pageIndex<=DBCount then
     with fDBFrame[pageIndex-1] do
     case Key of
-    VK_RETURN:
-    if (shift=[]) and (mmoSQL.SelLength=0) then begin
-      btnExecClick(nil);
-      Key := 0;
-    end;
     VK_F5:
       btnCmdClick(btnCmd);
     VK_F9:
