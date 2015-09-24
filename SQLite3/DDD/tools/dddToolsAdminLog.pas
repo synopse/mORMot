@@ -294,10 +294,11 @@ begin
   end;
   moveToLast := drwgrdEvents.Row=drwgrdEvents.RowCount-1;
   drwgrdEvents.RowCount := FLogSelectedCount;
-  if (drwgrdEvents.Tag=0) or moveToLast then begin
-    drwgrdEvents.Row := FLogSelectedCount-1;
-    drwgrdEvents.Tag := 1;
-  end;
+  if FLogSelectedCount>0 then
+    if (drwgrdEvents.Tag=0) or moveToLast then begin
+      drwgrdEvents.Row := FLogSelectedCount-1;
+      drwgrdEvents.Tag := 1;
+    end;
   drwgrdEvents.Invalidate;
   tmrRefresh.Tag := 0;
 end;
@@ -390,7 +391,7 @@ procedure TLogFrame.SetListItem(Index: integer; const search: RawUTF8);
 var i: integer;
     s,ss: string;
 begin
-  if (Index<0) or (FLog=nil) then
+  if (FLog=nil) or (cardinal(Index)>=cardinal(FLogSelectedCount)) then
     mmoBottom.Text := '' else begin
     drwgrdEvents.Row := Index;
     if (search='') and drwgrdEvents.Visible then
