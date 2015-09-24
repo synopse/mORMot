@@ -2637,7 +2637,7 @@ var log: TSynLog;
     stream: TFileStream;
     endpos,start: Int64;
     c: AnsiChar;
-    i,len: integer;
+    i,len,read: integer;
 begin
   result := '';
   if SynLogFileList<>nil then begin
@@ -2668,8 +2668,10 @@ begin
               stream.Position := start;
             len := endpos-start;
             SetLength(result,len);
-            stream.Read(pointer(result)^,len);
-            assert(stream.Position=endpos);
+            read := stream.Read(pointer(result)^,len);
+            if read<>len then
+              SetLength(result,read);
+            stream.Position := endpos;
           end;
         finally
           LeaveCriticalSection(GlobalThreadLock);
