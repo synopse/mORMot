@@ -1087,7 +1087,6 @@ procedure TMainLogView.tmrRefreshTimer(Sender: TObject);
 begin
   if tmrRefresh.Tag=0 then
     exit;
-  tmrRefresh.Enabled := false;
   if tmrRefresh.Tag=1 then begin
     List.ColCount := 4;
     List.ColWidths[2] := 30;
