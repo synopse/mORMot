@@ -190,6 +190,7 @@ begin
   btnSearchNext.Hide;
   drwgrdEvents.RowCount := 0;
   drwgrdEvents.Tag := 0;
+  tmrRefresh.Enabled := false;
   (Owner as TAdminControl).EndLog(self);
 end;
 
@@ -249,6 +250,7 @@ begin
     drwgrdEvents.ColWidths[1] := 60;
     drwgrdEvents.ColWidths[2] := 2000;
     drwgrdEvents.Show;
+    tmrRefresh.Enabled := true;
   except
     Callback := nil;
     FreeAndNil(FLog);
@@ -271,22 +273,21 @@ begin
     FLog.AddInMemoryLine(line);
     if FLog.Count=0 then
       continue;
-    if withoutThreads and (FLog.EventThread<>nil) then
-      tmrRefresh.Tag := 1;
+    if tmrRefresh.Tag=0 then
+      if withoutThreads and (FLog.EventThread<>nil) then
+        tmrRefresh.Tag := 1 else
+        tmrRefresh.Tag := 2;
     if FLog.EventLevel[FLog.Count-1] in FEventsSet then
       AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
-  tmrRefresh.Enabled := true; // MUCH faster than Synchronize() to use a timer
 end;
 
 procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
 var moveToLast: boolean;
 begin
-  tmrRefresh.Enabled := false;
-  if fLog=nil then
-    exit; // avoid GPF
+  if (tmrRefresh.Tag=0) or (fLog=nil) then
+    exit;
   if tmrRefresh.Tag=1 then begin
-    tmrRefresh.Tag := 2;
     drwgrdEvents.ColCount := 4;
     drwgrdEvents.ColWidths[2] := 30;
     drwgrdEvents.ColWidths[3] := 2000;
@@ -298,6 +299,7 @@ begin
     drwgrdEvents.Tag := 1;
   end;
   drwgrdEvents.Invalidate;
+  tmrRefresh.Tag := 0;
 end;
 
 const

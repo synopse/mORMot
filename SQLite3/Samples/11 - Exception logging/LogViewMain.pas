@@ -1057,6 +1057,7 @@ begin
     '%00 info  Remote Logging Server started on port % with root name "%"',
     [NowToString(false),FRemoteLogService.Port,FRemoteLogService.Server.Model.Root]));
   List.Show;
+  tmrRefresh.Enabled := true;
 end;
 
 procedure TMainLogView.ReceivedOne(const Text: RawUTF8);
@@ -1073,19 +1074,21 @@ begin
     FLog.AddInMemoryLine(line);
     if FLog.Count=0 then
       continue;
-    if withoutThreads and (FLog.EventThread<>nil) then
-      tmrRefresh.Tag := 1;
+    if tmrRefresh.Tag=0 then
+      if withoutThreads and (FLog.EventThread<>nil) then
+        tmrRefresh.Tag := 1 else
+        tmrRefresh.Tag := 2;
     if FLog.EventLevel[FLog.Count-1] in FEventsRemoteViewSet then
       AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
   until P=nil;
-  tmrRefresh.Enabled := true; // MUCH faster than Synchronize() to use a timer
 end;
 
 procedure TMainLogView.tmrRefreshTimer(Sender: TObject);
 begin
+  if tmrRefresh.Tag=0 then
+    exit;
   tmrRefresh.Enabled := false;
   if tmrRefresh.Tag=1 then begin
-    tmrRefresh.Tag := 0;
     List.ColCount := 4;
     List.ColWidths[2] := 30;
     List.ColWidths[3] := 2000;
@@ -1094,6 +1097,7 @@ begin
   if FLogSelectedCount > 0 then
     List.TopRow := FLogSelectedCount-List.VisibleRowCount;
   List.Invalidate;
+  tmrRefresh.Tag := 0;
 end;
 
 procedure TMainLogView.btnListClearClick(Sender: TObject);
