@@ -42,10 +42,12 @@ unit PasZip;
 
 { $D-,L-}
 
+{$I Synopse.inc}
+
 interface
 
 uses
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
   Windows,
 {$else}
   LibC, Types,
@@ -65,7 +67,7 @@ function CompressString(const data: string; failIfGrow: boolean = false) : strin
 function UncompressString(const data: string) : string;
 
 
-{$ifdef WIN32} { use Windows MapFile }
+{$ifdef MSWINDOWS} { use Windows MapFile }
 function CompressFile(const srcFile, dstFile: string; failIfGrow: boolean = false) : boolean;
 function UncompressFile(const srcFile, dstFile: string; lastWriteTime: int64 = 0; attr: dword = 0) : boolean;
 
@@ -190,17 +192,17 @@ type
     commentLen    : word;            // 0
   end;
 
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 type
   /// stores an entry of a file inside a .zip archive
   TZipEntry = packed record
-    /// the information of this file, as stored in the .zip archive
-    info: PFileInfo;
-    /// points to the compressed data in the .zip archive, mapped in memory
-    data: PAnsiChar;
-    /// ASCIIZ name of the file inside the .zip archive
-    // - not a string, but a fixed-length array of char
-    Name: array[0..127-8] of AnsiChar;
+    /// the information of this file, as stored in the .zip archive
+    info: PFileInfo;
+    /// points to the compressed data in the .zip archive, mapped in memory
+    data: PAnsiChar;
+    /// ASCIIZ name of the file inside the .zip archive
+    // - not a string, but a fixed-length array of char
+    Name: array[0..127-8] of AnsiChar;
   end;
 
   /// read-only access to a .zip archive file
@@ -3639,7 +3641,7 @@ begin
 end;
 
 
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 type splitInt64 = record loCard, hiCard : cardinal end;
 
 function CompressFile(const srcFile, dstFile: string; failIfGrow: boolean = false) : boolean;
@@ -3836,7 +3838,7 @@ begin
 end;
 
 
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 function Zip(const zip: string; const files, zipAs: array of string; NoSubDirectories: boolean=false) : boolean;
 var i1, i2, i3 : integer;
     dstFh      : dword;
@@ -3999,7 +4001,7 @@ begin // this code is 49 bytes long, generating a 1KB table
 end;
 {$endif}
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
 
 { TZipRead }
 
