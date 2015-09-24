@@ -643,7 +643,7 @@ function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
 type
   {$M+}
   THttpClientWebSockets = class;
-  TWebSocketProcessClientThread = class;
+  TWebSocketProcessClientThread = class;        
   {$M-}
 
   /// implements WebSockets process as used on client side
@@ -1756,7 +1756,7 @@ begin
           end;
         end else
         if TThreadHook(fOwnerThread).Terminated then
-           break else begin
+          break else begin
           elapsed := LastPingDelay;
           if (elapsed>0) and (fOutgoing.Count>0) then
             SendPendingOutgoingFrames else
@@ -1804,7 +1804,7 @@ end;
 procedure LogEscape(const s: RawUTF8; var result: RawUTF8);
 var i,L: integer;
 begin
-  with TTextWriter.CreateOwnedStream(800) do
+  with TTextWriter.CreateOwnedStream(600) do
   try
     L := length(s);
     if L>200 then
@@ -1812,9 +1812,11 @@ begin
     for i := 1 to L do
       if s[i] in [' '..#126] then
         Add(s[i]) else begin
-        Add('#');
-        AddU(ord(s[i]));
+        Add('$');
+        AddByteToHex(ord(s[i]));
       end;
+    if L=200 then
+      AddShort('...');
     SetText(result);
   finally
     Free;
