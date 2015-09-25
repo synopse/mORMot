@@ -29,6 +29,7 @@ unit SynCrossPlatformJSON;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Witya
   
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -668,7 +669,7 @@ begin
     '"': result := result+'\"';
     else
     if Text[i]<' ' then
-      result := result+'\'+IntToHex(ord(Text[i]),4) else
+      result := result+'\u00'+IntToHex(ord(Text[i]),2) else
       AppendChar(result,Text[i]); // will be UTF-8 encoded later
     end;
   end;
