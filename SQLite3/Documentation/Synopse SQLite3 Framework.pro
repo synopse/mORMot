@@ -1959,10 +1959,18 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TSQLRawBlob@}|@*BLOB@|This type is an alias to {\f1\fs20 @*RawByteString@}
 |{\i @*dynamic array@s}|BLOB|in the {\f1\fs20 TDynArray.SaveTo} binary format
 |{\f1\fs20 variant}|TEXT|numerical or text in JSON, or @80@ for JSON objects or arrays
+|{\f1\fs20 @*TNullableInteger@}|INTEGER|{\i Nullable} {\f1\fs20 Int64} value - see @177@
+|{\f1\fs20 @*TNullableBoolean@}|INTEGER|{\i Nullable} {\f1\fs20 boolean} (0/1/NULL) value - see @177@
+|{\f1\fs20 @*TNullableFloat@}|FLOAT|{\i Nullable} {\f1\fs20 double} value - see @177@
+|{\f1\fs20 @*TNullableCurrency@}|FLOAT|{\i Nullable} {\f1\fs20 currency} value - see @177@
+|{\f1\fs20 @*TNullableDateTime@}|TEXT|{\i Nullable} @*ISO 8601@ encoded date time - see @177@
+|{\f1\fs20 @*TNullableTimeLog@}|INTEGER|{\i Nullable} @*TTimeLog@ value - see @177@
+|{\f1\fs20 @*TNullableUTF8Text@}|TEXT|{\i Nullable} Unicode text value - see @177@
 |{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
 |{\f1\fs20 @*TRecordVersion@}|INTEGER|64 bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
 |%
 \page
+:178  Property Attributes
 Some additional attributes may be added to the {\f1\fs20 published} field definitions:
 - If the property is marked as {\f1\fs20 stored @**AS_UNIQUE@} (i.e. {\f1\fs20 stored false}), it will be created as UNIQUE in the database (i.e. a SQL index will be created and uniqueness of the value will be checked at insert/update);
 - For a dynamic array field, the {\f1\fs20 index} number can be used for the {\f1\fs20 TSQLRecord. DynArray(DynArrayFieldIndex)} method to create a {\f1\fs20 TDynArray} wrapper mapping the dynamic array data;
@@ -1982,6 +1990,7 @@ For instance, the following {\f1\fs20 class} definition will create an index for
 !    property Model: TSQLDiaperModel read fModel write fModel;
 !    property Baby: TSQLBaby read fBaby write fBaby;
 !end;
+Note that {\f1\fs20 @*TTNullableUTF8Text@} kind of property would follow the same {\f1\fs20 index ###} attribute interpretation.
 :  Text fields
 In practice, the generic {\f1\fs20 string} type is handled (as {\f1\fs20 UnicodeString} under {\i Delphi} 2009 and later), but you may loose some content if you're working with pre-Unicode version of {\i Delphi} (in which {\f1\fs20 string = AnsiString} with the current system code page). So we won't recommend its usage.
 The natural {\i Delphi} type to be used for TEXT storage in our framework is {\f1\fs20 @*RawUTF8@} as introduced for @32@. All business process should better use {\f1\fs20 RawUTF8} variables and methods (you have all necessary functions in {\f1\fs20 SynCommons.pas}), then you should explicitly convert the {\f1\fs20 RawUTF8} content into a string using {\f1\fs20 U2S / S2U} from {\f1\fs20 mORMoti18n.pas} or {\f1\fs20 StringToUTF8 / UTF8ToString} which will handle proper char-set conversion according to the current @*i18n@ settings. On Unicode version of {\i Delphi} (starting with {\i Delphi} 2009), you can directly assign a {\f1\fs20 string / UnicodeString} value to / from a {\f1\fs20 RawUTF8}, but this implicit conversion will be slightly slower than our {\f1\fs20 StringToUTF8 / UTF8ToString} functions. With pre-Unicode version of {\i Delphi} (up to {\i Delphi} 2007), such direct assignation will probably loose data for all non ASCII 7 bit characters, so an explicit call to {\f1\fs20 StringToUTF8 / UTF8ToString} functions is required.
@@ -2127,6 +2136,67 @@ But {\f1\fs20 @*TSQLRawBlob@} properties will be transmitted as @*REST@ful separ
 You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
+:177  TNullable* fields for NULL storage
+In {\i Delphi}, nullable types do not exist, as they do for instance in C#, via the {\f1\fs20 int?} kind of definition.\line But at SQL and @*JSON@ levels, the @*NULL@ value does exist and are expected to be handled as expected by our ORM.
+In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).\line It is worth noting that NULL handling is not consistent among all existing database engines, e.g. when you are comparing NULL with non NULL values... so we recommend using it with case in any database statements, or only with proper (unit) testing, when you switch from one database engine to another.
+By default, in the {\i mORMot} ORM/SQL code, NULL will appear only in case of a BLOB storage with a size of {\f1\fs20 0} bytes. Otherwise, you should not see it as a value, in most used types - see @26@.
+Null-oriented value types have been implemented in our framework, since the object pascal language does not allow defining a nullable type (yet). We choose to store those values as {\f1\fs20 variant}, with a set of {\f1\fs20 @**TNullable@*} dedicated types, as defined in {\f1\fs20 mORMot.pas}:
+!type
+!  TNullableInteger = type variant;
+!  TNullableBoolean = type variant;
+!  TNullableFloat = type variant;
+!  TNullableCurrency = type variant;
+!  TNullableDateTime = type variant;
+!  TNullableTimeLog = type variant;
+!  TNullableUTF8Text = type variant;
+In order to define a {\f1\fs20 NULLable} column of such types, you could use them as types for your {\f1\fs20 TSQLRecord} class definition:
+!type
+!  TSQLNullableRecord = class(TSQLRecord)
+!  protected
+!    fInt: TNullableInteger;
+!    fBool: TNullableBoolean;
+!    fFlt: TNullableFloat;
+!    fCurr: TNullableCurrency;
+!    fDate: TNullableDateTime;
+!    fTimeStamp: TNullableTimeLog;
+!    fCLOB: TNullableUTF8Text;
+!    fText: TNullableUTF8Text;
+!  published
+!    property Int: TNullableInteger read fInt write fInt;
+!    property Bool: TNullableBoolean read fBool write fBool;
+!    property Flt: TNullableFloat read fFlt write fFlt;
+!    property Curr: TNullableCurrency read fCurr write fCurr;
+!    property Date: TNullableDateTime read fDate write fDate;
+!    property TimeStamp: TNullableTimeLog read fTimeStamp write fTimeStamp;
+!    property CLOB: TNullableUTF8Text read fCLOB write fCLOB;
+!    property Text: TNullableUTF8Text index 32 read fText write fText;
+!  end;
+Such a class would let the ORM handle SQL NULL values as expected, i.e. returning a {\f1\fs20 null} variant value, or an integer/number/text value if there is something stored. Of course, the corresponding column in the database would have the expected data type, e.g. a {\f1\fs20 NULLABLE INTEGER} for {\f1\fs20 TNullableInteger} property.
+Note that {\f1\fs20 TNullableUTF8Text} is defined as a {\f1\fs20 RawUTF8} usual field - see @178@. That is, without any size limitation by default (as for the {\f1\fs20 CLOB} property), or with an explicit size limitation using the {\f1\fs20 index ###} attribute (as for {\f1\fs20 Text} property, which would be converted as a {\f1\fs20 VARCHAR(32)} SQL column).
+You could use the following wrapper functions to create a {\f1\fs20 TNullable*} value from any non-nullable standard Delphi value:
+!function NullableInteger(const Value: Int64): TNullableInteger;
+!function NullableBoolean(Value: boolean): TNullableBoolean;
+!function NullableFloat(const Value: double): TNullableFloat;
+!function NullableCurrency(const Value: currency): TNullableCurrency;
+!function NullableDateTime(const Value: TDateTime): TNullableDateTime;
+!function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
+!function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
+Some corresponding functions are able to return the expected {\f1\fs20 null} value for each kind, with strong typing (to be used for @*FPC@ compatibility, which does not allow direct assignment to a {\f1\fs20 TNullable* = type variant} property):
+!function NullableIntegerNull: TNullableInteger;
+!function NullableIntegerBoolean: TNullableBoolean;
+!...
+You could check for a {\f1\fs20 TNullable*} value to contain null, using the following functions:
+!function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
+!function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): Boolean;
+!...
+Or retrieve a Delphi non-nullable value in one step, using the corresponding wrappers:
+!function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
+!function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+!...
+!function NullableIntegerToValue(const V: TNullableInteger): Int64;
+!function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
+!...
+Thanks to those types, and their corresponding wrapper functions, you have at hand everything needed to safely store some nullable values into your application database, with proper handling on Delphi side.
 :164 Working with Objects
 To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@, and using the {\f1\fs20 ID} @*primary key@ as resource identifier:
 !!procedure Test(Client: TSQLRest);  // we will use CRUD operations on a REST instance
@@ -4236,12 +4306,6 @@ That is, it will find all objects where {\f1\fs20 TSQLRecordPeople.FirstName} wi
 In fact, the {\f1\fs20 REGEXP} operator is a special syntax for the {\f1\fs20 regexp()} user function. No {\f1\fs20 regexp()} user function is defined by default and so use of the {\f1\fs20 REGEXP} operator will normally result in an error message. Calling {\f1\fs20 CreateRegExFunction()} for a given connection will add a SQL function named "{\f1\fs20 regexp()}" at run-time, which will be called in order to implement the {\f1\fs20 REGEXP} operator.
 It will use the statically linked PCRE library as available since {\i Delphi} XE, or will rely on the {\f1\fs20 PCRE.pas} wrapper unit as published at @http://www.regular-expressions.info/download/TPerlRegEx.zip for older versions of {\i Delphi}.
 This unit will call directly the @*UTF-8@ API of the PCRE library, and maintain a per-connection cache of compiled regular expressions to ensure the best performance possible.
-:  NULL handling
-Since you access {\i Delphi} properties, NULL doesn't exist as such (it is a @*SQL@ concept). So you will have {\f1\fs20 0} for an integer field, {\f1\fs20 nil} for a field referring to another record, and {\f1\fs20 ''} for a string field. At the SQL and @*JSON@ levels, the NULL value does exist and are converted as expected. At higher level ({\i Delphi} code or {\i @*JavaScript@}/@*AJAX@ code) the NULL value is to be handled explicitly. In fact, no null-oriented ORM methods are implemented in our framework, since the object pascal language does not allow defining a nullable type (yet).
-In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).
-There is no direct way of making a difference between NULL and {\f1\fs20 ''} for a string field, for example. It can be performed by using a simple SQL statement, which can be added to your database class, as a method common to all your application classes.
-In the {\i mORMot} ORM/SQL code, NULL will appear only in case of a BLOB storage with a size of {\f1\fs20 0} bytes. Otherwise, you should not see it as a value.
-It is worth noting that NULL handling is not consistent among all existing database engines... so we recommend not using it in any database statements, or only with proper (unit) testing. Staying at ORM level may help.
 :60  ACID and speed
 As stated above in @59@, the default {\i SQlite3} write speed is quite slow, when running on a normal hard drive. By default, the engine will pause after issuing a OS-level write command. This guarantees that the data is written to the disk, and features the @*ACID@ properties of the database engine.
 {\f1\fs20 @**ACID@} is an acronym for "{\i Atomicity Consistency Isolation Durability}" properties, which guarantee that database transactions are processed reliably: for instance, in case of a power loss or hardware failure, the data will be saved on disk in a consistent way, with no potential loss of data.

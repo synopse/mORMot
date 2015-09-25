@@ -3139,7 +3139,7 @@ type
     property SQLFieldType: TSQLFieldType read fSQLFieldType;
     /// the corresponding column type, as stored by the ORM layer
     // - match SQLFieldType, unless for SQLFieldType=sftNullable, in which this
-    // field would contain the simple eventually stored in the database
+    // field would contain the simple type eventually stored in the database
     property SQLFieldTypeStored: TSQLFieldType read fSQLFieldTypeStored;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
