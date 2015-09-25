@@ -13719,8 +13719,9 @@ type
     // in database nor retrieved by ORM), but the resulting TSQLAuthUser
     // must have its ID and LogonName properties set with unique values (which
     // will be used to identify it for a later call and session owner
-    // identification), and its GroupRights property must contain a REAL
-    // TSQLAuthGroup instance for fast retrieval in TSQLRestServer.URI
+    // identification), and its GroupRights property must not yet contain a real
+    // TSQLAuthGroup instance, just a TSQLAuthGroup(aGroupID) value (as directly
+    // retrieved from the ORM) - TAuthSession.Create will retrieve the instance
     // - another possibility, orthogonal to all TSQLRestServerAuthentication
     // classes, may be to define a TSQLRestServer.OnAuthenticationUserRetrieve
     // custom event
