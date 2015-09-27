@@ -6208,6 +6208,8 @@ type
   // included in woFullExpand or woHumanReadable)
   // - woDateTimeWithMagic will append the JSON_SQLDATE_MAGIC (i.e. U+FFF1)
   // before the ISO-8601 encoded TDateTime value
+  // - woDateTimeWithZSuffix will append the Z suffix to the ISO-8601 encoded
+  // TDateTime value, to identify the content as strict UTC value
   // - by default, TSQLRawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
@@ -6218,7 +6220,7 @@ type
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woEnumSetsAsText, woDateTimeWithMagic,
+    woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix,
     woSQLRawBlobAsBase64, woHideSynPersistentPassword,
     woObjectListWontStoreClassName);
   /// options set for TTextWriter.WriteObject() method

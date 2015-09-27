@@ -44821,6 +44821,8 @@ begin
               AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
               Add('"');
             AddDateTime(P^.GetDoubleProp(Value));
+            if woDateTimeWithZSuffix in Options then
+              Add('Z');
             Add('"');
           end else
             Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
