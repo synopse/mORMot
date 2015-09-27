@@ -2273,10 +2273,14 @@ begin
       mem := TSynMonitorMemory.Create;
       disk := TSynMonitoryDisk.Create; // current drive
       result.Content := JSONEncode(['host',Host,'user',User,
-        {$ifdef CPUINTEL}'sse2',cfSSE2 in CpuFeatures,
-          'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
-        {$endif}'cpucount',
-        {$ifdef MSWINDOWS}dwNumberOfProcessors,'os',FormatUTF8(
+        {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
+        'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
+        'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
+        'hypervisor',cf_HYP in CpuFeatures,
+        {$endif}{$endif}
+        'cpucount',
+        {$ifdef MSWINDOWS}
+        dwNumberOfProcessors,'os',FormatUTF8(
           '% % (%.%.%)',[GetEnumNameTrimed(TypeInfo(TWindowsVersion),OSVersion),
           szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]),
         'wow64',IsWow64{,'env',value}{$else}
