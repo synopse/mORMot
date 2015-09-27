@@ -9156,12 +9156,12 @@ var
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
    cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
    cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
-   cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA_64, cfPBE,
+   cfFXSR, cfSSE, cfSSE2, cfSS, cfHT, cfTM, cfIA_64, cfPBE,
    { in ECX }
    cfSSE3, cf_c1, cf_c2, cfMON, cfDS_CPL, cf_c5, cf_c6, cfEIST,
    cfTM2, cfSSSE3, cfCID, cfSSE5, cf_c12, cfCX16, cfxTPR, cf_c15,
    cf_c16, cf_c17, cf_c18, cfSSE41, cfSSE42, cf_c21, cf_c22, cfPOPCNT,
-   cf_c24, cfAESNI, cf_c26, cf_c27, cfAVX, cf_c29, cf_c30, cf_c31);
+   cf_c24, cfAESNI, cf_c26, cf_c27, cfAVX, cf_c29, cf_c30, cf_HYP);
 
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
@@ -30598,6 +30598,8 @@ end;
 
 {$else CPU64}
 
+{$ifndef PUREPASCAL}
+
 procedure FillCharX87;
 asm // eax=Dest edx=Count cl=Value
         // faster version by John O'Harrow  (Code Size = 153 Bytes)
@@ -30910,6 +30912,8 @@ end;
 
 {$endif DELPHI5OROLDER}
 
+{$endif PUREPASCAL}
+
 {$endif CPU64}
 
 procedure InitRedirectCode;
@@ -30924,6 +30928,9 @@ begin
   FillcharFast := @FillCharSSE2;
   MoveFast := @MoveSSE2;
   {$else}
+  {$ifdef PUREPASCAL}
+  Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$else}
   if cfSSE2 in CpuFeatures then begin
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
@@ -30934,6 +30941,7 @@ begin
     FillcharFast := @FillCharX87;
   end;
   MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
+  {$endif PUREPASCAL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
@@ -30952,6 +30960,7 @@ begin
 end;
 
 {$endif CPUARM}
+
 {$endif FPC}
 
 
@@ -50838,7 +50847,7 @@ initialization
   {$else}
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
-  {$else}    
+  {$else}
   {$ifdef USEPACKAGES}
   Pointer(@FillCharFast) := SystemFillCharAddress;
   {$else}
