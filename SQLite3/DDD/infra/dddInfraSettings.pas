@@ -415,10 +415,15 @@ type
     // - by default, will create a local SQLite3 file for storage
     // - all services of aMainRestWithServices would log their calling information
     // into a dedicated table
-    // - if aLogClass=nil, TSQLRecordServiceLog would be used as a class
+    // - the first supplied item of aLogClass array would be used for the
+    // service logging; any additional item would be part of the model of the
+    // returned REST instance, but may be used later on (e.g. to handle
+    // DB-based asynchronous remote notifications as processed by
+    // TServiceFactoryClient.SendNotificationsVia method)
+    // - if aLogClass=[], TSQLRecordServiceLog would be used as a class
     function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
       aMainRestWithServices: TSQLRestServer;
-      aLogClass: TSQLRecordServiceLogClass=nil): TSQLRest; reintroduce;
+      const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
   end;
 
 
@@ -684,15 +689,23 @@ end;
 
 function TDDDServicesLogRestSettings.NewRestInstance(
   aRootSettings: TDDDAppSettingsFile; aMainRestWithServices: TSQLRestServer;
-  aLogClass: TSQLRecordServiceLogClass): TSQLRest;
+  const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest;
+var classes: TSQLRecordClassDynArray;
+    i: integer;
 begin
-  if aLogClass=nil then
-    aLogClass := TSQLRecordServiceLog;
-  result := inherited NewRestInstance(aRootSettings,TSQLModel.Create([aLogClass]),
+  if length(aLogClass)=0 then begin
+    SetLength(classes,1);
+    classes[0] := TSQLRecordServiceLog;
+  end else begin
+    SetLength(classes,length(aLogClass));
+    for i := 0 to high(aLogClass) do
+      classes[i] := aLogClass[i];
+  end;
+  result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
     [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
-  if result<>nil then
+  if result<>nil then // set the first supplied class type to log services
     (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
-      SetServiceLog(result,aLogClass);
+      SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]));
 end;
 
 end.
