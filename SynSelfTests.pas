@@ -3155,6 +3155,8 @@ begin
   end;
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
+  E := Iso8601ToDateTime(s+'Z');
+  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
   Check(Iso8601ToTimeLog(s)<>0);
   I.From(s);
   t := I.Text(Expanded);
