@@ -9840,6 +9840,10 @@ function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
 // ready to be displayed
 function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
 
+/// retrieve the current UTC Date, in the ISO 8601 layout, but expanded and
+// ready to be displayed
+function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
@@ -11713,7 +11717,7 @@ function VariantLoadJSON(const JSON: RawUTF8;
 // - is able to handle simple and custom variant types, for instance:
 // !  VariantSaveJSON(1.5)='1.5'
 // !  VariantSaveJSON('test')='"test"'
-// !  o := _Json('{BSON: ["test", 5.05, 1986]}');
+// !  o := _Json('{ BSON: [ "test", 5.05, 1986 ] }');
 // !  VariantSaveJSON(o)='{"BSON":["test",5.05,1986]}'
 // !  o := _Obj(['name','John','doc',_Obj(['one',1,'two',_Arr(['one',2])])]);
 // !  VariantSaveJSON(o)='{"name":"John","doc":{"one":1,"two":["one",2]}}'
@@ -26994,6 +26998,13 @@ function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): Raw
 var I: TTimeLogBits;
 begin
   I.FromNow;
+  result := I.Text(Expanded,FirstTimeChar);
+end;
+
+function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
+var I: TTimeLogBits;
+begin
+  I.FromUTCTime;
   result := I.Text(Expanded,FirstTimeChar);
 end;
 
@@ -50324,7 +50335,7 @@ end;
 constructor TSynBackgroundThreadAbstract.Create(aOnIdle: TOnIdleSynBackgroundThread;
   const aThreadName: RawUTF8);
 begin
-  fOnIdle := aOnIdle;
+  fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fProcessEvent := TEvent.Create(nil,false,false,'');
   fCallerEvent := TEvent.Create(nil,false,false,'');
   fThreadName := aThreadName;
