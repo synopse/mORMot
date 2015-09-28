@@ -9747,11 +9747,34 @@ type
     property MicroSec: integer read fMicroSec write fMicroSec;
   end;
 
+  /// execution statistics used for DB-based asynchronous notifications
+  // - as used by TServiceFactoryClient.SendNotificationsVia
+  // - here, the Output column may contain the information about an error
+  // occurred during process
+  TSQLRecordServiceNotifications = class(TSQLRecordServiceLog)
+  protected
+    fSent: TTimeLog;
+  public
+    /// this overriden method will create an index on the 'Sent' column
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
+  published
+    /// when this notification has been sent
+    // - equals 0 until it was actually notified
+    property Sent: TTimeLog read fSent write fSent;
+  end;
+
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics
   // - you could inherit from TSQLRecordServiceLog, and specify additional
   // fields corresponding to the execution context
   TSQLRecordServiceLogClass = class of TSQLRecordServiceLog;
+
+  /// class-reference type (metaclass) for storing interface-based service
+  // execution statistics used for DB-based asynchronous notifications
+  // - as used by TServiceFactoryClient.SendNotificationsVia
+  TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
+
 
   TServiceMethodExecute = class;
 
@@ -11428,6 +11451,7 @@ type
     fForcedURI: RawUTF8;
     fParamsAsJSONObject: boolean;
     fResultAsJSONObject: boolean;
+    fSendNotificationsViaThread: TThread;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -11436,7 +11460,6 @@ type
     function Invoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
       aResult: PRawUTF8; aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
     procedure NotifyInstanceDestroyed(aClientDrivenID: cardinal); virtual;
   public
     /// initialize the service provider parameters
@@ -11486,7 +11509,26 @@ type
     // useful e.g. when working with JavaScript clients
     // - this value can be overridden by setting ForceServiceResultAsJSONObject
     // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
-    property ResultAsJSONObjectWithoutResult: boolean read fResultAsJSONObject write fResultAsJSONObject;
+    property ResultAsJSONObjectWithoutResult: boolean read fResultAsJSONObject
+      write fResultAsJSONObject;
+    /// allow background process of method with no results, via a temporary
+    // database, to be used e.g. for safe notifications transmission
+    // - expect a REST instance, which would store all methods without any
+    // results (i.e. procedure without any var/out parameters) on the
+    // associated TSQLRecordServiceNotifications class
+    // - a background thread would be used to check for pending notifications,
+    // and send them on the main TSQLRestClient communication
+    // - if the remote client is not reachable, will retry after the specified
+    // period of time, in seconds
+    // - this method is not blocking, and would write the pending calls to
+    // the aRest/aLogClass table, which would be retrieved asynchronously
+    // by the background thread
+    procedure SendNotificationsVia(aRest: TSQLRest;
+      aLogClass: TSQLRecordServiceNotificationsClass;
+      aRetryPeriodSeconds: Integer=30);
+    /// compute how many pending notifications are waiting for background process
+    // initiated by SendNotificationsVia() method
+    function SendNotificationsViaPending: integer;
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -11746,7 +11788,7 @@ type
       const ID: TID; const Revision: TRecordVersion);
     /// log method execution information to a TSQLRecordServiceLog table
     // - TServiceFactoryServer.SetServiceLog() will be called for all registered
-    // interfaced-based services of this container 
+    // interfaced-based services of this container
     // - will write to the specified aLogRest instance, and would disable
     // writing if aLogRest is nil
     // - will write to a (inherited) TSQLRecordServiceLog table, as available in
@@ -32547,8 +32589,8 @@ constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
 begin
   InitializeCriticalSection(fLock);
   fNotifier := TEvent.Create(nil,false,false,'');
-  inherited Create(false);
   fClient := aClient;
+  inherited Create(false);
 end;
 
 destructor TRemoteLogThread.Destroy;
@@ -38350,10 +38392,10 @@ end;
 constructor TSQLRestServerNamedPipe.Create(aServer: TSQLRestServer;
   const PipeName: TFileName);
 begin
-  inherited Create(false);
   fServer := aServer;
   fPipeName := PipeName;
   fChild := TList.Create;
+  inherited Create(false);
 //  writeln('TSQLRestServerNamedPipe ',PipeName,' ThreadID=',ThreadID);
 end;
 
@@ -38422,7 +38464,6 @@ end;
 constructor TSQLRestServerNamedPipeResponse.Create(aServer: TSQLRestServer;
   aMasterThread: TSQLRestServerNamedPipe; aPipe: cardinal);
 begin
-  inherited Create(false);
   fServer := aServer;
   fMasterThread := aMasterThread;
   with fMasterThread.fChild do begin
@@ -38432,10 +38473,11 @@ begin
       Items[fMasterThreadChildIndex] := self;
   end;
   fPipe := aPipe;
-  FreeOnTerminate := true;
 {$ifdef LVCL}
   FOnTerminate := fServer.EndCurrentThread;
 {$endif}
+  inherited Create(false);
+  FreeOnTerminate := true;
 end;
 
 {$ifndef LVCL}
@@ -51506,6 +51548,17 @@ begin
 end;
 
 
+{ TSQLRecordServiceNotifications }
+
+class procedure TSQLRecordServiceNotifications.InitializeTable(
+  Server: TSQLRestServer; const FieldName: RawUTF8;
+  Options: TSQLInitializeTableOptions);
+begin
+  inherited;
+  if FieldName='' then
+    Server.CreateSQLMultiIndex(Self,['Sent'],false);
+end;
+
 { TServiceContainerClient }
 
 function TServiceContainerClient.Info(aTypeInfo: PTypeInfo): TServiceFactory;
@@ -51749,12 +51802,142 @@ begin
   result := TInterfacedObjectFakeClient.Create(self,Invoke,notify);
 end;
 
+type
+  TServiceFactoryClientNotificationThread = class(TThread)
+  protected
+    fClient: TServiceFactoryClient;
+    fRest: TSQLRest;
+    fLogClass: TSQLRecordServiceNotificationsClass;
+    fRetryPeriodSeconds: Integer;
+    fPending: integer;
+    procedure Execute; override;
+    procedure ProcessPendingNotification;
+    function GetPendingCountFromDB: Int64;
+  public
+    constructor Create(aClient: TServiceFactoryClient; aRest: TSQLRest;
+      aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer);
+    procedure AsynchInvoke(const aMethod: TServiceMethod;
+      const aParams: RawUTF8; aClientDrivenID: PCardinal);
+  end;
+
+function TServiceFactoryClientNotificationThread.GetPendingCountFromDB: Int64;
+begin
+  if not fRest.OneFieldValue(fLogClass,'count(*)','Sent=?',[],[0],result) then
+    result := 0;
+end;
+
+constructor TServiceFactoryClientNotificationThread.Create(
+  aClient: TServiceFactoryClient; aRest: TSQLRest;
+  aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer);
+begin
+  fClient := aClient; // cross-platform may run Execute as soon as Create is called
+  fRest := aRest;
+  fLogClass := aLogClass;
+  fRetryPeriodSeconds := aRetryPeriodSeconds;
+  fPending := GetPendingCountFromDB;
+  inherited Create(false);
+end;
+
+procedure TServiceFactoryClientNotificationThread.AsynchInvoke(
+  const aMethod: TServiceMethod; const aParams: RawUTF8; aClientDrivenID: PCardinal);
+var pending: TSQLRecordServiceNotifications;
+begin
+  pending := fLogClass.Create;
+  try
+    pending.Method := aMethod.URI;
+    TDocVariantData(pending.fInput).InitJSON('['+aParams+']',JSON_OPTIONS_FAST_EXTENDED);
+    if aClientDrivenID<>nil then
+      pending.Session := aClientDrivenID^;
+    fRest.Add(pending,true);
+    InterlockedIncrement(fPending);
+  finally
+    pending.Free;
+  end;
+end;
+
+procedure TServiceFactoryClientNotificationThread.ProcessPendingNotification;
+var pending: TSQLRecordServiceNotifications;
+    params,error: RawUTF8;
+    client: cardinal;
+    count: integer;
+    timer: TPrecisionTimer;
+begin
+  pending := fLogClass.Create(fRest,'Sent=? order by id limit 1',[0]);
+  try
+    if pending.IDValue=0 then
+      raise EServiceException.CreateUTF8(
+        '%.ProcessPendingNotification pending=% with no DB row',[self,fPending]);
+    timer.Start;
+    VariantSaveJson(pending.Input,twJSONEscape,params);
+    if (params<>'') and (params[1]='[') then
+      params := copy(params,2,length(params)-2); // trim [..] for URI call
+    client := pending.Session;
+    if not fClient.InternalInvoke(pending.Method,params,nil,@error,@client) then begin
+      if _Safe(pending.fOutput)^.GetAsInteger('count',count) then
+        inc(count) else
+        count := 1;
+      VarClear(pending.fOutput);
+      TDocVariantData(pending.fOutput).InitObject(['errorcount',count,
+        'lasterror',error,'lasttime',NowUTCToString(true,'T'),
+        'lastelapsed',timer.Stop],JSON_OPTIONS_FAST_EXTENDED);
+      fRest.Update(pending,'Output',true);
+      raise EServiceException.CreateUTF8(
+        '%.ProcessPendingNotification failed for %(%) [ID=%,pending=%] on %: %',
+        [self,pending.Method,params,pending.IDValue,fPending,fClient.fClient,error]);
+    end;
+    fClient.fClient.InternalLog('ProcessPendingNotification %(%) in % us [ID=%,pending=%]',
+      [pending.Method,params,timer.Stop,pending.IDValue,fPending],sllTrace);
+    pending.Sent := TimeLogNowUTC;
+    pending.MicroSec := timer.LastTimeInMicroSec;
+    fRest.Update(pending,'MicroSec,Sent',true);
+    InterlockedDecrement(fPending);
+  finally
+    pending.Free;
+  end;
+end;
+
+procedure TServiceFactoryClientNotificationThread.Execute;
+  procedure WaitForSeconds(Sec: integer);
+  var i: integer;
+  begin
+    for i := 1 to Sec*100 do
+      if Terminated then
+        exit else
+        SleepHiRes(10);
+  end;
+var delay: integer;
+begin
+  delay := 50;
+  while not Terminated do begin
+    while fPending>0 do
+    try
+      ProcessPendingNotification;
+      delay := 0;
+      if Terminated then
+        break;
+    except
+      on E: Exception do
+        WaitForSeconds(fRetryPeriodSeconds);
+    end;
+    if Terminated then
+      break;
+    if delay<50 then
+      inc(delay);
+    SleepHiRes(delay);
+  end;
+end;
+
 function TServiceFactoryClient.Invoke(const aMethod: TServiceMethod;
   const aParams: RawUTF8; aResult: PRawUTF8; aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
-  result := InternalInvoke(
-    aMethod.URI,aParams,aResult,aErrorMsg,aClientDrivenID,aServiceCustomAnswer);
+  if (fSendNotificationsViaThread<>nil) and (aMethod.ArgsOutputValuesCount=0) then begin
+     TServiceFactoryClientNotificationThread(fSendNotificationsViaThread).
+       AsynchInvoke(aMethod,aParams,aClientDrivenID);
+     result := true;
+  end else
+    result := InternalInvoke(
+      aMethod.URI,aParams,aResult,aErrorMsg,aClientDrivenID,aServiceCustomAnswer);
 end;
 
 function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
@@ -51882,6 +52065,7 @@ end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
+  FreeAndNil(fSendNotificationsViaThread);
   if fSharedInstance<>nil then
   with TInterfacedObjectFake(fSharedInstance) do
     if fRefCount<>1 then
@@ -51920,6 +52104,25 @@ begin
   pointer(Obj) := @O.fVTable;
   O._AddRef;
   result := true;
+end;
+
+procedure TServiceFactoryClient.SendNotificationsVia(aRest: TSQLRest;
+  aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer);
+begin
+  if (self=nil) or (aRest=nil) or (aLogClass=nil) then
+    raise EServiceException.CreateUTF8('%.SendNotificationsVia invalid call',[self]);
+  if fSendNotificationsViaThread<>nil then
+    fClient.InternalLog('%.SendNotificationsVia called twice -> ignored',[ClassType],sllInfo) else
+    fSendNotificationsViaThread := TServiceFactoryClientNotificationThread.Create(
+      self,aRest,aLogClass,aRetryPeriodSeconds);
+end;
+
+function TServiceFactoryClient.SendNotificationsViaPending: integer;
+begin
+  if (self=nil) or (fSendNotificationsViaThread=nil) then
+    result := 0 else
+    result := TServiceFactoryClientNotificationThread(
+      fSendNotificationsViaThread).GetPendingCountFromDB;
 end;
 
 
