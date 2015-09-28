@@ -1066,7 +1066,7 @@ begin
       AddNoJSONEscapeUTF8(TSQLRestServer(fRest).FullStatsAsJson);
     end;
     Add(',"Version":"%","DateTime":"%"}',
-      [ExeVersion.Version.Detailed,NowToString(True,'T')]);
+      [ExeVersion.Version.Detailed,NowUTCToString(True,'T')]);
     SetText(result);
   finally
     Free;
