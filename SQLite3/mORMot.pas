@@ -9748,7 +9748,7 @@ type
   end;
 
   /// execution statistics used for DB-based asynchronous notifications
-  // - as used by TServiceFactoryClient.SendNotificationsVia
+  // - as used by TServiceFactoryClient.SendNotifications
   // - here, the Output column may contain the information about an error
   // occurred during process
   TSQLRecordServiceNotifications = class(TSQLRecordServiceLog)
@@ -9772,7 +9772,7 @@ type
 
   /// class-reference type (metaclass) for storing interface-based service
   // execution statistics used for DB-based asynchronous notifications
-  // - as used by TServiceFactoryClient.SendNotificationsVia
+  // - as used by TServiceFactoryClient.SendNotifications
   TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
 
 
@@ -11451,7 +11451,7 @@ type
     fForcedURI: RawUTF8;
     fParamsAsJSONObject: boolean;
     fResultAsJSONObject: boolean;
-    fSendNotificationsViaThread: TThread;
+    fSendNotificationsThread: TThread;
     function CreateFakeInstance: TInterfacedObject;
     function InternalInvoke(const aMethod: RawUTF8; const aParams: RawUTF8='';
       aResult: PRawUTF8=nil; aErrorMsg: PRawUTF8=nil; aClientDrivenID: PCardinal=nil;
@@ -11523,12 +11523,15 @@ type
     // - this method is not blocking, and would write the pending calls to
     // the aRest/aLogClass table, which would be retrieved asynchronously
     // by the background thread
-    procedure SendNotificationsVia(aRest: TSQLRest;
+    procedure SendNotifications(aRest: TSQLRest;
       aLogClass: TSQLRecordServiceNotificationsClass;
       aRetryPeriodSeconds: Integer=30);
     /// compute how many pending notifications are waiting for background process
-    // initiated by SendNotificationsVia() method
-    function SendNotificationsViaPending: integer;
+    // initiated by SendNotifications() method
+    function SendNotificationsPending: integer;
+    /// wait for all pending notifications to be sent
+    // - you can supply a time out period after which no wait would take place
+    procedure SendNotificationsWait(aTimeOutSeconds: integer);
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -51555,9 +51558,10 @@ class procedure TSQLRecordServiceNotifications.InitializeTable(
   Options: TSQLInitializeTableOptions);
 begin
   inherited;
-  if FieldName='' then
+  if (FieldName='') or (FieldName='Sent') then
     Server.CreateSQLMultiIndex(Self,['Sent'],false);
 end;
+
 
 { TServiceContainerClient }
 
@@ -51833,7 +51837,9 @@ begin
   fClient := aClient; // cross-platform may run Execute as soon as Create is called
   fRest := aRest;
   fLogClass := aLogClass;
-  fRetryPeriodSeconds := aRetryPeriodSeconds;
+  if aRetryPeriodSeconds<=0 then
+    fRetryPeriodSeconds := 1 else
+    fRetryPeriodSeconds := aRetryPeriodSeconds;
   fPending := GetPendingCountFromDB;
   inherited Create(false);
 end;
@@ -51861,12 +51867,14 @@ var pending: TSQLRecordServiceNotifications;
     client: cardinal;
     count: integer;
     timer: TPrecisionTimer;
-begin
+begin // one at a time, since the notification is the bottleneck
   pending := fLogClass.Create(fRest,'Sent=? order by id limit 1',[0]);
   try
-    if pending.IDValue=0 then
+    if pending.IDValue=0 then begin
+      fPending := GetPendingCountFromDB;
       raise EServiceException.CreateUTF8(
         '%.ProcessPendingNotification pending=% with no DB row',[self,fPending]);
+    end;
     timer.Start;
     VariantSaveJson(pending.Input,twJSONEscape,params);
     if (params<>'') and (params[1]='[') then
@@ -51931,8 +51939,8 @@ function TServiceFactoryClient.Invoke(const aMethod: TServiceMethod;
   const aParams: RawUTF8; aResult: PRawUTF8; aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin
-  if (fSendNotificationsViaThread<>nil) and (aMethod.ArgsOutputValuesCount=0) then begin
-     TServiceFactoryClientNotificationThread(fSendNotificationsViaThread).
+  if (fSendNotificationsThread<>nil) and (aMethod.ArgsOutputValuesCount=0) then begin
+     TServiceFactoryClientNotificationThread(fSendNotificationsThread).
        AsynchInvoke(aMethod,aParams,aClientDrivenID);
      result := true;
   end else
@@ -52065,7 +52073,7 @@ end;
 
 destructor TServiceFactoryClient.Destroy;
 begin
-  FreeAndNil(fSendNotificationsViaThread);
+  FreeAndNil(fSendNotificationsThread);
   if fSharedInstance<>nil then
   with TInterfacedObjectFake(fSharedInstance) do
     if fRefCount<>1 then
@@ -52106,23 +52114,41 @@ begin
   result := true;
 end;
 
-procedure TServiceFactoryClient.SendNotificationsVia(aRest: TSQLRest;
+procedure TServiceFactoryClient.SendNotifications(aRest: TSQLRest;
   aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer);
 begin
   if (self=nil) or (aRest=nil) or (aLogClass=nil) then
-    raise EServiceException.CreateUTF8('%.SendNotificationsVia invalid call',[self]);
-  if fSendNotificationsViaThread<>nil then
-    fClient.InternalLog('%.SendNotificationsVia called twice -> ignored',[ClassType],sllInfo) else
-    fSendNotificationsViaThread := TServiceFactoryClientNotificationThread.Create(
+    raise EServiceException.CreateUTF8('%.SendNotifications invalid call',[self]);
+  if fSendNotificationsThread<>nil then
+    fClient.InternalLog('%.SendNotifications called twice -> ignored',[ClassType],sllInfo) else
+    fSendNotificationsThread := TServiceFactoryClientNotificationThread.Create(
       self,aRest,aLogClass,aRetryPeriodSeconds);
 end;
 
-function TServiceFactoryClient.SendNotificationsViaPending: integer;
+function TServiceFactoryClient.SendNotificationsPending: integer;
 begin
-  if (self=nil) or (fSendNotificationsViaThread=nil) then
+  if (self=nil) or (fSendNotificationsThread=nil) then
     result := 0 else
     result := TServiceFactoryClientNotificationThread(
-      fSendNotificationsViaThread).GetPendingCountFromDB;
+      fSendNotificationsThread).GetPendingCountFromDB;
+end;
+
+procedure TServiceFactoryClient.SendNotificationsWait(aTimeOutSeconds: integer);
+var timeOut: Int64;
+begin
+  if (self=nil) or (fSendNotificationsThread=nil) then
+    exit;
+  if TServiceFactoryClientNotificationThread(fSendNotificationsThread).
+      GetPendingCountFromDB=0 then
+    exit;
+  fClient.LogClass.Enter;
+  timeOut := GetTickCount64+aTimeOutSeconds*1000;
+  repeat
+    Sleep(5);
+    if TServiceFactoryClientNotificationThread(fSendNotificationsThread).
+       GetPendingCountFromDB=0 then
+      exit;
+  until GetTickCount64>timeOut;
 end;
 
 
