@@ -703,9 +703,13 @@ begin
   end;
   result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
     [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
-  if result<>nil then // set the first supplied class type to log services
-    (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
-      SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]));
+  if result=nil then
+    exit;
+  if result.InheritsFrom(TSQLRestServerDB) then
+    TSQLRestServerDB(result).DB.UseCache := false;
+  // set the first supplied class type to log services
+  (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
+    SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]));
 end;
 
 end.
