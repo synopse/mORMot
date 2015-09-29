@@ -51867,7 +51867,7 @@ var pending: TSQLRecordServiceNotifications;
     client: cardinal;
     count: integer;
     timer: TPrecisionTimer;
-begin // one at a time, since the notification is the bottleneck
+begin // one at a time, since InternalInvoke() is the bottleneck
   pending := fLogClass.Create(fRest,'Sent=? order by id limit 1',[0]);
   try
     if pending.IDValue=0 then begin
@@ -51881,7 +51881,7 @@ begin // one at a time, since the notification is the bottleneck
       params := copy(params,2,length(params)-2); // trim [..] for URI call
     client := pending.Session;
     if not fClient.InternalInvoke(pending.Method,params,nil,@error,@client) then begin
-      if _Safe(pending.fOutput)^.GetAsInteger('count',count) then
+      if _Safe(pending.fOutput)^.GetAsInteger('errorcount',count) then
         inc(count) else
         count := 1;
       VarClear(pending.fOutput);
