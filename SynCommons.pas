@@ -40777,6 +40777,7 @@ noesc:c := i;
       until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
       inc(PByte(P),c);
       dec(i,c);
+      dec(Len,c);
       if BEnd-B<=i then
         AddNoJSONEscape(P,i) else begin
         MoveFast(P^,B[1],i);
