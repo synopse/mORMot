@@ -1756,6 +1756,11 @@ procedure StringToUTF8(const Text: string; var result: RawUTF8); overload;
 
 {$ifndef NOVARIANTS}
 
+type
+  /// function prototype used internally for variant comparaison
+  // - used in mORMot.pas unit e.g. by TDocVariantData.SortByValue
+  TVariantCompare = function(const V1,V2: variant): PtrInt;
+
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
@@ -12121,6 +12126,7 @@ type
     function GetArrayExistingByName(const aName: RawUTF8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUTF8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
+    procedure ExchgValues(v1,v2: integer);
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -12564,7 +12570,10 @@ type
     // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
     // methods for much faster binary search
     procedure SortByName(Compare: TUTF8Compare=nil);
-    /// reverse the order of the document object or array items 
+    /// sort the document object values by value
+    // - do nothing if the document is not a dvObject
+    procedure SortByValue(Compare: TVariantCompare);
+    /// reverse the order of the document object or array items
     procedure Reverse;
     /// create a TDocVariant object, from a selection of properties of this
     // document, by property name
@@ -34332,6 +34341,51 @@ begin
   if not Assigned(Compare) then
     Compare := @StrIComp;
   QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
+end;
+
+procedure TDocVariantData.ExchgValues(v1,v2: integer);
+var n: pointer;
+    v: TVarData;
+begin
+  if VName<>nil then begin // VName=[] for dvArray
+    n := pointer(VName[v2]);
+    pointer(VName[v2]) := pointer(VName[v1]);
+    PPointerArray(VName)[v1] := n;
+  end;
+  v := TVarData(VValue[v2]);
+  TVarData(VValue[v2]) := TVarData(VValue[v1]);
+  TVarData(VValue[v1]) := v;
+end;
+
+procedure QuickSortDocVariantValues(var Doc: TDocVariantData;
+  L, R: PtrInt; Compare: TVariantCompare);
+var I, J, P: PtrInt;
+    pivot: PVariant;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := @Doc.VValue[P];
+      while Compare(Doc.VValue[I],pivot^)<0 do Inc(I);
+      while Compare(Doc.VValue[J],pivot^)>0 do Dec(J);
+      if I <= J then begin
+        Doc.ExchgValues(I,J);
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortDocVariantValues(Doc,L,J,Compare);
+    L := I;
+  until I >= R;
+end;
+
+procedure TDocVariantData.SortByValue(Compare: TVariantCompare);
+begin
+  if VCount>0 then
+    QuickSortDocVariantValues(self,0,VCount-1,Compare);
 end;
 
 procedure TDocVariantData.Reverse;
