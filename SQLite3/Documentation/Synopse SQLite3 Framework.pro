@@ -4248,7 +4248,7 @@ Since this FTS4 feature is specific to {\i SQlite3}, and triggers do not work on
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
 - BINARY - Compares string data using {\f1\fs20 memcmp()}, regardless of text encoding.
-- NOCASE - The same as binary, except the 26 upper case characters of ASCII are folded to their lower case equivalents before the comparison is performed. Note that only ASCII characters are case folded. {\i SQLite} does not attempt to do full UTF case folding due to the size of the tables required;
+- NOCASE - The same as binary, except the 26 upper case characters of ASCII are folded to their lower case equivalents before the comparison is performed. Note that only ASCII characters are case folded. Plain {\i SQLite} does not attempt to do full @*Unicode@ case folding due to the size of the tables required - but you could use {\i mORMot}'s SYSTEMNOCASE or WIN32CASE/WIN32NOCASE custom collations for enhanced case folding support (see below);
 - RTRIM - The same as binary, except that trailing space characters are ignored.
 In the {\i mORMot} ORM, we defined some additional kind of collations, via some internal calls to the {\f1\fs20 sqlite3_create_collation()} API:
 |%25%60
@@ -4257,12 +4257,12 @@ In the {\i mORMot} ORM, we defined some additional kind of collations, via some 
 |{\f1\fs20 sftUTF8Text}|SYSTEMNOCASE, i.e. using {\f1\fs20 UTF8ILComp()}, which will ignore {\i Win-1252} Latin accents
 |{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftTID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
 |{\f1\fs20 {\f1\fs20 sftDateTime}}|ISO8601, i.e. decoding the text into a date/time value before comparison
-|{\f1\fs20 sftObject\line sftVariant}|NOCASE, since it is stored as plain JSON content
+|{\f1\fs20 sftObject\line sftVariant}|BINARY, since it is stored as plain JSON content
 |{\f1\fs20 sftBlob\line sftBlobDynArray\line sftBlobCustom}|BINARY
 ;|{\f1\fs20 sftUTF8Custom}|NOCASE by default
 |%
-You can override those default collation schemes by calling {\f1\fs20 TSQLRecordProperties. SetCustomCollationForAllRawUTF8()} or {\f1\fs20 SetCustomCollation()} methods in an overridden {\f1\fs20 class procedure InternalRegisterCustomProperties()}, so that it will be common to all database models, for both client and server, every time the corresponding {\f1\fs20 TSQLRecord} is used.
-Or you can call {\f1\fs20 TSQLModel.SetCustomCollationForAllRawUTF8()} method, which will do it for a given model.
+You can override those default collation schemes by calling {\f1\fs20 TSQLRecordProperties. SetCustomCollationForAll()} (which will override all fields collation for a given type) or {\f1\fs20 SetCustomCollation()} method (which will override a given field) in an overridden {\f1\fs20 class procedure InternalRegisterCustomProperties()} or {\f1\fs20 InternalDefineModel()}, so that it will be common to all database models, for both client and server, every time the corresponding {\f1\fs20 TSQLRecord} is used.
+As an alternative, you may call {\f1\fs20 TSQLModel.SetCustomCollationForAll()} method, which will do it for a given model.
 The following collations are therefore available when using {\i SQLite3} within the {\i mORMot} ORM:
 |%25%70
 |\b Collation|Description\b0
@@ -4274,9 +4274,10 @@ The following collations are therefore available when using {\i SQLite3} within 
 |WIN32CASE|{\i mORMot}'s comparison using case-insensitive Windows API
 |WIN32NOCASE|{\i mORMot}'s comparison using not case-insensitive Windows API
 |%
-Note that WIN32CASE/WIN32NOCASE will be slower than the others, but will handle properly any kind of complex scripting. That is, if you want to use the Unicode-ready Windows API at database level, you can set for each database model:
-! aModel.SetCustomCollationForAllRawUTF8('WIN32CASE');
-If you use non-default collations (i.e. SYSTEMNOCASE/ISO8601/WIN32CASE/WIN32NOCASE), you may have trouble running requests with "plain default" {\i SQLite3} tools. But you can use our {\f1\fs20 @*SynDBExplorer@} safely, since it will declare all the above collations.
+Note that WIN32CASE/WIN32NOCASE will be slower than the others, but will handle properly any kind of complex scripting. For instance, if you want to use the Unicode-ready Windows API at database level, you can set for each database model:
+! aModel.SetCustomCollationForAll(sftUTF8Text,'WIN32CASE');
+! aModel.SetCustomCollationForAll(sftDateTime,'NOCASE');
+If you use non-default collations (i.e. SYSTEMNOCASE/ISO8601/WIN32CASE/WIN32NOCASE), you may have trouble running requests with "plain" {\i SQLite3} tools. But you can use our {\f1\fs20 @*SynDBExplorer@} safely, since it will declare all the above collations.
 When using external databases - see @27@, if the content is retrieved directly from the database driver and by-passes the virtual table mechanism - see @20@, returned data may not match your expectations according to the custom collations: you will need to customize the external tables definition by hand, with the proper SQL statement of each external DB engine.
 :  REGEXP operator
 Our {\i SQLite3} engine can use {\i @**regular expression@} within its SQL queries, by enabling the {\f1\fs20 @**REGEXP@} operator in addition to standard SQL operators ({\f1\fs20 =  == != <> IS IN LIKE GLOB MATCH}). It will use the Open Source PCRE library to perform the queries.

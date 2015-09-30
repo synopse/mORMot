@@ -1146,8 +1146,8 @@ unit mORMot;
       and TSQLRecordProperties.FieldBitsFromBlobField() method
     - added TSQLRecordProperties.RegisterCustomFixedSizeRecordProperty() and
       RegisterCustomRTTIRecordProperty() methods
-    - added TSQLRecordProperties.SetCustomCollationForAllRawUTF8() +
-      SetCustomCollation() methods, and TSQLModel.SetCustomCollationForAllRawUTF8()
+    - added TSQLRecordProperties.SetCustomCollationForAll() +
+      SetCustomCollation() methods, and TSQLModel.SetCustomCollationForAll()
       to implement ticket [bfdc198e70]
     - introducing TSQLRecordProperties.SetMaxLengthValidatorForTextFields() and
       SetMaxLengthFilterForTextFields() methods, and also corresponding
@@ -4945,14 +4945,16 @@ type
     /// set a custom SQlite3 text column collation for a specified field
     // - overloaded method which expects the field to be named
     function SetCustomCollation(const aFieldName, aCollationName: RawUTF8): boolean; overload;
-    /// set a custom SQlite3 text column collation for all RawUTF8 fields
+    /// set a custom SQlite3 text column collation for a given field type
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUTF8,
-    // and let the generated SQLite3 file be available outside
+    // or the default COLLATE ISO8601 of TDateTime, and let the generated SQLite3
+    // file be available outside the scope of mORMot's SQLite3 engine
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
     // - to be set in overridden class procedure InternalRegisterCustomProperties()
     // so that it will be common to all database models, for both client and server
-    procedure SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
+    procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
+      const aCollationName: RawUTF8);
     /// allow to validate length of all text published properties of this table
     // - the "index" attribute of the RawUTF8/string published properties could
     // be used to specify a maximum length for external VARCHAR() columns
@@ -6417,7 +6419,7 @@ type
     // or calling Props.RegisterCustomFixedSizeRecordProperty() or
     // Props.RegisterCustomRTTIRecordProperty() methods
     // - can also be used to specify a custom text collation, by calling
-    // Props.SetCustomCollationForAllRawUTF8() or SetCustomCollation() methods
+    // Props.SetCustomCollationForAll() or SetCustomCollation() methods
     // - do not call RecordProps from here (e.g. by calling AddFilter*): it
     // woult trigger a stack overflow, since at this state Props is not stored -
     // but rather use InternalDefineModel class method
@@ -8630,7 +8632,7 @@ type
     fActions: PEnumType;
     fEvents: PEnumType;
     fTableProps: TSQLModelRecordPropertiesObjArray;
-    fCustomCollationForAllRawUTF8: RawUTF8;
+    fCustomCollationForAll: array[TSQLFieldType] of RawUTF8;
     /// contains the caller of CreateOwnedStream()
     fRestOwner: TSQLRest;
     /// for every table, contains a locked record list
@@ -8749,17 +8751,19 @@ type
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
     function SQLFromSelectWhere(const Tables: array of TSQLRecordClass;
       const SQLSelect, SQLWhere: RawUTF8): RawUTF8;
-    /// set a custom SQlite3 text column collation for all RawUTF8 fields of
-    // all TSQLRecord of this model
+    /// set a custom SQlite3 text column collation for all fields of a given
+    // type for all TSQLRecord of this model
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUTF8,
-    // and let the generated SQLite3 file be available outside
+    // or COLLATE ISO8601 for TDateTime, and let the generated SQLite3 file be
+    // available outside the scope of mORMot's SQLite3 engine
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE: if
     // you want to use the slow but Unicode ready Windows API, set for each model:
-    // ! SetCustomCollationForAllRawUTF8('WIN32CASE');
+    // ! SetCustomCollationForAll(sftUTF8Text,'WIN32CASE');
     // - shall be set on both Client and Server sides, otherwise some issues
     // may occur
-    procedure SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
+    procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
+      const aCollationName: RawUTF8);
     /// allow to validate length of all text published properties of all tables
     // of this model
     // - the "index" attribute of the RawUTF8/string published properties could
@@ -29477,6 +29481,7 @@ end;
 
 procedure TSQLModel.SetTableProps(aIndex: integer);
 var i,j,f: integer;
+    t: TSQLFieldType;
     Kind: TSQLRecordVirtualKind;
     Table: TSQLRecordClass;
     aTableName,aFieldName: RawUTF8;
@@ -29518,8 +29523,9 @@ begin
     Kind := rSQLite3;
   Props := TSQLModelRecordProperties.Create(self,Table,Kind);
   Props.Props.InternalRegisterModel(Self,aIndex,Props);
-  if fCustomCollationForAllRawUTF8<>'' then
-    Props.Props.SetCustomCollationForAllRawUTF8(fCustomCollationForAllRawUTF8);
+  for t := low(t) to high(t) do
+    if fCustomCollationForAll[t]<>'' then
+      Props.Props.SetCustomCollationForAll(t,fCustomCollationForAll[t]);
   fTableProps[aIndex] := Props;
   aTableName := Props.Props.SQLTableName;
   fSortedTablesName[aIndex] := aTableName;
@@ -29644,7 +29650,7 @@ begin
   fSortedTablesNameIndex := CloneFrom.fSortedTablesNameIndex;
   fRecordReferences := CloneFrom.fRecordReferences;
   fVirtualTableModule := CloneFrom.fVirtualTableModule;
-  fCustomCollationForAllRawUTF8 := CloneFrom.fCustomCollationForAllRawUTF8;
+  fCustomCollationForAll := CloneFrom.fCustomCollationForAll;
   SetLength(fTableProps,fTablesMax+1);
   for i := 0 to fTablesMax do
     fTableProps[i] := TSQLModelRecordProperties.CreateFrom(
@@ -29911,17 +29917,18 @@ begin
   result := result+SQLFromWhere(SQLWhere);
 end;
 
-procedure TSQLModel.SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
+procedure TSQLModel.SetCustomCollationForAll(aFieldType: TSQLFieldType;
+  const aCollationName: RawUTF8);
 var i: integer;
 begin
   if self=nil then
     exit;
-  if fCustomCollationForAllRawUTF8<>'' then
-    raise EModelException.CreateUTF8('%.SetCustomCollationForAllRawUTF8(%)'+
+  if fCustomCollationForAll[aFieldType]<>'' then
+    raise EModelException.CreateUTF8('%.SetCustomCollationForAll(%)'+
       ' shall be called only once',[self,aCollationName]);
-  fCustomCollationForAllRawUTF8 := aCollationName;
+  fCustomCollationForAll[aFieldType] := aCollationName;
   for i := 0 to high(fTableProps) do
-    fTableProps[i].fProps.SetCustomCollationForAllRawUTF8(aCollationName);
+    fTableProps[i].fProps.SetCustomCollationForAll(aFieldType,aCollationName);
 end;
 
 procedure TSQLModel.SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean);
@@ -44068,9 +44075,9 @@ const
     ' TEXT COLLATE ISO8601, ',       // sftDateTime
     ' INTEGER, ',                    // sftTimeLog
     ' FLOAT, ',                      // sftCurrency
-    ' TEXT COLLATE NOCASE, ',        // sftObject
+    ' TEXT COLLATE BINARY, ',        // sftObject
     {$ifndef NOVARIANTS}
-    ' TEXT COLLATE NOCASE, ',        // sftVariant
+    ' TEXT COLLATE BINARY, ',        // sftVariant
     ' TEXT COLLATE NOCASE, ',        // sftNullable (from SQLFieldTypeStored)
     {$endif}
     ' BLOB, ',                       // sftBlob
@@ -44105,7 +44112,8 @@ begin
   result := SetCustomCollation(Fields.IndexByNameOrExcept(aFieldName),aCollationName);
 end;
 
-procedure TSQLRecordProperties.SetCustomCollationForAllRawUTF8(const aCollationName: RawUTF8);
+procedure TSQLRecordProperties.SetCustomCollationForAll(aFieldType: TSQLFieldType;
+  const aCollationName: RawUTF8);
 var i: integer;
 begin
   if self=nil then
@@ -44113,7 +44121,7 @@ begin
   if Fields.Count>length(fCustomCollation) then
     SetLength(fCustomCollation,Fields.Count);
   for i := 0 to Fields.Count-1 do
-    if Fields.List[i].SQLFieldTypeStored=sftUTF8Text then
+    if Fields.List[i].SQLFieldTypeStored=aFieldType then
       fCustomCollation[i] := aCollationName;
 end;
 
@@ -51558,6 +51566,7 @@ end;
 class procedure TSQLRecordServiceLog.InternalDefineModel(Props: TSQLRecordProperties);
 begin
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+  Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE'); // slightly faster
 end;
 
 

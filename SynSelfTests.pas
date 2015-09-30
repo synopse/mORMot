@@ -7253,7 +7253,7 @@ begin
     'Test TEXT COLLATE SYSTEMNOCASE, Unicode TEXT COLLATE SYSTEMNOCASE, '+
     'Ansi TEXT COLLATE NOCASE, ValFloat FLOAT, ValWord INTEGER, '+
     'ValDate TEXT COLLATE ISO8601, Next INTEGER, Data BLOB'+
-    {$ifndef NOVARIANTS}', ValVariant TEXT COLLATE NOCASE'+{$endif}');');
+    {$ifndef NOVARIANTS}', ValVariant TEXT COLLATE BINARY'+{$endif}');');
   s := TSQLRecordTest.RecordProps.SQLAddField(0);
   Check(s='ALTER TABLE Test ADD COLUMN Int INTEGER; ');
   s := TSQLRecordTest.RecordProps.SQLAddField(1000);
