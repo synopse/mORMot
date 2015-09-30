@@ -34677,11 +34677,12 @@ end;
 function TDocVariantData.GetAsRawUTF8(const aName: RawUTF8; out aValue: RawUTF8;
   aSortedCompare: TUTF8Compare): Boolean;
 var found: PVarData;
+    wasString: boolean;
 begin
   found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else begin
-    aValue := VariantToUTF8(PVariant(found)^);
+    VariantToUTF8(PVariant(found)^,aValue,wasString);
     result := true;
   end;
 end;
