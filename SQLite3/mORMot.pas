@@ -4861,6 +4861,9 @@ type
 
     /// return TRUE if the given name is either ID/RowID, either a property name
     function IsFieldName(const PropName: RawUTF8): boolean;
+    /// return TRUE if the given name is either ID/RowID, either a property name,
+    // or an aggregate function (MAX/MIN/AVG/SUM) on a valid property name 
+    function IsFieldNameOrFunction(const PropName: RawUTF8): boolean;
     /// set all bits corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromRawUTF8(const aFields: array of RawUTF8;
@@ -30940,7 +30943,7 @@ function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
   const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
   const WhereClause: RawUTF8): boolean;
 var SQL: RawUTF8;
-    n,L,i: integer;
+    n,i: integer;
     T: TSQLTableJSON;
 begin
   result := false;
@@ -30951,22 +30954,17 @@ begin
       SQL := 'SELECT COUNT(*) FROM '+SQLTableName;
       if WhereClause<>'' then
         SQL := SQL+' WHERE '+WhereClause;
-    end else
-    if (n=1) and IdemPChar(pointer(FieldName[0]),'MAX(') then begin
-      L := length(FieldName[0]);
-      if (FieldName[0][L]<>')') or not IsFieldName(copy(FieldName[0],5,L-5)) then
-        exit; // prevent SQL error or security breach
-      SQL := 'SELECT '+FieldName[0]+' FROM '+SQLTableName;
-      if WhereClause<>'' then
-        SQL := SQL+' WHERE '+WhereClause;
     end else begin
       for i := 0 to high(FieldName) do
-        if not IsFieldName(FieldName[i]) then
+        if not IsFieldNameOrFunction(FieldName[i]) then
           exit else // prevent SQL error or security breach
           if SQL='' then
             SQL := 'SELECT '+FieldName[i] else
             SQL := SQL+','+FieldName[i];
-      SQL := SQL+' FROM '+SQLTableName+' WHERE '+WhereClause+' LIMIT 1;';
+      SQL := SQL+' FROM '+SQLTableName;
+      if WhereClause<>'' then
+        SQL := SQL+' WHERE '+WhereClause;
+      SQL := SQL+' LIMIT 1';
     end;
     T := ExecuteList([Table],SQL);
     if T<>nil then
@@ -44293,6 +44291,18 @@ function TSQLRecordProperties.IsFieldName(const PropName: RawUTF8): boolean;
 begin
   result := (PropName<>'') and
     (isRowID(pointer(PropName)) or (Fields.IndexByName(PropName)>=0));
+end;
+
+function TSQLRecordProperties.IsFieldNameOrFunction(const PropName: RawUTF8): boolean;
+var L: integer;
+begin
+  L := length(PropName);
+  if (L=0) or (self=nil) then
+    result := false else
+    if (PropName[L]=')') and
+       (IdemPCharArray(pointer(PropName),['MAX(','MIN(','AVG(','SUM('])>=0) then
+      result := IsFieldName(copy(PropName,5,L-5)) else
+      result := IsFieldName(PropName);
 end;
 
 function TSQLRecordProperties.AddFilterOrValidate(aFieldIndex: integer;
