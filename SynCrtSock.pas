@@ -4907,7 +4907,7 @@ type
     RequestQueue: word;
     IdleConnection: word;
     HeaderWait: word;
-    MinSendRate: word;
+    MinSendRate: cardinal;
   end;
   PHTTP_TIMEOUT_LIMIT_INFO = ^HTTP_TIMEOUT_LIMIT_INFO;
 
