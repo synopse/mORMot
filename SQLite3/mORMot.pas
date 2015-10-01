@@ -4931,7 +4931,7 @@ type
     function MainFieldName(ReturnFirstIfNoUnique: boolean=false): RawUTF8;
     /// return the SQLite3 field datatype for each specified field
     // - set to '' for fields with no column created in the database (e.g. sftMany)
-    // - equals e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
+    // - returns e.g. ' INTEGER, ' or ' TEXT COLLATE SYSTEMNOCASE, '
     function SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
     /// set a custom SQlite3 text column collation for a specified field
     // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUTF8
@@ -28040,7 +28040,7 @@ begin
   result := ''; // RowID is added by sqlite3_declare_vtab() for a Virtual Table
   for i := 0 to Props.Fields.Count-1 do
   with Props.Fields.List[i] do begin
-    SQL := Props.SQLFieldTypeToSQL(i);
+    SQL := Props.SQLFieldTypeToSQL(i); // = '' for field with no matching DB column
     if SQL<>'' then
       result := result+Name+SQL;
   end;
@@ -28123,7 +28123,7 @@ begin
     with Props.Props do
     for i := 0 to Fields.Count-1 do
     with Fields.List[i] do begin
-      SQL := SQLFieldTypeToSQL(i);
+      SQL := SQLFieldTypeToSQL(i); // = '' for field with no matching DB column
       if SQL<>'' then begin
         result := result+Name+SQL;
         if i in IsUniqueFieldsBits then
@@ -44116,7 +44116,7 @@ procedure TSQLRecordProperties.SetCustomCollationForAll(aFieldType: TSQLFieldTyp
   const aCollationName: RawUTF8);
 var i: integer;
 begin
-  if self=nil then
+  if (self=nil) or (aFieldType in [sftUnknown,sftMany]) then
     exit;
   if Fields.Count>length(fCustomCollation) then
     SetLength(fCustomCollation,Fields.Count);
