@@ -8020,8 +8020,10 @@ type
   protected
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
   public
+    /// customization of variant into JSON serialization
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
+      ForcedSerializeAsNonExtendedJson: boolean); override;
     /// handle type conversion to string
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion to string
@@ -9569,7 +9571,10 @@ type
     procedure SerializeToContract(WR: TTextWriter);
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
-    procedure AddJSON(WR: TTextWriter; V: pointer);
+    // - any TDocVariant with dvoSerializeAsExtendedJson option would be
+    // serialized as strict JSON if ForcedSerializeAsNonExtendedJson is TRUE
+    procedure AddJSON(WR: TTextWriter; V: pointer;
+      ForcedSerializeAsNonExtendedJson: boolean);
     /// append the value corresponding to this argument as within a JSON string
     // - will escape any JSON string character, and include a pending ','
     procedure AddJSONEscaped(WR: TTextWriter; V: pointer);
@@ -24229,7 +24234,7 @@ begin
 end;
 
 procedure TSQLTableRowVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
 var r: integer;
     tmp: variant; // write row via a TDocVariant
 begin
@@ -24237,7 +24242,7 @@ begin
   if r<0 then
     r := TSQLTableRowVariantData(Value).VTable.fStepRow;
   TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
-  W.AddVariant(tmp,Escape);
+  W.AddVariant(tmp,Escape,ForcedSerializeAsNonExtendedJson);
 end;
 
 {$endif NOVARIANTS}
@@ -44940,8 +44945,8 @@ begin
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
           HR(P);
           P^.GetVariantProp(Value,VVariant);
-          AddVariant(VVariant,twJSONEscape);
-        end;
+          AddVariant(VVariant,twJSONEscape,woVariantAsNonExtendedJson in Options);
+        end;                               
         {$endif}
         tkClass: begin
           Obj := P^.GetObjProp(Value);
@@ -47087,7 +47092,7 @@ begin
           Params.AddDynArrayJSON(DynArrays[IndexVar]);
           Params.Add(',');
         end;
-        else AddJSON(Params,V);
+        else AddJSON(Params,V,true);
         end;
     end;
     Params.CancelLastComma;
@@ -50376,7 +50381,7 @@ begin
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
           W.Add(':');
-          AddJSON(W,Sender.Values[a]);
+          AddJSON(W,Sender.Values[a],false);
         end;
       W.CancelLastComma;
     end;
@@ -50387,7 +50392,7 @@ begin
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
           W.AddShort(ParamName^);
           W.Add(':');
-          AddJSON(W,Sender.Values[a]);
+          AddJSON(W,Sender.Values[a],false);
         end;
       W.CancelLastComma;
     end;
@@ -50847,7 +50852,10 @@ begin
   WR.AddShort('"},');
 end;
 
-procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
+procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
+  ForcedSerializeAsNonExtendedJson: boolean);
+const OPT: array[boolean] of TTextWriterWriteObjectOptions = (
+  [woStoreStoredFalse],[woStoreStoredFalse,woVariantAsNonExtendedJson]);
 begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
@@ -50873,13 +50881,13 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvObject:     WR.WriteObject(PPointer(V)^,[woStoreStoredFalse]);
+  smvObject:     WR.WriteObject(PPointer(V)^,OPT[ForcedSerializeAsNonExtendedJson]);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
-  {$ifndef NOVARIANTS}
-  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
-  {$endif}
   smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
+  {$ifndef NOVARIANTS}
+  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape,ForcedSerializeAsNonExtendedJson);
+  {$endif}
   end;
   if vIsString in ValueKindAsm then
     WR.Add('"',',') else
@@ -50890,9 +50898,9 @@ procedure TServiceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
 var W: TTextWriter;
 begin
   if ValueType in [smvBoolean..smvCurrency,smvInterface] then // no need to escape those
-    AddJSON(WR,V) else begin
+    AddJSON(WR,V,false) else begin
     W := WR.InternalJSONWriter;
-    AddJSON(W,V);
+    AddJSON(W,V,false);
     WR.AddJSONEscape(W);
   end;
 end;
@@ -51463,7 +51471,7 @@ begin
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
-          Par := JSONToObject(fObjects[IndexVar],Par,valid);
+          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,[j2oHandleCustomVariants]);
           if not valid then
             exit;
           IgnoreComma(Par);
@@ -51541,7 +51549,7 @@ begin
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
         if ResAsJSONObject then
           Res.AddPropName(ParamName^);
-        AddJSON(Res,fValues[a]);
+        AddJSON(Res,fValues[a],true);
       end;
       Res.CancelLastComma;
     end;
