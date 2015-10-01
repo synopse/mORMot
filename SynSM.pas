@@ -885,8 +885,6 @@ type
     /// fast getter/setter implementation of object properties
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
-    // this implementation will let SpiderMonkey write directly the JSON content
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
   public
     /// initialize a variant instance to store a JavaScript object
     class procedure New(const aObject: TSMObject; out aValue: variant); overload;
@@ -894,6 +892,9 @@ type
     class procedure New(cx: PJSContext; obj: PJSObject; out aValue: variant); overload;
     /// initialize a variant instance to store a new JavaScript object
     class procedure New(engine: TSMEngine; out aValue: variant); overload;
+    // this implementation will let SpiderMonkey write directly the JSON content
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
+     ForcedSerializeAsNonExtendedJson: boolean); override;
     /// handle type conversion
     // - any TSMVariant will be converted to '<<JavaScript TSMVariant>>' text
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -2458,7 +2459,7 @@ begin
 end;
 
 procedure TSMVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
 var val: jsval;
 begin
   with TSMVariantData(Value) do

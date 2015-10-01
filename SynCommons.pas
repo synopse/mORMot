@@ -6221,13 +6221,16 @@ type
   // field will be serialized as "***" to prevent security issues (e.g. in log)
   // - by default, TObjectList will set the woStoreClassName for its nested
   // objects, unless woObjectListWontStoreClassName is defined
+  // - any variant published property would be stored with their own
+  // serialization option, unless woVariantAsNonExtendedJson is set to force
+  // strict JSON content
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix,
     woSQLRawBlobAsBase64, woHideSynPersistentPassword,
-    woObjectListWontStoreClassName);
+    woObjectListWontStoreClassName, woVariantAsNonExtendedJson);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -6694,9 +6697,13 @@ type
     /// append a variant content as number or string
     // - default Escape=twJSONEscape will create valid JSON content, which
     // can be converted back to a variant value using VariantLoadJSON()
+    // - would store the variant with its default JSON serialization, unless
+    // ForcedSerializeAsNonExtendedJson is TRUE so that any extended JSON format
+    // would be replaced by standard/strict JSON
     // - note that before Delphi 2009, any varString value is expected to be
     // a RawUTF8 instance - which does make sense in the mORMot context
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind=twJSONEscape);
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind=twJSONEscape;
+      ForcedSerializeAsNonExtendedJson: boolean=false);
     {$endif}
     /// append a void record content as UTF-8 encoded JSON or custom serialization
     // - this method will first create a void record (i.e. filled with #0 bytes)
@@ -11412,6 +11419,7 @@ type
     /// override those two abstract methods for fast getter/setter implementation
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); virtual; abstract;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); virtual; abstract;
+  public
     /// customization of JSON parsing into variants
     // - will be called by e.g. by VariantLoadJSON() or GetVariantFromJSON()
     // with Options: PDocVariantOptions parameter not nil
@@ -11425,8 +11433,11 @@ type
       EndOfObject: PUTF8Char): boolean; virtual;
     /// customization of variant into JSON serialization
     // - this default implementation will raise an ESynException
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); overload; virtual;
-  public
+    // - would store the variant with its default JSON serialization, unless
+    // ForcedSerializeAsNonExtendedJson is TRUE so that any extended JSON format
+    // would be replaced by standard/strict JSON
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
+      ForcedSerializeAsNonExtendedJson: boolean); overload; virtual;
     /// retrieve the field/column value
     // - this method will call protected IntGet abstract method
     function GetProperty(var Dest: TVarData; const V: TVarData;
@@ -11879,8 +11890,6 @@ type
     /// fast getter/setter implementation
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
-    // this implementation will write the content as JSON object or array
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
   public
     /// initialize a variant instance to store some document-based content
     // - by default, every internal value will be copied, so access of nested
@@ -12005,6 +12014,9 @@ type
     class procedure GetSingleOrDefault(const docVariantArray, default: variant;
       var result: variant);
 
+    // this implementation will write the content as JSON object or array
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
+      ForcedSerializeAsNonExtendedJson: boolean); override;
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array)
@@ -33333,7 +33345,7 @@ begin
 end;
 
 procedure TSynInvokeableVariantType.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
 begin
   raise ESynException.CreateUTF8('%.ToJSON: unimplemented variant type',[self]);
 end;
@@ -35327,7 +35339,8 @@ begin
   result := false;
 end;
 
-procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind);
+procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
+  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
 var ndx: integer;
 begin
   with TDocVariantData(Value) do
@@ -35337,8 +35350,10 @@ begin
       W.AddShort('null');
     dvObject: begin
       W.Add('{');
+      if not (dvoSerializeAsExtendedJson in VOptions) then
+        ForcedSerializeAsNonExtendedJson := true;
       for ndx := 0 to VCount-1 do begin
-        if (dvoSerializeAsExtendedJson in VOptions) and
+        if (not ForcedSerializeAsNonExtendedJson) and
            JsonPropNameValid(pointer(VName[ndx])) then begin
           W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
         end else begin
@@ -35347,7 +35362,7 @@ begin
           W.Add('"');
         end;
         W.Add(':');
-        W.AddVariant(VValue[ndx],twJSONEscape);
+        W.AddVariant(VValue[ndx],twJSONEscape,ForcedSerializeAsNonExtendedJson);
         W.Add(',');
       end;
       W.CancelLastComma;
@@ -35356,7 +35371,7 @@ begin
     dvArray: begin
       W.Add('[');
       for ndx := 0 to VCount-1 do begin
-        W.AddVariant(VValue[ndx],twJSONEscape);
+        W.AddVariant(VValue[ndx],twJSONEscape,ForcedSerializeAsNonExtendedJson);
         W.Add(',');
       end;
       W.CancelLastComma;
@@ -39757,7 +39772,8 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
+procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
+  ForcedSerializeAsNonExtendedJson: boolean);
 var CustomVariantType: TCustomVariantType;
 begin
   with TVarData(Value) do
@@ -39777,7 +39793,7 @@ begin
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
   varBoolean:  Add(VBoolean);
-  varVariant:  AddVariant(PVariant(VPointer)^,Escape);
+  varVariant:  AddVariant(PVariant(VPointer)^,Escape,ForcedSerializeAsNonExtendedJson);
   varString: begin
     if Escape=twJSONEscape then
       Add('"');
@@ -39798,7 +39814,7 @@ begin
   end;
   else
   if VType=varVariant or varByRef then
-    AddVariant(PVariant(VPointer)^,Escape) else
+    AddVariant(PVariant(VPointer)^,Escape,ForcedSerializeAsNonExtendedJson) else
   if VType=varByRef or varString then begin
     if Escape=twJSONEscape then
       Add('"');
@@ -39820,7 +39836,8 @@ begin
   end else
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
-    TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
+    TSynInvokeableVariantType(CustomVariantType).ToJson(
+      self,Value,Escape,ForcedSerializeAsNonExtendedJson) else
     raise ESynException.CreateUTF8('%.AddVariant(VType=%)',[self,VType]);
   end;
 end;

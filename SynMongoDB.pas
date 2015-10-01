@@ -215,12 +215,13 @@ type
   TBSONVariant = class(TSynInvokeableVariantType)
   protected
     function GetNewDoc(const BSONDoc: TBSONDocument): variant;
+  public
     /// customization of JSON conversion into TBSONVariant kind of variants
     function TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
       EndOfObject: PUTF8Char): boolean; override;
     /// variant serialization will use modMongoStrict JSON-compatible mode
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
-  public
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
+      ForcedSerializeAsNonExtendedJson: boolean); override;
     /// handle type conversion
     // - only types processed by now are string/OleStr/UnicodeString/date
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -3761,7 +3762,8 @@ end;
 
 { TBSONVariant }
 
-procedure TBSONVariant.ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind);
+procedure TBSONVariant.ToJSON(W: TTextWriter; const Value: variant;
+  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
 var item: TBSONElement;
     temp: RawByteString;
 begin
