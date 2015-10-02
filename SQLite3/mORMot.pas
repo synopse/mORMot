@@ -20707,11 +20707,8 @@ procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
 var value: Variant;
 begin
   fPropInfo.GetVariantProp(Instance,value);
-  if W.WriteAsJsonNotAsString then
-    with _Safe(value)^ do
-      if Count>0 then
-        Options := JSON_OPTIONS_FAST; // force true JSON serialization
-  W.AddVariant(value,twJSONEscape); // even sftNullable should escape strings
+  W.AddVariant(value,twJSONEscape,W.WriteAsJsonNotAsString);
+  // even sftNullable should escape strings
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetValueVar(Instance: TObject;
@@ -44946,7 +44943,7 @@ begin
           HR(P);
           P^.GetVariantProp(Value,VVariant);
           AddVariant(VVariant,twJSONEscape,woVariantAsNonExtendedJson in Options);
-        end;                               
+        end;
         {$endif}
         tkClass: begin
           Obj := P^.GetObjProp(Value);
