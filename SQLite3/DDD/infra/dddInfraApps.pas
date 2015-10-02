@@ -90,7 +90,7 @@ type
   // protected method to launch and return a IAdministratedDaemon instance
   TDDDDaemon = class
   protected
-    fSettings: TDDDAdministratedDaemonSettingsFile;
+    fSettings: TDDDAdministratedDaemonSettings;
     fSettingsRef: IUnknown;
     /// the service/daemon will be stopped when this interface is set to nil
     fDaemon: IAdministratedDaemon;
@@ -106,7 +106,7 @@ type
     // - actual settings would inherit from TDDDAdministratedDaemonSettingsFile,
     // to define much more parameters, according to the service/daemon process
     // - the supplied settings will be owned by this TDDDDaemon instance
-    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); virtual;
+    constructor Create(aSettings: TDDDAdministratedDaemonSettings); virtual;
     /// finalize the service/daemon application, and release its resources
     destructor Destroy; override;
     /// interprect the command line to run the application as expected
@@ -148,7 +148,7 @@ type
     function InternalRetrieveState(var Status: variant): boolean; override;
   public
     /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
+    constructor Create(aSettings: TDDDAdministratedDaemonSettings); reintroduce;
     /// finalize the service/daemon thread
     // - will call Halt() if the associated process is still running
     destructor Destroy; override;
@@ -168,7 +168,7 @@ type
     procedure InternalLogMonitoring; virtual;
   public
     /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TDDDAdministratedDaemonSettingsFile); reintroduce;
+    constructor Create(aSettings: TDDDAdministratedDaemonSettings); reintroduce;
     /// finalize the service/daemon thread
     // - will call Halt() if the associated process is still running
     destructor Destroy; override;
@@ -182,7 +182,7 @@ type
   // - as hosted by TDDDDaemon service/daemon application
   TDDDRestHttpDaemon = class(TDDDRestDaemon)
   protected
-    fSettings: TDDDAdministratedDaemonHttpSettingsFile;
+    fSettings: TDDDAdministratedDaemonHttpSettings;
     fHttpServer: TSQLHttpServer;
     // initialize HTTP Server into fHttpServer
     // (fRest should have been set by the overriden method)
@@ -192,7 +192,7 @@ type
   public
     /// initialize the Daemon with the supplied settings
     // - no HTTP server is published, until Start is performed
-    constructor Create(aSettings: TDDDAdministratedDaemonHttpSettingsFile); reintroduce;
+    constructor Create(aSettings: TDDDAdministratedDaemonHttpSettings); reintroduce;
     /// reference to the main HTTP server publishing this daemon Services
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
@@ -238,7 +238,7 @@ type
     // - note that the supplied Model.Root is expected to be the default root
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
-    function NewRestClientInstance(aRootSettings: TDDDAppSettingsFile;
+    function NewRestClientInstance(aRootSettings: TDDDAppSettingsAbstract;
       aModel: TSQLModel=nil;
       aOptions: TDDDNewRestInstanceOptions=[riOwnModel,riCreateVoidModelIfNone,
         riHandleAuthentication,riRaiseExceptionIfNoRest]): TSQLRestClientURI;
@@ -533,7 +533,7 @@ implementation
 
 { TDDDDaemon }
 
-constructor TDDDDaemon.Create(aSettings: TDDDAdministratedDaemonSettingsFile);
+constructor TDDDDaemon.Create(aSettings: TDDDAdministratedDaemonSettings);
 begin
   inherited Create;
   if aSettings=nil then
@@ -758,7 +758,7 @@ end;
 { TDDDThreadDaemon }
 
 constructor TDDDThreadDaemon.Create(
-  aSettings: TDDDAdministratedDaemonSettingsFile);
+  aSettings: TDDDAdministratedDaemonSettings);
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
@@ -788,7 +788,7 @@ end;
 { TDDDRestDaemon }
 
 constructor TDDDRestDaemon.Create(
-  aSettings: TDDDAdministratedDaemonSettingsFile);
+  aSettings: TDDDAdministratedDaemonSettings);
 begin
   if aSettings=nil then
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
@@ -831,7 +831,7 @@ end;
 { TDDDRestHttpDaemon }
 
 constructor TDDDRestHttpDaemon.Create(
-  aSettings: TDDDAdministratedDaemonHttpSettingsFile);
+  aSettings: TDDDAdministratedDaemonHttpSettings);
 begin
   fSettings := aSettings;
   inherited Create(aSettings);
@@ -1377,7 +1377,7 @@ end;
 { TDDDRestClientSettings }
 
 function TDDDRestClientSettings.NewRestClientInstance(
-  aRootSettings: TDDDAppSettingsFile; aModel: TSQLModel;
+  aRootSettings: TDDDAppSettingsAbstract; aModel: TSQLModel;
   aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
 var pass: RawUTF8;
 begin

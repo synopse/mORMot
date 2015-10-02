@@ -49,8 +49,7 @@ unit dddInfraSettings;
   - first public release, corresponding to Synopse mORMot Framework 1.18
 
   TODO:
-   - store settings in database
-   - allow to handle authentication via a centralized service or REST server
+   - store settings in database, or in a centralized service
 
 }
 
@@ -74,28 +73,6 @@ uses
 { ----- Manage Service/Daemon settings }
 
 type
-  /// abstract class for storing application settings
-  // - this class implements IAutoCreateFieldsResolve so is able to inject
-  // its own values to any TInjectableAutoCreateFields instance
-  // - you have to manage instance lifetime of these inherited classes with a
-  // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
-  TDDDAppSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
-    IAutoCreateFieldsResolve)
-  protected
-    fAllProps: PPropInfoDynArray;
-    fInitialJsonContent: RawUTF8;
-    procedure SetProperties(Instance: TObject); virtual;
-    // inherited constructors should use this method to initialize the content
-    procedure SetJsonContent(const JsonContent: RawUTF8); virtual;
-  public
-    /// the JSON content, as specified when creating the instance
-    // - will allow SettingsDidChange to check if has changed
-    // - here the JSON content is stored with default ObjectToJSON() options,
-    // so will be the normalized representation of the content, which may not
-    // match the JSON supplied to SetJsonContent() protected method
-    property InitialJsonContent: RawUTF8 read fInitialJsonContent;
-  end;
-
   /// settings used to define how logging take place
   // - will map the most used TSynLogFamily parameters
   TDDDLogSettings = class(TSynPersistent)
@@ -140,7 +117,7 @@ type
     property PerThread: TSynLogPerThreadMode read fPerThread write fPerThread;
     /// by default (false), logging will use manual stack trace browsing
     // - if you experiment unexpected EAccessViolation, try to set this setting
-    // to TRUE so that the RtlCaptureStackBackTrace() API would be used instead 
+    // to TRUE so that the RtlCaptureStackBackTrace() API would be used instead
     property StackTraceViaAPI: boolean read FStackTraceViaAPI write FStackTraceViaAPI;
     /// allows to customize where the log files will be stored
     property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
@@ -153,33 +130,62 @@ type
    property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
   end;
 
-  /// parent class for storing application settings as a JSON file
-  TDDDAppSettingsFile = class(TDDDAppSettingsAbstract)
+  TDDDAppSettingsAbstract = class;
+
+  /// abstract parent class for storing application settings
+  TDDDAppSettingsStorageAbstract = class(TSynAutoCreateFields)
   protected
-    fSettingsJsonFileName: TFileName;
+    fInitialJsonContent: RawUTF8;
+    fOwner: TDDDAppSettingsAbstract;
+    /// called by TDDDAppSettingsAbstract.Create
+    function SetOwner(aOwner: TDDDAppSettingsAbstract): boolean;
+    /// inherited classes would override this to persist fInitialJsonContent
+    procedure InternalStore; virtual; abstract;
+  public
+    /// initialize the storage instance
+    constructor Create(const aInitialJSON: RawUTF8); reintroduce; virtual;
+    /// TDDDAppSettingsAbstract would use this to actually persist the data
+    procedure Store(const aJSON: RawUTF8); virtual;
+    /// the JSON content, as specified when creating the instance
+    // - will allow SettingsDidChange to check if has changed
+    // - here the JSON content is stored with default ObjectToJSON() options,
+    // so will be the normalized representation of the content, which may not
+    // match the JSON supplied to SetInitialJsonContent() protected method
+    property InitialJsonContent: RawUTF8 read fInitialJsonContent;
+    /// the associated settings values
+    property Owner: TDDDAppSettingsAbstract read fOwner;
+  end;
+
+  /// abstract class for storing application settings
+  // - this class implements IAutoCreateFieldsResolve so is able to inject
+  // its own values to any TInjectableAutoCreateFields instance
+  // - you have to manage instance lifetime of these inherited classes with a
+  // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
+  TDDDAppSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
+    IAutoCreateFieldsResolve)
+  protected
+    fAllProps: PPropInfoDynArray;
     fDescription: string;
     fLog: TDDDLogSettings;
+    fStorage: TDDDAppSettingsStorageAbstract;
+    procedure SetProperties(Instance: TObject); virtual;
   public
-    /// initialize and read the settings from the supplied JSON file name
-    // - if no file name is specified, will use the executable name with
-    // '.settings' as extension
-    constructor Create(const aSettingsJsonFileName: TFileName=''); reintroduce; virtual;
-    /// save to file and finalize the settings
+    /// initialize the settings, with a corresponding storage process
+    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;
+    /// persist if needed, and finalize the settings
     destructor Destroy; override;
-    /// save settings to file
+    /// to be called when the application starts, to initialize settings
+    // - you can specify a default Description value
+    // - it will set the global SQLite3Log.Family according to Log values
+    procedure Initialize(const aDescription: string); virtual;
+    /// persist the settings if needed
+    // - will call the virtual InternalPersist method
+    procedure StoreIfUpdated; virtual;
+    /// serialize the settings as JSON
     // - any enumerated or set published property will be commented with their
     // textual values, and 'stored false' properties would be included
-    procedure UpdateFile; virtual;
-    /// to be called when the application starts, to access settings
-    // - will change the system current directory to SettingsJsonFileName, and
-    // set the log settings as expected
-    // - you can specify a default Description value
-    procedure Initialize(const aDescription: string); virtual;
-    /// compute a file name relative to the .settings file path
-    function FileNameRelativeToSettingsFile(const aFileName: TFileName): TFileName;
-    /// the .settings file name, including full path
-    property SettingsJsonFileName: TFileName
-      read fSettingsJsonFileName write fSettingsJsonFileName;
+    // - returns the new JSON content corresponding to the updated settings
+    function AsJson: RawUTF8; virtual;
   published
     /// some text which will be used to describe this application
     property Description: string read FDescription write FDescription;
@@ -187,13 +193,29 @@ type
     property Log: TDDDLogSettings read fLog;
   end;
 
-  /// class type for storing a service/daemon settings as a JSON file
-  TDDDAppSettingsFileClass = class of TDDDAppSettingsFile;
+  /// class type used for storing application settings 
+  TDDDAppSettingsAbstractClass = class of TDDDAppSettingsAbstract;
+
+  /// class used for storing application settings as a JSON file
+  TDDDAppSettingsStorageFile = class(TDDDAppSettingsStorageAbstract)
+  protected
+    fSettingsJsonFileName: TFileName;
+    procedure InternalStore; override;
+  public
+    /// initialize and read the settings from the supplied JSON file name
+    // - if no file name is specified, will use the executable name with
+    // '.settings' as extension
+    constructor Create(const aSettingsJsonFileName: TFileName); reintroduce; virtual;
+    /// compute a file name relative to the .settings file path
+    function FileNameRelativeToSettingsFile(const aFileName: TFileName): TFileName;
+    /// the .settings file name, including full path
+    property SettingsJsonFileName: TFileName
+      read fSettingsJsonFileName write fSettingsJsonFileName;
+  end;
 
   /// some options to be used for TDDDRestSettings
   TDDDRestSettingsOption =
     (optEraseDBFileAtStartup,
-     optStoreDBFileRelativeToSettings,
      optSQlite3FileSafeSlowMode);
 
   /// define options to be used for TDDDRestSettings
@@ -244,7 +266,7 @@ type
     // - note that the supplied Model.Root is expected to be the default root
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also publish /wrapper HTML page if WrapperTemplateFolder is set
-    function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+    function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
       aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
@@ -279,15 +301,15 @@ type
     property Options: TDDDRestSettingsOptions read fOptions write fOptions;
   end;
 
-  /// parent class for storing REST-based application settings as a JSON file
+  /// parent class for storing REST-based application settings 
   // - this class could be used for an application with a single REST server
   // running on a given HTTP port
-  TDDDAppSettingsRestFile = class(TDDDAppSettingsFile)
+  TDDDAppSettingsRest = class(TDDDAppSettingsAbstract)
   protected
     fRest: TDDDRestSettings;
     fServerPort: RawUTF8;
   public
-    /// to be called when the application starts, to access settings
+    /// to be called when the application starts, to initialize settings
     // - will call inherited TDDDAppSettingsFile.Initialize, and
     // set ServerPort to a default 888/8888 value under Windows/Linux
     procedure Initialize(const aDescription: string); override;
@@ -302,7 +324,7 @@ type
   // - the IAdministratedDaemon service will be published to administrate
   // this service/daemon instance
   // - those values should match the ones used on administrative tool side
-  TDDDAdministratedDaemonSettings = class(TSynAutoCreateFields)
+  TDDDAdministratedDaemonRemoteAdminSettings = class(TSynAutoCreateFields)
   protected
     FAuthRootURI: RawUTF8;
     FAuthHashedPassword: RawUTF8;
@@ -330,23 +352,23 @@ type
     property AuthHttp: TSQLHttpServerDefinition read FAuthHttp;
   end;
 
-  /// parent class for storing a service/daemon settings as a JSON file
-  // - under Windows, some Service* properties will handle installaiton as a
+  /// parent class for storing a service/daemon settings
+  // - under Windows, some Service* properties will handle installation as a
   // regular Windows Service, thanks to TDDDDaemon
-  TDDDAdministratedDaemonSettingsFile = class(TDDDAppSettingsFile)
+  TDDDAdministratedDaemonSettings = class(TDDDAppSettingsAbstract)
   protected
-    FRemoteAdmin: TDDDAdministratedDaemonSettings;
+    FRemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings;
     FServiceDisplayName: string;
     FServiceName: string;
     FServiceAutoStart: boolean;
   public
-    /// to be called when the application starts, to access settings
+    /// to be called when the application starts, to initialize settings
     // - you can specify default Description and Service identifiers
     procedure Initialize(
       const aDescription,aServiceName,aServiceDisplayName: string); reintroduce; virtual;
   published
     /// define how this administrated service/daemon is accessed via REST
-    property RemoteAdmin: TDDDAdministratedDaemonSettings read FRemoteAdmin;
+    property RemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings read FRemoteAdmin;
     /// under Windows, will define the Service internal name
     property ServiceName: string read FServiceName write FServiceName;
     /// under Windows, will define the Service displayed name
@@ -356,8 +378,8 @@ type
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
   end;
 
-  /// parent class for storing a HTTP published service/daemon settings as a JSON file
-  TDDDAdministratedDaemonHttpSettingsFile = class(TDDDAdministratedDaemonSettingsFile)
+  /// parent class for storing a HTTP published service/daemon settings
+  TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
   private
     fHttp: TSQLHttpServerDefinition;
   published
@@ -421,7 +443,7 @@ type
     // DB-based asynchronous remote notifications as processed by
     // TServiceFactoryClient.SendNotificationsVia method)
     // - if aLogClass=[], TSQLRecordServiceLog would be used as a class
-    function NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+    function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aMainRestWithServices: TSQLRestServer;
       const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
   end;
@@ -432,71 +454,7 @@ implementation
 
 { TDDDAppSettingsAbstract }
 
-procedure TDDDAppSettingsAbstract.SetJsonContent(const JsonContent: RawUTF8);
-var valid: boolean;
-    tmp: RawUTF8;
-begin
-  if JsonContent='' then
-    exit;
-  fInitialJsonContent := JsonContent;
-  tmp := JsonContent;
-  UniqueString(AnsiString(tmp));
-  RemoveCommentsFromJSON(pointer(tmp));
-  JSONToObject(self,pointer(tmp),valid);
-  if not valid then
-    fInitialJsonContent := '';
-end;
-
-procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
-begin
-  CopyObject(self,Instance);
-end;
-
-
-{ TDDDLogSettings }
-
-constructor TDDDLogSettings.Create;
-begin
-  inherited Create;
-  fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
-  fPerThread := ptIdentifiedInOnFile;
-  fRotateFileAtHour := -1;
-  fRotateFileCount := 20;
-  fRotateFileSize := 128*1024; // 128 MB per rotation log by default
-  fAutoFlush := 5;
-end;
-
-
-{ TDDDAppSettings }
-
-constructor TDDDAppSettingsFile.Create(
-  const aSettingsJsonFileName: TFileName);
-begin
-  inherited Create;
-  if aSettingsJsonFileName<>'' then
-    fSettingsJsonFileName := aSettingsJsonFileName else
-    fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
-  fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
-  SetJsonContent(AnyTextFileToRawUTF8(fSettingsJsonFileName,true));
-end;
-
-procedure TDDDAppSettingsFile.UpdateFile;
-var new: RawUTF8;
-begin
-  new := ObjectToJSON(Self,[woHumanReadable,woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-  if new=fInitialJsonContent then
-    exit;
-  FileFromString(new,fSettingsJsonFileName);
-end;
-
-destructor TDDDAppSettingsFile.Destroy;
-begin
-  UpdateFile;
-  inherited Destroy;
-end;
-
-procedure TDDDAppSettingsFile.Initialize(const aDescription: string);
+procedure TDDDAppSettingsAbstract.Initialize(const aDescription: string);
 begin
   with SQLite3Log.Family do begin
     Level := Log.Levels-[sllNone]; // '*' would include sllNone
@@ -519,22 +477,60 @@ begin
   end;
   if fDescription='' then
     fDescription := aDescription;
-  ChDir(ExtractFilePath(SettingsJsonFileName));
 end;
 
-function TDDDAppSettingsFile.FileNameRelativeToSettingsFile(
-  const aFileName: TFileName): TFileName;
-var path,settings: TFileName;
+procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
 begin
-  path := ExtractFilePath(ExpandFileName(aFileName));
-  settings := ExtractFilePath(ExpandFileName(SettingsJsonFileName));
-  result := ExtractRelativePath(settings,path)+ExtractFileName(aFileName);
+  CopyObject(self,Instance);
+end;
+
+destructor TDDDAppSettingsAbstract.Destroy;
+begin
+  StoreIfUpdated;
+  inherited;
+  fStorage.Free;
+end;
+
+function TDDDAppSettingsAbstract.AsJson: RawUTF8;
+begin
+  result := ObjectToJSON(Self,[woHumanReadable,woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment,
+    woVariantAsNonExtendedJson]);
+end;
+
+constructor TDDDAppSettingsAbstract.Create(
+  aStorage: TDDDAppSettingsStorageAbstract);
+begin
+  inherited Create;
+  fStorage := aStorage;
+  fStorage.SetOwner(self);
+end;
+
+procedure TDDDAppSettingsAbstract.StoreIfUpdated;
+begin
+  if fStorage<>nil then
+    fStorage.Store(AsJson);
+end;
+
+
+
+{ TDDDLogSettings }
+
+constructor TDDDLogSettings.Create;
+begin
+  inherited Create;
+  fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
+  fPerThread := ptIdentifiedInOnFile;
+  fRotateFileAtHour := -1;
+  fRotateFileCount := 20;
+  fRotateFileSize := 128*1024; // 128 MB per rotation log by default
+  fAutoFlush := 5;
 end;
 
 
 { TDDDRestSettings }
 
-function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
+function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
   aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
@@ -551,9 +547,6 @@ function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsFile;
       fORM.ServerName := StringToUTF8(IncludeTrailingPathDelimiter(
         fDefaultDataFolder))+FN+Ext;
     end;
-    if (aRootSettings<>nil) and (optStoreDBFileRelativeToSettings in Options) then
-      fORM.ServerName := StringToUTF8(
-        aRootSettings.FileNameRelativeToSettingsFile(UTF8ToString(fORM.ServerName)));
   end;
 
 begin
@@ -651,9 +644,9 @@ begin
 end;
 
 
-{ TDDDAppSettingsRestFile }
+{ TDDDAppSettingsRest }
 
-procedure TDDDAppSettingsRestFile.Initialize(const aDescription: string);
+procedure TDDDAppSettingsRest.Initialize(const aDescription: string);
 begin
   inherited Initialize(aDescription);
   if ServerPort='' then
@@ -662,9 +655,9 @@ end;
 
 
 
-{ TDDDAdministratedDaemonSettingsFile }
+{ TDDDAdministratedDaemonSettings }
 
-procedure TDDDAdministratedDaemonSettingsFile.Initialize(
+procedure TDDDAdministratedDaemonSettings.Initialize(
   const aDescription,aServiceName,aServiceDisplayName: string);
 begin
   inherited Initialize(aDescription);
@@ -688,7 +681,7 @@ end;
 { TDDDServicesLogRestSettings }
 
 function TDDDServicesLogRestSettings.NewRestInstance(
-  aRootSettings: TDDDAppSettingsFile; aMainRestWithServices: TSQLRestServer;
+  aRootSettings: TDDDAppSettingsAbstract; aMainRestWithServices: TSQLRestServer;
   const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest;
 var classes: TSQLRecordClassDynArray;
     i: integer;
@@ -710,6 +703,69 @@ begin
   // set the first supplied class type to log services
   (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
     SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]));
+end;
+
+
+{ TDDDAppSettingsStorageAbstract }
+
+constructor TDDDAppSettingsStorageAbstract.Create(
+  const aInitialJSON: RawUTF8);
+begin
+  inherited Create;
+  if aInitialJSON='' then
+    exit;
+  fInitialJsonContent := aInitialJSON;
+end;
+
+function TDDDAppSettingsStorageAbstract.SetOwner(
+  aOwner: TDDDAppSettingsAbstract): boolean;
+var tmp: RawUTF8;
+begin
+  if self=nil then
+    exit;
+  fOwner := aOwner;
+  if fInitialJsonContent='' then
+    exit;
+  tmp := fInitialJsonContent;
+  UniqueString(AnsiString(tmp));
+  RemoveCommentsFromJSON(pointer(tmp));
+  JSONToObject(fOwner,pointer(tmp),result);
+  if not result then
+    fInitialJsonContent := '';
+end;
+
+procedure TDDDAppSettingsStorageAbstract.Store(const aJSON: RawUTF8);
+begin
+  if aJSON=fInitialJsonContent then
+    exit;
+  fInitialJsonContent := aJSON;
+  InternalStore;
+end;
+
+
+{ TDDDAppSettingsStorageFile }
+
+constructor TDDDAppSettingsStorageFile.Create(const aSettingsJsonFileName: TFileName);
+begin
+  if aSettingsJsonFileName<>'' then
+    fSettingsJsonFileName := aSettingsJsonFileName else
+    fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
+  fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
+  inherited Create(AnyTextFileToRawUTF8(fSettingsJsonFileName,true));
+end;
+
+function TDDDAppSettingsStorageFile.FileNameRelativeToSettingsFile(
+  const aFileName: TFileName): TFileName;
+var path,settings: TFileName;
+begin
+  path := ExtractFilePath(ExpandFileName(aFileName));
+  settings := ExtractFilePath(ExpandFileName(SettingsJsonFileName));
+  result := ExtractRelativePath(settings,path)+ExtractFileName(aFileName);
+end;
+
+procedure TDDDAppSettingsStorageFile.InternalStore;
+begin
+  FileFromString(fInitialJsonContent,fSettingsJsonFileName);
 end;
 
 end.
