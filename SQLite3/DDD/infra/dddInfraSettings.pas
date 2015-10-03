@@ -205,7 +205,7 @@ type
     /// initialize and read the settings from the supplied JSON file name
     // - if no file name is specified, will use the executable name with
     // '.settings' as extension
-    constructor Create(const aSettingsJsonFileName: TFileName); reintroduce; virtual;
+    constructor Create(const aSettingsJsonFileName: TFileName=''); reintroduce; virtual;
     /// compute a file name relative to the .settings file path
     function FileNameRelativeToSettingsFile(const aFileName: TFileName): TFileName;
     /// the .settings file name, including full path
