@@ -715,6 +715,7 @@ unit SynCommons;
   - added Utf8TruncateToUnicodeLength() and Utf8TruncateToLength() functions
   - added MaxAlphaCount, MaxDigitCount, MaxPunctCount, MaxLowerCount and
     MaxUpperCount properties to TSynValidateText class
+  - added ResourceToRawByteString and ResourceSynLZToRawByteString functions
   - if DOPATCHTRTL is defined, will enable asm-optimized RecordClear and
     _InitializeRecord functions in replacement to the slower RTL version, and
     patch TObject.CleanupInstance before Delphi 2009 (since TMonitor.Destroy
@@ -2063,6 +2064,13 @@ procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
 // - returns '' if the resource is not found
 // - warning: resources size may be rounded up to alignment
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
+  out buf: RawByteString);
+
+/// creates a RawByteString memory buffer from an SynLZ-compressed embedded resource
+// - returns '' if the resource is not found
+// - this method would use SynLZDecompress() after ResourceToRawByteString(),
+// with a ResType=PChar(10) (i.e. RC_DATA)
+procedure ResourceSynLZToRawByteString(const ResName: string;
   out buf: RawByteString);
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
@@ -19072,6 +19080,19 @@ begin
   HGlobal := LoadResource(HInstance,HResInfo);
   if HGlobal<>0 then
     SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(HInstance,HResInfo));
+end;
+
+procedure ResourceSynLZToRawByteString(const ResName: string;
+  out buf: RawByteString);
+var HResInfo: THandle;
+    HGlobal: THandle;
+begin
+  HResInfo := FindResource(HInstance,PChar(ResName),PChar(10));
+  if HResInfo=0 then
+    exit;
+  HGlobal := LoadResource(HInstance,HResInfo);
+  if HGlobal<>0 then // direct decompression from memory mapped .exe content
+    SynLZDecompress(LockResource(HGlobal),SizeofResource(HInstance,HResInfo),buf);
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
