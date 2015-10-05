@@ -209,8 +209,9 @@ unit SynCrtSock;
   - fixed several issues when releasing THttpApiServer and THttpServer instances
   - allow to use any Unicode content for SendEmail() - also includes
     SendEmailSubject() function, for feature request [0a5fdf9129]
-  - added support for TLS1.1 & TLS1.2 for TWinHTTP (disabled by default an last in Win7).
+  - added support for TLS1.1 & TLS1.2 for TWinHTTP
   - added advanced exception text if case of HTTPS connection problems
+
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -6863,6 +6864,8 @@ end;
 
 procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
+    Callback: WINHTTP_STATUS_CALLBACK;
+    CallbackRes: Integer absolute Callback; // for FPC compatibility
 begin
   if fProxyName='' then
     OpenType := WINHTTP_ACCESS_TYPE_DEFAULT_PROXY else
@@ -6879,9 +6882,10 @@ begin
     if not WinHttpSetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
        @WINHTTP_FLAG_SECURE_PROTOCOL_MODERN, SizeOf(WINHTTP_FLAG_SECURE_PROTOCOL_MODERN)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
-    if integer(WinHttpSetStatusCallback(fSession, WinHTTPSecurityErrorCallback,
-       WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil)) = WINHTTP_INVALID_STATUS_CALLBACK then
-     RaiseLastModuleError(winhttpdll,EWinHTTP);
+    Callback := WinHttpSetStatusCallback(fSession, WinHTTPSecurityErrorCallback,
+       WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
+    if CallbackRes=WINHTTP_INVALID_STATUS_CALLBACK then
+      RaiseLastModuleError(winhttpdll,EWinHTTP);
   end;
   fConnection := WinHttpConnect(fSession, pointer(Ansi7ToUnicode(FServer)), fPort, 0);
   if fConnection=nil then

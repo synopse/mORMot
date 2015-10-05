@@ -16840,7 +16840,7 @@ begin
     if Typ^.elType<>nil then
       result := Typ^.elType{$ifndef FPC}^{$endif};
     if aDataSize<>nil then
-      aDataSize^ := Typ^.elSize;
+      aDataSize^ := Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   end;
 end;
 
@@ -22171,8 +22171,14 @@ var L: integer;
 begin
   L := length(Text);
   if L=0 then
-    S.Write(L,4) else
+    S.Write(L,4) else begin
+    {$ifdef FPC}
+    S.Write(L,4);
+    S.Write(pointer(Text)^,L);
+    {$else}
     S.Write(pointer(PtrInt(Text)-sizeof(integer))^,L+4);
+    {$endif}
+    end;
 end;
 
 function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
@@ -29370,7 +29376,7 @@ type
   end;
 begin
   with PArrayInfo(pointer(GetFPCTypeData(typeInfo)))^ do
-    result := ElSize * ElCount;
+    result := (ElSize and $7FFFFFFF) * ElCount;
 end;
 
 function RTTIRecordSize(typeInfo: Pointer): SizeInt; inline;
@@ -32583,7 +32589,8 @@ begin // only tkRecord is needed here
     case Item.PropertyType of
     ptArray: begin
       inc(PByte(ItemField),ItemField^.NameLen);
-      ItemArray := AddItemFromRTTI('',ItemField^.elType2^,ItemField^.elSize);
+      ItemArray := AddItemFromRTTI('',ItemField^.elType2^,
+        ItemField^.elSize {$ifdef FPC}and $7FFFFFFF{$endif});
       if (ItemArray.PropertyType=ptCustom) and
          (ItemArray.ClassType=TJSONCustomParserRTTI) then
         FromEnhancedRTTI(Item,ItemField^.elType2^) else begin
@@ -36978,10 +36985,11 @@ begin
   if (Typ^.ElType<>nil) or (Source=nil) or
      (Source[0]<>AnsiChar(Typ^.elSize)) or (Source[1]<>#0) then
     exit; // invalid type information or Source content
-  ElemSize := Typ^.elSize;
+  ElemSize := Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (Hash32(@Hash[1],Count*Typ^.elSize)=Hash[0]) then
+  if (Count<>0) and (Hash32(@Hash[1],
+      Count*Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif})=Hash[0]) then
     result := @Hash[1]; // returns valid Source content
 end;
 
@@ -37617,7 +37625,7 @@ begin
     {$endif}
   end;
   with PDynArrayTypeInfo(aTypeInfo)^ do begin
-    fElemSize := elSize;
+    fElemSize := elSize {$ifdef FPC}and $7FFFFFFF{$endif};
     fElemType := elType;
   end;
   if fElemType<>nil then
@@ -39788,7 +39796,7 @@ begin
   {$else}
   inc(PtrUInt(typ),typ^.NameLen);
   {$endif}
-  SetLength(tmp,typ^.elSize);
+  SetLength(tmp,typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif});
   AddRecordJSON(tmp[0],TypeInfo);
 end;
 

@@ -216,10 +216,13 @@
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
     {$define CPUINTEL}
     {$endif}
-    // FPC has its own RTTI layout only since late 3.x
-    // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-    {.$define HASINTERFACERTTI}
   {$endif CPU64}
+
+  // FPC has its own RTTI layout only since late 3.x
+  // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
+  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated trunk conditional
+    {$define HASINTERFACERTTI}
+  {$endif}
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}

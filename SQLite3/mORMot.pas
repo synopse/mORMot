@@ -32390,7 +32390,9 @@ end;
 
 procedure TSQLRestThread.Execute;
 begin
+  {$ifdef WITHLOG}
   fLog := FRest.LogClass.Add;
+  {$endif}
   FRest.BeginCurrentThread(self);
   try
     try
@@ -32398,7 +32400,9 @@ begin
       InternalExecute;
     except
       on E: Exception do
+        {$ifdef WITHLOG}
         fLog.Add.Log(sllError,'Unhandled % exception in %.Execute -> abort',[E,ClassType],self);
+        {$endif}
     end;
   finally
     FRest.EndCurrentThread(self);
@@ -33585,7 +33589,14 @@ begin
     // write cardinal 0 if Text=''
     FileWrite(Handle,L,4) else
     // write length+content at once
+    {$ifdef FPC}
+    begin
+      FileWrite(Handle,L,4);
+      FileWrite(Handle,pointer(Text)^,L);
+    end;
+    {$else}
     FileWrite(Handle,pointer(PtrInt(Text)-4)^,L+4);
+    {$endif}
 end;
 
 {$ifdef MSWINDOWS}
@@ -51648,8 +51659,10 @@ begin
     if fEvent in [evRaised,evTimeout] then
       exit; // ignore if already notified
     fEvent := evRaised;
+    {$ifdef WITHLOG}
     if aRestForLog<>nil then
       aRestForLog.LogClass.Add.Log(sllTrace,self);
+    {$endif}
     fEventNotifier.SetEvent; // notify caller
   finally
     Safe.UnLock;
@@ -52165,7 +52178,9 @@ begin
   if TServiceFactoryClientNotificationThread(fSendNotificationsThread).
       GetPendingCountFromDB=0 then
     exit;
+  {$ifdef WITHLOG}
   fClient.LogClass.Enter;
+  {$endif}
   timeOut := GetTickCount64+aTimeOutSeconds*1000;
   repeat
     Sleep(5);

@@ -3038,15 +3038,19 @@ begin
   Write4(Flags);
   if CollectionName='' then
     raise EBSONException.Create('Missing collection name');
-  Write(pointer(CollectionName),PInteger(PtrInt(CollectionName)-sizeof(integer))^+1); // +1 for #0
+  Write(pointer(CollectionName),length(CollectionName)+1); // +1 for #0
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; elemtype: TBSONElementType);
 begin
   Write1(ord(elemtype));
   if name='' then
-    write1(0) else
+    write1(0) else // write only #0
+    {$ifdef HASINLINE}
+    Write(pointer(name),length(name)+1); // +1 for #0
+    {$else}
     Write(pointer(name),PInteger(PtrInt(name)-sizeof(integer))^+1); // +1 for #0
+    {$endif}
 end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: integer);
