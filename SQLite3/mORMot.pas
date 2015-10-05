@@ -17263,6 +17263,11 @@ type
     // - SQLite uses this value to make a choice between several calls to
     // the TSQLVirtualTable.Prepare() method with several expressions
     EstimatedCost: Double;
+    ///  Estimated number of rows of using this prepared index
+    // - SQLite uses this value to make a choice between several calls to
+    // the TSQLVirtualTable.Prepare() method with several expressions
+    // - is used only starting with SQLite 3.8.2
+    EstimatedRows: Int64;
     /// WHERE statement parameters, in TSQLVirtualTableCursor.Search() order
     Where: array[0..MAX_SQLFIELDS-1] of TSQLVirtualTablePreparedConstraint;
     /// ORDER BY statement parameters
@@ -17425,7 +17430,7 @@ type
     // - in Where[], Expr must be set to not 0 if needed for Search method,
     // and OmitCheck to true if double check is not necessary
     // - OmitOrderBy must be set to true if double sort is not necessary
-    // - EstimatedCost should receive the estimated cost
+    // - EstimatedCost and EstimatedRows should receive the estimated cost
     // - default implementation will let the DB engine perform the search,
     // and prepare for ID=? statement if vtWhereIDPrepared was set
     function Prepare(var Prepared: TSQLVirtualTablePrepared): boolean; virtual;
@@ -45144,8 +45149,11 @@ begin
       Value.VType := ftNull; // mark TSQLVirtualTableCursorJSON expects it
       OmitCheck := true;
       Prepared.EstimatedCost := 1;
-    end else
+      Prepared.EstimatedRows := 1;
+    end else begin
       Prepared.EstimatedCost := 1E10; // generic high cost
+      Prepared.EstimatedRows := 100000;
+    end;
 end;
 
 function TSQLVirtualTable.Drop: boolean;
@@ -45383,9 +45391,12 @@ begin
       Value.VType := ftNull; // mark TSQLVirtualTableCursorJSON expects it
       OmitCheck := true;
       Prepared.EstimatedCost := 1;
+      Prepared.EstimatedRows := 1;
     end;
-    if Prepared.EstimatedCost>1E9 then
+    if Prepared.EstimatedCost>1E9 then begin
       Prepared.EstimatedCost := fStaticInMemory.Count;
+      Prepared.EstimatedRows := fStaticInMemory.Count;
+    end;
     if fStaticInMemory.fIDSorted and (Prepared.OrderByCount=1) then
       // ascending IDs ?
       with Prepared.OrderBy[0] do

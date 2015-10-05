@@ -175,8 +175,10 @@ unit SynSQLite3;
   - TSQLDataBase.Blob() will now allow negative IDs, and expect 0 to be replaced
     by the latest inserted ID - see ticket [799a2c114c]
   - small fix of TOnSQLStoredProc callback parameter (TSQLRequest as const)
+  - introduced TSQLite3IndexInfo.estimatedRows field, available since 3.8.2
   - added SQLITE_MEMORY_DATABASE_NAME constant as alias to ':memory:'
   - added sqlite3.config() experimental support
+  - added sqlite3.VersionNumber property
   - added TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager method (run by
     default in SynSQLite3Static), to let external SQlite3 library use the same
     memory manager than Delphi, for better performance and stability
@@ -214,6 +216,16 @@ uses
 
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
+
+{$ifdef BSD}
+  {$linklib c}
+  {$linklib pthread}
+{$endif}
+
+{$ifdef FPC}
+  {$packrecords C}
+  {$packenum 4}
+{$endif}
 
 type
   /// internaly store the SQLite3 database handle
@@ -665,6 +677,8 @@ type
     // different constraints, obtain multiple cost estimates, then choose the
     // query plan that gives the lowest estimate
     estimatedCost: Double;
+    /// output: Estimated number of rows returned  (since 3.8.2)
+    estimatedRows: Int64;
   end;
 
   /// Virtual Table Instance Object
@@ -1152,6 +1166,7 @@ type
   TSQLite3Library = class
   protected
     fUseInternalMM: boolean;
+    fVersionNumber: cardinal;
     function GetVersion: RawUTF8;
   public
     /// initialize the SQLite3 database code
@@ -1976,11 +1991,16 @@ type
     config: function(operation: integer): integer;
       {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
 
+    /// initialize the internal version numbers
+    constructor Create; virtual;
     /// will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
     // under multi-process activity
     // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
+    /// returns the current version number as a single decimal integer
+    // - equals e.g. 3080301 for '3.8.3.1'
+    property VersionNumber: cardinal read fVersionNumber;
   published
     /// will return the class name and SQLite3 version number
     property Version: RawUTF8 read GetVersion;
@@ -5394,6 +5414,17 @@ end;
 
 { TSQLite3Library }
 
+constructor TSQLite3Library.Create;
+var V: PUTF8Char;
+begin
+  if Assigned(libversion) then begin
+    V := libversion; // convert into e.g. 3080301
+    fVersionNumber := GetNextItemCardinal(V,'.')*1000000+
+      GetNextItemCardinal(V,'.')*10000+GetNextItemCardinal(V,'.')*100+
+      GetNextItemCardinal(V,'.');
+  end;
+end;
+
 // due to a FPC's bug, all those functions should be declared outside the method
 function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
@@ -5476,7 +5507,8 @@ end;
 const
   SQLITE3_ENTRIES: array[0..86] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
-   'libversion','errmsg','extended_errcode','create_function','create_function_v2',
+   'libversion','errmsg','extended_errcode',
+   'create_function','create_function_v2',
    'create_collation','last_insert_rowid','busy_timeout','busy_handler',
    'prepare_v2','finalize','next_stmt','reset','stmt_readonly','step',
    'column_count','column_type','column_decltype','column_name','column_bytes',
@@ -5520,6 +5552,7 @@ begin
   {$ifdef WITHLOG}
   SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,libversion]);
   {$endif}
+  inherited Create; // set fVersionNumber
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;

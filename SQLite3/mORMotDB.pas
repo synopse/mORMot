@@ -445,8 +445,9 @@ type
     // - in Where[], Expr must be set to not 0 if needed for Search method,
     // and OmitCheck always set to true since double check is not necessary
     // - OmitOrderBy will be set to true since double sort is not necessary
-    // - EstimatedCost will receive the estimated cost, with lowest value if
-    // fStatic.fFieldsExternal[].ColumnIndexed is set (i.e. if column has an index)
+    // - EstimatedCost/EstimatedRows will receive the estimated cost, with
+    // lowest value if fStatic.fFieldsExternal[].ColumnIndexed is set
+    // (i.e. if column has an index)
     function Prepare(var Prepared: TSQLVirtualTablePrepared): boolean; override;
     /// called when a DROP TABLE statement is executed against the virtual table
     // - returns true on success, false otherwise
@@ -2047,11 +2048,15 @@ begin
         end;
         OmitCheck := true; // search handled via SQL query
         Value.VType := ftNull; // caller vt_BestIndex() expects <> ftUnknown
-        if hasIndex then
+        if hasIndex then begin
           // the more indexes, the faster
-          Prepared.EstimatedCost := Prepared.EstimatedCost/100 else
+          Prepared.EstimatedCost := Prepared.EstimatedCost/128;
+          Prepared.EstimatedRows := Prepared.EstimatedRows shr 7;
+        end else begin
           // always favor a where clause: full scan is always slower
           Prepared.EstimatedCost := Prepared.EstimatedCost/2;
+          Prepared.EstimatedRows := Prepared.EstimatedRows shr 1;
+        end;
       end;
     // check the OrderBy[] clauses
     if Prepared.OrderByCount>0 then begin

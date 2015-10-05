@@ -2216,6 +2216,8 @@ begin
     Prepared^.WhereCount := n; // will match argc in vt_Filter()
     pInfo.orderByConsumed := integer(Prepared^.OmitOrderBy);
     pInfo.estimatedCost := Prepared^.EstimatedCost;
+    if sqlite3.VersionNumber>=3080200 then // starting with SQLite 3.8.2
+      pInfo.estimatedRows := Prepared^.EstimatedRows;
     pInfo.idxStr := pointer(Prepared);
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
     result := SQLITE_OK;

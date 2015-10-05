@@ -153,7 +153,7 @@ type
   TSQLite3LibraryStatic = class(TSQLite3Library)
   public
     /// fill the internal API reference s with the static .obj engine
-    constructor Create; reintroduce;
+    constructor Create; override;
     /// unload the static library
     destructor Destroy; override;
   end;
@@ -1209,7 +1209,6 @@ function sqlite3_profile(DB: TSQLite3DB; Callback: TSQLProfileCallback;
 
 constructor TSQLite3LibraryStatic.Create;
 begin
-  inherited;
   initialize           := @sqlite3_initialize;
   shutdown             := @sqlite3_shutdown;
   open                 := @sqlite3_open;
@@ -1309,6 +1308,7 @@ begin
   fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$endif}
   sqlite3_initialize;
+  inherited Create; // set fVersionNumber
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
