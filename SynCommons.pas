@@ -31380,6 +31380,8 @@ begin // code below must match TTextWriter.AddRecordJSON
     JSON := Reader(JSON,Rec,wasValid);
     if not wasValid then
       exit;
+    if (JSON<>nil) and (JSON^ in [#1..' ']) then
+      repeat inc(JSON) until not(JSON^ in [#1..' ']);
     if (JSON<>nil) and (JSON^<>#0) then begin
       EndOfObj := JSON^;
       inc(JSON);

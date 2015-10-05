@@ -4967,6 +4967,7 @@ begin
 end;
 var O,O2: TPersistentToJSON;
     E: TSynBackgroundThreadProcessStep;
+    EndOfObject: AnsiChar;
     {$ifndef LVCL}
     P: PUTF8Char;
     {$endif}
@@ -5512,6 +5513,18 @@ begin
     O2.Free;
     O.Free;
   end;
+   U := '"filters":[{"name":"name1","value":"value1","comparetype":">"},'+
+     '{"name":"name2","value":"value2","comparetype":"="}], "Limit":100}';
+   P := UniqueRawUTF8(U);
+   Check(GetJSONPropName(P)='filters');
+   Check((P<>nil)and(P^='['));
+   P := GotoNextJSONItem(P,1,@EndOfObject);
+   Check(EndOfObject=',');
+   Check(GetJSONPropName(P)='Limit');
+   Check((P<>nil)and(P^='1'));
+   P := GotoNextJSONItem(P,1,@EndOfObject);
+   Check(P<>nil);
+   Check(EndOfObject='}');
 {$ifndef LVCL}
   C2 := TCollTst.Create;
   Coll := TCollTst.Create;
@@ -5650,6 +5663,14 @@ begin
      U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
      Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil,'invalid JSON');
      Check(not Valid);
+     U := '{"Coll":[{"Color":1,"Length":0,"Name":"test"}],'+
+       '"One":{"Color":2,"Length":0,"Name":"test2"}}';
+     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+     Check(Valid);
+     Check(C2.One.Color=2);
+     Check(C2.One.Name='test2');
+     Check(C2.Coll.Count=1);
+     Check(C2.Coll[0].Name='test');
   finally
     C2.Free;
     Coll.Free;
