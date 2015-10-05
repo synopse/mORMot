@@ -188,7 +188,8 @@ begin
   lblExistingLogKB.Show;
   edtSearch.Hide;
   btnSearchNext.Hide;
-  drwgrdEvents.Row := -1;
+  mmoBottom.Text := '';
+  drwgrdEvents.Row := 0;
   drwgrdEvents.RowCount := 0;
   drwgrdEvents.Tag := 0;
   tmrRefresh.Enabled := false;
@@ -456,7 +457,7 @@ begin
     ndx := -1;
   FLogSelectedCount := FLog.EventSelect(FEventsSet,FLogSelected,@ndx);
   if selected<FLogSelectedCount then
-    drwgrdEvents.Row := -1; // to avoid "Grid Out Of Range"
+    drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
   drwgrdEvents.RowCount := FLogSelectedCount;
   SetListItem(ndx);
   if drwgrdEvents.Visible then begin
