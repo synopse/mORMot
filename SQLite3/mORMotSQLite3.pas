@@ -2234,13 +2234,15 @@ var Prepared: PSQLVirtualTablePrepared absolute idxStr; // idxNum is not used
     i: integer;
 begin
   result := SQLITE_ERROR;
-  if Prepared^.WhereCount<>argc then
-    exit; // invalid prepared array
+  if Prepared^.WhereCount<>argc then begin
+    Notify('vt_Filter WhereCount=% argc=%',[Prepared^.WhereCount,argc]);
+    exit; // invalid prepared array (should not happen)
+  end;
   for i := 0 to argc-1 do
     SQlite3ValueToSQLVar(argv[i],Prepared^.Where[i].Value);
   if TSQLVirtualTableCursor(pVtabCursor.pInstance).Search(Prepared^) then
     result := SQLITE_OK else
-    Notify('vt_Filter',[]);
+    Notify('vt_Filter Search()',[]);
 end;
 
 function vt_Open(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
