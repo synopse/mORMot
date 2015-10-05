@@ -188,6 +188,7 @@ begin
   lblExistingLogKB.Show;
   edtSearch.Hide;
   btnSearchNext.Hide;
+  drwgrdEvents.Row := -1;
   drwgrdEvents.RowCount := 0;
   drwgrdEvents.Tag := 0;
   tmrRefresh.Enabled := false;
@@ -450,12 +451,12 @@ begin
     exit;
   EventsCheckToEventsSet;
   selected := drwgrdEvents.Row;
-  if selected>=0 then
+  if cardinal(selected)<cardinal(FLogSelectedCount) then
     ndx := FLogSelected[selected] else
     ndx := -1;
   FLogSelectedCount := FLog.EventSelect(FEventsSet,FLogSelected,@ndx);
   if selected<FLogSelectedCount then
-    drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
+    drwgrdEvents.Row := -1; // to avoid "Grid Out Of Range"
   drwgrdEvents.RowCount := FLogSelectedCount;
   SetListItem(ndx);
   if drwgrdEvents.Visible then begin

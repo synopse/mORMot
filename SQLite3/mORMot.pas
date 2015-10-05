@@ -49965,6 +49965,8 @@ asm
     mov RDX, [r12].TCallMethodArgs.StackSize
     call Move
     // call method
+    {$ifdef LINUX}
+    // Linux/BSD System V AMD64 ABI
     mov RDI,[r12+TCallMethodArgs.Regs+REGRDI*8-8]
     mov RSI,[r12+TCallMethodArgs.Regs+REGRSI*8-8]
     mov RDX, [r12+TCallMethodArgs.Regs+REGRDX *8-8]
@@ -49979,6 +49981,17 @@ asm
     movsd xmm5,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM5*8-8]
     movsd xmm6,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM6*8-8]
     movsd xmm7,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM7*8-8]
+    {$else}
+    // Win64 ABI
+    mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
+    mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]
+    mov r8, [r12+TCallMethodArgs.Regs+REGR8 *8-8]
+    mov r9, [r12+TCallMethodArgs.Regs+REGR9 *8-8]
+    movsd xmm0,[r12+TCallMethodArgs.Regs+REGXMM0*8-8]
+    movsd xmm1,[r12+TCallMethodArgs.Regs+REGXMM1*8-8]
+    movsd xmm2,[r12+TCallMethodArgs.Regs+REGXMM2*8-8]
+    movsd xmm3,[r12+TCallMethodArgs.Regs+REGXMM3*8-8]
+    {$endif}
     call [r12].TCallMethodArgs.method
     // retrieve result
     mov [r12].TCallMethodArgs.res64,rax

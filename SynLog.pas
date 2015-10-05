@@ -3879,8 +3879,7 @@ begin
           aSelectedIndex^ := result; // found the first matching selected index
           aSelectedIndex := nil;
         end;
-        aSelectedIndexes[result] := i;
-        inc(result);
+        AddInteger(aSelectedIndexes,result,i);
       end;
   if aSelectedIndex<>nil then
     aSelectedIndex^ := -1; // aSelectedIndex^ was not found
