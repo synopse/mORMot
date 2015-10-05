@@ -456,7 +456,7 @@ begin
     ndx := FLogSelected[selected] else
     ndx := -1;
   FLogSelectedCount := FLog.EventSelect(FEventsSet,FLogSelected,@ndx);
-  if selected<FLogSelectedCount then
+  if cardinal(selected)<cardinal(FLogSelectedCount) then
     drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
   drwgrdEvents.RowCount := FLogSelectedCount;
   SetListItem(ndx);

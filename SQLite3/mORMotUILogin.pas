@@ -612,7 +612,7 @@ begin
     result := mrNone;
     exit;
   end;
-  details := Format('Exception %s raised',[E.ClassName]);
+  details := UTF8ToString(ObjectToJSONDebug(E));
 {$ifdef USETMSPACK}
   with CreateAdvTaskDialog do
   try
@@ -625,9 +625,9 @@ begin
     Free;
   end;
 {$else}
-  Task.Content := details;
+  Task.Content := E.Message;
   Task.Inst := ContextMessage;
-  Task.Info := E.Message;
+  Task.Info := details;
   result := Task.Execute(CommonButtons,mrOk,[],tiError);
 {$endif}
 end;
