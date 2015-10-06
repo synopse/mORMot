@@ -2238,7 +2238,8 @@ begin
   if SQL='' then
     exit;
   if SQL[1]='#' then
-    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG','HELP']) of
+    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG',
+      'CHAT','HELP']) of // 'HELP' should be the last one on the list
     0: if InternalRetrieveState(status) then
          result.Content := VariantSaveJSON(status);
     1: if fInternalSettings<>nil then begin
@@ -2291,7 +2292,9 @@ begin
       exit;
     end;
     4: result.Content := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
-    else
+    5: fLogClass.Add.Log(sllMonitoring,'[CHAT] % %',
+         [ServiceContext.Request.InHeader['remoteip'],DatabaseName]);
+    else 
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
         '|#state|#settings|#settings full.path=value|#version|#computer|#log|#help"';
     end;

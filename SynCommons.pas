@@ -6178,7 +6178,8 @@ type
   // - sllNewRun will be written when a process opens a rotated log
   // - sllDDDError will log any DDD-related low-level error information
   // - sllDDDInfo will log any DDD-related low-level debugging information
-  // - sllMonitoring will log the statistics information (if available)
+  // - sllMonitoring will log the statistics information (if available),
+  // or may be used for real-time chat among connected people to ToolsAdmin
   TSynLogInfo = (
     sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
     sllEnter, sllLeave,

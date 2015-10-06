@@ -5,11 +5,26 @@ unit dddToolsAdminMain;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, mORMotUI, mORMotUILogin, mORMotToolbar, SynTaskDialog,
-  SynCommons, mORMot, mORMotHttpClient,
-  mORMotDDD, dddInfraApps,
-  dddToolsAdminDB, dddToolsAdminLog;
+  Windows,
+  Messages,
+  SysUtils,
+  Variants,
+  Classes,
+  Graphics,
+  Controls,
+  Forms,
+  Dialogs,
+  mORMotUI,
+  mORMotUILogin,
+  mORMotToolbar,
+  SynTaskDialog,
+  SynCommons,
+  mORMot,
+  mORMotHttpClient,
+  mORMotDDD,
+  dddInfraApps,
+  dddToolsAdminDB,
+  dddToolsAdminLog;
 
 type
   TAdminControl = class(TWinControl)
@@ -21,6 +36,8 @@ type
     fPages: array of TSynPage;
     fLogFrame: TLogFrame;
     fLogFrames: TLogFrameDynArray;
+    fChatPage: TSynPage;
+    fChatFrame: TLogFrame;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
     procedure OnPageChange(Sender: TObject); virtual;
@@ -30,20 +47,24 @@ type
     Version: Variant;
     OnAfterExecute: TNotifyEvent;
     destructor Destroy; override;
-    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel=nil): boolean; virtual;
+    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil):
+      boolean; virtual;
     procedure Show; virtual;
     function GetState: Variant; virtual;
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
-    function AddDBFrame(const aCaption,aDatabaseName: RawUTF8; aClass: TDBFrameClass): TDBFrame; virtual;
-    function AddLogFrame(const aCaption,aEvents,aPattern: RawUTF8; aClass: TLogFrameClass): TLogFrame; virtual;
+    function AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
+      TDBFrameClass): TDBFrame; virtual;
+    function AddLogFrame(page: TSynPage; const aCaption, aEvents, aPattern:
+      RawUTF8; aClass: TLogFrameClass): TLogFrame; virtual;
     procedure EndLog(aLogFrame: TLogFrame); virtual;
     function CurrentDBFrame: TDBFrame;
     function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
-    procedure FormKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState); virtual;
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState); virtual;
     property Client: TSQLHttpClientWebsockets read fClient;
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
+    property ChatPage: TSynPage read fChatPage;
+    property ChatFrame: TLogFrame read fChatFrame;
   end;
 
   TAdminForm = class(TForm)
@@ -60,39 +81,42 @@ var
 
 function AskForUserIfVoid(Definition: TDDDRestClientSettings): boolean;
 
-
 implementation
 
 {$R *.dfm}
 
 function AskForUserIfVoid(Definition: TDDDRestClientSettings): boolean;
-var U,P: string;
+var
+  U, P: string;
 begin
   result := false;
-  if Definition.ORM.User='' then
-    if TLoginForm.Login(Application.Mainform.Caption,Format('Credentials for %s',
-        [Definition.ORM.ServerName]),U,P,true,'') then begin
+  if Definition.ORM.User = '' then
+    if TLoginForm.Login(Application.Mainform.Caption, Format('Credentials for %s',
+      [Definition.ORM.ServerName]), U, P, true, '') then begin
       Definition.ORM.User := StringToUTF8(U);
       Definition.ORM.PasswordPlain := StringToUTF8(P);
-    end else
+    end
+    else
       exit;
   result := true;
 end;
 
-function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel): boolean;
-var temp: TForm;
-    exec: TServiceCustomAnswer;
+function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel):
+  boolean;
+var
+  temp: TForm;
+  exec: TServiceCustomAnswer;
 begin
   result := false;
-  if Assigned(fAdmin) or (Definition.Orm.User='') then
+  if Assigned(fAdmin) or (Definition.Orm.User = '') then
     exit;
   try
-    temp := CreateTempForm(Format('Connecting to %s...',[Definition.ORM.ServerName]));
+    temp := CreateTempForm(Format('Connecting to %s...', [Definition.ORM.ServerName]));
     try
       Application.ProcessMessages;
-      fClient := AdministratedDaemonClient(Definition,Model);
-      fClient.Services.Resolve(IAdministratedDaemon,fAdmin);
-      exec := fAdmin.DatabaseExecute('','#version');
+      fClient := AdministratedDaemonClient(Definition, Model);
+      fClient.Services.Resolve(IAdministratedDaemon, fAdmin);
+      exec := fAdmin.DatabaseExecute('', '#version');
       version := _JsonFast(exec.Content);
       fDefinition := Definition;
       result := true;
@@ -108,27 +132,29 @@ begin
 end;
 
 function TAdminControl.GetState: Variant;
-var exec: TServiceCustomAnswer;
+var
+  exec: TServiceCustomAnswer;
 begin
-  if fAdmin<>nil then begin
-    exec := fAdmin.DatabaseExecute('','#state');
+  if fAdmin <> nil then begin
+    exec := fAdmin.DatabaseExecute('', '#state');
     result := _JsonFast(exec.Content);
   end;
 end;
 
 procedure TAdminControl.Show;
-var i,n: integer;
-    f: TDBFrame;
+var
+  i, n: integer;
+  f: TDBFrame;
 begin
-  if (fClient=nil) or (fAdmin=nil) or (fPage<>nil) then
+  if (fClient = nil) or (fAdmin = nil) or (fPage <> nil) then
     exit; // show again after hide
-  if LogFrameClass=nil then
+  if LogFrameClass = nil then
     LogFrameClass := TLogFrame;
-  if DBFrameClass=nil then
+  if DBFrameClass = nil then
     DBFrameClass := TDBFrame;
   fDatabases := fAdmin.DatabaseList;
   fPage := TSynPager.Create(self);
-  fPage.ControlStyle := fPage.ControlStyle+[csClickEvents]; // enable OnDblClick
+  fPage.ControlStyle := fPage.ControlStyle + [csClickEvents]; // enable OnDblClick
   fPage.Parent := self;
   fPage.Align := alClient;
   fPage.OnChange := OnPageChange;
@@ -137,24 +163,25 @@ begin
   fLogFrame.Parent := AddPage('log');
   fLogFrame.Align := alClient;
   fLogFrame.Admin := fAdmin;
-  if n>0 then begin
-    for i := 0 to n-1 do begin
-      f := AddDBFrame(fDatabases[i],fDatabases[i],DBFrameClass);
+  if n > 0 then begin
+    for i := 0 to n - 1 do begin
+      f := AddDBFrame(fDatabases[i], fDatabases[i], DBFrameClass);
       f.Open;
-      if i=0 then
+      if i = 0 then
         fPage.ActivePageIndex := 1;
     end;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;
   end;
+  fChatPage := AddPage('Chat');
 end;
 
 procedure TAdminControl.EndLog(aLogFrame: TLogFrame);
 begin
-  if aLogFrame<>nil then
+  if aLogFrame <> nil then
   try
     Screen.Cursor := crHourGlass;
-    if aLogFrame.Callback<>nil then
+    if aLogFrame.Callback <> nil then
       fClient.Services.CallBackUnRegister(aLogFrame.Callback);
     aLogFrame.Closing;
   finally
@@ -163,9 +190,10 @@ begin
 end;
 
 destructor TAdminControl.Destroy;
-var i: integer;
+var
+  i: integer;
 begin
-  if fLogFrame<>nil then begin
+  if fLogFrame <> nil then begin
     Endlog(fLogFrame);
     fLogFrame.Admin := nil;
     fLogFrame := nil;
@@ -184,72 +212,74 @@ begin
   inherited Destroy;
 end;
 
-procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word;
-  Shift: TShiftState);
+procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 
   procedure LogKeys(aLogFrame: TLogFrame);
   begin
-    if aLogFrame<>nil then
-    case Key of
-    VK_F3:
-      aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext);
-    ord('A')..ord('Z'),Ord('0')..ord('9'),32:
-      if (shift=[]) and not aLogFrame.edtSearch.Focused then
-        aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text+string(Char(Key)) else
-      if (key=ord('F')) and (ssCtrl in Shift) then begin
-        aLogFrame.edtSearch.SelectAll;
-        aLogFrame.edtSearch.SetFocus;
+    if aLogFrame <> nil then
+      case Key of
+        VK_F3:
+          aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext);
+        ord('A')..ord('Z'), Ord('0')..ord('9'), 32:
+          if (shift = []) and not aLogFrame.edtSearch.Focused then
+            aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text + string(Char(Key))
+          else if (key = ord('F')) and (ssCtrl in Shift) then begin
+            aLogFrame.edtSearch.SelectAll;
+            aLogFrame.edtSearch.SetFocus;
+          end;
       end;
-    end;
   end;
 
-var pageIndex,DBCount: integer;
+var
+  pageIndex, DBCount: integer;
 begin
   pageIndex := fPage.ActivePageIndex;
   DBCount := length(fDBFrame);
-  if pageIndex=0 then
-    LogKeys(fLogFrame) else
-  if pageIndex<=DBCount then
-    with fDBFrame[pageIndex-1] do
-    case Key of
-    VK_F5:
-      btnCmdClick(btnCmd);
-    VK_F9:
-      btnExecClick(btnExec);
-    ord('A'):
-      if ssCtrl in Shift then begin
-        mmoSQL.SelectAll;
-        mmoSQL.SetFocus;
-      end;
-    ord('H'):
-      if ssCtrl in Shift then
-        btnHistoryClick(btnHistory);
-    end else
-  if pageIndex<=Length(fLogFrames)+DBCount then
-    LogKeys(fLogFrames[pageIndex-DBCount-1]);
+  if pageIndex = 0 then
+    LogKeys(fLogFrame)
+  else if pageIndex <= DBCount then
+    with fDBFrame[pageIndex - 1] do
+      case Key of
+        VK_F5:
+          btnCmdClick(btnCmd);
+        VK_F9:
+          btnExecClick(btnExec);
+        ord('A'):
+          if ssCtrl in Shift then begin
+            mmoSQL.SelectAll;
+            mmoSQL.SetFocus;
+          end;
+        ord('H'):
+          if ssCtrl in Shift then
+            btnHistoryClick(btnHistory);
+      end
+  else if pageIndex <= Length(fLogFrames) + DBCount then
+    LogKeys(fLogFrames[pageIndex - DBCount - 1]);
 end;
 
 function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
-var n: integer;
+var
+  n: integer;
 begin
   n := length(fPages);
-  SetLength(fPages,n+1);
+  SetLength(fPages, n + 1);
   result := TSynPage.Create(self);
   result.Caption := UTF8ToString(aCaption);
   result.PageControl := fPage;
   fPages[n] := result;
 end;
 
-function TAdminControl.AddDBFrame(const aCaption,aDatabaseName: RawUTF8;
-  aClass: TDBFrameClass): TDBFrame;
-var page: TSynPage;
-    n: integer;
+function TAdminControl.AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
+  TDBFrameClass): TDBFrame;
+var
+  page: TSynPage;
+  n: integer;
 begin
   page := AddPage(aCaption);
   n := length(fDBFrame);
-  SetLength(fDBFrame,n+1);
+  SetLength(fDBFrame, n + 1);
   result := aClass.Create(self);
-  result.Name := format('DBFrame%s',[aCaption]);
+  result.Name := format('DBFrame%s', [aCaption]);
   result.Parent := page;
   result.Align := alClient;
   result.Client := fClient;
@@ -259,43 +289,54 @@ begin
   fDBFrame[n] := result;
 end;
 
-function TAdminControl.AddLogFrame(const aCaption, aEvents, aPattern: RawUTF8;
-  aClass: TLogFrameClass): TLogFrame;
-var page: TSynPage;
-    n: integer;
+function TAdminControl.AddLogFrame(page: TSynPage; const aCaption, aEvents,
+  aPattern: RawUTF8; aClass: TLogFrameClass): TLogFrame;
+var
+  n: integer;
 begin
-  page := AddPage(aCaption);
-  result := aClass.CreateCustom(self,fAdmin,aEvents,aPattern);
+  if page = nil then begin
+    page := AddPage(aCaption);
+    fPage.ActivePageIndex := fPage.PageCount - 1;
+  end;
+  result := aClass.CreateCustom(self, fAdmin, aEvents, aPattern);
   result.Parent := page;
   result.Align := alClient;
   n := length(fLogFrames);
-  SetLength(fLogFrames,n+1);
+  SetLength(fLogFrames, n + 1);
   fLogFrames[n] := result;
-  fPage.ActivePageIndex := fPage.PageCount-1; 
 end;
 
 procedure TAdminControl.OnPageChange(Sender: TObject);
-var ndx: cardinal;
+var
+  ndx: cardinal;
 begin
-  ndx := fPage.ActivePageIndex-1;
-  if ndx>=cardinal(Length(fDBFrame)) then
+  if fPage.ActivePage = fChatPage then begin
+    if fChatFrame = nil then
+      fChatFrame := AddLogFrame(fChatPage, '', 'Monitoring', '[CHAT] ', TLogFrameChat);
+    exit;
+  end;
+  ndx := fPage.ActivePageIndex - 1;
+  if ndx >= cardinal(Length(fDBFrame)) then
     exit;
 end;
 
 function TAdminControl.CurrentDBFrame: TDBFrame;
-var ndx: cardinal;
+var
+  ndx: cardinal;
 begin
-  ndx := fPage.ActivePageIndex-1;
-  if ndx>=cardinal(Length(fDBFrame)) then
-    result := nil else
+  ndx := fPage.ActivePageIndex - 1;
+  if ndx >= cardinal(Length(fDBFrame)) then
+    result := nil
+  else
     result := fDBFrame[ndx];
 end;
 
 function TAdminControl.FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
-var i: Integer;
+var
+  i: Integer;
 begin
   for i := 0 to high(fDBFrame) do
-    if IdemPropNameU(fDBFrame[i].DatabaseName,aDatabaseName) then begin
+    if IdemPropNameU(fDBFrame[i].DatabaseName, aDatabaseName) then begin
       result := fDBFrame[i];
       exit;
     end;
@@ -310,7 +351,7 @@ procedure TAdminForm.FormCreate(Sender: TObject);
 begin
   DefaultFont.Name := 'Tahoma';
   DefaultFont.Size := 9;
-  Caption := Format('%s %s',[ExeVersion.ProgramName,ExeVersion.Version.Detailed]);
+  Caption := Format('%s %s', [ExeVersion.ProgramName, ExeVersion.Version.Detailed]);
   fFrame := TAdminControl.Create(self);
   fFrame.Parent := self;
   fFrame.Align := alClient;
@@ -320,10 +361,9 @@ end;
 procedure TAdminForm.FormShow(Sender: TObject);
 begin
   fFrame.Show;
-  Caption := Format('%s - %s %s via %s',[ExeVersion.ProgramName,
-    fFrame.version.prog,fFrame.version.version,fFrame.fDefinition.ORM.ServerName]);
+  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName, fFrame.version.prog,
+    fFrame.version.version, fFrame.fDefinition.ORM.ServerName]);
 end;
-
 
 end.
 
