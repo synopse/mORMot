@@ -994,35 +994,37 @@ var ctxt: THttpServerRequest;
 begin
   result := false;
   if self<>nil then
-  if (fHttpServer<>nil) and fHttpServer.InheritsFrom(TWebSocketServerRest) then
-  try // aConnection.InheritsFrom(TSynThread) may raise an exception
+  try
+    if (fHttpServer<>nil) and fHttpServer.InheritsFrom(TWebSocketServerRest) then begin
+      // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-    ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
-    try
-      ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
-        aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
-      if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
-        mode := wscNonBlockWithoutAnswer else
-        mode := wscBlockWithAnswer;
-      status := TWebSocketServerRest(fHttpServer).WebSocketsCallback(ctxt,mode);
-      if status=HTML_SUCCESS then begin
-        if aResult<>nil then
-          aResult^ := Ctxt.OutContent;
-        result := true;
-      end else
-        if aErrorMsg<>nil then
-          aErrorMsg^ := FormatUTF8('%.NotifyCallback(%) returned status=%',
-            [self,aConnectionID,status]);
-    finally
-      ctxt.Free;
-    end;
+      ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
+      try
+        ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
+          aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
+        if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
+          mode := wscNonBlockWithoutAnswer else
+          mode := wscBlockWithAnswer;
+        status := TWebSocketServerRest(fHttpServer).WebSocketsCallback(ctxt,mode);
+        if status=HTML_SUCCESS then begin
+          if aResult<>nil then
+            aResult^ := Ctxt.OutContent;
+          result := true;
+        end else
+          if aErrorMsg<>nil then
+            aErrorMsg^ := FormatUTF8('%.NotifyCallback(%) returned status=%',
+              [self,aConnectionID,status]);
+      finally
+        ctxt.Free;
+      end;
+    end else
+      if aErrorMsg<>nil then
+        aErrorMsg^ := FormatUTF8('NotifyCallback over % is unsupported',[fHttpServer]);
   except
     on E: Exception do
       if aErrorMsg<>nil then
         aErrorMsg^ := ObjectToJSONDebug(E);
-  end else
-    if aErrorMsg<>nil then
-      aErrorMsg^ := FormatUTF8('NotifyCallback over % is unsupported',[fHttpServer]);
+  end;
 end;
 
 constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
