@@ -36053,8 +36053,14 @@ end;
 function TSQLRestServerURIContext.GetInHeader(const HeaderName: RawUTF8): RawUTF8;
 var up: array[byte] of AnsiChar;
 begin
-  PWord(UpperCopy255(up,HeaderName))^ := ord(':');
-  result := Trim(FindIniNameValue(pointer(Call.InHead),up));
+  if self=nil then
+    result := '' else begin
+    PWord(UpperCopy255(up,HeaderName))^ := ord(':');
+    result := Trim(FindIniNameValue(pointer(Call.InHead),up));
+    if (result='') and (SessionRemoteIP<>'') and IdemPropNameU(HeaderName,'remoteip') then
+      // some protocols (e.g. WebSockets) do not send headers at each call
+      result := SessionRemoteIP;
+  end;
 end;
 
 procedure TSQLRestServerURIContext.SetInCookie(CookieName, CookieValue: RawUTF8);
