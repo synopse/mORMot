@@ -157,7 +157,6 @@ var
 begin
   inherited;
   Name := 'LogFrame' + IntToStr(LogFrameCount);
-  ;
   inc(LogFrameCount);
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
@@ -263,7 +262,7 @@ begin
   try
     FLog := TSynLogFile.Create;
     if Sender = self then
-      kb := 0
+      kb := 64 // from TLogFrame.CreateCustom
     else
       kb := StrToIntDef(edtExistingLogKB.Text, 0);
     Admin.SubscribeLog(FEventsSet, Callback, kb);
@@ -549,7 +548,8 @@ procedure TLogFrameChat.mmoChatKeyPress(Sender: TObject; var Key: Char);
 begin
   if Key = #13 then begin
     if Assigned(Admin) then
-      Admin.DatabaseExecute(FormatUTF8('% %', [ExeVersion.User, mmoChat.Text]), '#chat');
+      Admin.DatabaseExecute(FormatUTF8('% %',
+        [ExeVersion.User, StringToUTF8(mmoChat.Text)]), '#chat');
     mmoChat.Clear;
     Key := #0;
   end;

@@ -208,6 +208,7 @@ begin
   fDBFrame := nil;
   fAdmin := nil;
   fDefinition.Free;
+  Sleep(200); // leave some time to flush all pending CallBackUnRegister()
   FreeAndNil(fClient);
   inherited Destroy;
 end;
