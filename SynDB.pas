@@ -196,6 +196,9 @@ unit SynDB;
   - added TSQLDBConnectionProperties.ExecuteInlined() overloaded methods
   - added TSQLDBConnectionProperties.LoggedSQLMaxSize property to limit the
     logged SQL content as requested by [0b6006e4f5]
+  - added published TSQLDBConnectionProperties.DatabaseNameSafe property, to
+    replace TSQLDBConnectionProperties.DatabaseName, triming any internal
+    TSQLDBConnectionProperties.Password value for safety
   - ESQLDBException will now append the current SQL statement to its message,
     if TSQLDBConnectionProperties.LogSQLStatementOnException is defined, as
     requested by [ea07928ae9]
@@ -1089,6 +1092,7 @@ type
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
     function GetMainConnection: TSQLDBConnection; virtual;
+    function GetDatabaseNameSafe: RawUTF8; virtual;
     /// any overriden TSQLDBConnectionProperties class should call it in the
     // initialization section of its implementation unit to be recognized
     class procedure RegisterClassNameForDefinition;
@@ -1456,6 +1460,11 @@ type
     /// the associated User Password, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
     property PassWord: RawUTF8 read fPassWord;
+    /// the associated database name, as specified at creation
+    // - not published, for security reasons (may be serialized otherwise)
+    // - DatabaseNameSafe will be published, and delete any matching
+    // PasswordValue in DatabaseName
+    property DatabaseName: RawUTF8 read fDatabaseName;
     /// can be used to store the fForeignKeys[] data in an external BLOB
     // - since GetForeignKeys can be (somewhat) slow, could save a lot of time
     property ForeignKeysData: RawByteString
@@ -1478,8 +1487,10 @@ type
     property Engine: RawUTF8 read fEngineName;
     /// the associated server name, as specified at creation
     property ServerName: RawUTF8 read fServerName;
-    /// the associated database name, as specified at creation
-    property DatabaseName: RawUTF8 read fDatabaseName;
+    /// the associated database name, safely trimmed from the password
+    // - this property would have any matching Password value content deleted
+    // before serialization, for security reasons
+    property DatabaseNameSafe: RawUTF8 read GetDatabaseNameSafe;
     /// the associated User Identifier, as specified at creation
     property UserID: RawUTF8 read fUserID;
     /// the remote DBMS type, as stated by the inheriting class itself, or
@@ -5857,6 +5868,11 @@ var PS: PShortString;
 begin
   PS := GetEnumName(TypeInfo(TSQLDBDefinition),ord(DBMS));
   SetString(result,PAnsiChar(@PS^[2]),ord(PS^[0])-1);
+end;
+
+function TSQLDBConnectionProperties.GetDatabaseNameSafe: RawUTF8;
+begin
+  result := StringReplaceAll(fDatabaseName,PassWord,'***');
 end;
 
 function TSQLDBConnectionProperties.SQLLimitClause: TSQLDBDefinitionLimitClause;
