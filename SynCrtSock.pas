@@ -3565,13 +3565,12 @@ end;
 { THttpServer }
 
 constructor THttpServer.Create(const aPort: SockString
-      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
+  {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
 var aSock: TCrtSocket;
 begin
   fThreadRespClass := THttpServerResp;
   InitializeCriticalSection(fProcessCS);
   aSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
-  inherited Create(false);
   fSock := aSock;
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
@@ -3579,6 +3578,7 @@ begin
   if ServerThreadPoolCount>0 then
     fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
 {$endif}
+  inherited Create(false);
 end;
 
 function THttpServer.GetAPIVersion: string;

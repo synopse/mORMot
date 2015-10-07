@@ -534,7 +534,6 @@ type
   TSQLBusyHandler = function(user: pointer; count: integer): integer;
      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
-  {$A-}
   PFTSMatchInfo = ^TFTSMatchInfo;
   /// map the matchinfo function returned BLOB value
   // - i.e. the default 'pcx' layout, for both FTS3 and FTS4
@@ -542,7 +541,7 @@ type
   // - used for the FTS3/FTS4 ranking of results by TSQLRest.FTSMatch method
   // and the internal RANK() function as proposed in
   // http://www.sqlite.org/fts3.html#appendix_a
-  TFTSMatchInfo = record
+  TFTSMatchInfo = packed record
     nPhrase: integer;
     nCol: integer;
     hits: array[1..9] of record
@@ -551,7 +550,6 @@ type
       docs_with_hits: integer;
     end;
   end;
-  {$A+}
 
   PSQLite3Module = ^TSQLite3Module;
   PSQLite3VTab = ^TSQLite3VTab;
