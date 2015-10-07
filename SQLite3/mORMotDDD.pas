@@ -2293,7 +2293,7 @@ begin
     end;
     4: result.Content := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
     5: fLogClass.Add.Log(sllMonitoring,'[CHAT] % %',
-         [ServiceContext.Request.InHeader['remoteip'],DatabaseName]);
+         [ServiceContext.Request.InHeader['remoteip'],copy(SQL,7,maxInt)]);
     else 
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
         '|#state|#settings|#settings full.path=value|#version|#computer|#log|#help"';

@@ -549,8 +549,8 @@ procedure TLogFrameChat.mmoChatKeyPress(Sender: TObject; var Key: Char);
 begin
   if Key = #13 then begin
     if Assigned(Admin) then
-      Admin.DatabaseExecute(FormatUTF8('% %', [ExeVersion.User, StringToUTF8(mmoChat.Text)]),
-        '#chat');
+      Admin.DatabaseExecute('', FormatUTF8('#chat % %',
+        [ExeVersion.User, StringToUTF8(mmoChat.Text)]));
     mmoChat.Clear;
     Key := #0;
   end;
