@@ -206,6 +206,8 @@ type
 
     /// the remote DBMS type, as retrieved at ODBC connection opening
     property DBMS: TSQLDBDefinition read fDBMS;
+    /// the full connection string (expanded from ServerName)
+    property SQLDriverFullString: RawUTF8 read fSQLDriverFullString;
   published
     /// the remote DBMS name, as retrieved at ODBC connection opening
     property DBMSName: RawUTF8 read fDBMSName;
@@ -213,8 +215,6 @@ type
     property DBMSVersion: RawUTF8 read fDBMSVersion;
     /// the local driver name, as retrieved at ODBC connection opening
     property DriverName: RawUTF8 read fDriverName;
-    /// the full connection string (expanded from ServerName)
-    property SQLDriverFullString: RawUTF8 read fSQLDriverFullString;
   end;
 
   /// implements a statement using a ODBC connection
