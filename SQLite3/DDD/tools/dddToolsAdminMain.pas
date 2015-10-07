@@ -159,10 +159,7 @@ begin
   fPage.Align := alClient;
   fPage.OnChange := OnPageChange;
   n := length(fDatabases);
-  fLogFrame := LogFrameClass.Create(self);
-  fLogFrame.Parent := AddPage('log');
-  fLogFrame.Align := alClient;
-  fLogFrame.Admin := fAdmin;
+  fLogFrame := AddLogFrame(nil, 'log', '', '', LogFrameClass);
   if n > 0 then begin
     for i := 0 to n - 1 do begin
       f := AddDBFrame(fDatabases[i], fDatabases[i], DBFrameClass);
@@ -181,8 +178,10 @@ begin
   if aLogFrame <> nil then
   try
     Screen.Cursor := crHourGlass;
-    if aLogFrame.Callback <> nil then
+    if aLogFrame.Callback <> nil then begin
       fClient.Services.CallBackUnRegister(aLogFrame.Callback);
+      aLogFrame.Callback := nil;
+    end;
     aLogFrame.Closing;
   finally
     Screen.Cursor := crDefault;
@@ -193,11 +192,6 @@ destructor TAdminControl.Destroy;
 var
   i: integer;
 begin
-  if fLogFrame <> nil then begin
-    Endlog(fLogFrame);
-    fLogFrame.Admin := nil;
-    fLogFrame := nil;
-  end;
   for i := 0 to high(fLogFrames) do begin
     EndLog(fLogFrames[i]);
     fLogFrames[i].Admin := nil;
@@ -222,7 +216,8 @@ procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShif
         VK_F3:
           aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext);
         ord('A')..ord('Z'), Ord('0')..ord('9'), 32:
-          if (shift = []) and not aLogFrame.edtSearch.Focused then
+          if (shift = []) and (aLogFrame.ClassType <> TLogFrameChat) and not
+            aLogFrame.edtSearch.Focused then
             aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text + string(Char(Key))
           else if (key = ord('F')) and (ssCtrl in Shift) then begin
             aLogFrame.edtSearch.SelectAll;
@@ -232,30 +227,37 @@ procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShif
   end;
 
 var
-  pageIndex, DBCount: integer;
+  page: TControl;
+  ndx: integer;
 begin
-  pageIndex := fPage.ActivePageIndex;
-  DBCount := length(fDBFrame);
-  if pageIndex = 0 then
-    LogKeys(fLogFrame)
-  else if pageIndex <= DBCount then
-    with fDBFrame[pageIndex - 1] do
-      case Key of
-        VK_F5:
-          btnCmdClick(btnCmd);
-        VK_F9:
-          btnExecClick(btnExec);
-        ord('A'):
-          if ssCtrl in Shift then begin
-            mmoSQL.SelectAll;
-            mmoSQL.SetFocus;
-          end;
-        ord('H'):
-          if ssCtrl in Shift then
-            btnHistoryClick(btnHistory);
-      end
-  else if pageIndex <= Length(fLogFrames) + DBCount then
-    LogKeys(fLogFrames[pageIndex - DBCount - 1]);
+  page := fPage.ActivePage;
+  if page = nil then
+    exit;
+  ndx := page.Tag;
+  if ndx > 0 then begin
+    ndx := ndx - 1; // see AddDBFrame()
+    if cardinal(ndx) < cardinal(length(fDBFrame)) then
+      with fDBFrame[ndx] do
+        case Key of
+          VK_F5:
+            btnCmdClick(btnCmd);
+          VK_F9:
+            btnExecClick(btnExec);
+          ord('A'):
+            if ssCtrl in Shift then begin
+              mmoSQL.SelectAll;
+              mmoSQL.SetFocus;
+            end;
+          ord('H'):
+            if ssCtrl in Shift then
+              btnHistoryClick(btnHistory);
+        end
+  end
+  else if ndx < 0 then begin
+    ndx := -(ndx + 1); // see AddLogFrame()
+    if cardinal(ndx) < cardinal(length(fLogFrames)) then
+      LogKeys(fLogFrames[ndx]);
+  end;
 end;
 
 function TAdminControl.AddPage(const aCaption: RawUTF8): TSynPage;
@@ -288,6 +290,7 @@ begin
   result.DatabaseName := aDatabaseName;
   result.OnAfterExecute := OnAfterExecute;
   fDBFrame[n] := result;
+  page.Tag := n + 1; // Tag>0 -> index in fDBFrame[Tag-1] -> used in FormKeyDown
 end;
 
 function TAdminControl.AddLogFrame(page: TSynPage; const aCaption, aEvents,
@@ -299,12 +302,16 @@ begin
     page := AddPage(aCaption);
     fPage.ActivePageIndex := fPage.PageCount - 1;
   end;
-  result := aClass.CreateCustom(self, fAdmin, aEvents, aPattern);
+  if aEvents = '' then
+    result := aClass.Create(self, fAdmin)
+  else
+    result := aClass.CreateCustom(self, fAdmin, aEvents, aPattern);
   result.Parent := page;
   result.Align := alClient;
   n := length(fLogFrames);
   SetLength(fLogFrames, n + 1);
   fLogFrames[n] := result;
+  page.Tag := -(n + 1); // Tag<0 -> index in fLogFrames[-(Tag+1)] -> used in FormKeyDown
 end;
 
 procedure TAdminControl.OnPageChange(Sender: TObject);

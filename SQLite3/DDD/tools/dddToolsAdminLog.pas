@@ -69,7 +69,8 @@ type
     Callback: ISynLogCallback;
     OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo; const Text:
       RawUTF8): boolean of object;
-    constructor Create(Owner: TComponent); override;
+    constructor Create(Owner: TComponent; const aAdmin: IAdministratedDaemon);
+      reintroduce;
     constructor CreateCustom(Owner: TComponent; const aAdmin:
       IAdministratedDaemon; const aEvents, aPattern: RawUTF8); virtual;
     procedure Closing;
@@ -150,12 +151,13 @@ end;
 var
   LogFrameCount: integer;
 
-constructor TLogFrame.Create(Owner: TComponent);
+constructor TLogFrame.Create(Owner: TComponent; const aAdmin: IAdministratedDaemon);
 var
   F: TSynLogFilter;
   M: TMenuItem;
 begin
-  inherited;
+  inherited Create(Owner);
+  Admin := aAdmin;
   Name := 'LogFrame' + IntToStr(LogFrameCount);
   inc(LogFrameCount);
   for F := low(F) to high(F) do begin
@@ -178,7 +180,7 @@ var
   P: PUTF8Char;
   e: integer;
 begin
-  Create(Owner);
+  Create(Owner, aAdmin);
   pmFilterClick(FMenuFilterNone);
   P := pointer(aEvents);
   while P <> nil do begin
@@ -187,7 +189,6 @@ begin
     if e > 0 then // ignore e=0=sllNone
       chklstEvents.Checked[e - 1] := True;
   end;
-  Admin := aAdmin;
   FCallbackPattern := UpperCase(aPattern);
   btnStartLogClick(self);
   btnStopLog.Hide; { TODO: allow event log closing }
@@ -548,8 +549,8 @@ procedure TLogFrameChat.mmoChatKeyPress(Sender: TObject; var Key: Char);
 begin
   if Key = #13 then begin
     if Assigned(Admin) then
-      Admin.DatabaseExecute(FormatUTF8('% %',
-        [ExeVersion.User, StringToUTF8(mmoChat.Text)]), '#chat');
+      Admin.DatabaseExecute(FormatUTF8('% %', [ExeVersion.User, StringToUTF8(mmoChat.Text)]),
+        '#chat');
     mmoChat.Clear;
     Key := #0;
   end;
