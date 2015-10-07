@@ -51939,8 +51939,10 @@ begin // one at a time, since InternalInvoke() is the bottleneck
   try
     if pending.IDValue=0 then begin
       fPending := GetPendingCountFromDB;
-      raise EServiceException.CreateUTF8(
-        '%.ProcessPendingNotification pending=% with no DB row',[self,fPending]);
+      if fPending=0 then
+        exit else
+        raise EServiceException.CreateUTF8(
+          '%.ProcessPendingNotification pending=% with no DB row',[self,fPending]);
     end;
     timer.Start;
     VariantSaveJson(pending.Input,twJSONEscape,params);
