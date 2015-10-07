@@ -3333,12 +3333,14 @@ function ReadStringFromStream(S: TStream; MaxAllowedSize: integer=255): RawUTF8;
 // - format is Length(Integer):Text, i.e. the one used by ReadStringFromStream
 procedure WriteStringToStream(S: TStream; const Text: RawUTF8);
 
-/// get the file date and time
+/// get a file date and time, from its name
 // - returns 0 if file doesn't exist
+// - under Windows, will use GetFileAttributesEx fast API
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 
-/// get the file size
+/// get a file size, from its name
 // - returns 0 if file doesn't exist
+// - under Windows, will use GetFileAttributesEx fast API
 function FileSize(const FileName: TFileName): Int64;
 
 /// delete the content of a specified directory
@@ -22213,23 +22215,33 @@ begin
 end;
 
 function FileSize(const FileName: TFileName): Int64;
-{$ifdef LINUX}
-begin
-  result := GetLargeFileSize(FileName);
-end;
-{$else}
-var F: THandle;
-begin
-  F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
-  if PtrInt(F)>=0 then begin
-    PInt64Rec(@result)^.Lo := GetFileSize(F,@PInt64Rec(@result)^.Hi);
-    FileClose(F);
+{$ifdef MSWINDOWS}
+var FA: WIN32_FILE_ATTRIBUTE_DATA;
+begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  if GetFileAttributesEx(pointer(FileName),GetFileExInfoStandard,@FA) then begin
+    PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
+    PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
   end else
     result := 0;
+end;
+{$else}
+begin
+  result := GetLargeFileSize(FileName);
 end;
 {$endif}
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
+{$ifdef MSWINDOWS}
+var FA: WIN32_FILE_ATTRIBUTE_DATA;
+    ST,LT: TSystemTime;
+begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
+  if GetFileAttributesEx(pointer(FileName),GetFileExInfoStandard,@FA) and
+     FileTimeToSystemTime(FA.ftLastWriteTime,ST) and
+     SystemTimeToTzSpecificLocalTime(nil,ST,LT) then
+    result := SystemTimeToDateTime(LT) else
+    result := 0;
+end;
+{$else}
 {$ifdef HASNEWFILEAGE}
 begin
   if not FileAge(FileName,result) then
@@ -22239,9 +22251,10 @@ begin
   Age := FileAge(FileName);
   if Age<>-1 then
     result := FileDateToDateTime(Age) else
-{$endif}
+{$endif HASNEWFILEAGE}
     result := 0;
 end;
+{$endif MSWINDOWS}
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 {$ifdef MSWINDOWS}
