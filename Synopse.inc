@@ -181,6 +181,7 @@
   {$MINENUMSIZE 1}
   {$PACKSET 1}
   {$PACKENUM 1}
+
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
@@ -189,6 +190,7 @@
   {$define HASAESNI}
   {$define HASTTHREADSTART}
   {$define FPC_OR_UNICODE}
+  {$define DELPHI5ORFPC}
 
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -360,6 +362,7 @@
     // Delphi 5 or older
     {$define DELPHI6OROLDER}
     {$define DELPHI5OROLDER}
+    {$define DELPHI5ORFPC}
     {$define MSWINDOWS}
     {$define NOVARIANTS}
     {$define NOVARCOPYPROC}

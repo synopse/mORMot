@@ -467,6 +467,7 @@ unit SynCommons;
   - added CSVToRawUTF8DynArray() overloaded functions
   - added GetLastCSVItem() function and dedicated HashPointer() function
   - added DirectoryDelete() and EnsureDirectoryExists() function
+  - added FileOpenSequentialRead() function, used e.g. by StringFromFile()
   - added GetNextItemInteger(), GetNextItemCardinalStrict() and UpperCaseCopy()
   - added GetEnumNameValue() and UnQuotedSQLSymbolName() functions
   - added JSONEncodeArrayOfConst() function
@@ -10304,6 +10305,13 @@ function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
 
+/// overloaded function optimized for one pass file reading
+// - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
+// by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
+// - is used e.g. by StringFromFile() and TSynMemoryStreamMapped.Create()
+function FileOpenSequentialRead(const FileName: string): Integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// check if the current timestamp, in ms, matched a given period
 // - will compare the current GetTickCount64 to the supplied PreviousTix
 // - returns TRUE if the Internal ms period was not elapsed
@@ -19779,6 +19787,15 @@ end;
 
 {$endif MSWINDOWS}
 
+function FileOpenSequentialRead(const FileName: string): Integer;
+begin
+  {$ifdef MSWINDOWS}
+  result := CreateFile(pointer(FileName),GENERIC_READ,
+    FILE_SHARE_READ,nil,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
+  {$else}
+  result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  {$endif MSWINDOWS}
+end;
 
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
 var now: Int64;
@@ -22019,7 +22036,7 @@ begin
   result := '';
   if FileName='' then
     exit;
-  F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  F := FileOpenSequentialRead(FileName);
   if PtrInt(F)>=0 then begin
     Size := GetFileSize(F,nil);
     SetLength(result,Size);
@@ -45469,6 +45486,8 @@ function TMemoryMap.Map(const aFileName: TFileName): boolean;
 var F: THandle;
 begin
   result := false;
+  // Memory-mapped file access does not go through the cache manager so
+  // using FileOpenSequentialRead() is pointless here
   F := FileOpen(aFileName,fmOpenRead or fmShareDenyNone);
   if PtrInt(F)<0 then
     exit;
@@ -45522,16 +45541,20 @@ end;
 
 { TSynMemoryStreamMapped }
 
-constructor TSynMemoryStreamMapped.Create(const aFileName: TFileName; aCustomSize: cardinal; aCustomOffset: Int64);
+constructor TSynMemoryStreamMapped.Create(const aFileName: TFileName;
+  aCustomSize: cardinal; aCustomOffset: Int64);
 begin
   fFileName := aFileName;
+  // Memory-mapped file access does not go through the cache manager so
+  // using FileOpenSequentialRead() is pointless here
   fFileStream := TFileStream.Create(aFileName,fmOpenRead or fmShareDenyNone);
-  Create(fFileStream.Handle);
+  Create(fFileStream.Handle,aCustomSize,aCustomOffset);
 end;
 
-constructor TSynMemoryStreamMapped.Create(aFile: THandle; aCustomSize: cardinal; aCustomOffset: Int64);
+constructor TSynMemoryStreamMapped.Create(aFile: THandle;
+  aCustomSize: cardinal; aCustomOffset: Int64);
 begin
-  if not fMap.Map(aFile) then
+  if not fMap.Map(aFile,aCustomSize,aCustomOffset) then
     raise ESynException.CreateUTF8('%.Create(%) mapping error',[self,fFileName]);
   inherited Create(fMap.fBuf,fMap.fBufSize);
 end;
@@ -49331,7 +49354,11 @@ begin
   result := false;
   if FileExists(Source) then
   try
+    {$ifdef DELPHI5ORFPC}
     S := TFileStream.Create(Source,fmOpenRead or fmShareDenyNone);
+    {$else}
+    S := TFileStream.Create(FileOpenSequentialRead(Source));
+    {$endif}
     try
       DeleteFile(Dest);
       D := TFileStream.Create(Dest,fmCreate);
@@ -49378,7 +49405,11 @@ begin
   result := false;
   if FileExists(Source) then
   try
+    {$ifdef DELPHI5ORFPC}
     S := TFileStream.Create(Source,fmOpenRead or fmShareDenyNone);
+    {$else}
+    S := TFileStream.Create(FileOpenSequentialRead(Source));
+    {$endif}
     try
       DeleteFile(Dest);
       D := TFileStream.Create(Dest,fmCreate);
