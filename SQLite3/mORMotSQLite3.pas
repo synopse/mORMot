@@ -667,6 +667,11 @@ function RegisterVirtualTableModule(aModule: TSQLVirtualTableClass; aDatabase: T
 
 implementation
 
+{$ifdef SQLVIRTUALLOGS}
+uses
+  mORMotDB;
+{$endif}
+
 { TSQLTableDB }
 
 constructor TSQLTableDB.Create(aDB: TSQLDataBase; const Tables: array of TSQLRecordClass;
@@ -2164,6 +2169,8 @@ end;
 
 function vt_BestIndex(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): Integer;
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+const COST: array[TSQLVirtualTablePreparedCost] of double = (1E10,1E8,10,1);
+      // costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex
 var Prepared: PSQLVirtualTablePrepared;
     Table: TSQLVirtualTable;
     i, n: Integer;
@@ -2178,28 +2185,33 @@ begin
   Prepared := sqlite3.malloc(sizeof(TSQLVirtualTablePrepared));
   try
     // encode the incoming parameters into Prepared^ record
-    FillCharFast(Prepared^,sizeof(Prepared^),0);
     Prepared^.WhereCount := pInfo.nConstraint;
+    Prepared^.EstimatedCost := costFullScan;
     for i := 0 to pInfo.nConstraint-1 do
-    with Prepared^.Where[i], pInfo.aConstraint^[i] do
-    if usable then begin
-      Column := iColumn;
-      case op of
-        SQLITE_INDEX_CONSTRAINT_EQ:    Operation := soEqualTo;
-        SQLITE_INDEX_CONSTRAINT_GT:    Operation := soGreaterThan;
-        SQLITE_INDEX_CONSTRAINT_LE:    Operation := soLessThanOrEqualTo;
-        SQLITE_INDEX_CONSTRAINT_LT:    Operation := soLessThan;
-        SQLITE_INDEX_CONSTRAINT_GE:    Operation := soGreaterThanOrEqualTo;
-        SQLITE_INDEX_CONSTRAINT_MATCH: Operation := soBeginWith;
-        else exit; // invalid parameter
+      with Prepared^.Where[i], pInfo.aConstraint^[i] do begin
+        OmitCheck := False;
+        Value.VType := ftUnknown;
+        if usable then begin
+          Column := iColumn;
+          case op of
+            SQLITE_INDEX_CONSTRAINT_EQ:    Operation := soEqualTo;
+            SQLITE_INDEX_CONSTRAINT_GT:    Operation := soGreaterThan;
+            SQLITE_INDEX_CONSTRAINT_LE:    Operation := soLessThanOrEqualTo;
+            SQLITE_INDEX_CONSTRAINT_LT:    Operation := soLessThan;
+            SQLITE_INDEX_CONSTRAINT_GE:    Operation := soGreaterThanOrEqualTo;
+            SQLITE_INDEX_CONSTRAINT_MATCH: Operation := soBeginWith;
+            else exit; // invalid parameter
+          end;
+        end else
+          Column := VIRTUAL_TABLE_IGNORE_COLUMN;
       end;
-    end else
-      Column := VIRTUAL_TABLE_IGNORE_COLUMN;
-    assert(sizeof(TSQLVirtualTablePreparedOrderBy)=sizeof(TSQLite3IndexOrderBy));
+    Prepared^.OmitOrderBy := false;
     if pInfo.nOrderBy>0 then begin
+      assert(sizeof(TSQLVirtualTablePreparedOrderBy)=sizeof(TSQLite3IndexOrderBy));
       Prepared^.OrderByCount := pInfo.nOrderBy;
       MoveFast(pInfo.aOrderBy^[0],Prepared^.OrderBy[0],pInfo.nOrderBy*sizeof(Prepared^.OrderBy[0]));
-    end;
+    end else
+      Prepared^.OrderByCount := 0;
     // perform the index query
     if not Table.Prepare(Prepared^) then
       exit;
@@ -2215,12 +2227,28 @@ begin
     end;
     Prepared^.WhereCount := n; // will match argc in vt_Filter()
     pInfo.orderByConsumed := integer(Prepared^.OmitOrderBy);
-    pInfo.estimatedCost := Prepared^.EstimatedCost;
+    pInfo.estimatedCost := COST[Prepared^.EstimatedCost];
     if sqlite3.VersionNumber>=3080200 then // starting with SQLite 3.8.2
-      pInfo.estimatedRows := Prepared^.EstimatedRows;
+      case Prepared^.EstimatedCost of
+      costFullScan:
+        pInfo.estimatedRows := Prepared^.EstimatedRows;
+      costScanWhere: // estimate a WHERE clause is a slight performance gain
+        pInfo.estimatedRows := Prepared^.EstimatedRows shr 1;
+      costSecondaryIndex:
+        pInfo.estimatedRows := 10;
+      costPrimaryIndex:
+        pInfo.estimatedRows := 1;
+      else raise EORMException.Create('vt_BestIndex: unexpected EstimatedCost');
+      end;
     pInfo.idxStr := pointer(Prepared);
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
     result := SQLITE_OK;
+    {$ifdef SQLVIRTUALLOGS}
+    if Table.Static is TSQLRestStorageExternal then
+      TSQLRestStorageExternal(Table.Static).ComputeSQL(prepared^);
+    SQLite3Log.Add.Log(sllDebug,'vt_BestIndex(%) plan=% -> cost=% rows=%',
+      [sqlite3.VersionNumber,ord(Prepared^.EstimatedCost),pInfo.estimatedCost,pInfo.estimatedRows]);
+    {$endif}
   finally
     if result<>SQLITE_OK then
       sqlite3.free_(Prepared); // avoid memory leak on error

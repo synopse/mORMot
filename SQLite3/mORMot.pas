@@ -17207,7 +17207,7 @@ type
 
 
   /// a WHERE constraint as set by the TSQLVirtualTable.Prepare() method
-  TSQLVirtualTablePreparedConstraint = record
+  TSQLVirtualTablePreparedConstraint = packed record
     /// Column on left-hand side of constraint
     // - The first column of the virtual table is column 0
     // - The ROWID of the virtual table is column -1
@@ -17215,6 +17215,12 @@ type
     // - if this field contains VIRTUAL_TABLE_IGNORE_COLUMN (-2), TSQLVirtualTable.
     // Prepare() should ignore this entry
     Column: integer;
+    /// The associated expression
+    // - TSQLVirtualTable.Prepare() must set Value.VType to not svtUnknown
+    // (e.g. to svtNull), if an expression is expected at vt_BestIndex() call
+    // - TSQLVirtualTableCursor.Search() will receive an expression value,
+    // to be retrieved e.g. via sqlite3_value_*() functions
+    Value: TSQLVar;
     /// Constraint operator
     // - MATCH keyword is parsed into soBeginWith, and should be handled as
     // soBeginWith, soContains or soSoundsLike* according to the effective
@@ -17226,15 +17232,12 @@ type
     // constraints on each row of the virtual table that it receives
     // - TSQLVirtualTable.Prepare() can set this property to true
     OmitCheck: boolean;
-    /// The associated expression
-    // - TSQLVirtualTable.Prepare() must set Value.VType to not svtUnknown
-    // (e.g. to svtNull), if an expression is expected at vt_BestIndex() call
-    // - TSQLVirtualTableCursor.Search() will receive an expression value,
-    // to be retrieved e.g. via sqlite3_value_*() functions
-    Value: TSQLVar;
   end;
+  PSQLVirtualTablePreparedConstraint = ^TSQLVirtualTablePreparedConstraint;
 
   /// an ORDER BY clause as set by the TSQLVirtualTable.Prepare() method
+  // - warning: this structure should match exactly TSQLite3IndexOrderBy as
+  // defined in SynSQLite3 
   TSQLVirtualTablePreparedOrderBy = record
     /// Column number
     // - The first column of the virtual table is column 0
@@ -17245,6 +17248,9 @@ type
     Desc: boolean;
   end;
 
+  /// abstract planning execution of a query, as set by TSQLVirtualTable.Prepare
+  TSQLVirtualTablePreparedCost = (
+    costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex);
 
   /// the WHERE and ORDER BY statements as set by TSQLVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
@@ -17262,8 +17268,9 @@ type
     ///  Estimated cost of using this prepared index
     // - SQLite uses this value to make a choice between several calls to
     // the TSQLVirtualTable.Prepare() method with several expressions
-    EstimatedCost: Double;
+    EstimatedCost: TSQLVirtualTablePreparedCost;
     ///  Estimated number of rows of using this prepared index
+    // - does make sense only if EstimatedCost=costFullScan
     // - SQLite uses this value to make a choice between several calls to
     // the TSQLVirtualTable.Prepare() method with several expressions
     // - is used only starting with SQLite 3.8.2
@@ -30503,7 +30510,9 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
+  {$ifndef FPC} // serialization during destruction seems unsafe under FPC
   InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
+  {$endif}
   FreeAndNil(fServices);
   FreeAndNil(fCache);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
@@ -37706,6 +37715,7 @@ begin
     JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
                         'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
     EngineAdd(TableHistoryIndex,JSON);
+    { TODO: use a BATCH to speed up TSQLHistory storage }
     if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
         fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
       // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
@@ -45099,32 +45109,33 @@ end;
 constructor TSQLVirtualTable.Create(aModule: TSQLVirtualTableModule;
   const aTableName: RawUTF8; FieldCount: integer; Fields: PPUTF8CharArray);
 var aClass: TSQLRestStorageClass;
+    aServer: TSQLRestServer;
 begin
   if (aModule=nil) or (aTableName='') then
     raise EModelException.CreateUTF8('Invalid %.Create(%,"%")',[self,aModule,aTableName]);
   fModule := aModule;
   fTableName := aTableName;
-  if fModule.fFeatures.StaticClass<>nil then
+  if fModule.fFeatures.StaticClass<>nil then begin
     // create new fStatic instance e.g. for TSQLVirtualTableLog
-    if fModule.Server=nil then
+    aServer := fModule.Server;
+    if aServer=nil then
       raise EModelException.CreateUTF8('%.Server=nil for %.Create',[Module,self]) else
-    with fModule.Server do begin
-      fStaticTableIndex := Model.GetTableIndex(aTableName);
-      if fStaticTableIndex>=0 then begin
-        fStaticTable := Model.Tables[fStaticTableIndex];
-        aClass := fModule.fFeatures.StaticClass;
-        if aClass.InheritsFrom(TSQLRestStorageInMemory) then
-          fStatic := TSQLRestStorageInMemoryClass(aClass).Create(fStaticTable,
-            fModule.Server,fModule.FileName(aTableName),
-            self.InheritsFrom(TSQLVirtualTableBinary)) else
-          fStatic := aClass.Create(fStaticTable,fModule.Server);
-        if length(fStaticVirtualTable)<>length(Model.Tables) then
-          SetLength(fStaticVirtualTable,length(Model.Tables));
-        fStaticVirtualTable[fStaticTableIndex] := fStatic;
-        if fStatic.InheritsFrom(TSQLRestStorage) then
-          fStaticStorage := TSQLRestStorage(fStatic);
-      end;
+    fStaticTableIndex := aServer.Model.GetTableIndex(aTableName);
+    if fStaticTableIndex>=0 then begin
+      fStaticTable := aServer.Model.Tables[fStaticTableIndex];
+      aClass := fModule.fFeatures.StaticClass;
+      if aClass.InheritsFrom(TSQLRestStorageInMemory) then
+        fStatic := TSQLRestStorageInMemoryClass(aClass).Create(fStaticTable,
+          fModule.Server,fModule.FileName(aTableName),
+          self.InheritsFrom(TSQLVirtualTableBinary)) else
+        fStatic := aClass.Create(fStaticTable,fModule.Server);
+      if length(aServer.fStaticVirtualTable)<>length(aServer.Model.Tables) then
+        SetLength(aServer.fStaticVirtualTable,length(aServer.Model.Tables));
+      aServer.fStaticVirtualTable[fStaticTableIndex] := fStatic;
+      if fStatic.InheritsFrom(TSQLRestStorage) then
+        fStaticStorage := TSQLRestStorage(fStatic);
     end;
+  end;
 end;
 
 destructor TSQLVirtualTable.Destroy;
@@ -45132,7 +45143,7 @@ var aTableIndex: cardinal;
 begin
   if fStatic<>nil then begin
     if (Module<>nil) and (Module.Server<>nil) then
-      with Module.Server do begin
+      with Module.Server do begin // temporary release (e.g. backup)
         aTableIndex := Model.GetTableIndex(TableName);
         if aTableIndex<cardinal(length(fStaticVirtualTable)) then begin
           fStaticVirtualTable[aTableIndex] := nil;
@@ -45154,11 +45165,11 @@ begin
     with Prepared.Where[0] do begin // check ID=?
       Value.VType := ftNull; // mark TSQLVirtualTableCursorJSON expects it
       OmitCheck := true;
-      Prepared.EstimatedCost := 1;
+      Prepared.EstimatedCost := costPrimaryIndex;
       Prepared.EstimatedRows := 1;
     end else begin
-      Prepared.EstimatedCost := 1E10; // generic high cost
-      Prepared.EstimatedRows := 100000;
+      Prepared.EstimatedCost := costFullScan;
+      Prepared.EstimatedRows := 1000000;
     end;
 end;
 
@@ -45396,13 +45407,11 @@ begin
     if fStaticInMemory.UniqueFieldHash(Column)<>nil then begin
       Value.VType := ftNull; // mark TSQLVirtualTableCursorJSON expects it
       OmitCheck := true;
-      Prepared.EstimatedCost := 1;
-      Prepared.EstimatedRows := 1;
-    end;
-    if Prepared.EstimatedCost>1E9 then begin
-      Prepared.EstimatedCost := fStaticInMemory.Count;
-      Prepared.EstimatedRows := fStaticInMemory.Count;
-    end;
+      Prepared.EstimatedCost := costSecondaryIndex;
+      Prepared.EstimatedRows := 10;
+    end else
+      if Prepared.EstimatedCost in [costFullScan,costScanWhere] then
+        Prepared.EstimatedRows := fStaticInMemory.Count;
     if fStaticInMemory.fIDSorted and (Prepared.OrderByCount=1) then
       // ascending IDs ?
       with Prepared.OrderBy[0] do

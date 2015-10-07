@@ -192,11 +192,11 @@
   {$define FPC_OR_UNICODE}
   {$define DELPHI5ORFPC}
 
-  {.$define FPCSQLITE3STATIC}
+  {$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
-  // -> disabled by default, for direct compilation of mORMot, e.g. from fpcup
-  // -> enable it to support static-linked SQLite3 engine, after retrieval of
+  // -> enabled to support static-linked SQLite3 engine, after retrieval of
   // the needed .o files from http://synopse.info/files/sqlite3fpc.7z
+  // -> could be disabled to force external .so/.dll linking
   // -> only available for Win32 and Linux32 platforms by now
 
   {$ifdef ANDROID}
@@ -450,6 +450,10 @@
   // our proprietary crypto expects a patched SQlite3.c statically linked
   {$define NOSQLITE3ENCRYPT}
 {$endif}
+
+{.$define SQLVIRTUALLOGS}
+// enable low-level logging of SQlite3 virtual table query planner costs
+// -> to be used only for internal debugging
 
 {$ifdef MSWINDOWS}
   /// define this to publish TWinINet / TWinHttp / TWinHttpAPI classes

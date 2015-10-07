@@ -285,8 +285,10 @@ type
     // - you should not use this, but rather call VirtualTableExternalRegister()
     // - RecordProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
     // - RecordProps.ExternalTableName will retrieve the real full table name,
-    // e.g. including any database schema prefix
+    // e.g. including any databas<e schema prefix
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); override;
+    /// finalize the remote database connection
+    destructor Destroy; override;
     /// delete a row, calling the external engine with SQL
     // - made public since a TSQLRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TSQLRestServer
@@ -347,6 +349,9 @@ type
     // method may be used only once, when some records have been inserted into
     // the external database outside this class scope (e.g. by legacy code)
     procedure EngineAddForceSelectMaxID;
+    /// compute the SQL query corresponding to a prepared request
+    // - can be used internally e.g. for debugging purposes
+    function ComputeSQL(const Prepared: TSQLVirtualTablePrepared): RawUTF8;
 
     /// retrieve the REST server instance corresponding to an external TSQLRecord
     // - just map aServer.StaticVirtualTable[] and will return nil if not
@@ -863,6 +868,11 @@ begin
   fSelectTableHasRowsSQL := FormatUTF8('select ID from % limit 1',
     [StoredClassRecordProps.SQLTableName]);
   AdaptSQLForEngineList(fSelectTableHasRowsSQL);
+end;
+
+destructor TSQLRestStorageExternal.Destroy;
+begin
+  inherited Destroy;
 end;
 
 function TSQLRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
@@ -1906,6 +1916,50 @@ begin
   StorageUnLock;
 end;
 
+const
+  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of RawUTF8 = (
+    '=?','<>?','<?','<=?','>?','>=?');
+
+function TSQLRestStorageExternal.ComputeSQL(
+  const Prepared: TSQLVirtualTablePrepared): RawUTF8;
+var i: integer;
+    constraint: PSQLVirtualTablePreparedConstraint;
+    {$ifdef SQLVIRTUALLOGS}
+    log: RawUTF8;
+    {$endif}
+begin
+  result := fSelectAllDirectSQL;
+  for i := 0 to Prepared.WhereCount-1 do begin
+    constraint := @Prepared.Where[i];
+    {$ifdef SQLVIRTUALLOGS}
+    log := FormatUTF8('% [column=% oper=%]',
+      [log,constraint^.Column,ord(constraint^.Operation)]);
+    {$endif}
+    if constraint^.Operation>high(SQL_OPER_WITH_PARAM) then
+      exit; // invalid specified operator -> abort search
+    if i=0 then
+      result := result+' where ' else
+      result := result+' and ';
+    if StoredClassProps.ExternalDB.AppendFieldName(constraint^.Column,result) then
+      exit; // invalid column index -> abort search
+    result := result+SQL_OPER_WITH_PARAM[constraint^.Operation];
+  end;
+  // e.g. 'select FirstName,..,ID from PeopleExternal where FirstName=? and LastName=?'
+  for i := 0 to Prepared.OrderByCount-1 do
+  with Prepared.OrderBy[i] do begin
+    if i=0 then
+      result := result+' order by ' else
+      result := result+', ';
+    if StoredClassProps.ExternalDB.AppendFieldName(Column,result) then
+      exit; // invalid column index -> abort search
+    if Desc then
+      result := result+' desc';
+  end;
+  {$ifdef SQLVIRTUALLOGS}
+  SQLite3Log.Add.Log(sllDebug,'%.ComputeSQL "%" %',[ClassType,result,log]);
+  {$endif}
+end;
+
 
 { TSQLVirtualTableCursorExternal }
 
@@ -1947,47 +2001,17 @@ begin
   end;
 end;
 
-const
-  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of RawUTF8 = (
-    '=?','<>?','<?','<=?','>?','>=?');
-
 function TSQLVirtualTableCursorExternal.Search(
   const Prepared: TSQLVirtualTablePrepared): boolean;
 var i: integer;
 begin
   result := false;
-  if (Self=nil) or (Table=nil) or (Table.Static=nil) then
-    exit;
+  if (Self<>nil) and (Table<>nil) and (Table.Static<>nil) then
   with Table.Static as TSQLRestStorageExternal do begin
-    if fSQL='' then begin
-      // compute the SQL query corresponding to this prepared request
-      fSQL := fSelectAllDirectSQL;
-      if Prepared.WhereCount<>0 then begin
-        for i := 0 to Prepared.WhereCount-1 do
-        with Prepared.Where[i] do begin
-          if Operation>high(SQL_OPER_WITH_PARAM) then
-            exit; // invalid specified operator -> abort search
-          if i=0 then
-            fSQL := fSQL+' where ' else
-            fSQL := fSQL+' and ';
-          if StoredClassProps.ExternalDB.AppendFieldName(Column,fSQL) then
-            exit; // invalid column index -> abort search
-          fSQL := fSQL+SQL_OPER_WITH_PARAM[Operation];
-        end;
-      end;
-      // e.g. 'select FirstName,..,ID from PeopleExternal where FirstName=? and LastName=?'
-      for i := 0 to Prepared.OrderByCount-1 do
-      with Prepared.OrderBy[i] do begin
-        if i=0 then
-          fSQL := fSQL+' order by ' else
-          fSQL := fSQL+', ';
-        if StoredClassProps.ExternalDB.AppendFieldName(Column,fSQL) then
-          exit; // invalid column index -> abort search
-        if Desc then
-          fSQL := fSQL+' desc';
-      end;
-    end;
-    // execute the SQL statement
+    {$ifndef SQLVIRTUALLOGS}
+    if fSQL='' then
+    {$endif}
+      fSQL := ComputeSQL(Prepared);
     try
       fStatement := fProperties.NewThreadSafeStatementPrepared(fSQL,true);
       if fStatement<>nil then begin
@@ -2024,10 +2048,9 @@ end;
 
 function TSQLVirtualTableExternal.Prepare(var Prepared: TSQLVirtualTablePrepared): boolean;
 var i, col: integer;
-    hasIndex: boolean;
     Fields: TSQLPropInfoList;
 begin
-  result := inherited Prepare(Prepared); // Prepared.EstimatedCost := 1E10;
+  result := inherited Prepare(Prepared); // set costFullScan or costPrimaryIndex
   if result and (Static<>nil) then
   with Static as TSQLRestStorageExternal do begin
     // mark Where[] clauses will be handled by SQL
@@ -2038,25 +2061,21 @@ begin
       if (Column<>VIRTUAL_TABLE_IGNORE_COLUMN) and
          (Operation<=high(SQL_OPER_WITH_PARAM)) then begin
         if Column=VIRTUAL_TABLE_ROWID_COLUMN then // is an indexed primary key
-          hasIndex := true else begin
+          Prepared.EstimatedCost := costPrimaryIndex else begin
           if cardinal(Column)>=cardinal(Fields.Count) then
             exit; // invalid column index -> abort query
           col := fFieldsInternalToExternal[Column+1];
           if col<0 then
             exit; // column not known in the external database -> abort query
-          hasIndex := fFieldsExternal[col].ColumnIndexed;
+          if fFieldsExternal[col].ColumnIndexed then begin
+            if Prepared.EstimatedCost<costSecondaryIndex then
+              Prepared.EstimatedCost := costSecondaryIndex;
+          end else
+            if Prepared.EstimatedCost<costScanWhere then
+              Prepared.EstimatedCost := costScanWhere;
         end;
         OmitCheck := true; // search handled via SQL query
         Value.VType := ftNull; // caller vt_BestIndex() expects <> ftUnknown
-        if hasIndex then begin
-          // the more indexes, the faster
-          Prepared.EstimatedCost := Prepared.EstimatedCost/128;
-          Prepared.EstimatedRows := Prepared.EstimatedRows shr 7;
-        end else begin
-          // always favor a where clause: full scan is always slower
-          Prepared.EstimatedCost := Prepared.EstimatedCost/2;
-          Prepared.EstimatedRows := Prepared.EstimatedRows shr 1;
-        end;
       end;
     // check the OrderBy[] clauses
     if Prepared.OrderByCount>0 then begin
