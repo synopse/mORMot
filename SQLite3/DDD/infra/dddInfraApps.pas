@@ -480,7 +480,7 @@ type
     procedure ExecuteDisconnectAfterError;
     procedure ExecuteSocket;
     function TrySend(const aFrame: RawByteString;
-      ImmediateDisconnectAfterError: boolean=true): Boolean;
+      ImmediateDisconnectAfterError: boolean=true): Boolean; virtual;
     // inherited classes could override those methods for process customization
     procedure InternalExecuteConnected; virtual;
     procedure InternalExecuteDisconnect; virtual;
