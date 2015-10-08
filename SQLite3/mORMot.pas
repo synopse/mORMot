@@ -5829,11 +5829,12 @@ type
       Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape;
       MakeHumanReadable: boolean=false);
     /// uses this method to send back directly any binary content to the caller
-    // - the exact MIME type will be retrieved using GetMimeContentTypeHeader()
+    // - the exact MIME type will be retrieved using GetMimeContentTypeHeader(),
+    // from the supplied Blob binary buffer, and optional a file name
     // - by default, the HTML_NOTMODIFIED process will take place, to minimize
     // bandwidth between the server and the client
     procedure ReturnBlob(const Blob: RawByteString; Status: integer=HTML_SUCCESS;
-      Handle304NotModified: boolean=true);
+      Handle304NotModified: boolean=true; const FileName: TFileName='');
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
@@ -36222,9 +36223,9 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
-  Status: integer; Handle304NotModified: boolean);
+  Status: integer; Handle304NotModified: boolean; const FileName: TFileName);
 begin
-  Returns(Blob,Status,GetMimeContentTypeHeader(Blob),Handle304NotModified);
+  Returns(Blob,Status,GetMimeContentTypeHeader(Blob,FileName),Handle304NotModified);
 end;
 
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;

@@ -28262,7 +28262,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       27,91: Result := 'application/msword';
       31,35: Result := HTML_CONTENT_TYPE;
       40: Result := 'text/css';
-      44: Result := 'application/x-javascript';
+      44: Result := 'application/javascript';
+      // text/javascript and application/x-javascript are obsolete (RFC 4329)
       47: Result := 'image/x-icon';
       51,105: Result := 'application/font-woff';
       55: Result := TEXT_CONTENT_TYPE;
