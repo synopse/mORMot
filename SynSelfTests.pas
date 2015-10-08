@@ -858,6 +858,47 @@ type
     procedure _TRecordVersion;
   end;
 
+type
+  // This is our simple Test data class. Will be mapped to TSQLRecordDDDTest.
+  TDDDTest = class(TSynPersistent)
+  private
+    fDescription: RawUTF8;
+  published
+    property Description: RawUTF8 read fDescription write fDescription;
+  end;
+
+  TDDDTestObjArray = array of TDDDTest;
+
+  // The corresponding TSQLRecord for TDDDTest.
+  TSQLRecordDDDTest = class(TSQLRecord)
+  private
+    fDescription: RawUTF8;
+  published
+    property Description: RawUTF8 read fDescription write fDescription;
+  end;
+
+  // CQRS Query Interface fo TTest
+  IDDDThreadsQuery = interface(ICQRSService)
+    ['{DD402806-39C2-4921-98AA-A575DD1117D6}']
+    function SelectByDescription(const aDescription: RawUTF8): TCQRSResult;
+    function SelectAll: TCQRSResult;
+    function Get(out aAggregate: TDDDTest): TCQRSResult;
+    function GetAll(out aAggregates: TDDDTestObjArray): TCQRSResult;
+    function GetNext(out aAggregate: TDDDTest): TCQRSResult;
+    function GetCount: integer;
+  end;
+
+  // CQRS Command Interface for TTest
+  IDDDThreadsCommand = interface(IDDDThreadsQuery)
+    ['{F0E4C64C-B43A-491B-85E9-FD136843BFCB}']
+    function Add(const aAggregate: TDDDTest): TCQRSResult;
+    function Update(const aUpdatedAggregate: TDDDTest): TCQRSResult;
+    function Delete: TCQRSResult;
+    function DeleteAll: TCQRSResult;
+    function Commit: TCQRSResult;
+    function Rollback: TCQRSResult;
+  end;
+
   /// a test case for all shared DDD types and services
   TTestDDDSharedUnits = class(TSynTestCase)
   protected
@@ -3815,7 +3856,7 @@ const
    'html',HTML_CONTENT_TYPE,
    'HTML',HTML_CONTENT_TYPE,
    'css','text/css',
-   'js','application/x-javascript',
+   'js','application/javascript',
    'ico','image/x-icon',
    'pdf','application/pdf',
    'PDF','application/pdf',
@@ -13865,46 +13906,6 @@ begin
 end;
 
 type
-  // This is our simple Test data class. Will be mapped to TSQLRecordDDDTest.
-  TDDDTest = class(TSynPersistent)
-  private
-    fDescription: RawUTF8;
-  published
-    property Description: RawUTF8 read fDescription write fDescription;
-  end;
-
-  TDDDTestObjArray = array of TDDDTest;
-
-  // The corresponding TSQLRecord for TDDDTest.
-  TSQLRecordDDDTest = class(TSQLRecord)
-  private
-    fDescription: RawUTF8;
-  published
-    property Description: RawUTF8 read fDescription write fDescription;
-  end;
-
-  // CQRS Query Interface fo TTest
-  IDDDThreadsQuery = interface(ICQRSService)
-    ['{DD402806-39C2-4921-98AA-A575DD1117D6}']
-    function SelectByDescription(const aDescription: RawUTF8): TCQRSResult;
-    function SelectAll: TCQRSResult;
-    function Get(out aAggregate: TDDDTest): TCQRSResult;
-    function GetAll(out aAggregates: TDDDTestObjArray): TCQRSResult;
-    function GetNext(out aAggregate: TDDDTest): TCQRSResult;
-    function GetCount: integer;
-  end;
-
-  // CQRS Command Interface for TTest
-  IDDDThreadsCommand = interface(IDDDThreadsQuery)
-    ['{F0E4C64C-B43A-491B-85E9-FD136843BFCB}']
-    function Add(const aAggregate: TDDDTest): TCQRSResult;
-    function Update(const aUpdatedAggregate: TDDDTest): TCQRSResult;
-    function Delete: TCQRSResult;
-    function DeleteAll: TCQRSResult;
-    function Commit: TCQRSResult;
-    function Rollback: TCQRSResult;
-  end;
-
   // The infratructure REST class implementing the Query and Command Interfaces for TTest
   TDDDThreadsTestRest = class(TDDDRepositoryRestCommand, IDDDThreadsCommand)
   public

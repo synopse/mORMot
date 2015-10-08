@@ -762,6 +762,8 @@ begin
   wDateTime:
     _ObjAddProps(['isDateTime',true,'toVariant','DateTimeToIso8601',
       'fromVariant','Iso8601ToDateTime'],result);
+  wRecordVersion:
+    _ObjAddProps(['isRecordVersion',true],result);
   wCurrency:
     _ObjAddProps(['isCurrency',true],result);
   wVariant:

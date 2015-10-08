@@ -13405,11 +13405,11 @@ type
   end;
 
 {$ifdef FPC}
-  TWMCopyData = packed record
-    Msg: Cardinal;
-    From: HWND;
-    CopyDataStruct: PCopyDataStruct;
-    Result: Longint;
+  TWMCopyData = record
+    Msg: UINT;
+    From: WPARAM;
+    CopyDataStruct: LPARAM;
+    Result: LRESULT;
   end;
 {$endif}
 {$endif}
@@ -33655,6 +33655,7 @@ const
 procedure TSQLRestServer.AnswerToMessage(var Msg: TWMCopyData);
 var call: TSQLRestURIParams;
     P: PUTF8Char;
+    input: PCopyDataStruct;
     Res: packed record
       Magic: cardinal;
       Status: cardinal;
@@ -33666,8 +33667,9 @@ begin
   Msg.Result := HTML_NOTFOUND;
   if (self=nil) or (Msg.From=0) then
     exit;
-  P := Msg.CopyDataStruct^.lpData;
-  if (P=nil) or (Msg.CopyDataStruct^.cbData<=7) then
+  input := PCopyDataStruct(Msg.CopyDataStruct);
+  P := input^.lpData;
+  if (P=nil) or (input^.cbData<=7) then
     exit;
   if PCardinal(P)^<>MAGIC_SYN then
     exit; // invalid layout: a broadcasted WM_COPYDATA message? :(
@@ -33683,8 +33685,7 @@ begin
   if call.InHead='' then
     call.InHead := Header else
     call.InHead := call.InHead+#13#10+Header;
-  with Msg.CopyDataStruct^ do
-    SetString(call.InBody,P,PtrInt(cbData)-(P-lpData));
+  SetString(call.InBody,P,PtrInt(input^.cbData)-(P-input^.lpData));
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
   // note: it's up to URI overridden method to implement access rights
   URI(call);
@@ -43162,12 +43163,12 @@ end;
 procedure TSQLRestClientURIMessage.WMCopyData(var Msg: TWMCopyData);
 begin
   if (self=nil) or (Msg.From<>fServerWindow) or
-     (Msg.CopyDataStruct^.dwData<>fServerWindow) then
+     (PCopyDataStruct(Msg.CopyDataStruct)^.dwData<>fServerWindow) then
     exit;
   Msg.Result := HTML_SUCCESS; // Send something back
   if fCurrentResponse=#0 then // expect some response?
-    SetString(fCurrentResponse,PAnsiChar(Msg.CopyDataStruct^.lpData),
-      Msg.CopyDataStruct^.cbData);
+    SetString(fCurrentResponse,PAnsiChar(PCopyDataStruct(Msg.CopyDataStruct)^.lpData),
+      PCopyDataStruct(Msg.CopyDataStruct)^.cbData);
 end;
 
 function TSQLRestClientURIMessage.InternalCheckOpen: boolean;
