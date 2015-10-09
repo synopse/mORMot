@@ -9433,9 +9433,11 @@ type
   protected
     fRefCount: Integer;
     {$ifdef FPC}
-    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function QueryInterface(
+      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+      out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
@@ -43302,7 +43304,8 @@ begin
 end;
 
 {$ifdef FPC}
-function TSQLRecordInterfaced.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+function TSQLRecordInterfaced.QueryInterface(
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint;
 {$else}
 function TSQLRecordInterfaced.QueryInterface(const IID: TGUID; out Obj): HResult;
 {$endif}
@@ -43312,14 +43315,12 @@ begin
     result := E_NOINTERFACE;
 end;
 
-function TSQLRecordInterfaced._AddRef:
-  {$ifdef FPC}longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF}{$else}integer{$endif};
+function TSQLRecordInterfaced._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   result := InterlockedIncrement(fRefCount);
 end;
 
-function TSQLRecordInterfaced._Release:
-  {$ifdef FPC}longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF}{$else}integer{$endif};
+function TSQLRecordInterfaced._Release: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   result := InterlockedDecrement(fRefCount);
   if result=0 then
@@ -46965,9 +46966,17 @@ type
   protected
     fVTable: PPointerArray;
     function FakeCall(var aCall: TFakeCallStack): Int64;
+    {$ifdef FPC}
+    function FakeQueryInterface(
+      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+      out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function Fake_AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function Fake_Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
     function FakeQueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function Fake_AddRef: Integer; stdcall;
     function Fake_Release: Integer; stdcall;
+    {$endif}
     function SelfFromInterface: TInterfacedObjectFake;
       {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
     procedure InterfaceWrite(W: TJSONSerializer; const aMethod: TServiceMethod;
@@ -47038,17 +47047,22 @@ asm
 end;
 {$endif}
 
-function TInterfacedObjectFake.Fake_AddRef: Integer;
+function TInterfacedObjectFake.Fake_AddRef: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   result := SelfFromInterface._AddRef;
 end;
 
-function TInterfacedObjectFake.Fake_Release: Integer;
+function TInterfacedObjectFake.Fake_Release: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   result := SelfFromInterface._Release;
 end;
 
-function TInterfacedObjectFake.FakeQueryInterface(const IID: TGUID; out Obj): HResult;
+function TInterfacedObjectFake.FakeQueryInterface(
+{$ifdef FPC}
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint;
+{$else}
+  const IID: TGUID; out Obj): HResult;
+{$endif}
 begin
   self := SelfFromInterface;
   if IsEqualGUID(IID,fFactory.fInterfaceIID) then begin

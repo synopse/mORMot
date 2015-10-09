@@ -13388,9 +13388,11 @@ type
     fExpected8087, fSaved8087: word;
     fRefCount: integer;
     {$ifdef FPC}
-    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function QueryInterface(
+      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+      out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
@@ -31614,7 +31616,7 @@ begin
           raise ESynException.CreateUTF8('%.CustomReader("%") not implemented yet from string',
             [self,fCustomTypeName]) else
           i64 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
-        i64 := GetInt64(PropValue);
+        SetInt64(PropValue,i64);
       if i64<0 then
         exit;
       MoveFast(i64,aValue,fDataSize);
@@ -44021,11 +44023,7 @@ end;
 
 { TSynFPUException }
 
-{$ifdef FPC}
-function TSynFPUException._AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-{$else}
-function TSynFPUException._AddRef: Integer;
-{$endif}
+function TSynFPUException._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   if fRefCount=0 then begin
     fSaved8087 := Get8087CW;
@@ -44035,11 +44033,7 @@ begin
   result := 1; // should never be 0 (mark release of TSynFPUException instance)
 end;
 
-{$ifdef FPC}
-function TSynFPUException._Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-{$else}
-function TSynFPUException._Release: Integer;
-{$endif}
+function TSynFPUException._Release: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   dec(fRefCount);
   if fRefCount=0 then
@@ -44049,7 +44043,8 @@ end;
 
 {$ifdef FPC}
 function TSynFPUException.QueryInterface(
-    {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+  out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
 {$else}
 function TSynFPUException.QueryInterface(const IID: TGUID; out Obj): HResult;
 {$endif}

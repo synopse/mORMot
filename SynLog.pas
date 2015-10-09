@@ -739,9 +739,10 @@ type
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     {$ifdef FPC}
-    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function QueryInterface(
+      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
     {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
@@ -2764,7 +2765,7 @@ begin
   end;
 end;
 
-function TSynLog._AddRef: Integer;
+function TSynLog._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
 begin
   if fFamily.Level*[sllEnter,sllLeave]<>[] then
   try
@@ -2797,7 +2798,7 @@ var
 {$endif}
 
 {$STACKFRAMES ON}
-function TSynLog._Release: Integer;
+function TSynLog._Release: {$ifdef FPC}longint{$else}integer{$endif};
 {$ifndef CPU64}
 {$ifndef PUREPASCAL}
 var aStackFrame: PtrInt;
@@ -2933,17 +2934,15 @@ begin
   end;
 end;
 
+function TSynLog.QueryInterface(
 {$ifdef FPC}
-function TSynLog.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-begin
-  Result := E_NOINTERFACE;
-end;
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint;
 {$else}
-function TSynLog.QueryInterface(const IID: TGUID; out Obj): HResult;
+  const IID: TGUID; out Obj): HResult;
+{$endif}
 begin
   Result := E_NOINTERFACE;
 end;
-{$endif}
 
 class function TSynLog.Add: TSynLog;
 begin
