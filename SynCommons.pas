@@ -5929,6 +5929,7 @@ type
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
       Options: TJSONCustomParserSerializationOptions): boolean; virtual;
     /// serialize a binary internal representation into JSON content
+    // - this method won't append a trailing ',' character
     procedure WriteOneLevel(aWriter: TTextWriter; var P: PByte;
       Options: TJSONCustomParserSerializationOptions); virtual;
     /// the associated type name, e.g. for a record
@@ -30140,7 +30141,7 @@ asm // faster version by AB (direct call to finalization procedures)
         movzx ecx,byte ptr [edx].TFieldTable.NameLen
         push ebx
         mov ebx,eax
-        push esi
+        push esi         
         push edi
         mov edi,[edx+ecx].TFieldTable.ManagedCount
         lea esi,[edx+ecx].TFieldTable.ManagedFields
@@ -31517,15 +31518,18 @@ end;
 
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
-var i,int: integer;
+var i: integer;
+    i64: Int64;
     V: PByte;
 begin
   case fKnownType of
   ktStaticArray: begin
     aWriter.Add('[');
     V := @aValue;
-    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
+    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
       fNestedArray.WriteOneLevel(aWriter,V,[]);
+      aWriter.Add(',');
+    end;
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
@@ -31544,9 +31548,9 @@ begin
   end;
   *)
   ktEnumeration, ktSet: begin
-    int := 0;
-    MoveFast(aValue,int,fDataSize);
-    aWriter.AddU(int); // storing the value as binary/integer is safe and fast
+    i64 := 0;
+    MoveFast(aValue,i64,fDataSize);
+    aWriter.Add(i64); // storing the value as binary/integer is safe and fast
     //aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
   end;
   ktDynamicArray:
@@ -31568,7 +31572,8 @@ end;
 function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
-    V,i: integer;
+    i: integer;
+    i64: Int64;
     wasString: boolean;
     Val: PByte;
 begin
@@ -31608,11 +31613,11 @@ begin
         if fKnownType=ktSet then
           raise ESynException.CreateUTF8('%.CustomReader("%") not implemented yet from string',
             [self,fCustomTypeName]) else
-          V := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
-        V := GetInteger(PropValue);
-      if V<0 then
+          i64 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+        i64 := GetInt64(PropValue);
+      if i64<0 then
         exit;
-      MoveFast(V,aValue,fDataSize);
+      MoveFast(i64,aValue,fDataSize);
       result := P;
     end;
     ktFixedArray:
@@ -32287,10 +32292,9 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
           if soWriteHumanReadable in Options then
             aWriter.AddCRAndIndent;
           if Prop.NestedProperty[0].PropertyName='' then  // array of simple
-            WriteOneValue(Prop.NestedProperty[0],DynArray) else begin
+            WriteOneValue(Prop.NestedProperty[0],DynArray) else
             Prop.WriteOneLevel(aWriter,DynArray,Options); // array of record
-            aWriter.Add(',');
-          end;
+          aWriter.Add(',');
           {$ifdef ALIGNCUSTOMREC}
           if PtrUInt(DynArray)and 7<>0 then
             inc(DynArray,8-(PtrUInt(DynArray)and 7));
@@ -32302,13 +32306,11 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     end;
     ptRecord: begin
       Prop.WriteOneLevel(aWriter,Value,Options);
-      aWriter.Add(',');
       exit;
     end;
     ptCustom:
       TJSONCustomParserCustom(Prop).CustomWriter(aWriter,Value^);
     end;
-    aWriter.Add(',');
     inc(Value,Prop.fDataSize);
   end;
 var i: integer;
@@ -32332,6 +32334,7 @@ begin
     if soWriteHumanReadable in Options then
       aWriter.Add(' ');
     WriteOneValue(SubProp,P);
+    aWriter.Add(',');
   end;
   aWriter.CancelLastComma;
   dec(aWriter.fHumanReadableLevel);
