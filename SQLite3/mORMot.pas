@@ -4052,6 +4052,18 @@ type
     class function RegisterObjArrayFindType(aDynArray: PTypeInfo): PClassInstance;
   end;
 
+const
+  /// fake TTypeInfo RTTI used for TGUID on older versions of the compiler
+  GUID_FAKETYPEINFO: packed record
+    Kind: TTypeKind;
+    Name: string[5];
+    Size: cardinal;
+    Count: integer;
+  end = (
+    Kind: tkRecord;
+    Name: 'TGUID';
+    Size: sizeof(TGUID);
+    Count: 0);
 
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -21189,7 +21201,6 @@ begin
   Data := GetFieldAddr(Instance);
   fCustomParser.WriteOneLevel(W,Data,
     [soReadIgnoreUnknownFields,soCustomVariantCopiedByReference]);
-  W.CancelLastComma;
 end;
 
 procedure TSQLPropInfoCustomJSON.GetValueVar(Instance: TObject;
@@ -36050,9 +36061,11 @@ begin
       for ndx := 0 to high(MultiPart) do
         with MultiPart[ndx] do
           if ContentType=TEXT_CONTENT_TYPE then begin
+            // append as regular "Name":"TextValue" field
             RawUTF8ToVariant(Content,v);
-            AddValue(Name,v); // append as regular "Name":"TextValue" field
-          end else // append binary file as an object, with Base64-encoded data
+            AddValue(Name,v);
+          end else
+            // append binary file as an object, with Base64-encoded data
             AddValue(Name,_ObjFast(['data',BinToBase64(Content),
               'filename',FileName,'contenttype',ContentType]));
     end;
@@ -48199,8 +48212,10 @@ begin
         ArgTypeName := PS;
         PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
         if PP^=nil then
-          RaiseError('"%" parameter has no information',[ParamName^]);
-        ArgTypeInfo := PP^^;
+          if IdemPropName(ArgTypeName^,'TGUID') then
+            ArgTypeInfo := @GUID_FAKETYPEINFO else
+            RaiseError('"%: %" parameter has no RTTI',[ParamName^,ArgTypeName^]) else
+          ArgTypeInfo := PP^^;
         inc(PP);
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
@@ -48224,7 +48239,11 @@ begin
           ValueDirection := smdResult;
           ArgTypeName := PS;
           PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-          ArgTypeInfo := PP^^;
+          if PP^=nil then
+            if IdemPropName(ArgTypeName^,'TGUID') then
+              ArgTypeInfo := @GUID_FAKETYPEINFO else
+              RaiseError('"result: %" parameter has no RTTI',[ArgTypeName^]) else
+            ArgTypeInfo := PP^^;
           inc(PP);
         end;
       {$ifdef ISDELPHIXE}
