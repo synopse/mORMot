@@ -9464,6 +9464,9 @@ type
   TServiceInstanceImplementation = (
     sicSingle, sicShared, sicClientDriven, sicPerSession, sicPerUser, sicPerGroup,
     sicPerThread);
+  /// set of Server-side instance implementation patterns for
+  // interface-based services
+  TServiceInstanceImplementations = set of TServiceInstanceImplementation;
 
   /// handled kind of parameters for an interface-based service provider method
   // - we do not handle all kind of Delphi variables, but provide some
@@ -17789,6 +17792,9 @@ const
 
   // contains TSQLAuthUser.ComputeHashedPassword('synopse')
   DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
+
+  /// the Server-side instance implementation patterns without any ID
+  SERVICE_IMPLEMENTATION_NOID = [sicSingle,sicShared];
 
 var
   /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
@@ -35380,7 +35386,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       Service.ResultAsJSONObjectWithoutResult or
       ForceServiceResultAsXMLObject; // XML needs a full JSON object as input
     ForceServiceResultAsJSONObjectWithoutResult := ForceServiceResultAsJSONObject and
-      (Service.InstanceCreation in [sicSingle,sicShared]) and
+      (Service.InstanceCreation in SERVICE_IMPLEMENTATION_NOID) and
       Service.ResultAsJSONObjectWithoutResult;
     if ForceServiceResultAsXMLObjectNameSpace='' then
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
@@ -36518,7 +36524,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
   JSONDecode(JSON,['method','params','id'],Values,True);
   if Values[0]=nil then // Method name required
     exit;
-  method := Values[0];
+  SetString(method,Values[0],StrLen(Values[0]));
   ServiceParameters := Values[1];
   ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
   ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
@@ -52080,29 +52086,36 @@ begin
       end else
         aErrorMsg^ := resp;
     end;
-    exit;
+    exit; // leave result=false
   end;
   // decode result
   if aServiceCustomAnswer=nil then begin // decode JSON object
     {$ifdef WITHLOG}
-    if (sllServiceReturn in fRest.fLogFamily.Level) and (resp<>'') then
-      Log.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
+    with fRest.fLogFamily do
+      if (sllServiceReturn in Level) and (resp<>'') then
+        SynLog.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
     {$endif}
     if fResultAsJSONObject then begin
       if aResult<>nil then
         aResult^ := resp;
       if aClientDrivenID<>nil then
         aClientDrivenID^ := 0;
+    end else
+    if (resp<>'') and (aClientDrivenID=nil) and
+       not IdemPChar(GotoNextNotSpace(pointer(resp)),'{"RESULT":') then begin
+      if aResult<>nil then
+        aResult^ := resp; // e.g. when client retrieves the contract
     end else begin
-      JSONDecode(resp,['result','id'],Values,True);
-      if Values[0]=nil then begin // assume ID=0 if no "id":... value
+      JSONDecode(pointer(resp),['result','id'],Values,True);
+      if Values[0]=nil then begin // no "result":... layout
         if aErrorMsg<>nil then
-          aErrorMsg^ := 'Invalid returned JSON content: expects {"result":...}, got '+resp;
-        exit;
+          aErrorMsg^ :=
+            'Invalid returned JSON content: expects {"result":...}, got '+resp;
+        exit; // leave result=false
       end;
       if aResult<>nil then
-        aResult^ := Values[0];
-      if aClientDrivenID<>nil then
+        SetString(aResult^,Values[0],StrLen(Values[0]));
+      if aClientDrivenID<>nil then // assume ID=0 if no "id":... value
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;
   end else begin // free answer returned in TServiceCustomAnswer
