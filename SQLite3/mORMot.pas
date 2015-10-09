@@ -9580,6 +9580,10 @@ type
     // - for smdConst argument, contains -1 (no need to a local var: the value
     // will be on the stack only)
     IndexVar: integer;
+    {$ifndef FPC}
+    /// set ArgTypeName and ArgTypeInfo values from RTTI
+    procedure SetFromRTTI(var P: PByte);
+    {$endif}
     /// serialize the argument into the TServiceContainer.Contract JSON format
     // - non standard types (e.g. clas, enumerate, dynamic array or record)
     // are identified by their type identifier - so contract does not extend
@@ -48088,12 +48092,14 @@ var P: Pointer;
     m,a: integer;
     n: cardinal;
     aURI: RawUTF8;
-procedure RaiseError(const Format: RawUTF8; const Args: array of const);
-begin
-  raise EInterfaceFactoryException.CreateUTF8(
-    '%.AddMethodsFromTypeInfo(%.%) failed - %',
-    [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
-end;
+
+  procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+  begin
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.AddMethodsFromTypeInfo(%.%) failed - %',
+      [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
+  end;
+
 begin
   // handle interface inheritance via recursive calls
   P := aInterface^.ClassType;
@@ -48209,14 +48215,7 @@ begin
           ArgsOutNotResultLast := a;
         ParamName := PS;
         PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-        ArgTypeName := PS;
-        PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-        if PP^=nil then
-          if IdemPropName(ArgTypeName^,'TGUID') then
-            ArgTypeInfo := @GUID_FAKETYPEINFO else
-            RaiseError('"%: %" parameter has no RTTI',[ParamName^,ArgTypeName^]) else
-          ArgTypeInfo := PP^^;
-        inc(PP);
+        SetFromRTTI(PB);
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
@@ -48237,14 +48236,7 @@ begin
         with Args[n] do begin
           ParamName := @CONST_PSEUDO_RESULT_NAME;
           ValueDirection := smdResult;
-          ArgTypeName := PS;
-          PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-          if PP^=nil then
-            if IdemPropName(ArgTypeName^,'TGUID') then
-              ArgTypeInfo := @GUID_FAKETYPEINFO else
-              RaiseError('"result: %" parameter has no RTTI',[ArgTypeName^]) else
-            ArgTypeInfo := PP^^;
-          inc(PP);
+          SetFromRTTI(PB);
         end;
       {$ifdef ISDELPHIXE}
       inc(PB,PW^); // skip custom attributes
@@ -50903,6 +50895,25 @@ end;
 
 
 { TServiceMethodArgument }
+
+{$ifndef FPC}
+procedure TServiceMethodArgument.SetFromRTTI(var P: PByte);
+var PS: PShortString absolute P;
+    PP: ^PPTypeInfo absolute P;
+begin
+  ArgTypeName := PS;
+  PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+  if PP^=nil then
+    {$ifndef ISDELPHI2010}
+    if IdemPropName(ArgTypeName^,'TGUID') then
+      ArgTypeInfo := @GUID_FAKETYPEINFO else
+    {$endif}
+      raise EInterfaceFactoryException.CreateUTF8(
+       '"%: %" parameter has no RTTI',[ParamName^,ArgTypeName^]) else
+    ArgTypeInfo := PP^^;
+  inc(PP);
+end;
+{$endif FPC}
 
 procedure TServiceMethodArgument.SerializeToContract(WR: TTextWriter);
 const
