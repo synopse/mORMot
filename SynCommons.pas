@@ -2151,13 +2151,17 @@ function DoubleToString(Value: Double): string;
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToString(Value: Int64): string;
 
-const
+var
   /// best possible precision when rendering a "single" kind of float
   // - can be used as parameter for ExtendedToString/ExtendedToStr
-  SINGLE_PRECISION = 8;
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  SINGLE_PRECISION: integer = 8;
   /// best possible precision when rendering a "double" kind of float
   // - can be used as parameter for ExtendedToString/ExtendedToStr
-  DOUBLE_PRECISION = 15;
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  DOUBLE_PRECISION: integer = 15;
 
 type
   {$ifdef CPUARM}
