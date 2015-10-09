@@ -422,7 +422,9 @@
 // used by SynSQLite3, SynSQLite3Static, SynSQlite3RegEx and mORMotSQLite3 units
 {$ifdef CPU64}
   // only one calling convention in the Win64 world
+  {$ifndef FPC}
   {$define SQLITE3_FASTCALL}
+  {$endif}
 {$else}
   // undefined by default: BCC32 -pr fastcall (=Delphi resgister) is broken
   // because of issues with BCC32 itself, or some obfuscated calls in source?
@@ -434,8 +436,12 @@
   {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional 
     {$define NOSQLITE3STATIC}
   {$endif}
+{$else}
+  // Only Win32+Linux32 do support static linked library yet with Delphi
+  {$ifdef CPU64}
+    {$define NOSQLITE3STATIC}
+  {$endif}
 {$endif}
-// Only Win32+Linux32 do support our SQLite3 static linked library yet
 {$ifdef CPU64}
   {$define NOSQLITE3STATIC}
 {$endif}

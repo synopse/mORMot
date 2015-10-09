@@ -1,6 +1,7 @@
 @rem Use MINGW to compile our version of sqlite3.c amalgation file for FPC compatibility
 
-set mingw=c:\progs\mingw
+set mingwvers=5.2.0
+set mingw=c:\progs\mingw\i686-%mingwvers%-posix-dwarf-rt_v4-rev0\mingw32
 
 set path=%path%;%mingw%\bin
 
@@ -9,8 +10,8 @@ set path=%path%;%mingw%\bin
 mkdir ..\fpc-win32
 mkdir ..\fpc-linux32
 @rem need to copy these files only once
-copy %mingw%\lib\libkernel32.a ..\fpc-win32
-copy %mingw%\lib\gcc\mingw32\4.8.1\libgcc.a  ..\fpc-win32
+copy %mingw%\i686-w64-mingw32\lib\libkernel32.a ..\fpc-win32
+copy %mingw%\lib\gcc\i686-w64-mingw32\%mingwvers%\libgcc.a  ..\fpc-win32
 
 cd ..\fpc-win32
 

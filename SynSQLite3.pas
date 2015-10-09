@@ -5466,8 +5466,6 @@ end;
 procedure TSQLite3Library.ForceToUseSharedMemoryManager;
 {$ifdef DELPHI5OROLDER} begin // varargs attribute was unknown under Delphi 5
 {$else}
-{$ifdef CPU64} begin // not working under Win64
-{$else}
 var mem: TSQLite3MemMethods;
     res: integer;
 begin
@@ -5487,7 +5485,6 @@ begin
     SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
     {$endif}
     fUseInternalMM := true;
-{$endif}
 {$endif}
 end;
 

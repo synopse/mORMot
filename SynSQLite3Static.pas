@@ -277,9 +277,15 @@ extern int unixWrite(
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
   {$ifdef MSWINDOWS}
-  {$L fpc-win32\sqlite3.o}
-  {$linklib fpc-win32\libkernel32.a}
-  {$linklib fpc-win32\libgcc.a}
+    {$ifdef CPU64}
+      {$L fpc-win64\sqlite3-64.o}
+      {$linklib fpc-win64\libkernel32.a}
+      {$linklib fpc-win64\libgcc.a}
+    {$else}
+      {$L fpc-win32\sqlite3.o}
+      {$linklib fpc-win32\libkernel32.a}
+      {$linklib fpc-win32\libgcc.a}
+  {$endif}
   {$else}
   {$L fpc-linux32\sqlite3.o}
   {$linklib fpc-linux32\gcc.a}
@@ -322,21 +328,21 @@ end;
 // those functions will be called only under Windows
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_malloc';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'malloc'{$else}alias : '_malloc'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_free';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'free'{$else}alias : '_free'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4 very fast heap manager
 begin
   FreeMem(P);
 end;
 
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_realloc';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'realloc'{$else}alias : '_realloc'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM very fast heap manager
 begin
   result := P;
@@ -344,7 +350,7 @@ begin
 end;
 
 function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_memset';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'memset'{$else}alias : '_memset'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   result := P;
@@ -352,14 +358,14 @@ begin
 end;
 
 procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_memmove';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'memmove'{$else}alias : '_memmove'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count); // move() is overlapping-friendly
 end;
 
 procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_memcpy';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'memcpy'{$else}alias : '_memcpy'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count);
@@ -433,21 +439,21 @@ end;
 {$endif FPC}
 
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_strlen';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'strlen'{$else}alias : '_strlen'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrLen(pointer(p));
 end;
 
 function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_strcmp';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'strcmp'{$else}alias : '_strcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrComp(p1,p2);
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_memcmp';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'memcmp'{$else}alias : '_memcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -470,7 +476,7 @@ begin
 end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_strncmp';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'strncmp'{$else}alias : '_strncmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 var i: integer;
 begin
@@ -563,7 +569,7 @@ end;
 
 procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func);
   cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_qsort';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'qsort'{$else}alias : '_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
@@ -592,7 +598,7 @@ var
   end;
 
 function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '__localtime64';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__localtime64'{$else}alias : '__localtime64'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 var {$ifdef MSWINDOWS}
     uTm: TFileTime;
@@ -625,7 +631,7 @@ begin
 end;
 
 function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}alias : '_localtime';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : 'localtime'{$else}alias : '__localtime32'{$endif};{$endif}
 begin
   result := localtime64(t^);
 end;
@@ -634,13 +640,13 @@ end;
 
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
-  {$ifdef FPC}alias : '__beginthreadex';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__beginthreadex'{$else}alias : '__imp___beginthreadex'{$endif};{$endif}
 begin
   result := CreateThread(security,stkSize,start,arg,flags,threadid);
 end;
 
 procedure _endthreadex(ExitCode: DWORD); cdecl;
-  {$ifdef FPC}alias : '__endthreadex';{$endif}
+  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__endthreadex'{$else}alias : '__imp___endthreadex'{$endif};{$endif}
 begin
   ExitThread(ExitCode);
 end;
@@ -946,7 +952,11 @@ function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integ
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
     {$ifdef MSWINDOWS}
-    alias : '_winWrite';
+      {$ifdef CPU64}
+      alias : 'winWrite';
+      {$else}
+      alias : '_winWrite';
+      {$endif}
     {$else}
     alias : 'unixWrite'; export;
     {$endif}
@@ -1031,7 +1041,11 @@ function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): intege
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
     {$ifdef MSWINDOWS}
+      {$ifdef CPU64}
+      alias : 'winRead';
+      {$else}
       alias : '_winRead';
+      {$endif}
     {$else}
       alias : 'unixRead'; export;
     {$endif}
