@@ -1694,6 +1694,8 @@ type
   // - under a 64 bit Linux system, you should install the 32 bit flavor of
   // libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
+  // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
+  // depending on the default version installation on the system
   TCurlHTTP = class(THttpRequest)
   protected
     fHandle: pointer;
@@ -7012,7 +7014,7 @@ end;
 { ************ libcurl implementation }
 
 const
-  LIBCURL_DLL = {$IFDEF LINUX} 'libcurl.so.3' {$ELSE} 'libcurl.dll' {$ENDIF};
+  LIBCURL_DLL = {$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF};
 
 type
   TCurlOption = (
