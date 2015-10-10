@@ -739,6 +739,9 @@ type
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
   // not have to use the protected fOnTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
+
+  { TSynThread }
+
   TSynThread = class(TThread)
   protected
     // ensure fOnTerminate is called only if NotifyThreadStart has been done
@@ -751,6 +754,8 @@ type
     procedure DoTerminate; override;
     {$endif}
   public
+    /// initialize the server instance, in non suspended state
+    constructor Create(CreateSuspended: Boolean); reintroduce; virtual;
     {$ifndef HASTTHREADSTART}
     /// method to be called when the thread was created as suspended
     // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
@@ -784,12 +789,12 @@ type
   public
     /// initialize the response thread for the corresponding incoming socket
     // - this version will get the request directly from an incoming socket
-    constructor Create(aSock: TSocket; aServer: THttpServer); overload;
+    constructor Create(aSock: TSocket; aServer: THttpServer); reintroduce; overload; 
     /// initialize the response thread for the corresponding incoming socket
     // - this version will handle KeepAlive, for such an incoming request
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
       {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
-      overload; virtual;
+      reintroduce; overload; virtual;
     /// the associated socket to communicate with the client
     property ServerSock: THttpServerSocket read fServerSock;
     /// the associated main HTTP server instance
@@ -810,7 +815,7 @@ type
     fOwner: TSynThreadPool;
   public
     /// initialize the thread
-    constructor Create(Owner: TSynThreadPool);
+    constructor Create(Owner: TSynThreadPool); reintroduce;
     /// will loop for any pending IOCP commands, and execute fOwner.Task()
     procedure Execute; override;
   end;
@@ -976,7 +981,7 @@ type
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: Boolean); reintroduce;
+    constructor Create(CreateSuspended: Boolean); override;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -1135,7 +1140,7 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode='');
+    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode=''); reintroduce;
     /// release all associated memory and handles
     destructor Destroy; override;
     /// will clone this thread into multiple other threads
@@ -1353,7 +1358,8 @@ type
     // cases, maximum is 64) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString
-      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif}); virtual;
+      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
+      reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -3808,6 +3814,15 @@ end;
 
 { TSynThread }
 
+constructor TSynThread.Create(CreateSuspended: Boolean);
+begin
+  {$ifdef FPC}
+  inherited Create(CreateSuspended,1024*1024); // DefaultSizeStack=1MB
+  {$else}
+  inherited Create(CreateSuspended);
+  {$endif}
+end;
+
 {$ifndef LVCL}
 procedure TSynThread.DoTerminate;
 begin
@@ -3817,6 +3832,7 @@ begin
   end;
   inherited DoTerminate;
 end;
+
 {$endif}
 
 {$ifndef HASTTHREADSTART}
@@ -3851,8 +3867,8 @@ begin
     LeaveCriticalSection(fServer.fProcessCS);
   end;
   fConnectionID := fServer.NextConnectionID;
-  inherited Create(false);
   FreeOnTerminate := true;
+  inherited Create(false);
 end;
 
 procedure THttpServerResp.Execute;

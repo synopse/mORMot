@@ -5350,8 +5350,8 @@ begin
   if (cardinal(StepSleepMS)<=1000) and (StepPageNumber>0) then
     fStepSleepMS := StepSleepMS;
   fOnProgress := OnProgress;
-  inherited Create(false);
   FreeOnTerminate := true;
+  inherited Create(false);
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;

@@ -13259,7 +13259,7 @@ end;
 { TTestMultiThreadProcess }
 
 type
-  TTestMultiThreadProcessThread = class(TThread)
+  TTestMultiThreadProcessThread = class(TSynThread)
   protected
     fTest: TTestMultiThreadProcess;
     fID: integer;
@@ -13270,7 +13270,7 @@ type
     procedure Execute; override;
     procedure LaunchProcess;
   public
-    constructor Create(aTest: TTestMultiThreadProcess; aID: integer);
+    constructor Create(aTest: TTestMultiThreadProcess; aID: integer); reintroduce;
     destructor Destroy; override;
   end;
 
@@ -13483,7 +13483,7 @@ procedure TTestMultiThreadProcess.SocketAPI;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
   {$ifndef FPC}
-  if DebugHook=0 then
+  //if DebugHook=0 then
   {$endif}
     Test(TSQLHttpClientWinSock,useHttpSocket);
   {$WARN SYMBOL_PLATFORM ON}
@@ -13493,7 +13493,7 @@ procedure TTestMultiThreadProcess.Websockets;
 begin
   {$WARN SYMBOL_PLATFORM OFF}
   {$ifndef FPC}
-  if DebugHook=0 then
+  //if DebugHook=0 then
   {$endif}
     Test(TSQLHttpClientWebsockets,useBidirSocket);
   {$WARN SYMBOL_PLATFORM ON}
@@ -13534,12 +13534,12 @@ end;
 
 constructor TTestMultiThreadProcessThread.Create(aTest: TTestMultiThreadProcess; aID: integer);
 begin
-  inherited Create(False);
   FreeOnTerminate := false;
   fEvent := TEvent.Create(nil,false,false,'');
   fTest := aTest;
   fID := aID;
   SetLength(fIDs,fTest.fOperationCount);
+  inherited Create(False);
 end;
 
 destructor TTestMultiThreadProcessThread.Destroy;
@@ -13932,7 +13932,7 @@ type
     // IDDDThreadsCommand interface. Will be assigned inside SetUser
     fMyCommand: IDDDThreadsCommand;
   public
-    constructor Create(const aServer, aPort: AnsiString); 
+    constructor Create(const aServer, aPort: AnsiString); reintroduce;
     destructor Destroy; override;
     function SetUser(const aUserName, aPassword: RawUTF8; aHashedPassword: Boolean = false): boolean; reintroduce;
     property MyCommand: IDDDThreadsCommand read fMyCommand;
@@ -13948,7 +13948,7 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(const aId, aRequestCount: integer);
+    constructor Create(const aId, aRequestCount: integer); reintroduce;
     destructor Destroy; override;
     property IsError: boolean read fIsError;
   end;

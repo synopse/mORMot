@@ -38545,8 +38545,8 @@ begin
 {$ifdef LVCL}
   FOnTerminate := fServer.EndCurrentThread;
 {$endif}
-  inherited Create(false);
   FreeOnTerminate := true;
+  inherited Create(false);
 end;
 
 {$ifndef LVCL}

@@ -50491,7 +50491,7 @@ begin
   fProcessEvent := TEvent.Create(nil,false,false,'');
   fCallerEvent := TEvent.Create(nil,false,false,'');
   fThreadName := aThreadName;
-  inherited Create(false);
+  inherited Create(false{$ifdef FPC},1024*1024{$endif}); // DefaultStackSize=1MB
   InitializeCriticalSection(fPendingProcessLock);
 end;
 
