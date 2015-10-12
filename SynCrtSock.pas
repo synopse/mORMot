@@ -5866,7 +5866,7 @@ begin
       NO_ERROR:
       try
         // parse method and headers
-        Context.fConnectionID := Req^.RequestId;
+        Context.fConnectionID := Req^.ConnectionId;
         Context.fURL := Req^.pRawUrl;
         if Req^.Verb in [low(Verbs)..high(Verbs)] then
           Context.fMethod := Verbs[Req^.Verb] else
