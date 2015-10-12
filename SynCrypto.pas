@@ -245,7 +245,9 @@ interface
 
 {$ifdef Linux}
   {$undef USETHREADSFORBIGAESBLOCKS} // uses low-level WinAPI threading
-  {.$define USEPADLOCK} // dedibox linux tested only, but may be OK on Windows
+  {$ifdef KYLIX3}
+    {$define USEPADLOCK} // dedibox Linux tested only
+  {$endif}
 {$else}
   {$ifdef CONDITIONALEXPRESSIONS}
     // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
@@ -467,6 +469,10 @@ type
     procedure EncryptTrailer;
     procedure DecryptTrailer;
   public
+    {$ifdef USEPADLOCK}
+    // used for Padlock only
+    destructor Destroy; override;
+    {$endif}
     /// perform the AES cypher in the corresponding mode
     // - this abstract method will set CV from AES.Context, and fIn/fOut
     // from BufIn/BufOut
@@ -1136,6 +1142,11 @@ end;
 {$L padlock.obj}
 {$L padlock_sha.obj}
 {$L padlock_aes.obj}
+{$else}
+{$L padlock.o}
+{$L padlock_sha.o}
+{$L padlock_aes.o}
+{$endif}
 
 function memcpy(dest, src: Pointer; count: integer): Pointer; cdecl;
 begin
@@ -1165,26 +1176,20 @@ begin
   // called on error -> do nothing
 end;
 
-{$else}
-{$L padlock.o}
-{$L padlock_sha.o}
-{$L padlock_aes.o}
-{$endif}
-
 { this .o files have been generated from the sdk sources with
     gcc-2.95 -c -O2 padlock*.c -I../include
 }
-  function padlock_phe_available: boolean;                                         cdecl; external;
-  function padlock_phe_sha1(buf: pointer; nbytes: integer; var Digest): integer;   cdecl; external;
-  function padlock_phe_sha256(buf: pointer; nbytes: integer; var Digest): integer; cdecl; external;
+function padlock_phe_available: boolean; cdecl; external;
+function padlock_phe_sha1(buf: pointer; nbytes: integer; var Digest): integer; cdecl; external;
+function padlock_phe_sha256(buf: pointer; nbytes: integer; var Digest): integer; cdecl; external;
 
-  function padlock_ace_available: boolean;                                         cdecl; external;
-  function padlock_aes_begin: pointer;                                             cdecl; external;
-  function padlock_aes_setkey(ctx: pointer; const key; key_len: integer): integer; cdecl; external;
-  function padlock_aes_setmodeiv (ctx: pointer; mode: integer; var iv): integer;   cdecl; external;
-  function padlock_aes_encrypt(ctx, bIn, bOut: pointer; nbytes: integer): integer; cdecl; external;
-  function padlock_aes_decrypt(ctx, bIn, bOut: pointer; nbytes: integer): integer; cdecl; external;
-  function padlock_aes_close(ctx: pointer): integer;                               cdecl; external;
+function padlock_ace_available: boolean; cdecl; external;
+function padlock_aes_begin: pointer; cdecl; external;
+function padlock_aes_setkey(ctx: pointer; const key; key_len: integer): integer; cdecl; external;
+function padlock_aes_setmodeiv(ctx: pointer; mode: integer; var iv): integer; cdecl; external;
+function padlock_aes_encrypt(ctx, bIn, bOut: pointer; nbytes: integer): integer; cdecl; external;
+function padlock_aes_decrypt(ctx, bIn, bOut: pointer; nbytes: integer): integer; cdecl; external;
+function padlock_aes_close(ctx: pointer): integer; cdecl; external;
 
 procedure PadlockInit;
 begin
@@ -1649,7 +1654,7 @@ end;
 
 {$ifdef USEAESNI}
 procedure AesNiEncryptXmm7;
-asm // input: eax=TAESContext, xmm7=data; output: xmm7=data
+asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   mov dl,[eax].TAESContext.Rounds
   movdqu xmm0,[eax+16*0]
   movdqu xmm1,[eax+16*1]
@@ -1765,8 +1770,8 @@ procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
  3. This notice may not be removed or altered from any source distribution. }
 var
   ctx: TAESContext absolute Context;
-  s0,s1,s2,s3: cardinal; // TAESBlock s as separate variables
-  t0,t1,t2: cardinal;    // TAESBlock t as separate variables
+  s0,s1,s2,s3: cardinal; // TAESBlock s* as separate variables
+  t0,t1,t2: cardinal;    // TAESBlock t* as separate variables
 {$ifdef AES_ROLLED}
   i: integer;
   pK: PWA4;
@@ -1929,12 +1934,14 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   push edx
   push eax           // padlock_aes_encrypt(ctx.ViaCtx,@BI,@BO,16);
 {$ifdef USEPADLOCKDLL}
-  call dword ptr [padlock_aes_encrypt] {$else}
+  call dword ptr [padlock_aes_encrypt]
+{$else}
   call padlock_aes_encrypt
 {$endif}
   add esp,16 // padlock_aes_encrypt is cdecl -> caller must restore stack
   ret
-@DoAsm: {$endif}
+@DoAsm:
+{$endif USEPADLOCK}
   push ebx
   push esi
   push edi
@@ -2783,13 +2790,14 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   push edx
   push eax           // padlock_aes_decrypt(ctx.ViaCtx,@BI,@BO,16);
 {$ifdef USEPADLOCKDLL}
-  call dword ptr [padlock_aes_decrypt] {$else}
+  call dword ptr [padlock_aes_decrypt]
+{$else}
   call padlock_aes_decrypt
 {$endif}
   add esp,16 // padlock_aes_decrypt is cdecl -> caller must restore stack
   ret
 @DoAsm:
-{$endif}
+{$endif USEPADLOCK}
   push ebx
   push esi
   push edi
@@ -2972,8 +2980,8 @@ begin
         padlock_aes_encrypt(ctx.ViaCtx,pIn,pOut,Count) else
         padlock_aes_decrypt(ctx.ViaCtx,pIn,pOut,Count);
     end;
-    oIn := pointer(PtrUInt(pIn)+Count);
-    oOut := pointer(PtrUInt(pOut)+Count);
+    oIn := pointer(PtrUInt(pIn)+PtrUInt(Count));
+    oOut := pointer(PtrUInt(pOut)+PtrUInt(Count));
     exit;
   end;
 {$endif}
@@ -3027,7 +3035,7 @@ end;
 procedure TAES.Done;
 begin
 end;
-{$endif}
+{$endif USEPADLOCK}
 
 {$ifdef USETHREADSFORBIGAESBLOCKS}
 type
@@ -4655,9 +4663,9 @@ begin
         Crypt.Decrypt(Last);
         Write(@Last,LastLen);
       end;
-{$ifdef USEPADLOCK}
+      {$ifdef USEPADLOCK}
       Crypt.Done; // used for Padlock only
-{$endif}
+      {$endif}
     end;
   finally
     if Tmp<>nil then
@@ -4677,9 +4685,9 @@ begin
     result := false else begin
     Crypt.Decrypt(PAESBlock(buff)^,TAESBlock(Head));
     result := Head.Calc(Key,KeySize)=Head.HeaderCheck;
-{$ifdef USEPADLOCK}
+    {$ifdef USEPADLOCK}
     Crypt.Done; // for Padlock support
-{$endif}
+    {$endif}
   end;
 end;
 
@@ -4892,9 +4900,9 @@ end;
 destructor TAESWriteStream.Destroy;
 begin
   Finish;
-{$ifdef USEPADLOCK}
+  {$ifdef USEPADLOCK}
   AES.Done; // useful for padlock only
-{$endif}
+  {$endif}
   inherited;
 end;
 
@@ -6229,6 +6237,14 @@ end;
 
 
 { TAESAbstractSyn }
+
+{$ifdef USEPADLOCK}
+destructor TAESAbstractSyn.Destroy;
+begin
+  inherited Destroy;
+  AES.Done; // used for Padlock only
+end;
+{$endif USEPADLOCK}
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
