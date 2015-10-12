@@ -3819,7 +3819,7 @@ end;
 constructor TSynThread.Create(CreateSuspended: Boolean);
 begin
   {$ifdef FPC}
-  inherited Create(CreateSuspended,1024*1024); // DefaultSizeStack=1MB
+  inherited Create(CreateSuspended,512*1024); // DefaultSizeStack=512KB
   {$else}
   inherited Create(CreateSuspended);
   {$endif}
