@@ -2228,7 +2228,7 @@ begin
     Prepared^.WhereCount := n; // will match argc in vt_Filter()
     pInfo.orderByConsumed := integer(Prepared^.OmitOrderBy);
     pInfo.estimatedCost := COST[Prepared^.EstimatedCost];
-    if sqlite3.VersionNumber>=3080200 then // starting with SQLite 3.8.2
+    if sqlite3.VersionNumber>=3008002000 then // starting with SQLite 3.8.2
       case Prepared^.EstimatedCost of
       costFullScan:
         pInfo.estimatedRows := Prepared^.EstimatedRows;

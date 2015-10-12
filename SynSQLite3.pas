@@ -1997,7 +1997,7 @@ type
     // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
     /// returns the current version number as a single decimal integer
-    // - equals e.g. 3080301 for '3.8.3.1'
+    // - equals e.g. 3008003001 for '3.8.3.1'
     property VersionNumber: cardinal read fVersionNumber;
   published
     /// will return the class name and SQLite3 version number
@@ -5416,9 +5416,9 @@ constructor TSQLite3Library.Create;
 var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
-    V := libversion; // convert into e.g. 3080301
-    fVersionNumber := GetNextItemCardinal(V,'.')*1000000+
-      GetNextItemCardinal(V,'.')*10000+GetNextItemCardinal(V,'.')*100+
+    V := libversion; // convert into e.g. 3008003001
+    fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
+      GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
       GetNextItemCardinal(V,'.');
   end;
 end;
