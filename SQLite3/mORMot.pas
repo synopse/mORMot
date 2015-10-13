@@ -50564,7 +50564,7 @@ begin
     end;
   end;
   if Inst.Instance=nil then begin
-    Error('instance not found or deprecated');
+    Error('instance not found or deprecated',HTML_FORBIDDEN);
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
