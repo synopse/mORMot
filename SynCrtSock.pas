@@ -7258,6 +7258,10 @@ begin
   if curl.Module=0 then
   try
     curl.Module := LoadLibrary(LIBCURL_DLL);
+    {$ifdef LINUX}
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl.so.3');
+    {$endif}
     if curl.Module=0 then
       raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
         +': try sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);

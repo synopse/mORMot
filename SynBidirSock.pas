@@ -308,9 +308,10 @@ type
     /// finalize the encryption, if was used
     destructor Destroy; override;
     /// initialize the WebSockets binary protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
-    // specify an URI to limit the protocol upgrade to a single resource
-    // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used on on this protocol
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used
+    // on this protocol
     constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
       aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol

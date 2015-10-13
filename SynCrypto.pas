@@ -246,7 +246,7 @@ interface
 {$ifdef Linux}
   {$undef USETHREADSFORBIGAESBLOCKS} // uses low-level WinAPI threading
   {$ifdef KYLIX3}
-    {$define USEPADLOCK} // dedibox Linux tested only
+    {.$define USEPADLOCK} // dedibox Linux tested only
   {$endif}
 {$else}
   {$ifdef CONDITIONALEXPRESSIONS}
