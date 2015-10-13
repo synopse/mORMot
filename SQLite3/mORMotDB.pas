@@ -1184,7 +1184,7 @@ begin
         if fBatchMethod=mDelete then
           for i := 0 to high(Values) do
             Owner.AfterDeleteForceCoherency(
-              fStoredClass,GetInt64(pointer(Values[i])));
+              fStoredClassProps.TableIndex,GetInt64(pointer(Values[i])));
       end;
       Fields := nil; // force new sending block
       BatchBegin := BatchEnd+1;

@@ -4730,7 +4730,7 @@ type
     // !   TSQLRecordClientToBeDeletedID = type TID;
     // !   TSQLOrder = class(TSQLRecord)
     // !   ...
-    // !   published OrderedBy: TSQLRecordClienToBeDeletedtID read fOrderedBy write fOrderedBy;
+    // !   published OrderedBy: TSQLRecordClientToBeDeletedID read fOrderedBy write fOrderedBy;
     // !   ...
     // then this OrderedBy property would be tied to the TSQLRecordClient class
     // of the corresponding model, and the whole record will be deleted when
@@ -8667,10 +8667,12 @@ type
     fRecordReferences: array of record
       TableIndex: integer;
       FieldType: TSQLPropInfo;
-      FieldTable: TSQLRecordClass;
+      FieldTableIndex: integer;
       CascadeDelete: boolean;
     end;
     procedure SetTableProps(aIndex: integer);
+    function GetTableIndexSafe(aTable: TSQLRecordClass;
+      RaiseExceptionIfNotExisting: boolean): integer;
     function GetTableProps(aClass: TSQLRecordClass): TSQLModelRecordProperties;
     /// get the enumerate type information about the possible actions to be
     function GetLocks(aTable: TSQLRecordClass): PSQLLocks;
@@ -15050,7 +15052,7 @@ type
     // - important notice: we don't use FOREIGN KEY constraints in this framework,
     // and handle all integrity check within this method (it's therefore less
     // error-prone, and more cross-database engine compatible)
-    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: TID): boolean; virtual;
+    function AfterDeleteForceCoherency(aTableIndex: integer; aID: TID): boolean; virtual;
     /// update all BLOB fields of the supplied Value
     // - this overridden method will execute the direct static class, if any
     function UpdateBlobFields(Value: TSQLRecord): boolean; override;
@@ -16298,7 +16300,7 @@ type
     // ensure relational database coherency
     // - this overridden method will just return TRUE: in this remote access,
     // true coherency will be performed on the ORM server side
-    function AfterDeleteForceCoherency(Table: TSQLRecordClass; aID: TID): boolean; override;
+    function AfterDeleteForceCoherency(TableIndex: integer; aID: TID): boolean; override;
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;
@@ -29517,33 +29519,45 @@ end;
 
 { TSQLModel }
 
+function TSQLModel.GetTableIndexSafe(aTable: TSQLRecordClass;
+  RaiseExceptionIfNotExisting: boolean): integer;
+begin
+  for result := 0 to fTablesMax do // manual search: GetTableIndex() may fail
+    if fTables[result]=aTable then
+      exit;
+  if RaiseExceptionIfNotExisting then
+    raise EModelException.CreateUTF8('% must include %',[self,aTable]);
+  result := -1;
+end;
+
 procedure TSQLModel.SetTableProps(aIndex: integer);
-var i,j,f: integer;
+var j,f: integer;
     t: TSQLFieldType;
     Kind: TSQLRecordVirtualKind;
     Table: TSQLRecordClass;
     aTableName,aFieldName: RawUTF8;
     Props: TSQLModelRecordProperties;
-    Search: TClass;
     W: TTextWriter;
-procedure RegisterTableForRecordReference(aFieldType: TSQLPropInfo;
-  aFieldTable: TClass);
-var R: integer;
-begin
-  if (aFieldTable=nil) or not aFieldTable.InheritsFrom(TSQLRecord) then
-    exit; // no associated table to track deletion
-  R := length(fRecordReferences);
-  SetLength(fRecordReferences,R+1);
-  with fRecordReferences[R] do begin
-    TableIndex := aIndex;
-    FieldType := aFieldType;
-    FieldTable := pointer(aFieldTable);
-    if aFieldType.InheritsFrom(TSQLPropInfoRTTIInstance) then
-      CascadeDelete := TSQLPropInfoRTTIInstance(aFieldType).CascadeDelete else
-    if aFieldType.InheritsFrom(TSQLPropInfoRTTITID) then
-      CascadeDelete := TSQLPropInfoRTTITID(aFieldType).CascadeDelete;
+
+  procedure RegisterTableForRecordReference(aFieldType: TSQLPropInfo;
+    aFieldTable: TClass);
+  var R: integer;
+  begin
+    if (aFieldTable=nil) or not aFieldTable.InheritsFrom(TSQLRecord) then
+      exit; // no associated table to track deletion
+    R := length(fRecordReferences);
+    SetLength(fRecordReferences,R+1);
+    with fRecordReferences[R] do begin
+      TableIndex := aIndex;
+      FieldType := aFieldType;
+      FieldTableIndex := GetTableIndexSafe(pointer(aFieldTable),true);
+      if aFieldType.InheritsFrom(TSQLPropInfoRTTIInstance) then
+        CascadeDelete := TSQLPropInfoRTTIInstance(aFieldType).CascadeDelete else
+      if aFieldType.InheritsFrom(TSQLPropInfoRTTITID) then
+        CascadeDelete := TSQLPropInfoRTTITID(aFieldType).CascadeDelete;
+    end;
   end;
-end;
+
 begin
   if (cardinal(aIndex)>cardinal(fTablesMax)) or (fTableProps[aIndex]<>nil) then
     raise EModelException.Create('TSQLModel.SetTableProps');
@@ -29569,7 +29583,7 @@ begin
   fSortedTablesName[aIndex] := aTableName;
   fSortedTablesNameIndex[aIndex] := aIndex;
   with Props.Props.Fields do
-  for f := 0 to Count-1 do begin
+  for f := 0 to Count-1 do
     case List[f].SQLFieldType of
     sftRecord:
       RegisterTableForRecordReference(List[f],Table); // Table not used
@@ -29579,19 +29593,9 @@ begin
     sftTID:
       RegisterTableForRecordReference(
         List[f],(List[f] as TSQLPropInfoRTTITID).RecordClass);
-    sftMany: begin
-      Search := (List[f] as TSQLPropInfoRTTIMany).ObjectClass;
-      for i := 0 to fTablesMax do // manual search:  GetTableIndex() may fail
-        if fTables[i]=Search then begin
-          Search := nil;
-          break;
-        end;
-      if Search<>nil then
-        raise EModelException.CreateUTF8('% must include % for %.%',
-          [self,Search,Tables[aIndex],List[f].Name]);
+    sftMany:
+      GetTableIndexSafe(pointer((List[f] as TSQLPropInfoRTTIMany).ObjectClass),true);
     end;
-    end;
-  end;
   if Props.Props.JoinedFieldsTable<>nil then begin
     W := TTextWriter.CreateOwnedStream;
     try
@@ -30893,7 +30897,7 @@ end;
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; var Data: TInt64DynArray; SQL: PRawUTF8=nil): boolean;
 var T: TSQLTableJSON;
-    V,err: integer;
+    V: Int64;
     Prop: RawUTF8;
     P: PUTF8Char;
 begin
@@ -30908,8 +30912,8 @@ begin
         inc(P);
         if PWord(P)^=ord(':')+ord('(')shl 8 then
           inc(P,2); // handle inlined parameters
-        V := GetInt64(P,err);
-        if err=0 then begin
+        SetInt64(P,V);
+        if V>0 then begin
           SetLength(Data,1);
           Data[0] := V;
           result := true;
@@ -31360,14 +31364,14 @@ function TSQLRest.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
 var i: integer;
 begin
   result := false;
-  if (not OneFieldValues(Table,'RowID',SQLWhere,TInt64DynArray(IDs))) or
-     (IDs=nil) then
-    exit;
-  for i := 0 to high(IDs) do
-    if not RecordCanBeUpdated(Table,IDs[i],seDelete) then
-      exit;
-  for i := 0 to high(IDs) do
-    fCache.NotifyDeletion(Table,IDs[i]);
+  if OneFieldValues(Table,'RowID',SQLWhere,TInt64DynArray(IDs)) and
+     (IDs<>nil) then begin
+    for i := 0 to high(IDs) do
+      if not RecordCanBeUpdated(Table,IDs[i],seDelete) then
+        exit;
+    for i := 0 to high(IDs) do
+      fCache.NotifyDeletion(Table,IDs[i]);
+  end;
   result := true;
 end;
 
@@ -34595,21 +34599,22 @@ begin
   result := inherited Delete(Table,ID); // call EngineDelete
   if result then
     // force relational database coherency (i.e. our FOREIGN KEY implementation)
-    AfterDeleteForceCoherency(Table,ID);
+    AfterDeleteForceCoherency(Model.GetTableIndex(Table),ID);
 end;
 
 function TSQLRestServer.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
 var IDs: TIDDynArray;
-    i: integer;
+    TableIndex,i: integer;
 begin
   result := false;
   if not InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs) then
     exit;
-  result := EngineDeleteWhere(Model.GetTableIndexExisting(Table),SQLWhere,IDs);
+  TableIndex := Model.GetTableIndexExisting(Table);
+  result := EngineDeleteWhere(TableIndex,SQLWhere,IDs);
   if result then
     // force relational database coherency (i.e. our FOREIGN KEY implementation)
     for i := 0 to high(IDs) do
-      AfterDeleteForceCoherency(Table,IDs[i]);
+      AfterDeleteForceCoherency(TableIndex,IDs[i]);
 end;
 
 function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): Int64;
@@ -34654,14 +34659,11 @@ begin // overridden method to update all BLOB fields at once
   end;
 end;
 
-function TSQLRestServer.AfterDeleteForceCoherency(Table: TSQLRecordClass;
+function TSQLRestServer.AfterDeleteForceCoherency(aTableIndex: integer;
   aID: TID): boolean;
 var T: integer;
-    Tab: TSQLRecordClass;
     Where: Int64;
-    RecRef: TRecordReference;
     Rest: TSQLRest;
-    ToDo: (toVoidField, toDeleteRecord);
     cascadeOK: boolean;
     W: RawUTF8;
 begin
@@ -34669,46 +34671,34 @@ begin
   {$ifndef CPU64}
   Where := 0; // make compiler happy
   {$endif}
-  RecRef := RecordReference(Model,Table,aID);
-  if RecRef=0 then
-    exit; // nothing to synchronize
-  for T := 0 to high(Model.fRecordReferences) do
+  for T := 0 to length(Model.fRecordReferences)-1 do
   with Model.fRecordReferences[T] do begin
-    ToDo := toVoidField;
     case FieldType.SQLFieldType of
-    sftRecord: begin // TRecordReference published field
-      if CascadeDelete then
-        ToDo := toDeleteRecord;
-      Where := RecRef;
-    end;
-    sftID:           // TSQLRecord published field
-      if FieldTable=Table then
+    sftRecord: // TRecordReference published field
+      Where := RecordReference(aTableIndex,aID);
+    sftID:     // TSQLRecord published field
+      if FieldTableIndex=aTableIndex then
         Where := aID else
         continue;
-    sftTID:          // TTableID = type TID published field
-      if FieldTable=Table then begin
-        if CascadeDelete then
-          ToDo := toDeleteRecord;
-        Where := aID;
-      end else
+    sftTID:    // TTableID = type TID published field
+      if FieldTableIndex=aTableIndex then
+        Where := aID else
         continue;
     else continue;
     end;
-    // set Field=0 where Field references aID
+    if Where=0 then
+      continue;
+    // set Field=0 or delete row where Field references aID
     Int64ToUTF8(Where,W);
-    Tab := Model.Tables[TableIndex];
-    cascadeOK := true;
-    case ToDo of
-    toVoidField: begin
-      Rest := GetStaticDataServerOrVirtualTable(Tab);
+    if CascadeDelete then
+      cascadeOK := Delete(Model.Tables[TableIndex],
+        FieldType.Name+'=:('+W+'):') else begin
+      Rest := GetStaticDataServerOrVirtualTable(TableIndex);
       if Rest<>nil then // fast direct call
         cascadeOK := Rest.EngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W) else
         cascadeOK := MainEngineUpdateField(TableIndex,
           FieldType.Name,'0',FieldType.Name,W);
-    end;
-    toDeleteRecord:
-      cascadeOK := Delete(Tab,FieldType.Name+'=:('+W+'):');
     end;
     if not cascadeOK then
       InternalLog('%.AfterDeleteForceCoherency() failed to handle field %.%',
@@ -34812,8 +34802,8 @@ begin
     ObjArrayAdd(fSessionAuthentication,result); // will be owned by fSessionAuthentications
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
-    fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
     fSQLAuthGroupClass := Model.AddTableInherited(TSQLAuthGroup);
+    fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
     if fAfterCreation and
       ((not TableHasRows(fSQLAuthUserClass)) or
        (not TableHasRows(fSQLAuthGroupClass))) then
@@ -35795,7 +35785,7 @@ begin
       if not Server.RecordCanBeUpdated(Table,TableID,seDelete,@CustomErrorMsg) then
         Call.OutStatus := HTML_FORBIDDEN else begin
         if TableEngine.EngineDelete(TableIndex,TableID) and
-           Server.AfterDeleteForceCoherency(Table,TableID) then begin
+           Server.AfterDeleteForceCoherency(TableIndex,TableID) then begin
           Call.OutStatus := HTML_SUCCESS; // 200 OK
           Server.fCache.NotifyDeletion(TableIndex,TableID);
         end;
@@ -38172,7 +38162,7 @@ begin
           if fCache<>nil then
             fCache.NotifyDeletion(RunTableIndex,ID);
           if (RunningBatchRest<>nil) or
-             AfterDeleteForceCoherency(RunTable,ID) then
+             AfterDeleteForceCoherency(RunTableIndex,ID) then
             Results[Count] := HTML_SUCCESS; // 200 OK
         end;
       end;
@@ -41274,7 +41264,7 @@ begin
     ID,FieldName,Increment);
 end;
 
-function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(Table: TSQLRecordClass;
+function TSQLRestServerRemoteDB.AfterDeleteForceCoherency(TableIndex: integer;
   aID: TID): boolean;
 begin
   result := true; // coherency will be performed on the server side
