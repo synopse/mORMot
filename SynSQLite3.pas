@@ -5416,7 +5416,7 @@ constructor TSQLite3Library.Create;
 var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
-    V := libversion; // convert into e.g. 3008003001
+    V := libversion;        // convert into e.g. 3008003001
     fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
       GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
       GetNextItemCardinal(V,'.');

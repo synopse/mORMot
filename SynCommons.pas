@@ -12543,9 +12543,11 @@ type
     function AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer; overload;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
+    // - any existing Name would be updated with the new Value, unless
+    // OnlyAddMissing is set to TRUE, in which case existing values would remain
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUTF8; const aValue: variant;
-      wasAdded: PBoolean=nil): integer;
+      wasAdded: PBoolean=nil; OnlyAddMissing: boolean=false): integer;
     /// add a value in this document
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible
@@ -12561,6 +12563,13 @@ type
     // - caller should ensure that VKind=dvObject, otherwise it won't do anything
     // - any existing Name would be updated with the new Value
     procedure AddOrUpdateNameValuesToObject(const NameValuePairs: array of const);
+    /// merge some TDocVariantData dvObject properties to a TDocVariantData dvObject
+    // - data is supplied two by two, as Name,Value pairs
+    // - caller should ensure that both variants have VKind=dvObject, otherwise
+    // it won't do anything
+    // - any existing Name would be updated with the new Value, unless
+    // OnlyAddMissing is set to TRUE, in which case existing values would remain
+    procedure AddOrUpdateObject(const NewValues: variant; OnlyAddMissing: boolean=false);
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -34003,6 +34012,17 @@ begin
   end;
 end;
 
+procedure TDocVariantData.AddOrUpdateObject(const NewValues: variant;
+  OnlyAddMissing: boolean);
+var n: integer;
+    new: PDocVariantData;
+begin
+  new := _Safe(NewValues);
+  if (VKind<>dvArray) and (new^.VKind<>dvArray) then
+    for n := 0 to new^.Count-1 do
+      AddOrUpdateValue(new^.Names[n],new^.Values[n],nil,OnlyAddMissing);
+end;
+
 procedure TDocVariantData.InitArray(const Items: array of const;
   aOptions: TDocVariantOptions=[]);
 var arg: integer;
@@ -35076,7 +35096,7 @@ begin
 end;
 
 function TDocVariantData.AddOrUpdateValue(const aName: RawUTF8;
-  const aValue: variant; wasAdded: PBoolean): integer;
+  const aValue: variant; wasAdded: PBoolean; OnlyAddMissing: boolean): integer;
 begin
   if VKind=dvArray then
     raise EDocVariant.CreateUTF8('AddOrUpdateValue("%") on an array',[aName]);
@@ -35085,9 +35105,12 @@ begin
     result := InternalAdd(aName);
     if wasAdded<>nil then
       wasAdded^ := true;
-  end else
+  end else begin
     if wasAdded<>nil then
       wasAdded^ := false;
+    if OnlyAddMissing then
+      exit;
+  end;
   SetVariantByValue(aValue,VValue[result]);
 end;
 
