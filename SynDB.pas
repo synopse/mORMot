@@ -386,10 +386,10 @@ type
     IndexName: RawUTF8;
     /// description of the index type
     // - for MS SQL possible values are:
-    // ! HEAP | CLUSTERED | NONCLUSTERED | XML |SPATIAL
+    // $ HEAP | CLUSTERED | NONCLUSTERED | XML |SPATIAL
     //  - for Oracle:
-    // ! NORMAL | BITMAP | FUNCTION-BASED NORMAL | FUNCTION-BASED BITMAP | DOMAIN
-    //  see @http://docs.oracle.com/cd/B19306_01/server.102/b14237/statviews_1069.htm
+    // $ NORMAL | BITMAP | FUNCTION-BASED NORMAL | FUNCTION-BASED BITMAP | DOMAIN
+    // see @http://docs.oracle.com/cd/B19306_01/server.102/b14237/statviews_1069.htm
     TypeDesc: RawUTF8;
     /// Expression for the subset of rows included in the filtered index
     // - only set for MS SQL - not retrieved for other DB types yet
@@ -3180,40 +3180,56 @@ const
   // - see TSQLDBFieldTypeDefinition documentation to find out the mapping
   DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition = (
   // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+
   // dUnknown
-  (' INT',' NVARCHAR(%)',' BIGINT',' DOUBLE',' NUMERIC(19,4)',' TIMESTAMP',' CLOB',' BLOB'),
+  (' INT',' NVARCHAR(%)',' BIGINT',' DOUBLE',' NUMERIC(19,4)',' TIMESTAMP',
+   ' CLOB',' BLOB'),
+
   // dDefault
-  (' INT',' NVARCHAR(%)',' BIGINT',' DOUBLE',' NUMERIC(19,4)',' TIMESTAMP',' CLOB',' BLOB'),
+  (' INT',' NVARCHAR(%)',' BIGINT',' DOUBLE',' NUMERIC(19,4)',' TIMESTAMP',
+   ' CLOB',' BLOB'),
+
   // dOracle
-  (' NUMBER(22,0)',' NVARCHAR2(%)',' NUMBER(22,0)',' BINARY_DOUBLE',' NUMBER(19,4)',' DATE',
-   ' NCLOB',' BLOB'),
-  // NCLOB (National Character Large Object) is an Oracle data type that can hold
-  // up to 4 GB of character data. It's similar to a CLOB, but characters are
-  // stored in a NLS or multibyte national character set (like NVARCHAR2)
+  (' NUMBER(22,0)',' NVARCHAR2(%)',' NUMBER(22,0)',' BINARY_DOUBLE',' NUMBER(19,4)',
+   ' DATE',' NCLOB',' BLOB'),
+    // NCLOB (National Character Large Object) is an Oracle data type that can hold
+    // up to 4 GB of character data. It's similar to a CLOB, but characters are
+    // stored in a NLS or multibyte national character set (like NVARCHAR2)
+
   // dMSSQL
   (' int',' nvarchar(%)',' bigint',' float',' money',' datetime',' nvarchar(max)',
    ' varbinary(max)'),
+
   // dJet
-  (' LONG',' VarChar(%)',' Decimal(19,0)',' Double',' Currency',' DateTime',
+  (' Long',' VarChar(%)',' Decimal(19,0)',' Double',' Currency',' DateTime',
    ' LongText',' LongBinary'),
+
   // dMySQL
-  (' INT',' varchar(%) character set UTF8',' bigint',' double',' decimal(19,4)',' datetime',
-   ' mediumtext character set UTF8',' mediumblob'),
+  (' int',' varchar(%) character set UTF8',' bigint',' double',' decimal(19,4)',
+   ' datetime',' mediumtext character set UTF8',' mediumblob'),
+
   // dSQLite
   (' INTEGER',' TEXT',' INTEGER',' FLOAT',' FLOAT',' TEXT',' TEXT',' BLOB'),
+
   // dFirebird
-  (' INTEGER',' VARCHAR(%) CHARACTER SET UTF8',' BIGINT',' FLOAT',' DECIMAL(18,4)',' TIMESTAMP',
-   // about BLOB: http://www.ibphoenix.com/resources/documents/general/doc_54
-   ' BLOB SUB_TYPE 1 SEGMENT SIZE 2000 CHARACTER SET UTF8',
+  (' INTEGER',' VARCHAR(%) CHARACTER SET UTF8',' BIGINT',' FLOAT',' DECIMAL(18,4)',
+   ' TIMESTAMP',' BLOB SUB_TYPE 1 SEGMENT SIZE 2000 CHARACTER SET UTF8',
    ' BLOB SUB_TYPE 0 SEGMENT SIZE 2000'),
+   // about BLOB: http://www.ibphoenix.com/resources/documents/general/doc_54
+
   // dNexusDB
   (' INTEGER',' NVARCHAR(%)',' LARGEINT',' REAL',' MONEY',' DATETIME',' NCLOB',' BLOB'),
-  // VARCHAR(%) CODEPAGE 65001 just did not work well with Delphi<2009
-  // dPostgreSQL - we will create TEXT column instead of VARCHAR(%)
+    // VARCHAR(%) CODEPAGE 65001 just did not work well with Delphi<2009
+
+  // dPostgreSQL
   (' INTEGER',' TEXT',' BIGINT',' DOUBLE PRECISION',' NUMERIC(19,4)',
    ' TIMESTAMP',' TEXT',' BYTEA'),
-  // dDB2 (for CCSID Unicode tables) - bigint needs 9.1 and up
+    // like SQLite3, we will create TEXT column instead of VARCHAR(%), as stated
+    // by http://www.postgresql.org/docs/current/static/datatype-character.html
+   
+  // dDB2 (for CCSID Unicode tables)
   (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob')
+    { note: bigint needs 9.1 and up }
   );
 
   /// the known column data types corresponding to our TSQLDBFieldType types
@@ -3244,17 +3260,17 @@ const
   // - InsertFmt will replace '%' with the maximum number of lines to be retrieved
   // - used by TSQLDBConnectionProperties.AdaptSQLLimitForEngineList()
   DB_SQLLIMITCLAUSE: array[TSQLDBDefinition] of TSQLDBDefinitionLimitClause  = (
-    (Position: posNone;   InsertFmt:nil),                         // dUnknown
-    (Position: posNone;   InsertFmt:nil),                         // dDefault
-    (Position: posWhere;  InsertFmt:'rownum<=%'),                 // dOracle
-    (Position: posSelect; InsertFmt:'top(%) '),                   // dMSSQL
-    (Position: posSelect; InsertFmt:'top % '),                    // dJet
-    (Position: posAfter;  InsertFmt:' limit %'),                  // dMySQL
-    (Position: posAfter;  InsertFmt:' limit %'),                  // dSQLite
-    (Position: posSelect; InsertFmt:'first % '),                  // dFirebird
-    (Position: posSelect; InsertFmt:'top % '),                    // dNexusDB
-    (Position: posAfter;  InsertFmt:' limit %'),                  // dPostgreSQL
-    (Position: posAfter;  InsertFmt:' fetch first % rows only')); // dDB2
+    (Position: posNone;   InsertFmt:nil),                         { dUnknown    }
+    (Position: posNone;   InsertFmt:nil),                         { dDefault    }
+    (Position: posWhere;  InsertFmt:'rownum<=%'),                 { dOracle     }
+    (Position: posSelect; InsertFmt:'top(%) '),                   { dMSSQL      }
+    (Position: posSelect; InsertFmt:'top % '),                    { dJet        }
+    (Position: posAfter;  InsertFmt:' limit %'),                  { dMySQL      }
+    (Position: posAfter;  InsertFmt:' limit %'),                  { dSQLite     }
+    (Position: posSelect; InsertFmt:'first % '),                  { dFirebird   }
+    (Position: posSelect; InsertFmt:'top % '),                    { dNexusDB    }
+    (Position: posAfter;  InsertFmt:' limit %'),                  { dPostgreSQL }
+    (Position: posAfter;  InsertFmt:' fetch first % rows only')); { dDB2        }
 
   /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
@@ -5407,7 +5423,7 @@ end;
 function TSQLDBConnectionProperties.SQLFieldCreate(const aField: TSQLDBColumnCreate;
   var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
-  if (aField.DBType=ftUTF8) and (aField.Width-1<fSQLCreateFieldMax) then
+  if (aField.DBType=ftUTF8) and (cardinal(aField.Width-1)<fSQLCreateFieldMax) then
     result := FormatUTF8(fSQLCreateField[ftNull],[aField.Width]) else
     result := fSQLCreateField[aField.DBType];
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
