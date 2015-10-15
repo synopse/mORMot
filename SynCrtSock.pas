@@ -329,18 +329,21 @@ type
   PPtrUInt = ^PtrUInt;
 {$endif}
 
+  {$M+}
   /// exception thrown by the classes of this unit
   ECrtSocket = class(Exception)
   protected
-    fSocketError: integer;
+    fLastError: integer;
   public
     /// will concat the message with the WSAGetLastError information
     constructor Create(const Msg: string); overload;
     /// will concat the message with the supplied WSAGetLastError information
     constructor Create(const Msg: string; Error: integer); overload;
+  published
     /// the associated WSAGetLastError value
-    property SocketError: integer read fSocketError;
+    property LastError: integer read fLastError;
   end;
+  {$M-}
 
   TCrtSocketClass = class of TCrtSocket;
 
@@ -1632,14 +1635,10 @@ type
   end;
 
   /// WinINet exception type
-  EWinINet = class(Exception)
-  protected
-    fCode: DWORD;
+  EWinINet = class(ECrtSocket)
   public
     /// create a WinINet exception, with the error message as text
     constructor Create;
-    /// associated Error Code, as retrieved from API
-    property ErrorCode: DWORD read fCode;
   end;
 
   /// a class to handle HTTP/1.1 request using the WinHTTP API
@@ -4304,9 +4303,9 @@ end;
 constructor ECrtSocket.Create(const Msg: string; Error: integer);
 begin
   if Error=0 then
-    fSocketError := WSAEWOULDBLOCK else // if unknown, probably a timeout
-    fSocketError := abs(Error);
-  inherited CreateFmt('%s %d (%s)',[Msg,fSocketError,SysErrorMessage(fSocketError)]);
+    fLastError := WSAEWOULDBLOCK else // if unknown, probably a timeout
+    fLastError := abs(Error);
+  inherited CreateFmt('%s %d (%s)',[Msg,fLastError,SysErrorMessage(fLastError)]);
 end;
 
 
@@ -5278,10 +5277,12 @@ begin
     move(pointer(RemoteIP)^,D^,length(RemoteIP));
     inc(D,length(RemoteIP));
     PWord(D)^ := 13+10 shl 8;
-  end;
   {$ifopt C+}
-  inc(D,2);
+    inc(D,2);
+  end;
   assert(D-pointer(result)=L);
+  {$else}
+  end;
   {$endif}
 end;
 
@@ -5534,15 +5535,14 @@ end;
 { EHttpApiServer }
 
 type
-  EHttpApiServer = class(Exception)
+  EHttpApiServer = class(ECrtSocket)
   protected
-    fLastError: integer;
     fLastApi: THttpAPIs;
   public
     class procedure RaiseOnError(api: THttpAPIs; Error: integer);
     constructor Create(api: THttpAPIs; Error: integer); reintroduce;
+  published
     property LastApi: THttpAPIs read fLastApi;
-    property LastError: integer read fLastError;
   end;
 
 class procedure EHttpApiServer.RaiseOnError(api: THttpAPIs; Error: integer);
@@ -6604,9 +6604,9 @@ constructor EWinINet.Create;
 var dwError, tmpLen: DWORD;
     msg, tmp: string;
 begin // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
-  fCode := GetLastError;
-  msg := SysErrorMessagePerModule(fCode,'wininet.dll');
-  if fCode=ERROR_INTERNET_EXTENDED_ERROR then begin
+  fLastError := GetLastError;
+  msg := SysErrorMessagePerModule(fLastError,'wininet.dll');
+  if fLastError=ERROR_INTERNET_EXTENDED_ERROR then begin
     InternetGetLastResponseInfo({$ifdef FPC}@{$endif}dwError,nil,tmpLen);
     if tmpLen > 0 then begin
       SetLength(tmp,tmpLen);
@@ -6614,7 +6614,7 @@ begin // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
       msg := msg+' ['+tmp+']';
     end;
   end;
-  inherited CreateFmt('%s (%d)',[msg,fCode]);
+  inherited CreateFmt('%s (%d)',[msg,fLastError]);
 end;
 
 
