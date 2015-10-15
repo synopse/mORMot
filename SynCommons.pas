@@ -2927,28 +2927,28 @@ function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): 
 /// fast replace of all #9 chars by a given string
 function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
 
-/// format a text content with quotes
+/// format a text content with SQL-like quotes
 // - UTF-8 version of the function available in SysUtils
 // - this function implements what is specified in the official SQLite3
-//   documentation: "A string constant is formed by enclosing the string in single
-//   quotes ('). A single quote within the string can be encoded by putting two
-//   single quotes in a row - as in Pascal."
+// documentation: "A string constant is formed by enclosing the string in single
+// quotes ('). A single quote within the string can be encoded by putting two
+// single quotes in a row - as in Pascal."
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar=''''): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// format a buffered text content with quotes
+/// format a buffered text content with SQL-like quotes
 // - this function implements what is specified in the official SQLite3
-//   documentation: "A string constant is formed by enclosing the string in single
-//   quotes ('). A single quote within the string can be encoded by putting two
-//   single quotes in a row - as in Pascal."
+// documentation: "A string constant is formed by enclosing the string in single
+// quotes ('). A single quote within the string can be encoded by putting two
+// single quotes in a row - as in Pascal."
 function QuotedStr(Text: PUTF8Char; Quote: AnsiChar): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// format a buffered text content with quotes
+/// format a buffered text content with SQL-like quotes
 // - this function implements what is specified in the official SQLite3
-//   documentation: "A string constant is formed by enclosing the string in single
-//   quotes ('). A single quote within the string can be encoded by putting two
-//   single quotes in a row - as in Pascal."
+// documentation: "A string constant is formed by enclosing the string in single
+// quotes ('). A single quote within the string can be encoded by putting two
+// single quotes in a row - as in Pascal."
 procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); overload;
 
 /// convert a buffered text content into a JSON string
@@ -6490,9 +6490,10 @@ type
     // - Instance must be not nil
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar);
     /// append a quoted string as JSON, with in-place decoding
-    // - if QuotedString does not start with ', it will written directly
-    // (i.e. expects to be a number)
-    // - as used e.g. by TJSONObjectDecoder.EncodeAsJSON
+    // - if QuotedString does not start with ' or ", it will written directly
+    // (i.e. expects to be a number, or null/true/false constants)
+    // - as used e.g. by TJSONObjectDecoder.EncodeAsJSON method and
+    // JSONEncodeNameSQLValue() function
     procedure AddQuotedStringAsJSON(const QuotedString: RawUTF8);
     /// append an array of integers as CSV
     procedure AddCSVInteger(const Integers: array of Integer); overload;
@@ -8080,6 +8081,10 @@ function JSONEncodeArrayOfConst(const Values: array of const;
 // the integer mapped value will be transmitted, therefore wrongly)
 procedure JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUTF8); overload;
+
+/// encode as JSON {"name":value} object, from a potential SQL quoted value
+// - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON() 
+procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUTF8);
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - data will be set in Values, according to the Names supplied e.g.
@@ -41241,27 +41246,30 @@ end;
 procedure TTextWriter.AddQuotedStringAsJSON(const QuotedString: RawUTF8);
 var L: integer;
     P,B: PUTF8Char;
+    quote: AnsiChar;
 begin
   L := length(QuotedString);
-  if L>0 then
-  if (QuotedString[1]='''') and (QuotedString[L]='''') then begin
-    Add('"');
-    P := pointer(QuotedString);
-    inc(P);
-    repeat
-      B := P;
-      while P[0]<>'''' do inc(P);
-      if P[1]<>'''' then
-        break; // end quote
+  if L>0 then begin
+    quote := QuotedString[1];
+    if (quote in ['''','"']) and (QuotedString[L]=quote) then begin
+      Add('"');
+      P := pointer(QuotedString);
       inc(P);
-      AddJSONEscape(B,P-B);
-      inc(P); // ignore double quote
-    until false;
-    if P-B<>0 then
-      AddJSONEscape(B,P-B);
-    Add('"');
-  end else
-    AddNoJSONEscape(pointer(QuotedString),length(QuotedString));
+      repeat
+        B := P;
+        while P[0]<>quote do inc(P);
+        if P[1]<>quote then
+          break; // end quote
+        inc(P);
+        AddJSONEscape(B,P-B);
+        inc(P); // ignore double quote
+      until false;
+      if P-B<>0 then
+        AddJSONEscape(B,P-B);
+      Add('"');
+    end else
+      AddNoJSONEscape(pointer(QuotedString),length(QuotedString));
+  end;
 end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
@@ -41723,7 +41731,7 @@ begin
     W.Add('[');
     W.AddCSVDouble(Values);
     W.Add(']');
-    result := W.Text;
+    W.SetText(result);
   finally
     W.Free
   end;
@@ -41737,7 +41745,7 @@ begin
     W.Add('[');
     W.AddCSVUTF8(Values);
     W.Add(']');
-    result := W.Text;
+    W.SetText(result);
   finally
     W.Free
   end;
@@ -41751,7 +41759,7 @@ begin
     W.Add('[');
     W.AddCSVInteger(Values);
     W.Add(']');
-    result := W.Text;
+    W.SetText(result);
   finally
     W.Free
   end;
@@ -41777,10 +41785,30 @@ begin
       AddCSVConst(Values);
       if not WithoutBraces then
         Add(']');
-      result := Text;
+      SetText(result);
     finally
       Free
     end;
+end;
+
+procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8;
+  var result: RawUTF8);
+begin
+  if (SQLValue<>'') and (SQLValue[1] in ['''','"']) then
+    // unescape SQL quoted string value into a valid JSON string
+    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    try
+      Add('{','"');
+      AddNoJSONEscapeUTF8(Name);
+      Add('"',':');
+      AddQuotedStringAsJSON(SQLValue);
+      Add('}');
+      SetText(result);
+    finally
+      Free;
+    end else
+    // Value is a number or null/true/false
+    result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
 procedure JSONDecode(var JSON: RawUTF8;
