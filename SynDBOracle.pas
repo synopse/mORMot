@@ -136,6 +136,7 @@ unit SynDBOracle;
   - remove unneeded TSQLDBOracleStatement.Prepare() Enter/Leave logs
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
     shared with SynDB and mORMot units (includes methods refactoring)
+  - fixed column descriptor memory leak in case UseCache=true
 
 }
 
@@ -3192,6 +3193,9 @@ begin
           end;
         end;
       end;
+      // avoid memory leak for cached statement
+      if DescriptorFree(oHandle, OCI_DTYPE_PARAM)<>OCI_SUCCESS then
+        SynDBLog.Add.Log(sllError, 'Invalid column descriptor release');
     end;
     assert(fColumn.Count=integer(ColCount));
     // 3. Dispatch data in row buffer
