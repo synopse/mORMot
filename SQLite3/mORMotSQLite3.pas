@@ -1464,14 +1464,14 @@ begin
   Props := Model.TableProps[TableModelIndex].Props;
   if Props.Fields.IndexByName(SetFieldName)<0 then
     Exit;
-  WhereID := 0;
   if IsRowID(pointer(WhereFieldName)) then begin
     WhereID := GetInt64(Pointer(WhereValue));
     if WhereID<=0 then
-      exit; // limitation: will only check for update from RowID
+      exit;
   end else
     if Props.Fields.IndexByName(WhereFieldName)<0 then
-      exit;
+      exit else
+      WhereID := 0;
   if InternalUpdateEventNeeded(TableModelIndex) or
      (Props.RecordVersionField<>nil) then begin
     if WhereID>0 then begin
@@ -1497,10 +1497,10 @@ begin
            Props.RecordVersionField,RecordVersionCompute,ID[0]]) else begin
       IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
       if Props.RecordVersionField=nil then
-        result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID IN (%)',
+        result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,IDs]) else begin
         RecordVersion := RecordVersionCompute;
-        result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID IN (%)',
+        result := ExecuteFmt('UPDATE % SET %=%,%=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,
            Props.RecordVersionField,RecordVersion,IDs]);
       end;
@@ -1510,15 +1510,11 @@ begin
     JSON := '{"'+SetFieldName+'":'+SetValue+'}';
     for i := 0 to high(ID) do
       InternalUpdateEvent(seUpdate,TableModelIndex,ID[i],JSON,nil);
-  end else begin
-    if IsRowID(pointer(WhereFieldName)) then begin
-      WhereID := GetInt64(Pointer(WhereValue));
-      if (WhereID<=0) or not RecordCanBeUpdated(Props.Table,WhereID,seUpdate) then
-        exit; // limitation: will only check for update from RowID
-    end;
-    result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
-      [Props.SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
-  end;
+  end else
+    if (WhereID>0) and not RecordCanBeUpdated(Props.Table,WhereID,seUpdate) then
+      exit else // limitation: will only check for update when RowID is provided
+      result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
+        [Props.SQLTableName,SetFieldName,SetValue,WhereFieldName,WhereValue]);
 end;
 
 function TSQLRestServerDB.UpdateBlobFields(Value: TSQLRecord): boolean;
