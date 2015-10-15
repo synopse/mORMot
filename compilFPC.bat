@@ -11,7 +11,7 @@ echo.
 cd \dev\lib\SQLite3
 echo Compiling...
 
-c:\Development\FreePascal\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O2 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
+c:\Development\FreePascal\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O2 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -Fu%lib%\kylix -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
 
 rem C:\development\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O2 -XX -ve -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilation
 

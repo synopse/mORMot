@@ -18,7 +18,7 @@ cd ..\fpc-win32
 attrib -r sqlite3.o 
 del sqlite3.o
 
-gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS ..\SQLite3\sqlite3.c
+gcc -O2 -c -DSQLITE_ENABLE_FTS3 ..\SQLite3\sqlite3.c
 
 attrib +r sqlite3.o 
 

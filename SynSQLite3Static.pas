@@ -1,4 +1,4 @@
-/// SQLite3 3.8.11.1 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.9.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -47,8 +47,8 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.8.11.1 engine
-   *******************************************
+    Statically linked SQLite3 3.9.0 engine
+   ****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
@@ -74,7 +74,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.8.11.1
+  - updated SQLite3 engine to latest version 3.9.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -82,7 +82,6 @@ unit SynSQLite3Static;
   - under Win64, expects an external sqlite3-64.dll file to be available
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
-
 
 }
 
@@ -116,7 +115,8 @@ end;
 initialization
   DoInitialization;
 
-{$else}
+{$else NOSTATIC}
+
 uses
   {$ifdef MSWINDOWS}
   Windows,
@@ -189,7 +189,7 @@ const
   // - default size is therefore 16KB
   SQLEncryptTableSize = $4000;
 
-{
+(*
   Code below will link all database engine, from amalgamation source file:
 
  - to compile with free Borland C++ compiler 5.5.1 from the command line:
@@ -198,47 +198,12 @@ const
      int __cdecl fts3CompareElemByTerm(const void *lhs, const void *rhs)
      \dev\bcc\bin\bcc32 -6 -O2 -c -d -pr -u- sqlite3.c
  - to compile for FPC using the MinGW compiler: run c-fpcmingw.bat
-    gcc -O2 -c -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS sqlite3.c
+    gcc -O2 -c -DSQLITE_ENABLE_FTS3 sqlite3.c
     and copy libgcc.a and libkernel32.a from your MinGW folders
  - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
-    gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_RTREE sqlite3.c
+    gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 sqlite3.c
     and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
     For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
-
- - the following defines must be added in the beginning of the sqlite3.c file:
-
-//#define SQLITE_ENABLE_FTS3
-//  this unit is FTS3-ready, but not compiled with it by default
-//  if you don't use FTS3, dont define this conditional: you'll spare 50KB of code
-//  this conditional is defined at compile time, in order to create sqlite3fts3.obj
-#define SQLITE_DEFAULT_MEMSTATUS 0
-//  don't need any debug here
-#define SQLITE_THREADSAFE 2
-//  assuming multi-thread safety is made by caller - in our framework, there is
-// only one thread using the database connection at the same time, but there could
-// be multiple database connection at the same time (previous was 0 could be unsafe)
-#define SQLITE_OMIT_SHARED_CACHE 1
-// no need of shared cache in a threadsafe calling model
-#define SQLITE_OMIT_AUTOINIT 1
-//  sqlite3.initialize() is done in initialization section below -> no AUTOINIT
-#define SQLITE_OMIT_DEPRECATED 1
-//  spare some code size - is now defined only if compiled without FTS3/FTS4
-#ifndef SQLITE_ENABLE_FTS3
-  #define SQLITE_OMIT_TRACE 1
-#endif
-// we don't need sqlite3.profile() and sqlite3.trace() interfaces
-#define SQLITE_OMIT_LOAD_EXTENSION 1
-// we don't need extension in an embedded engine
-#define SQLITE_OMIT_COMPILEOPTION_DIAGS 1
-// we don't need Compilation Options Diagnostics in our embedded engine
-#define SQLITE_OMIT_PROGRESS_CALLBACK 1
-// we don't need sqlite3.progress_handler() API function
-#define SQLITE_ENABLE_RTREE 1
-// the RTREE extension is now (from v.1.8/3.7) compiled into the engine
-//#define SQLITE_OMIT_LOOKASIDE
-// even if we use FastMM4/SynScaleMM, LookAside seems mandatory in c source
-#define SQLITE_WITHOUT_MSIZE
-// _msize() is not available (nor needed) with FastMM4 memory manager
 
 and, in the sqlite3.c source file, the following functions are made external
 in order to allow our proprietary but simple and efficient encryption system:
@@ -273,7 +238,26 @@ extern int unixWrite(
   sqlite3_int64 offset
 );
 
-}
+
+Some notes for version 3.9.0 and JSON1 extension:
+
+  - fixed unknown isalnum/isdigit function calls:
+
+#define safe_isdigit(x) sqlite3Isdigit((unsigned char)(x))
+#define safe_isalnum(x) sqlite3Isalnum((unsigned char)(x))
+
+  - use of strtod() converted to:
+  
+    case JSON_REAL: {
+	  double r;
+	  if (sqlite3AtoF(pNode->u.zJContent, &r, sqlite3Strlen30(pNode->u.zJContent), SQLITE_UTF8)==0){
+	    r = 0;
+	  }
+      sqlite3_result_double(pCtx, r);
+      break;
+    }
+
+*)
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
   {$ifdef MSWINDOWS}
@@ -824,7 +808,7 @@ type
 {$endif}
 
   {$ifdef MSWINDOWS}
-  TSQLFile = packed record // see struct winFile in 3.8.7 sqlite3.c
+  TSQLFile = packed record // see struct winFile in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
@@ -840,7 +824,7 @@ type
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
   {$else}
-  TSQLFile = record             // see struct unixFile in 3.8.7 sqlite3.c
+  TSQLFile = record             // see struct unixFile in sqlite3.c
     pMethods: pointer;          // sqlite3.io_methods_ptr
     pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
     unixInodeInfo: pointer;     // Info about locks on this inode
@@ -860,7 +844,7 @@ type
   {$endif}
 
   // those structures are used to retrieve the Windows/Linux file handle
-  TSQLPager = record            // see struct Pager in 3.8.7 sqlite3.c
+  TSQLPager = record            // see struct Pager in sqlite3.c
     pVfs: pointer;
     exclusiveMode, journalMode, useJournal, noSync, fullSync,
     ckptSyncFlags, walsyncFlags, syncFlags, tempFile, noLock, readOnly, memDb,
