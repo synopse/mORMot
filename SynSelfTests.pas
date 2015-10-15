@@ -3190,6 +3190,9 @@ var s,t: RawUTF8;
     I,J: TTimeLogBits;
 begin
   s := DateTimeToIso8601(D,Expanded);
+  if Expanded then
+    Check(length(s)=19) else
+    Check(length(s)=15);
   if Expanded then begin
     Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
     Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
@@ -3213,6 +3216,10 @@ begin
   Check(Abs(D-I.ToDateTime)<(1000/MSecsPerDay));
   E := TimeLogToDateTime(I.Value);
   Check(Abs(D-E)<(1000/MSecsPerDay));
+  s := DateTimeToIso8601(D,Expanded,#0);
+  if Expanded then
+    Check(length(s)=18) else
+    Check(length(s)=14);
 end;
 var i: integer;
     D: TDateTime;

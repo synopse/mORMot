@@ -26661,16 +26661,17 @@ end;
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar='T'): RawUTF8;
 // use YYYYMMDDThhmmss format
+const ISO8601_LEN: array[boolean,boolean] of integer = ((19,18),(15,14));
 var tmp: array[0..31] of AnsiChar;
 begin
   if Expanded then begin
     DateToIso8601PChar(D,tmp,true);
     TimeToIso8601PChar(D,@tmp[10],true,FirstChar);
-    SetString(result,PAnsiChar(@tmp),19);
+    SetString(result,PAnsiChar(@tmp),ISO8601_LEN[false,FirstChar=#0]);
   end else begin
     DateToIso8601PChar(D,tmp,false);
     TimeToIso8601PChar(D,@tmp[8],false,FirstChar);
-    SetString(result,PAnsiChar(@tmp),15);
+    SetString(result,PAnsiChar(@tmp),ISO8601_LEN[true,FirstChar=#0]);
   end;
 end;
 
