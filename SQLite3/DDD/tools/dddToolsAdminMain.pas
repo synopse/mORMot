@@ -40,7 +40,6 @@ type
     fChatFrame: TLogFrame;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
-    procedure OnPageChange(Sender: TObject); virtual;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
@@ -57,10 +56,12 @@ type
     function AddLogFrame(page: TSynPage; const aCaption, aEvents, aPattern:
       RawUTF8; aClass: TLogFrameClass): TLogFrame; virtual;
     procedure EndLog(aLogFrame: TLogFrame); virtual;
+    procedure OnPageChange(Sender: TObject); virtual;
     function CurrentDBFrame: TDBFrame;
     function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState); virtual;
     property Client: TSQLHttpClientWebsockets read fClient;
+    property Page: TSynPager read fPage;
     property LogFrame: TLogFrame read fLogFrame;
     property DBFrame: TDBFrameDynArray read fDBFrame;
     property ChatPage: TSynPage read fChatPage;
@@ -171,6 +172,7 @@ begin
     fDBFrame[0].mmoSQL.SetFocus;
   end;
   fChatPage := AddPage('Chat');
+  fChatPage.TabVisible := false;
 end;
 
 procedure TAdminControl.EndLog(aLogFrame: TLogFrame);
