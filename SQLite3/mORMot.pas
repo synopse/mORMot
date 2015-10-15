@@ -8630,6 +8630,16 @@ type
     property Kind: TSQLRecordVirtualKind read fKind write SetKind default rSQLite3;
   end;
 
+  /// how a TSQLModel stores a foreign link to be cascaded
+  TSQLModelRecordReference = record
+    TableIndex: integer;
+    FieldType: TSQLPropInfo;
+    FieldTable: TSQLRecordClass;
+    FieldTableIndex: integer;
+    CascadeDelete: boolean;
+  end;
+  PSQLModelRecordReference = ^TSQLModelRecordReference;
+  
   /// a Database Model (in a MVC-driven way), for storing some tables types
   // as TSQLRecord classes
   // - share this Model between TSQLRest Client and Server
@@ -8664,12 +8674,7 @@ type
     // after deletion of a record: all other records pointing to it will be
     // reset to 0 or deleted (if CascadeDelete is true) by
     // TSQLRestServer.AfterDeleteForceCoherency
-    fRecordReferences: array of record
-      TableIndex: integer;
-      FieldType: TSQLPropInfo;
-      FieldTableIndex: integer;
-      CascadeDelete: boolean;
-    end;
+    fRecordReferences: array of TSQLModelRecordReference;
     procedure SetTableProps(aIndex: integer);
     function GetTableIndexSafe(aTable: TSQLRecordClass;
       RaiseExceptionIfNotExisting: boolean): integer;
@@ -17866,7 +17871,7 @@ function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
 function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID): TRecordReference; overload;
 
 /// create a TRecordReference with the corresponding parameters
-function RecordReference(aTableIndex,aID: TID): TRecordReference; overload;
+function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a dynamic array of TRecordReference into its corresponding IDs
@@ -29550,7 +29555,10 @@ var j,f: integer;
     with fRecordReferences[R] do begin
       TableIndex := aIndex;
       FieldType := aFieldType;
-      FieldTableIndex := GetTableIndexSafe(pointer(aFieldTable),true);
+      FieldTable := pointer(aFieldTable);
+      FieldTableIndex := GetTableIndexSafe(FieldTable,false);
+      if FieldTableIndex<0 then
+        FieldTableIndex := -2; // allow lazy table index identification
       if aFieldType.InheritsFrom(TSQLPropInfoRTTIInstance) then
         CascadeDelete := TSQLPropInfoRTTIInstance(aFieldType).CascadeDelete else
       if aFieldType.InheritsFrom(TSQLPropInfoRTTITID) then
@@ -34606,9 +34614,9 @@ function TSQLRestServer.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8):
 var IDs: TIDDynArray;
     TableIndex,i: integer;
 begin
-  result := false;
-  if not InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs) then
-    exit;
+  result := InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs);
+  if (IDs=nil) or not result then
+    exit; // nothing to delete
   TableIndex := Model.GetTableIndexExisting(Table);
   result := EngineDeleteWhere(TableIndex,SQLWhere,IDs);
   if result then
@@ -34661,49 +34669,52 @@ end;
 
 function TSQLRestServer.AfterDeleteForceCoherency(aTableIndex: integer;
   aID: TID): boolean;
-var T: integer;
-    Where: Int64;
-    Rest: TSQLRest;
-    cascadeOK: boolean;
-    W: RawUTF8;
-begin
-  result := true; // success if no property found
-  {$ifndef CPU64}
-  Where := 0; // make compiler happy
-  {$endif}
-  for T := 0 to length(Model.fRecordReferences)-1 do
-  with Model.fRecordReferences[T] do begin
-    case FieldType.SQLFieldType of
-    sftRecord: // TRecordReference published field
-      Where := RecordReference(aTableIndex,aID);
-    sftID:     // TSQLRecord published field
-      if FieldTableIndex=aTableIndex then
-        Where := aID else
-        continue;
-    sftTID:    // TTableID = type TID published field
-      if FieldTableIndex=aTableIndex then
-        Where := aID else
-        continue;
-    else continue;
-    end;
+
+  procedure PerformCascade(const Where: Int64; Ref: PSQLModelRecordReference);
+  var W: RawUTF8;
+      cascadeOK: boolean;
+      Rest: TSQLRest;
+  begin // set Field=0 or delete row where Field references aID
     if Where=0 then
-      continue;
-    // set Field=0 or delete row where Field references aID
+      exit;
     Int64ToUTF8(Where,W);
-    if CascadeDelete then
-      cascadeOK := Delete(Model.Tables[TableIndex],
-        FieldType.Name+'=:('+W+'):') else begin
-      Rest := GetStaticDataServerOrVirtualTable(TableIndex);
+    if Ref^.CascadeDelete then
+      cascadeOK := Delete(Model.Tables[Ref^.TableIndex],
+        Ref^.FieldType.Name+'=:('+W+'):') else begin
+      Rest := GetStaticDataServerOrVirtualTable(Ref^.TableIndex);
       if Rest<>nil then // fast direct call
-        cascadeOK := Rest.EngineUpdateField(TableIndex,
-          FieldType.Name,'0',FieldType.Name,W) else
-        cascadeOK := MainEngineUpdateField(TableIndex,
-          FieldType.Name,'0',FieldType.Name,W);
+        cascadeOK := Rest.EngineUpdateField(Ref^.TableIndex,
+          Ref^.FieldType.Name,'0',Ref^.FieldType.Name,W) else
+        cascadeOK := MainEngineUpdateField(Ref^.TableIndex,
+          Ref^.FieldType.Name,'0',Ref^.FieldType.Name,W);
     end;
     if not cascadeOK then
       InternalLog('%.AfterDeleteForceCoherency() failed to handle field %.%',
-        [ClassType,Model.Tables[TableIndex],FieldType.Name],sllWarning);
+        [ClassType,Model.Tables[Ref^.TableIndex],Ref^.FieldType.Name],sllWarning);
   end;
+
+var i: integer;
+    Ref: PSQLModelRecordReference;
+begin
+  Ref := @Model.fRecordReferences[0];
+  if Ref<>nil then begin
+    for i := 1 to length(Model.fRecordReferences) do begin
+      if Ref^.FieldTableIndex=-2 then // lazy initialization
+        Ref^.FieldTableIndex := Model.GetTableIndexSafe(Ref^.FieldTable,false);
+      case Ref^.FieldType.SQLFieldType of
+      sftRecord: // TRecordReference published field
+        PerformCascade(RecordReference(aTableIndex,aID),Ref);
+      sftID:     // TSQLRecord published field
+        if Ref^.FieldTableIndex=aTableIndex then
+          PerformCascade(aID,Ref);
+      sftTID:    // TTableID = type TID published field
+        if Ref^.FieldTableIndex=aTableIndex then
+          PerformCascade(aID,Ref);
+      end;
+      inc(Ref);
+    end;
+  end;
+  result := true; // success even if no match found, or some cascade warnings
 end;
 
 function TSQLRestServer.CreateSQLMultiIndex(Table: TSQLRecordClass;
@@ -41584,7 +41595,7 @@ begin
   end;
 end;
 
-function RecordReference(aTableIndex,aID: TID): TRecordReference;
+function RecordReference(aTableIndex: cardinal; aID: TID): TRecordReference;
 begin
   if (aID=0) or (aTableIndex>63) then
     result := 0 else
