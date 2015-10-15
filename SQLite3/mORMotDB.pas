@@ -1464,7 +1464,7 @@ begin
             [RowIDFieldName,fTableName,ExtWhereFieldName,WhereValue],true);
           if Rows=nil then
             exit;
-          JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+          JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
           while Rows.Step do
             Owner.InternalUpdateEvent(seUpdate,TableModelIndex,Rows.ColumnInt(0),JSON,nil);
         end;

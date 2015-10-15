@@ -1507,7 +1507,7 @@ begin
     end;
     if not result then
       exit;
-    JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+    JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
     for i := 0 to high(ID) do
       InternalUpdateEvent(seUpdate,TableModelIndex,ID[i],JSON,nil);
   end else

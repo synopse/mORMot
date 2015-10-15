@@ -40425,7 +40425,7 @@ begin
       fModified := true;
       if Owner<>nil then begin
         if SetValueJson='' then
-          SetValueJson := '{"'+SetField.Name+'":'+SetValue+'}';
+          JSONEncodeNameSQLValue(SetField.Name,SetValue,SetValueJson);
         Owner.InternalUpdateEvent(seUpdate,fStoredClassProps.TableIndex,Rec.fID,SetValueJson,nil);
       end;
       result := true;

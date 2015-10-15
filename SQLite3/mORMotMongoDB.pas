@@ -614,7 +614,7 @@ begin
       if Owner<>nil then begin
         if Owner.InternalUpdateEventNeeded(TableModelIndex) and
            id.Init(fCollection.FindBSON(query,BSONVariant(['_id',1]))) then begin
-          JSON := '{"'+SetFieldName+'":'+SetValue+'}';
+          JSONEncodeNameSQLValue(SetFieldName,SetValue,JSON);
           while id.Next do
             Owner.InternalUpdateEvent(seUpdate,TableModelIndex,
               id.Item.DocItemToInteger('_id'),JSON,nil);
