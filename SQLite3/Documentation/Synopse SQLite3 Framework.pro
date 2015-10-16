@@ -5256,21 +5256,13 @@ See {\f1\fs20 TSQLDBZEOSConnectionProperties} documentation for further informat
 For our framework, and in completion to {\f1\fs20 SynDBZeos} or our {\f1\fs20 SynOleDB / SynDBODBC} units, the {\f1\fs20 SynDBOracle} unit has been implemented. It allows {\i direct access} to any remote @**Oracle@ server, using the {\i Oracle Call Interface}.
 {\i Oracle Call Interface} (OCI) is the most comprehensive, high performance, native unmanaged interface to the Oracle Database that exposes the full power of the Oracle Database. A direct interface to the {\f1\fs20 oci.dll} library was written, using our DB abstraction classes introduced in {\f1\fs20 @*SynDB@.pas}.
 We tried to implement all best-practice patterns detailed in the official {\i Building High Performance Drivers for Oracle} reference document.
-Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection.
-You can use the latest version of the {\i Oracle Instant Client} (OIC) provided by Oracle - see @http://www.oracle.com/technetwork/database/features/instant-client - which allows to run client applications without installing the standard (huge) Oracle client or having an {\f1\fs20 ORACLE_HOME}. Just deliver the few {\f1\fs20 dll} files in the same directory than the application (probably a {\i mORMot} server), and it will work at amazing speed, with all features of Oracle (other stand-alone direct Oracle access library rely on deprecated Oracle 8 protocol).
-\graph SynDBOCIdirect Oracle Connectivity with SynDBOracle
-\RAD Application\DBExpress寸r BDE
-\DBExpress寸r BDE\ installed力racle Client
-\ installed力racle Client\ Oracle Server\TCP/IP
-\mORMot Application\installed力racle Client
-\installed力racle Client\Oracle Server \TCP/IP
-\mORMot Application已ith OIC dlls\Oracle Server\TCP/IP
-\
+Resulting speed is quite impressive: for all requests, {\f1\fs20 SynDBOracle} is 3 to 5 times faster than a {\f1\fs20 SynOleDB} connection using the native {\i OleDB Provider} supplied by Oracle. A similar (even worse) speed penalty has been observed in comparison with the official ODBC driver from Oracle, via a {\f1\fs20 SynDBODBC}-based connection. For more detailed numbers, see @59@.
+:   Optimized client library
 It is worth saying that, when used in a {\i mORMot} Client-Server architecture, object persistence using an {\i Oracle} database expects only the Oracle instance to be reachable on the Server side, just like with {\i OleDB} or {\i ODBC}.
-Here are the main features of this unit:
+Here are the main features of this {\f1\fs20 SynDBOracle} unit:
 - {\i Direct access} to the {\i Oracle Call Interface} (OCI) client, with no BDE, Midas, DBExpress, nor {\i OleDB / ODBC} provider necessary;
 - Dedicated to work with {\i any version} of the Oracle OCI interface, starting from revision 8;
-- {\i Optimized for the latest features} of Oracle 11g (e.g. using native {\f1\fs20 Int64} for retrieving NUMBER fields with no decimal);
+- {\i Optimized for the latest features} of Oracle 11g/12c (e.g. using native {\f1\fs20 Int64} for retrieving NUMBER fields with no decimal);
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
 - {\i Natively Unicode} (uses internal @*UTF-8@ encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
@@ -5279,11 +5271,49 @@ Here are the main features of this unit:
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
 - Use {\i Rows Array} and {\i BLOB fetching}, for best performance (ZEOS/ZDBC did not handle this, for instance);
-- Handle {\i Prepared Statements} - on both client and server side, if available;
-- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once - see @59@;
+- Handle {\i Prepared Statements} - on both client and server side, if available - server side caching lead to up a 3 times speed boost, from our experiment;
+- Implements {\i @*Array Bind@ing} for very fast bulk modifications - insert, update or deletion of a lot of rows at once;
 - Implements binding of a {\f1\fs20 TInt64DynArray} or {\f1\fs20 TRawUTF8DynArray} as parameter, e.g. within a {\f1\fs20 SELECT .. IN} where clause;
-- Native {\i export to @*JSON@} methods, which will be the main entry point for our @*ORM@ framework;
 - {\i Cursor support}, which is pretty common when working with stored procedures and legacy code.
+Of course, this unit is perfectly integrated with the @27@ process. For instance, it features native {\i export to @*JSON@} methods, which will be the main entry point for our @*ORM@ framework. And {\i Array binding} is handled directly during @*BATCH@ sequences - see @28@.
+:179   Direct connection without Client installation
+You can use the latest version of the {\i @**Oracle Instant Client@} (@**OIC@) provided by Oracle - see @http://www.oracle.com/technetwork/database/features/instant-client - which allows to run client applications without installing the standard (huge) Oracle client or having an {\f1\fs20 ORACLE_HOME}.
+\graph SynDBOCIdirect Oracle Connectivity with SynDBOracle
+\RAD Application\DBExpress寸r BDE
+\DBExpress寸r BDE\ installed力racle Client
+\ installed力racle Client\ Oracle Server\TCP/IP
+\mORMot Application\installed力racle Client
+\installed力racle Client\Oracle Server \TCP/IP
+\mORMot Application已ith OIC dlls\Oracle Server\TCP/IP
+\
+Just deliver the few {\f1\fs20 dll} files in the same directory than the application (probably a {\i mORMot} server), and it will work at amazing speed, with all features of Oracle (other stand-alone direct Oracle access library rely on deprecated Oracle 8 protocol).
+:   Oracle Wallet support
+Password credentials for connecting to databases can now be stored in a client-side {\i @**Oracle Wallet@}, a secure software container used to store authentication and signing credentials.
+This wallet usage can simplify large-scale deployments that rely on password credentials for connecting to databases. When this feature is configured, application code, batch jobs, and scripts no longer need embedded user names and passwords. Risk is reduced because such passwords are no longer exposed in the clear, and password management policies are more easily enforced without changing application code whenever user names or passwords change.
+In order to use this feature, set {\f1\fs20 TSQLDBOracleConnectionProperties.UseWallet} to {\f1\fs20 true} before connecting to the database.
+Wallet configuration is performed on the computer where server is running. You must perform a full Oracle client setup: @*OIC@ - see @179@ - does not give access to wallet authentication.
+Steps to create a Wallet:
+1) Create a folder for you wallet:
+$ > mkdir c:\OraWallets
+2) Create a wallet on the client by using the following syntax at the command line:
+$ > mkstore -wrl c:\OraWallets -create
+Oracle will ask you for the main wallet password - remember it!
+3) Create database connection credentials in the wallet by using the following syntax at the command line:
+$ mkstore -wrl c:\OraWallets -createCredential TNS_alias_name_from_tnsnames_ora username password
+where {\f1\fs20 password} is the password of database user. Oracle will ask you the wallet password - use the main password from previous step.
+4) In the client {\f1\fs20 sqlnet.ora} file, add the {\f1\fs20 WALLET_LOCATION} parameter and set it to the directory location of the wallet and set {\f1\fs20 SQLNET.WALLET_OVERRIDE} parameter to {\f1\fs20 TRUE}:
+$SQLNET.WALLET_OVERRIDE = TRUE
+$WALLET_LOCATION =
+$  (SOURCE =
+$    (METHOD = FILE)
+$    (METHOD_DATA =
+$  (DIRECTORY = c:\OraWallets)
+$  )
+$)
+You can not drop a database while it has a wallet. You need to delete wallet credentials via the next command:
+$mkstore -wrl wallet_location -deleteCredential db_alias
+Oracle will ask to enter the wallet password - use the same password which you used during wallet creation.
+Note that there is also an {\i Oracle Wallet Manager} tool available with your database distribution, if you prefer to use a GUI tool for database administration. \line See  @https://docs.oracle.com/cd/B28359_01/network.111/b28530/asowalet.htm
 :127  SQLite3
 For our ORM framework, we implemented an efficient {\i @*SQLite3@} wrapper, joining the {\i SQLite3} engine either statically (i.e. within the main {\f1\fs20 exe}) or from external {\f1\fs20 sqlite3.dll}.
 It was an easy task to let the {\f1\fs20 SynSQLite3.pas} unit be called from our {\f1\fs20 @*SynDB@.pas} database abstract classes. Adding such another Database is just a very thin layer, implemented in the {\f1\fs20 SynDBSQLite3.pas} unit.
