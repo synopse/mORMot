@@ -137,6 +137,7 @@ unit SynDBOracle;
   - replaced confusing TVarData by a new dedicated TSQLVar memory structure,
     shared with SynDB and mORMot units (includes methods refactoring)
   - fixed column descriptor memory leak in case UseCache=true
+  - add ability to use the Secure External Password Store for Credentials
 
 }
 
@@ -207,6 +208,8 @@ type
     fEnvironmentInitializationMode: integer;
     fOnPasswordChanged: TNotifyEvent;
     fOnPasswordExpired: TOnPasswordExpired;
+    fUseWallet: boolean;
+    fLogSQLWithoutValues: boolean;
     function GetClientVersion: RawUTF8;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
@@ -259,6 +262,12 @@ type
     // - is set to 30 by default
     // - only used if UseCache=true
     property StatementCacheSize: integer read fStatementCacheSize write fStatementCacheSize;
+    /// use the Secure External Password Store for Password Credentials
+    // - see Oracle documentation
+    // http://docs.oracle.com/cd/B28359_01/network.111/b28531/authentication.htm#DBSEG97906
+    property UseWallet: boolean read fUseWallet write fUseWallet;
+    /// by default, will log values within sllSQL unless this propert is TRUE
+    property LogSQLWithoutValues: boolean read fLogSQLWithoutValues write fLogSQLWithoutValues;
   end;
 
   /// implements a direct connection to the native Oracle Client Interface (OCI)
@@ -1864,10 +1873,12 @@ procedure TSQLDBOracleConnection.Connect;
 var Log: ISynLog;
     Props: TSQLDBOracleConnectionProperties;
     mode: ub4;
+    msg: RawUTF8;
 const
     type_owner_name: RawUTF8 = 'SYS';
     type_NymberListName: RawUTF8 = 'ODCINUMBERLIST';
     type_Varchar2ListName: RawUTF8 = 'ODCIVARCHAR2LIST';
+    type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS,OCI_CRED_EXT);
 begin
   Log := SynDBLog.Enter(self);
   Disconnect; // force fTrans=fError=fServer=fContext=nil
@@ -1904,7 +1915,7 @@ begin
       mode := OCI_DEFAULT;
     if Props.UserID='SYS' then
       mode := mode or OCI_SYSDBA;
-    CheckSession(self,nil,SessionBegin(fContext,fError,fSession,OCI_CRED_RDBMS,mode),fError);
+    CheckSession(self,nil,SessionBegin(fContext,fError,fSession,type_Credential[Props.UseWallet],mode),fError);
     Check(self,nil,TypeByName(fEnv,fError,fContext,Pointer(type_owner_name),length(type_owner_name),
       Pointer(type_NymberListName),length(type_NymberListName),nil,0,OCI_DURATION_SESSION,OCI_TYPEGET_HEADER,
       fType_numList),fError);
@@ -1929,8 +1940,11 @@ begin
       end;
       fAnsiConvert := TSynAnsiConvert.Engine(CharSetIDToCodePage(fOCICharSet));
     end;
-    Log.Log(sllInfo,'Connected to % as % with %, codepage % (%/%)',
-      [Props.ServerName,Props.UserID,Props.ClientVersion,fAnsiConvert.CodePage,
+    if Props.UseWallet then
+      msg := 'using Oracle Wallet' else
+      msg := 'as '+Props.UserID;
+    Log.Log(sllInfo,'Connected to % % with %, codepage % (%/%)',
+      [Props.ServerName,msg,Props.ClientVersion,fAnsiConvert.CodePage,
        fOCICharSet,OracleCharSetName(fOCICharSet)],self);
     with NewStatement do
     try // ORM will send date/time as ISO8601 text -> force encoding
@@ -2603,8 +2617,12 @@ begin
   if (fStatement=nil) then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
   with SynDBLog.Add do
-    if sllSQL in Family.Level then
-      Log(sllSQL,SQLWithInlinedParams,self,2048);
+    if sllSQL in Family.Level then begin
+      if (Connection.Properties as TSQLDBOracleConnectionProperties).LogSQLWithoutValues then
+        tmp := SQL else
+        tmp := SQLWithInlinedParams;
+      Log(sllSQL,tmp,self,2048);
+    end;
   fTimeElapsed.ProfileCurrentMethod;
   ociArraysCount := 0;
   Env := (Connection as TSQLDBOracleConnection).fEnv;
@@ -2721,9 +2739,9 @@ begin
         // 1.2.1. Bind an array as one object
         case fParams[i].VType of
         ftInt64:
-          Type_List := (Connection as TSQLDBOracleConnection).fType_numList;
+          Type_List := TSQLDBOracleConnection(Connection).fType_numList;
         ftUTF8:
-          Type_List := (Connection as TSQLDBOracleConnection).fType_strList;
+          Type_List := TSQLDBOracleConnection(Connection).fType_strList;
         else
           Type_List := nil;
         end;
@@ -2852,7 +2870,7 @@ begin
       mode := OCI_COMMIT_ON_SUCCESS else
       // for SELECT or inside a transaction: wait for an explicit COMMIT
       mode := OCI_DEFAULT;
-    Status := OCI.StmtExecute((Connection as TSQLDBOracleConnection).fContext,
+    Status := OCI.StmtExecute(TSQLDBOracleConnection(Connection).fContext,
       fStatement,fError,fRowCount,0,nil,nil,mode);
     FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
     Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
