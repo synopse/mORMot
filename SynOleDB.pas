@@ -1851,6 +1851,7 @@ begin
     SetLength(fColumnBindings,nCols);
     B := pointer(fColumnBindings);
     result := 0; // resulting buffer will map TColumnValue layout
+    fColumn.Capacity := nCols;
     for i := 1 to nCols do begin
       if (nfo^.pwszName=nil) or (nfo^.pwszName^=#0) then
         aName := 'col_'+Int32ToUTF8(i) else

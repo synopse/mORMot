@@ -3073,6 +3073,7 @@ begin
     AttrGet(fStatement,OCI_HTYPE_STMT,@ColCount,nil,OCI_ATTR_PARAM_COUNT,fError);
     RowSize := ColCount*sizeof(sb2); // space for indicators
     ColumnLongTypes := [];
+    fColumn.Capacity := ColCount;
     for i := 1 to ColCount do begin
       oHandle := nil;
       ParamGet(fStatement,OCI_HTYPE_STMT,fError,oHandle,i);

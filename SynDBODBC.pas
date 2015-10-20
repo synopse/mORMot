@@ -1206,6 +1206,7 @@ begin
   with ODBC do begin
     Check(nil,self,NumResultCols(fStatement,nCols),SQL_HANDLE_STMT,fStatement);
     SetLength(fColData,nCols);
+    fColumn.Capacity := nCols;
     for c := 1 to nCols do begin
       Check(nil,self,DescribeColW(fStatement,c,Name,256,NameLength,DataType,ColumnSize,
         DecimalDigits,Nullable),SQL_HANDLE_STMT,fStatement);

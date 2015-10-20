@@ -483,6 +483,7 @@ begin
       fCurrentRow := -1;
       fColumnCount := 0;
       fColumn.ReHash;
+      fColumn.Capacity := fQuery.FieldCount;
       for i := 0 to fQuery.FieldCount-1 do begin
         Field := DatasetField(i);
         with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(

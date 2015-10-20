@@ -898,7 +898,7 @@ end;
 {$endif ZEOS72UP}
 
 procedure TSQLDBZEOSStatement.ExecutePrepared;
-var i: integer;
+var i,n: integer;
     Props: TSQLDBZEOSConnectionProperties;
     Log: ISynLog;
     blob: IZBlob;
@@ -971,9 +971,11 @@ begin
         Log.Log(sllWarning,'TSQLDBZEOSStatement.ExecutePrepared(%s) returned nil',
           [SQLWithInlinedParams]);
       end else begin
-        fResultInfo := fResultSet.GetMetadata;
         Props := fConnection.Properties as TSQLDBZEOSConnectionProperties;
-        for i := 1 to fResultInfo.GetColumnCount do begin
+        fResultInfo := fResultSet.GetMetadata;
+        n := fResultInfo.GetColumnCount;
+        fColumn.Capacity := n;
+        for i := 1 to n do begin
           name := fResultInfo.GetColumnLabel(i);
           if name='' then
             name := fResultInfo.GetColumnName(i);

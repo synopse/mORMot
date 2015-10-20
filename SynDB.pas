@@ -7833,6 +7833,7 @@ begin
     colCount := FromVarUInt32(Data);
     SetLength(fDataCurrentRowColTypes,colCount);
     SetLength(fDataCurrentRowValues,colCount);
+    fColumn.Capacity := colCount;
     for F := 0 to colCount-1 do
     with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(FromVarString(Data)))^ do begin
       ColumnType := TSQLDBFieldType(Data^);
