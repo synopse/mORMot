@@ -3318,7 +3318,6 @@ type
   /// information about an ordinal Int32 published property
   TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
   protected
-    procedure SetInt32(Instance: TObject; Value: integer);
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
@@ -18974,7 +18973,7 @@ end;
 procedure TSQLPropInfoRTTIInt32.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
   Dest: TObject);
 begin
-  TSQLPropInfoRTTIInt32(DestInfo).SetInt32(Dest,fPropInfo.GetOrdProp(Source));
+  TSQLPropInfoRTTIInt32(DestInfo).fPropInfo.SetOrdProp(Dest,fPropInfo.GetOrdProp(Source));
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TFileBufferWriter);
@@ -19023,31 +19022,20 @@ end;
 function TSQLPropInfoRTTIInt32.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 begin
   if P<>nil then
-    SetInt32(Instance,integer(FromVarUInt32(PByte(P))));
+    fPropInfo.SetOrdProp(Instance,integer(FromVarUInt32(PByte(P))));
   result := P;
-end;
-
-procedure TSQLPropInfoRTTIInt32.SetInt32(Instance: TObject; Value: integer);
-begin
-  {$ifdef USETYPEINFO}
-  if fPropInfo.SetterIsField then
-    PInteger(fPropInfo.SetterAddr(Instance))^ := Value else
-  if (fPropInfo.SetProc=0) and fPropInfo.GetterIsField then
-    PInteger(fPropInfo.GetterAddr(Instance))^ := Value else
-  {$endif}
-    fPropInfo.SetOrdProp(Instance,Value);
 end;
 
 procedure TSQLPropInfoRTTIInt32.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 begin
-  SetInt32(Instance,GetInteger(Value));
+  fPropInfo.SetOrdProp(Instance,GetInteger(Value));
 end;
 
 function TSQLPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 begin
   if aValue.VType=ftInt64 then begin
-    SetInt32(Instance,aValue.VInt64);
+    fPropInfo.SetOrdProp(Instance,aValue.VInt64);
     result := true;
   end else
     result := inherited SetFieldSQLVar(Instance,aValue);
