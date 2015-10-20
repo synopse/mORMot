@@ -2731,7 +2731,7 @@ type
   // have to manually retrieve the record, using a integer(IDField) typecast)
   // - handle TSQLRecordMany descendant properties as an "has many" instance (this
   // is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
-  // - handle TRecordReference properties as INTEGER RecordRef-like value
+  // - handle TRecordReference properties as INTEGER (64 bit) RecordRef-like value
   //  (use TSQLRest.Retrieve(Reference) to get a record content)
   // - handle TSQLRawBlob properties as BLOB
   // - handle dynamic arrays as BLOB, in the TDynArray.SaveTo binary format (is able
@@ -4674,11 +4674,12 @@ type
   // stored in the table itself, but in a pivot table
   // - sftObject for e.g. TStrings TRawUTF8List TCollection instances
   {$ifdef CPU64}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt64){$else}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32){$endif}
+  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt64)
+  {$else}
+  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32)
+  {$endif}
   protected
     fObjectClass: TClass;
-    fCascadeDelete: boolean;
   public
     /// will setup the corresponding ObjectClass property
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
@@ -4691,6 +4692,18 @@ type
     /// direct access to the property class
     // - can be used e.g. for TSQLRecordMany properties
     property ObjectClass: TClass read fObjectClass;
+  end;
+
+  /// information about a TRecordReference/TRecordReferenceToBeDeleted
+  // published property
+  // - identified as a sftRecord kind of property
+  TSQLPropInfoRTTIRecordReference = class(TSQLPropInfoRTTIInt64)
+  protected
+    fCascadeDelete: boolean;
+  public
+    /// will identify TRecordReferenceToBeDeleted kind of field, and
+    // setup the corresponding CascadeDelete property
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
     property CascadeDelete: boolean read fCascadeDelete;
   end;
@@ -4699,16 +4712,15 @@ type
   // - identified as a sftTID kind of property, optionally tied to a TSQLRecord
   // class, via its custom type name, e.g.
   // ! TSQLRecordClientID = type TID;  ->  TSQLRecordClient class
-  TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIInt64)
+  TSQLPropInfoRTTITID = class(TSQLPropInfoRTTIRecordReference)
   protected
     fRecordClass: TSQLRecordClass;
-    fCascadeDelete: boolean;
   public
     /// will setup the corresponding RecordClass property from the TID type name
     // - the TSQLRecord type should have previously been registered to the
     // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
     // that e.g. 'TSQLRecordClientID' type name would match TSQLRecordClient
-    // - in addition, the '...ToBeDeletedID' name pattern should set CascadeDelete
+    // - in addition, the '...ToBeDeletedID' name pattern would set CascadeDelete
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// the TSQLRecord class associated to this TID
     // - is computed from its type name - for instance, if you define:
@@ -18516,7 +18528,7 @@ const
      ftInt64,     // sftSet
      ftInt64,     // sftInteger
      ftInt64,     // sftID = TSQLRecord(aID)
-     ftInt64,     // sftRecord = TRecordReference
+     ftInt64,     // sftRecord = TRecordReference = RecordRef
      ftInt64,     // sftBoolean
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
@@ -18852,10 +18864,10 @@ begin
         C := TSQLPropInfoRTTIDateTime;
       sftID: // = TSQLRecord(aID)
         C := TSQLPropInfoRTTIID;
-      sftTID:
+      sftTID: // = TID or T*ID
         C := TSQLPropInfoRTTITID;
-      sftRecord: // = TRecordReference
-        C := TSQLPropInfoRTTIInstance;
+      sftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
+        C := TSQLPropInfoRTTIRecordReference;
       sftRecordVersion:
         C := TSQLPropInfoRTTIRecordVersion;
       sftMany:
@@ -19549,8 +19561,6 @@ constructor TSQLPropInfoRTTIInstance.Create(aPropInfo: PPropInfo; aPropIndex: in
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjectClass := fPropType^.ClassType^.ClassType;
-  if aSQLFieldType=sftRecord then
-    fCascadeDelete:= IdemPropName(fPropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
 function TSQLPropInfoRTTIInstance.GetInstance(Instance: TObject): TObject;
@@ -19561,6 +19571,16 @@ end;
 procedure TSQLPropInfoRTTIInstance.SetInstance(Instance, Value: TObject);
 begin
   fPropInfo.SetOrdProp(Instance,PtrInt(Value));
+end;
+
+
+{ TSQLPropInfoRTTIRecordReference }
+
+constructor TSQLPropInfoRTTIRecordReference.Create(aPropInfo: PPropInfo;
+  aPropIndex: integer; aSQLFieldType: TSQLFieldType);
+begin
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  fCascadeDelete := IdemPropName(fPropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
 
@@ -29559,10 +29579,8 @@ var j,f: integer;
       FieldTableIndex := GetTableIndexSafe(FieldTable,false);
       if FieldTableIndex<0 then
         FieldTableIndex := -2; // allow lazy table index identification
-      if aFieldType.InheritsFrom(TSQLPropInfoRTTIInstance) then
-        CascadeDelete := TSQLPropInfoRTTIInstance(aFieldType).CascadeDelete else
-      if aFieldType.InheritsFrom(TSQLPropInfoRTTITID) then
-        CascadeDelete := TSQLPropInfoRTTITID(aFieldType).CascadeDelete;
+      if aFieldType.InheritsFrom(TSQLPropInfoRTTIRecordReference) then
+        CascadeDelete := TSQLPropInfoRTTIRecordReference(aFieldType).CascadeDelete;
     end;
   end;
 
