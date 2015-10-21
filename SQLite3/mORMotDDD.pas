@@ -2127,15 +2127,17 @@ begin
   CqrsBeginMethod(qaNone,result);
   if fStatus<>dsStarted then
     CqrsSetResultError(cqrsBadRequest) else begin
-    CqrsSetResult(RetrieveState(Information));
+    if InternalRetrieveState(Information) then
     try
       InternalStop; // always stop
       fStatus := dsStopped;
       fLogClass.Add.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      CqrsSetResult(cqrsSuccess);
     except
       on E: Exception do
         CqrsSetResult(E);
-    end;
+    end else
+      CqrsSetResult(cqrsInternalError);
   end;
 end;
 
@@ -2230,18 +2232,23 @@ var rest: TSQLRest;
     doc: TDocVariantData;
     valid: Boolean;
     status: variant;
+    res: TCQRSResult;
     mem: TSynMonitorMemory;
     disk: TSynMonitoryDisk;
+    cmd: integer;
 begin
   result.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   result.Status := HTML_SUCCESS;
   if SQL='' then
     exit;
-  if SQL[1]='#' then
-    case IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG',
-      'CHAT','HELP']) of // 'HELP' should be the last one on the list
+  if SQL[1]='#' then begin
+    cmd := IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG',
+      'CHAT','STARTDAEMON','STOPDAEMON','RESTARTDAEMON','HELP']);
+       // 'HELP' should be the last one on the list
+    case cmd of
     0: if InternalRetrieveState(status) then
-         result.Content := VariantSaveJSON(status);
+         result.Content := VariantSaveJSON(status) else
+         result.Content := '"Daemon seems stopped"';
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           Split(copy(SQL,11,maxInt),'=',name,value);
@@ -2294,10 +2301,27 @@ begin
     4: result.Content := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
     5: fLogClass.Add.Log(sllMonitoring,'[CHAT] % %',
          [ServiceContext.Request.InHeader['remoteip'],copy(SQL,7,maxInt)]);
-    else 
-      result.Content := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings|#settings full.path=value|#version|#computer|#log|#help"';
+    6,7,8: begin // 6=start/7=stop/8=restart
+      if cmd=6 then
+        res := cqrsSuccess else
+        res := Stop(status);
+      if res=cqrsSuccess then begin
+        if cmd<>7 then
+          res := Start;
+        if res=cqrsSuccess then
+         result.Content := VariantSaveJSON(status) else
+         result.Content := JSONEncode(['errorStart',ToText(res)^,
+           'stopStatus',status]);
+       end else
+         result.Content := JSONEncode(['errorStop',ToText(res)^]);
+       exit;
     end;
+    else
+      result.Content := '"Enter either a SQL request, or one of the following commands:|'+
+        '|#state|#settings|#settings full.path=value|#version|#computer|#log|#startdaemon'+
+        '|#stopdaemon|#restartdaemon|#help"';
+    end;
+  end;
   rest := PublishedORM(DatabaseName);
   if rest<>nil then
     rest.AdministrationExecute(DatabaseName,SQL,RawJSON(result.Content));
