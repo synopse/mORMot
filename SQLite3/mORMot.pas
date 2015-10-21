@@ -25700,7 +25700,7 @@ i64:    SetInt64Prop(Dest,GetInt64Prop(Source)) else
       if kD=tkFloat then
         DestInfo.SetFloatProp(Dest,GetFloatProp(Source));
     {$ifdef FPC}tkAString,{$endif}
-    tkLString: begin
+    tkLString:
       if kD=tkLString then begin
         GetLongStrProp(Source,Value);
         DestInfo.SetLongStrProp(Dest,Value);
@@ -25709,17 +25709,16 @@ str:  if kD in tkStringTypes then begin
         GetLongStrValue(Source,RawUTF8(Value));
         DestInfo.SetLongStrValue(Dest,RawUTF8(Value));
       end;
-    end;
     {$ifdef UNICODE}
     tkUString:
       if kD=tkUString then
-        SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source)) else
+        DestInfo.SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source)) else
         goto str;
     {$endif}
     tkWString:
       if kD=tkWString then begin
         GetWideStrProp(Source,WS);
-        SetWideStrProp(Dest,WS);
+        DestInfo.SetWideStrProp(Dest,WS);
       end else
         goto str;
     tkDynArray:
@@ -25734,7 +25733,7 @@ str:  if kD in tkStringTypes then begin
     tkVariant:
       if kD=tkVariant then begin
         GetVariantProp(Source,V);
-        SetVariantProp(Dest,V);
+        DestInfo.SetVariantProp(Dest,V);
       end;
     {$endif}
   end; // note: tkString (shortstring) and tkInterface not handled
