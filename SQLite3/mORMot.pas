@@ -22737,7 +22737,7 @@ begin
             W.Add('"');
             W.AddJSONEscape(U^,StrLen(U^));
             W.Add('"');
-        end;
+          end;
         W.Add(',');
         inc(U); // points to next value
       end;
@@ -42253,21 +42253,21 @@ type
   TJSONObject =
     (oNone, oException, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
      oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
-     oSynMonitor, oCustom);
+     oSynMonitor, oSQLTable, oCustom);
 
 function JSONObject(aClassType: TClass; out aCustomIndex: integer;
   aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
 const
-  MAX = {$ifdef LVCL}13{$else}14{$endif};
+  MAX = {$ifdef LVCL}14{$else}15{$endif};
   TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
     TObject,Exception,ESynException,TList,TObjectList,TPersistent,
     TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
-    TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List
+    TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List,TSQLTable
     {$ifndef LVCL},TCollection{$endif});
   OBJ: array[0..MAX] of TJSONObject = (
     oNone,oException,oPersistent,oList,oObjectList,oPersistent,
     oPersistentPassword,oPersistent,oPersistent,
-    oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs
+    oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs,oSQLTable
     {$ifndef LVCL},oCollection{$endif});
 var i: integer;
 begin
@@ -44708,6 +44708,7 @@ end;
 procedure TJSONSerializer.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 var Added: boolean;
     CustomComment: RawUTF8;
+
   procedure HR(P: PPropInfo=nil);
   begin
     if woHumanReadable in Options then begin
@@ -44725,6 +44726,7 @@ var Added: boolean;
       Add(' ');
     Added := true;
   end;
+
 var P: PPropInfo;
     i, j, V, c, codepage: integer;
     Obj: TObject;
@@ -44734,6 +44736,7 @@ var P: PPropInfo;
 {$endif}
     Str: TStrings absolute Value;
     Utf: TRawUTF8List absolute Value;
+    Table: TSQLTable absolute Value;
     aClassType: TClass;
     Kind: TTypeKind;
     PS: PShortString;
@@ -44774,6 +44777,8 @@ begin
       exit;
     end;
   // handle JSON arrays
+  oSQLTable:
+    Table.GetJSONValues(Stream,true);
   oList, oObjectList, {$ifndef LVCL}oCollection,{$endif} oUtfs, oStrings: begin
     HR;
     Add('['); // write as JSON array of JSON objects
