@@ -37,6 +37,7 @@ unit SynPdf;
    FalconB
    Florian Grummel
    Harald Simon
+   Josh Kelley (joshkel)
    Ondrej (reddwarf)
    Sinisa (sinisav)
    Pierre le Riche
