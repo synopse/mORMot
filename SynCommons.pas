@@ -8684,6 +8684,11 @@ type
     procedure SetParameters(Value: RawUTF8); override;
   end;
 
+  { C++Builder doesn't support array elements as properties (RSP-12595).
+    For now, simply exclude the relevant classes from C++Builder. }
+  {$NODEFINE TSynValidateText }
+  {$NODEFINE TSynValidatePassWord }
+
   /// will define a filter to be applied to a Record field content (typicaly
   // a TSQLRecord)
   // - a typical usage is to convert to lower or upper case, or
@@ -9907,7 +9912,7 @@ type
   {$A-}
   /// used to store a Date/Time in TSynTimeZone internal structures
   // - map Windows.TSystemTime, since it is how it is stored in the Registry
-  TTimeZoneValue = object
+  TTimeZoneValue = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
     wYear: Word;
     wMonth: Word;
     wDayOfWeek: Word;
@@ -9931,7 +9936,7 @@ type
   end;
   PTimeZoneInfo = ^TTimeZoneInfo;
   /// used to store Time Zone information for a single area in TSynTimeZone
-  TTimeZoneData = object
+  TTimeZoneData = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
     id: RawUTF8;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
@@ -9972,7 +9977,8 @@ type
     // - under Linux, the file should be located with the executable, renamed
     // with a .tz extension - may have been created via SaveToFile(''), or
     // from a 'TSynTimeZone' bound resource
-    constructor CreateDefault;
+    // "dummy" parameter exists only to disambiguate constructors for C++
+    constructor CreateDefault(dummy: integer=0);
     /// finalize the instance
     destructor Destroy; override;
     {$ifdef MSWINDOWS}

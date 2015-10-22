@@ -370,6 +370,9 @@ const
   MWT_LEFTMULTIPLY = 2;
   MWT_RIGHTMULTIPLY = 3;
   MWT_SET = 4;
+  {$NODEFINE MWT_IDENTITY}
+  {$NODEFINE MWT_LEFTMULTIPLY}
+  {$NODEFINE MWT_RIGHTMULTIPLY}
 
 {  some low-level record definition for True Type format table reading }
 
@@ -3041,6 +3044,21 @@ function ScriptShape(hdc: HDC; var psc: pointer; const pwcChars: PWideChar;
 function ScriptApplyDigitSubstitution(
     const psds: Pointer; const psControl: pointer;
     const psState: pointer): HRESULT; stdcall; external Usp10;
+
+// C++Builder code should #include <usp10.h> directly instead of using these.
+{$NODEFINE TScriptState }
+{$NODEFINE PScriptState }
+{$NODEFINE TScriptAnalysis }
+{$NODEFINE PScriptAnalysis }
+{$NODEFINE TScriptVisAttr }
+{$NODEFINE PScriptVisAttr }
+{$NODEFINE TScriptItem }
+{$NODEFINE PScriptItem }
+{$NODEFINE ScriptItemize }
+{$NODEFINE ScriptGetProperties }
+{$NODEFINE ScriptLayout }
+{$NODEFINE ScriptShape }
+{$NODEFINE ScriptApplyDigitSubstitution }
 
 {$endif USE_UNISCRIBE}
 
