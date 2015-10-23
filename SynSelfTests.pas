@@ -8149,7 +8149,7 @@ var MS: THeapMemoryStream;
     WS: SynUnicode;
 const
   Hash: array[boolean] of Cardinal =
-    ($92260252,$554BB32D);
+    (2336277040,1967009088);
   Name: array[boolean] of PDFString =
     ('Arial','Helvetica');
 begin
@@ -8290,7 +8290,7 @@ const
   'jz/dDXej3ZClzk14r9LVXTW1kca7FgzLrfNaWG5KyG/40tuNtM7LvavpM665+Q+G+dsXdVoc3x5vK5fK'+
   'WP0ebanRbmgol+oYnDQrW+6mTLl3Hln9FZS7n5W7K+Gi8ZIw3vqLIZ2yZd44wufWeWzS1Ebaxn17Dfzy'+
   'CW6jv67RdXcuf1/o69I+T+fTdim0j3Ry8TccmqZuqswsX2i+d/n7Qnv9f1RSHw29k+n/Bw==';
-  Hash: array[boolean] of Cardinal = ($B7E3D52E,$9EB2B857); //($4D1810E,$2806E33);
+  Hash: array[boolean] of Cardinal = (343869333,3715537523);
 var S: RawByteString;
     MS: THeapMemoryStream;
     MF: TMetaFile;
@@ -8351,7 +8351,7 @@ begin
         if CheckFailed(i<>0)then exit;
         fillchar(s[i],32,32);
         H := Hash32(s);
-        Check(H=$4CFB10E6);
+        Check(H=1030733677);
       end;
     finally
       Free;
