@@ -19984,7 +19984,7 @@ begin
     {$ifdef USENORMTOUPPER}
     result := NormToUpperByte[result];
     {$else}
-    result := NormToUpperAnsi7Byte[result]);
+    result := NormToUpperAnsi7Byte[result];
     {$endif}
     exit;
   end;
@@ -19993,7 +19993,7 @@ begin
     {$ifdef USENORMTOUPPER}
     result := NormToUpperByte[result];
     {$else}
-    result := NormToUpperAnsi7Byte[result]);
+    result := NormToUpperAnsi7Byte[result];
     {$endif}
 end;
 
