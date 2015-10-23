@@ -502,6 +502,8 @@ constructor TDDDAppSettingsAbstract.Create(
   aStorage: TDDDAppSettingsStorageAbstract);
 begin
   inherited Create;
+  if aStorage=nil then
+    aStorage := TDDDAppSettingsStorageFile.Create;
   fStorage := aStorage;
   fStorage.SetOwner(self);
 end;
