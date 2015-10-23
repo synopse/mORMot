@@ -88,6 +88,7 @@ type
   // administrated daemon, or a console application, according to the command line
   // - you should inherit from this class, then override the abstract NewDaemon
   // protected method to launch and return a IAdministratedDaemon instance
+  {$M+}
   TDDDDaemon = class
   protected
     fSettings: TDDDAdministratedDaemonSettings;
@@ -137,44 +138,40 @@ type
     /// read-only access to the underlying daemon instance
     // - equals nil if the daemon is not started
     property Daemon: IAdministratedDaemon read fDaemon;
+  published
   end;
+  {$M-}
 
   /// abstract class to implement a IAdministratedDaemon service via a TThread
   // - as hosted by TDDDDaemon service/daemon application
   TDDDThreadDaemon = class(TDDDAdministratedThreadDaemon)
   protected
-    fAdministrationHTTPServer: TSQLHttpServer;
     // returns the system memory info as current state
     function InternalRetrieveState(var Status: variant): boolean; override;
+    function GetAdministrationHTTPServer: TSQLHttpServer;
+      {$ifdef HASINLINE}inline;{$endif}
   public
-    /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TDDDAdministratedDaemonSettings); reintroduce;
-    /// finalize the service/daemon thread
-    // - will call Halt() if the associated process is still running
-    destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
-    property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
+    property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a TSQLRestServer
   // - as hosted by TDDDDaemon service/daemon application
   TDDDRestDaemon = class(TDDDAdministratedRestDaemon)
   protected
-    fAdministrationHTTPServer: TSQLHttpServer;
     fPreviousMonitorTix: Int64;
+    function Settings: TDDDAdministratedDaemonHttpSettings;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetAdministrationHTTPServer: TSQLHttpServer;
+      {$ifdef HASINLINE}inline;{$endif}
     // returns the current state from fRest.Stat() + system memory
     function InternalRetrieveState(var Status: variant): boolean; override;
     procedure InternalLogMonitoring; virtual;
   public
-    /// initialize the thread with the supplied parameters
-    constructor Create(aSettings: TDDDAdministratedDaemonSettings); reintroduce;
-    /// finalize the service/daemon thread
-    // - will call Halt() if the associated process is still running
-    destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
-    property AdministrationHTTPServer: TSQLHttpServer read fAdministrationHTTPServer;
+    property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
   end;
 
   /// abstract class to implement a IAdministratedDaemon service via a
@@ -182,7 +179,6 @@ type
   // - as hosted by TDDDDaemon service/daemon application
   TDDDRestHttpDaemon = class(TDDDRestDaemon)
   protected
-    fSettings: TDDDAdministratedDaemonHttpSettings;
     fHttpServer: TSQLHttpServer;
     // initialize HTTP Server into fHttpServer
     // (fRest should have been set by the overriden method)
@@ -190,9 +186,6 @@ type
     // finalize HTTP Server
     procedure InternalStop; override;
   public
-    /// initialize the Daemon with the supplied settings
-    // - no HTTP server is published, until Start is performed
-    constructor Create(aSettings: TDDDAdministratedDaemonHttpSettings); reintroduce;
     /// reference to the main HTTP server publishing this daemon Services
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
@@ -256,6 +249,10 @@ type
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
 function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
    Model: TSQLModel=nil): TSQLHttpClientWebsockets;
+
+/// create a WebSockets server instance, publishing a IAdministratedDaemon service
+function AdministratedDaemonServer(Settings: TDDDAdministratedDaemonSettings;
+  DaemonClass: TDDDAdministratedDaemonClass): TDDDAdministratedDaemon;
 
 
 { ----- Implements Thread Processing to access a TCP server }
@@ -757,24 +754,9 @@ end;
 
 { TDDDThreadDaemon }
 
-constructor TDDDThreadDaemon.Create(
-  aSettings: TDDDAdministratedDaemonSettings);
+function TDDDThreadDaemon.GetAdministrationHTTPServer: TSQLHttpServer;
 begin
-  if aSettings=nil then
-    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
-  fInternalSettings := aSettings;
-  with aSettings.RemoteAdmin do
-    inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
-  fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
-  with aSettings.RemoteAdmin do
-    if AuthHttp.BindPort<>'' then
-      fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
-end;
-
-destructor TDDDThreadDaemon.Destroy;
-begin
-  FreeAndNil(fAdministrationHTTPServer);
-  inherited;
+  result := fAdministrationHTTPServer as TSQLHttpServer;
 end;
 
 function TDDDThreadDaemon.InternalRetrieveState(
@@ -787,24 +769,9 @@ end;
 
 { TDDDRestDaemon }
 
-constructor TDDDRestDaemon.Create(
-  aSettings: TDDDAdministratedDaemonSettings);
+function TDDDRestDaemon.GetAdministrationHTTPServer: TSQLHttpServer;
 begin
-  if aSettings=nil then
-    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
-  fInternalSettings := aSettings;
-  with aSettings.RemoteAdmin do
-    inherited Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
-  fLogClass.Add.Log(sllTrace,'Create(%)',[aSettings],self);
-  with aSettings.RemoteAdmin do
-    if AuthHttp.BindPort<>'' then
-      fAdministrationHTTPServer := TSQLHttpServer.Create(fAdministrationServer,AuthHttp);
-end;
-
-destructor TDDDRestDaemon.Destroy;
-begin
-  FreeAndNil(fAdministrationHTTPServer);
-  inherited Destroy;
+  result := TSQLHttpServer(fAdministrationHTTPServer);
 end;
 
 procedure TDDDRestDaemon.InternalLogMonitoring;
@@ -827,20 +794,17 @@ begin
     result := false;
 end;
 
+function TDDDRestDaemon.Settings: TDDDAdministratedDaemonHttpSettings;
+begin
+  result := TDDDAdministratedDaemonHttpSettings(fInternalSettings);
+end;
 
 { TDDDRestHttpDaemon }
 
-constructor TDDDRestHttpDaemon.Create(
-  aSettings: TDDDAdministratedDaemonHttpSettings);
-begin
-  fSettings := aSettings;
-  inherited Create(aSettings);
-end;
-
 procedure TDDDRestHttpDaemon.InternalStart;
 begin
-  if fSettings.Http.BindPort<>'' then
-    fHttpServer := TSQLHttpServer.Create(fRest,fSettings.Http);
+  if Settings.Http.BindPort<>'' then
+    fHttpServer := TSQLHttpServer.Create(fRest,Settings.Http);
 end;
 
 procedure TDDDRestHttpDaemon.InternalStop;
@@ -1464,6 +1428,23 @@ begin
     result.Free;
     raise;
   end;
+end;
+
+function AdministratedDaemonServer(Settings: TDDDAdministratedDaemonSettings;
+  DaemonClass: TDDDAdministratedDaemonClass): TDDDAdministratedDaemon;
+begin
+  if DaemonClass=nil then
+    raise EDDDInfraException.Create('AdministratedDaemonServer(DaemonClass=nil)');
+  if Settings=nil then
+    raise EDDDInfraException.Create('AdministratedDaemonServer(Settings=nil)');
+  with Settings.RemoteAdmin do
+    result := DaemonClass.Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
+  result.InternalSettings := Settings;
+  result.LogClass.Add.Log(sllTrace,'%.Create(%)',[DaemonClass,Settings],result);
+  with Settings.RemoteAdmin do
+    if AuthHttp.BindPort<>'' then
+      result.AdministrationHTTPServer := TSQLHttpServer.Create(
+        result.AdministrationServer,AuthHttp);
 end;
 
 initialization

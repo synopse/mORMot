@@ -782,25 +782,28 @@ type
   // methods to supply the actual process (e.g. set a background thread)
   TDDDAdministratedDaemon = class(TCQRSService,IAdministratedDaemon)
   protected
-    fAdministrationServer: TSQLRestServer;
-    fAdministrationServerOwned: boolean;
     fLogClass: TSynLogClass;
     fStatus: TDDDAdministratedDaemonStatus;
     fFinished: TEvent;
     fRemoteLog: TSynLogCallbacks;
     fInternalDatabases: TSQLRestDynArray;
     fInternalSettings: TObject;
+    fAdministrationServer: TSQLRestServer;
+    fAdministrationServerOwned: boolean;
+    fAdministrationHTTPServer: TObject;
     // return TRUE e.g. if TDDDAdministratedThreadDaemon.fThread<>nil
     function InternalIsRunning: boolean; virtual; abstract;
     // should start the daemon: e.g. set TDDDAdministratedThreadDaemon.fThread
     procedure InternalStart; virtual; abstract;
     // return TRUE and set Status (e.g. from monitoring info) on success
-    function InternalRetrieveState(var Status: variant): boolean; virtual; abstract;
+    // - this default implement returns the system memory info as current state
+    function InternalRetrieveState(var Status: variant): boolean; virtual; 
     // should end the daemon: e.g. TDDDAdministratedThreadDaemon.fThread := nil
     procedure InternalStop; virtual;
     // set the list of published TSQLRestInstances - InternalStop would release it
     procedure PublishORMTables(const Rest: array of TSQLRest); virtual;
     function PublishedORM(const DatabaseName: RawUTF8): TSQLRest;
+    procedure SetInternalSettings(Settings: TObject); virtual;
   public
     /// initialize the administrable service/daemon
     // - aAdministrationServer.ServiceDefine(IAdministratedDaemon) will be
@@ -860,6 +863,13 @@ type
     procedure WaitUntilHalted; virtual;
     /// access to the associated loging class
     property LogClass: TSynLogClass read fLogClass;
+    /// access to the associated internal settings
+    // - is defined as an opaque TObject instance, to avoid unneeded dependencies
+    property InternalSettings: TObject read fInternalSettings write SetInternalSettings;
+    /// reference to the WebSockets/HTTP server publishing AdministrationServer
+    // - is defined as an opaque TObject instance, to avoid unneeded dependencies
+    property AdministrationHTTPServer: TObject
+      read fAdministrationHTTPServer write fAdministrationHTTPServer;
   published
     /// the current status of the service/daemon
     property Status: TDDDAdministratedDaemonStatus read fStatus;
@@ -867,6 +877,9 @@ type
     // - e.g. from named pipe local communication on Windows
     property AdministrationServer: TSQLRestServer read fAdministrationServer;
   end;
+
+  /// type used to define a class kind of TDDDAdministratedDaemon
+  TDDDAdministratedDaemonClass = class of TDDDAdministratedDaemon;
 
   /// abstract class to implement an TThread-based administrable service/daemon
   // - inherited class should override InternalStart and InternalRetrieveState
@@ -2072,6 +2085,7 @@ begin
   if InternalIsRunning then
     Halt(dummy);
   try
+    FreeAndNil(fAdministrationHTTPServer);
     inherited Destroy;
     fFinished.Free;
     FreeAndNil(fRemoteLog);
@@ -2368,6 +2382,17 @@ begin
   fInternalDatabases := nil;
 end;
 
+function TDDDAdministratedDaemon.InternalRetrieveState(
+  var Status: variant): boolean;
+begin
+  Status := _ObjFast(['SystemMemory',TSynMonitorMemory.ToVariant]);
+  result := true;
+end;
+
+procedure TDDDAdministratedDaemon.SetInternalSettings(Settings: TObject);
+begin
+  fInternalSettings := Settings;
+end;
 
 
 { TDDDAdministratedThreadDaemon }
