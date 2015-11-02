@@ -98,6 +98,7 @@ type
     /// the associated MongoDB collection
     fCollection: TMongoCollection;
     fEngineLastID: TID;
+    fEngineAddUseSelectMaxID: boolean;
     fBSONProjectionSimpleFields: variant;
     fBSONProjectionBlobFields: variant;
     fBSONProjectionBlobFieldsNames: TRawUTF8DynArray;
@@ -176,6 +177,9 @@ type
     procedure Drop;
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
+
+    property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
+      write fEngineAddUseSelectMaxID;
   end;
 
 
@@ -333,6 +337,7 @@ end;
 constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer);
 begin
   inherited Create(aClass,aServer);
+  fEngineAddUseSelectMaxID := False;
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
@@ -449,7 +454,7 @@ begin
 end;
 begin
   EnterCriticalSection(fStorageCriticalSection);
-  if fEngineLastID=0 then
+  if (fEngineLastID=0) or fEngineAddUseSelectMaxID then
     ComputeMax_ID;
   inc(fEngineLastID);
   result := fEngineLastID;
