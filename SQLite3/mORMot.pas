@@ -14097,7 +14097,7 @@ type
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
-  TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationURI)
+  TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationSignedURI)
   protected
     /// Windows built-in authentication
     // - holds information between calls to ServerSSPIAuth
