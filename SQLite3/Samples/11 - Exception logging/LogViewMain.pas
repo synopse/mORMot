@@ -57,6 +57,7 @@ type
     btnListClear: TButton;
     btnListSave: TButton;
     dlgSaveList: TSaveDialog;
+    ThreadListMenuThis: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -95,6 +96,7 @@ type
     procedure tmrRefreshTimer(Sender: TObject);
     procedure btnListClearClick(Sender: TObject);
     procedure btnListSaveClick(Sender: TObject);
+    procedure ThreadListMenuThisClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -938,6 +940,19 @@ begin
   fillchar(FThreadSelected[0],Length(FThreadSelected),byte((Sender=ThreadListMenuAll))*255);
   ThreadListCheckRefresh;
   EventsListClickCheck(nil);
+end;
+
+procedure TMainLogView.ThreadListMenuThisClick(Sender: TObject);
+var
+  i: integer;
+begin
+  i := ThreadListBox.ItemIndex;
+  if i>=0 then begin
+    fillchar(FThreadSelected[0],Length(FThreadSelected),byte(0));
+    SetBit(FThreadSelected[0],i);
+    ThreadListCheckRefresh;
+    EventsListClickCheck(nil);
+  end;
 end;
 
 procedure TMainLogView.ThreadListCheckRefresh;

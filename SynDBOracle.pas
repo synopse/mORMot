@@ -1301,6 +1301,8 @@ const
   OCI_OBJECTFREE_NONULL: ub2 = $0002;
   OCI_OBJECTFREE_HEADER: ub2 = $0004;
 
+  OCI_PREP2_CACHE_SEARCHONLY: ub4 = $0010;
+
 type
   /// Oracle native number low-level representation
   OCINumber = packed record
@@ -2031,7 +2033,7 @@ begin
   Stmt := nil;
   try
     Stmt := TSQLDBOracleStatement.Create(self);
-    if fProperties.IsCachable(pointer(aSQL)) then
+    if fProperties.UseCache then
       Stmt.fUseServerSideStatementCache := true;
     Stmt.Prepare(aSQL,ExpectResults);
     result := Stmt;
@@ -3297,9 +3299,16 @@ begin
     Env := (Connection as TSQLDBOracleConnection).fEnv;
     with OCI do begin
       HandleAlloc(Env,fError,OCI_HTYPE_ERROR);
-      if fUseServerSideStatementCache then
-        Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
-          fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError) else begin
+      if fUseServerSideStatementCache then begin
+        if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
+          fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
+          SynDBLog.Add.Log(sllDebug, 'Statement cache HIT')
+        else begin
+          Check(nil,self,StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,fStatement,
+            fError,pointer(oSQL),length(oSQL),nil,0,OCI_NTV_SYNTAX,OCI_DEFAULT),fError);
+          SynDBLog.Add.Log(sllDebug, 'Statement cache miss');
+        end;
+      end else begin
         HandleAlloc(Env,fStatement,OCI_HTYPE_STMT);
         Check(nil,self,StmtPrepare(fStatement,fError,pointer(oSQL),length(oSQL),
           OCI_NTV_SYNTAX,OCI_DEFAULT),fError);

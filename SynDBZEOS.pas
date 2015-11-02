@@ -52,7 +52,9 @@ unit SynDBZeos;
 
   Version 1.18
   - first public release, corresponding to mORMot framework 1.18
-
+  - PostgreSQL array binding for select statements like
+     SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
+     work with all ZEOS versions
 (*
   Note:
   - if you want to work as expected with SQlite3 backend (but how would need to
@@ -897,6 +899,94 @@ begin
 end;
 {$endif ZEOS72UP}
 
+/// Convert array of RawUTF8 to PostgreSQL ARRAY
+// ['one', 't"wo'] -> '{"one","t\"wo"}'
+// ['1', '2', '3'] -> '{1,2,3}'
+function UTF8Array2PostgreArray(const Values: array of RawUTF8): RawUTF8;
+var i, j, k, len, seplen, startlen, finlen, dQuoteRepllen, L: Integer;
+    P: PAnsiChar;
+    isStr: boolean;
+const
+  start: RawUTF8= '{';
+  fin: RawUTF8= '}';
+  Sep: RawUTF8= ',';
+  dQuoteRepl: RawUTF8= '\"';
+begin
+  result := '';
+  if high(Values)<0 then exit;
+  seplen := length(Sep);
+  startlen := length(start);
+  finlen := length(fin);
+  dQuoteRepllen := length(dQuoteRepl);
+  len := seplen*high(Values);
+  for i := 0 to high(Values) do begin
+    inc(len,length(Values[i]));
+    for j := 2 to length(Values[i])-1 do
+    case Values[i][j] of
+      '"': inc(len);
+    end;
+  end;
+  inc(len,startlen+finlen);//add { and }
+  SetLength(result,len);
+  P := pointer(result);
+
+  if startlen>0 then begin
+    Move(pointer(start)^,P^,startlen);
+    inc(P,startlen);
+  end;
+
+  i := 0;
+  repeat
+    L := length(Values[i]);
+    if L>0 then begin
+      isStr := (Values[i][1] = '''') and ((Values[i][l] = ''''));
+      if isStr then begin
+        P^ := '"';
+        inc(p);
+        k := 2;
+        while k<l-1 do begin
+          j := 0;
+          while k+j<l do begin
+            case Values[i][k+j] of
+              '"': break;
+              else inc(j);
+            end;
+          end;
+          move(pointer(@Values[i][k])^,P^,j);
+          inc(P,j);
+          inc(k,j);
+          case Values[i][k] of
+            '"': begin
+              move(pointer(dQuoteRepl)^,P^,dQuoteRepllen);
+              inc(P,dQuoteRepllen);
+              inc(k);
+            end;
+          end;
+        end;
+        P^ := '"';
+        inc(p);
+      end else begin
+        move(pointer(Values[i])^,P^,L);
+        inc(P,L);
+      end;
+    end;
+
+    if i=high(Values) then
+      Break;
+    if seplen>0 then begin
+      Move(pointer(Sep)^,P^,seplen);
+      inc(P,seplen);
+    end;
+    inc(i);
+  until false;
+
+  if finlen>0 then begin
+    Move(pointer(fin)^,P^,finlen);
+    inc(P,finlen);
+  end;
+  Assert(P-pointer(result)=len);
+end;
+
 procedure TSQLDBZEOSStatement.ExecutePrepared;
 var i,n: integer;
     Props: TSQLDBZEOSConnectionProperties;
@@ -927,11 +1017,18 @@ begin
   try
     if arrayBinding=nil then
   {$else}
-  if fParamsArrayCount>0 then
+  if (fParamsArrayCount>0) and (not fExpectResults) then
     raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported',[self]) else
   {$endif}
     for i := 1 to fParamCount do
-      with fParams[i-1] do
+    with fParams[i-1] do begin
+      if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
+        case VType of
+        ftInt64, ftUTF8: VData := UTF8Array2PostgreArray(VArray);
+        else raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
+        end;
+        VType := ftUTF8;
+      end;
       case VType of
       ftNull:     fStatement.SetNull(i,stUnknown);
       ftInt64:    fStatement.SetLong(i,VInt64);
@@ -960,6 +1057,7 @@ begin
         raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid type parameter #%',
           [self,i]);
       end;
+    end;
     // 2. Execute query
     if fExpectResults then begin
       fColumnCount := 0;

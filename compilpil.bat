@@ -49,6 +49,7 @@ echo.
 
 if not exist %bin% (
 	mkdir %bin%\exe
+	mkdir %bin%\dcu
 	cd %mORMot%\sqlite3\exe
 	copy sqlite3-64.dll %bin%\exe >nul
 	copy comments.json %bin%\exe >nul

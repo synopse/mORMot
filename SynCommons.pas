@@ -4815,11 +4815,16 @@ type
   // - for best performance, any type inheriting from this class will bypass
   // some regular steps: do not implement interfaces or use TMonitor with them!
   TSynPersistent = class(TObject)
+  private
+    procedure AssignError(Source: TSynPersistent);
+  protected
+    procedure AssignTo(Dest: TSynPersistent); virtual;
   public
     /// this virtual constructor will be called at instance creation
     // - this constructor does nothing, but is declared as virtual so that
     // inherited classes may safely override this default void implementation
     constructor Create; virtual;
+    procedure Assign(Source: TSynPersistent); virtual;
     {$ifndef FPC_OR_PUREPASCAL}
     /// optimized x86 asm initialization code
     // - warning: this optimized version won't initialize the vmtIntfTable
@@ -39190,6 +39195,27 @@ end;
 constructor TSynPersistent.Create;
 begin // nothing to do by default - overridden constructor may add custom code
 end;
+
+procedure TSynPersistent.AssignError(Source: TSynPersistent);
+var
+  SourceName: string;
+begin
+  if Source <> nil then
+    SourceName := Source.ClassName else
+    SourceName := 'nil';
+  raise EConvertError.CreateFmt('Cannot assign a %s to a %s', [SourceName, ClassName]);
+end;
+
+procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
+begin
+  Dest.AssignError(Self);
+end;
+
+procedure TSynPersistent.Assign(Source: TSynPersistent);
+begin
+  if Source <> nil then Source.AssignTo(Self) else AssignError(nil);
+end;
+
 
 {$ifndef FPC_OR_PUREPASCAL}
 

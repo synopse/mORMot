@@ -64,6 +64,7 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynLog,
   SynDB;
 
 
