@@ -1202,9 +1202,15 @@ type
     constructor Create(cTotalRows: UINT);
     function SetupAccessors(pIAccessorTVP: IAccessor):HRESULT; virtual; abstract;
     destructor Destroy; override;
+    {$ifdef FPC}
+    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
     function _Release: Integer; stdcall;
+    {$endif}
     /// Adds a reference count to an existing row handle
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HResult; stdcall;
@@ -3014,8 +3020,12 @@ begin
      Result := DB_S_ENDOFROWSET;
 end;
 
-function TBaseAggregatingRowset.QueryInterface(const IID: TGUID;
-  out Obj): HResult;
+{$ifdef FPC}
+function TBaseAggregatingRowset.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid : tguid;out obj) : longint;
+  {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+{$else}
+function TBaseAggregatingRowset.QueryInterface(const IID: TGUID; out Obj): HResult;
+{$endif FPC}
 begin
   if IsEqualGUID(IID, IID_IUnknown)then begin
     IUnknown(Obj) := Self;
@@ -3056,12 +3066,20 @@ begin
   fhAccessor[idxAccessor] := hAccessor;
 end;
 
+{$ifdef FPC}
+function TBaseAggregatingRowset._AddRef : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+{$else}
 function TBaseAggregatingRowset._AddRef: Integer;
+{$endif FPC}
 begin
   Result := 1;
 end;
 
+{$ifdef FPC}
+function TBaseAggregatingRowset._Release : longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+{$else}
 function TBaseAggregatingRowset._Release: Integer;
+{$endif FPC}
 begin
   Result := 1;
 end;
