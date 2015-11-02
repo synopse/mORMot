@@ -282,7 +282,7 @@ var F: TSynLogFilter;
     M: TMenuItem;
     E: TSynLogInfo;
 begin
-  FMainCaption := Caption;
+  FMainCaption := format(Caption,[SYNOPSE_FRAMEWORK_VERSION]);
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
     M.Caption := GetCaptionFromEnum(TypeInfo(TSynLogFilter),Ord(F));
