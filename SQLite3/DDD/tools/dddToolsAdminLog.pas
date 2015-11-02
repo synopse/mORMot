@@ -375,7 +375,6 @@ begin
         else
           Brush.Color := LOG_COLORS[b, FLog.EventLevel[Index]];
         Font.Color := LOG_COLORS[not b, FLog.EventLevel[Index]];
-        FillRect(Rect);
         case ACol of
           0:
             DateTimeToString(txt, TIME_FORMAT[FLog.Freq = 0], FLog.EventDateTime(Index));
@@ -389,7 +388,7 @@ begin
           3:
             SetTxtFromEvent;
         end;
-        TextOut(Rect.Left + 4, Rect.Top, txt);
+        TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
       end
       else begin
         Brush.Color := clLtGray;
