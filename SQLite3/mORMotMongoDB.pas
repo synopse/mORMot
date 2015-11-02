@@ -177,7 +177,11 @@ type
     procedure Drop;
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
-
+    /// force to compute the next ID from the remote database at each request
+    // - it would decrease performance, but may be used in some special cases
+    // - note that setting this property to TRUE may be unsafe: a ID value
+    /// collision may occur very easily, if the ID is increased outside the
+    // mORMot core in-between maxID computation and document insertion 
     property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
       write fEngineAddUseSelectMaxID;
   end;
@@ -337,7 +341,6 @@ end;
 constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQLRestServer);
 begin
   inherited Create(aClass,aServer);
-  fEngineAddUseSelectMaxID := False;
   // ConnectionProperties should have been set in StaticMongoDBRegister()
   fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
@@ -442,16 +445,18 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.EngineNextID: TID;
-procedure ComputeMax_ID;
-var res: variant;
-begin
-  res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
-  if DocVariantType.IsOfType(res) then
-    fEngineLastID := VariantToInt64Def(res.max,0);
-  {$ifdef WITHLOG}
-  fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
-  {$endif}
-end;
+
+  procedure ComputeMax_ID;
+  var res: variant;
+  begin
+    res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
+    if DocVariantType.IsOfType(res) then
+      fEngineLastID := VariantToInt64Def(res.max,0);
+    {$ifdef WITHLOG}
+    fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
+    {$endif}
+  end;
+
 begin
   EnterCriticalSection(fStorageCriticalSection);
   if (fEngineLastID=0) or fEngineAddUseSelectMaxID then
