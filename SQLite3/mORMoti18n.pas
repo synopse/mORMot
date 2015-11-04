@@ -29,6 +29,8 @@ unit mORMoti18n;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - lagodny
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -1653,7 +1655,7 @@ var Section: PUTF8Char; {$endif}
         for k := 1 to InternalClassPropInfo(CL,P) do begin
           // standard properties
           if (P^.Name='Caption') or (P^.Name='Hint') or
-             (P^.Name='Title') then
+             (P^.Name='Title') or (P^.Name='DisplayLabel') then
             TranslateOneProp(P,O,CName) else
           // class properties
           if P^.PropType^^.Kind=tkClass then begin
@@ -2234,7 +2236,8 @@ var F: ^Text absolute lparam;
         // write value
         if (LastPropName='Caption') or (LastPropName='EditLabel.Caption') or
            (LastPropName='Hint') or (LastPropName='EditLabel.Hint') or
-           (LastPropName='Title') or (LastPropName='Items') then begin
+           (LastPropName='Title') or (LastPropName='Items') or
+           (LastPropName='DisplayLabel') then begin
           Writeln(F^,PropName,'=_',Hash32(CB_EnumStrings[AddOnceDynArray(Value)]),
             '   ',Value); // add original caption for custom form translation
         end;
