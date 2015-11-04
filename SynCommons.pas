@@ -33,6 +33,7 @@ unit SynCommons;
    - Alfred Glaenzer (alf)
    - BigStar
    - itSDS
+   - kevinday
    - mazinsw
    - Marius Maximus (mariuszekpl)
    - RalfS
@@ -24149,7 +24150,6 @@ begin
     if GetNextUTF8Upper(p)<>ord(up^) then
       exit;
     inc(up);
-    inc(p);
   end;
   result := true;
 end;
