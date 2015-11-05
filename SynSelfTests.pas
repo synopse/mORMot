@@ -826,6 +826,7 @@ type
   IBidirService = interface(IInvokable)
     ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
     function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchCallback(a: integer);
     procedure RemoveCallback;
@@ -13704,6 +13705,7 @@ type
   protected
     fCallback: IBidirCallback;
     function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchCallback(a: integer);
     procedure RemoveCallback;
@@ -13728,6 +13730,13 @@ function TBidirServer.TestRest(a,b: integer; out c: RawUTF8): variant;
 begin
   c := Int32ToUtf8(a+b);
   result := _ObjFast(['a',a,'b',b,'c',c]);
+end;
+
+function TBidirServer.TestRestCustom(a: integer): TServiceCustomAnswer;
+begin
+  result.Header := BINARY_CONTENT_TYPE_HEADER;
+  result.Content := Int32ToUtf8(a)+#0#1;
+  result.Status := HTML_SUCCESS;
 end;
 
 function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
@@ -13776,7 +13785,7 @@ begin
   // sicClientDriven services expect authentication for sessions
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
-  Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicClientDriven)<>nil);
+  Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicShared)<>nil);
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).Settings.SetFullLog;
@@ -13788,6 +13797,7 @@ var I: IBidirService;
     a,b: integer;
     c: RawUTF8;
     v: variant;
+    res: TServiceCustomAnswer;
 begin
   Rest.Services.Resolve(IBidirService,I);
   if CheckFailed(Assigned(I)) then
@@ -13802,6 +13812,12 @@ begin
       check(v.b=b);
       check(v.c=c);
     end;
+  for a := -10 to 10 do begin
+    res := I.TestRestCustom(a);
+    check(res.Status=HTML_SUCCESS);
+    check(GetInteger(pointer(res.Content))=a);
+    check(res.Content[Length(res.Content)]=#1);
+  end;
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestCallback(Rest: TSQLRest);
@@ -13844,8 +13860,8 @@ end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
 begin
   TestRest(fServer);
-  TestRest(fServer);
   TestCallback(fServer);
+  TestRest(fServer);
 end;
 
 procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(Ajax: boolean);
@@ -13855,12 +13871,12 @@ begin
   try
     Check(Client.ServerTimeStampSynchronize);
     Check(Client.SetUser('User','synopse'));
-    Check(Client.ServiceDefine(IBidirService,sicClientDriven)<>nil);
+    Check(Client.ServiceDefine(IBidirService,sicShared)<>nil);
     TestRest(Client);
     Client.WebSockets.Settings.SetFullLog;
     Client.WebSocketsUpgrade(WEBSOCKETS_KEY,Ajax,true);
-    TestRest(Client);
     TestCallback(Client);
+    TestRest(Client);
   finally
     Client.Free;
   end;
@@ -14183,7 +14199,6 @@ end;
 
 
 {$endif DELPHI5OROLDER}
-
 
 
 initialization

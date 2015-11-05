@@ -52175,6 +52175,7 @@ begin
     end;
   end else begin // free answer returned in TServiceCustomAnswer
     fRest.InternalLog('TServiceCustomAnswer(%) returned len=%',[head,length(resp)],sllServiceReturn);
+    aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
     if aClientDrivenID<>nil then
