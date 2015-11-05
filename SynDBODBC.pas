@@ -1554,7 +1554,7 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
         end else
           ColumnSize := SizeOf(Int64);
         status := ODBC.BindParameter(fStatement, p+1, InputOutputType, CValueType,
-         CType2SQL(CValueType), ColumnSize, 0, ParameterValue, ColumnSize, StrLen_or_Ind[p]);
+         CType2SQL(CValueType), 0, 0, ParameterValue, ColumnSize, StrLen_or_Ind[p]);
         if (status=SQL_ERROR) and (not DriverDoesNotHandleUnicode) and
            (ODBC.GetDiagField(fStatement)='HY004') then begin
           TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode := true;
