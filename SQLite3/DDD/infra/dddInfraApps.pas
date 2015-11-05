@@ -223,7 +223,8 @@ type
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
-    procedure SetDefaults(const Root,Port,WebSocketPassword,UserPassword: RawUTF8);
+    procedure SetDefaults(const Root,Port,WebSocketPassword,UserPassword: RawUTF8;
+      const User: RawUTF8='User');
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -1399,7 +1400,7 @@ begin
 end;
 
 procedure TDDDRestClientSettings.SetDefaults(const Root,Port,WebSocketPassword,
-  UserPassword: RawUTF8);
+  UserPassword,User: RawUTF8);
 begin
   if fClient.Root='' then
     fClient.Root := Root;
@@ -1412,7 +1413,7 @@ begin
     if fClient.WebSocketsPassword='' then
       fClient.WebSocketsPassword := WebSocketPassword;
     if UserPassword<>'' then begin
-      fORM.User := 'User';
+      fORM.User := User;
       fORM.PasswordPlain := UserPassword;
     end;
   end;

@@ -9902,7 +9902,8 @@ type
     // - corresponding to the response type, as defined in Header
     Content: RawByteString;
     /// the HTML response code
-    // - if not overriden, will default to HTML_SUCCESS = 200
+    // - if not overriden, will default to HTML_SUCCESS = 200 on server side
+    // - on client side, would always contain HTML_SUCCESS = 200
     Status: cardinal;
   end;
 
