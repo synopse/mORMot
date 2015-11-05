@@ -170,7 +170,6 @@ uses
   mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}
 
-
 begin
   {$ifdef ISDELPHI2007ANDUP}
   {$ifdef DEBUG}
