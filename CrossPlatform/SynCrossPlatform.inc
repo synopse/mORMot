@@ -79,6 +79,9 @@
     {$define ISDELPHI2010}
     {$define ISDELPHIXE}
     {$define USETMONITOR}
+    {$if CompilerVersion >= 29.0}
+      {$define ISDELPHIXE8} // e.g. for System.Net.HttpClient
+    {$ifend}
   {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$ifdef UNICODE}
@@ -110,6 +113,9 @@
       {$define ISDELPHIXE4}
       {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
       {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
+    {$ifend}
+    {$if CompilerVersion >= 29.0}
+      {$define ISDELPHIXE8} // e.g. for System.Net.HttpClient
     {$ifend}
   {$else}
     {$define ISDELPHI5OROLDER}
