@@ -2167,11 +2167,13 @@ function WriteObject(Value: TObject): RawUTF8; overload;
 procedure CopyObject(aFrom, aTo: TObject);
 
 /// copy two TStrings instances
+// - will just call Dest.Assign(Source) in practice
 procedure CopyStrings(Source, Dest: TStrings);
 
 {$ifndef LVCL}
 /// copy two TCollection instances
-// - will call CopyObject() in loop to repopulate the Dest collection
+// - will call CopyObject() in loop to repopulate the Dest collection,
+// which would work even if Assign() method was not overriden
 procedure CopyCollection(Source, Dest: TCollection);
 {$endif}
 
@@ -13283,6 +13285,7 @@ type
     // a reference time base
     property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
+    // - this default implementation will handle #time #model #rest commands
     procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); virtual;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
@@ -41809,7 +41812,7 @@ begin
   try
     Dest.Clear;
     for i := 0 to Source.Count-1 do
-      CopyObject(Source.Items[i],Dest.Add); // Assign() fails
+      CopyObject(Source.Items[i],Dest.Add); // Assign() fails for most objects
   finally
     Dest.EndUpdate;
   end;
@@ -41820,16 +41823,11 @@ procedure CopyStrings(Source, Dest: TStrings);
 begin
   if (Source=nil) or (Dest=nil) then
     exit;
-  {$ifndef LVCL}
-  Dest.BeginUpdate;
-  try
-  {$endif}
-    Dest.Clear;
-    Dest.AddStrings(Source);
-  {$ifndef LVCL}
-  finally
-    Dest.EndUpdate;
-  end;
+  {$ifdef LVCL}
+  Dest.Clear;
+  Dest.AddStrings(Source);
+  {$else}
+  Dest.Assign(Source);
   {$endif}
 end;
 
@@ -45961,15 +45959,20 @@ var aUserName: RawUTF8;
     aSessionID: cardinal;
     i: integer;
 begin
+  result := false;
+  if fServer.fSessions=nil then
+    exit;
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
+  if aUserName='' then
+    exit;
   aSessionID := Ctxt.InputIntOrVoid['Session'];
   if aSessionID=0 then
     aSessionID := Ctxt.InputHexaOrVoid['SessionHex'];
-  if (aUserName<>'') and (aSessionID<>0) then begin
-    // GET ModelRoot/auth?UserName=...&Session=... -> release session
-  if (fServer.fSessions<>nil) and
-     // allow only to delete its own session - ticket [7723fa7ebd]
-     (aSessionID=Ctxt.Session) then
+  if aSessionID=0 then
+    exit;
+  result := true; // recognized GET ModelRoot/auth?UserName=...&Session=...
+  // allow only to delete its own session - ticket [7723fa7ebd]
+  if aSessionID=Ctxt.Session then
     for i := 0 to fServer.fSessions.Count-1 do
       with TAuthSession(fServer.fSessions.List[i]) do
       if (fIDCardinal=aSessionID) and (fUser.LogonName=aUserName) then begin
@@ -45977,9 +45980,6 @@ begin
         Ctxt.Success;
         break;
       end;
-    result := true;
-  end else
-    result := false;
 end;
 
 function TSQLRestServerAuthentication.GetUser(Ctxt: TSQLRestServerURIContext;
