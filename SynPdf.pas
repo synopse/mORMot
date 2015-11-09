@@ -29,6 +29,7 @@ unit SynPdf;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+   Achim Kalwa
    Alexander (chaa)
    aweste
    CoMPi
@@ -279,6 +280,7 @@ unit SynPdf;
   - added TPdfFormWithCanvas class - thanks Harald! see SynPdfFormCanvas.dpr
   - EMR_INTERSECTCLIPRECT fix supplied by Marsh - but patch disabled by default
   - huge UniScribe fixes supplied by Mehrdad Momeni (nosa) - THANKS A LOT!
+  - enhanced clipping process by Achim Kalwa
 
 }
 
@@ -8773,7 +8775,7 @@ type
     procedure SetMetaRgn;
     // intersect - clipping
     function IntersectClipRect(const ClpRect: TPdfBox; const CurrRect: TPdfBox): TPdfBox;
-    procedure ExtSelectClipRgn(data: PRgnDataHeader; iMode: DWord);
+    procedure ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
     // get current clipping area
     function GetClipRect: TPdfBox;
     procedure GradientFill(data: PEMGradientFill);
@@ -9183,14 +9185,9 @@ begin
   EMR_SETMETARGN:
     E.SetMetaRgn;
   EMR_EXTSELECTCLIPRGN:
-    E.ExtSelectClipRgn(@PEMRExtSelectClipRgn(R)^.RgnData[0],PEMRExtSelectClipRgn(R)^.iMode);
-  EMR_INTERSECTCLIPRECT: begin
-    ClipRgn := e.IntersectClipRect(e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true),ClipRgn);
-    {e.Canvas.Clip; // revert patch supplied by Marsh, which seems to break
-    with e.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true) do
-      e.Canvas.Rectangle(Left,Top,Width,Height);
-    e.Canvas.EoClip;}
-  end;
+    E.ExtSelectClipRgn(PEMRExtSelectClipRgn(R));
+  EMR_INTERSECTCLIPRECT:
+    ClipRgn := E.IntersectClipRect(E.Canvas.BoxI(PEMRIntersectClipRect(r)^.rclClip,true),ClipRgn);
   EMR_SETMAPMODE:
     MappingMode := PEMRSetMapMode(R)^.iMode;
   EMR_BEGINPATH: begin
@@ -9856,7 +9853,12 @@ end;
 function TPdfEnum.IntersectClipRect(const ClpRect: TPdfBox; const CurrRect: TPdfBox): TPdfBox;
 begin
   Result := CurrRect;
-  if (ClpRect.Width<>0) or (ClpRect.Height<>0) then begin // ignore null clipping area
+  if DC[nDC].ClipRgnNull then
+    exit; // no change
+  if (ClpRect.Width=0) or (ClpRect.Height=0) then
+    exit; // ignore null clipping area
+  if (CurrRect.Width>0) and (CurrRect.Height>0) then begin
+    // update existing region
     if ClpRect.Left > Result.Left then
       Result.Left := ClpRect.Left;
     if ClpRect.Top > Result.Top then
@@ -9870,23 +9872,45 @@ begin
       Result.Width := 0;
     if Result.Height<0 then
       Result.Height := 0;
+  end else begin
+    // current clip rect has no dimension, we need to create a new one
+    Canvas.Rectangle(ClpRect.Left,ClpRect.Top,ClpRect.Width,ClpRect.Height);
+    Canvas.Clip;
+    Canvas.NewPath;
+    Canvas.FNewPath := False;
+    DC[nDC].ClipRgnNull := false;
+    fFillColor := -1;
   end;
 end;
 
-procedure TPdfEnum.ExtSelectClipRgn(data: PRgnDataHeader; iMode: DWord);
-var ExtClip: TRect;
-begin
-  try
-    ExtClip := data^.rcBound;
-    with DC[nDC] do
-    case iMode of
-      RGN_COPY: begin
-        ClipRgn := MetaRgn;
-        ClipRgnNull := False;
-      end;
+procedure TPdfEnum.ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
+var RGNs: PRgnData;
+    i: Integer;
+    RCT: TRect;
+    ClipRect: TPdfBox;
+begin // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
+  if not DC[nDC].ClipRgnNull then begin
+    Canvas.GRestore;
+    Canvas.NewPath;
+    Canvas.fNewPath := False;
+    DC[nDC].ClipRgnNull := True;
+    fFillColor := -1;
+  end;
+  if Data^.cbRgnData>0 then begin
+    Canvas.GSave;
+    Canvas.NewPath;
+    DC[nDC].ClipRgnNull := False;
+    RGNs := @Data^.RgnData;
+    for i := 0 to RGNs^.rdh.nCount-1 do begin
+      Move(Rgns^.Buffer[i*SizeOf(TRect)], RCT, SizeOf(RCT));
+      Inc(RCT.Bottom);
+      ClipRect := Canvas.BoxI(RCT, False);
+      Canvas.Rectangle(ClipRect.Left,ClipRect.Top,ClipRect.Width,ClipRect.Height);
     end;
-  except
-    on E: Exception do ; // ignore any error (continue EMF enumeration)
+    Canvas.Closepath;
+    Canvas.Clip;
+    Canvas.NewPath;
+    Canvas.FNewPath := False;
   end;
 end;
 
