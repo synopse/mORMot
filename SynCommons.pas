@@ -19834,7 +19834,8 @@ function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   {$ifdef MSWINDOWS}
   result := CreateFile(pointer(FileName),GENERIC_READ,
-    FILE_SHARE_READ,nil,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
+    FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone 
+    OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
   {$else}
   result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
   {$endif MSWINDOWS}
@@ -22082,9 +22083,11 @@ begin
   F := FileOpenSequentialRead(FileName);
   if PtrInt(F)>=0 then begin
     Size := GetFileSize(F,nil);
-    SetLength(result,Size);
-    if FileRead(F,pointer(Result)^,Size)<>Size then
-      result := '';
+    if Size>0 then begin
+      SetLength(result,Size);
+      if FileRead(F,pointer(result)^,Size)<>Size then
+        result := '';
+    end;
     FileClose(F);
   end;
 end;
