@@ -29,6 +29,8 @@ unit mORMotUI;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - kevinday
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -114,6 +116,7 @@ unit mORMotUI;
     - added AutoResizeColumns optional parameter to TSQLTableToGrid.Refresh() -
       see feature request [c2e1ff324b]
     - added TSQLTableToGrid.OnSort event handler - see request [bffff9b4c3]
+    - added some values to TSQLAction - thanks kevinday for the patch
 
 *)
 
@@ -124,7 +127,7 @@ interface
 
 uses
   Windows,
-  Types,
+  Types, DateUtils,
   SynCommons, mORMot, mORMoti18n,
   SysUtils, Classes, Messages, Variants,
   {$ifdef WITHUXTHEME}
@@ -1667,7 +1670,9 @@ end;
 
 procedure TSQLTableToGrid.SetMark(aAction: TSQLAction);
 var i: integer;
-    V, Time: Int64;
+    V: Int64;
+    current: TDateTime;
+    TimeMin, TimeMax: TTimeLogBits;
 const
   DIFFTIME: array[actMarkOlderThanOneDay..actMarkOlderThanOneYear] of double =
     (1,7,31,183,365); // 183 = more or less half a year
@@ -1685,17 +1690,47 @@ begin
     actmarkInverse:
       for i := 1 to RowCount do
         Marked[i] := not Marked[i];
-    actMarkOlderThanOneDay..actMarkOlderThanOneYear:
-    if FieldIndexTimeLogForMark>=0 then begin
-      // use TDateTime calculation because TTimeLog is not duration compatible
-      PTimeLogBits(@Time)^.From(Now-DIFFTIME[aAction],true);
-      for i := 1 to RowCount do begin
-        SetInt64(Table.Get(i,fFieldIndexTimeLogForMark),V);
-        if (V>0) and (V<=Time) then
-          Marked[i] := true;
+    else
+      if FieldIndexTimeLogForMark >= 0 then begin
+        // use TDateTime calculation because TTimeLog is not duration compatible
+        current := Trunc(NowUTC);
+        case aAction of
+        actMarkToday: begin
+          TimeMin.From(current, true);
+          TimeMax.From(current + 1, true);
+        end;
+        actMarkThisWeek: begin
+          TimeMin.From(StartOfTheWeek(current), true);
+          TimeMax.From(EndOfTheWeek(current) + 1, true);
+        end;
+        actMarkThisMonth: begin
+          TimeMin.From(StartOfTheMonth(current), true);
+          TimeMax.From(EndOfTheMonth(current) + 1, true);
+        end;
+        actMarkYesterday: begin
+          TimeMin.From(current - 1, true);
+          TimeMax.From(current, true);
+        end;
+        actMarkLastWeek: begin
+          TimeMin.From(IncWeek(StartOfTheWeek(current), -1), true);
+          TimeMax.From(StartOfTheWeek(current), true);
+        end;
+        actMarkLastMonth: begin
+          TimeMin.From(IncMonth(StartOfTheMonth(current), -1), true);
+          TimeMax.From(StartOfTheMonth(current), true);
+        end;
+        actMarkOlderThanOneDay..actMarkOlderThanOneYear: begin
+          TimeMin.Value := 1; // = 1 second after Jesus' birth = not <> 0
+          TimeMax.From(NowUTC - DIFFTIME[aAction],true);
+        end;
+        else exit;
+        end;
+        for i := 1 to RowCount do begin
+          SetInt64(Table.Get(i, fFieldIndexTimeLogForMark), V);
+          if (V>=TimeMin.Value) and (V<=TimeMax.Value) then
+            Marked[i] := true;
+        end;
       end;
-    end;
-  else exit;
   end;
   TDrawGrid(Owner).Invalidate; // refresh screen
 end;

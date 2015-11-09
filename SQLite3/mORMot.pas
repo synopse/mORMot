@@ -8238,27 +8238,39 @@ type
   end;
 
   /// standard actions for User Interface generation
+  // - actNoAction for not defined action
+  // - actMark (standard action) to Mark rows, i.e. display sub-menu with
+  // actmarkAllEntries..actmarkOlderThanOneYear items
+  // - actUnmarkAll (standard action) to UnMark all rows
+  // - actmarkAllEntries to Mark all rows
+  // - actMarkForToday to Mark rows for today
+  // - actMarkForThisWeek to Mark rows for This Week
+  // - actMarkForThisMonth to Mark rows for this month
+  // - actMarkForYestday to Mark rows for today
+  // - actMarkForLastWeek to Mark rows for Last Week
+  // - actMarkForLastMonth to Mark rows for Last month
+  // - actmarkOlderThanOneDay to Mark rows After one day
+  // - actmarkOlderThanOneWeek to Mark rows older than one week
+  // - actmarkOlderThanOneMonth to Mark rows older than one month
+  // - actmarkOlderThanSixMonths to Mark rows older than one half year
+  // - actmarkOlderThanOneYear to Mark rows older than one year
+  // - actmarkInverse to Inverse Mark values (ON->OFF, OFF->ON)
   TSQLAction = (
-    /// action not defined
     actNoAction,
-    /// Mark rows (standard action)
-    // - display sub-menu with actmarkAllEntries..actmarkBeforeOneYear items
     actMark,
-    /// UnMark all rows (standard action)
     actUnmarkAll,
-    /// Mark all rows
     actmarkAllEntries,
-    /// Mark rows After one day
+    actMarkToday,
+    actMarkThisWeek,
+    actMarkThisMonth,
+    actMarkYesterday,
+    actMarkLastWeek,
+    actMarkLastMonth,
     actmarkOlderThanOneDay,
-    /// Mark rows older than one week
     actmarkOlderThanOneWeek,
-    /// Mark rows older than one month
     actmarkOlderThanOneMonth,
-    /// Mark rows older than one half year
     actmarkOlderThanSixMonths,
-    /// Mark rows older than one year
     actmarkOlderThanOneYear,
-    /// Inverse Mark values (ON->OFF, OFF->ON)
     actmarkInverse);
 
   /// set of standard actions for User Interface generation
