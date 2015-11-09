@@ -65,6 +65,8 @@ type
     Tables: TRawUTF8DynArray;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
+    TableDblClickOrderByIdDesc: boolean;
+    TableDblClickOrderByIdDescCSV: string;
     OnAfterExecute: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     procedure Open; virtual;
@@ -132,10 +134,19 @@ end;
 procedure TDBFrame.lstTablesDblClick(Sender: TObject);
 var
   i: integer;
+  table, sql: string;
 begin
   i := lstTables.ItemIndex;
-  if i >= 0 then
-    AddSQL('select * from ' + lstTables.Items[i] + ' limit 1000', true);
+  if i < 0 then
+    exit;
+  table := lstTables.Items[i];
+  sql := 'select * from ' + table;
+  if TableDblClickOrderByIdDesc or
+     ((TableDblClickOrderByIdDescCSV<>'') and
+      (Pos(table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
+    sql := sql + ' order by id desc';
+  sql := sql + ' limit 1000';
+  AddSQL(sql, true);
 end;
 
 procedure TDBFrame.SetResult(const JSON: RawUTF8);
