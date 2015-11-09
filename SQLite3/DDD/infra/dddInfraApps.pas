@@ -138,6 +138,10 @@ type
     /// read-only access to the underlying daemon instance
     // - equals nil if the daemon is not started
     property Daemon: IAdministratedDaemon read fDaemon;
+    /// returns the class instance implementing the underlying Daemon
+    // - you should transtype the returned instance using e.g.
+    // !  myDaemon := mainDaemon.DaemonInstance as TMyDaemonClass;
+    function DaemonInstance: TObject;
   published
   end;
   {$M-}
@@ -538,6 +542,11 @@ begin
     raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
   fSettings := aSettings;
   fSettingsRef := aSettings;
+end;
+
+function TDDDDaemon.DaemonInstance: TObject;
+begin
+  result := ObjectFromInterface(fDaemon);
 end;
 
 destructor TDDDDaemon.Destroy;
