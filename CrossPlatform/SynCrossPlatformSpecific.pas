@@ -59,35 +59,34 @@ unit SynCrossPlatformSpecific;
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
   {$define HASINLINE}
-{$else}
+{$else}           // Delphi or FPC: select a single USE* conditional
   {$i SynCrossPlatform.inc} // define e.g. HASINLINE
   {$ifdef MSWINDOWS}
     {$ifdef FPC}
-      {$define USEFCL}  // for debugging the FCL within Lazarus
-    {$else}
-    {$ifdef UNICODE}
-      {$ifdef MSWINDOWS}
-        {$define USESYNCRT}       // sounds to be the best choice under Windows
-      {$else}
-        {$ifdef ISDELPHIXE8}
-          {$define USEHTTPCLIENT} // use new System.Net.HttpClient
-        {$else}
-          {$define USEINDY}
-        {$endif}
-      {$endif}
-    {$else}
-      {$define USESYNCRT}
-    {$endif}
-    {$endif}
+      {$define USESYNCRT}       // sounds to be the best choice under Windows
+      {.$define USEFCL}         // for debugging the FCL within Lazarus
+    {$else FPC}
+      {$define USESYNCRT}       // sounds to be the best choice under Windows
+      {.$define USEINDY}        // for debugging Indy within Delphi
+      {.$define USEHTTPCLIENT}  // for debugging XE8+ HttpClient within Delphi
+    {$endif FPC}
     {$define USECRITICALSECTION}
-  {$else}
+  {$else MSWINDOWS}
     {$ifdef FPC}
       {$define USEFCL}
       {$define USECRITICALSECTION}
-    {$else}
-      {$define USEINDY}
-    {$endif}
-  {$endif}
+    {$else FPC}
+      {$ifdef ISDELPHIXE8}     // use new XE8+ System.Net.HttpClient
+        {$ifdef ANDROID}
+          {$define USEHTTPCLIENT}
+        {$else ANDROID}
+          {$define USEINDY} // HttpClient has still issues with https under iOS
+        {$endif ANDROID}
+      {$else ISDELPHIXE8}
+        {$define USEINDY}
+      {$endif ISDELPHIXE8}
+    {$endif FPC}
+  {$endif MSWINDOWS}
 {$endif}
 
 interface
