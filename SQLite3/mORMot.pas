@@ -2764,6 +2764,8 @@ type
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    procedure CopyLongStrProp(Source,Dest: TObject);
+     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
@@ -3219,8 +3221,7 @@ type
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; virtual; abstract;
     /// copy a property value from one instance to another
     // - both objects should have the same exact property
-    procedure CopyValue(Source, Dest: TObject);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure CopyValue(Source, Dest: TObject); virtual;
     /// copy a value from one instance to another property instance
     // - if the property has been flattened (for a TSQLPropInfoRTTI), the real
     // Source/Dest instance will be used for the copy
@@ -3278,6 +3279,7 @@ type
     fPropInfo: PPropInfo;
     fPropType: PTypeInfo;
     fFlattenedProps: PPropInfoDynArray;
+    fInPlaceCopySameClassPropOffset: cardinal;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
@@ -3453,6 +3455,7 @@ type
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
+    procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -3522,6 +3525,7 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
+    procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -3539,6 +3543,7 @@ type
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
+    procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); override;
     function SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -18980,6 +18985,9 @@ begin
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
+  if aPropInfo.GetterIsField and
+     ((aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc)) then
+    fInPlaceCopySameClassPropOffset := aPropInfo.GetProc {$ifndef FPC} and $00FFFFFF{$endif};
   fFromRTTI := true;
 end;
 
@@ -19845,6 +19853,14 @@ begin
   aValue.VText := pointer(temp);
 end;
 
+procedure TSQLPropInfoRTTIAnsi.CopyValue(Source, Dest: TObject);
+begin // avoid temporary variable use, for simple fields with no getter/setter
+  if fInPlaceCopySameClassPropOffset=0 then
+    fPropInfo.CopyLongStrProp(Source,Dest) else
+    PRawByteString(PtrUInt(Dest)+fInPlaceCopySameClassPropOffset)^ :=
+      PRawByteString(PtrUInt(Source)+fInPlaceCopySameClassPropOffset)^;
+end;
+
 
 { TSQLPropInfoRTTIRawUTF8 }
 
@@ -20158,6 +20174,14 @@ begin
     wasSQLString^ := true;
 end;
 
+procedure TSQLPropInfoRTTIWide.CopyValue(Source, Dest: TObject);
+begin // avoid temporary variable use, for simple fields with no getter/setter
+  if fInPlaceCopySameClassPropOffset=0 then
+    CopySameClassProp(Source,self,Dest) else
+    PWideString(PtrUInt(Dest)+fInPlaceCopySameClassPropOffset)^ :=
+      PWideString(PtrUInt(Source)+fInPlaceCopySameClassPropOffset)^;
+end;
+
 function TSQLPropInfoRTTIWide.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 var tmp1,tmp2: WideString;
@@ -20206,6 +20230,14 @@ end;
 procedure TSQLPropInfoRTTIUnicode.GetBinary(Instance: TObject; W: TFileBufferWriter);
 begin
   W.Write(UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance)));
+end;
+
+procedure TSQLPropInfoRTTIUnicode.CopyValue(Source, Dest: TObject);
+begin // avoid temporary variable use, for simple fields with no getter/setter
+  if fInPlaceCopySameClassPropOffset=0 then
+    CopySameClassProp(Source,self,Dest) else
+    PUnicodeString(PtrUInt(Dest)+fInPlaceCopySameClassPropOffset)^ :=
+      PUnicodeString(PtrUInt(Source)+fInPlaceCopySameClassPropOffset)^;
 end;
 
 function TSQLPropInfoRTTIUnicode.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
@@ -25917,6 +25949,15 @@ begin
   {$endif}
 end;
 
+procedure TPropInfo.CopyLongStrProp(Source,Dest: TObject);
+begin
+  {$ifdef UNICODE}
+  TypInfo.SetAnsiStrProp(Dest,@self,TypInfo.GetAnsiStrProp(Source,@self));
+  {$else}
+  SetStrProp(Dest,@self,TypInfo.GetStrProp(Source,@self));
+  {$endif}
+end;
+
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
 begin
   Value := TypInfo.GetWideStrProp(Instance,@self);
@@ -26165,6 +26206,13 @@ begin // caller must check that PropType^.Kind = tkLString
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(Index,Value);
   end;
+end;
+
+procedure TPropInfo.CopyLongStrProp(Source,Dest: TObject);
+var tmp: RawByteString;
+begin
+  GetLongStrProp(Source,tmp);
+  SetLongStrProp(Dest,tmp);
 end;
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
