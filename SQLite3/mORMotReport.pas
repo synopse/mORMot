@@ -32,6 +32,7 @@ unit mORMotReport;
 
   Contributor(s):
   - Celery
+  - Kevinday
   - Leo
   - Mike Lamusse (mogulza)
 
@@ -207,6 +208,7 @@ unit mORMotReport;
   - added withNewLine optional parameter to DrawText*() methods so that you
     may be able to append some text without creating a new paragraph - from a
     proposal patch by Mike Lamusse (mogulza): thanks for sharing!
+  - added TGDIPages.DrawColumnLine method - thanks kevinday for the patch
 
 *)
 
@@ -392,7 +394,6 @@ type
     fZoomTimer: TTimer;
 {$endif}
     fPtrHdl: THandle;
-
     fTabCount: integer;
     fCurrentPrinter: string;
     fOrientation: TPrinterOrientation;
@@ -453,12 +454,10 @@ type
     fColumnHeaderPrinted: boolean;
     fColumnHeaderPrintedAtLeastOnce: boolean;
     fDrawTextAcrossColsDrawingHeader: boolean;
-
     fColumnHeaderInGroup: boolean;
     fColumnsUsedInGroup: boolean;
     fGroupVerticalSpace: integer;
     fGroupVerticalPos: integer;
-
     fZoomChangedEvent: TZoomChangedEvent;
     fPreviewPageChangedEvent: TNotifyEvent;
     fStartNewPage: TNewPageEvent;
@@ -468,10 +467,8 @@ type
     fEndPageFooter: TNotifyEvent;
     fStartColumnHeader: TNotifyEvent;
     fEndColumnHeader: TNotifyEvent;
-
     fSavedCount: integer;
     fSaved: array of TSavedState;
-
     fTab: array of integer;
     fColumnsWithBottomGrayLine: boolean;
     fColumnsRowLineHeight: integer;
@@ -526,7 +523,8 @@ type
     procedure ZoomTimerInternal(X,Y: integer; ZoomIn: boolean);
     procedure ZoomTimer(Sender: TObject);
 
-    procedure LineInternal(start,finish: integer; DoubleLine: boolean);
+    procedure LineInternal(start, finish : integer; doubleline : boolean); overload;
+    procedure LineInternal(aty, start, finish : integer; doubleline : boolean); overload;
     procedure PrintFormattedLine(s: SynUnicode; flags: integer;
       const aBookmark: string=''; const aLink: string=''; withNewLine: boolean=true);
     procedure LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean=true);
@@ -730,6 +728,9 @@ type
     procedure DrawLine(doubleline: boolean=false);
     /// draw a Dashed Line between the left & right margins
     procedure DrawDashedLine;
+    /// draw a Line, following a column layout
+    procedure DrawColumnLine(ColIndex: integer; aAtTop: boolean;
+      aDoDoubleLine: boolean);
     /// append a Rich Edit content to the current report
     // - note that if you want the TRichEdit component to handle more than 64 KB
     // of RTF content, you have to set its MaxLength property as expected (this
@@ -2566,26 +2567,30 @@ begin
   ZoomTimerInternal(CursorPos.x,CursorPos.y, fZoomIn);
 end;
 
-procedure TGDIPages.LineInternal(start,finish: integer; DoubleLine: boolean);
-var
-  Y: integer;
+procedure TGDIPages.LineInternal(start, finish : integer; doubleline : boolean);
 begin
-  if (Self<>nil) and (fCanvas<>nil) then
-  with fCanvas do begin
-    Pen.Width := MulDiv(fDefaultLineWidth,Self.Font.Size,8);
-    if fsBold in Self.Font.style then Pen.Width := Pen.Width +1;
-    if DoubleLine then begin
-      Y := fCurrentYPos + (GetLineHeight shr 1) - (Pen.Width);
-      MoveTo(start,Y);
-      LineTo(finish,Y);
-      MoveTo(start,Y + Pen.Width*2);
-      LineTo(finish,Y + Pen.Width*2);
-    end else begin
-      Y := fCurrentYPos + (GetLineHeight shr 1) - (Pen.Width shr 1);
-      MoveTo(start,Y);
-      LineTo(finish,Y);
+  LineInternal(fCurrentYPos + (GetLineHeight shr 1), start, finish, doubleline);
+end;
+
+procedure TGDIPages.LineInternal(aty, start, finish : integer; doubleline : boolean);
+var Y: integer;
+begin
+  if (Self <> nil) and (fCanvas <> nil) then
+    with fCanvas do begin
+      Pen.Width := MulDiv(fDefaultLineWidth, Self.Font.size, 8);
+      if fsBold in Self.Font.style then Pen.Width := Pen.Width + 1;
+      if doubleline then begin
+        Y := aty - (Pen.Width);
+        MoveTo(start, Y);
+        LineTo(finish, Y);
+        MoveTo(start, Y + (Pen.Width * 2));
+        LineTo(finish, Y + (Pen.Width * 2));
+      end else begin
+        Y := aty - (Pen.Width shr 1);
+        MoveTo(start, Y);
+        LineTo(finish, Y);
+      end;
     end;
-  end;
 end;
 
 procedure TGDIPages.PrintFormattedLine(s: SynUnicode; flags: integer;
@@ -3555,6 +3560,17 @@ begin
     Pen.Style := psSolid;
   end;
   NewLine;
+end;
+
+procedure TGDIPages.DrawColumnLine(ColIndex: integer; aAtTop: boolean;
+  aDoDoubleLine: boolean);
+var Y: integer;
+begin
+  if aAtTop then
+    Y := fCurrentYPos - 1 else
+    Y := fCurrentYPos + fLineHeight + 1;
+  with fColumns[ColIndex] do
+    LineInternal(Y, ColLeft, ColRight, aDoDoubleLine);
 end;
 
 procedure TGDIPages.NewLine;
