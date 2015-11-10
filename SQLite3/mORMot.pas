@@ -7667,14 +7667,22 @@ type
     // - will call W.FlushToStream, then append all content
     procedure GetJSONValues(W: TTextWriter; Expand: boolean;
       RowFirst: integer=0; RowLast: integer=0); overload;
-    /// save the table in CSV format
+    /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
     // country use ',' as decimal separator, for instance our "douce France")
     // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
     procedure GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar=',';
-      AddBOM: boolean=false);
+      AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0); overload;
+    /// save the table as CSV format, into a string variable
+    // - if Tab=TRUE, will use TAB instead of ',' between columns
+    // - you can customize the ',' separator - use e.g. the global ListSeparator
+    // variable (from SysUtils) to reflect the current system definition (some
+    // country use ',' as decimal separator, for instance our "douce France")
+    // - AddBOM will add a UTF-8 Byte Order Mark at the beginning of the content
+    function GetCSVValues(Tab: boolean; CommaSep: AnsiChar=',';
+      AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0): RawUTF8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
     // - this format is used by ADODB.recordset, easily consummed by MS apps
     // - see @http://synopse.info/forum/viewtopic.php?pid=11691#p11691
@@ -7688,7 +7696,12 @@ type
     // - this method will return the raw binary buffer of the file
     // - see @http://synopse.info/forum/viewtopic.php?id=2133
     function GetODSDocument: RawByteString;
-
+    /// append the table content as a HTML <table> ... </table>
+    procedure GetHtmlTable(Dest: TTextWriter); overload;
+    /// save the table as a <html><body><table> </table></body></html> content
+    function GetHtmlTable(const Header: RawUTF8='<head><style>table,th,td'+
+      '{border: 1px solid black;border-collapse: collapse;}th,td{padding: 5px;'+
+      'font-family: sans-serif;}</style></head>'#10): RawUTF8; overload;
     /// get the Field index of a FieldName
     // - return -1 if not found, index (0..FieldCount-1) if found
     function FieldIndex(FieldName: PUTF8Char): integer; overload;
@@ -22814,13 +22827,17 @@ begin
 end;
 
 procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar=',';
-  AddBOM: boolean=false);
+  AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0);
 var U: PPUTF8Char;
     F,R,FMax: integer;
     W: TTextWriter;
 begin
   if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
     exit;
+  if (RowLast=0) or (RowLast>fRowCount) then
+    RowLast := fRowCount;
+  if RowFirst<0 then
+    RowFirst := 0;
   W := TTextWriter.Create(Dest,16384);
   try
     if AddBOM then
@@ -22828,8 +22845,8 @@ begin
     if Tab then
       CommaSep := #9;
     FMax := FieldCount-1;
-    U := pointer(fResults);
-    for R := 0 to fRowCount do
+    U := @fResults[RowFirst*FieldCount];
+    for R := RowFirst to RowLast do
       for F := 0 to FMax do begin
         if Tab or (not IsStringJSON(U^)) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
@@ -22845,6 +22862,19 @@ begin
     W.FlushFinal;
   finally
     W.Free;
+  end;
+end;
+
+function TSQLTable.GetCSVValues(Tab: boolean; CommaSep: AnsiChar=',';
+  AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0): RawUTF8;
+var MS: TRawByteStringStream;
+begin
+  MS := TRawByteStringStream.Create;
+  try
+    GetCSVValues(MS,Tab,CommaSep,AddBOM,RowFirst,RowLast);
+    result := MS.DataString;
+  finally
+    MS.Free;
   end;
 end;
 
@@ -23015,6 +23045,45 @@ begin
   end;
 end;
 
+procedure TSQLTable.GetHtmlTable(Dest: TTextWriter);
+var R,F: integer;
+    U: PPUTF8Char;
+begin
+  Dest.AddShort('<table>'#10);
+  U := pointer(fResults);
+  for R := 0 to fRowCount do begin
+    Dest.AddShort('<tr>');
+    for F := 1 to FieldCount do begin
+      if R=0 then
+        Dest.AddShort('<th>') else
+        Dest.AddShort('<td>');
+      Dest.AddHtmlEscape(U^);
+      if R=0 then
+        Dest.AddShort('</th>') else
+        Dest.AddShort('</td>');
+      inc(U); // points to next value
+    end;
+    Dest.AddShort('</tr>'#10);
+  end;
+  Dest.AddShort('</table>');
+end;
+
+function TSQLTable.GetHtmlTable(const Header: RawUTF8): RawUTF8;
+var W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(16384);
+  try
+    W.AddShort('<html>');
+    W.AddString(Header);
+    W.AddShort('<body>'#10);
+    GetHtmlTable(W);
+    W.AddShort(#10'</body></html>');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+  
 function TSQLTable.GetW(Row, Field: integer): RawUnicode;
 begin
   result := UTF8DecodeToRawUnicode(Get(Row,Field),0);

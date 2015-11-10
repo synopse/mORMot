@@ -40665,7 +40665,7 @@ begin
       '&': AddShort('&amp;');
       '"': AddShort('&quot;');
       '''': AddShort('&apos;');
-      else break;
+      else break; // should match XML_ESCAPE[] constant above
       end;
       inc(i);
     until false;
