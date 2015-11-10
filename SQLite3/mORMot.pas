@@ -2164,7 +2164,12 @@ function WriteObject(Value: TObject): RawUTF8; overload;
 // TSQLRecord children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular Delphi classes
-procedure CopyObject(aFrom, aTo: TObject);
+procedure CopyObject(aFrom, aTo: TObject); overload;
+
+/// create a new object instance, from an existing one
+// - will create a new instance of the same class, then call the overloaded
+// CopyObject() procedure to copy its values
+function CopyObject(aFrom: TObject): TObject; overload;
 
 /// copy two TStrings instances
 // - will just call Dest.Assign(Source) in practice
@@ -19656,12 +19661,12 @@ begin
 end;
 
 
+
 { TSQLPropInfoRTTIIObject }
 
 procedure TSQLPropInfoRTTIObject.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 var S,D: TObject;
-    DInst: TClassInstance;
 begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
@@ -19673,14 +19678,7 @@ begin
   if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
     CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous instance
-    try
-      DInst.Init(S.ClassType);
-      D := DInst.CreateNew;
-      CopyObject(S,D); // copy child content
-    except
-      FreeAndNil(D); // avoid memory leak if error during new instance copy
-    end;
-    SetInstance(Dest,D);
+    TSQLPropInfoRTTIObject(DestInfo).SetInstance(Dest,CopyObject(S));
   end;
 end;
 
@@ -40253,7 +40251,7 @@ begin
     if i<0 then
       result := nil else begin
       result := fStoredClass.Create;
-      CopyObject(fValue.List[i],result);
+      CopyObject(TObject(fValue.List[i]),result);
       result.fID := aID;
     end;
   finally
@@ -40347,7 +40345,7 @@ begin
       exit;
     if (fUniqueFields<>nil) and not UniqueFieldsUpdateOK(Rec,i) then
       exit; // stored false property duplicated value -> error
-    CopyObject(Rec,fValue.List[i]);
+    CopyObject(Rec,TObject(fValue.List[i]));
     fModified := true;
     result := true;
     if Owner<>nil then
@@ -41886,6 +41884,7 @@ begin
   end;
 end;
 
+
 procedure CopyObject(aFrom, aTo: TObject);
 var P,P2: PPropInfo;
     i: integer;
@@ -41931,6 +41930,22 @@ begin
       end;
       C := C.ClassParent;
     until C=TObject;
+end;
+
+function CopyObject(aFrom: TObject): TObject; 
+var DInst: TClassInstance;
+begin
+  if aFrom=nil then begin
+    result := nil;
+    exit;
+  end;
+  DInst.Init(aFrom.ClassType);
+  result := DInst.CreateNew;
+  try
+    CopyObject(aFrom,result);
+  except
+    FreeAndNil(result); // avoid memory leak if error during new instance copy
+  end;
 end;
 
 {$ifndef LVCL}
@@ -52359,7 +52374,7 @@ begin
   with TInterfacedObjectFake(fSharedInstance) do
     if fRefCount<>1 then
       raise EServiceException.CreateUTF8('%.Destroy with RefCount=%: you must release '+
-        'I% interface (:= nil) before Client.Free',[self,fRefCount,fInterfaceURI]) else
+        'I% interface (setting := nil) before Client.Free',[self,fRefCount,fInterfaceURI]) else
       _Release; // bonne nuit les petits
   inherited;
 end;
