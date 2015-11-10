@@ -20489,20 +20489,21 @@ end;
 
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
-var blob: RawByteString;
+var tmp: RawByteString;
     wrapper: TDynArray;
 begin
   GetDynArray(Instance,wrapper);
   if fObjArray<>nil then begin
-    wrapper.LoadFromJSON(Value);
+    SetString(tmp,PAnsiChar(Value),StrLen(Value)); // make private copy
+    wrapper.LoadFromJSON(pointer(tmp));
     exit;
   end;
   if Value=nil then
     wrapper.Clear else
-  if Base64MagicCheckAndDecode(Value,blob) then
-    wrapper.LoadFrom(pointer(blob)) else begin
-    blob := Value; // private copy since LoadFromJSON() modifies buffer in-place
-    wrapper.LoadFromJSON(Pointer(blob));
+  if Base64MagicCheckAndDecode(Value,tmp) then
+    wrapper.LoadFrom(pointer(tmp)) else begin
+    SetString(tmp,PAnsiChar(Value),StrLen(Value)); // make private copy
+    wrapper.LoadFromJSON(pointer(tmp));
   end;
 end;
 
