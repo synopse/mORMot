@@ -121,7 +121,11 @@ end;
 interface
 
 uses
-  Windows, Types, SysUtils,
+  {$ifdef MSWINDOWS}
+  Windows,
+  {$endif}
+  Types,
+  SysUtils,
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
