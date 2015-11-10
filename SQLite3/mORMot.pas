@@ -7213,7 +7213,7 @@ type
     // - handle UTF-8 SQL to Delphi values conversion (see TPropInfo mapping)
     // - this method has been made virtual e.g. so that a calculated value can be
     // used in a custom field
-    procedure FillRow(aRow: integer; aDest: TSQLRecord=nil); virtual;
+    function FillRow(aRow: integer; aDest: TSQLRecord=nil): boolean; virtual;
     /// fill all published properties of this object from the next available
     // TSQLTable prepared row
     // - FillPrepare() must have been called before
@@ -27899,15 +27899,16 @@ begin
       Int64DynArrayToCSV(aIDs,length(aIDs),'ID in (',')'),aCustomFieldsCSV);
 end;
 
-procedure TSQLRecord.FillRow(aRow: integer; aDest: TSQLRecord=nil);
+function TSQLRecord.FillRow(aRow: integer; aDest: TSQLRecord): boolean;
 begin
   if self<>nil then
     if aDest=nil then
-      fFill.Fill(aRow) else
+      result := fFill.Fill(aRow) else
       if fFill.fTableMapRecordManyInstances=nil then
-        fFill.Fill(aRow,aDest) else
+        result := fFill.Fill(aRow,aDest) else
         raise EBusinessLayerException.CreateUTF8(
-          '%.FillRow() forbidden after FillPrepareMany',[self]);
+          '%.FillRow() forbidden after FillPrepareMany',[self]) else
+    result := false;
 end;
 
 function TSQLRecord.FillOne: boolean;

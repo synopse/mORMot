@@ -7036,6 +7036,7 @@ begin
 end;
 procedure CheckRWith(i: Integer; offset: integer=0);
 begin
+  Check(i<>0);
   Check(R.ID=i);
   Check(R.Int=i);
   Check(R.Test=Int32ToUtf8(i));
@@ -7145,6 +7146,15 @@ begin
             CheckRWith(i);
           end;
           Check(i=9999);
+          for i := 1 to 9999 do begin
+            Check(R.FillRow(i));
+            CheckRWith(i);
+          end;
+          for i := 1 to 19999 do begin
+            j := Random(9999)+1;
+            Check(R.FillRow(j));
+            CheckRWith(j);
+          end;
         finally
           R.Free;
         end;
