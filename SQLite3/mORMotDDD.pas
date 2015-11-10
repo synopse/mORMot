@@ -861,6 +861,9 @@ type
     /// this method will wait until Halt() is executed
     // - i.e. protected fFinished TEvent is notified
     procedure WaitUntilHalted; virtual;
+    /// returns the daemon name
+    // - e.g. TMyOwnDaemon would return 'MyOwn' text
+    function DaemonName: RawUTF8; virtual;
     /// access to the associated loging class
     property LogClass: TSynLogClass read fLogClass;
     /// access to the associated internal settings
@@ -2274,7 +2277,7 @@ begin
         end;
         result.Content := ObjectToJSON(fInternalSettings);
       end;
-    2: result.Content := JSONEncode(['prog',ExeVersion.ProgramName,
+    2: result.Content := JSONEncode(['daemon',DaemonName,
          'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
          'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
          'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
@@ -2394,12 +2397,23 @@ begin
   fInternalSettings := Settings;
 end;
 
+function TDDDAdministratedDaemon.DaemonName: RawUTF8;
+var L: integer;
+begin
+  result := RawUTF8(ClassName);
+  if result[1]='T' then
+    delete(result,1,1);
+  L := length(result);
+  if copy(result,L-5,6)='Daemon' then
+    SetLength(result,L-6);
+end;
+
 
 { TDDDAdministratedThreadDaemon }
 
 function TDDDAdministratedThreadDaemon.InternalIsRunning: boolean;
 begin
-  result := (self<>nil) and (fThread<>nil);
+  result := fThread<>nil;
 end;
 
 procedure TDDDAdministratedThreadDaemon.InternalStop;

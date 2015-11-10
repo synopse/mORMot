@@ -487,7 +487,7 @@ end;
 destructor TDDDAppSettingsAbstract.Destroy;
 begin
   StoreIfUpdated;
-  inherited;
+  inherited Destroy;
   fStorage.Free;
 end;
 
