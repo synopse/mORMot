@@ -14,6 +14,7 @@ uses
   Controls,
   Forms,
   Dialogs,
+  Clipbrd,
   mORMotUI,
   mORMotUILogin,
   mORMotToolbar,
@@ -27,6 +28,8 @@ uses
   dddToolsAdminLog;
 
 type
+  TAdminSaveOrExport = (expSaveGrid, expCopyGrid, expCopyRow);
+
   TAdminControl = class(TWinControl)
   protected
     fClient: TSQLHttpClientWebsockets;
@@ -40,11 +43,13 @@ type
     fChatFrame: TLogFrame;
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
+    fDlgSave: TSaveDialog;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
     OnAfterExecute: TNotifyEvent;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil):
       boolean; virtual;
@@ -60,6 +65,8 @@ type
     function CurrentDBFrame: TDBFrame;
     function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState); virtual;
+    procedure SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName: string =
+      ''; DB: TDBFrame = nil);
     property Client: TSQLHttpClientWebsockets read fClient;
     property Page: TSynPager read fPage;
     property LogFrame: TLogFrame read fLogFrame;
@@ -188,6 +195,19 @@ begin
   finally
     Screen.Cursor := crDefault;
   end;
+end;
+
+constructor TAdminControl.Create(AOwner: TComponent);
+begin
+  inherited;
+  fDlgSave := TSaveDialog.Create(AOwner);
+  fDlgSave.Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist,
+    ofEnableSizing];
+  fDlgSave.Filter :=
+    'JSON (human readable)|*.json|JSON (small)|*.json|CSV (text)|*.txt|Excel/Office (.ods)|*.ods|HTML|*.html';
+  fDlgSave.DefaultExt := '.html';
+  fDlgSave.FilterIndex := 5;
+  fDlgSave.InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
 end;
 
 destructor TAdminControl.Destroy;
@@ -373,6 +393,57 @@ begin
   fFrame.Show;
   Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName, fFrame.version.prog,
     fFrame.version.version, fFrame.fDefinition.ORM.ServerName]);
+end;
+
+procedure TAdminControl.SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName:
+  string; DB: TDBFrame);
+var
+  grid: TSQLTable;
+  row: integer;
+  table: RawUTF8;
+begin
+  if DB = nil then
+    DB := CurrentDBFrame;
+  if DB = nil then
+    exit;
+  grid := DB.Grid.Table;
+  if (grid = nil) or (grid.RowCount = 0) then
+    exit;
+  if Fmt = expSaveGrid then begin
+    fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s', [ContextName, db.GridLastTableName,
+      NowToString(false)]));
+    if not fDlgSave.Execute then
+      exit;
+    case fDlgSave.FilterIndex of
+      1:
+        JSONBufferReformat(pointer(grid.GetJSONValues(true)), table);
+      2:
+        table := grid.GetJSONValues(true);
+      3:
+        table := grid.GetCSVValues(true);
+      4:
+        table := grid.GetODSDocument;
+      5:
+        table := grid.GetHtmlTable;
+    end;
+    if table <> '' then
+      FileFromString(table, fDlgSave.FileName);
+  end
+  else begin
+    case Fmt of
+      expCopyGrid:
+        table := grid.GetCSVValues(true);
+      expCopyRow:
+        begin
+          row := db.drwgrdResult.Row;
+          if row < 0 then
+            exit;
+          table := grid.GetCSVValues(true, ',', false, row, row);
+        end;
+    end;
+    if table <> '' then
+      Clipboard.AsText := UTF8ToString(table);
+  end;
 end;
 
 end.
