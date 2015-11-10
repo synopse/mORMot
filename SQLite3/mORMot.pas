@@ -23057,7 +23057,7 @@ begin
       if R=0 then
         Dest.AddShort('<th>') else
         Dest.AddShort('<td>');
-      Dest.AddHtmlEscape(U^);
+      Dest.AddHtmlEscape(U^,hfOutsideAttributes);
       if R=0 then
         Dest.AddShort('</th>') else
         Dest.AddShort('</td>');

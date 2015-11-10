@@ -6293,6 +6293,17 @@ type
     jsonCompact, jsonHumanReadable,
     jsonUnquotedPropName, jsonUnquotedPropNameCompact);
 
+  /// the potential places were TTextWriter.HtmlEscape should process
+  // proper HTML string escaping
+  // $  < > & "  ->   &lt; &gt; &amp; &quote;
+  // by default (hfAnyWhere)
+  // $  < > &  ->   &lt; &gt; &amp;
+  // outside HTML attributes (hfOutsideAttributes)
+  // $  & "  ->   &amp; &quote;
+  // within HTML attributes (hfWithinAttributes)
+  TTextWriterHTMLFormat = (
+    hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
+
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
   // - some dedicated methods is able to encode any data with JSON escape
@@ -6572,14 +6583,13 @@ type
     // single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar; TextLen: integer=0);
     /// append some chars, escaping all HTML special chars as expected
-    // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
-    procedure AddHtmlEscape(Text: PUTF8Char); overload;
+    procedure AddHtmlEscape(Text: PUTF8Char; Fmt: TTextWriterHTMLFormat=hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
-    // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
-    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: integer); overload;
+    procedure AddHtmlEscape(Text: PUTF8Char; TextLen: integer;
+      Fmt: TTextWriterHTMLFormat=hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
-    // - i.e.   < > & "  as   &lt; &gt; &amp; &quote;
-    procedure AddHtmlEscapeString(const Text: string);
+    procedure AddHtmlEscapeString(const Text: string;
+      Fmt: TTextWriterHTMLFormat=hfAnyWhere);
     /// convert some wiki-like text into proper HTML
     // - convert all #13#10 into <p>...</p>, *..* into <i>..</i> and +..+ into
     // <b>..</b>, then escape http:// as <a href=...> and any HTML special chars
@@ -40511,10 +40521,7 @@ begin
   inc(B);
 end;
 
-const
-  HTML_ESCAPE: set of byte = [0,ord('<'),ord('>'),ord('&'),ord('"')];
-
-procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char);
+procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; Fmt: TTextWriterHTMLFormat);
 var i,beg: PtrInt;
 begin
   if Text=nil then
@@ -40522,12 +40529,24 @@ begin
   i := 0;
   repeat
     beg := i;
-    if not(ord(Text[i]) in HTML_ESCAPE) then begin
-      repeat // it is faster to handle all not-escaped chars at once
-        inc(i);
-      until ord(Text[i]) in HTML_ESCAPE;
-      AddNoJSONEscape(Text+beg,i-beg);
+    case Fmt of
+    hfAnyWhere:
+      while true do
+        if Text[i] in [#0,'&','"','<','>'] then
+          break else
+          inc(i);
+    hfOutsideAttributes:
+      while true do
+        if Text[i] in [#0,'&','<','>'] then
+          break else
+          inc(i);
+    hfWithinAttributes:
+      while true do
+        if Text[i] in [#0,'&','"'] then
+          break else
+          inc(i);
     end;
+    AddNoJSONEscape(Text+beg,i-beg);
     repeat
       case Text[i] of
       #0: exit;
@@ -40542,7 +40561,8 @@ begin
   until false;
 end;
 
-procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: integer);
+procedure TTextWriter.AddHtmlEscape(Text: PUTF8Char; TextLen: integer;
+  Fmt: TTextWriterHTMLFormat);
 var i,beg: PtrInt;
 begin
   if (Text=nil) or (TextLen<=0) then
@@ -40550,15 +40570,27 @@ begin
   i := 0;
   repeat
     beg := i;
-    if not(ord(Text[i]) in HTML_ESCAPE) then begin
-      repeat // it is faster to handle all not-escaped chars at once
-        inc(i);
-      until (ord(Text[i]) in HTML_ESCAPE) or (i>=TextLen);
-      AddNoJSONEscape(Text+beg,i-beg);
+    case Fmt of
+    hfAnyWhere:
+      while i<TextLen do
+        if Text[i] in [#0,'&','"','<','>'] then
+          break else
+          inc(i);
+    hfOutsideAttributes:
+      while i<TextLen do
+        if Text[i] in [#0,'&','<','>'] then
+          break else
+          inc(i);
+    hfWithinAttributes:
+      while i<TextLen do
+        if Text[i] in [#0,'&','"'] then
+          break else
+          inc(i);
     end;
-    if i=TextLen then
-      exit;
+    AddNoJSONEscape(Text+beg,i-beg);
     repeat
+      if i=TextLen then
+        exit;
       case Text[i] of
       #0: exit;
       '<': AddShort('&lt;');
@@ -40572,9 +40604,9 @@ begin
   until false;
 end;
 
-procedure TTextWriter.AddHtmlEscapeString(const Text: string);
+procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHTMLFormat);
 begin
-  AddHtmlEscape(pointer(StringToUTF8(Text)));
+  AddHtmlEscape(pointer(StringToUTF8(Text)),Fmt);
 end;
 
 procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char);
@@ -40607,7 +40639,7 @@ begin
         if (P^='h') and IdemPChar(P+1,'TTP://') then
           break else
           inc(P);
-      AddHtmlEscape(B,P-B);
+      AddHtmlEscape(B,P-B,hfOutsideAttributes);
       case ord(P^) of
       0: break;
       10,13: begin

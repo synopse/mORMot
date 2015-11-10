@@ -373,28 +373,6 @@ begin
   result := nil;
 end;
 
-
-
-{ TAdminForm }
-
-procedure TAdminForm.FormCreate(Sender: TObject);
-begin
-  DefaultFont.Name := 'Tahoma';
-  DefaultFont.Size := 9;
-  Caption := Format('%s %s', [ExeVersion.ProgramName, ExeVersion.Version.Detailed]);
-  fFrame := TAdminControl.Create(self);
-  fFrame.Parent := self;
-  fFrame.Align := alClient;
-  OnKeyDown := fFrame.FormKeyDown;
-end;
-
-procedure TAdminForm.FormShow(Sender: TObject);
-begin
-  fFrame.Show;
-  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName, fFrame.version.prog,
-    fFrame.version.version, fFrame.fDefinition.ORM.ServerName]);
-end;
-
 procedure TAdminControl.SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName:
   string; DB: TDBFrame);
 var
@@ -444,6 +422,27 @@ begin
     if table <> '' then
       Clipboard.AsText := UTF8ToString(table);
   end;
+end;
+
+
+{ TAdminForm }
+
+procedure TAdminForm.FormCreate(Sender: TObject);
+begin
+  DefaultFont.Name := 'Tahoma';
+  DefaultFont.Size := 9;
+  Caption := Format('%s %s', [ExeVersion.ProgramName, ExeVersion.Version.Detailed]);
+  fFrame := TAdminControl.Create(self);
+  fFrame.Parent := self;
+  fFrame.Align := alClient;
+  OnKeyDown := fFrame.FormKeyDown;
+end;
+
+procedure TAdminForm.FormShow(Sender: TObject);
+begin
+  fFrame.Show;
+  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName, fFrame.version.prog,
+    fFrame.version.version, fFrame.fDefinition.ORM.ServerName]);
 end;
 
 end.
