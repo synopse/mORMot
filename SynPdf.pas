@@ -499,6 +499,10 @@ type
   TPdfAnnotationSubType = (
     asTextNotes, asLink);
 
+  /// The border style of an annotation
+  TPdfAnnotationBorder = (
+    abSolid, abDashed, abBeveled, abInset, abUnderline);
+
   /// Destination Type determines default user space coordinate system of
   // Explicit destinations
   TPdfDestinationType = (
@@ -1450,13 +1454,15 @@ type
     function GetXObjectImageName(const Hash: TPdfImageHash; Width, Height: Integer): PDFString;
     /// wrapper to create an annotation
     // - the annotation is set to a specified position of the current page
-    function CreateAnnotation(AType: TPdfAnnotationSubType; const ARect: TPdfRect): TPdfDictionary; overload;
+    function CreateAnnotation(AType: TPdfAnnotationSubType; const ARect: TPdfRect;
+      BorderStyle: TPdfAnnotationBorder=abSolid; BorderWidth: integer=1): TPdfDictionary;
     /// wrapper to create a Link annotation, specified by a bookmark
     // - the link is set to a specified rectangular position of the current page
     // - if the bookmark name is not existing (i.e. if it no such name has been
     // defined yet via the CreateBookMark method), it's added to the internal
     // fMissingBookmarks list, and will be linked at CreateBookMark method call
-    function CreateLink(const ARect: TPdfRect; const aBookmarkName: RawUTF8): TPdfDictionary;
+    function CreateLink(const ARect: TPdfRect; const aBookmarkName: RawUTF8;
+      BorderStyle: TPdfAnnotationBorder=abSolid; BorderWidth: integer=1): TPdfDictionary;
     /// create an Outline entry at a specified position of the current page
     // - the outline tree is created from the specified numerical level (0=root),
     // just after the item added via the previous CreateOutline call
@@ -2148,13 +2154,13 @@ type
   // and the outline tree is created from the number of leading spaces in the title
   // - pgcBookmark will create a destination at the current position (i.e.
   // the last Y parameter of a Move), with some text supplied as bookmark name
-  // - pgcLink will create a asLink annotation, expecting the data to be filled
-  // with TRect inclusive-inclusive bounding rectangle coordinates, followed by
-  // the corresponding bookmark name
+  // - pgcLink/pgcLinkNoBorder will create a asLink annotation, expecting the data
+  // to be filled with TRect inclusive-inclusive bounding rectangle coordinates,
+  // followed by the corresponding bookmark name
   // - use the GDIComment*() functions to append the corresponding
   // EMR_GDICOMMENT message to a metafile content
   TPdfGDIComment =
-    (pgcOutline, pgcBookmark, pgcLink);
+    (pgcOutline, pgcBookmark, pgcLink, pgcLinkNoBorder);
 
   /// a dictionary wrapper class for the PDF document information fields
   // - all values use the generic VCL string type, and will be encoded
@@ -2784,7 +2790,8 @@ procedure GDICommentBookmark(MetaHandle: HDC; const aBookmarkName: RawUTF8);
 procedure GDICommentOutline(MetaHandle: HDC; const aTitle: RawUTF8; aLevel: Integer);
 
 /// append a EMR_GDICOMMENT message for creating a Link into a specified bookmark
-procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect);
+procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect;
+  NoBorder: boolean);
 
 
 {$ifdef USE_PDFSECURITY}
@@ -3228,7 +3235,8 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   Windows.GdiComment(MetaHandle,L+2,D);
 end;
 
-procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect);
+procedure GDICommentLink(MetaHandle: HDC; const aBookmarkName: RawUTF8; const aRect: TRect;
+  NoBorder: boolean);
 var Data: RawByteString;
     D: PAnsiChar;
     L: integer;
@@ -3236,7 +3244,9 @@ begin // high(TPdfGDIComment)<$47 so it will never begin with GDICOMMENT_IDENTIF
   L := length(aBookmarkName);
   SetLength(Data,L+(1+sizeof(TRect)));
   D := pointer(Data);
-  D^ := AnsiChar(pgcLink);
+  if NoBorder then
+    D^ := AnsiChar(pgcLinkNoBorder) else
+    D^ := AnsiChar(pgcLink);
   PRect(D+1)^ := aRect;
   MoveFast(pointer(aBookmarkName)^,D[1+sizeof(TRect)],L);
   Windows.GdiComment(MetaHandle,L+(1+sizeof(TRect)),D);
@@ -5533,11 +5543,12 @@ begin
 end;
 
 function TPdfDocument.CreateAnnotation(AType: TPdfAnnotationSubType;
-  const ARect: TPdfRect): TPdfDictionary;
-var FAnnotation: TPdfDictionary;
+  const ARect: TPdfRect; BorderStyle: TPdfAnnotationBorder; BorderWidth: integer): TPdfDictionary;
+var FAnnotation, FBorderStyle: TPdfDictionary;
     aArray: TPdfArray;
     aPage: TPdfPage;
 const FLAGS_PRINT = 4;
+      BS: array [TPdfAnnotationBorder] of PDFString = ('S','D','B','I','U');
 begin
   // create new annotation and set the properties
   FAnnotation := TPdfDictionary.Create(FXref);
@@ -5546,6 +5557,14 @@ begin
   FAnnotation.AddItem('Type', 'Annot');
   FAnnotation.AddItem('Subtype', PDF_ANNOTATION_TYPE_NAMES[ord(AType)]);
   FAnnotation.AddItem('F',FLAGS_PRINT);
+  if (BorderStyle<>abSolid) or (BorderWidth<>1) then begin
+    FBorderStyle := TPdfDictionary.Create(FXRef);
+    if BorderStyle<>abSolid then
+      FBorderStyle.AddItem('S',BS[BorderStyle]);
+    if BorderWidth<>1 then
+      FBorderStyle.AddItem('W',BorderWidth);
+    FAnnotation.AddItem('BS',FBorderStyle);
+  end;
   with ARect do
     FAnnotation.AddItem('Rect',TPdfArray.CreateReals(FXRef,[Left,Top,Right,Bottom]));
   // adding annotation to the current page
@@ -5559,11 +5578,11 @@ begin
   Result := FAnnotation;
 end;
 
-function TPdfDocument.CreateLink(const ARect: TPdfRect;
-  const aBookmarkName: RawUTF8): TPdfDictionary;
+function TPdfDocument.CreateLink(const ARect: TPdfRect; const aBookmarkName: RawUTF8;
+  BorderStyle: TPdfAnnotationBorder; BorderWidth: integer): TPdfDictionary;
 var aDest: TPdfDestination;
 begin
-  result := CreateAnnotation(asLink,ARect);
+  result := CreateAnnotation(asLink,ARect,BorderStyle,BorderWidth);
   with fBookmarks do
     aDest := TPdfDestination(Objects[IndexOf(aBookmarkName)]);
   if aDest=nil then
@@ -9637,6 +9656,7 @@ end;
 
 procedure TPdfEnum.HandleComment(Kind: TPdfGDIComment; P: PAnsiChar; Len: integer);
 var Text: RawUTF8;
+    W: integer;
 begin
   try
     case Kind of
@@ -9650,10 +9670,13 @@ begin
         SetString(Text,P,Len);
         Canvas.Doc.CreateBookMark(Canvas.I2Y(DC[nDC].Position.Y),Text);
       end;
-      pgcLink:
+      pgcLink,pgcLinkNoBorder:
       if Len>Sizeof(TRect) then begin
         SetString(Text,P+SizeOf(TRect),Len-SizeOf(TRect));
-        Canvas.Doc.CreateLink(Canvas.RectI(PRect(P)^,true),Text);
+        if Kind=pgcLink then
+          W := 1 else
+          W := 0;
+        Canvas.Doc.CreateLink(Canvas.RectI(PRect(P)^,true),Text,abSolid,W);
       end;
     end;
   except
