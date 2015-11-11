@@ -32,6 +32,8 @@ interface
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - kevinday
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -1038,6 +1040,14 @@ var TypeName: PShortString;
     EN: boolean;
     A2: TSQLAction;
     ActionNames: TStringDynArray;
+
+  procedure InsertSubMenu(A2: TSQLAction);
+  begin
+    CreateSubMenuItem(fClass.CaptionNameFromRTTI(
+      PTypeInfo(TypeInfo(TSQLAction))^.EnumBaseType^.GetEnumName(A2)),
+      iAction,nil,iAction-1,integer(A2));
+  end;
+  
 begin
   result := nil;
   if fPage=nil then
@@ -1104,18 +1114,16 @@ begin
           // create associated sub menu entry
           if Style<>bsCheck then begin
             NewMenuItem(fMenu,Caption,iAction-1);
-            if TSQLAction(iAction)=actMark then
-              // actMarkAllEntries..actMarkBeforeOneYear are regrouped in
-              // an only one aAction=actMark
-              with PTypeInfo(TypeInfo(TSQLAction))^.EnumBaseType^ do
-              for A2 := actMarkAllEntries to actmarkInverse do
-                if (A2<actmarkOlderThanOneDay) or (A2>actmarkOlderThanOneYear) or
-                 (TableToGrid.FieldIndexTimeLogForMark>=0) then begin
-                  if A2=actmarkInverse then
+            if TSQLAction(iAction)=actMark then begin // Mark sub-menu
+              InsertSubMenu(actmarkAllEntries);
+              InsertSubMenu(actmarkInverse);
+              if TableToGrid.FieldIndexTimeLogForMark>=0 then 
+                for A2 := actmarkToday to actmarkOlderThanOneYear do begin
+                  if A2 in [actmarkToday,actmarkOlderThanOneDay] then
                     CreateSubMenuItem('-',iAction,nil);
-                  CreateSubMenuItem(fClass.CaptionNameFromRTTI(GetEnumName(A2)),
-                    iAction,nil,iAction-1,integer(A2));
+                  InsertSubMenu(A2);
                 end;
+            end;
           end;
         end;
     end;
