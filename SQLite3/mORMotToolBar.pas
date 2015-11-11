@@ -2427,7 +2427,7 @@ begin
   end;
   if (Body<>nil) and Body.AdvOfficePagerStyler.InheritsFrom(TAdvOfficePagerOfficeStyler) then
     TAdvOfficePagerOfficeStyler(Body.AdvOfficePagerStyler).Style :=
-      TOfficePagerStyle(StatusBarStyler.Style);
+      TOfficePagerStyle(StatusStyle);
   // update colors for windows
   for i := 0 to Application.ComponentCount-1 do begin
     C := Application.Components[i];
