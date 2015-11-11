@@ -526,7 +526,8 @@ type
     procedure LineInternal(start, finish : integer; doubleline : boolean); overload;
     procedure LineInternal(aty, start, finish : integer; doubleline : boolean); overload;
     procedure PrintFormattedLine(s: SynUnicode; flags: integer;
-      const aBookmark: string=''; const aLink: string=''; withNewLine: boolean=true);
+      const aBookmark: string=''; const aLink: string=''; withNewLine: boolean=true;
+      aLinkNoBorder: boolean=false);
     procedure LeftOrJustifiedWrap(const s: SynUnicode; withNewLine: boolean=true);
     procedure RightOrCenterWrap(const s: SynUnicode);
     procedure GetTextLimitsPx(var LeftOffset, RightOffset: integer);
@@ -691,10 +692,10 @@ type
     // - if aBookmark is set, a bookmark is created at this position
     // - if aLink is set, a link to the specified bookmark name (in aLink) is made
     procedure DrawTitle(const s: SynUnicode; DrawBottomLine: boolean=false; OutlineLevel: Integer=0;
-      const aBookmark: string=''; const aLink: string='');
+      const aBookmark: string=''; const aLink: string=''; aLinkNoBorder: boolean=false);
     /// draw one line of text, with the current alignment
     procedure DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string='';
-      CheckPageNumber: boolean=false);
+      CheckPageNumber: boolean=false; aLinkNoBorder: boolean=false);
     /// draw one line of text, with a specified Angle and X Position
     procedure DrawAngledTextAt(const s: SynUnicode; XPos, Angle: integer);
     /// draw a square box at the given coordinates
@@ -934,7 +935,7 @@ type
     // - the bookmark name is not checked by this method: a bookmark can be
     // linked before being marked in the document
     procedure AddLink(const aBookmarkName: string; aRect: TRect;
-      aPageNumber: integer=0); virtual;
+      aPageNumber: integer=0; aNoBorder: boolean=false); virtual;
 
     /// convert a rect of mm into pixel canvas units
     function MmToPrinter(const R: TRect): TRect;
@@ -2594,7 +2595,7 @@ begin
 end;
 
 procedure TGDIPages.PrintFormattedLine(s: SynUnicode; flags: integer;
-  const aBookmark: string; const aLink: string; withNewLine: boolean);
+  const aBookmark: string; const aLink: string; withNewLine,aLinkNoBorder: boolean);
 var i, xpos: integer;
     leftOffset, rightOffset: integer;
 begin
@@ -2633,7 +2634,7 @@ begin
   if aLink<>'' then
     AddLink(aLink,Rect(PrinterPxToMmX(leftOffset),PrinterPxToMmY(fCurrentTextTop),
       PrinterPxToMmX(rightOffset),PrinterPxToMmY(fCurrentTextTop+fLineHeight)),
-      fCurrentTextPage);
+      fCurrentTextPage,aLinkNoBorder);
     // first line of written text is added
 end;
 
@@ -3310,8 +3311,8 @@ begin
   DrawTextW(UTF8ToSynUnicode(s),withNewLine);
 end;
 
-procedure TGDIPages.DrawTitle(const s: SynUnicode; DrawBottomLine: boolean=false;
-  OutlineLevel: Integer=0; const aBookmark: string=''; const aLink: string='');
+procedure TGDIPages.DrawTitle(const s: SynUnicode; DrawBottomLine: boolean;
+  OutlineLevel: Integer; const aBookmark,aLink: string; aLinkNoBorder: boolean);
 var H: integer;
     str: string;
 begin
@@ -3322,7 +3323,7 @@ begin
     str := SynUnicodeToString(s);
     if not fInHeaderOrFooter then
       fCanvasText := fCanvasText+str+#13#10; // copy as text
-    PrintFormattedLine(s,TitleFlags,aBookMark,aLink);
+    PrintFormattedLine(s,TitleFlags,aBookMark,aLink,true,aLinkNoBorder);
     if UseOutlines then
       AddOutline(str,OutlineLevel,fCurrentTextTop,fCurrentTextPage);
     if DrawBottomLine then begin
@@ -3336,8 +3337,8 @@ begin
   end;
 end;
 
-procedure TGDIPages.DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string='';
-  CheckPageNumber: boolean=false);
+procedure TGDIPages.DrawTextAt(s: SynUnicode; XPos: integer; const aLink: string;
+  CheckPageNumber,aLinkNoBorder: boolean);
 var i: integer;
     R: TRect;
     Size: TSize;
@@ -3365,7 +3366,7 @@ begin
   if aLink<>'' then begin
     R.Right := R.Left+Size.cx;
     R.Bottom := R.Top+Size.cy;
-    AddLink(aLink,PrinterToMM(R));
+    AddLink(aLink,PrinterToMM(R),0,aLinkNoBorder);
   end;
 end;
 
@@ -5006,7 +5007,8 @@ begin
   {$endif}
 end;
 
-procedure TGDIPages.AddLink(const aBookmarkName: string; aRect: TRect; aPageNumber: integer=0);
+procedure TGDIPages.AddLink(const aBookmarkName: string; aRect: TRect;
+  aPageNumber: integer; aNoBorder: boolean);
 begin
   if aPageNumber=0 then
     aPageNumber := PageCount;
@@ -5015,7 +5017,7 @@ begin
     fLinks.AddObject(aBookmarkName,
       TGDIPagereference.Create(aPageNumber,Left,Top,Right,Bottom));
   {$ifndef USEPDFPRINTER}
-  GDICommentLink(fCanvas.Handle,StringToUtf8(aBookmarkName),aRect);
+  GDICommentLink(fCanvas.Handle,StringToUtf8(aBookmarkName),aRect,aNoBorder);
   {$endif}
 end;
 
