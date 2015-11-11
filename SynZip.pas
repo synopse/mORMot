@@ -30,6 +30,7 @@ unit SynZip;
 
   Contributor(s):
    - Alf
+   - ehansen
    - jpdk
    - Gigo
 
@@ -151,6 +152,7 @@ unit SynZip;
      info field into infoLocal, and introduced infoDirectory new field
    - renamed ZipFormat parameter to ZlibFormat, and introduce it also for
      uncompression, so that both deflate and zlib layout are handled
+   - allow reading files of size 0 in TZipRead
    - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
@@ -1182,9 +1184,6 @@ begin
           'Unsupported compression method %d for %s',[infoLocal^.zZipMethod,zipName]);
       if (zipName='') or (zipName[length(zipName)]='\') then
         continue; // ignore folder
-      if infoLocal^.flags and (1 shl 3)=0 then
-        if (infoLocal^.zzipSize=0) or (infoLocal^.zfullSize=0) then
-          raise ESynZipException.CreateFmt('"%s" size=0 in ZIP',[zipName]);
       inc(Count); // add file to Entry[]
     end;
   end;
@@ -1283,8 +1282,8 @@ begin
   end;
   // get info from ending "central directory" (faster than "data descriptor")
   with Entry[Index].infoDirectory^.fileInfo do
-    if (zzipSize<>0) and (zfullSize<>0) and
-       (zzipSize<>dword(-1)) and (zfullSize<>dword(-1)) then begin
+    if (zzipSize<>dword(-1)) and (zfullSize<>dword(-1)) then begin
+      // ZIP64 format not supported yet (sizes=-1)
       Info.zcrc32 := zcrc32;
       Info.zzipSize := zzipSize;
       Info.zfullSize := zfullSize;
