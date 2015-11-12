@@ -81,6 +81,7 @@ type
     fConsoleLevels: TSynLogInfos;
     fAutoFlush: integer;
     fStackTraceViaAPI: boolean;
+    fLowLevelWebSocketsFrames: boolean;
     fPerThread: TSynLogPerThreadMode;
     fDestinationPath: TFileName;
     fRotateFileCount: cardinal;
@@ -101,6 +102,11 @@ type
     // you should better not set a verbose definition here, unless you are
     // in debugging mode
     property ConsoleLevels: TSynLogInfos read fConsoleLevels write fConsoleLevels;
+    /// if low-level WebSockets frames should be logged
+    // - disabled by default, to minimize logged content
+    // - may be enabled to monitor most (asynchronous) activity, especially
+    // in background threads
+    property LowLevelWebSocketsFrames: boolean read fLowLevelWebSocketsFrames write fLowLevelWebSocketsFrames;
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
     // - by default, the log file will be written for every 4 KB of log (see
@@ -450,7 +456,6 @@ type
 
 
 implementation
-
 
 { TDDDAppSettingsAbstract }
 

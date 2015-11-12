@@ -76,6 +76,7 @@ uses
   mORMotDDD,
   dddInfraSettings,
   SynCrtSock,
+  SynBiDirSock,
   mORMotHttpServer, // for publishing a TSQLRestServer over HTTP
   mORMotHttpClient; // for publishing a TSQLRestClientURI over HTTP
 
@@ -560,6 +561,11 @@ end;
 procedure TDDDDaemon.DoStart(Sender: TService);
 begin
   SQLite3Log.Enter(self);
+  if Assigned(fSettings) and fSettings.Log.LowLevelWebSocketsFrames then begin
+    WebSocketLog := SQLite3Log;
+    HttpServerFullWebSocketsLog := true;
+    HttpClientFullWebSocketsLog := true;
+  end;
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
