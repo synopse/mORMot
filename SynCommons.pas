@@ -27524,7 +27524,7 @@ end;
 procedure LogToTextFile(Msg: RawUTF8);
 begin
   if Msg='' then begin
-    Msg := StringToUTF8(SysErrorMessage(GetLastError));
+    StringToUTF8(SysErrorMessage(GetLastError),Msg);
     if Msg='' then
       exit;
   end;

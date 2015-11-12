@@ -76,7 +76,7 @@ uses
   mORMotDDD,
   dddInfraSettings,
   SynCrtSock,
-  SynBiDirSock,
+  SynBidirSock,
   mORMotHttpServer, // for publishing a TSQLRestServer over HTTP
   mORMotHttpClient; // for publishing a TSQLRestClientURI over HTTP
 
@@ -608,13 +608,15 @@ var name,param: RawUTF8;
   end;
   procedure Show(Success: Boolean);
   var msg: RawUTF8;
+      error: integer;
   begin
     if Success then begin
       msg := 'Successfully executed';
       TextColor(ccWhite);
     end else begin
+      error := GetLastError;
       msg := FormatUTF8('Error % "%" occured with',
-        [GetLastError,SysErrorMessage(GetLastError)]);
+        [error,StringToUTF8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
@@ -1142,10 +1144,8 @@ begin
 end;
 
 function TDDDSynCrtSocket.LastError: RawUTF8;
-var Error: integer;
 begin
-  Error := fSocket.LastLowSocketError;
-  result := FormatUTF8('%[%]',[Error,SysErrorMessage(Error)]);
+  result := StringToUTF8(SocketErrorMessage(fSocket.LastLowSocketError));
 end;
 
 

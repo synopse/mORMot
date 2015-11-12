@@ -1809,6 +1809,9 @@ function HtmlEncode(const s: SockString): SockString;
 function GetRemoteMacAddress(const IP: SockString): SockString;
 {$endif}
 
+/// low-level text description of  Socket error code
+function SocketErrorMessage(Error: integer): string;
+
 
 implementation
 
@@ -4295,6 +4298,19 @@ end;
 
 { ECrtSocket }
 
+function SocketErrorMessage(Error: integer): string;
+begin
+  case Error of
+  ETIMEDOUT:    result := 'WSAETIMEDOUT';
+  ENETDOWN:     result := 'WSAENETDOWN';
+  EWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
+  ECONNABORTED: result := 'WSAECONNABORTED';
+  ECONNRESET:   result := 'WSAECONNRESET';
+  else result := '';
+  end;
+  result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
+end;
+
 constructor ECrtSocket.Create(const Msg: string);
 begin
   Create(Msg,WSAGetLastError());
@@ -4305,7 +4321,7 @@ begin
   if Error=0 then
     fLastError := WSAEWOULDBLOCK else // if unknown, probably a timeout
     fLastError := abs(Error);
-  inherited CreateFmt('%s %d (%s)',[Msg,fLastError,SysErrorMessage(fLastError)]);
+  inherited Create(Msg+' '+SocketErrorMessage(fLastError));
 end;
 
 
