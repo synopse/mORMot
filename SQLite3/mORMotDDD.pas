@@ -2281,7 +2281,7 @@ begin
          'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
          'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
          'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
-    3: with ExeVersion,SystemInfo {$ifdef MSWINDOWS},OSVersionInfo {$endif} do begin
+    3: begin
       {$ifdef MSWINDOWS_INCLUDESENV}
       P := pointer(GetEnvironmentStringsA);
       while P^<>#0 do begin
@@ -2297,7 +2297,9 @@ begin
       {$endif}
       mem := TSynMonitorMemory.Create;
       disk := TSynMonitoryDisk.Create; // current drive
-      result.Content := JSONEncode(['host',Host,'user',User,
+      with SystemInfo {$ifdef MSWINDOWS},OSVersionInfo {$endif} do
+      result.Content := JSONEncode([
+        'host',ExeVersion.Host,'user',ExeVersion.User,
         {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
         'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
         'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
@@ -2308,7 +2310,7 @@ begin
         dwNumberOfProcessors,'os',FormatUTF8(
           '% % (%.%.%)',[GetEnumNameTrimed(TypeInfo(TWindowsVersion),OSVersion),
           szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]),
-        'wow64',IsWow64{,'env',value}{$else}
+        'wow64',IsWow64{$ifdef MSWINDOWS_INCLUDESENV},'env',value{$endif}{$else}
         nprocs,'os',FormatUTF8('%-% %',[uts.sysname,uts.release,uts.version])
         {$endif},'mem',mem,'disk',disk]);
       disk.Free;

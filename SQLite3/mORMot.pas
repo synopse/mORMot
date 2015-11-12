@@ -11951,10 +11951,19 @@ type
   public
     /// initialize the instance for a given REST and callback interface
     constructor Create(aRest: TSQLRest; const aGUID: TGUID); reintroduce;
+    /// notify the associated TSQLRestServer that the callback is disconnnected
+    // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
+    // - this method will process the unsubscription only once, and
+    procedure CallbackRestUnregister; virtual;
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
-    // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
+    // - i.e. will call CallbackRestUnregister
     destructor Destroy; override;
+    /// the associated TSQLRestServer instance, which would be notified
+    // when the callback is released
+    property Rest: TSQLRest read fRest;
+    /// the interface type, implemented by this callback class
+    property RestInterface: TGUID read fInterface write fInterface;
   end;
 
   /// the current state of a TBlockingCallback instance
@@ -11979,9 +11988,13 @@ type
     /// called to wait for the callback to be processed, or trigger timeout
     procedure WaitFor;
     /// should be called by the callback when the process is finished
+    // - the caller would then let its WaitFor method return
+    // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
+    // notify the server that the callback is no longer needed
     // - would optionally log all published properties values to the log class
     // of the supplied REST instance
-    procedure CallbackFinished(aRestForLog: TSQLRest);
+    procedure CallbackFinished(aRestForLog: TSQLRest;
+      aServerUnregister: boolean=false);
   published
     /// the current state of process
     property Event: TBlockingCallbackEvent read fEvent write fEvent;
@@ -51888,12 +51901,20 @@ begin
   fInterface := aGUID;
 end;
 
-destructor TInterfacedCallback.Destroy;
-var Obj: pointer; // Obj: IInvokable here raises a EStackOverflow
+procedure TInterfacedCallback.CallbackRestUnregister;
+var Obj: pointer; // to avoid unexpected (recursive) Destroy call
 begin
-  if (fRest<>nil) and (fRest.Services<>nil) and not IsNullGUID(fInterface) then
-    if GetInterface(fInterface,Obj) then
+  if (fRest<>nil) and (fRest.Services<>nil) and not IsNullGUID(fInterface) then 
+    if GetInterface(fInterface,Obj) then begin
       fRest.Services.CallBackUnRegister(IInvokable(Obj));
+      dec(fRefCount); // GetInterface() did increase the refcount
+      fRest := nil; // notify once
+    end;
+end;
+
+destructor TInterfacedCallback.Destroy;
+begin
+  CallbackRestUnregister;
   inherited Destroy;
 end;
 
@@ -51916,7 +51937,8 @@ begin
   inherited Destroy;
 end;
 
-procedure TBlockingCallback.CallbackFinished(aRestForLog: TSQLRest);
+procedure TBlockingCallback.CallbackFinished(aRestForLog: TSQLRest;
+  aServerUnregister: boolean);
 begin
   fSafe.Lock;
   try
@@ -51927,7 +51949,9 @@ begin
     if aRestForLog<>nil then
       aRestForLog.LogClass.Add.Log(sllTrace,self);
     {$endif}
-    fEventNotifier.SetEvent; // notify caller
+    fEventNotifier.SetEvent; // notify caller to unlock "WaitFor" method
+    if aServerUnregister then
+      CallbackRestUnregister;
   finally
     Safe.UnLock;
   end;
