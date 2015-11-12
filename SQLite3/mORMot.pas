@@ -10933,6 +10933,9 @@ type
     /// set the optional stubing/mocking options
     // - same as the Options property, but in a fluent-style interface
     function SetOptions(Options: TInterfaceStubOptions): TInterfaceStub;
+    /// reset the internal trace
+    // - Log, LogAsText, LogHash and LogCount would be initialized
+    procedure ClearLog;
 
     /// the stubbed method execution trace items
     property Log: TInterfaceStubLogDynArray read fLogs;
@@ -49148,6 +49151,11 @@ end;
 function TInterfaceStub.LogAsText(SepChar: AnsiChar): RawUTF8;
 begin
   result := IntGetLogAsText(0,'',[wName,wParams,wResults],SepChar);
+end;
+
+procedure TInterfaceStub.ClearLog;
+begin
+  fLog.Clear;
 end;
 
 function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
