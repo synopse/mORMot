@@ -765,8 +765,8 @@ type
 
   /// OleDB connection properties to Microsoft SQL Server 2005, via
   // SQL Server Native Client (SQL Server 2005)
-  // - this overridden version will use deprecated SQLNCLI provider, but will
-  // with MS SQL Server 2005
+  // - this overridden version will use the SQLNCLI provider, which is
+  // deprecated but may be an alternative with MS SQL Server 2005
   // - is aUserID='' at Create, it will use Windows Integrated Security
   // for the connection
   TOleDBMSSQL2005ConnectionProperties = class(TOleDBMSSQLConnectionProperties)

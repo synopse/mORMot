@@ -2248,7 +2248,7 @@ begin
   if (fProcess<>nil) and (fProcess.fState=wpsClose) then
     fThreadState := sClosed else
     fThreadState := sFinished;
-  WebSocketLog.Add.Log(sllDebug,'%.Execute: ThreadState=%',[ClassType,
+  WebSocketLog.Add.Log(sllDebug,'%.Execute finished: ThreadState=%',[ClassType,
     GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(fThreadState))^],self);
 end;
 

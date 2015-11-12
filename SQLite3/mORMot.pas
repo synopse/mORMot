@@ -15678,6 +15678,7 @@ type
     fStoredClassProps: TSQLModelRecordProperties;
     fStoredClassRecordProps: TSQLRecordProperties;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
+    fStorageLockLogTrace: boolean;
     fModified: boolean;
     fOwner: TSQLRestServer;
     fStorageCriticalSection: TRTLCriticalSection;
@@ -15774,6 +15775,9 @@ type
     property StoredClassRecordProps: TSQLRecordProperties read fStoredClassRecordProps;
     /// read only access to the TSQLRestServer using this storage engine
     property Owner: TSQLRestServer read fOwner;
+    /// enable low-level trace of StorageLock/StorageUnlock methods
+    // - may be used to resolve low-level race conditions
+    property StorageLockLogTrace: boolean read fStorageLockLogTrace write fStorageLockLogTrace;
   end;
 
   /// event prototype called by TSQLRestStorageInMemory.FindWhereEqual() or
@@ -40951,17 +40955,20 @@ end;
 
 procedure TSQLRestStorage.StorageLock(WillModifyContent: boolean);
 begin
+  if fStorageLockLogTrace then
+    InternalLog('StorageLock % %',[fStoredClass,fStorageCriticalSectionCount],sllTrace);
   EnterCriticalSection(fStorageCriticalSection);
   inc(fStorageCriticalSectionCount);
   if WillModifyContent and
-     fStorageLockShouldIncreaseOwnerInternalState and
-     (Owner<>nil) then
+     fStorageLockShouldIncreaseOwnerInternalState and (Owner<>nil) then
     inc(Owner.InternalState);
 end;
 
 procedure TSQLRestStorage.StorageUnLock;
 begin
   dec(fStorageCriticalSectionCount);
+  if fStorageLockLogTrace then
+    InternalLog('StorageUnlock % %',[fStoredClass,fStorageCriticalSectionCount],sllTrace);
   if fStorageCriticalSectionCount<0 then
     raise EORMException.CreateUTF8('%.StorageUnLock with CS=%',
       [self,fStorageCriticalSectionCount]);
