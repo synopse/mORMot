@@ -219,13 +219,16 @@ begin
     fLogFrames[i].Admin := nil;
     fLogFrames[i] := nil;
   end;
+  Finalize(fLogFrames);
   for i := 0 to high(fDBFrame) do
     fDBFrame[i].Admin := nil;
   fDBFrame := nil;
   fAdmin := nil;
   fDefinition.Free;
-  Sleep(200); // leave some time to flush all pending CallBackUnRegister()
-  FreeAndNil(fClient);
+  if fClient<>nil then begin
+    Sleep(200); // leave some time to flush all pending CallBackUnRegister()
+    FreeAndNil(fClient);
+  end;
   inherited Destroy;
 end;
 
