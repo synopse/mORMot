@@ -152,6 +152,7 @@ unit SynCrtSock;
   - added THttpServerRequest.UseSSL property to check if connection is secured
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
+  - introduced THttpApiServer.ReceiveBufferSize property
   - added THttpApiServer.HTTPQueueLength property (for HTTP API 2.0 only)
   - added THttpApiServer.MaxBandwidth and THttpApiServer.MaxConnections
     properties (for HTTP API 2.0 only) - thanks mpv for the proposal!
@@ -1115,6 +1116,7 @@ type
     fLogDataStorage: array of byte;
     fLoggingServiceName: SockString;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
+    fReceiveBufferSize: cardinal;
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal;
@@ -1278,6 +1280,11 @@ type
     property ServerSessionID: HTTP_SERVER_SESSION_ID read fServerSessionID;
     /// read-only access to the low-level HTTP API 2.0 URI Group ID
     property UrlGroupID: HTTP_URL_GROUP_ID read fUrlGroupID;
+    /// how many bytes are retrieved in a single call to ReceiveRequestEntityBody
+    // - set by default to 1048576, i.e. 1 MB - practical limit is around 20 MB
+    // - you may customize this value if you encounter HTTP error 406 from client,
+    // corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450) exception on server side
+    property ReceiveBufferSize: cardinal read fReceiveBufferSize write fReceiveBufferSize;
   published
     /// TRUE if this instance is in fact a cloned instance for the thread pool
     property Cloned: boolean read GetCloned;
@@ -1304,7 +1311,7 @@ type
     property MaxBandwidth: Cardinal read GetMaxBandwidth write SetMaxBandwidth;
     /// the maximum number of HTTP connections allowed (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited number of connections
-    // - by default Windows not limit number of allowed connections
+    // - by default Windows does not limit number of allowed connections
     // - will return 0 if the system does not support HTTP API 2.0 (i.e.
     // under Windows XP or Server 2003)
     property MaxConnections: Cardinal read GetMaxConnections write SetMaxConnections;
@@ -5718,6 +5725,7 @@ begin
   end else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,Http.CreateHttpHandle(fReqQueue));
   fClones := TObjectList.Create;
+  fReceiveBufferSize := 1048576; // i.e. 1 MB
   if not CreateSuspended then
     Suspended := False;
 end;
@@ -5731,6 +5739,7 @@ begin
   fOnRequest := From.fOnRequest;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
+  fReceiveBufferSize := From.fReceiveBufferSize;
   if From.fLogData<>nil then
     fLogData := pointer(fLogDataStorage);
   SetServerName(From.fServerName);
@@ -5819,7 +5828,7 @@ var Req: PHTTP_REQUEST;
     flags, bytesRead, bytesSent: cardinal;
     Err: HRESULT;
     InCompressAccept: THttpSocketCompressSet;
-    InContentLength, InContentLengthRead: cardinal;
+    InContentLength, InContentLengthChunk, InContentLengthRead: cardinal;
     InContentEncoding, InAcceptEncoding, Range: SockString;
     OutContentEncoding, OutStatus: SockString;
     Context: THttpServerRequest;
@@ -5923,8 +5932,11 @@ begin
               if Http.Version.MajorVersion>1 then // speed optimization for Vista+
                 flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER else
                 flags := 0;
+              InContentLengthChunk := InContentLength-InContentLengthRead;
+              if (fReceiveBufferSize>=1024) and (InContentLengthChunk>fReceiveBufferSize) then
+                InContentLengthChunk := fReceiveBufferSize;
               Err := Http.ReceiveRequestEntityBody(fReqQueue,Req^.RequestId,flags,
-                BufRead,InContentLength-InContentLengthRead,BytesRead);
+                BufRead,InContentLengthChunk,BytesRead);
               inc(InContentLengthRead,BytesRead);
               if Err=ERROR_HANDLE_EOF then begin
                 if InContentLengthRead<InContentLength then
