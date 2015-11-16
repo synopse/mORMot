@@ -1117,6 +1117,7 @@ type
     fLoggingServiceName: SockString;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     fReceiveBufferSize: cardinal;
+    procedure SetReceiveBufferSize(Value: cardinal);
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
     function GetHTTPQueueLength: Cardinal;
@@ -1283,8 +1284,9 @@ type
     /// how many bytes are retrieved in a single call to ReceiveRequestEntityBody
     // - set by default to 1048576, i.e. 1 MB - practical limit is around 20 MB
     // - you may customize this value if you encounter HTTP error 406 from client,
-    // corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450) exception on server side
-    property ReceiveBufferSize: cardinal read fReceiveBufferSize write fReceiveBufferSize;
+    // corresponding to an ERROR_NO_SYSTEM_RESOURCES (1450) exception on server
+    // side, when uploading huge data content
+    property ReceiveBufferSize: cardinal read fReceiveBufferSize write SetReceiveBufferSize;
   published
     /// TRUE if this instance is in fact a cloned instance for the thread pool
     property Cloned: boolean read GetCloned;
@@ -6296,6 +6298,15 @@ begin
   fLogData := nil;
   for i := 0 to fClones.Count-1 do
     THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).fLogData := nil;
+end;
+
+procedure THttpApiServer.SetReceiveBufferSize(Value: cardinal);
+var i: integer;
+begin
+  fReceiveBufferSize := Value;
+  if fClones<>nil then // parameter shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).fReceiveBufferSize := Value;
 end;
 
 procedure THttpApiServer.SetServerName(const aName: SockString);
