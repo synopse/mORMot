@@ -8514,7 +8514,7 @@ They certainly help to fight the three main code weaknesses:
 - {\i Rigidity}: Hard to change something because every change affects too many other parts of the system;
 - {\i Fragility}: When you make a change, unexpected parts of the system break;
 - {\i Immobility}: Hard to reuse in another application because it cannot be disentangled from the current application.
-:  Single Responsibility Principle
+:182  Single Responsibility Principle
 When you define a class, it shall be designed to implement only one feature. The so-called feature can be seen as an "{\i axis of change}" or a "{\i a reason for change}".
 Therefore:
 - One class shall have only one reason that justifies changing its implementation;
@@ -9223,7 +9223,7 @@ In case of mocking, you may add additional verifications within the implementati
 !  Ctxt['result'] := Ctxt['n1']-Ctxt['n2'];
 !end;
 Here, an additional callback-private parameter containing {\f1\fs20 'toto'} has been specified at {\f1\fs20 TInterfaceMock} definition. Then its content is checked on the associated test case via {\f1\fs20 Ctxt.Sender} instance. If the caller is not a {\f1\fs20 TInterfaceMock}, it will raise an exception when accessing the {\f1\fs20 Ctxt.TestCase} property.
-:  Calls tracing
+:180  Calls tracing
 As stated above, {\i mORMot} is able to log all interface calls into its internal {\f1\fs20 TInterfaceStub}'s structures. This is indeed the root feature of its "test spy" {\f1\fs20 TInterfaceMockSpy.Verify()} methods.
 !  Stub := TInterfaceStub.Create(ICalculator,I).
 !!    SetOptions([imoLogMethodCallsAndResults]);
@@ -10259,7 +10259,7 @@ Then a remote call to the {\f1\fs20 IChatService.BlaBla()} method should be broa
 !  for i := 0 to high(fConnected) do
 !!    fConnected[i].NotifyBlaBla(pseudo,msg);
 !end;
-Note that every call to {\f1\fs20 IChatCallback.BlaBla()} within the loop would be made via {\i @*WebSockets@}, in an asynchronous and non blocking way, so that even in case of huge number of clients, the {\f1\fs20 IChatService.BlaBla()} method won't block. In case of high numbers of messages, the framework is even able to {\i gather} push notification messages into a single bigger message, to reduce the resource use.
+Note that every call to {\f1\fs20 IChatCallback.BlaBla()} within the loop would be made via {\i @*WebSockets@}, in an asynchronous and non blocking way, so that even in case of huge number of clients, the {\f1\fs20 IChatService.BlaBla()} method won't block. In case of high numbers of messages, the framework is even able to {\i gather} push notification messages into a single bigger message, to reduce the resource use - see @153@.
 If you are a bit paranoid, you may ensure that the notification process would continue, if any of the event failed:
 !procedure TChatService.BlaBla(const pseudo,msg: string);
 !var i: integer;
@@ -10297,7 +10297,7 @@ On the client side, you implement the {\f1\fs20 IChatCallback} callback interfac
 !begin
 !  writeln(#13'@',pseudo,' ',msg);
 !end;
-The {\f1\fs20 TInterfacedCallback} type defines a {\f1\fs20 TInterfacedObject} class which would automatically notify the REST server when it is released. By providing the client {\f1\fs20 TSQLRest} instance to the {\f1\fs20 TChatCallback.Create()} constructor, you would ensure that the {\f1\fs20 IChatService.CallbackReleased} method would be executed on the server side, when the {\f1\fs20 TChatCallback}/{\f1\fs20 IChatCallback} instance would be released on the client side.
+The {\f1\fs20 TInterfacedCallback} type defines a {\f1\fs20 TInterfacedObject} sub-class, which would automatically notify the REST server when it is released. By providing the client {\f1\fs20 TSQLRest} instance to the {\f1\fs20 TChatCallback.Create()} constructor, you would ensure that the {\f1\fs20 IChatService.CallbackReleased} method would be executed on the server side, when the {\f1\fs20 TChatCallback}/{\f1\fs20 IChatCallback} instance would be released on the client side.
 Then you subscribe to your remote service as such:
 !!var Service: IChatService;
 !!    callback: IChatCallback;
@@ -10321,7 +10321,133 @@ Then you subscribe to your remote service as such:
 !      Service := nil;  // release the service local instance BEFORE Client.Free
 !    end;
 You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s - see @48@, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
-If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with. Most {\i Events Oriented} solutions do use a set of dedicated classes, with a centralized Message Bus, or in P2P (see e.g. {\i ZeroMQ} or {\i NanoMsg}). Here, the method parameters define the message values, and itegration with the Delphi language is clearly implementation agnostic.\line In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}. The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and binary/JSON marshalling over TCP/IP). We will see @172@ how it may help implementing DDD's {\i @*Event-Driven@} pattern.
+:   Interacting with UI/VCL
+As we have stated, all callback notifications do take place in the transmission thread, i.e. in the {\f1\fs20 TWebSocketProcessClientThread} instance corresponding to each connected client.
+You may be tempted to use the VCL {\f1\fs20 @*Synchronize@()} method, as usual, to forward the notifications to the UI layer. Unfortunately, this may trigger some unexpected race conditions, e.g. when asynchronous notifications (e.g. {\f1\fs20 TChatCallback.NotifyBlaBla()}) are received during a blocking REST command (e.g. {\f1\fs20 Service.BlaBla()}). The {\f1\fs20 Synchronize} call within the blocking command would avoid any incoming asynchronous notification wait for the main thread to be available, and would block the reception of the answer of the pending REST command...\line If you experiment random hangouts of your User Interface, and {\f1\fs20 404 errors} corresponding to a low-level {\i WebSockets} timeout, even when closing the application, you have certainly hit such a race condition.
+Get rid of all your {\f1\fs20 Synchronize()} calls! Use {\i Windows} messages instead: they are safe, efficient and fast. The framework allows to forward all incoming notifications as a dedicated {\i Windows} message in a single line:
+! Client.ServiceNotificationMethodViaMessages(MainForm.Handle,WM_SERVICENOTIFICATION);
+The {\f1\fs20 WM_SERVICENOTIFICATION} should have been defined as a custom user message:
+!const
+! WM_SERVICENOTIFICATION = WM_USER; // may be WM_USER+1, +2, ...
+Then, the {\f1\fs20 TFormMain} should execute the message, as a regular event handler:
+! TFormMain = class(TForm)
+!...
+! procedure ServiceNotification(var Msg: TMessage); message WM_SERVICENOTIFICATION;
+!...
+!procedure TFormMain.ServiceNotification(var Msg: TMessage);
+!begin
+!  TSQLRestClientURI.ServiceNotificationMethodExecute(Msg);
+!end;
+Thanks to these two lines, the callbacks would be executed asynchronously in the main UI thread, using the optimized {\i Message} queue of the Operating System, without any blocking execution, nor race condition.
+:  Benefits of interface callbacks instead of class messages
+If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.
+Most {\i Events Oriented} solutions do use a set of dedicated messages to propagate the events, with a centralized {\i Message Bus} (like {\i MSMQ} or {\i JMS}), or a P2P approach (see e.g. {\i ZeroMQ} or {\i NanoMsg}). In practice, you are expected to define one {\f1\fs20 class} per message, the {\f1\fs20 class} fields being the message values. You would define e.g. one {\f1\fs20 class} to notify a successful process, and another {\f1\fs20 class} to notify an error. @*SOA@ services would eventually tend to be defined by a huge number of individual classes, with the temptation of re-using existing classes in several contexts.
+Our {\f1\fs20 interface}-based approach allows to gather all messages:
+- In a single {\f1\fs20 interface} type per {\i notification}, i.e. probably per {\i service operation};
+- With one {\i method} per {\i event};
+- Using method {\i parameters} defining the event {\i values}.
+Since asynchronous notifications are needed most of the time, method parameters would be one-way, i.e. only {\f1\fs20 const}. Blocking request may also be defined, as we will see @181@. And an evolved algorithm would transparently gather outgoing messages, to enhance scalability.
+Behind the scene, the framework would still transmit raw messages over IP sockets, like other systems, but events notification would benefit from using interfaces, on both server and client sides.
+:   Using service and callback interfaces
+For instance, you may define the following generic service and callback to retrieve a file from a remote camera, using {\i mORMot}'s {\f1\fs20 interface}-based approach:
+!type
+!  // define some custom types to make the implicit explicit
+!  TCameraID = RawUTF8;
+!  TPictureID = RawUTF8;
+!  // mORMot notifications using a callback interface definition
+!  IMyCameraCallback = interface(IInvokable)
+!    ['{445F967F-79C0-4735-A972-0BED6CC63D1D}']
+!    procedure Started(const Camera: TCameraID; const Picture: TPictureID);
+!    procedure Progressed(const Camera: TCameraID; const Picture: TPictureID;
+!      CurrentSize,TotalSize: cardinal);
+!    procedure Finished(const Camera: TCameraID; const Picture: TPictureID;
+!      const PublicURI: RawUTF8; TotalSize: cardinal);
+!    procedure ErrorOccured(const Camera: TCameraID; const Picture: TPictureID;
+!      const MessageText: RawUTF8);
+!  end;
+!  // mORMot main service, also defined as an interface
+!  IMyCameraService = interface(IInvokable)
+!    ['{3CE61E74-A01D-41F5-A414-94F204F140E1}']
+!    function TakePicture(const Camera: TCameraID; const Callback: IMyCameraCallback): TPictureID;
+!  end;
+Take a deep breath, and keep in mind those two type definitions as reference. In a single look, I guess you did get the expectation of the "Camera Service". We will now compare with a classical message-based pattern.
+:   Classical message(s) event
+With a {\f1\fs20 class}-based message kind of implementation, you may either have to define a single class, containing all potential information:
+!type
+!  // a single class message would need a status
+!  TMyCameraCallbackState = (
+!    ccsStarted, ccsProgressed, ccsFinished, ccsErrorOccured);
+!  // the single class message
+!  TMyCameraCallbackMessage = class
+!  private
+!    fCamera: TCameraID;
+!    fPicture: TPictureID;
+!    fTotalSize: cardinal;
+!    fMessageText: RawUTF8;
+!    fState: TMyCameraCallbackState;
+!  published
+!    property State: TMyCameraCallbackState read fState write fState;
+!    property Camera: TCameraID read fCamera write fCamera;
+!    property Picture: TPictureID read fPicture write fPicture;
+!    property TotalSize: cardinal read fTotalSize write fTotalSize;
+!    property MessageText: RawUTF8 read fMessageText write fMessageText;
+!  end;
+This single class is easy to write, but makes it a bit confusing to consume the notification. Which field comes with which state? The client-side code would eventually consist of a huge {\f1\fs20 case aMessage.State of} ... block, with potential issues. The business logic does not appear in this type definition. Easy to write, difficult to read - and maintain...
+In order to have an implementation closer to @47@, you may define a set of classes, as such:
+!type
+!  // all classes would inherit from this one, to have common properties
+!  TMyCameraCallbackAbstract = class
+!  private
+!    fCamera: TCameraID;
+!    fPicture: TPictureID;
+!  published
+!    property Camera: TCameraID read fCamera write fCamera;
+!    property Picture: TPictureID read fPicture write fPicture;
+!  end;
+!  // message class when the picture acquisition starts
+!  TMyCameraCallbackStarted = class(TMyCameraCallbackAbstract);
+!  // message class when the picture is acquired
+!  TMyCameraCallbackFinished = class(TMyCameraCallbackAbstract)
+!  private
+!    fPublicURI: RawUTF8;
+!    fTotalSize: cardinal;
+!  published
+!    property TotalSize: cardinal read fTotalSize write fTotalSize;
+!    property PublicURI: RawUTF8 read fPublicURI write fPublicURI;
+!  end;
+!  // message during picture download
+!  TMyCameraCallbackProgressed = class(TMyCameraCallbackFinished)
+!  private
+!    fCurrentSize: cardinal;
+!  published
+!    property CurrentSize: cardinal read fCurrentSize write fCurrentSize;
+!  end;
+!  // error message
+!  TMyCameraCallbackErrorOccured = class(TMyCameraCallbackAbstract)
+!  private
+!    fMessageText: RawUTF8;
+!  published
+!    property MessageText: RawUTF8 read fMessageText write fMessageText;
+!  end;
+Inheritance makes this class hierarchy not as verbose as it may have been with plain "flat" classes, but it is still much less readable than the {\f1\fs20 IMyCameraCallback} type definition.
+In both cases, such {\f1\fs20 class} definitions make it difficult to guess which message does match with a given service. You must be very careful and consistent about your naming conventions, and uncouple your service definitions in clear name spaces.
+When implementing @*SOA@ services, @*DDD@'s {\i @*Ubiquitous Language@} tends to be polluted by the {\f1\fs20 class} definition (getters and setters), and implementation details of the messages-based notification: your {\i Domain} code would be tied to the message oriented nature of the {\i Infrastructure} layer. We will see @172@ how {\f1\fs20 interface} callbacks would help implementing DDD's {\i @*Event-Driven@} pattern, in a cleaner way.
+:181   Workflow adaptation
+Sometimes, it may be necessary to react to some unexpected event. The consumer may be able to change the workflow of the producer, depending on some business rules, or user expectations. By definition, all message-based implementation are asynchronous: as a result, implementing "reverse" messaging tends to be difficult to write and debug.
+A common implementation is to have a dedicated set of "answer" messages, to notify the service providers of a state change - it comes with potential race conditions, or unexpected rebound phenomenons, for instance when you add a node to an existing event-driven system.
+Another solution may be to define explicit {\i rules} for service providers, e.g. when the service is called. You may define a set of workflows, injected to the provider service at runtime. It will definitively tend to break the @182@.
+On the other hand, since {\i mORMot}'s callbacks are true {\f1\fs20 interface} methods, they may return some values (as a {\f1\fs20 function} result or a {\f1\fs20 var/out} parameter). On the server side, such callbacks would block and wait for the client end to respond.
+So by writing an additional method like:
+!  IMyCameraCallback = interface(IInvokable)
+!  ...
+!    function ShouldRetryIfBusy(const Camera: TCameraID; const Picture: TPictureID): boolean;
+!  ...
+... you would be able to implement any needed complex workflow adaptation, in real time. The server side code would still be very readable and efficient, with no complex plumbing, wait queue or state machine to set up.
+:   From interfaces comes abstraction and ease
+As an additional benefit, integration with the Delphi language is clearly implementation agnostic: you are not even tied to use the framework, when working with such {\f1\fs20 interface} type definitions. In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}, only if necessary.
+The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} instance calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and binary/JSON marshalling over TCP/IP).
+On the server side, your code - especially your {\i Domain} code - may interact directly with the lower level services, defined in the {\i Domain} as {\f1\fs20 interface} types, and implemented in the {\i infrastructure} layer. You may host both {\i Domain} and {\i Infrastructure} code in a single server executable, with direct assignment of local {\f1\fs20 class} instance as callbacks. This will minimize the program resources, in both CPU and memory terms - which is always a very valuable goal, for any business system.
+Last but not least, using an {\f1\fs20 interface} would help implementing the whole callback mechanism using @166@, e.g. for easy unit testing via @180@.\line You may also write your unit tests with real local callback {\f1\fs20 class} instances, which would be much easier to debug than over the whole client/server stack. Once you identified a scenario which fails the system, you could reproduce it with a dedicated test, even in an aggressive multi-threaded way, then use the debugger to trace the execution and identify the root cause of the issue.
 \page
 : Implementation details
 :165  Error handling
