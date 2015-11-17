@@ -17060,7 +17060,10 @@ type
     // - message would be sent for any interface-based service method callback
     // which expects no result (i.e. no out parameter nor function result),
     // so is safely handled as asynchronous notification
-    procedure ServiceNotificationMethodExecute(var Msg : TMessage);
+    // - is defines as a class procedure, since the underlying TSQLRestClientURI
+    // instance has no impact here: a single WM_* handler is enough for
+    // several TSQLRestClientURI instances
+    class procedure ServiceNotificationMethodExecute(var Msg : TMessage);
     {$endif MSWINDOWS}
   published
     /// low-level error code, as returned by server
@@ -32817,23 +32820,26 @@ end;
 type
   TSQLRestClientURIServiceNotification = class(TServiceMethodExecute)
   protected
+    fOwner: TSQLRestClientURI;
     fInstance: TObject;
     fPar: RawUTF8;
   end;
 
 procedure TSQLRestClientURI.ServiceNotificationMethodViaMessages(hWnd: HWND; Msg: UINT);
 begin
+  if Msg=0 then
+    hWnd := 0; // avoid half defined parameters
   fServiceNotificationMethodViaMessages.Wnd := hWnd;
   fServiceNotificationMethodViaMessages.Msg := Msg;
 end;
 
-procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg : TMessage);
+class procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg : TMessage);
 var exec: TSQLRestClientURIServiceNotification;
 begin
   exec := pointer(Msg.LParam);
   try
     if (exec<>nil) and exec.InheritsFrom(TSQLRestClientURIServiceNotification) and
-       (self<>nil) and (HWND(Msg.WParam)=fServiceNotificationMethodViaMessages.Wnd) then
+       (HWND(Msg.WParam)=exec.fOwner.fServiceNotificationMethodViaMessages.Wnd) then
       // run asynchronous notification callback in the main UI thread context  
       exec.ExecuteJson([exec.fInstance],pointer(exec.fPar),nil);
   finally
@@ -32855,6 +32861,7 @@ begin
     // expects no output -> asynchronous non blocking notification in UI thread
     status := 0;
     exec := TSQLRestClientURIServiceNotification.Create(method);
+    TSQLRestClientURIServiceNotification(exec).fOwner := self;
     TSQLRestClientURIServiceNotification(exec).fInstance := instance;
     TSQLRestClientURIServiceNotification(exec).fPar := par;
     with fServiceNotificationMethodViaMessages do
