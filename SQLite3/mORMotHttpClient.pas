@@ -755,16 +755,8 @@ var i,methodIndex,fakeCallID: integer;
     ok: Boolean;
 
   procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
-  var exec: TServiceMethodExecute;
   begin
-    exec := TServiceMethodExecute.Create(@factory.Methods[methodIndex]);
-    try
-      ok := exec.ExecuteJson([instance],pointer(par),res);
-      head := exec.ServiceCustomAnswerHead;
-      result := exec.ServiceCustomAnswerStatus;
-    finally
-      exec.Free;
-    end;
+    ok := InternalNotificationMethodExecute(instance,factory,methodIndex,res,par,head,result);
   end;
   
 begin

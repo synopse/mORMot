@@ -16606,7 +16606,6 @@ type
     function FindIndex(aID: integer): integer;
   end;
 
-
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
@@ -16633,6 +16632,12 @@ type
     fRemoteLogClass: TSynLog;
     fRemoteLogOwnedByFamily: boolean;
     fServicePublishOwnInterfaces: RawUTF8;
+    {$ifdef MSWINDOWS}
+    fServiceNotificationMethodViaMessages: record
+      Wnd: HWND;
+      Msg: UINT;
+    end;
+    {$endif}
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
@@ -16650,6 +16655,9 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
+    function InternalNotificationMethodExecute(instance: pointer;
+      factory: TInterfaceFactory; methodIndex: integer; res: TTextWriter;
+      const par: RawUTF8; out head: RawUTF8; out status: cardinal): boolean; virtual;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
@@ -17032,7 +17040,28 @@ type
     // to guess an associated REST server which may implement a given service
     function ServiceRetrieveAssociated(const aInterface: TGUID;
       out URI: TSQLRestServerURIDynArray): boolean; overload;
-
+    {$ifdef MSWINDOWS}
+    /// set a HWND/WM_* pair to let interface-based services notification
+    // callbacks be processed safely in the main UI thread, via Windows messages
+    // - by default callbacks are executed in the transmission thread, e.g.
+    // the WebSockets client thread: using VCL Synchronize() method may
+    // trigger some unexpected race conditions, e.g. when asynchronous
+    // notifications are received during a blocking REST command - this
+    // message-based mechanism would allow safe and easy notification for
+    // any VCL client application
+    // - the associated ServiceNotificationMethodExecute() method shall be
+    // called in the client HWND TForm for the defined WM_* message
+    procedure ServiceNotificationMethodViaMessages(hWnd: HWND; Msg: UINT);
+    /// event to be triggered when a WM_* message is received from
+    // the internal asynchronous notification system, to run the callback
+    // in the main UI thread
+    // - WM_* message identifier should have been set e.g. via the associated
+    // ServiceNotificationMethodViaMessages(Form.Handle,WM_USER)
+    // - message would be sent for any interface-based service method callback
+    // which expects no result (i.e. no out parameter nor function result),
+    // so is safely handled as asynchronous notification
+    procedure ServiceNotificationMethodExecute(var Msg : TMessage);
+    {$endif MSWINDOWS}
   published
     /// low-level error code, as returned by server
     // - check this value about HTML_* constants
@@ -17191,8 +17220,8 @@ type
     // ServerWindowName, and Definition.DatabaseName to be the ClientWindowName
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// event to be triggered when a WM_COPYDATA message is received from the server
-    // - to be called by the corresponding message WM_COPYDATA; method in the
-    // client window
+    // - to be called by the corresponding "message WM_COPYDATA;" method in the
+    // client TForm instance
     procedure WMCopyData(var Msg : TWMCopyData); message WM_COPYDATA;
     /// define if the client will process the Windows Messages loop
     // - set to TRUE if the client is used outside the main GUI application thread
@@ -32783,6 +32812,67 @@ begin
     'PUT',nil,nil,@aText).Lo=HTML_SUCCESS;
 end;
 
+
+{$ifdef MSWINDOWS}
+type
+  TSQLRestClientURIServiceNotification = class(TServiceMethodExecute)
+  protected
+    fInstance: TObject;
+    fPar: RawUTF8;
+  end;
+
+procedure TSQLRestClientURI.ServiceNotificationMethodViaMessages(hWnd: HWND; Msg: UINT);
+begin
+  fServiceNotificationMethodViaMessages.Wnd := hWnd;
+  fServiceNotificationMethodViaMessages.Msg := Msg;
+end;
+
+procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg : TMessage);
+var exec: TSQLRestClientURIServiceNotification;
+begin
+  exec := pointer(Msg.LParam);
+  try
+    if (exec<>nil) and exec.InheritsFrom(TSQLRestClientURIServiceNotification) and
+       (self<>nil) and (HWND(Msg.WParam)=fServiceNotificationMethodViaMessages.Wnd) then
+      // run asynchronous notification callback in the main UI thread context  
+      exec.ExecuteJson([exec.fInstance],pointer(exec.fPar),nil);
+  finally
+    exec.Free; // always release notification resources
+  end;
+end;
+{$endif MSWINDOWS}
+
+function TSQLRestClientURI.InternalNotificationMethodExecute(instance: pointer;
+  factory: TInterfaceFactory; methodIndex: integer; res: TTextWriter;
+  const par: RawUTF8; out head: RawUTF8; out status: cardinal): boolean;
+var method: PServiceMethod;
+    exec: TServiceMethodExecute;
+begin
+  method := @factory.Methods[methodIndex];
+  {$ifdef MSWINDOWS}
+  if (fServiceNotificationMethodViaMessages.Wnd<>0) and
+     (method^.ArgsOutputValuesCount=0) then begin
+    // expects no output -> asynchronous non blocking notification in UI thread
+    status := 0;
+    exec := TSQLRestClientURIServiceNotification.Create(method);
+    TSQLRestClientURIServiceNotification(exec).fInstance := instance;
+    TSQLRestClientURIServiceNotification(exec).fPar := par;
+    with fServiceNotificationMethodViaMessages do
+      result := PostMessage(Wnd,Msg,Wnd,LPARAM(exec));
+    if result then
+      exit;
+  end else // if PostMessage() failed (e.g. invalid Wnd/Msg) -> blocking exec
+  {$endif}
+    exec := TServiceMethodExecute.Create(method);
+  try
+    result := exec.ExecuteJson([instance],pointer(par),res);
+    head := exec.ServiceCustomAnswerHead;
+    status := exec.ServiceCustomAnswerStatus;
+  finally
+    exec.Free;
+  end;
+end;
+
 {$ifdef LVCL} // SyncObjs.TEvent not available in LVCL yet
 
 function TSQLRestClientURI.ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
@@ -33059,6 +33149,9 @@ var t,i: integer;
     aID: TID;
     Table: TSQLRecordClass;
 begin
+  {$ifdef MSWINDOWS}
+  fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
+  {$endif}
   {$ifdef WITHLOG}
   if GarbageCollectorFreeing then // may be owned by a TSynLogFamily
     SetLogClass(nil);
