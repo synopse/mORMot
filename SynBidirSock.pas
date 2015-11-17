@@ -1306,7 +1306,7 @@ begin
         jumboInfo := '';
       frame.opcode := focBinary;
       frame.payload := FromVarString(P);
-      Sender.Log(frame,FormatUTF8('GetSubFrame(%/%)',[i,n]));
+      Sender.Log(frame,FormatUTF8('GetSubFrame(%/%)',[i+1,n+1]));
       inherited ProcessIncomingFrame(Sender,frame,jumboInfo);
     end;
   end else
