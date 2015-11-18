@@ -4771,14 +4771,20 @@ type
   public
     /// search one item in the internal hash array
     function Find(Item: TObject): integer;
+    /// search one item using slow list browsing
+    // - this version expects the internal list count to be supplied, if some
+    // last items are to be ignored (used e.g. in EnsureJustAddedNotDuplicated)
+    function Scan(Item: TObject; ListCount: integer): integer; virtual;
     /// to be called when an item is modified
     // - for Delete/Update will force a full rehash on next Find() call
     procedure Invalidate;
     /// to be called when an item has just been added
     // - the index of the latest added item should be Count-1
+    // - this method will update the internal hash table, and check if
+    // the newly added value is not duplicated
     // - return FALSE if this item is already existing (i.e. insert error)
     // - return TRUE if has been added to the internal hash table
-    function JustAdded: boolean;
+    function EnsureJustAddedNotDuplicated: boolean;
   end;
 
   /// abstract parent class with a virtual constructor, ready to be overridden
@@ -5527,6 +5533,10 @@ function SortDynArrayVariant(const A,B): integer;
 
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A,B): integer;
+
+/// compare two "array of variant" elements, with or without case sensitivity
+function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
+
 {$endif}
 
 
@@ -9245,7 +9255,7 @@ procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var
   /// compute CRC32C checksum on the supplied buffer
   // - this variable will use the fastest mean available, e.g. SSE 4.2
-  // - you should use this function instead of crc32cfast() nor crc32csse42()
+  // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher;
 
 /// compute the hexadecimal representation of the crc32 checkum of a given text
@@ -36183,6 +36193,10 @@ begin
         result := 0;
     varBoolean:
       result := ord(A.VBoolean)-ord(B.VBoolean);
+    varOleStr{$ifdef HASVARUSTRING},varUString{$endif}:
+      if caseInsensitive then
+        result := AnsiICompW(A.VAny,B.VAny) else
+        result := StrCompW(A.VAny,B.VAny);
     else
       if A.VType and VTYPE_STATIC=0 then
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
@@ -39055,14 +39069,17 @@ function TObjectHash.Find(Item: TObject): integer;
 var n: integer;
 begin
   n := Count;
-  if n<=COUNT_TO_START_HASHING then begin
-    for result := 0 to n-1 do // loop comparison if not worth it
-      if Compare(Get(result),Item) then
-        exit;
-    result := -1;
-    exit;
-  end;
-  result := HashFind(Hash(Item),Item);
+  if n<=COUNT_TO_START_HASHING then
+    result := Scan(Item,n) else
+    result := HashFind(Hash(Item),Item);
+end;
+
+function TObjectHash.Scan(Item: TObject; ListCount: integer): integer;
+begin
+  for result := 0 to ListCount-1 do
+    if Compare(Get(result),Item) then
+      exit;
+  result := -1;
 end;
 
 function TObjectHash.HashFind(aHashCode: cardinal; Item: TObject): integer;
@@ -39131,38 +39148,34 @@ begin
   fHashs := nil; // force HashInit call on next Find()
 end;
 
-function TObjectHash.JustAdded: boolean;
+function TObjectHash.EnsureJustAddedNotDuplicated: boolean;
 var H: cardinal;
-    n,ndx: integer;
-    O: TObject;
+    lastNdx,ndx: integer;
+    lastObject: TObject;
 begin
-  n := Count-1;
-  O := Get(n);
-  if O=nil then
-    raise ESynException.CreateUTF8('Invalid %.JustAdded call',[self]);
-  if n<COUNT_TO_START_HASHING then begin
-    result := false;
-    for ndx := 0 to n-1 do // loop comparison if not worth it
-      if Compare(Get(ndx),O) then
-        exit;
-    result := true;
+  lastNdx := Count-1;
+  lastObject := Get(lastNdx);
+  if lastObject=nil then
+    raise ESynException.CreateUTF8('Invalid %.EnsureJustAddedNotDuplicated call',[self]);
+  if lastNdx<COUNT_TO_START_HASHING then begin
+    result := Scan(lastObject,lastNdx)<0; // O(n) search if not worth it
     exit;
   end;
-  if n*2-n shr 3>length(fHashs) then begin
+  if lastNdx*2-lastNdx shr 3>length(fHashs) then begin
     fHashs := nil;
-    HashInit(n); // re-compute fHashs up to Count-1 if not enough void positions
+    HashInit(lastNdx); // re-compute fHashs up to Count-1 if not enough void positions
   end;
-  H := Hash(O);
-  ndx := HashFind(H,O);
+  H := Hash(lastObject);
+  ndx := HashFind(H,lastObject);
   if ndx>=0 then begin
-    result := true; // duplicate found
+    result := false; // duplicate found
     exit;
   end;
   with fHashs[-ndx-1] do begin
     Hash := H;
-    Index := n;
+    Index := lastNdx;
   end;
-  result := true;
+  result := true; // last inserted item is OK
 end;
 
 
@@ -50421,7 +50434,7 @@ begin
     ndx := DV.GetValueIndex(List[i].Name);
     if ndx<0 then
       ndx := DV.InternalAdd(List[i].Name) else
-      if SortDynArrayVariant(v,DV.Values[ndx])=0 then
+      if SortDynArrayVariantComp(TVarData(v),TVarData(DV.Values[ndx]),false)=0 then
         continue; // value not changed -> skip
     if ChangedProps<>nil then
       PDocVariantData(ChangedProps)^.AddValue(List[i].Name,v);

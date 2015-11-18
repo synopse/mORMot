@@ -741,7 +741,7 @@ Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit 
 \page
 :123 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
-First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries targets the main article about a given concept or technical term.
+First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries target the main article(s) about a given concept or technical term.
 Feel free to give your feedback at @http://synopse.info/forum asking new questions or improving answers!
 {\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes! Consider also the  slides available at @https://drive.google.com/folderview?id=0B0r8u-FwvxWdeVJVZnBhSEpKYkE
 {\b Where should I start?}\line Take a look at the {\i Architecture principles} @40@, then download and install the sources and compile and run the {\f1\fs20 TestSQL3.dpr} program as stated @113@. Check about @*ORM@ @3@, @*SOA@ @63@ and @*MVC@ @108@, then test the various samples (from the {\f1\fs20 SQLite3\\Samples} folder), especially 01, 02, 04, 11, 12, 14, 17, 26, 28, 30 and the {\f1\fs20 MainDemo}.

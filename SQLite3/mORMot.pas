@@ -3284,6 +3284,7 @@ type
     fPropInfo: PPropInfo;
     fPropType: PTypeInfo;
     fFlattenedProps: PPropInfoDynArray;
+    fGetterIsFieldPropOffset: cardinal;
     fInPlaceCopySameClassPropOffset: cardinal;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
@@ -15865,6 +15866,8 @@ type
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
     constructor Create(aValues: TList; aField: TSQLPropInfo; aCaseInsensitive: boolean);
+    /// search one item using slow list browsing
+    function Scan(Item: TObject; ListCount: integer): integer; override;
     /// the corresponding field index in the TSQLRecord
     property FieldIndex: integer read fField;
     /// the corresponding field RTTI
@@ -19055,9 +19058,11 @@ begin
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
-  if aPropInfo.GetterIsField and
-     ((aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc)) then
-    fInPlaceCopySameClassPropOffset := aPropInfo.GetProc {$ifndef FPC} and $00FFFFFF{$endif};
+  if aPropInfo.GetterIsField then begin
+    fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00FFFFFF{$endif};
+    if (aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc) then
+      fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
+  end;
   fFromRTTI := true;
 end;
 
@@ -19321,7 +19326,10 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else
-    result := fPropInfo.GetInt64Prop(Item1)-fPropInfo.GetInt64Prop(Item2);
+    if fGetterIsFieldPropOffset<>0 then
+      result := PInt64(PtrUInt(Item1)+fGetterIsFieldPropOffset)^-
+          PInt64(PtrUInt(Item2)+fGetterIsFieldPropOffset)^ else
+      result := fPropInfo.GetInt64Prop(Item1)-fPropInfo.GetInt64Prop(Item2);
 end;
 
 function TSQLPropInfoRTTIInt64.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
@@ -19989,20 +19997,31 @@ end;
 
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
-var tmp1,tmp2: RawByteString;
-begin
-  if Item1=Item2 then
-    result := 0 else
-  if Item1=nil then
-    result := -1 else
-  if Item2=nil then
-    result := 1 else begin
+
+  procedure Generic;
+  var tmp1,tmp2: RawByteString;
+  begin
     fPropInfo.GetLongStrProp(Item1,tmp1);
     fPropInfo.GetLongStrProp(Item2,tmp2);
     if CaseInsensitive then
       result := UTF8IComp(pointer(tmp1),pointer(tmp2)) else
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
+
+begin
+  if Item1=Item2 then
+    result := 0 else
+  if Item1=nil then
+    result := -1 else
+  if Item2=nil then
+    result := 1 else
+    if fGetterIsFieldPropOffset<>0 then // avoid any temporary variable
+      if CaseInsensitive then
+        result := UTF8IComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
+          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
+        result := StrComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
+          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
+    Generic;
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -20903,20 +20922,26 @@ end;
 
 function TSQLPropInfoRTTIVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
-var V1,V2: variant;
+
+  procedure Generic;
+  var V1,V2: variant;
+  begin
+    fPropInfo.GetVariantProp(Item1,V1);
+    fPropInfo.GetVariantProp(Item2,V2);
+    result := SortDynArrayVariantComp(TVarData(V1),TVarData(V2),CaseInsensitive);
+  end;
+
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else begin
-    fPropInfo.GetVariantProp(Item1,V1);
-    fPropInfo.GetVariantProp(Item2,V2);
-    if CaseInsensitive then
-      result := SortDynArrayVariant(V1,V2) else
-      result := SortDynArrayVariantI(V1,V2);
-  end;
+    result := 1 else
+    if fGetterIsFieldPropOffset<>0 then // avoid any temporary variable
+      result := SortDynArrayVariantComp(PVarData(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
+          PVarData(PtrUInt(Item2)+fGetterIsFieldPropOffset)^,CaseInsensitive) else
+      Generic;
 end;
 
 function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
@@ -39467,6 +39492,7 @@ function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
 var ndx,i: integer;
     lastID: TID;
     needSort: boolean;
+    hash: TListFieldHash;
 begin
   if (self=nil) or (Rec=nil) then begin
     result := -1; // mark error
@@ -39481,16 +39507,16 @@ begin
       raise EORMException.CreateUTF8('%.AddOne(%.ForceID=0)',[self,Rec]);
     if Rec.fID<=lastID then begin
       if fUniqueFields<>nil then begin
-        for i := 0 to fUniqueFields.Count-1 do
-        with TListFieldHash(fUniqueFields.List[i]) do begin
-          for ndx := 0 to fValue.Count-1 do // O(n) search to avoid hashing
-            if Compare(fValue.List[ndx],Rec) then begin
-              InternalLog('%.AddOne: Duplicated field "%" value for % and %',
-                [ClassType,Field.Name,Rec,TSQLRecord(fValue.List[ndx])],sllTrace);
-              result := 0; // duplicate unique fields -> error
-              exit;
-            end;
-          Invalidate;
+        for i := 0 to fUniqueFields.Count-1 do begin
+          hash := fUniqueFields.List[i];
+          ndx := hash.Scan(Rec,fValue.Count); // O(n) search to avoid hashing
+          if ndx>=0 then begin
+            InternalLog('%.AddOne: Duplicated field "%" value for % and %',
+              [ClassType,hash.Field.Name,Rec,TSQLRecord(fValue.List[ndx])],sllTrace);
+            result := 0; // duplicate unique fields -> error
+            exit;
+          end;
+          hash.Invalidate;
         end;
         InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
           [ClassType,Rec.ClassType,Rec.fID,lastID],sllTrace);
@@ -39510,7 +39536,7 @@ begin
     fValue.Sort(TSQLRecordCompare) else // fUniqueFields[] already checked
     if fUniqueFields<>nil then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
-      if not TListFieldHash(fUniqueFields.List[i]).JustAdded then begin
+      if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
         InternalLog('%.AddOne: Duplicated field "%" value for %',
           [ClassType,TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec],sllTrace);
         result := 0; // duplicate unique fields -> error
@@ -39924,7 +39950,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
       if (Stmt.Where[0].Field<>0) or // only handle ID IN (..) by now
          (Stmt.Offset>0) then
         goto err else
-        with TDocVariantData(Stmt.Where[0].ValueVariant) do
+        with _Safe(Stmt.Where[0].ValueVariant)^ do
           for ndx := 0 to Count-1 do
             if VariantToInt64(Values[ndx],id) then begin
               j := IDToIndex(id);
@@ -40988,6 +41014,14 @@ begin
     if cardinal(Index)<cardinal(Count) then
       result := List[Index] else
       result := nil;
+end;
+
+function TListFieldHash.Scan(Item: TObject; ListCount: integer): integer;
+begin
+  for result := 0 to ListCount-1 do
+    if fProp.CompareValue(fValues.List[result],Item,CaseInsensitive)=0 then
+      exit;
+  result := -1;
 end;
 
 
