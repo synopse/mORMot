@@ -1138,9 +1138,13 @@ begin
       end;
       if WithMark then
         inc(XInc,CheckBoxWidth+4);
-      if Assigned(OnValueText) and OnValueText(Table,ACol,ARow,StringValue) then
-        ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
-          length(StringValue), nil) else // translated text
+      if Assigned(OnValueText) and OnValueText(Table,ACol,ARow,StringValue) then begin
+        L := length(StringValue);
+        if L>255 then
+          L := 255; // avoid blank cell drawing for huge content
+        ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect,
+          pointer(StringValue), L, nil); // translated text
+      end else
       case Table.ExpandAsString(ARow,ACol,Client,StringValue,GetCustomFormat(ACol)) of
       // very fast response (calculated once)
       sftBoolean:
