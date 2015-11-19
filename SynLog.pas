@@ -485,7 +485,6 @@ type
     // TSynLogFamily: it will staty alive until this TSynLogFamily is destroyed,
     // or the EchoRemoteStop() method called
     // - aClientEvent should be able to send the log row to the remote server
-    // - typical use may be:
     procedure EchoRemoteStart(aClient: TObject; const aClientEvent: TOnTextWriterEcho;
       aClientOwnedByFamily: boolean);
     /// stop echo remote logging
@@ -738,6 +737,7 @@ type
     fThreadContextCount: integer;
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
+    fDisableRemoteLog: boolean;
     {$ifdef FPC}
     function QueryInterface(
       {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
@@ -949,6 +949,15 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject=nil;
       const IgnoreWhenStartWith: PAnsiChar=nil);
+    /// allow to temporary disable remote logging
+    // - to be used within a try ... finally section:
+    // ! log.DisableRemoteLog(true);
+    // ! try
+    // !   log.Log(....); // won't be propagated to the remote log
+    // ! finally
+    // !   log.DisableRemoteLog(false);
+    // ! end;
+    procedure DisableRemoteLog(value: boolean);
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
     property Writer: TTextWriter read fWriter;
@@ -3161,6 +3170,26 @@ end;
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     DoLog(LinesToLog);
+end;
+
+procedure TSynLog.DisableRemoteLog(value: boolean);
+begin
+  if (fDisableRemoteLog=value) or not Assigned(fFamily.fEchoRemoteEvent) then
+    exit;
+  if value then begin
+    // fDisableRemoteLog=false -> remove from events, within the global mutex
+    EnterCriticalSection(GlobalThreadLock);
+    if fDisableRemoteLog=value then // unlikely set in-between
+      LeaveCriticalSection(GlobalThreadLock) else begin
+      fDisableRemoteLog := true;
+      fWriter.EchoRemove(fFamily.fEchoRemoteEvent);
+    end;
+  end else begin
+    // fDisableRemoteLog=true -> already within the mutex
+    fDisableRemoteLog := false;
+    fWriter.EchoAdd(fFamily.fEchoRemoteEvent);
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; aInstance: TObject);
