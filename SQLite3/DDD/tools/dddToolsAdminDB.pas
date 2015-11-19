@@ -141,11 +141,10 @@ begin
     exit;
   table := lstTables.Items[i];
   sql := 'select * from ' + table;
-  if TableDblClickOrderByIdDesc or
-     ((TableDblClickOrderByIdDescCSV<>'') and
-      (Pos(table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
+  if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and (Pos
+    (table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
     sql := sql + ' order by id desc';
-  sql := sql + ' limit 1000';
+  sql := sql + ' limit 3000';
   AddSQL(sql, true);
 end;
 
@@ -190,7 +189,7 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
   end;
 
 var
-  res, ctyp: RawUTF8;
+  res, ctyp, execTime: RawUTF8;
   mmo, cmd: string;
   SelStart, SelLength, i: integer;
   table: TSQLTable;
@@ -198,6 +197,7 @@ var
   P: PUTF8Char;
   exec: TServiceCustomAnswer;
   ctxt: variant;
+  timer: TPrecisionTimer;
 begin
   if (Sender <> nil) and Sender.InheritsFrom(TMenuItem) then begin
     mmo := TMenuItem(Sender).Hint;
@@ -220,21 +220,23 @@ begin
   if fSQL = '' then
     exit;
   if IdemPropNameU(fSQL, '#client') then begin
-    fJSON := ObjectToJSON(Client);
+    fJson := ObjectToJSON(Client);
   end
   else begin
     Screen.Cursor := crHourGlass;
     try
       try
+        timer.Start;
         exec := Admin.DatabaseExecute(DatabaseName, fSQL);
+        execTime := timer.Stop;
         ctyp := FindIniNameValue(pointer(exec.Header), HEADER_CONTENT_TYPE_UPPER);
         if ctyp = '' then
-          fJSON := exec.Content
+          fJson := exec.Content
         else
-          fJSON := '';
+          fJson := '';
       except
         on E: Exception do
-          fJSON := ObjectToJSON(E);
+          fJson := ObjectToJSON(E);
       end;
     finally
       Screen.Cursor := crDefault;
@@ -279,7 +281,7 @@ begin
       tables := AssociatedModel.Tables
     else
       tables := AssociatedTables;
-    table := TSQLTableJSON.CreateFromTables(tables, '', pointer(fJson), length(fJSON));
+    table := TSQLTableJSON.CreateFromTables(tables, '', pointer(fJson), length(fJson));
     Grid := TSQLTableToGrid.Create(drwgrdResult, table, nil);
     Grid.SetAlignedByType(sftCurrency, alRight);
     Grid.SetFieldFixedWidth(100);
@@ -289,8 +291,9 @@ begin
       OnAfterExecute(self);
     drwgrdResult.Options := drwgrdResult.Options - [goRowSelect];
     drwgrdResult.Show;
-    if table.RowCount > 0 then
-      drwgrdResultClick(nil);
+    mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
+    mmoResult.Text := Format(#13#10' Returned %d row(s), for %s in %s', [table.RowCount,
+      KB(Length(fJson)), execTime]);
   end;
   if Sender <> nil then begin
     mmoSQL.SelStart := SelStart;

@@ -447,7 +447,6 @@ begin
           Brush.Color := clBlack else
           Brush.Color := LOG_COLORS[b,FLog.EventLevel[Index]];
         Font.Color  := LOG_COLORS[not b,FLog.EventLevel[Index]];
-        FillRect(Rect);
         case ACol of
         0: DateTimeToString(txt,TIME_FORMAT[FLog.Freq=0],FLog.EventDateTime(Index));
         1: txt := FEventCaption[FLog.EventLevel[Index]];
@@ -456,7 +455,7 @@ begin
              txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
         3: txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
         end;
-        TextOut(Rect.Left+4,Rect.Top,txt);
+        TextRect(Rect,Rect.Left+4,Rect.Top,txt);
       end else begin
         Brush.Color := clLtGray;
         FillRect(Rect);
