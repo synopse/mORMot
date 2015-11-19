@@ -617,7 +617,7 @@ subgraph cluster_6 {
 label="         Featuring";
 "Featured";
 }
-=SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle
+=SQLDB=SQLite3 - Firebird - NexusDB\nPostgreSQL - MySQL - DB2\nMS SQL - Oracle - Informix
 =NoSQLDB=MongoDB\nIn-Memory\nFiles
 =Services=Method-based Services\nInterface-based Services\nAsynchronous (Push) Services\nRemote (Saas) Services
 =Featured=User Management - Security & Rights - Sessions - Replication¤Unit Testing - Mocks/Stubs - Logging - Performance - Profiling¤http.sys - WebSockets - MultiCore - Templates (MVC) ¤JSON - JavaScript Engine -  Reporting - PDF - UI
@@ -632,7 +632,7 @@ The {\i mORMot} framework provides an Open Source {\i self-sufficient set of uni
 - {\i Presentation layer} featuring @*MVC@ UI generation with @*i18n@ and reporting for rich {\i Delphi} clients, {\i @*Mustache@}-based templates for web views - see @108@ - or rich @*AJAX@ clients;
 - {\i Application layer} implementing Service Oriented Architecture via {\f1\fs20 interface}-based services (like @*WCF@) and Client-Server ORM - following a @*REST@ful model using @*JSON@ over several communication protocols (e.g. @*HTTP@/1.1 and @*HTTPS@);
 - {\i Domain Model layer} handling all the needed business logic in plain {\i Delphi} objects, including high-level managed types like @*dynamic array@s or records for {\i Value Objects}, dedicated classes for {\i Entities} or {\i Aggregates}, and {\f1\fs20 variant} storage with late-binding for dynamic documents - your business logic may also be completed in {\i JavaScript} on the server side as stated @79@;
-- {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
+- {\i Data persistence infrastructure layer} with ORM persistence on direct @*Oracle@, @*MS SQL@, @*OleDB@, @*ODBC@, @*Zeos@ connection or any {\f1\fs20 DB.pas} provider (e.g. @*NexusDB@, @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@...), with a powerful @*SQLite3@ kernel, and direct @*SQL@ access if needed - including SQL auto-generation for {\i SQLite3, Oracle, @*Jet/MSAccess@, MS SQL, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} and {\i NexusDB} - the ORM is also able to use @*NoSQL@ engines via a native {\i @*MongoDB@} connection, for ODM persistence;
 - {\i Cross-Cutting infrastructure layers} for handling data filtering and validation, @*security@, @*session@, @*cache@, logging and @*test@ing (framework uses @*test-driven@ approach and features @*stub@bing and @*mock@ing).
 If you do not know some of those concepts, don't worry: this document will detail them - see @40@.
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line {\i mORMot} is not another ORM on which a transmission layer has been added, like almost everything existing in Delphi, C# or Java: this is a full Client-Server ORM/SOA from the ground up. This really makes the difference.
@@ -956,14 +956,14 @@ Both @*ORM@ and @*SOA@ aspects of our @*REST@ful framework make it easy to devel
 \Logic Tier\Data Tier
 \
 The {\i Synopse mORMot Framework} follows this development pattern:
-- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from {\i Delphi} classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
+- {\i Data Tier} is either {\i @*SQLite3@} and/or an internal very fast in-memory database; most @*SQL@ queries are created on the fly, and database table layout are defined from {\i Delphi} classes; you can also use any external database, currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} and {\i @*NexusDB@} SQL dialects are handled, and even @*NoSQL@ engines like {\i @*MongoDB@} can be directly used - see @27@;
 - {\i Logic Tier} is performed by pure ORM aspect and SOA implementation: you write {\i Delphi} classes which are mapped by the {\i Data Tier} into the database, and you can write your business logic as Services called as {\i Delphi} {\f1\fs20 interface}, up to a {\i @*Domain-Driven@} design - see @54@ - if your project reaches some level of complexity;
 - {\i Presentation Tier} is either a {\i Delphi} Client, or an @*AJAX@ application, because the framework can communicate using @*REST@ful @*JSON@ over @*HTTP@/1.1 (the {\i Delphi} Client User Interface is generated from Code, by using @*RTTI@ and structures, not as a RAD - and the Ajax applications need to be written by using your own tools and @*JavaScript@ framework, there is no "official" Ajax framework included yet).
 In fact, {\i mORMot} can scales up to a {\i @*Domain-Driven@} Design four-tier architecture - see @54@ - as such:
 - {\i Presentation Tier} which can be e.g. a {\i Delphi} or AJAX client;
 - {\i Application Tier} which serves JSON content according to the client application;
 - {\i Business Logic Tier} which centralizes all the {\i Domain} processing, shared among all applications;
-- {\i Persistence/Data Tier} which can be either in-process (like {\i @*SQLite3@} or in-memory) or external (e.g. {\i Oracle, MS SQL, DB2, PostgreSQL, MySQL}...).
+- {\i Persistence/Data Tier} which can be either in-process (like {\i @*SQLite3@} or in-memory) or external (e.g. {\i Oracle, MS SQL, DB2, PostgreSQL, MySQL, Informix}...).
 \graph ArchiDDDTier Domain Driven Design n-Tier Architecture - Logical View
 \Presentation Tier\Application Tier
 \Application Tier\Business Logic Tier
@@ -3684,7 +3684,7 @@ Here, the write operations are defined in a {\f1\fs20 IDomUserCommand} service, 
 :  Several ORMs at once
 To be clear, {\i mORMot} offers several kind of table definitions:
 - Via {\f1\fs20 @*TSQLRecord@} / {\f1\fs20 @*TSQLRecordVirtual@} "native ORM" classes: data storage is using either fast in-memory lists via {\f1\fs20 @*TSQLRestStorageInMemory@}, or {\i @*SQLite3@} tables (in memory, on file, or virtual). In this case, we do not use {\f1\fs20 index} for strings (column length is not used by any of those engines).
-- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} / {\f1\fs20 @*VirtualTableExternalMap@()} functions, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / @*ZDBC@ provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
+- Via {\f1\fs20 @*TSQLRecord@} "external ORM-managed" classes: after registration via a call to the {\f1\fs20 @*VirtualTableExternalRegister@()} / {\f1\fs20 @*VirtualTableExternalMap@()} functions, external DB tables are created and managed by the ORM, via SQL - see @27@. These classes will allow creation of tables in any supported database engine - currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} and {\i @*NexusDB@} - via whatever {\i OleDB, ODBC} / @*ZDBC@ provider, or any {\f1\fs20 DB.pas} unit). For the "external ORM-managed" {\f1\fs20 TSQLRecord} type definitions, the ORM expects to find an {\f1\fs20 index} attribute for any text column length (i.e. {\f1\fs20 RawUTF8} or {\f1\fs20 string} published properties). This is the only needed parameter to be defined for such a basic implementation, in regard to {\f1\fs20 TSQLRecord} kind of classes. Then can specify addition field/column mapping, if needed.
 - Via {\f1\fs20 @*TSQLRecord@} "external @*ODM@-managed" classes: after registration via a call to the {\f1\fs20 @*StaticMongoDBRegister@()} or {\f1\fs20 @*StaticMongoDBRegisterAll@()} functions, external {\i @*MongoDB@} collections are created and managed via @82@. In this case, no {\f1\fs20 index} attribute for setting text column length is necessary.
 - Via {\f1\fs20 @*TSQLRecordMappedAutoID@} / {\f1\fs20 @*TSQLRecordMappedForcedID@} "external mapped" classes: DB tables are not created by the ORM, but already existing in the DB, with sometimes a very complex layout. This feature is not yet implemented, but on the road-map. For this kind of classes we won't probably use attributes, nor even external files, but we will rely on definition from code, either with a fluent definition, or with dedicated classes (or interface).
 - Via any kind of Delphi {\f1\fs20 class}, mapped to their internal {\f1\fs20 TSQLRecord class}, using @*CQRS@ {\i Repository Services} as presented @167@.
@@ -3694,12 +3694,12 @@ In practice, when your data starts to grow, you may need to {\i archive} older d
 Another pattern is to use dedicated consolidation DBs for any analysis. In fact, SQL {\i @*normalization@} is good for most common relation work, but sometimes {\i @*denormalization@} is necessary, e.g. for statistic or business analyse purposes. In this case, dedicated consolidation databases, containing the data already prepared and indexed in a ready-to-use denormalized layout.
 Last but not least, some @*Event Sourcing@ architectures even {\i expect} several DB back-end at once:
 - It will store the status on one database (e.g. high-performance in-memory) for most common requests to be immediate;
-- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} or {\i @*NexusDB@}), even a high-speed @*NoSQL@ engine like {\i @*MongoDB@}.
+- And store the modification events in another @*ACID@ database (e.g. {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} or {\i @*NexusDB@}), even a high-speed @*NoSQL@ engine like {\i @*MongoDB@}.
 It is possible to directly access ORM objects remotely (e.g. the consolidation DB), mostly in a read-only way, for dedicated reporting, e.g. from consolidated data - this is one potential @*CQRS@ implementation pattern with {\i mORMot}. Thanks to the framework security, remote access will be safe: your clients won't be able to change the consolidation DB content!
 As can be easily guessed, such design models are far away from a basic ORM built only for class persistence. And {\i mORMot}'s ORM/ODM offers you all those possibilities.
 :  The best ORM is the one you need
 Therefore, we may sum up some potential use of ORM, depending of your intent:
-- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestStorageInMemory@} class which is able to persist its content in small files - see @57@;
+- If you want to persist some data objects (not tied to complex business logic), the framework's ORM will be a light and fast candidate, targetting {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@, @*NexusDB@} databases, or even with no SQL engine, using {\f1\fs20 @*TSQLRestStorageInMemory@} class which is able to persist its content in small files - see @57@;
 - If your understanding of ORM is just to persist some {\i existing} objects with associated business code, {\i mORMot} could help you, thanks to its {\i Repository Services} automatically generated over {\f1\fs20 TSQLRecord}, as presented @167@;
 - If you want a very fast low-level Client-Server layer, {\i mORMot} is a first class candidate: we identified that some users are using the built-in JSON serialization and HTTP server features to create their application, using a RESTful/SOA architecture - see @49@ and @63@;
 - If your expectation is to map an existing complex RDBMS, {\i mORMot} would allow to publish existing SQL statements as services, using e.g. {\f1\fs20 interface}-based services - see @63@ - over optimized {\f1\fs20 SynDB.pas} data access - see @126@ - as explained in @66@;
@@ -3712,7 +3712,7 @@ The core database of this framework uses the {\i @**SQLite3@} library, which is 
 As stated below, you can use any other database access layer, if you wish:
 - A fast in-memory engine is included, which outperforms any SQL-based solution in terms of speed - but to the price of a non ACID behavior on disk (but ACID in RAM);
 - An integrated {\i SQLite3} engine, which is the best candidate for an embedded solution, even on server side;
-- Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects;
+- Any remote RDBMS database, via one or more {\i @*OleDB@}, {\i @*ODBC@}, {\i @*Zeos@} or {\i @*Oracle@} connections to store your precious ORM objects. Or you can use any {\f1\fs20 DB.pas} unit, e.g. to access @*NexusDB@ or any database engines supported by @*DBExpress@, @*FireDAC@, @*AnyDAC@, @*UniDAC@ (or the deprecated @*BDE@). In all cases, the ORM supports currently {\i SQLite3, @*Oracle@, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} and {\i @*NexusDB@} SQL dialects;
 - Any other {\f1\fs20 TSQLRest} instance (either another {\f1\fs20 TSQLRestServer}, or a remote {\f1\fs20 TSQLRestClientHTTP}) - see @93@;
 - Direct access to a {\i @*MongoDB@} database, which implements a true @82@ design.
 \graph mORMotDBDesign mORMot Persistence Layer Architecture
@@ -3757,7 +3757,7 @@ The overhead of including {\i SQlite3} in your server application will be worth 
 :  Extended by SQLite3 virtual tables
 Since the framework is truly object oriented, another database engine could be used instead of the framework. You could easily write your own {\f1\fs20 TSQLRestServer} descendant (as an example, we included a fast in-memory database engine as {\f1\fs20 @*TSQLRestServerFullMemory@}) and link to a another engine (like {\i @*FireBird@}, or a private one). You can even use our framework without any link to the {\i @*SQLite3@} engine itself, via our provided very fast in memory dataset (which can be made persistent by writing and reading @*JSON@ files on disk). The {\i SQLite3} engine is implemented in a separate unit, named {\f1\fs20 SynSQLite3.pas}, and the main unit of the framework is {\f1\fs20 mORMot.pas}. A bridge between the two units is made with {\f1\fs20 mORMotSQLite3.pas}, which will found our ORM framework using {\i SQLite3} as its core.
 The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@.pas}-based dedicated units, as stated @27@.
-As a result, the framework has several potential database back-ends, in addition to the default {\i SQLite3} file-based engine. Each engine may have its own purpose, according to the application expectations. Currently {\i SQLite3, Oracle, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@} and {\i @*NexusDB@} SQL dialects are handled by our ORM.
+As a result, the framework has several potential database back-ends, in addition to the default {\i SQLite3} file-based engine. Each engine may have its own purpose, according to the application expectations. Currently {\i SQLite3, Oracle, @*Jet/MSAccess@, @*MS SQL@, @*Firebird@, @*DB2@, @*PostgreSQL@, @*MySQL@, @*Informix@} and {\i @*NexusDB@} SQL dialects are handled by our ORM.
 :59  Data access benchmark
 Purpose here is not to say that one library or database is better or faster than another, but publish a snapshot of {\i mORMot} persistence layer abilities, depending on each access library.
 In this timing, we do not benchmark only the "pure" SQL/DB layer access ({\f1\fs20 SynDB.pas} units), but the whole @*Client-Server@ ORM of our framework.
@@ -3945,6 +3945,7 @@ Most recognized {\i closed source} databases are available:
 - Direct access to {\i Oracle} gives impressive results in BATCH mode (aka @*array bind@ing). It may be an obligation if your end-customer stores already its data in such a server, for instance, and want to leverage the licensing cost of its own IT solution. {\i Oracle Express} edition is free, but somewhat heavy and limited in terms of data/hardware size (see its licensing terms);
 - {\i MS SQL Server}, directly accessed via {\i OleDB} (or {\i ODBC}) gives pretty good timing. A {\i MS SQL Server 2008 R2 Express} instance is pretty well integrated with the {\i Windows} environment, for a very affordable price (i.e. for free) - the {\i LocalDB} (MSI installer) edition is enough to start with, but also with data/hardware size limitation, just like {\i Oracle Express};
 - IBM {\i DB2} is another good candidate, and the {\i Express-C} ("C" standing for Community) offers a no-charge opportunity to run an industry standard engine, with no restriction on the data size, and somewhat high hardware limitations (16 GB of RAM and 2 CPU cores for the latest 10.5 release) or enterprise-level features;
+- We did not include {\i Informix} numbers here, since support for this database was provided by an user patch - thanks Esteban Martin for sharing! - and we do not have any such server available here;
 - {\i @*NexusDB@} may be considered, if you have existing {\i Delphi} code and data - but it is less known and recognized as the its commercial competitors.
 {\i Open Source} databases are worth considering, especially in conjunction with an Open Source framework like {\i mORMot}:
 - {\i MySQL} is the well-known engine used by a lot of web sites, mainly with {\i LAMP} ({\i @*Linux@ Apache MySQL PHP}) configurations. Windows is not the best platform to run it, but it could be a fairly good candidate, especially in its {\i MariaDB} fork, which sounds more attractive those days than the official main version, owned by Oracle;
@@ -3961,7 +3962,7 @@ Therefore, the typical use may be the following:
 |{\f1\fs20 TObjectList} virtual|Created with {\f1\fs20 VirtualTableRegister}.\line Best possible performance for SQL over small amount of data (or even unlimited amount under @*Win64@), if ACID is not required nor complex SQL
 |external SQLite3 file|Created with {\f1\fs20 @*VirtualTableExternalRegister@}\line External back-end, e.g. for disk spanning
 |external SQLite3 in-memory|Created with {\f1\fs20 VirtualTableExternalRegister} and {\f1\fs20 ':memory:'}\line Fast external back-end (e.g. for testing)
-|external @*Oracle@ / @*MS SQL@ / @*DB2@ / @*PostgreSQL@ / @*MySQL@ / @*Firebird@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Fast, secure and industry standard back-ends; data can be shared outside {\i mORMot}
+|external @*Oracle@ / @*MS SQL@ / @*DB2@ / @*PostgreSQL@ / @*MySQL@ / @*Informix@ / @*Firebird@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Fast, secure and industry standard back-ends; data can be shared outside {\i mORMot}
 |external @*NexusDB@|Created with {\f1\fs20 VirtualTableExternalRegister}\line The free embedded version let the whole engine be included within your executable, and use any existing code, but {\i SQlite3} sounds like a better option
 |external @*Jet/MSAccess@|Created with {\f1\fs20 VirtualTableExternalRegister}\line Could be used as a data exchange format (e.g. with Office applications)
 |external Zeos|Created with {\f1\fs20 VirtualTableExternalRegister}\line Allow access to several external engines, with direct @*Zeos@/@*ZDBC@ access which will by-pass the {\f1\fs20 DB.pas} unit and its {\f1\fs20 TDataSet} bottleneck - and we will also prefer an active Open Source project!
@@ -4352,7 +4353,7 @@ Or, for external tables:
 !Client := TSQLRestClientDB.Create(Model,nil,MainDBFileName,TSQLRestServerDB,false,'');
 !!TSQLDBSQLite3Connection(Props.MainConnection).Synchronous := smOff;
 !!TSQLDBSQLite3Connection(Props.MainConnection).LockingMode := lmExclusive;
-If you can afford loosing some data in very rare border case, or if you are sure your hardware configuration is safe (e.g. if the server is connected to a power inverter and has RAID disks) and that you have backups at hand, setting {\f1\fs20 Synchronous := smOff} would help your application scale for writing. Setting {\f1\fs20 LockingMode := lmExclusive} will benefit of both writing and reading speed. Consider using an external and dedicated database (like {\i @*Firebird@}, {\i @*Oracle@, @*PostgreSQL@, @*MySQL@, @*DB2@} or @*MS SQL@) if your security expectations are very high, and if the default safe but slow setting is not enough for you.
+If you can afford loosing some data in very rare border case, or if you are sure your hardware configuration is safe (e.g. if the server is connected to a power inverter and has RAID disks) and that you have backups at hand, setting {\f1\fs20 Synchronous := smOff} would help your application scale for writing. Setting {\f1\fs20 LockingMode := lmExclusive} will benefit of both writing and reading speed. Consider using an external and dedicated database (like {\i @*Firebird@}, {\i @*Oracle@, @*PostgreSQL@, @*MySQL@, @*DB2@, @*Informix@} or @*MS SQL@) if your security expectations are very high, and if the default safe but slow setting is not enough for you.
 :  Database backup
 In all cases, do not forget to perform @*backup@s of your {\i SQlite3} database as often as possible (at least several times a day). Adding a backup feature on the server side is as simple as running:
 ! Server.DB.BackupBackground('backup.db3',1024,10,nil);
@@ -4689,7 +4690,7 @@ Note that both {\f1\fs20 TSQLRestStorageRemote} and {\f1\fs20 TSQLRestServerRemo
 Sadly, this redirection pattern won't work if the connection is lost. The main office server needs to be always accessible so that the local offices would continue to work. You may consider using @147@ to allow the local offices to work with their own local copy of the master data. @*Replication@ sounds in fact preferred than simple redirection, especially in terms of network and resource use, in some cases.
 :  Virtual Tables to access external databases
 As will be stated @27@, some external databases may be accessed by our ORM.
-The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
+The @*Virtual Table@ feature of {\i @*SQLite3@} will allow those remote tables to be accessed just like "native" {\i SQLite3} tables - in fact, you may be able e.g. to write a valid SQL query with a {\f1\fs20 @*JOIN@} between {\i SQlite3} tables, {\i @*MS SQL@ Server, @*MySQL@, @*FireBird@, @*PostgreSQL@, @*MySQL@, @*DB2@, @*Informix@} and {\i @*Oracle@} databases, even with multiple connections and several remote servers. Think as an ORM-based {\i Business Intelligence} from any database source. Added to our code-based reporting engine (able to generate @*pdf@), it could be a very powerful way of consolidating any kind of data.
 In order to define such {\i external} tables, you define your regular {\f1\fs20 @*TSQLRecord@} classes as usual, then a call to the {\f1\fs20 @**VirtualTableExternalRegister@()}  or {\f1\fs20 @**VirtualTableExternalMap@()} functions will define this class to be managed as a virtual table, from an external database engine. Using a dedicated external database server may allow better response time or additional features (like data sharing with other applications or languages). Server-side may omit a call to {\f1\fs20 VirtualTableExternalRegister()} if the need of an internal database is expected: it will allow custom database configuration at runtime, depending on the customer's expectations (or license).
 :  Virtual tables from the client side
 For external databases - see @27@ - the SQL conversion will be done on the fly in a more advanced way, so you should be able to work with such virtual tables from the client side without any specific model notification. In this case, you can safely define your tables as {\f1\fs20 TSQLValue1 = class(TSQLRecord)}, with no further code on client side.
@@ -4767,7 +4768,7 @@ Remember the diagram introducing {\i mORMot}'s @42@:
 The framework still relies on {\i @*SQLite3@} as its SQL core on the server, but a dedicated mechanism allows access to any remote database, and mixes those tables content with the native ORM tables of the framework. Thanks to the unique @20@ mechanism of {\i SQLite3}, those external tables may be accessed as native {\i SQLite3} tables in our SQL statements, even for NoSQL engines.
 |%10%90
 |\b Mode|Engines\b0
-|SQL|{\i @*SQLite3@, @*Oracle@, @*NexusDB@, @*MS SQL@, @*Jet/MSAccess@, @*FireBird@, @*MySQL@, @*PostgreSQL@, IBM @*DB2@}\line See @126@
+|SQL|{\i @*SQLite3@, @*Oracle@, @*NexusDB@, @*MS SQL@, @*Jet/MSAccess@, @*FireBird@, @*MySQL@, @*PostgreSQL@, IBM @*DB2@, IBM @*Informix@}\line See @126@
 |NoSQL|{\i @*MongoDB@}, {\f1\fs20 TObjectList} with JSON or binary disk persistence\line See @83@ and @57@
 |%
 You can even mix databases, i.e. the same {\i mORMot} ORM could persist, at the same time, its data in several databases, some {\f1\fs20 TSQLRecord} as fast internal {\i SQLite3} tables or as {\f1\fs20 TObjectList}, others in a {\i PostgreSQL} database (tied to an external reporting/SAP engine), and e.g. flat consolidated data in a {\i MongoDB} instance.
@@ -4780,7 +4781,7 @@ The current list of handled data access libraries is:
 |{\i SQLite3}|{\f1\fs20 SynDBSQLite3.pas}|direct {\i SQLite3} access (as dll or linked to the exe)\line See @127@
 |{\i Oracle}|{\f1\fs20 SynDBOracle.pas}|direct {\i Oracle} access (via OCI)\line See @117@
 |{\i @*OleDB@}|{\f1\fs20 SynOleDB.pas}|{\i MS SQL, Jet/MSAccess} or others\line See @118@
-|{\i @*ODBC@}|{\f1\fs20 SynDBODBC.pas}|{\i MS SQL, FireBird, MySQL, PostgreSQL, IBM DB2} or others\line See @118@
+|{\i @*ODBC@}|{\f1\fs20 SynDBODBC.pas}|{\i MS SQL, FireBird, MySQL, PostgreSQL, IBM DB2, Informix} or others\line See @118@
 |{\i @*Zeos@Lib}|{\f1\fs20 SynDBZeos.pas}|{\i MS SQL, SQLite3, FireBird, MySQL, PostgreSQL}\line See @94@
 |{\f1\fs20 DB.pas}/\line {\f1\fs20 @**TDataset@}|{\f1\fs20 SynDBDataset.pas}|@*NexusDB@ and databases supported by @*DBExpress@, @*FireDAC@, @*AnyDac@, @*UniDAC@, @*BDE@...\line See @119@
 |HTTP|{\f1\fs20 SynDBRemote.pas}|remote access to any {\f1\fs20 SynDB} database, over HTTP
@@ -4819,6 +4820,7 @@ The following connections are therefore possible:
 \ODBC\DB2
 \ODBC\PostgreSQL
 \ODBC\Interbase
+\ODBC\Informix
 \ODBC\Firebird
 \ODBC\Sybase
 \ODBC\Jet/Access
@@ -4830,6 +4832,7 @@ The following connections are therefore possible:
 \OleDB\PostgreSQL
 \OleDB\Interbase
 \OleDB\Firebird
+\OleDB\Informix
 \OleDB\Sybase
 \DB\NexusDB
 \DB\AnyDAC
@@ -4918,7 +4921,7 @@ BLOB columns or parameters are accessed as {\f1\fs20 @*RawByteString@} variables
 In addition to raw data access, the {\f1\fs20 SynDB.pas} unit handles some SQL-level generation, which would be used by our @3@ kernel.
 The following RDBMS database engines are defined as such in {\f1\fs20 SynDB.pas}:
 ! TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet,
-!   dMySQL, dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2);
+!   dMySQL, dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2, dInformix);
 |%25%75
 |\b {\f1\fs20 TSQLDBDefinition}|RDBMS tested\b0
 |{\f1\fs20 dDefault}|Any database, following the SQL-92 standard
@@ -4931,6 +4934,7 @@ The following RDBMS database engines are defined as such in {\f1\fs20 SynDB.pas}
 |{\f1\fs20 dNexusDB}|@*NexusDB@ 3.11
 |{\f1\fs20 dPostgreSQL}|@PostgreSQL@ 9.2/9.3
 |{\f1\fs20 dDB2}|IBM @*DB2@ 10.5
+|{\f1\fs20 dInformix}|IBM @*Informix@ 11.70
 |%
 The above versions have been tested, but newer or older revisions may also work. Your feedback is welcome: we cannot achieve to test all possible combinations of databases and clients on our own!
 The {\f1\fs20 SynDB.pas} unit is able to generate the SQL statements of those engines, for a {\f1\fs20 CREATE TABLE} / {\f1\fs20 CREATE INDEX} command, retrieve metadata (e.g. the tables and fields information), compute the right limit/offset syntax for a {\f1\fs20 SELECT}, compute multi-{\f1\fs20 INSERT} statements - see @99@, check the SQL keywords, define specific schema/owner naming conventions, process date and time values, handle errors and exceptions, or even create a database.
@@ -5195,6 +5199,7 @@ If you plan to connect to a MS SQL Server, we highly recommend using the {\f1\fs
 \ODBC\MS SQL
 \ODBC\MySQL
 \ODBC\DB2
+\ODBC\Informix
 \ODBC\PostgreSQL
 \ODBC\Interbase
 \ODBC\Firebird
@@ -7435,7 +7440,7 @@ That is, CRUD operations can be executed either at the database level, or remote
 This feature has several benefits, among them:
 - No need to deploy the database client library for your application clients - a standard IP network connection is enough;
 - Therefore the client application can safely remain small, and stand-alone - no installation step is necessary, and you still have the full power of a native rich client;
-- Clients access their objects in an abstract way, i.e. without any guess on how persistence is handled: some classes may be stored in one {\i @*SQlite3@} database, others may exist only in server's memory, others may be stored e.g. in an external {\i @*Oracle@}, {\i @*Firebird@}, {\i @*PostgreSQL@}, @*MySQL@, @*DB2@ or {\i @*MS SQL@} database;
+- Clients access their objects in an abstract way, i.e. without any guess on how persistence is handled: some classes may be stored in one {\i @*SQlite3@} database, others may exist only in server's memory, others may be stored e.g. in an external {\i @*Oracle@}, {\i @*Firebird@}, {\i @*PostgreSQL@, @*MySQL@, @*DB2@, @*Informix@} or {\i @*MS SQL@} database;
 - You can switch from local to remote access just by changing the class type, even at runtime;
 - Optimization is implemented at every level of the @*n-Tier@ architecture, e.g. cache or security.
 : ORM as local or remote
@@ -7852,7 +7857,7 @@ When used in conjunction with @27@, BATCH methods can be implemented as {\i @**a
 Our {\f1\fs20 SynDB.pas} unit offers some {\f1\fs20 TSQLDBStatement.BindArray()} methods, introducing native {\i array binding} for faster database batch modifications. It is working in conjunction with our the BATCH methods of the ORM, so that CRUD modification actions will transparently be grouped within one {\i round-trip} over the network.
 Thanks to this enhancement, inserting records within {\i Oracle} (over a 100 Mb Ethernet network) comes from 400-500 rows per second to more than 70,000 rows per second, according to our @59@.
 The great maintainers of the {\i ZEOS Open Source} library did especially tune its internals to support {\i mORMot} at its full speed, directly accessing the {\i ZDBC} layer - see @94@. The {\i ZEOS 7.2} branch did benefit of a huge code refactoring, and also introduced {\i array binding} abilities. This feature will be recognized and handled by our ORM, if available at the ZDBC provider side. Today, only the ZDBC {\i Oracle} and {\i Firebird} providers do support this feature. But the list is growing.
-The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@}, @*MySQL@ and {\i @*PostgreSQL@}.
+The @*FireDAC@ (formerly @*AnyDAC@) library is the only one implementing this feature (known as {\i Array DML} in the {\i FireDAC} documentation) around all available {\i Delphi} commercial libraries. Enabling it gives a similar performance boost, not only for {\i Oracle}, but also {\i @*MS SQL@, @*Firebird@, @*DB2@, @*MySQL@, @*Informix@} and {\i @*PostgreSQL@}.
 In practice, when accessing {\i Oracle}, our own direct implementation in {\f1\fs20 SynDBOracle} still gives better performance results than the {\i ZDBC} / {\i FireDAC} implementation.
 In fact, some modern database engine (e.g. {\i Oracle} or MS SQL) are even faster when using {\i array binding}, not only due to the network latency reduce, but to the fact that in such operations, integrity checking and indexes update is performed at the end of the bulk process. If your table has several indexes and constraints, it will make using this feature even faster than a "naive" stored procedure executing individual statements within a loop.
 :    For faster IN clause
@@ -7881,10 +7886,10 @@ From tests on production, this implementation is 2-100 times faster (depending o
 Sadly, array binding is not available for all databases or libraries.\line In order to maximize speed, during BATCH insertion, the {\i mORMot} ORM kernel is able to generate some optimized SQL statements, depending on the target database, to send several rows of data at once. It induces a noticeable speed increase when saving several objects into an external database.
 Automatic multi-INSERT statement generation is available for:
 - Our internal {\i SQLite3} engine (in the {\f1\fs20 mORMotSQLite3.pas} unit);
-- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
+- Almost all the supported @27@ (in the {\f1\fs20 mORMotDB.pas} unit): {\i @*SQlite3@} (3.7.11 and later), {\i @*MySQL@, @*PostgreSQL@, @*MS SQL@ Server} (2008 and up), {\i @*Oracle@, @*Firebird@, @*DB2@, @*Informix@} and {\i @*NexusDB@} - and since it is implemented at SQL level, it is available for all supported access libraries, e.g. {\i @*ODBC@, @*OleDB@, Zeos/@*ZDBC@, @*UniDAC@};
 - And, in the {\i @*NoSQL@} form of "documents array" insertion, for the {\i @*MongoDB@} database (in the {\f1\fs20 mORMotMongoDB.pas} unit).
 It means that even providers not implementing array binding (like {\i OleDB}, {\i ODBC} or {\i UniDAC}) are able to have a huge boost at data insertion.
-{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
+{\i SQlite3, MySQL, PostgreSQL, MSSQL 2008, DB2, Informix} and {\i NexusDB} handle {\f1\fs20 INSERT} statements with multiple {\f1\fs20 VALUES}, in the following SQL-92 standard syntax, using parameters:
 $INSERT INTO TABLE (column-a, [column-b, ...])
 $VALUES ('value-1a', ['value-1b', ...]),
 $       ('value-2a', ['value-2b', ...]),
