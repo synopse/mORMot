@@ -233,6 +233,7 @@ type
     fColData: TRawByteStringDynArray;
     fSQLW: RawUnicode;
     procedure AllocStatement;
+    procedure DeallocStatement;
     procedure BindColumns;
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
     function GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
@@ -1172,11 +1173,21 @@ begin
   if fStatement<>nil then
     raise EODBCException.CreateUTF8('%.AllocStatement called twice',[self]);
   fCurrentRow := 0;
+  fTotalRowsRetrieved := 0;
   if not fConnection.Connected then
     fConnection.Connect;
   hDbc := (fConnection as TODBCConnection).fDbc;
   with ODBC do
     Check(nil,self,AllocHandle(SQL_HANDLE_STMT,hDBC,fStatement),SQL_HANDLE_DBC,hDBC);
+end;
+
+procedure TODBCStatement.DeallocStatement;
+begin
+  if fStatement<>nil then begin
+    ODBC.Check(nil,self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
+      (fConnection as TODBCConnection).fDbc);
+    fStatement := Nil;
+  end;
 end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer): TSQLDBFieldType;
@@ -1471,9 +1482,7 @@ end;
 destructor TODBCStatement.Destroy;
 begin
   try
-    if fStatement<>nil then
-      ODBC.Check(nil,self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
-        (fConnection as TODBCConnection).fDbc);
+    DeallocStatement;
   finally
     inherited Destroy;
   end;
@@ -1829,15 +1838,20 @@ begin
       AllocStatement;
       status := ODBC.ColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,
         pointer(Table),SQL_NTS,nil,0);
-      if status<>SQL_SUCCESS then // e.g. driver does not support schema
+      if (status<>SQL_SUCCESS) or (not Step) then begin
+        // e.g. driver does not support schema
+        DeallocStatement;
+        AllocStatement;
         status := ODBC.ColumnsA(fStatement,nil,0,nil,0,pointer(Table),SQL_NTS,nil,0);
+      end;
       ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
       BindColumns;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
       fillchar(F,sizeof(F),0);
-      while Step do begin
-        F.ColumnName := Trim(ColumnUTF8(3));
+      if fCurrentRow>0 then // Step done above
+      repeat
+        F.ColumnName := Trim(ColumnUTF8(3)); // Column*() should be done in order
         DataType := ColumnInt(4);
         F.ColumnTypeNative := Trim(ColumnUTF8(5));
         F.ColumnLength := ColumnInt(6);
@@ -1847,7 +1861,7 @@ begin
         F.ColumnIndexed := (fDBMS in [dFirebird,dDB2]) and
           IsRowID(pointer(F.ColumnName)); // ID UNIQUE field create an implicit index
         FA.Add(F);
-      end;
+      until not Step;
       SetLength(Fields,n);
     finally
       Free; // TODBCStatement release
@@ -1875,7 +1889,7 @@ begin
       end;
   except
     on Exception do
-      SetLength(Fields,0);
+      Fields := nil;
   end;
 end;
 
@@ -1932,14 +1946,16 @@ begin
   end;
 end;
 
-procedure TODBCConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
+procedure TODBCConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8;
+  out Parameters: TSQLDBProcColumnDefineDynArray);
 var Schema, Package, Proc: RawUTF8;
     F: TSQLDBProcColumnDefine;
     n,DataType: integer;
     status: SqlReturn;
     FA: TDynArray;
+    Stmt: TODBCStatement;
 begin
-//  inherited; // first try from SQL, if any (faster)
+  inherited; // first try from SQL, if any (faster)
   if Parameters<>nil then
     exit; // already retrieved directly from engine
   SQLSplitProcedureName(aProcName,Schema,Package,Proc);
@@ -1950,43 +1966,45 @@ begin
     Proc := Package + '.' + Proc;
   try
     // get column definitions
-    with TODBCStatement.Create(MainConnection) do
+    Stmt := TODBCStatement.Create(MainConnection);
     try
-      AllocStatement;
-      status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
-      if status<>SQL_SUCCESS then begin // e.g. driver does not support schema
-        status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
-        if status<>SQL_SUCCESS then // e.g. driver does not support packages
-          status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,nil,0,pointer(Proc),SQL_NTS,nil,0);
+      Stmt.AllocStatement;
+      status := ODBC.SQLProcedureColumnsA(Stmt.fStatement,nil,0,
+        pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
+      if (status<>SQL_SUCCESS) or (not Stmt.Step) then begin
+        // e.g. driver does not support schema
+        Stmt.DeallocStatement;
+        Stmt.AllocStatement;
+        status := ODBC.SQLProcedureColumnsA(Stmt.fStatement,nil,0,
+          nil,0,pointer(Proc),SQL_NTS,nil,0);
       end;
-      ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
-      BindColumns;
+      ODBC.Check(Stmt.Connection,nil,status,SQL_HANDLE_STMT,Stmt.fStatement);
+      Stmt.BindColumns;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
-      FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
       fillchar(F,sizeof(F),0);
-      while Step do begin
-        F.ColumnName := Trim(ColumnUTF8(3));
-        DataType := ColumnInt(4);
-        F.ColumnTypeNative := Trim(ColumnUTF8(6));
-        F.ColumnLength := ColumnInt(7);
-        F.ColumnScale := ColumnInt(8);
-        F.ColumnPrecision := ColumnInt(9);
-        F.ColumnType:= ODBCColumnToFieldType(ColumnInt(5),F.ColumnPrecision,F.ColumnScale);
-        case DataType of
-          SQL_PARAM_INPUT: F.ColumnParamType := paramIn;
+      if Stmt.fCurrentRow>0 then // Stmt.Step done above
+      repeat
+        F.ColumnName := Trim(Stmt.ColumnUTF8(3)); // Column*() should be in order
+        case Stmt.ColumnInt(4) of
+          SQL_PARAM_INPUT:        F.ColumnParamType := paramIn;
           SQL_PARAM_INPUT_OUTPUT: F.ColumnParamType := paramInOut;
-        else
-          F.ColumnParamType := paramOut;
+          else                    F.ColumnParamType := paramOut;
         end;
+        DataType := Stmt.ColumnInt(5);
+        F.ColumnTypeNative := Trim(Stmt.ColumnUTF8(6));
+        F.ColumnLength := Stmt.ColumnInt(7);
+        F.ColumnScale := Stmt.ColumnInt(8);
+        F.ColumnPrecision := Stmt.ColumnInt(9);
+        F.ColumnType:= ODBCColumnToFieldType(DataType,F.ColumnPrecision,F.ColumnScale);
         FA.Add(F);
-      end;
+      until not Stmt.Step;
       SetLength(Parameters,n);
     finally
-      Free; // TODBCStatement release
+      Stmt.Free; // TODBCStatement release
     end;
   except
     on Exception do
-      SetLength(Parameters,0);
+      Parameters := nil;
   end;
 end;
 

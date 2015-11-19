@@ -5204,56 +5204,46 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.SQLSplitProcedureName(const aProcName: RawUTF8; out Owner, Package, ProcName: RawUTF8);
+procedure TSQLDBConnectionProperties.SQLSplitProcedureName(
+  const aProcName: RawUTF8; out Owner, Package, ProcName: RawUTF8);
 
-  // from http://stackoverflow.com/questions/5265317/delphi-count-number-of-times-a-string-occurs-in-another-string
-  function Occurrences(const Substring, Text: RawUTF8): integer;
-  var
-    offset: integer;
+  procedure SetSchemaNameToOwner;
   begin
-    result := 0;
-    offset := SynCommons.PosEx(Substring, Text, 1);
-    while offset <> 0 do
-    begin
-      inc(result);
-      offset := SynCommons.PosEx(Substring, Text, offset + length(Substring));
-    end;
+    if fForcedSchemaName='' then
+      case fDBMS of
+      dMySql: Owner := DatabaseName;
+      else    Owner := UserID;
+      end
+    else Owner := fForcedSchemaName;
   end;
 
-var
-  lOccur: Integer;
+var lOccur,i: Integer;
 begin
-  lOccur := Occurrences('.',aProcName);
-  if (lOccur = 0) then begin
+  lOccur := 0;
+  for i := 1 to length(aProcName) do
+    if aProcName[i]='.' then
+      inc(lOccur);
+  if lOccur=0 then begin
     ProcName := aProcName;
+    SetSchemaNameToOwner;
     Exit;
   end;
-
   case fDBMS of
   dSQLite:
     ProcName := aProcName;
   dOracle, dFirebird: begin // Firebird 3 has packages
-    if (lOccur = 2) then begin // OWNER.PACKAGE.PROCNAME
+    if lOccur=2 then begin // OWNER.PACKAGE.PROCNAME
       Split(aProcName,'.',Owner,Package);
-      Split(Package,'.',Package, ProcName);
-    end
-    else begin // PACKAGE.PROCNAME
+      Split(Package,'.',Package,ProcName);
+    end else begin // PACKAGE.PROCNAME
       Split(aProcName,'.',Package,ProcName);
       Owner := UserID;
     end;
-  end
-  else begin  // OWNER.PROCNAME
+  end else begin  // OWNER.PROCNAME
     Split(aProcName,'.',Owner,ProcName);
     if ProcName='' then begin
       ProcName := Owner;
-      if fForcedSchemaName='' then
-        case fDBMS of
-        dMySql:
-          Owner := DatabaseName;
-        else
-          Owner := UserID;
-        end else
-        Owner := fForcedSchemaName;
+      SetSchemaNameToOwner;
     end;
   end;
   end;
