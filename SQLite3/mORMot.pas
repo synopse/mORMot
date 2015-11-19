@@ -14561,6 +14561,7 @@ type
   TSQLRestServerMonitor = class(TSynMonitorServer)
   protected
     fServer: TSQLRestServer;
+    fStartDate: RawUTF8;
     fCurrentThreadCount: integer;
     fSuccess: QWord;
     fOutcomingFiles: QWord;
@@ -14583,6 +14584,8 @@ type
     procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
        const CounterDiff: Int64);
   published
+    /// when this monitoring instance (therefore the server) was created
+    property StartDate: RawUTF8 read fStartDate;
     /// number of valid responses
     // - i.e. which returned status code 200/HTML_SUCCESS or 201/HTML_CREATED
     // - any invalid request will increase the TSynMonitor.Errors property
@@ -39141,6 +39144,7 @@ begin
   fServer := aServer;
   SetLength(fPerTable[false],length(aServer.Model.Tables));
   SetLength(fPerTable[true],length(aServer.Model.Tables));
+  fStartDate := NowUTCToString;
 end;
 
 destructor TSQLRestServerMonitor.Destroy;

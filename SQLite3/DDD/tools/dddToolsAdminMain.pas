@@ -119,7 +119,7 @@ begin
   if Assigned(fAdmin) or (Definition.Orm.User = '') then
     exit;
   try
-    temp := CreateTempForm(Format('Connecting to %s...', [Definition.ORM.ServerName]));
+    temp := CreateTempForm('Connecting to ' + Definition.ORM.ServerName);
     try
       Application.ProcessMessages;
       fClient := AdministratedDaemonClient(Definition, Model);
