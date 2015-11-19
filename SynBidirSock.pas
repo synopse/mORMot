@@ -471,7 +471,7 @@ type
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; virtual; abstract;
     procedure HiResDelay(const start: Int64);
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
-      aEvent: TSynLogInfo=sllTrace); virtual;
+      aEvent: TSynLogInfo=sllTrace; DisableRemoteLog: Boolean=false); virtual;
     function LastPingDelay: Int64;
     procedure SetLastPingTicks(invalidPing: boolean=false);
     procedure SendPendingOutgoingFrames;
@@ -805,7 +805,7 @@ end;
 function TWebSocketProtocol.FrameType(
   const frame: TWebSocketFrame): RawUTF8;
 begin
-  result := ''; // no frame URI by default
+  result := '*'; // no frame URI by default
 end;
 
 function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
@@ -1100,7 +1100,7 @@ function TWebSocketProtocolJSON.FrameType(
   const frame: TWebSocketFrame): RawUTF8;
 var P,txt: PUTF8Char;
 begin
-  result := '';
+  result := '*';
   if (length(frame.payload)<10) or (frame.opcode<>focText) then
     exit;
   P := pointer(frame.payload);
@@ -1195,7 +1195,7 @@ begin
     i := 0 else
     i := PosEx(#1,frame.payload);
   if i=0 then
-    result := '' else
+    result := '*' else
     result := copy(frame.payload,1,i-1);
 end;
 
@@ -1605,7 +1605,7 @@ var hdr: TFrameHeader;
 begin
   fSafeOut.Lock;
   try
-    Log(frame,'SendFrame');
+    Log(frame,'SendFrame',sllTrace,true);
     try
       result := true;
       if (fProtocol<>nil) and (Frame.payload<>'') then
@@ -1827,23 +1827,31 @@ begin
 end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
-  const aMethodName: RawUTF8; aEvent: TSynLogInfo);
+  const aMethodName: RawUTF8; aEvent: TSynLogInfo; DisableRemoteLog: Boolean);
 var content: RawUTF8;
+    log: TSynLog;
 begin
   if WebSocketLog<>nil then
   with WebSocketLog.Family do
   if aEvent in Level then
   if (logHeartbeat in fSettings.LogDetails) or
-     not (frame.opcode in [focPing,focPong]) then
-    if (frame.opcode=focText) and
-       (logTextFrameContent in fSettings.LogDetails) then
-      SynLog.Log(aEvent,'%.% type=% focText %',[self.ClassType,aMethodName,
-        Protocol.FrameType(frame),frame.PayLoad],self) else begin
-      if logBinaryFrameContent in fSettings.LogDetails then
-        LogEscape(frame.PayLoad,content);
-      SynLog.Log(aEvent,'%.% type=% % len=% %',[self.ClassType,aMethodName,
-        Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
+     not (frame.opcode in [focPing,focPong]) then begin
+    log := SynLog;
+    log.DisableRemoteLog(DisableRemoteLog);
+    try
+      if (frame.opcode=focText) and
+         (logTextFrameContent in fSettings.LogDetails) then
+        log.Log(aEvent,'%.% type=% focText %',[self.ClassType,aMethodName,
+          Protocol.FrameType(frame),frame.PayLoad],self) else begin
+        if logBinaryFrameContent in fSettings.LogDetails then
+          LogEscape(frame.PayLoad,content);
+        log.Log(aEvent,'%.% type=% % len=% %',[self.ClassType,aMethodName,
+          Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
+      end;
+    finally
+      log.DisableRemoteLog(false);
     end;
+  end;
 end;
 
 
