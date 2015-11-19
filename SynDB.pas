@@ -32,6 +32,7 @@ unit SynDB;
   - Alexander (volax)
   - Alfred Glaenzer (alf)
   - delphinium
+  - Esteban Martin (EMartin)
   - Joe (at jokusoftware)
   - Maciej Izak (hnb)
 
@@ -281,6 +282,10 @@ unit SynDB;
   - added TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed()
     internal method, used by some overridden GetFields() implementations
   - ensure a primary key column on SQlite3 is identified as indexed
+  - added support for getting stored procedure information: TSQLDBProcColumnDefine,
+    TSQLDBProcColumnDefineDynArray, TSQLDBConnectionProperties.GetProcedureParameters
+    and SQLGetParameter methods - by EMartin
+  - added Informix DBMS (dInformix), tested against Informix 11.70 by EMartin
 
 }
 
@@ -413,6 +418,36 @@ type
   // - e.g. for TSQLDBConnectionProperties.GetIndexes
   TSQLDBIndexDefineDynArray = array of TSQLDBIndexDefine;
 
+  /// used to define a parameter/column layout in a stored procedure schema
+  // - for TSQLDBConnectionProperties.GetProcedureParameters to retrieve the stored procedure parameters
+  // - can be extended according to https://msdn.microsoft.com/en-us/library/ms711701(v=vs.85).aspx
+  TSQLDBProcColumnDefine = packed record
+    /// the Column name
+    ColumnName: RawUTF8;
+    /// the Column type, as retrieved from the database provider
+    // - used e.g. by TSQLDBConnectionProperties.GetProcedureParameters method
+    ColumnTypeNative: RawUTF8;
+    /// the Column default width (in chars or bytes) of ftUTF8 or ftBlob
+    // - can be set to value <0 for CLOB or BLOB column type, i.e. for
+    // a value without any maximal length
+    ColumnLength: PtrInt;
+    /// the Column data precision
+    // - used e.g. for numerical values
+    ColumnPrecision: PtrInt;
+    /// the Column data scale
+    // - used e.g. for numerical values
+    ColumnScale: PtrInt;
+    /// the Column type, as recognized by our SynDB classes
+    // - should not be ftUnknown nor ftNull
+    ColumnType: TSQLDBFieldType;
+    /// defines the procedure column as a parameter or a result set column
+    ColumnParamType: TSQLDBParamInOutType;
+  end;
+
+  /// used to define the parameter/column layout of a stored procedure schema
+  // - e.g. for TSQLDBConnectionProperties.GetProcedureParameters
+  TSQLDBProcColumnDefineDynArray = array of TSQLDBProcColumnDefine;
+
   /// possible column retrieval patterns
   // - used by TSQLDBColumnProperty.ColumnValueState
   TSQLDBStatementGetCol = (colNone, colNull, colWrongType, colDataFilled, colDataTruncated);
@@ -520,7 +555,7 @@ type
   // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
   TSQLDBDefinition = (dUnknown, dDefault, dOracle, dMSSQL, dJet, dMySQL,
-    dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2);
+    dSQLite, dFirebird, dNexusDB, dPostgreSQL, dDB2, dInformix);
 
   /// set of the available database definitions
   TSQLDBDefinitions = set of TSQLDBDefinition;
@@ -621,7 +656,7 @@ type
     {$endif}
     /// return a special CURSOR Column content as a SynDB result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
-    // Oracle) usually use such structures to get data from strored procedures
+    // Oracle) usually use such structures to get data from stored procedures
     // - such columns are mapped as ftNull internally - so this method is the only
     // one giving access to the data rows
     // - see also BoundCursor() if you want to access a CURSOR out parameter
@@ -1113,6 +1148,16 @@ type
     /// SQL statement to get advanced information about all indexes for a Table
     // - should return a SQL "SELECT" statement with the index names as first
     function SQLGetIndex(const aTableName: RawUTF8): RawUTF8; virtual;
+    /// SQL statement to get all parameter for a specified Stored Procedure
+    // - used by GetProcedureParameters public method
+    // - should return a SQL "SELECT" statement with the parameter names as first
+    // column, a textual field type as 2nd column, then parameter length as 3rd, then
+    // parameter direction as 4th
+    // - this default implementation just returns nothing
+    // - if this method is overridden, the ColumnTypeNativeToDB() method should
+    // also be overridden in order to allow conversion from native column
+    // type into the corresponding TSQLDBFieldType
+    function SQLGetParameter(const aProcName: RawUTF8): RawUTF8; virtual;
     /// SQL statement to get all table names
     // - used by GetTableNames public method
     // - should return a SQL "SELECT" statement with the table names as
@@ -1387,6 +1432,10 @@ type
     // - will use ForcedSchemaName property (if applying), or the OWNER. already
     // available within the supplied table name
     procedure SQLSplitTableName(const aTableName: RawUTF8; out Owner, Table: RawUTF8); virtual;
+    /// split a procedure name to its OWNER.PACKAGE.PROCEDURE full name (if applying)
+    // - will use ForcedSchemaName property (if applying), or the OWNER. already
+    // available within the supplied table name
+    procedure SQLSplitProcedureName(const aProcName: RawUTF8; out Owner, Package, ProcName: RawUTF8); virtual;
     /// return the fully qualified SQL table name
     // - will use ForcedSchemaName property (if applying), or return aTableName
     // - you can override this method to force the expected format
@@ -1427,6 +1476,11 @@ type
     /// check if the supplied text word is not a keyword for the current database engine
     // - just a wrapper around the overloaded class function
     function IsSQLKeyword(aWord: RawUTF8): boolean; overload;
+    /// retrieve procedure input/output parameter information
+    // - aProcName: stored procedure name to retrieve parameter infomation.
+    // - Parameters: parameter list info (name, datatype, direction, default)
+    procedure GetProcedureParameters(const aProcName: RawUTF8;
+      out Parameters: TSQLDBProcColumnDefineDynArray); virtual;
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
@@ -3228,8 +3282,12 @@ const
     // by http://www.postgresql.org/docs/current/static/datatype-character.html
    
   // dDB2 (for CCSID Unicode tables)
-  (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob')
+  (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob'),
     { note: bigint needs 9.1 and up }
+
+  // dInformix
+  (' int',' lvarchar(%)',' bigint',' smallfloat',' decimal(19,4)',
+   ' datetime year to fraction(3)',' clob', ' blob')
   );
 
   /// the known column data types corresponding to our TSQLDBFieldType types
@@ -3237,7 +3295,7 @@ const
   // - SQLite3 doesn't expect any field length, neither PostgreSQL, so set to 0
   DB_FIELDSMAX: array[TSQLDBDefinition] of cardinal = (
     1000, 1000, 1333, { =4000/3 since WideChar is up to 3 bytes in UTF-8 }
-    4000, 255, 4000, 0, 32760, 32767, 0, 32700);
+    4000, 255, 4000, 0, 32760, 32767, 0, 32700, 32700);
 
   /// the known SQL statement to retrieve the server date and time
   DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = (
@@ -3250,7 +3308,8 @@ const
     'select current_timestamp from rdb$database',
     'SELECT CURRENT_TIMESTAMP',
     'SELECT LOCALTIMESTAMP',
-    'select current timestamp from sysibm.sysdummy1'
+    'select current timestamp from sysibm.sysdummy1',
+    'select CURRENT YEAR TO FRACTION(3) from SYSTABLES where tabid = 1'
   );
 
 const
@@ -3270,7 +3329,8 @@ const
     (Position: posSelect; InsertFmt:'first % '),                  { dFirebird   }
     (Position: posSelect; InsertFmt:'top % '),                    { dNexusDB    }
     (Position: posAfter;  InsertFmt:' limit %'),                  { dPostgreSQL }
-    (Position: posAfter;  InsertFmt:' fetch first % rows only')); { dDB2        }
+    (Position: posAfter;  InsertFmt:' fetch first % rows only'),  { dDB2        }
+    (Position: posAfter;  InsertFmt:' first % '));                { dInformix   }
 
   /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
   DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
@@ -3286,7 +3346,7 @@ const
     (posWithColumn, posGlobalBefore) = (
     posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
     posWithColumn, posWithColumn, posGlobalBefore, posWithColumn, posWithColumn,
-    posWithColumn);
+    posWithColumn, posWithColumn);
 
   /// the SQL text corresponding to the identified WHERE operators for a SELECT
   DB_SQLOPERATOR: array[opEqualTo..opLike] of RawUTF8 = (
@@ -4942,7 +5002,9 @@ const
   'validprocdb2genrl,valuedb2sql,valuesdbinfo,variabledbpartitionname,'+
   'variantdbpartitionnum,vcatdeallocate,versiondeclare,viewdefault,'+
   'volatiledefaults,volumesdefinition,whendelete,wheneverdense_rank,wheredenserank,'+
-  'whiledescribe,withdescriptor,withoutdeter');
+  'whiledescribe,withdescriptor,withoutdeter',
+  // dInformix specific keywords (in addition to dDefault)
+  '');
 var db: TSQLDBDefinition;
 begin // search using fast binary lookup in the alphabetic ordered arrays
   if DB_KEYWORDS[dDefault]=nil then
@@ -5068,6 +5130,38 @@ begin
   SetLength(Indexes,n);
 end;
 
+procedure TSQLDBConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8;
+  out Parameters: TSQLDBProcColumnDefineDynArray);
+var SQL: RawUTF8;
+    n: integer;
+    F: TSQLDBProcColumnDefine;
+    FA: TDynArray;
+begin
+  FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
+  FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
+  fillchar(F,sizeof(F),0);
+  SQL := SQLGetParameter(aProcName);
+  if SQL='' then
+    exit;
+  with Execute(SQL,[]) do
+    while Step do begin
+      F.ColumnName := trim(ColumnUTF8(0));
+      F.ColumnTypeNative := trim(ColumnUTF8(1));
+      F.ColumnLength := ColumnInt(2);
+      F.ColumnPrecision := ColumnInt(3);
+      F.ColumnScale := ColumnInt(4);
+      F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
+      case FindCSVIndex(pointer(ColumnUTF8(5)),'IN,OUT,INOUT') of
+        1: F.ColumnParamType := paramIn;
+        3: F.ColumnParamType := paramInOut;
+      else // any other is assumed as out
+        F.ColumnParamType := paramOut;
+      end;
+      FA.Add(F);
+    end;
+  SetLength(Parameters,n);
+end;
+
 procedure TSQLDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var SQL: RawUTF8;
     count: integer;
@@ -5097,6 +5191,61 @@ begin
     Split(aTableName,'.',Owner,Table);
     if Table='' then begin
       Table := Owner;
+      if fForcedSchemaName='' then
+        case fDBMS of
+        dMySql:
+          Owner := DatabaseName;
+        else
+          Owner := UserID;
+        end else
+        Owner := fForcedSchemaName;
+    end;
+  end;
+  end;
+end;
+
+procedure TSQLDBConnectionProperties.SQLSplitProcedureName(const aProcName: RawUTF8; out Owner, Package, ProcName: RawUTF8);
+
+  // from http://stackoverflow.com/questions/5265317/delphi-count-number-of-times-a-string-occurs-in-another-string
+  function Occurrences(const Substring, Text: RawUTF8): integer;
+  var
+    offset: integer;
+  begin
+    result := 0;
+    offset := SynCommons.PosEx(Substring, Text, 1);
+    while offset <> 0 do
+    begin
+      inc(result);
+      offset := SynCommons.PosEx(Substring, Text, offset + length(Substring));
+    end;
+  end;
+
+var
+  lOccur: Integer;
+begin
+  lOccur := Occurrences('.',aProcName);
+  if (lOccur = 0) then begin
+    ProcName := aProcName;
+    Exit;
+  end;
+
+  case fDBMS of
+  dSQLite:
+    ProcName := aProcName;
+  dOracle, dFirebird: begin // Firebird 3 has packages
+    if (lOccur = 2) then begin // OWNER.PACKAGE.PROCNAME
+      Split(aProcName,'.',Owner,Package);
+      Split(Package,'.',Package, ProcName);
+    end
+    else begin // PACKAGE.PROCNAME
+      Split(aProcName,'.',Package,ProcName);
+      Owner := UserID;
+    end;
+  end
+  else begin  // OWNER.PROCNAME
+    Split(aProcName,'.',Owner,ProcName);
+    if ProcName='' then begin
+      ProcName := Owner;
       if fForcedSchemaName='' then
         case fDBMS of
         dMySql:
@@ -5216,6 +5365,47 @@ begin
     Owner := UserID;
   end;
   result := FormatUTF8(FMT, [SynCommons.UpperCase(Table)]);
+end;
+
+function TSQLDBConnectionProperties.SQLGetParameter(const aProcName: RawUTF8): RawUTF8;
+var Owner, Package, Proc: RawUTF8;
+    FMT: PUTF8Char;
+begin
+  result := '';
+  SQLSplitProcedureName(aProcName,Owner,Package,Proc);
+  case DBMS of
+  dOracle: FMT := PUTF8Char(
+    'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
+    'from   sys.all_arguments a ' +
+    'where  a.owner like ''%''' +
+    '  and  a.package_name like ''' + SynCommons.UpperCase(Package) + '''' +
+    '  and  a.object_name like ''%''' +
+    ' order by position');
+  dMSSQL, dMySQL, dPostgreSQL: FMT :=
+    'select PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, PARAMETER_MODE ' +
+    'from INFORMATION_SCHEMA.PARAMETERS ' +
+    'where UPPER(SPECIFIC_SCHEMA) = ''%'' and UPPER(SPECIFIC_NAME) = ''%'''+
+    ' order by ORDINAL_POSITION';
+  dFirebird: begin
+    result :=
+      'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
+      ' b.rdb$field_length, b.rdb$field_precision, b.rdb$.field_scale,' +
+      ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
+      'from rdb$procedure_parameters a, rdb$fields b ' +
+      'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' + SynCommons.UpperCase(aProcName) + ''' ' +
+      'order by a.rdb$parameter_number';
+    exit;
+  end;
+  dNexusDB: begin // NOT TESTED !!!
+    result := 'select PROCEDURE_ARGUMENT_NAME, PROCEDURE_ARGUMENT_TYPE, PROCEDURE_ARGUMENT_UNITS,'+
+    ' PROCEDURE_ARGUMENT_UNITS, PROCEDURE_ARGUMENT_DECIMALS, PROCEDURE_ARGUMENT_KIND,'+
+    ' from #procedure_arguments where PROCEDURE_NAME = '''+aProcName+'''' +
+    ' order by PROCEDURE_ARGUMENT_INDEX';
+    exit;
+  end;
+  else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+  end;
+  result := FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Proc)]);
 end;
 
 function TSQLDBConnectionProperties.SQLGetTableNames: RawUTF8;
@@ -5432,7 +5622,7 @@ begin
     result := result+' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
     case DBMS of
-    dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB:
+    dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB, dInformix:
       result := result+' PRIMARY KEY';
     dDB2, dMySQL:
       aAddPrimaryKey := aField.Name;
@@ -5463,7 +5653,7 @@ begin
   if aIndexName='' then begin
     SQLSplitTableName(aTableName,Owner,Table);
     if (Owner<>'') and
-       not (fDBMS in [dMSSQL,dPostgreSQL,dMySQL,dFirebird,dDB2]) then
+       not (fDBMS in [dMSSQL,dPostgreSQL,dMySQL,dFirebird,dDB2,dInformix]) then
       // some DB engines do not expect any schema in the index name
       IndexName := Owner+'.';
     FieldsCSV := RawUTF8ArrayToCSV(aFieldNames,'');
@@ -5644,7 +5834,7 @@ begin
       AddShort('select 1 from dual');
       SQLCached := true;
     end;
-    else begin //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2
+    else begin //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
       AddShort('INSERT INTO '); // INSERT .. VALUES (..),(..),(..),..
       AddString(TableName);
       Add(' ','(');

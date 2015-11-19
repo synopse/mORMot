@@ -29,6 +29,7 @@ unit SynDBODBC;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Esteban Martin (EMartin)
   - zed
   
   Alternatively, the contents of this file may be used under the terms of
@@ -70,6 +71,7 @@ unit SynDBODBC;
     in aDatabaseName instead of ODBC Data Source name in aServerName
   - now TODBCConnection.Connect() will recognize the DBMS from its driver name
   - added NexusDB, Firebird, SQlite3 and DB2 support
+  - added Informix support - by EMartin
 
   TODO:
   - implement array binding of parameters
@@ -141,6 +143,11 @@ type
     // (note: 5.2.6 and 5.3.1 driver seems to be slow in ODBC.FreeHandle)
     // ! 'Driver=MySQL ODBC 5.2 UNICODE Driver;Database=test;'+
     // !   'Server=localhost;Port=3306;UID=root;Pwd='
+    // for IBM Informix and its official driver:
+    // ! 'Driver=IBM INFORMIX ODBC DRIVER;Database=SAMPLE;'+
+    // !   'Host=localhost;Server=<instance name on host>;Service=<service name
+    // !   in ../drivers/etc/services>;Protocol=olsoctcp;UID=<Windows/Linux user account>;
+    // !   Pwd=<Windows/Linux user account password>'
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
@@ -160,6 +167,8 @@ type
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
+    /// retrieve procedure input/output parameter information
+    procedure GetProcedureParameters(const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray); override;
     /// if full connection string may prompt the user for additional information
     // - property used only with SQLDriverConnect() API (i.e. when aServerName
     // is '' and aDatabaseName contains a full connection string)
@@ -945,6 +954,18 @@ type
       OutConnectionString: PWideChar; BufferLength: SqlSmallint;
       var StringLength2Ptr: SqlSmallint; DriverCompletion: SqlUSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+    SQLProcedureColumnsA: function(StatementHandle: SqlHStmt;
+      CatalogName: PAnsiChar; NameLength1: SqlSmallint;
+      SchemaName: PAnsiChar;  NameLength2: SqlSmallint;
+      ProcName: PAnsiChar;   NameLength3: SqlSmallint;
+      ColumnName: PAnsiChar;  NameLength4: SqlSmallint): SqlReturn;
+      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+    SQLProcedureColumnsW: function(StatementHandle: SqlHStmt;
+      CatalogName: PWideChar; NameLength1: SqlSmallint;
+      SchemaName: PWideChar;  NameLength2: SqlSmallint;
+      ProcName: PWideChar;   NameLength3: SqlSmallint;
+      ColumnName: PWideChar;  NameLength4: SqlSmallint): SqlReturn;
+      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
   public
     /// load the ODBC library
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
@@ -966,7 +987,7 @@ type
   end;
 
 const
-  ODBC_ENTRIES: array[0..63] of PChar =
+  ODBC_ENTRIES: array[0..65] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
      'SQLColAttribute','SQLColAttributeW','SQLColumns','SQLColumnsW',
@@ -982,7 +1003,8 @@ const
      'SQLMoreResults','SQLPrepare','SQLPrepareW','SQLRowCount','SQLNumResultCols',
      'SQLGetInfo','SQLGetInfoW','SQLSetStmtAttr','SQLSetStmtAttrW','SQLSetEnvAttr',
      'SQLSetConnectAttr','SQLSetConnectAttrW','SQLTables','SQLTablesW',
-     'SQLForeignKeys','SQLForeignKeysW','SQLDriverConnect','SQLDriverConnectW');
+     'SQLForeignKeys','SQLForeignKeysW','SQLDriverConnect','SQLDriverConnectW',
+     'SQLProcedureColumnsA','SQLProcedureColumnsW');
 
 var
   ODBC: TODBCLib = nil;
@@ -992,21 +1014,22 @@ var
 
 procedure TODBCConnection.Connect;
 const
-  DBMS_NAMES: array[0..7] of PAnsiChar = (
-    'ORACLE','MICROSOFT SQL','ACCESS','MYSQL','SQLITE','FIREBIRD','INTERBASE','POSTGRE');
+  DBMS_NAMES: array[0..8] of PAnsiChar = (
+    'ORACLE','MICROSOFT SQL','ACCESS','MYSQL','SQLITE','FIREBIRD','INTERBASE',
+    'POSTGRE','INFORMIX');
   DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSQLDBDefinition = (
-    dDefault,dOracle,dMSSQL,dJet,dMySQL,dSQLite,dFirebird,dFirebird,dPostgreSql);
-  DRIVER_NAMES: array[0..20] of PAnsiChar = (
+    dDefault,dOracle,dMSSQL,dJet,dMySQL,dSQLite,dFirebird,dFirebird,dPostgreSql,dInformix);
+  DRIVER_NAMES: array[0..21] of PAnsiChar = (
     'SQLSRV','LIBTDSODBC','IVSS','IVMSSS','PBSS',
     'DB2CLI','LIBDB2','IVDB2','PBDB2','MSDB2','CWBODBC', 'MYODBC',
     'SQORA','MSORCL','PBOR','IVOR', 'ODBCFB','IB', 'SQLITE',
-    'PSQLODBC','NXODBCDRIVER'
+    'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B'
     );
   DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSQLDBDefinition = (
     dDefault, dMSSQL,dMSSQL,dMSSQL,dMSSQL,dMSSQL,
     dDB2,dDB2,dDB2,dDB2,dDB2,dDB2, dMySQL,
     dOracle,dOracle,dOracle,dOracle, dFirebird,dFirebird, dSQLite,
-    dPostgreSQL, dNexusDB);
+    dPostgreSQL, dNexusDB, dInformix);
   DRIVERCOMPLETION: array[boolean] of SqlUSmallint = (
     SQL_DRIVER_NOPROMPT, SQL_DRIVER_PROMPT);
 var Log: ISynLog;
@@ -1466,10 +1489,18 @@ const
 function CType2SQL(CDataType: integer): integer;
 begin
   case CDataType of
-   SQL_C_CHAR:           result := SQL_VARCHAR;
+   SQL_C_CHAR:
+    case fDBMS of
+      dInformix:         result := SQL_INTEGER;
+      else               result := SQL_VARCHAR;
+    end;
    SQL_C_TYPE_DATE:      result := SQL_TYPE_DATE;
    SQL_C_TYPE_TIMESTAMP: result := SQL_TYPE_TIMESTAMP;
-   SQL_C_WCHAR:          result := SQL_WVARCHAR;
+   SQL_C_WCHAR:
+    case fDBMS of
+      dInformix:         result := SQL_VARCHAR;
+      else               result := SQL_WVARCHAR;
+    end;
    SQL_C_BINARY:         result := SQL_VARBINARY;
    SQL_C_SBIGINT:        result := SQL_BIGINT;
    SQL_C_DOUBLE:         result := SQL_DOUBLE;
@@ -1763,6 +1794,9 @@ begin
   if ODBC=nil then
     GarbageCollectorFreeAndNil(ODBC,TODBCLib.Create);
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
+  // stored UserID is used by SQLSplitProcedureName
+  if (aUserID = '') then
+    FUserID := FindIniNameValue(pointer(SynCommons.UpperCase(StringReplaceAll(aDatabaseName,';',sLineBreak))), 'UID=');
 end;
 
 function TODBCConnectionProperties.NewConnection: TSQLDBConnection;
@@ -1895,6 +1929,64 @@ begin
     end;
   except
     on Exception do ; // just ignore errors here
+  end;
+end;
+
+procedure TODBCConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
+var Schema, Package, Proc: RawUTF8;
+    F: TSQLDBProcColumnDefine;
+    n,DataType: integer;
+    status: SqlReturn;
+    FA: TDynArray;
+begin
+//  inherited; // first try from SQL, if any (faster)
+  if Parameters<>nil then
+    exit; // already retrieved directly from engine
+  SQLSplitProcedureName(aProcName,Schema,Package,Proc);
+  Proc := SynCommons.UpperCase(Proc);
+  Package := SynCommons.UpperCase(Package);
+  Schema := SynCommons.UpperCase(Schema);
+  if (Package <> '') then
+    Proc := Package + '.' + Proc;
+  try
+    // get column definitions
+    with TODBCStatement.Create(MainConnection) do
+    try
+      AllocStatement;
+      status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
+      if status<>SQL_SUCCESS then begin // e.g. driver does not support schema
+        status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
+        if status<>SQL_SUCCESS then // e.g. driver does not support packages
+          status := ODBC.SQLProcedureColumnsA(fStatement,nil,0,nil,0,pointer(Proc),SQL_NTS,nil,0);
+      end;
+      ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
+      BindColumns;
+      FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
+      FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
+      fillchar(F,sizeof(F),0);
+      while Step do begin
+        F.ColumnName := Trim(ColumnUTF8(3));
+        DataType := ColumnInt(4);
+        F.ColumnTypeNative := Trim(ColumnUTF8(6));
+        F.ColumnLength := ColumnInt(7);
+        F.ColumnScale := ColumnInt(8);
+        F.ColumnPrecision := ColumnInt(9);
+        F.ColumnType:= ODBCColumnToFieldType(ColumnInt(5),F.ColumnPrecision,F.ColumnScale);
+        case DataType of
+          SQL_PARAM_INPUT: F.ColumnParamType := paramIn;
+          SQL_PARAM_INPUT_OUTPUT: F.ColumnParamType := paramInOut;
+        else
+          F.ColumnParamType := paramOut;
+        end;
+        FA.Add(F);
+      end;
+      SetLength(Parameters,n);
+    finally
+      Free; // TODBCStatement release
+    end;
+  except
+    on Exception do
+      SetLength(Parameters,0);
   end;
 end;
 

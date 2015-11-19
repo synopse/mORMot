@@ -29,6 +29,7 @@ unit SynOleDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Esteban Martin (EMartin)
   - Pavel (mpv)
 
   Alternatively, the contents of this file may be used under the terms of
@@ -112,7 +113,7 @@ unit SynOleDB;
   - fixed logging SQL content of external OleDB statements
   - added TOleDBStatement.BindArray for `array of Int64` & `array of RawUFT8`
     binding for `select` statements( via additional TABLE variable)
-
+  - added TOleDBInformixConnectionProperties - by EMartin
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -829,6 +830,13 @@ type
   TOleDBAS400ConnectionProperties = class(TOleDBConnectionProperties)
   protected
     /// will set the appropriate provider name, i.e. 'IBMDA400.DataSource.1'
+    procedure SetInternalProperties; override;
+  end;
+
+  /// OleDB connection properties to Informix Server
+  TOleDBInformixConnectionProperties = class(TOleDBConnectionProperties)
+  protected
+    /// will set the appropriate provider name, i.e. 'Ifxoledbc'
     procedure SetInternalProperties; override;
   end;
 
@@ -2949,6 +2957,14 @@ begin
   inherited SetInternalProperties;
 end;
 
+{ TOleDBInformixConnectionProperties }
+
+procedure TOleDBInformixConnectionProperties.SetInternalProperties;
+begin
+  fProviderName := 'Ifxoledbc';
+  fDBMS := dInformix;
+  inherited SetInternalProperties;
+end;
 
 {$ifndef CPU64}
 
