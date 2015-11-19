@@ -98,7 +98,7 @@ type
     fDaemon: IAdministratedDaemon;
     /// this abstract method should be overriden to return a new service/daemon
     // instance, using the (inherited) fSettings as parameters
-    function NewDaemon: TDDDAdministratedDaemon; virtual; abstract;
+    function NewDaemon: TDDDAdministratedDaemon; virtual;
     {$ifdef MSWINDOWS} // to support Windows Services
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
@@ -561,11 +561,6 @@ end;
 procedure TDDDDaemon.DoStart(Sender: TService);
 begin
   SQLite3Log.Enter(self);
-  if Assigned(fSettings) and fSettings.Log.LowLevelWebSocketsFrames then begin
-    WebSocketLog := SQLite3Log;
-    HttpServerFullWebSocketsLog := true;
-    HttpClientFullWebSocketsLog := true;
-  end;
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
@@ -577,6 +572,16 @@ begin
 end;
 
 {$endif MSWINDOWS} // to support Windows Services
+
+function TDDDDaemon.NewDaemon: TDDDAdministratedDaemon;
+begin
+  if Assigned(fSettings) and fSettings.Log.LowLevelWebSocketsFrames then begin
+    WebSocketLog := SQLite3Log;
+    HttpServerFullWebSocketsLog := true;
+    HttpClientFullWebSocketsLog := true;
+  end;
+  result := nil;
+end;
 
 procedure TDDDDaemon.Execute;
 begin

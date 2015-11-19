@@ -11316,8 +11316,8 @@ type
     // from plain TInterfacedClass, TInterfacedObjectWithCustomCreate if you
     // need an overridden constructor, or TInjectableObject to support DI/IoC
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes,
-    // a time out (in seconds) can be defined - if the time out is 0, interface
-    // will be forced in sicSingle mode
+    // a time out (in seconds) can be defined (default is 30 minutes) - if the
+    // specified aTimeOutSec is 0, interface will be forced in sicSingle mode
     // - you should usualy have to call the TSQLRestServer.ServiceRegister()
     // method instead of calling this constructor directly
     constructor Create(aRestServer: TSQLRestServer; aInterface: PTypeInfo;
