@@ -1843,6 +1843,8 @@ begin
         DeallocStatement;
         AllocStatement;
         status := ODBC.ColumnsA(fStatement,nil,0,nil,0,pointer(Table),SQL_NTS,nil,0);
+        if status=SQL_SUCCESS then
+          Step;
       end;
       ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
       BindColumns;
@@ -1949,10 +1951,10 @@ end;
 procedure TODBCConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8;
   out Parameters: TSQLDBProcColumnDefineDynArray);
 var Schema, Package, Proc: RawUTF8;
-    F: TSQLDBProcColumnDefine;
+    P: TSQLDBProcColumnDefine;
+    PA: TDynArray;
     n,DataType: integer;
     status: SqlReturn;
-    FA: TDynArray;
     Stmt: TODBCStatement;
 begin
   inherited; // first try from SQL, if any (faster)
@@ -1977,26 +1979,28 @@ begin
         Stmt.AllocStatement;
         status := ODBC.SQLProcedureColumnsA(Stmt.fStatement,nil,0,
           nil,0,pointer(Proc),SQL_NTS,nil,0);
+        if status=SQL_SUCCESS then
+          Stmt.Step;
       end;
       ODBC.Check(Stmt.Connection,nil,status,SQL_HANDLE_STMT,Stmt.fStatement);
       Stmt.BindColumns;
-      FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
-      fillchar(F,sizeof(F),0);
-      if Stmt.fCurrentRow>0 then // Stmt.Step done above
+      PA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
+      fillchar(P,sizeof(P),0);
+      if Stmt.fCurrentRow>0 then // Step done above
       repeat
-        F.ColumnName := Trim(Stmt.ColumnUTF8(3)); // Column*() should be in order
+        P.ColumnName := Trim(Stmt.ColumnUTF8(3)); // Column*() should be in order
         case Stmt.ColumnInt(4) of
-          SQL_PARAM_INPUT:        F.ColumnParamType := paramIn;
-          SQL_PARAM_INPUT_OUTPUT: F.ColumnParamType := paramInOut;
-          else                    F.ColumnParamType := paramOut;
+          SQL_PARAM_INPUT:        P.ColumnParamType := paramIn;
+          SQL_PARAM_INPUT_OUTPUT: P.ColumnParamType := paramInOut;
+          else                    P.ColumnParamType := paramOut;
         end;
         DataType := Stmt.ColumnInt(5);
-        F.ColumnTypeNative := Trim(Stmt.ColumnUTF8(6));
-        F.ColumnLength := Stmt.ColumnInt(7);
-        F.ColumnScale := Stmt.ColumnInt(8);
-        F.ColumnPrecision := Stmt.ColumnInt(9);
-        F.ColumnType:= ODBCColumnToFieldType(DataType,F.ColumnPrecision,F.ColumnScale);
-        FA.Add(F);
+        P.ColumnTypeNative := Trim(Stmt.ColumnUTF8(6));
+        P.ColumnLength := Stmt.ColumnInt(7);
+        P.ColumnScale := Stmt.ColumnInt(8);
+        P.ColumnPrecision := Stmt.ColumnInt(9);
+        P.ColumnType:= ODBCColumnToFieldType(DataType,P.ColumnPrecision,P.ColumnScale);
+        PA.Add(P);
       until not Stmt.Step;
       SetLength(Parameters,n);
     finally
