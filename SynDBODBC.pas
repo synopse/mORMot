@@ -1838,16 +1838,19 @@ begin
       AllocStatement;
       status := ODBC.ColumnsA(fStatement,nil,0,pointer(Schema),SQL_NTS,
         pointer(Table),SQL_NTS,nil,0);
-      if (status<>SQL_SUCCESS) or (not Step) then begin
-        // e.g. driver does not support schema
+      if status=SQL_SUCCESS then begin
+        BindColumns;
+        if not Step then
+          status := SQL_NO_DATA; // no info -> retry without schema
+      end;
+      if status<>SQL_SUCCESS then begin
         DeallocStatement;
         AllocStatement;
         status := ODBC.ColumnsA(fStatement,nil,0,nil,0,pointer(Table),SQL_NTS,nil,0);
-        if status=SQL_SUCCESS then
-          Step;
+        ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
+        BindColumns;
+        Step;
       end;
-      ODBC.Check(Connection,nil,status,SQL_HANDLE_STMT,fStatement);
-      BindColumns;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
       fillchar(F,sizeof(F),0);
@@ -1964,8 +1967,8 @@ begin
   Proc := SynCommons.UpperCase(Proc);
   Package := SynCommons.UpperCase(Package);
   Schema := SynCommons.UpperCase(Schema);
-  if (Package <> '') then
-    Proc := Package + '.' + Proc;
+  if Package<>'' then
+    Proc := Package+'.'+Proc;
   try
     // get column definitions
     Stmt := TODBCStatement.Create(MainConnection);
@@ -1973,17 +1976,20 @@ begin
       Stmt.AllocStatement;
       status := ODBC.SQLProcedureColumnsA(Stmt.fStatement,nil,0,
         pointer(Schema),SQL_NTS,pointer(Proc),SQL_NTS,nil,0);
-      if (status<>SQL_SUCCESS) or (not Stmt.Step) then begin
-        // e.g. driver does not support schema
+      if status=SQL_SUCCESS then begin
+        Stmt.BindColumns;
+        if not Stmt.Step then
+          status := SQL_NO_DATA; // no info -> retry without schema
+      end;
+      if status<>SQL_SUCCESS then begin
         Stmt.DeallocStatement;
         Stmt.AllocStatement;
         status := ODBC.SQLProcedureColumnsA(Stmt.fStatement,nil,0,
           nil,0,pointer(Proc),SQL_NTS,nil,0);
-        if status=SQL_SUCCESS then
-          Stmt.Step;
+        ODBC.Check(Stmt.Connection,nil,status,SQL_HANDLE_STMT,Stmt.fStatement);
+        Stmt.BindColumns;
+        Stmt.Step;
       end;
-      ODBC.Check(Stmt.Connection,nil,status,SQL_HANDLE_STMT,Stmt.fStatement);
-      Stmt.BindColumns;
       PA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
       fillchar(P,sizeof(P),0);
       if Stmt.fCurrentRow>0 then // Step done above
