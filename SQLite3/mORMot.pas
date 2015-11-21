@@ -9872,7 +9872,7 @@ type
   TServiceMethodExecute = class;
 
   /// the current step of a TServiceMethodExecute.OnExecute call
-  TServiceMethodExecuteEventStep = (smsBefore, smsAfter);
+  TServiceMethodExecuteEventStep = (smsBefore, smsAfter, smsError);
 
   /// the TServiceMethodExecute.OnExecute signature
   TServiceMethodExecuteEvent = procedure(Sender: TServiceMethodExecute;
@@ -9906,6 +9906,7 @@ type
     Options: TServiceMethodOptions;
     ServiceCustomAnswerHead: RawUTF8;
     ServiceCustomAnswerStatus: cardinal;
+    LastException: Exception;
     /// initialize the execution instance
     constructor Create(aMethod: PServiceMethod);
     /// finalize the execution instance
@@ -32873,13 +32874,18 @@ class procedure TSQLRestClientURI.ServiceNotificationMethodExecute(var Msg : TMe
 var exec: TSQLRestClientURIServiceNotification;
 begin
   exec := pointer(Msg.LParam);
+  if exec<>nil then
   try
-    if (exec<>nil) and exec.InheritsFrom(TSQLRestClientURIServiceNotification) and
-       (HWND(Msg.WParam)=exec.fOwner.fServiceNotificationMethodViaMessages.Wnd) then
-      // run asynchronous notification callback in the main UI thread context  
-      exec.ExecuteJson([exec.fInstance],pointer(exec.fPar),nil);
-  finally
-    exec.Free; // always release notification resources
+    try
+      if exec.InheritsFrom(TSQLRestClientURIServiceNotification) and
+         (HWND(Msg.WParam)=exec.fOwner.fServiceNotificationMethodViaMessages.Wnd) then
+        // run asynchronous notification callback in the main UI thread context
+        exec.ExecuteJson([exec.fInstance],pointer(exec.fPar),nil);
+    finally
+      exec.Free; // always release notification resources
+    end;
+  except
+    ; // ignore any exception for this asynchronous callback execution
   end;
 end;
 {$endif MSWINDOWS}
@@ -50829,6 +50835,13 @@ begin
         end;
       W.CancelLastComma;
     end;
+    smsError: begin
+      W.AddShort('},Output:{');
+      W.AddClassName(Sender.LastException.ClassType);
+      W.Add(':','"');
+      W.AddJSONEscapeString(Sender.LastException.Message);
+      W.Add('"');
+    end;
     end;
 end;
 
@@ -51800,24 +51813,36 @@ begin
         call.resKind := Args[ArgsResultIndex].ValueType else
         call.resKind := smvNone;
       // launch the asm stub in the expected execution context
-      {$ifndef LVCL}
-      if (optExecInMainThread in Options) and
-         (GetCurrentThreadID<>MainThreadID) then
-        BackgroundExecuteCallMethod(@call,nil) else
-      {$endif}
-      if optExecInPerInterfaceThread in Options then
-        if Assigned(BackgroundExecutionThread) then
-          BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
-          raise EInterfaceFactoryException.Create('optExecInPerInterfaceThread'+
-            ' with BackgroundExecutionThread=nil') else
-        CallMethod(call);
-      if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
-        PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
-      // handle method execution interception
-      if Assigned(OnExecute) then
       try
-        OnExecute(self,smsAfter);
-      except // ignore any exception during interception
+        {$ifndef LVCL}
+        if (optExecInMainThread in Options) and
+           (GetCurrentThreadID<>MainThreadID) then
+          BackgroundExecuteCallMethod(@call,nil) else
+        {$endif}
+        if optExecInPerInterfaceThread in Options then
+          if Assigned(BackgroundExecutionThread) then
+            BackgroundExecuteCallMethod(@call,BackgroundExecutionThread) else
+            raise EInterfaceFactoryException.Create('optExecInPerInterfaceThread'+
+              ' with BackgroundExecutionThread=nil') else
+          CallMethod(call);
+        if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
+          PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
+        // handle method execution interception
+        if Assigned(OnExecute) then
+        try
+          OnExecute(self,smsAfter);
+        except // ignore any exception during interception
+        end;
+      except // also intercept any error during method execution
+        on E: Exception do begin
+          if Assigned(OnExecute) then
+          try
+            LastException := E;
+            OnExecute(self,smsError);
+          except // ignore any exception during interception
+          end;
+          raise; // caller expects the exception to be propagated
+        end;
       end;
     end;
   end;
