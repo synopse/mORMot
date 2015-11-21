@@ -6527,7 +6527,9 @@ type
     procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar);
     /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
     // - Instance must be not nil
-    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar);
+    // - overriden version in TJSONSerializer would implement IncludeUnitName 
+    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+      IncludeUnitName: boolean); virtual;
     /// append a quoted string as JSON, with in-place decoding
     // - if QuotedString does not start with ' or ", it will written directly
     // (i.e. expects to be a number, or null/true/false constants)
@@ -15970,7 +15972,7 @@ begin
     vtPointer:
       PointerToHex(VPointer,result);
     vtClass:
-      if VClass<>nil then
+      if VClass<>nil then                                          
         result := PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^ else
         result := '';
     vtObject:
@@ -41149,8 +41151,7 @@ begin
         vtChar:       AddJSONEscape(@VChar,1);
         vtWideChar:   AddJSONEscapeW(@VWideChar,1);
         vtWideString: AddJSONEscapeW(VWideString);
-        vtClass: if VClass<>nil then
-                   AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
+        vtClass:      AddClassName(VClass);
       end;
       Add('"');
     end;
@@ -41179,9 +41180,7 @@ begin
   vtPointer:      AddPointer(PtrUInt(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
   vtObject:       WriteObject(VObject,[woFullExpand]);
-  vtClass:
-    if VClass<>nil then
-      AddShort(PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^);
+  vtClass:        AddClassName(VClass);
   vtWideChar:
     AddW(@VWideChar,1,Escape);
   vtPWideChar:
@@ -41334,7 +41333,8 @@ begin
     Add(SepChar);
 end;
 
-procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar);
+procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+  IncludeUnitName: boolean);
 begin
   AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   Add('(');

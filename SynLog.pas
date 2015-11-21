@@ -597,7 +597,7 @@ type
     property LocalTimeStamp: boolean read fLocalTimeStamp write fLocalTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
-    // - set to FALSE by default
+    // - set to TRUE by default, for better debugging experience
     property WithUnitName: boolean read fWithUnitName write fWithUnitName;
     {$ifdef MSWINDOWS}
     /// the time (in seconds) after which the log content must be written on
@@ -669,8 +669,6 @@ type
   TSynLogThreadRecursion = record
     /// associated class instance to be displayed
     Instance: TObject;
-    /// associated class type to be displayed
-    ClassType: TClass;
     /// method name (or message) to be displayed
     MethodName: PUTF8Char;
     /// internal reference count used at this recursion level by TSynLog._AddRef
@@ -2421,6 +2419,7 @@ begin
   fRotateFileAtHour := -1;
   fBufferSize := 4096;
   fStackTraceLevel := 30;
+  fWithUnitName := true;
   {$ifndef FPC}
   if DebugHook<>0 then // never let stManualAndAPI trigger AV within the IDE
     fStackTraceUse := stOnlyAPI;
@@ -2954,9 +2953,16 @@ begin
 end;
 
 class function TSynLog.Add: TSynLog;
+{$ifdef HASINLINE}
 begin
   result := Family.SynLog;
 end;
+{$else}
+asm
+  call TSynLog.Family
+  jmp TSynLogFamily.SynLog
+end;
+{$endif}
 
 {$STACKFRAMES ON}
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUTF8Char;
@@ -3005,9 +3011,6 @@ begin
       {$endif}
       with Recursion[RecursionCount] do begin
         Instance := aInstance;
-        if aInstance=nil then
-          ClassType := pointer(aInstance) else
-          ClassType := PPointer(aInstance)^;
         MethodName := aMethodName;
         if aMethodNameLocal then
           MethodNameLocal := mnEnter else
@@ -3520,7 +3523,7 @@ begin
   if LogHeaderLock(Level,false) then
   try
     if Instance<>nil then
-      fWriter.AddInstancePointer(Instance,' ');
+      fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
     fWriter.Add(TextFmt,TextArgs,twOnSameLine);
     if LastError<>0 then
       AddErrorMessage(LastError);
@@ -3554,7 +3557,7 @@ begin
           fWriter.WriteObject(Instance,[woFullExpand]);
     end else begin
       if Instance<>nil then
-        fWriter.AddInstancePointer(Instance,' ');
+        fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
       if length(Text)>TextTruncateAtLength then begin
         fWriter.AddOnSameLine(pointer(Text),TextTruncateAtLength);
         fWriter.AddShort('... (truncated) length=');
@@ -3577,7 +3580,7 @@ begin
   if LogHeaderLock(Level,false) then
   try
     if Instance<>nil then
-      fWriter.AddInstancePointer(Instance,' ');
+      fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
     fWriter.AddFieldName(aName);
     fWriter.AddTypedJSON(aTypeInfo,aValue);
   finally
@@ -3687,53 +3690,14 @@ begin
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
-type
-  {$ifdef FPC}{$PACKRECORDS 1}{$endif}
-  TTypeInfo = {$ifndef FPC}packed{$endif} record
-    Kind: byte;
-    Name: ShortString;
-  end;
-  {$ifdef FPC}{$PACKRECORDS C}{$endif}
-  TClassType =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-     ClassType: TClass;
-     ParentInfo: pointer;
-     PropCount: SmallInt;
-     UnitName: ShortString;
-  end;
-  PTypeInfo = ^TTypeInfo;
-  PClassType = ^TClassType;
-var Info: PTypeInfo;
-    MS: cardinal;
-label DoEnt;
-begin
+var MS: cardinal;
+begin // aLevel = sllEnter,sllLeave or sllNone 
   with fThreadContext^ do
   if cardinal(aIndex)<cardinal(RecursionCount) then
   with Recursion[aIndex] do begin
     if aLevel<>sllLeave then begin
-      if ClassType<>nil then begin
-        if fFamily.WithUnitName then begin
-          Info := PPointer(PtrInt(ClassType)+vmtTypeInfo)^;
-          if Info<>nil then begin
-            {$ifdef FPC}
-            fWriter.AddShort(PClassType(GetFPCTypeData(pointer(Info)))^.UnitName);
-            {$else}
-            fWriter.AddShort(PClassType(@Info^.Name[ord(Info^.Name[0])+1])^.UnitName);
-            {$endif}
-            fWriter.Add('.');
-          end;
-        end;
-        fWriter.AddShort(PShortString(PPointer(PtrInt(ClassType)+vmtClassName)^)^);
-        if Instance<>nil then begin
-          fWriter.Add('(');
-          fWriter.AddPointer(PtrUInt(Instance));
-          fWriter.Add(')');
-        end;
-        fWriter.Add('.');
-      end;
+      if Instance<>nil then
+        fWriter.AddInstancePointer(Instance,'.',fFamily.WithUnitName);
       if MethodName<>nil then begin
         if MethodNameLocal<>mnLeave then begin
           fWriter.AddNoJSONEscape(MethodName);
@@ -3743,21 +3707,19 @@ begin
       end else
         TSynMapFile.Log(fWriter,Caller,false);
     end;
-    if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then
-DoEnt:case aLevel of
+    if (aLevel<>sllNone) and (fFrequencyTimeStamp<>0) then begin
+      if not fFamily.HighResolutionTimeStamp then begin
+        QueryPerformanceCounter(fCurrentTimeStamp);
+        dec(fCurrentTimeStamp,fStartTimeStamp);
+      end;
+      case aLevel of
       sllEnter:
         EnterTimeStamp := fCurrentTimeStamp;
       sllLeave: begin
-        if fFrequencyTimeStamp=0 then
-          MS := 0 else // avoid div per 0 exception
-          MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
+        MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
         fWriter.AddMicroSec(MS);
       end;
-      end else
-    if aLevel in [sllEnter,sllLeave] then begin
-      QueryPerformanceCounter(fCurrentTimeStamp);
-      dec(fCurrentTimeStamp,fStartTimeStamp);
-      goto DoEnt;
+      end;
     end;
   end;
   fWriter.AddEndOfLine(aLevel);

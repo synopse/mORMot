@@ -3987,6 +3987,9 @@ type
     // - function ObjectToJSON() is just a wrapper over this method
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); override;
+    /// override method, handling IncludeUnitName option
+    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+      IncludeUnitName: boolean); override;
     /// override method, able to write sets using RTTI
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue); overload; override;
     /// overloaded method, able to write sets using RTTI in human readable mode
@@ -11066,6 +11069,7 @@ type
       const aTrace: RawUTF8); overload;
   end;
 
+  {$M+}
   /// an abstract service provider, as registered in TServiceContainer
   // - each registered interface has its own TServiceFactory instance, available
   // as one TSQLServiceContainer item from TSQLRest.Services property
@@ -11151,19 +11155,6 @@ type
     /// the registered Interface GUID
     // - just maps InterfaceFactory.InterfaceIID
     property InterfaceIID: TGUID read GetInterfaceIID;
-    /// the registered Interface URI
-    // - in fact this is the Interface name without the initial 'I', e.g.
-    // 'Calculator' for ICalculator
-    property InterfaceURI: RawUTF8 read fInterfaceURI;
-    /// the registered Interface mangled URI
-    // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
-    // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
-    // - can be substituted to the clear InterfaceURI name
-    property InterfaceMangledURI: RawUTF8 read fInterfaceMangledURI;
-    /// how each class instance is to be created
-    // - only relevant on the server side; on the client side, this class will
-    // be accessed only to retrieve a remote access instance, i.e. sicSingle
-    property InstanceCreation: TServiceInstanceImplementation read fInstanceCreation;
     (*/ the service contract, serialized as a JSON object
     - a "contract" is in fact the used interface signature, i.e. its
       implementation mode (InstanceCreation) and all its methods definitions
@@ -11178,12 +11169,6 @@ type
     $               {"argument":"Result","direction":"out","type":"integer"}
     $ ]}]} *)
     property Contract: RawUTF8 read fContract;
-    /// a hash of the service contract, serialized as a JSON string
-    // - this may be used instead of the JSON signature, to enhance security
-    // (i.e. if you do not want to publish the available methods, but want
-    // to check for the proper synchronization of both client and server)
-    // - a possible value may be: "C351335A7406374C"
-    property ContractHash: RawUTF8 read fContractHash;
     /// the published service contract, as expected by both client and server
     // - by default, will contain ContractHash property value (for security)
     // - but you can override this value using plain Contract or any custom
@@ -11201,7 +11186,28 @@ type
     // for accessing a plain REST HTTP server which is not based on mORMot,
     // so may not implement POST /root/Interface._contract_
     property ContractExpected: RawUTF8 read fContractExpected write fContractExpected;
+  published
+    /// the registered Interface URI
+    // - in fact this is the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator
+    property InterfaceURI: RawUTF8 read fInterfaceURI;
+    /// the registered Interface mangled URI
+    // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
+    // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
+    // - can be substituted to the clear InterfaceURI name
+    property InterfaceMangledURI: RawUTF8 read fInterfaceMangledURI;
+    /// how each class instance is to be created
+    // - only relevant on the server side; on the client side, this class will
+    // be accessed only to retrieve a remote access instance, i.e. sicSingle
+    property InstanceCreation: TServiceInstanceImplementation read fInstanceCreation;
+    /// a hash of the service contract, serialized as a JSON string
+    // - this may be used instead of the JSON signature, to enhance security
+    // (i.e. if you do not want to publish the available methods, but want
+    // to check for the proper synchronization of both client and server)
+    // - a possible value may be: "C351335A7406374C"
+    property ContractHash: RawUTF8 read fContractHash;
   end;
+  {$M-}
 
   /// server-side service provider uses this to store one internal instance
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
@@ -11463,6 +11469,15 @@ type
     function RestServer: TSQLRestServer;
       {$ifdef HASINLINE}inline;{$endif}
 
+    /// direct access to per-method detailed process statistics
+    // - this Stats[] array follows Interface.Methods[] order
+    // - see Stat[] property to retrieve information about a method by name
+    property Stats: TSynMonitorInputOutputObjArray read fStats;
+    /// retrieve detailed statistics about a method use
+    // - will return a reference to the actual item in Stats[]: caller should
+    // not free the returned instance
+    property Stat[const aMethod: RawUTF8]: TSynMonitorInputOutput read GetStat;
+  published
     /// the class type used to implement this interface
     property ImplementationClass: TInterfacedClass read fImplementationClass;
     /// the instance life time-out, in seconds
@@ -11477,14 +11492,6 @@ type
     // (e.g. for returning some HTML content from a public URI, or to implement
     // a public service catalog)
     property ByPassAuthentication: boolean read fByPassAuthentication write fByPassAuthentication;
-    /// direct access to per-method detailed process statistics
-    // - this Stats[] array follows Interface.Methods[] order
-    // - see Stat[] property to retrieve information about a method by name
-    property Stats: TSynMonitorInputOutputObjArray read fStats;
-    /// retrieve detailed statistics about a method use
-    // - will return a reference to the actual item in Stats[]: caller should
-    // not free the returned instance
-    property Stat[const aMethod: RawUTF8]: TSynMonitorInputOutput read GetStat;
     /// set to TRUE to return the interface's methods result as JSON object
     // - by default (FALSE), any method execution will return a JSON array with
     // all VAR/OUT parameters, in order
@@ -11579,6 +11586,28 @@ type
     // default setting, for security reasons) - this function is always available
     // on TServiceFactoryServer side
     function RetrieveSignature: RawUTF8; override;
+    /// allow background process of method with no results, via a temporary
+    // database, to be used e.g. for safe notifications transmission
+    // - expect a REST instance, which would store all methods without any
+    // results (i.e. procedure without any var/out parameters) on the
+    // associated TSQLRecordServiceNotifications class
+    // - a background thread would be used to check for pending notifications,
+    // and send them on the main TSQLRestClient communication
+    // - if the remote client is not reachable, will retry after the specified
+    // period of time, in seconds
+    // - this method is not blocking, and would write the pending calls to
+    // the aRest/aLogClass table, which would be retrieved asynchronously
+    // by the background thread
+    procedure SendNotifications(aRest: TSQLRest;
+      aLogClass: TSQLRecordServiceNotificationsClass;
+      aRetryPeriodSeconds: Integer=30);
+    /// compute how many pending notifications are waiting for background process
+    // initiated by SendNotifications() method
+    function SendNotificationsPending: integer;
+    /// wait for all pending notifications to be sent
+    // - you can supply a time out period after which no wait would take place
+    procedure SendNotificationsWait(aTimeOutSeconds: integer);
+  published
     /// could be used to force the remote URI to access the service
     // - by default, the URI would be Root/Calculator or Root/InterfaceMangledURI
     // but you may use this property to use another value, e.g. if you are
@@ -11605,27 +11634,6 @@ type
     // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
     property ResultAsJSONObjectWithoutResult: boolean read fResultAsJSONObject
       write fResultAsJSONObject;
-    /// allow background process of method with no results, via a temporary
-    // database, to be used e.g. for safe notifications transmission
-    // - expect a REST instance, which would store all methods without any
-    // results (i.e. procedure without any var/out parameters) on the
-    // associated TSQLRecordServiceNotifications class
-    // - a background thread would be used to check for pending notifications,
-    // and send them on the main TSQLRestClient communication
-    // - if the remote client is not reachable, will retry after the specified
-    // period of time, in seconds
-    // - this method is not blocking, and would write the pending calls to
-    // the aRest/aLogClass table, which would be retrieved asynchronously
-    // by the background thread
-    procedure SendNotifications(aRest: TSQLRest;
-      aLogClass: TSQLRecordServiceNotificationsClass;
-      aRetryPeriodSeconds: Integer=30);
-    /// compute how many pending notifications are waiting for background process
-    // initiated by SendNotifications() method
-    function SendNotificationsPending: integer;
-    /// wait for all pending notifications to be sent
-    // - you can supply a time out period after which no wait would take place
-    procedure SendNotificationsWait(aTimeOutSeconds: integer);
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -33296,8 +33304,8 @@ begin
 end;
 
 const
-  // log up to 20 KB of JSON response, to save space
-  MAX_SIZE_RESPONSE_LOG = 20*1024;
+  // log up to 2 KB of JSON response, to save space
+  MAX_SIZE_RESPONSE_LOG = 2*1024;
 
 function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; out aResponse: RawUTF8;
@@ -45358,6 +45366,20 @@ next: P := P^.Next;
   Add('}');
   if woFullExpand in Options then
     Add('}');
+end;
+
+procedure TJSONSerializer.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
+  IncludeUnitName: boolean);
+var info: PTypeInfo;
+begin
+  if IncludeUnitName then begin
+    info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
+    if info<>nil then begin // avoid GPF if not RTTI for this class
+      AddShort(PClassType(AlignToPtr(@info^.Name[ord(info^.Name[0])+1]))^.UnitName);
+      Add('.');
+    end;
+  end;
+  inherited AddInstancePointer(Instance,SepChar,IncludeUnitName);
 end;
 
 procedure TJSONSerializer.AddTypedJSON(aTypeInfo: pointer; const aValue);
