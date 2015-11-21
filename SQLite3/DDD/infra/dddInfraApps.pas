@@ -691,14 +691,16 @@ begin
       daemon := NewDaemon;
       try
         fDaemon := daemon;
+        {$ifdef WITHLOG}
         if cmd=cDaemon then
           if (daemon.AdministrationServer=nil) or
              not ({$ifdef MSWINDOWS}
                    daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or{$endif}
                   (daemon.InheritsFrom(TDDDThreadDaemon) and
                    (TDDDThreadDaemon(daemon).fAdministrationHTTPServer<>nil))) then
-            daemon.LogClass.Add.Log(sllWarning,'ExecuteCommandLine as Daemon '+
+            daemon.Log.Synlog.Log(sllWarning,'ExecuteCommandLine as Daemon '+
               'without external admnistrator acccess',self);
+        {$endif}
         daemon.Execute(cmd=cDaemon);
       finally
         fDaemon := nil; // will stop the daemon
@@ -800,10 +802,11 @@ end;
 procedure TDDDRestDaemon.InternalLogMonitoring;
 var status: variant;
 begin
-  if fLogClass<>nil then
-  with fLogClass.Family do
-    if (sllMonitoring in Level) and InternalRetrieveState(status) then
-      SynLog.Log(sllMonitoring,'%',[status],Self);
+  {$ifdef WITHLOG}
+  if fLog<>nil then
+    if (sllMonitoring in fLog.Level) and InternalRetrieveState(status) then
+      fLog.SynLog.Log(sllMonitoring,'%',[status],Self);
+  {$endif}
 end;
 
 function TDDDRestDaemon.InternalRetrieveState(
@@ -881,7 +884,9 @@ end;
 destructor TDDDSocketThread.Destroy;
 var timeOut: Int64;
 begin
+  {$ifdef WITHLOG}
   FLog.Enter(self);
+  {$endif}
   Terminate;
   timeOut := GetTickCount64+10000;
   repeat // wait until properly disconnected from remote TCP server
@@ -894,13 +899,17 @@ end;
 procedure TDDDSocketThread.ExecuteConnect;
 var tix: Int64;
 begin
+  {$ifdef WITHLOG}
   FLog.Enter(self);
+  {$endif}
   if fSocket<>nil then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil',[self]);
   if FMonitoring.State<>tpsDisconnected then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',[self,ord(FMonitoring.State)]);
   fMonitoring.State := tpsConnecting;
+  {$ifdef WITHLOG}
   FLog.Log(sllTrace,'ExecuteConnect: Connecting to %:%',[Host,Port],self);
+  {$endif}
   try
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
       fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
@@ -908,12 +917,16 @@ begin
     fSocket.Connect;
     FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
+    {$ifdef WITHLOG}
     FLog.Log(sllTrace,'ExecuteConnect: Connected via Socket % - %',
       [fSocket.Identifier,FMonitoring],self);
+    {$endif}
   except
     on E: Exception do begin
+      {$ifdef WITHLOG}
       FLog.Log(sllTrace,'ExecuteConnect: Impossible to Connect to %:% (%) %',
         [Host,Port,E.ClassType,FMonitoring],self);
+      {$endif}
       fSocket := nil;
       FMonitoring.State := tpsDisconnected;
     end;
@@ -924,16 +937,20 @@ begin
       repeat
         sleep(50);
       until Terminated or (GetTickCount64>tix);
+      {$ifdef WITHLOG}
       if Terminated then
         FLog.Log(sllTrace,'ExecuteConnect: thread terminated',self) else
         FLog.Log(sllTrace,'ExecuteConnect: wait finished -> retry connect',self);
+      {$endif}
     end;
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnect;
 var info: RawUTF8;
 begin
+  {$ifdef WITHLOG}
   FLog.Enter(self);
+  {$endif}
   try
     fSafe.Lock;
     try
@@ -947,22 +964,28 @@ begin
       finally
         fSocket := nil;
       end;
+      {$ifdef WITHLOG}
       FLog.Log(sllTrace,'Socket % disconnected',[info],self);
+      {$endif}
       InternalLogMonitoring;
     finally
       fSafe.UnLock;
     end;
   except
+    {$ifdef WITHLOG}
     on E: Exception do
       FLog.Log(sllTrace,'Socket disconnection error (%)',[E.ClassType],self);
+    {$endif}
   end;
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnectAfterError;
 begin
+  {$ifdef WITHLOG}
   if fSocket<>nil then
     FLog.Log(sllError,'%.ExecuteDisconnectAfterError: Sock=% LastError=%',
       [ClassType,fSocket.Identifier,fSocket.LastError],self);
+  {$endif}
   ExecuteDisconnect;
   FSocketInputBuffer := '';
   if fSettings.AutoReconnectAfterSocketError then
@@ -1006,8 +1029,10 @@ begin
           InternalLogMonitoring;
         InternalExecuteIdle;
       except
+        {$ifdef WITHLOG}
         on E: Exception do
           FLog.Log(sllWarning,'Skipped % exception in %.InternalExecuteIdle',[E,ClassType],self);
+        {$endif}
       end;
     until Terminated;
   finally
@@ -1038,7 +1063,9 @@ procedure TDDDSocketThread.InternalLogMonitoring;
 var cached,flushed: integer;
 begin // CachedMemory method will also purge any outdated cached entries
   cached := fRest.CacheOrNil.CachedMemory(@flushed);
+  {$ifdef WITHLOG}
   FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',[FMonitoring,cached,flushed],Self);
+  {$endif}
   fPreviousMonitorTix := GetTickCount64;
 end;
 
@@ -1461,7 +1488,7 @@ begin
   with Settings.RemoteAdmin do
     result := DaemonClass.Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
   result.InternalSettings := Settings;
-  result.LogClass.Add.Log(sllTrace,'%.Create(%)',[DaemonClass,Settings],result);
+  result.Log.SynLog.Log(sllTrace,'%.Create(%)',[DaemonClass,Settings],result);
   with Settings.RemoteAdmin do
     if AuthHttp.BindPort<>'' then
       result.AdministrationHTTPServer := TSQLHttpServer.Create(

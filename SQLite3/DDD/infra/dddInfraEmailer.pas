@@ -589,7 +589,7 @@ begin
   {$WARN SYMBOL_DEPRECATED ON}
   if age<=0 then
     exit;
-  fLock.Enter;
+  fLockerEnter;
   try
     if fCache=nil then
       fCache := TSynCache.Create(MemoryCacheSize);
@@ -603,31 +603,31 @@ begin
     end else
       result := true; // from cache
   finally
-    fLock.Leave;
+    fLocker.Leave;
   end;
   aType := GetMimeContentType(pointer(aTemplate),length(aTemplate),filename);
 end;
 
 procedure TDDDTemplateFromFolder.SetFolder(const Value: TFileName);
 begin
-  fLock.Enter;
+  fLockerEnter;
   try
     fFolder := Value;
     fCache.Reset;
   finally
-    fLock.Leave;
+    fLocker.Leave;
   end;
 end;
 
 procedure TDDDTemplateFromFolder.SetMemoryCacheSize(
   const Value: integer);
 begin
-  fLock.Enter;
+  fLockerEnter;
   try
     fMemoryCacheSize := Value;
     FreeAndNil(fCache);
   finally
-    fLock.Leave;
+    fLocker.Leave;
   end;
 end;
 

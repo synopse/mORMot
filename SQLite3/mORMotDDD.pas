@@ -169,6 +169,11 @@ type
 /// returns the text equivalency of a CQRS result enumeration
 function ToText(res: TCQRSResult): PShortString; overload;
 
+const
+  /// successfull result enumerates for I*Query/I*Command CQRS
+  // - those items won't generate a sllDDDError log entry, for instance
+  CQRSRESULT_SUCCESS = [cqrsSuccess,cqrsSuccessWithMoreData,cqrsNoMoreData];
+
 
 { ----- Services / Daemon Interfaces }
 
@@ -284,7 +289,12 @@ type
     fLastErrorContext: variant;
     fAction: TCQRSQueryAction;
     fState: TCQRSQueryState;
-    fLock: IAutoLocker;
+    fLocker: IAutoLocker;
+    {$ifdef WITHLOG}
+    fLog: TSynLogFamily;
+    {$endif}
+    // will initialize fLocker if needed - to be used with finally fLocker.Leave
+    procedure fLockerEnter;
     // method to be called at first for LastError process
     function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
@@ -306,8 +316,12 @@ type
     procedure InternalCqrsSetResult(Error: TCQRSResult); virtual;
     procedure AfterInternalCqrsSetResult; virtual;
   public
-    /// initialize the class instance
+    /// initialize the instance
     constructor Create; override;
+    {$ifdef WITHLOG}
+    /// where logging should take place
+    property Log: TSynLogFamily read fLog write fLog;
+    {$endif}
   published
     /// the last error, as an enumerate
     property LastError: TCQRSResult read GetLastError;
@@ -318,6 +332,9 @@ type
     /// current step of the TCQRSService state machine
     property State: TCQRSQueryState read fState;
   end;
+
+/// returns the text equivalency of a CQRS state enumeration
+function ToText(res: TCQRSQueryState): PShortString; overload;
 
 
 { ----- Persistence / Repository Implementation using mORMot's ORM }
@@ -540,8 +557,6 @@ type
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
     function ORMSelectCount(ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
       out aResultCount: integer; ForcedBadRequest: boolean=false): TCQRSResult;
-    // will log any error on the owner Rest server
-    procedure AfterInternalCqrsSetResult; override;
   public
     /// you should not have to use this constructor, since the instances would
     // be injected by TDDDRepositoryRestFactory.TryResolve()
@@ -782,7 +797,9 @@ type
   // methods to supply the actual process (e.g. set a background thread)
   TDDDAdministratedDaemon = class(TCQRSService,IAdministratedDaemon)
   protected
-    fLogClass: TSynLogClass;
+    {$ifdef WITHLOG}
+    fLog: TSynLogFamily;
+    {$endif}
     fStatus: TDDDAdministratedDaemonStatus;
     fFinished: TEvent;
     fRemoteLog: TSynLogCallbacks;
@@ -864,8 +881,10 @@ type
     /// returns the daemon name
     // - e.g. TMyOwnDaemon would return 'MyOwn' text
     function DaemonName: RawUTF8; virtual;
+    {$ifdef WITHLOG}
     /// access to the associated loging class
-    property LogClass: TSynLogClass read fLogClass;
+    property Log: TSynLogFamily read fLog;
+    {$endif}
     /// access to the associated internal settings
     // - is defined as an opaque TObject instance, to avoid unneeded dependencies
     property InternalSettings: TObject read fInternalSettings write SetInternalSettings;
@@ -948,13 +967,27 @@ begin
   result := GetEnumName(TypeInfo(TCQRSResult),ord(res));
 end;
 
+function ToText(res: TCQRSQueryState): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TCQRSQueryState),ord(res));
+end;
+
 
 { TCQRSService }
 
 constructor TCQRSService.Create;
 begin
-  fLock := TAutoLocker.Create;
   inherited Create;
+  {$ifdef WITHLOG}
+  fLog := SQLite3Log.Family; // may be overriden
+  {$endif}
+end;
+
+procedure TCQRSService.fLockerEnter;
+begin
+  if not Assigned(fLocker) then
+    fLocker := TAutoLocker.Create;
+  fLocker.Enter;
 end;
 
 function TCQRSService.GetLastError: TCQRSResult;
@@ -1016,8 +1049,8 @@ end;
 procedure TCQRSService.InternalCqrsSetResult(Error: TCQRSResult);
 begin
   if fLastErrorAddress=nil then
-    raise ECQRSException.CreateUTF8('%.CqrsSetResult(%) with no prior CqrsBeginMethod',
-      [self,GetEnumName(TypeInfo(TCQRSResult),ord(Error))^]);
+    raise ECQRSException.CreateUTF8(
+      '%.CqrsSetResult(%) with no prior CqrsBeginMethod',[self,ToText(Error)^]);
   fLastErrorAddress^ := Error;
   fLastError := Error;
   if Error<>cqrsSuccess then
@@ -1029,6 +1062,12 @@ end;
 
 procedure TCQRSService.AfterInternalCqrsSetResult;
 begin
+  {$ifdef WITHLOG}
+  if not (fLastError in CQRSRESULT_SUCCESS) then
+    if sllDDDError in fLog.Level then
+      fLog.SynLog.Log(sllDDDError,'%.CqrsSetResult(%) state=% %',
+        [ClassType,ToText(fLastError)^,ToText(fState)^,fLastErrorContext],self);
+  {$endif}
 end;
 
 procedure TCQRSService.CqrsSetResultSuccessIf(SuccessCondition: boolean;
@@ -1530,22 +1569,15 @@ constructor TDDDRepositoryRestQuery.Create(
 begin
   fFactory := aFactory;
   fCurrentORMInstance := fFactory.Table.Create;
+  {$ifdef WITHLOG}
+  fLog := fFactory.Rest.LogFamily;
+  {$endif}
 end;
 
 destructor TDDDRepositoryRestQuery.Destroy;
 begin
   fCurrentORMInstance.Free;
   inherited;
-end;
-
-procedure TDDDRepositoryRestQuery.AfterInternalCqrsSetResult;
-begin
-  inherited AfterInternalCqrsSetResult;
-  {$ifdef WITHLOG}
-  if (fLastError<>cqrsSuccess) and
-     (sllDDDError in Factory.Rest.LogFamily.Level) then
-    Factory.Rest.LogClass.Add.Log(sllDDDError,'%',[fLastErrorContext],self);
-  {$endif}
 end;
 
 function TDDDRepositoryRestQuery.CqrsBeginMethod(aAction: TCQRSQueryAction;
@@ -2054,7 +2086,7 @@ begin
     raise ECQRSException.CreateUTF8('%.Create(aAdministrationServer=nil)',[self]);
   fAdministrationServer := aAdministrationServer;
   {$ifdef WITHLOG}
-  fLogClass := fAdministrationServer.LogClass;
+  fLog := fAdministrationServer.LogFamily;
   {$endif}
   CreateWithResolver(fAdministrationServer.ServiceContainer);
   fAdministrationServer.ServiceDefine(self,[IAdministratedDaemon]);
@@ -2076,15 +2108,19 @@ begin
     {$ifdef MSWINDOWS}
     fAdministrationServer.ExportServerNamedPipe(aServerNamedPipe);
     {$else}
-    fLogClass.Add.Log(sllTrace,'Ignored AuthNamedPipeName=% under Linux',
+    {$ifdef WITHLOG}
+    fLog.SynLog.Log(sllTrace,'Ignored AuthNamedPipeName=% under Linux',
       [aServerNamedPipe],self);
+    {$endif}
     {$endif}
 end;
 
 destructor TDDDAdministratedDaemon.Destroy;
 var dummy: variant;
 begin
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   if InternalIsRunning then
     Halt(dummy);
   try
@@ -2100,14 +2136,18 @@ end;
 
 function TDDDAdministratedDaemon.Start: TCQRSResult;
 begin
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   CqrsBeginMethod(qaNone,result);
   if not (fStatus in [dsCreated,dsStopped]) then
     CqrsSetResultError(cqrsBadRequest) else
   if InternalIsRunning then
     CqrsSetResult(cqrsAlreadyExists) else
     try
-      fLogClass.Add.Log(sllDDDInfo,'Starting',self);
+      {$ifdef WITHLOG}
+      fLog.SynLog.Log(sllDDDInfo,'Starting',self);
+      {$endif}
       InternalStart;
       fStatus := dsStarted;
       CqrsSetResult(cqrsSuccess);
@@ -2140,7 +2180,9 @@ end;
 function TDDDAdministratedDaemon.Stop(
   out Information: variant): TCQRSResult;
 begin
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   CqrsBeginMethod(qaNone,result);
   if fStatus<>dsStarted then
     CqrsSetResultError(cqrsBadRequest) else begin
@@ -2148,7 +2190,9 @@ begin
     try
       InternalStop; // always stop
       fStatus := dsStopped;
-      fLogClass.Add.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      {$ifdef WITHLOG}
+      fLog.SynLog.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      {$endif}
       CqrsSetResult(cqrsSuccess);
     except
       on E: Exception do
@@ -2161,11 +2205,15 @@ end;
 function TDDDAdministratedDaemon.Halt(
   out Information: variant): TCQRSResult;
 begin
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   CqrsBeginMethod(qaNone,result);
   if InternalIsRunning then
   try
-    fLogClass.Add.Log(sllDDDInfo,'Halting',self);
+    {$ifdef WITHLOG}
+    fLog.SynLog.Log(sllDDDInfo,'Halting',self);
+    {$endif}
     CqrsSetResult(Stop(Information));
   except
     on E: Exception do
@@ -2180,7 +2228,9 @@ procedure TDDDAdministratedDaemon.WaitUntilHalted;
 begin
   if fStatus in [dsUnknown] then
     exit;
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   FixedWaitForever(fFinished);
 end;
 
@@ -2188,7 +2238,9 @@ procedure TDDDAdministratedDaemon.Execute(RemotelyAdministrated: boolean);
 var name: string;
     msg: RawUTF8;
 begin
-  fLogClass.Enter(self);
+  {$ifdef WITHLOG}
+  fLog.SynLog.Enter(self);
+  {$endif}
   name := ClassName;
   {$I-}
   if RemotelyAdministrated then begin
@@ -2221,15 +2273,17 @@ end;
 
 procedure TDDDAdministratedDaemon.SubscribeLog(const Levels: TSynLogInfos;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
+{$ifdef WITHLOG}
 var previousContentSize: integer;
 begin
   if fRemoteLog=nil then
-    fRemoteLog := TSynLogCallbacks.Create(fLogClass.Family);
+    fRemoteLog := TSynLogCallbacks.Create(fLog);
   previousContentSize := fRemoteLog.Subscribe(Levels,Callback,ReceiveExistingKB);
-  {$ifdef WITHLOG}
-  fLogClass.Add.Log(sllTrace,'SubscribeLog sent % bytes as previous content',
+  fLog.SynLog.Log(sllTrace,'SubscribeLog sent % bytes as previous content',
     [previousContentSize],self);
-  {$endif}
+{$else}
+begin
+{$endif}
 end;
 
 function TDDDAdministratedDaemon.PublishedORM(const DatabaseName: RawUTF8): TSQLRest;
@@ -2317,9 +2371,11 @@ begin
       mem.Free;
       exit;
     end;
-    4: result.Content := ObjectToJSON(fLogClass.Add,[woEnumSetsAsText]);
-    5: fLogClass.Add.Log(sllMonitoring,'[CHAT] % %',
+    {$ifdef WITHLOG}
+    4: result.Content := ObjectToJSON(fLog.SynLog,[woEnumSetsAsText]);
+    5: fLog.SynLog.Log(sllMonitoring,'[CHAT] % %',
          [ServiceContext.Request.InHeader['remoteip'],copy(SQL,7,maxInt)]);
+    {$endif}
     6,7,8: begin // 6=start/7=stop/8=restart
       if cmd=6 then
         res := cqrsSuccess else
