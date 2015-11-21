@@ -47798,7 +47798,7 @@ begin
     on E: Exception do begin
       C := E.ClassType;
       if (C=EInterfaceStub) or (C=EInterfaceFactoryException) or
-         (C=EAccessViolation) {$IFNDEF  LVCL}or (C=EInvalidPointer){$endif} then
+         (C=EAccessViolation) {$ifndef LVCL}or (C=EInvalidPointer){$endif} then
         raise; // ignore all low-level exceptions
     end;
   end;
@@ -50917,7 +50917,7 @@ begin
     end;
   end;
   if Inst.Instance=nil then begin
-    Error('instance not found or deprecated',HTML_FORBIDDEN);
+    Error('instance not found or deprecated',HTML_BADREQUEST);
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
