@@ -2481,7 +2481,9 @@ end;
 {$endif}
 
 const
+  {$ifndef NOXPOWEREDNAME}
   XPOWEREDNAME = 'X-Powered-By';
+  {$endif}
   XPOWEREDVALUE = XPOWEREDPROGRAM+' http://synopse.info';
 
 { TURI }
@@ -3798,7 +3800,9 @@ begin
       end;
     end;
     // 2.2. generic headers
-    ClientSock.SockSend([XPOWEREDNAME+': '+XPOWEREDVALUE+#13#10'Server: ',fServerName]);
+    ClientSock.SockSend([
+      {$ifndef NOXPOWEREDNAME}XPOWEREDNAME+': '+XPOWEREDVALUE+#13#10+{$endif}
+      'Server: ',fServerName]);
     ClientSock.CompressDataAndWriteHeaders(Context.OutContentType,Context.fOutContent);
     if ClientSock.KeepAliveClient then begin
       if ClientSock.fCompressAcceptEncoding<>'' then
@@ -6441,10 +6445,15 @@ begin
 end;
 
 procedure HTTP_RESPONSE.SetHeaders(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs);
+{$ifndef NOXPOWEREDNAME}
 const XPN: PAnsiChar = XPOWEREDNAME;
       XPV: PAnsiChar = XPOWEREDVALUE;
+{$endif}
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
+  {$ifdef NOXPOWEREDNAME}
+  Headers.UnknownHeaderCount := 0;
+  {$else}
   with UnknownHeaders[0] do begin
     pName := XPN;
     NameLength := length(XPOWEREDNAME);
@@ -6452,6 +6461,7 @@ begin
     RawValueLength := length(XPOWEREDVALUE);
   end;
   Headers.UnknownHeaderCount := 1;
+  {$endif}
   if P<>nil then
   repeat
     while P^ in [#13,#10] do inc(P);

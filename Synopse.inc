@@ -482,3 +482,5 @@
   {$endif}
 {$endif}
 
+// define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
+{.$define NOXPOWEREDNAME}
