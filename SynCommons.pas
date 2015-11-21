@@ -3270,8 +3270,10 @@ function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 // used by IsHTMLContentTypeTextual() function:
 // ! result := ExistsIniNameValue(htmlHeaders,HEADER_CONTENT_TYPE_UPPER,
 // !  ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
+// - warning: this function calls IdemPCharArray(), so expects UpperValues[]
+/// items to have AT LEAST TWO CHARS (it will use fast initial 2 bytes compare)
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
-  const UpperValues: array of RawUTF8): boolean;
+  const UpperValues: array of PAnsiChar): boolean;
 
 /// find the integer Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
@@ -18951,9 +18953,9 @@ begin
     exit;
   end;
   result := '';
-  SetLength(tmpStr,length(Args));
   if length(Args)*2+1>high(blocks) then
     raise ESynException.Create('FormatUTF8: too many args (max=25)!');
+  SetLength(tmpStr,length(Args));
   blocksN := 0;
   argN := 0;
   L := 0;
@@ -21598,6 +21600,7 @@ begin
     result := false;
 end;
 
+
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
   var Result: TRawUTF8DynArray);
 var i: Integer;
@@ -21879,9 +21882,8 @@ begin
 end;
 
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
-  const UpperValues: array of RawUTF8): boolean;
+  const UpperValues: array of PAnsiChar): boolean;
 var PBeg: PUTF8Char;
-    i: integer;
 begin
   result := true;
   if high(UpperValues)>=0 then
@@ -21890,9 +21892,8 @@ begin
       if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
       if IdemPChar(PBeg,pointer(UpperName)) then begin
         inc(PBeg,length(UpperName));
-        for i := 0 to high(UpperValues) do
-          if IdemPChar(PBeg,pointer(UpperValues[i])) then
-            exit; // found one value
+        if IdemPCharArray(PBeg,UpperValues)>=0 then
+          exit; // found one value
         break;
       end;
     end;
@@ -28395,7 +28396,7 @@ end;
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
-    ['TEXT/','APPLICATION/JSON','APPLICATION/XML',
+    ['APPLICATION/JSON','TEXT/','APPLICATION/XML',
      'APPLICATION/X-JAVASCRIPT','IMAGE/SVG+XML']);
 end;
 

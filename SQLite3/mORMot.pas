@@ -33320,8 +33320,8 @@ begin
     {$ifdef WITHLOG}
     if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(header)) then
-        Log.Log(sllServiceReturn,aResponse,nil,MAX_SIZE_RESPONSE_LOG) else
-        Log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header]);
+        Log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
+        Log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header],self);
     {$endif}
   end;
 end;
@@ -35611,7 +35611,7 @@ begin
         Stats := TSynMonitorInputOutput.Create;
       Stats.Processing := true;
     end;
-    Server.InternalLog(Name,sllServiceCall);
+    Server.InternalLog('% %',[Name,Parameters],sllServiceCall);
     CallBack(self);
     if Stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
@@ -35732,7 +35732,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
 var xml: RawUTF8;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
-  Log.Log(sllServiceCall,URI,Server);
+  Log.Log(sllServiceCall,'%%',[URI,ServiceParameters],Server);
   {$endif}
   if Assigned(Service.OnMethodExecute) and
      (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
@@ -37006,9 +37006,14 @@ begin
     QueryPerformanceCounter(timeEnd);
     dec(timeEnd,timeStart);
     timeStart := fStats.FromExternalQueryPerformanceCounters(timeEnd);
+    {$ifdef WITHLOG}
     InternalLog('% % % %/% %-> % with outlen=% in % us',
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
       COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),timeStart],sllServer);
+    if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
+      if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
+        fLogFamily.SynLog.Log(sllServiceReturn,Call.OutBody,self,MAX_SIZE_RESPONSE_LOG);
+    {$endif}
     if mlTables in StatLevels then
       case Ctxt.Command of
       execORMGet:
@@ -50669,7 +50674,8 @@ begin
   Inst.Instance := CreateInstance(true);
   if Inst.Instance=nil then
     exit;
-  fRest.InternalLog('Adding % instance (id=%)',[fInterfaceURI,Inst.InstanceID],sllServiceCall);
+  fRest.InternalLog('%.InternalInstanceRetrieve: Adding % instance (id=%)',
+    [ClassType,fInterfaceURI,Inst.InstanceID],sllDebug);
   P := pointer(fInstances);
   for i := 1 to fInstancesCount do
     if P^.InstanceID=0 then begin
@@ -50693,8 +50699,9 @@ begin
       if InstanceID<>0 then
       if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
         // deprecated -> mark this entry as empty
-        fRest.InternalLog('Deleted % instance (id=%) after % ms timeout (max % ms)',
-          [fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllServiceCall);
+        fRest.InternalLog(
+          '%.InternalInstanceRetrieve: Deleted % instance (id=%) after % ms timeout (max % ms)',
+          [ClassType,fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllDebug);
         SafeFreeInstance(self);
       end;
     if Inst.InstanceID=0 then begin
@@ -52472,7 +52479,7 @@ begin
     {$ifdef WITHLOG}
     with fRest.fLogFamily do
       if (sllServiceReturn in Level) and (resp<>'') then
-        SynLog.Log(sllServiceReturn,resp,nil,MAX_SIZE_RESPONSE_LOG);
+        SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
     {$endif}
     if fResultAsJSONObject then begin
       if aResult<>nil then
@@ -52498,7 +52505,8 @@ begin
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;
   end else begin // free answer returned in TServiceCustomAnswer
-    fRest.InternalLog('TServiceCustomAnswer(%) returned len=%',[head,length(resp)],sllServiceReturn);
+    fRest.InternalLog('TServiceCustomAnswer(%) returned len=%',
+      [head,length(resp)],sllServiceReturn);
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
