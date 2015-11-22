@@ -14791,10 +14791,10 @@ $fpcup.exe --fpcURL="trunk" --lazURL="trunk"
 Then ensure you set the static {\i SQlite3} .o files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@.
 :  Creating the missing RTTI for interfaces
 Sadly, we have to face some unresolved FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774
-As a result, SOA, mock/stub and MVC features would not working directly.\line We propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
+As a result, SOA, mock/stub and MVC features would not work directly with FPC trunk. There is a private branch including the needed RTTI, but it has not been merged to the trunk yet.\line In the meanwihle, we propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
 The {\f1\fs20 mORMotWrappers.pas} unit proposes a {\f1\fs20 ComputeFPCInterfacesUnit()} function, which could be used on Delphi to generate the RTTI unit for FPC, as such:
 - Ensure that the application will use all its needed {\f1\fs20 interface}: for instance, run all your regression tests, and/or use all its SOA/MVC features if you are not confident about your test coverage;
-- Just before the application exists, add a call to {\f1\fs20 ComputeFPCInterfacesUnit()} with the proper folders, e.g. at the very end of your {\f1\fs20 .dpr} code.
+- Just before the application exits, add a call to {\f1\fs20 ComputeFPCInterfacesUnit()} with the proper folders, e.g. at the very end of your {\f1\fs20 .dpr} code.
 For instance, here is how {\f1\fs20 TestSQL3.dpr} has been modified:
 !program TestSQL3;
 ! ...
