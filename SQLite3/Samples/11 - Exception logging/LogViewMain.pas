@@ -677,10 +677,15 @@ end;
 
 procedure TMainLogView.ListDblClick(Sender: TObject);
 var i, Level: integer;
+    inThreadMode: boolean;
+    currentThreadID: Word;
 begin
   i := List.Row;
   if (FLog<>Nil) and (cardinal(i)<=cardinal(FLogSelectedCount)) then begin
     Level := 0;
+    inThreadMode := FLog.EventThread<>nil;
+    if inThreadMode then
+      currentThreadID := FLog.EventThread[FLogSelected[i]];
     case FLog.EventLevel[FLogSelected[i]] of
       sllEnter: // retrieve corresponding Leave event
         repeat
@@ -688,11 +693,16 @@ begin
           if i>=FLogSelectedCount then
             exit;
           case FLog.EventLevel[FLogSelected[i]] of
-          sllEnter: Inc(Level);
-          sllLeave: if Level=0 then begin
-            SetListItem(i);
-            exit;
-          end else Dec(Level);
+          sllEnter:
+          if (inThreadMode) then begin
+            if FLog.EventThread[FLogSelected[i]] = currentThreadID then
+              Inc(Level);
+          end else Inc(Level);
+          sllLeave: if (inThreadMode and (FLog.EventThread[FLogSelected[i]] = currentThreadID)) or not inThreadMode then
+            if Level=0 then begin
+              SetListItem(i);
+              exit;
+            end else Dec(Level);
           end;
         until false;
       sllLeave: // retrieve corresponding Enter event
@@ -701,11 +711,15 @@ begin
           if i<0 then
             exit;
           case FLog.EventLevel[FLogSelected[i]] of
-          sllLeave: Inc(Level);
-          sllEnter: if Level=0 then begin
-            SetListItem(i);
-            exit;
-          end else Dec(Level);
+          sllLeave: if (inThreadMode) then begin
+            if FLog.EventThread[FLogSelected[i]] = currentThreadID then
+              Inc(Level);
+          end else Inc(Level);
+          sllEnter: if (inThreadMode and (FLog.EventThread[FLogSelected[i]] = currentThreadID)) or not inThreadMode then
+            if Level=0 then begin
+              SetListItem(i);
+              exit;
+            end else Dec(Level);
           end;
         until false;
     end;
