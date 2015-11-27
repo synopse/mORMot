@@ -1370,6 +1370,7 @@ begin
             exec := TServiceMethodExecute.Create(@fApplication.fFactory.Methods[fMethodIndex]);
             try
               exec.Options := [optVariantCopiedByReference];
+              exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
               if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,true) then
                 with fApplication.fFactory do
                 raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
@@ -1412,7 +1413,7 @@ begin
           if Redirects(action) then // if redirection is implemented
             exit else
             action.ReturnedStatus := HTML_SUCCESS; // fallback is to handle here
-      until fMethodIndex<0;
+      until fMethodIndex<0; // loop to handle redirection
     end;
     // if we reached here, there was a wrong URI -> render the 404 error page
     CommandError('notfound',true,HTML_NOTFOUND);
