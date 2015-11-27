@@ -33349,12 +33349,12 @@ begin
     result := false;
     exit;
   end;
-{$ifdef SSPIAUTH} // try Windows authentication with the current logged user
+  {$ifdef SSPIAUTH} // try Windows authentication with the current logged user
   result := true;
   if ((trim(aUserName)='') or (PosEx('\',aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
-{$endif}
+  {$endif}
   result := TSQLRestServerAuthenticationDefault.
     ClientSetUser(self,aUserName,aPassword,HASH[aHashedPassword]);
 end;
@@ -46366,7 +46366,8 @@ begin
     fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
     if Session<>nil then
       Ctxt.Returns(['result',Session.fPrivateSalt,
-        'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]);
+        'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+        'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]);
   finally
     User.Free;
   end;
@@ -46736,7 +46737,8 @@ begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
           Ctxt.Returns(['result',Session.IDCardinal,
-            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]);
+            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]);
           exit; // success
         end;
       end else
@@ -46845,11 +46847,13 @@ begin
       if Session<>nil then
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
-            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID]),
+            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]),
             HTML_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main,
             'data',BinToBase64(OutData)]);
     finally
       User.Free;

@@ -1038,8 +1038,8 @@ type
     fLogProcMerged: TSynLogFileProcDynArray;
     fLogProcMergedCount: integer;
     fLogProcIsMerged: boolean;
-    fLogProcStack: array of cardinal;
-    fLogProcStackCount: integer;
+    fLogProcStack: array of array of cardinal;
+    fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
     /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
@@ -4246,33 +4246,12 @@ begin
       SetLength(fThreads,fLinesMax);
     end;
     fLineTextOffset := fLineLevelOffset+4;
+    SetLength(fLogProcStack, fLinesMax);
+    SetLength(fLogProcStackCount, fLinesMax);
   end;
   L := GetLogLevelFromText(LineBeg);
   if L=sllNone then
     exit;
-  fLevels[fCount-1] := L; // need exact match of level text
-  include(fLevelUsed,L);
-  case L of
-  sllEnter: begin
-    if Cardinal(fLogProcStackCount)>=Cardinal(length(fLogProcStack)) then
-      SetLength(fLogProcStack,length(fLogProcStack)+256);
-    fLogProcStack[fLogProcStackCount] := fLogProcNaturalCount;
-    inc(fLogProcStackCount);
-    if Cardinal(fLogProcNaturalCount)>=Cardinal(length(fLogProcNatural)) then
-      SetLength(fLogProcNatural,length(fLogProcNatural)+32768);
-    // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
-    inc(fLogProcNaturalCount);
-  end;
-  sllLeave:
-  if (LineEnd-LineBeg>10) and (LineEnd[-4]='.') and (LineEnd[-8]='.') and
-     (fLogProcStackCount>0) then begin // 00.020.006
-    MS := DecodeMicroSec(PByte(LineEnd-10));
-    if MS>=0 then begin
-      dec(fLogProcStackCount);
-      fLogProcNatural[fLogProcStack[fLogProcStackCount]].Time := MS;
-    end;
-  end;
-  end;
   if fThreads<>nil then begin
     if fThreadsCount<fLinesMax then begin
       fThreadsCount := fLinesMax;
@@ -4288,6 +4267,30 @@ begin
       end;
     end;
     inc(fThreadsRows[V]);
+  end else V := 0;
+
+  fLevels[fCount-1] := L; // need exact match of level text
+  include(fLevelUsed,L);
+  case L of
+  sllEnter: begin
+    if Cardinal(fLogProcStackCount[V])>=Cardinal(length(fLogProcStack[V])) then
+      SetLength(fLogProcStack[V],length(fLogProcStack[V])+256);
+    fLogProcStack[V][fLogProcStackCount[V]] := fLogProcNaturalCount;
+    inc(fLogProcStackCount[V]);
+    if Cardinal(fLogProcNaturalCount)>=Cardinal(length(fLogProcNatural)) then
+      SetLength(fLogProcNatural,length(fLogProcNatural)+32768);
+    // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
+    inc(fLogProcNaturalCount);
+  end;
+  sllLeave:
+  if (LineEnd-LineBeg>10) and (LineEnd[-4]='.') and (LineEnd[-8]='.') and
+     (fLogProcStackCount[V]>0) then begin // 00.020.006
+    MS := DecodeMicroSec(PByte(LineEnd-10));
+    if MS>=0 then begin
+      dec(fLogProcStackCount[V]);
+      fLogProcNatural[fLogProcStack[V][fLogProcStackCount[V]]].Time := MS;
+    end;
+  end;
   end;
 end;
 
