@@ -206,7 +206,7 @@ type
 const
   /// FireDAC DriverID values corresponding to SynDB recognized SQL engines
   FIREDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
-    'Ora','MSSQL','MSAcc','MySQL','SQLite','IB','','PG','DB2');
+    'Ora','MSSQL','MSAcc','MySQL','SQLite','IB','','PG','DB2','Infx');
 
 
 implementation

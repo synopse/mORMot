@@ -187,7 +187,7 @@ const
   /// UniDAC provider names corresponding to SynDB recognized SQL engines
   UNIDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
     'Oracle','SQL Server','Access','MySQL','SQLite','InterBase',
-    'NexusDB','PostgreSQL','DB2');
+    'NexusDB','PostgreSQL','DB2','');
 
 implementation
 
