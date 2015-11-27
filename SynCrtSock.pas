@@ -1977,6 +1977,20 @@ begin // not very fast, but working
     end;
 end;
 
+function HtmlEncodeString(const s: string): string;
+var i: integer;
+begin // not very fast, but working
+  result := '';
+  for i := 1 to length(s) do
+    case s[i] of
+      '<': result := result+'&lt;';
+      '>': result := result+'&gt;';
+      '&': result := result+'&amp;';
+      '"': result := result+'&quot;';
+      else result := result+s[i];
+    end;
+end;
+
 const
   CRLF: array[0..1] of AnsiChar = (#13,#10);
 
@@ -3779,7 +3793,7 @@ begin
       Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
         format('<body style="font-family:verdana">'#13+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
-        [ClassName,Code,Code,StatusCodeToReason(Code),HtmlEncode(ErrorMsg),fServerName]));
+        [ClassName,Code,Code,StatusCodeToReason(Code),HtmlEncodeString(ErrorMsg),fServerName]));
     end;
     // 1. send HTTP status command
     if ClientSock.TCPPrefix<>'' then
