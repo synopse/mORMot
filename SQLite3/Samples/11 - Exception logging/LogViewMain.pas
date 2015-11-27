@@ -6,14 +6,24 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  ImgList, StdCtrls, CheckLst, Menus, ExtCtrls, ShellAPI, Grids, Clipbrd, 
-{$WARN UNIT_PLATFORM OFF}
+  ImgList, StdCtrls, CheckLst, Menus, ExtCtrls, ShellAPI, Grids, Clipbrd,
+  {$WARN UNIT_PLATFORM OFF}
   FileCtrl,
-{$WARN UNIT_PLATFORM ON}
+  {$WARN UNIT_PLATFORM ON}
+  {$ifdef FPC}  // FPC compatibility by alf (alfred) - thanks for the patch!
+  ShellCtrls,
+  SynTaskDialog in '..\..\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
+  {$else}
   SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
+  {$endif}
   SynCommons, SynLog, mORMotHttpServer;
 
 type
+   {$ifdef FPC}
+   TFileListBox = TShellListView;
+   TDirectoryListBox = TShellTreeView;
+   {$endif}
+
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
     BtnBrowse: TButton;
@@ -41,7 +51,9 @@ type
     ThreadListMenuAll: TMenuItem;
     ThreadListMenuNone: TMenuItem;
     PanelBrowse: TPanel;
+    {$ifndef FPC}
     Drive: TDriveComboBox;
+    {$endif}
     Directory: TDirectoryListBox;
     Files: TFileListBox;
     Splitter4: TSplitter;
@@ -127,7 +139,17 @@ var
 
 implementation
 
+{$ifndef FPC}
 {$R *.dfm}
+{$else}
+{$R *.lfm}
+{$endif}
+
+{$ifdef FPC}
+uses
+  Themes,
+  LCLType;
+{$endif}
 
 resourcestring
   sEnterAddress = 'Enter an hexadecimal address:';
@@ -161,13 +183,16 @@ const
      clBlack,clBlack,clBlack,
      clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack));
 
-     
 { TMainLogView }
 
 procedure TMainLogView.SetLogFileName(const Value: TFileName);
 var E: TSynLogInfo;
     i: integer;
 begin
+  {$ifdef FPC}
+  if (Value<>'') and (GetFileNameExtIndex(Value,'log,synlz,txt')<0) then
+    exit;
+  {$endif}
   FreeAndNil(FLog);
   FreeAndNil(FLogUncompressed);
   Finalize(FLogSelected);
@@ -310,11 +335,19 @@ begin
     CmdLine := ParamStr(1);
     if SysUtils.DirectoryExists(CmdLine) then begin
       BtnBrowseClick(nil);
+      {$ifdef FPC}
+      Directory.Path := CmdLine;
+      {$else}
       Directory.Directory := CmdLine;
+      {$endif}
     end else
       LogFileName := CmdLine;
-    end else
+    end else begin
+      {$ifdef FPC}
+      Directory.Path := ExtractFileDir(ParamStr(0));
+      {$endif}
       LogFileName := '';
+    end;
   WindowState := wsMaximized;    
 end;
 
@@ -340,14 +373,33 @@ end;
 procedure TMainLogView.EventsListDrawItem(Control: TWinControl;
   Index: Integer; Rect: TRect; State: TOwnerDrawState);
 var E: TSynLogInfo;
+  {$ifdef FPC}
+  BRect: TRect;
+  aTheme: TThemedElementDetails;
+  {$endif}
 begin
   if Index<0 then
     exit;
   E := TSynLogInfo(EventsList.Items.Objects[Index]);
-  with EventsList.Canvas do begin
-    Brush.Color := LOG_COLORS[false,E];
-    Font.Color  := LOG_COLORS[true,E];
-    TextRect(Rect,Rect.Left+4,Rect.Top,FEventCaption[E]);
+  inherited;
+  with EventsList do begin
+    Canvas.Brush.Color := LOG_COLORS[false,E];
+    Canvas.Font.Color  := LOG_COLORS[true,E];
+    {$ifdef FPC}
+    Canvas.FillRect(Rect);
+    BRect.Left := Rect.Left + 1;
+    BRect.Top := Rect.Top;
+    BRect.Bottom := Rect.Bottom;
+    BRect.Right := Rect.Left + (Rect.Bottom - Rect.Top) - 2;
+    if Checked[Index] then
+       aTheme := ThemeServices.GetElementDetails(tbCheckBoxCheckedNormal) else
+       aTheme := ThemeServices.GetElementDetails(tbCheckBoxUncheckedNormal);
+    ThemeServices.DrawElement(Canvas.Handle, aTheme, BRect);
+    Rect.Left := BRect.Right;
+    Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,FEventCaption[E]);
+    {$else}
+    Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,FEventCaption[E]);
+    {$endif}
   end;
 end;
 
@@ -455,13 +507,21 @@ begin
              txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
         3: txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
         end;
+        {$ifdef FPC}
+        FillRect(Rect);
+        {$endif}
         TextRect(Rect,Rect.Left+4,Rect.Top,txt);
       end else begin
         Brush.Color := clLtGray;
         FillRect(Rect);
       end;
     end else
+    begin
+      {$ifdef FPC}
+      FillRect(Rect);
+      {$endif}
       TextRect(Rect,Rect.Left+4,Rect.Top,FLog.Strings[ARow]);
+    end;
 end;
 
 procedure TMainLogView.ListDrawItem(Control: TWinControl; Index: Integer;
@@ -677,15 +737,14 @@ end;
 
 procedure TMainLogView.ListDblClick(Sender: TObject);
 var i, Level: integer;
-    inThreadMode: boolean;
     currentThreadID: Word;
 begin
   i := List.Row;
-  if (FLog<>Nil) and (cardinal(i)<=cardinal(FLogSelectedCount)) then begin
+  if (FLog<>nil) and (cardinal(i)<=cardinal(FLogSelectedCount)) then begin
     Level := 0;
-    inThreadMode := FLog.EventThread<>nil;
-    if inThreadMode then
-      currentThreadID := FLog.EventThread[FLogSelected[i]];
+    if FLog.EventThread<>nil then
+      currentThreadID := FLog.EventThread[FLogSelected[i]] else
+      currentThreadID := 0;
     case FLog.EventLevel[FLogSelected[i]] of
       sllEnter: // retrieve corresponding Leave event
         repeat
@@ -694,15 +753,15 @@ begin
             exit;
           case FLog.EventLevel[FLogSelected[i]] of
           sllEnter:
-          if (inThreadMode) then begin
-            if FLog.EventThread[FLogSelected[i]] = currentThreadID then
-              Inc(Level);
-          end else Inc(Level);
-          sllLeave: if (inThreadMode and (FLog.EventThread[FLogSelected[i]] = currentThreadID)) or not inThreadMode then
-            if Level=0 then begin
-              SetListItem(i);
-              exit;
-            end else Dec(Level);
+            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
+              inc(Level);
+          sllLeave:
+            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
+              if Level=0 then begin
+                SetListItem(i);
+                exit;
+              end else
+                dec(Level);
           end;
         until false;
       sllLeave: // retrieve corresponding Enter event
@@ -711,15 +770,16 @@ begin
           if i<0 then
             exit;
           case FLog.EventLevel[FLogSelected[i]] of
-          sllLeave: if (inThreadMode) then begin
-            if FLog.EventThread[FLogSelected[i]] = currentThreadID then
-              Inc(Level);
-          end else Inc(Level);
-          sllEnter: if (inThreadMode and (FLog.EventThread[FLogSelected[i]] = currentThreadID)) or not inThreadMode then
-            if Level=0 then begin
-              SetListItem(i);
-              exit;
-            end else Dec(Level);
+          sllLeave:
+            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
+              inc(Level);
+          sllEnter:
+            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
+              if Level=0 then begin
+                SetListItem(i);
+                exit;
+              end else
+                dec(Level);
           end;
         until false;
     end;
@@ -942,8 +1002,10 @@ end;
 
 procedure TMainLogView.ImageLogoClick(Sender: TObject);
 begin
-{$WARNINGS OFF}
+{$ifndef FPC}
+  {$WARNINGS OFF}
   if DebugHook=0 then
+{$endif}
     ShellExecute(0,'open','http://synopse.info',nil,nil,SW_SHOWNORMAL);
 {$WARNINGS ON}
 end;
@@ -997,8 +1059,14 @@ end;
 
 procedure TMainLogView.FilesClick(Sender: TObject);
 begin
+  {$ifdef FPC}
+  if (FLog=nil) or (FLog.FileName<>Files.Root) then
+     if Files.Selected<>nil then
+       LogFileName := Files.GetPathFromItem(Files.Selected);
+  {$else}
   if (FLog=nil) or (FLog.FileName<>Files.FileName) then
     LogFileName := Files.FileName;
+  {$endif}
 end;
 
 procedure TMainLogView.ListMenuCopyClick(Sender: TObject);
@@ -1147,4 +1215,4 @@ begin
     RenameFile('temp~.log',dlgSaveList.FileName);
 end;
 
-end.
+end.
