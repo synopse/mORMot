@@ -4314,11 +4314,11 @@ end;
 function SocketErrorMessage(Error: integer): string;
 begin
   case Error of
-  ETIMEDOUT:    result := 'WSAETIMEDOUT';
-  ENETDOWN:     result := 'WSAENETDOWN';
-  EWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
-  ECONNABORTED: result := 'WSAECONNABORTED';
-  ECONNRESET:   result := 'WSAECONNRESET';
+  WSAETIMEDOUT:    result := 'WSAETIMEDOUT';
+  WSAENETDOWN:     result := 'WSAENETDOWN';
+  WSAEWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
+  WSAECONNABORTED: result := 'WSAECONNABORTED';
+  WSAECONNRESET:   result := 'WSAECONNRESET';
   else result := '';
   end;
   result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
@@ -7556,4 +7556,4 @@ finalization
     FreeLibrary(curl.Module);
   end;
   {$endif USELIBCURL}
-end.
+end.
