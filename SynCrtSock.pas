@@ -3744,8 +3744,7 @@ begin
     except
       on E: Exception do begin
         ErrorMsg := E.ClassName+': '+E.Message;
-        Code := STATUS_BADREQUEST;
-        Context.OutContent := '';
+        Code := STATUS_SERVERERROR;
       end;
     end;
     if Terminated then
@@ -3767,7 +3766,6 @@ begin
         on E: Exception do begin // error reading or sending file
          ErrorMsg := E.ClassName+': '+E.Message;
          Code := STATUS_NOTFOUND;
-         Context.OutContent := '';
         end;
       end;
     if Context.OutContentType=HTTP_RESP_NORESPONSE then
@@ -3775,12 +3773,13 @@ begin
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
-    if not(Code in [STATUS_SUCCESS,STATUS_CREATED]) and (Context.OutContent='') then begin
+    if ErrorMsg<>'' then begin
       Context.OutCustomHeaders := '';
-      Context.OutContentType := 'text/html'; // create message to display
-      Context.OutContent := SockString(format(
-        '<body style="font-family:verdana"><h1>%s Server Error %d</h1><hr><p>%s<p>%s',
-        [ClassName,Code,StatusCodeToReason(Code),ErrorMsg]));
+      Context.OutContentType := 'text/html; charset=utf-8'; // create message to display
+      Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
+        format('<body style="font-family:verdana">'#13+
+        '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
+        [ClassName,Code,Code,StatusCodeToReason(Code),HtmlEncode(ErrorMsg),fServerName]));
     end;
     // 1. send HTTP status command
     if ClientSock.TCPPrefix<>'' then
@@ -7466,7 +7465,7 @@ begin
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
   if res<>crOK then
-    result := STATUS_SERVERERROR else begin
+    result := STATUS_NOTFOUND else begin
     curl.easy_getinfo(fHandle,ciResponseCode,result);
     Header := Trim(fOut.Header);
     if IdemPChar(pointer(Header),'HTTP/') then begin
@@ -7556,4 +7555,4 @@ finalization
     FreeLibrary(curl.Module);
   end;
   {$endif USELIBCURL}
-end.
+end.
