@@ -10646,6 +10646,10 @@ type
 
   /// one recognized WHERE expression for TSynTableStatement
   TSynTableStatementWhere = record
+    /// any '(' before the actual expression
+    ParenthesisBefore: RawUTF8;
+    /// any ')' after the actual expression
+    ParenthesisAfter: RawUTF8;
     /// expressions are evaluated as AND unless this field is set to TRUE
     JoinedOR: boolean;
     /// if this expression is preceded by a NOT modifier
@@ -10695,6 +10699,7 @@ type
     fWhere: TSynTableStatementWhereDynArray;
     fOrderByField: TSQLFieldIndexDynArray;
     fGroupByField: TSQLFieldIndexDynArray;
+    fWhereHasParenthesis: boolean;
     fOrderByDesc: boolean;
     fLimit: integer;
     fOffset: integer;
@@ -10727,6 +10732,8 @@ type
     property TableName: RawUTF8 read fTableName;
     /// the WHERE clause of this SQL statement
     property Where: TSynTableStatementWhereDynArray read fWhere;
+    /// if the WHERE clause contains any ( ) parenthesis expression
+    property WhereHasParenthesis: boolean read fWhereHasParenthesis;
     /// recognize an GROUP BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
     property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
@@ -48931,7 +48938,7 @@ end;
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
   GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
   FieldProp: TSynTableFieldProperties=nil);
-var Prop: RawUTF8;
+var Prop, whereBefore: RawUTF8;
     P, B: PUTF8Char;
     ndx,err,len,selectCount,whereCount: integer;
     whereWithOR,whereNotClause: boolean;
@@ -48993,6 +49000,7 @@ begin
   result := true;
 end;
 function GetWhereValue(var Where: TSynTableStatementWhere): boolean;
+var B: PUTF8Char;
 begin
   result := false;
   P := GotoNextNotSpace(P);
@@ -49040,11 +49048,21 @@ begin
     inc(P,2); // ignore :(...): parameter
   Where.ValueSQLLen := P-Where.ValueSQL;
   P := GotoNextNotSpace(P);
+  if P^=')' then begin
+    B := P;
+    repeat
+      inc(P);
+    until not (P^ in [#1..' ',')']);
+    while P[-1]=' ' do dec(P); // trim right space
+    SetString(Where.ParenthesisAfter,B,P-B);
+    P := GotoNextNotSpace(P);
+  end;
   result := true;
 end;
 function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
 begin
   result := false;
+  Where.ParenthesisBefore := whereBefore;
   Where.JoinedOR := whereWithOR;
   Where.NotClause := whereNotClause;
   Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
@@ -49173,10 +49191,20 @@ begin
   whereCount := 0;
   whereWithOR := false;
   whereNotClause := false;
+  whereBefore := '';
   GetNextFieldProp(P,Prop);
   if IdemPropNameU(Prop,'WHERE') then begin
     repeat
       B := P;
+      if P^='(' then begin
+        fWhereHasParenthesis := true;
+        repeat
+          inc(P);
+        until not (P^ in [#1..' ','(']);
+        while P[-1]=' ' do dec(P); // trim right space
+        SetString(whereBefore,B,P-B);
+        B := P;
+      end;
       ndx := GetPropIndex;
       if ndx<0 then begin
         if IdemPropNameU(Prop,'NOT') then begin
@@ -49187,7 +49215,9 @@ begin
           inc(P);
           SetLength(fWhere,whereCount+1);
           with fWhere[whereCount] do begin
+            ParenthesisBefore := whereBefore;
             JoinedOR := whereWithOR;
+            NotClause := whereNotClause;
             FunctionName := UpperCase(Prop);
             // Byte/Word/Integer/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
             len := length(Prop);
@@ -49223,6 +49253,7 @@ begin
         whereWithOR := false else
         goto lim2;
       whereNotClause := false;
+      whereBefore := '';
     until false;
     // 4. get optional LIMIT/OFFSET/ORDER clause
 lim:P := GotoNextNotSpace(P);
@@ -51214,4 +51245,4 @@ finalization
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
-end.
+end.

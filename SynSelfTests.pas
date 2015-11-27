@@ -9601,7 +9601,7 @@ begin
       TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
       Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
       Check(AdaptSQLForEngineList(SQL)=AdaptShouldWork);
-      Check(IdemPropNameU(SQL,SQLExpected)or not AdaptShouldWork,
+      Check(SameTextU(SQL,SQLExpected)or not AdaptShouldWork,
         SQLExpected+#13#10+SQL);
     finally
       Free;
@@ -9643,6 +9643,14 @@ begin
         'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
   Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
         'select id,firstname from SampleRecord where id=2 and not lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
+        'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
+        'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
+        'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
+        'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
   Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
         'select id,firstname from SampleRecord where id=2 order by ID');
   Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',

@@ -953,7 +953,8 @@ begin
   if (n>1) and Stmt.Where[1].JoinedOR then begin
     for w := 2 to n-1 do
     if not Stmt.Where[w].JoinedOR then begin
-      InternalLog('%.EngineList: Unhandled mixed AND/OR for "%"',[self,SQL],sllError);
+      InternalLog('%.EngineList: mixed AND/OR not supported for [%]',
+        [ClassType,SQL],sllError);
       exit;
     end;
     B.BSONDocumentBegin('$or',betArray); // e.g. {$or:[{quantity:{$lt:20}},{price:10}]}
@@ -966,8 +967,8 @@ begin
     with Stmt.Where[w] do begin
       FieldName := extFieldName(Field-1);
       if not B.BSONWriteQueryOperator(FieldName,NotClause,Operator,ValueVariant) then begin
-        InternalLog('%.EngineList: Unhandled operator % for field "%" in "%"',[
-          self,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
+        InternalLog('%.EngineList: operator % not supported for field "%" in [%]',[
+          ClassType,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
           FieldName,SQL],sllError);
         exit;
       end;
@@ -985,12 +986,16 @@ var B: TBSONWriter;
 begin // here we compute a BSON query, since it is the fastest
   result := false;
   if Stmt.SQLStatement='' then begin
-    InternalLog('%.EngineList: Invalid SQL statement "%"',[self,SQL],sllError);
+    InternalLog('%.EngineList: Invalid SQL statement [%]',[ClassType,SQL],sllError);
     exit;
   end;
   if (Stmt.Where=nil) and (Stmt.OrderByField=nil) then begin // no WHERE clause
     result := true;
     SetVariantNull(Query); // void query -> returns all rows
+    exit;
+  end;
+  if Stmt.WhereHasParenthesis then begin
+    InternalLog('%.EngineList: parenthesis not supported in [%]',[ClassType,SQL],sllError);
     exit;
   end;
   B := TBSONWriter.Create(TRawByteStringStream);
@@ -1037,7 +1042,8 @@ begin
   for i := 0 to high(Stmt.Select) do
     if IdemPropNameU(Stmt.Select[i].FunctionName,'distinct') then
       if distinct>=0 then begin
-        InternalLog('%.EngineList: distinct() only allowed once in "%"',[self,SQL],sllError);
+        InternalLog('%.EngineList: distinct() only allowed once in [%]',
+          [ClassType,SQL],sllError);
         exit;
       end else begin
       distinct := Stmt.Select[i].Field;
@@ -1054,8 +1060,8 @@ begin
     if distinct>=0 then begin
       for i := 0 to high(Stmt.GroupByField) do
         if Stmt.GroupByField[i]<>distinct then begin
-          InternalLog('%.EngineList: Distinct(%) expected GROUP BY % in "%"',
-            [self,distinctName,distinctName,SQL],sllError);
+          InternalLog('%.EngineList: Distinct(%) expected GROUP BY % in [%]',
+            [ClassType,distinctName,distinctName,SQL],sllError);
           exit;
         end;
       B.BSONWrite('_id','$'+distinctName);
@@ -1075,8 +1081,8 @@ begin
         continue;
       func := TFunc(FindRawUTF8(['max','min','avg','sum','count'],FunctionName,false));
       if ord(func)<0 then begin
-        InternalLog('%.EngineList: unexpected function %() in "%"',
-          [self,FunctionName,SQL],sllError);
+        InternalLog('%.EngineList: unexpected function %() in [%]',
+          [ClassType,FunctionName,SQL],sllError);
         exit;
       end;
       B.BSONDocumentBegin('f'+UInt32ToUTF8(i));
@@ -1088,8 +1094,8 @@ begin
     B.BSONDocumentEnd;
     if Stmt.OrderByField<>nil then begin
       if (length(Stmt.OrderByField)<>1) or (Stmt.OrderByField[0]<>distinct) then begin
-        InternalLog('%.EngineList: ORDER BY should match Distinct(%) in "%"',
-          [self,distinctName,SQL],sllError);
+        InternalLog('%.EngineList: ORDER BY should match Distinct(%) in [%]',
+          [ClassType,distinctName,SQL],sllError);
         exit;
       end;
       B.BSONDocumentBeginInArray('$sort');

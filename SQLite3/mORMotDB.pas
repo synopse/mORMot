@@ -983,10 +983,14 @@ begin
               W.AddShort(' and ');
           if NotClause then
             W.AddShort('not ');
+          if ParenthesisBefore<>'' then
+            W.AddString(ParenthesisBefore);
           W.AddString(extFieldName(Field-1));
           W.AddString(DB_SQLOPERATOR[Operator]);
           if not (Operator in [opIsNull, opIsNotNull]) then
             W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
+          if ParenthesisAfter<>'' then
+            W.AddString(ParenthesisAfter);
         end;
       end;
       if Stmt.GroupByField<>nil then begin
