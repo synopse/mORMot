@@ -1310,12 +1310,14 @@ end;
 
 function TMVCApplication.GetViewInfo(MethodIndex: integer): variant;
 begin
-  result := _ObjFast(['pageName',fFactory.Methods[MethodIndex].URI]);
+  if MethodIndex>=0 then
+    result := _ObjFast(['pageName',fFactory.Methods[MethodIndex].URI]) else
+    result := _ObjFast([]);
 end;
 
 function TMVCApplication.GetMvcInfo: variant;
 begin
-  Result := _ObjFast(['name',fFactory.InterfaceTypeInfo^.Name,
+  result := _ObjFast(['name',fFactory.InterfaceTypeInfo^.Name,
     'mORMot',SYNOPSE_FRAMEWORK_VERSION,'root',RestModel.Model.Root,
     'methods',ContextFromMethods(fFactory)]);
 end;
