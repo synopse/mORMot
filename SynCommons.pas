@@ -17214,6 +17214,14 @@ begin
     VariantToUTF8(Variant(tmp),result,wasString) else
   if VType=varVariant or varByRef then // complex varByRef
     VariantToUTF8(PVariant(VPointer)^,result,wasString) else
+  if VType=varByRef or varString then begin
+    wasString := true;
+    {$ifdef UNICODE}
+      AnyAnsiToUTF8(PRawByteString(VString)^,result);
+    {$else}
+      result := PRawUTF8(VString)^;
+    {$endif}
+  end else
   if VType=varByRef or varOleStr then begin
     wasString := true;
     RawUnicodeToUtf8(pointer(PWideString(VAny)^),length(PWideString(VAny)^),result);
@@ -34381,8 +34389,8 @@ begin
     if ndx>=0 then
       raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   end;
-  SetVariantByValue(aValue,VValue[InternalAdd(aName)]);
-  result := VCount-1;
+  result := InternalAdd(aName); // FPC does not allow VValue[InternalAdd(aName)]
+  SetVariantByValue(aValue,VValue[result]);
 end;
 
 function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer;
@@ -34410,15 +34418,17 @@ end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
 begin
-  SetVariantByValue(aValue,VValue[InternalAdd('')]);
-  result := VCount-1;
+  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  SetVariantByValue(aValue,VValue[result]);
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
-var ndx: integer;
+var ndx,added: integer;
 begin
-  for ndx := 0 to high(aValue) do
-    VarRecToVariant(aValue[ndx],VValue[InternalAdd('')]);
+  for ndx := 0 to high(aValue) do begin
+    added := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+    VarRecToVariant(aValue[ndx],VValue[added]);
+  end;
 end;
 
 function TDocVariantData.SearchItemByProp(const aPropName,aPropValue: RawUTF8;
@@ -35407,7 +35417,8 @@ var ndx: Integer;
     Data: TDocVariantData absolute V;
 begin
   if (Data.Kind=dvArray) and (PWord(Name)^=ord('_')) then begin
-    SetVariantByValue(variant(Value),Data.VValue[Data.InternalAdd('')]);
+    ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+    SetVariantByValue(variant(Value),Data.VValue[ndx]);
     exit;
   end;
   SetString(aName,Name,StrLen(PUTF8Char(Name)));
@@ -35452,7 +35463,8 @@ begin
       exit;
     end;
   1:if SameText(Name,'Add') then begin
-      SetVariantByValue(variant(Arguments[0]),Data.VValue[Data.InternalAdd('')]);
+      ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+      SetVariantByValue(variant(Arguments[0]),Data.VValue[ndx]);
       exit;
     end else
     if SameText(Name,'Delete') then begin
@@ -35489,7 +35501,8 @@ begin
     end;
   2:if SameText(Name,'Add') then begin
       SetTempFromFirstArgument;
-      SetVariantByValue(variant(Arguments[1]),Data.VValue[Data.InternalAdd(temp)]);
+      ndx := Data.InternalAdd(temp); // FPC does not allow VValue[InternalAdd(aName)]
+      SetVariantByValue(variant(Arguments[1]),Data.VValue[ndx]);
       exit;
     end;
   end;
@@ -51201,4 +51214,4 @@ finalization
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
-end.
+end.
