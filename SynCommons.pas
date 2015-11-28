@@ -3364,6 +3364,18 @@ function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*'
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
+type
+  TFindFilesDynArray = array of record
+    Name: TFileName;
+    Attr: Integer;
+    Size: Int64;
+    TimeStamp: TDateTime;
+  end;
+
+/// search for matching file names
+// - just a wrapper around FindFirst/FindNext
+function FindFiles(const Directory,Mask: TFileName): TFindFilesDynArray;
+
 {$ifdef DELPHI5OROLDER}
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
@@ -22420,6 +22432,42 @@ begin
   end;
   if (not DeleteOnlyFilesNotDirectory) and (not RemoveDir(Dir)) then
     result := false;
+end;
+
+function FindFiles(const Directory,Mask: TFileName): TFindFilesDynArray;
+var F: TSearchRec;
+    n: integer;
+    Dir: TFileName;
+begin
+  result := nil;
+  n := 0;
+  Dir := IncludeTrailingPathDelimiter(Directory);
+  if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
+    repeat
+      {$ifndef DELPHI5OROLDER}
+      {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+      {$endif}
+      if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
+         (F.Name[1]<>'.') then begin
+        SetLength(result,n+1);
+        with result[n] do begin
+          Name := Dir+F.Name;
+          Size := F.Size; // may be limited to 32 bits on older Delphi
+          Attr := F.Attr;
+          {$ifdef ISDELPHIXE2}
+          TimeStamp := F.TimeStamp;
+          {$else}
+          TimeStamp := FileDateToDateTime(F.Time);
+          {$endif}
+        end;
+        inc(n);
+      end;
+      {$ifndef DELPHI5OROLDER}
+      {$WARN SYMBOL_DEPRECATED ON}
+      {$endif}
+    until FindNext(F)<>0;
+    FindClose(F);
+  end;
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
