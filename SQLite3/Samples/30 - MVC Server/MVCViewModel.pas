@@ -163,8 +163,9 @@ var info: TSQLBlogInfo;
     n,t: integer;
     articles,tags,comments: TIDDynArray;
     tmp: RawUTF8;
+    auto: IAutoFree; // mandatory only for FPC
 begin
-  TSQLRecord.AutoFree([ // avoid several try..finally
+  auto := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   if not RestModel.Retrieve('',info) then begin // retrieve first item
     info.Title := 'mORMot BLOG';
@@ -225,12 +226,13 @@ function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
   ContentToFillAuthor: TSQLContent): TID;
 var SessionInfo: TCookieData;
     author: TSQLAuthor;
+    auto: IAutoFree; // mandatory only for FPC
 begin
   result := 0;
   if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))=0) or
      not(Right in SessionInfo.AuthorRights) then
     exit;
-  TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID);
+  auto := TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID);
   if Right in author.Rights then begin
     result := SessionInfo.AuthorID;
     if ContentToFillAuthor<>nil then begin
@@ -387,8 +389,9 @@ function TBlogApplication.ArticleComment(ID: TID;
 var AuthorID: TID;
     comm: TSQLComment;
     error: string;
+    auto: IAutoFree; // mandatory only for FPC
 begin
-  TSQLComment.AutoFree(comm);
+  auto := TSQLComment.AutoFree(comm);
   AuthorID := GetLoggedAuthorID(canComment,comm);
   if AuthorID=0 then begin
     GotoError(result,sErrorNeedValidAuthorSession);
@@ -439,8 +442,9 @@ function TBlogApplication.ArticleCommit(ID: TID; const Title,Content: RawUTF8): 
 var AuthorID: TID;
     Article: TSQLArticle;
     error: string;
+    auto: IAutoFree; // mandatory only for FPC
 begin
-  TSQLArticle.AutoFree(Article,RestModel,ID);
+  auto := TSQLArticle.AutoFree(Article,RestModel,ID);
   AuthorID := GetLoggedAuthorID(canPost,Article);
   if AuthorID=0 then begin
     GotoError(result,sErrorNeedValidAuthorSession);

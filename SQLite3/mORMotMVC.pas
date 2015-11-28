@@ -1029,13 +1029,14 @@ end;
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
   out aContentType: RawUTF8): TSynMustache;
 var age: TDateTime;
+    auto: IUnknown; // mandatory only for FPC
 begin
   if cardinal(methodIndex)>=fFactory.MethodsCount then
     raise EMVCException.CreateUTF8('%.Render(methodIndex=%)',[self,methodIndex]);
   with fViews[methodIndex] do begin
     if MethodName='' then
       raise EMVCException.CreateUTF8('%.Render(''%''): not a View',[self,MethodName]);
-    Locker.ProtectMethod;
+    auto := Locker.ProtectMethod;
     if (Mustache=nil) and (FileName='') then
       raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
         [self,MethodName,SearchPattern]);
@@ -1510,8 +1511,9 @@ function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
   aPolicy: TMVCRendererCachePolicy; aTimeOutSeconds: cardinal): TMVCRunWithViews;
 const MAX_CACHE_TIMEOUT = 60*15; // 15 minutes
 var aMethodIndex: integer;
+    auto: IUnknown; // mandatory only for FPC
 begin
-  fCacheLocker.ProtectMethod;
+  auto := fCacheLocker.ProtectMethod;
   aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
   if fCache=nil then
     SetLength(fCache,fApplication.fFactory.MethodsCount);
@@ -1532,9 +1534,10 @@ begin
 end;
 
 procedure TMVCRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
+var auto: IUnknown; // mandatory only for FPC
 begin
   inherited;
-  fCacheLocker.ProtectMethod;
+  auto := fCacheLocker.ProtectMethod;
   if cardinal(aMethodIndex)<cardinal(Length(fCache)) then
   with fCache[aMethodIndex] do
     case Policy of

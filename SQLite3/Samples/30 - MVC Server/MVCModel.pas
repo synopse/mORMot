@@ -238,12 +238,13 @@ begin
 end;
 
 procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
+var auto: IUnknown; // mandatory only for FPC
 begin
   if aTagID>=length(aTags.Lookup) then
     exit;
   if not AddInteger(fTags,aTagID,true) then
     exit; // already there
-  aTags.Lock.ProtectMethod;
+  auto := aTags.Lock.ProtectMethod;
   inc(aTags.Lookup[aTagID-1].Occurence);
   aTags.SortTagsByIdent(fTags);
 end;
@@ -260,8 +261,9 @@ end;
 
 function TSQLTags.GetAsDocVariantArray: Variant;
 var i,ndx: Integer;
+    auto: IUnknown; // mandatory only for FPC
 begin
-  Lock.ProtectMethod;
+  auto := Lock.ProtectMethod;
   TDocVariant.NewFast(result);
   for i := 0 to length(OrderID)-1 do begin
     ndx := OrderID[i]-1;
@@ -275,12 +277,13 @@ end;
 procedure TSQLTags.Init(aRest: TSQLRest);
 var tag: TSQLTag;
     ID,count,maxID: integer;
+    auto1,auto2: IUnknown; // mandatory only for FPC
 begin
   Finalize(Lookup);
   if Lock=nil then
     Lock := TAutoLocker.Create;
-  Lock.ProtectMethod;
-  TAutoFree.One(
+  auto1 := Lock.ProtectMethod;
+  auto2 := TAutoFree.One(
     tag,TSQLTag.CreateAndFillPrepare(aRest,'order by Ident','RowID,Ident,Occurence'));
   count := tag.FillTable.RowCount;
   if count=0 then
@@ -307,9 +310,10 @@ end;
 procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
 var tag: TSQLTag;
     batch: TSQLRestBatch;
+    auto1,auto2: IUnknown; // mandatory only for FPC
 begin
-  Lock.ProtectMethod;
-  TAutoFree.Several([
+  auto1 := Lock.ProtectMethod;
+  auto2 := TAutoFree.Several([
     @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
     @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
   while tag.FillOne do begin
@@ -517,16 +521,17 @@ begin
     Free;
   end;
 end;
+var auto1,auto2: IAutoFree; // mandatory only for FPC
 begin
   if aStaticFolder<>'' then begin
     PublicFolder := IncludeTrailingPathDelimiter(aStaticFolder)+'public'+PathDelim;
     EnsureDirectoryExists(PublicFolder);
   end;
-  TAutoFree.Several([
+  auto1 := TAutoFree.Several([
     @data,TDotClearTable.Parse(aFlatFile),
     @urls,TRawUTF8ListHashed.Create,
     @batch,TSQLRestBatch.Create(Rest,TSQLTag,5000)]);
-  TSQLRecord.AutoFree([ // avoid several try..finally
+  auto2 := TSQLRecord.AutoFree([ // avoid several try..finally
     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment, @tag,TSQLTag]);
   T := data.GetObjectByName('setting') as TDotClearTable;
   Rest.Retrieve('',info);

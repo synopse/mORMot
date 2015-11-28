@@ -917,7 +917,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
     exit;
   templateFound := -1;
   for i := 0 to high(Path) do
-    if FindFirst(Path[i]+'\*.mustache',faAnyFile,SR)=0 then begin
+    if FindFirst(Path[i]+PathDelim+'*.mustache',faAnyFile,SR)=0 then begin
       templateFound := i;
       break;
     end;
@@ -985,7 +985,8 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   end else // download as file
     head := HEADER_CONTENT_TYPE+'application/'+LowerCase(templateExt);
   templateName := templateName+'.'+templateExt+'.mustache';
-  template := AnyTextFileToRawUTF8(Path[templateFound]+UTF8ToString('\'+templateName),true);
+  template := AnyTextFileToRawUTF8(
+    Path[templateFound]+PathDelim+UTF8ToString(templateName),true);
   if template='' then begin
     Ctxt.Error(templateName,HTML_NOTFOUND);
     exit;
@@ -1080,7 +1081,7 @@ begin
     exit;
   if DestFileName='' then
     DestFileName := 'mORMotServer.pas' else
-    if DestFileName[1]='\' then
+    if DestFileName[1]=PathDelim then
       DestFileName := ExtractFilePath(TemplateName)+DestFileName;
   FileFromString(WrapperFromModel(Server,AnyTextFileToRawUTF8(TemplateName,true),
     StringToUTF8(ExtractFileName(DestFileName)),0),DestFileName);
@@ -1097,7 +1098,7 @@ begin
     exit;
   if DestFileName='' then
     DestFileName := 'mORMotInterfaces.pas' else
-    if DestFileName[1]='\' then
+    if DestFileName[1]=PathDelim then
       DestFileName := ExtractFilePath(TemplateName)+DestFileName;
   with TWrapperContext.CreateFromUsedInterfaces do
   try
