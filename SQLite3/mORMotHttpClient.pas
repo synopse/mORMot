@@ -705,6 +705,23 @@ begin
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTML_SUCCESS;
 end;
 
+function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
+var params: TSQLRestURIParams;
+begin
+  if (Ctxt=nil) or
+     ((Ctxt.InContentType<>'') and
+      not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE)) then begin
+    result := HTML_BADREQUEST;
+    exit;
+  end;
+  params.Init(Ctxt.URL,Ctxt.Method,Ctxt.InHeaders,Ctxt.InContent);
+  InternalNotificationMethodExecute(params);
+  Ctxt.OutContent := params.OutBody;
+  Ctxt.OutCustomHeaders := params.OutHead;
+  Ctxt.OutContentType := params.OutBodyType;
+  result := params.OutStatus;
+end;
+
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket=nil then
@@ -744,96 +761,6 @@ begin
       Log(sllWarning,'"%" against %',[result,sockets],self) else
       Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
-end;
-
-function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
-var i,methodIndex,fakeCallID: integer;
-    url,root,interfmethod,interf,id,method,head,frames: RawUTF8;
-    instance: pointer;
-    factory: TInterfaceFactory;
-    WR: TTextWriter;
-    ok: Boolean;
-
-  procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
-  begin
-    ok := InternalNotificationMethodExecute(instance,factory,methodIndex,res,par,head,result);
-  end;
-  
-begin
-  result := HTML_BADREQUEST;
-  if (Ctxt=nil) or
-     ((Ctxt.InContentType<>'') and
-      not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE)) then
-    exit;
-  url := Ctxt.URL;
-  if url='' then
-    exit;
-  if url[1]='/' then
-    system.delete(url,1,1);
-  Split(Split(url,'/',root),'/',interfmethod,id); // 'root/BidirCallback.AsynchEvent/1'
-  if not IdemPropNameU(root,Model.Root) then
-    exit;
-  fakeCallID := GetInteger(pointer(id));
-  if fakeCallID<=0 then
-    exit;
-  fFakeCallbacks.Safe.Lock;
-  try
-    i := fFakeCallbacks.FindIndex(fakeCallID);
-    if i<0 then
-      exit;
-    if interfmethod='_free_' then begin
-      fFakeCallbacks.List[i].ReleasedFromServer := true;
-      result := HTML_SUCCESS;
-      exit;
-    end;
-    instance := fFakeCallbacks.List[i].Instance;
-    factory := fFakeCallbacks.List[i].Factory;
-  finally
-    fFakeCallbacks.Safe.UnLock;
-  end;
-  if instance=nil then
-    exit;
-  if (Ctxt.InHeaders<>'') and
-     (factory.MethodIndexCurrentFrameCallback>=0) then begin
-    frames := FindIniNameValue(pointer(Ctxt.InHeaders),'SEC-WEBSOCKET-FRAME: ');
-  end;
-  split(interfmethod,'.',interf,method);
-  methodIndex := factory.FindMethodIndex(method);
-  if methodIndex<0 then
-    exit;
-  if IdemPropNameU(interfmethod,factory.Methods[methodIndex].InterfaceDotMethodName) then
-  try
-    WR := TJSONSerializer.CreateOwnedStream;
-    try
-      WR.AddShort('{"result":[');
-      if frames='[0]' then // call before the first method of the jumbo frame
-        Call(factory.MethodIndexCurrentFrameCallback,frames,nil);
-      Call(methodIndex,Ctxt.InContent,WR);
-      if ok then begin
-        if head='' then begin
-          WR.Add(']','}');
-          result := HTML_SUCCESS;
-        end else begin
-          Ctxt.OutCustomHeaders := head;
-          Ctxt.OutContentType := FindIniNameValue(pointer(head),HEADER_CONTENT_TYPE_UPPER);
-        end;
-        if Ctxt.OutContentType='' then
-          Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-        Ctxt.OutContent := WR.Text;
-      end else
-        result := HTML_SERVERERROR;
-      if frames='[1]' then // call after the last method of the jumbo frame
-        Call(factory.MethodIndexCurrentFrameCallback,frames,nil);
-    finally
-      WR.Free;
-    end;
-  except
-    on E: Exception do begin
-      Ctxt.OutContent := ObjectToJSONDebug(E);
-      Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-      result := HTML_SERVERERROR;
-    end;
-  end;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsConnect(

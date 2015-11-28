@@ -844,7 +844,7 @@ begin
     end else
       result := HTML_BADREQUEST else
   if (Ctxt.Method='') or (OnlyJSONRequests and
-     not IdemPChar(pointer(Ctxt.InContentType),'APPLICATION/JSON')) then
+     not IdemPChar(pointer(Ctxt.InContentType),JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTML_BADREQUEST else
   if Ctxt.Method='OPTIONS' then begin
@@ -855,7 +855,7 @@ begin
     result := HTML_SUCCESS;
   end else begin
     // compute URI, handling any virtual host domain
-    FillcharFast(call,sizeof(call),0);
+    call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
     if Ctxt.UseSSL then
       include(call.LowLevelFlags,llfSSL);
@@ -900,6 +900,7 @@ begin
       // set output content
       result := call.OutStatus;
       Ctxt.OutContent := call.OutBody;
+      Ctxt.OutContentType := call.OutBodyType;
       P := pointer(call.OutHead);
       if IdemPChar(P,'CONTENT-TYPE: ') then begin
         // change mime type if modified in HTTP header (e.g. GET blob fields)

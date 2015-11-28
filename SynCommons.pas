@@ -1393,9 +1393,13 @@ const
   /// HTTP header for MIME content type used for plain JSON
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+JSON_CONTENT_TYPE;
 
+  /// MIME content type used for plain JSON, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
+  JSON_CONTENT_TYPE_UPPER = 'APPLICATION/JSON';
+
   /// HTTP header for MIME content type used for plain JSON, in upper case
   // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
-  JSON_CONTENT_TYPE_HEADER_UPPER = HEADER_CONTENT_TYPE_UPPER+'APPLICATION/JSON';
+  JSON_CONTENT_TYPE_HEADER_UPPER = HEADER_CONTENT_TYPE_UPPER+JSON_CONTENT_TYPE_UPPER;
 
   /// MIME content type used for plain UTF-8 text
   TEXT_CONTENT_TYPE = 'text/plain; charset=UTF-8';
@@ -28461,7 +28465,7 @@ end;
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
-    ['APPLICATION/JSON','TEXT/','APPLICATION/XML',
+    [JSON_CONTENT_TYPE_UPPER,'TEXT/','APPLICATION/XML',
      'APPLICATION/X-JAVASCRIPT','IMAGE/SVG+XML']);
 end;
 

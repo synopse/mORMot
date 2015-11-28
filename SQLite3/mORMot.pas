@@ -1905,7 +1905,7 @@ type
   // - this is the main process for marshalling JSON into SQL statements
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
   // InternalBatchStop methods
-  TJSONObjectDecoder = {$ifdef UNICODE}record{$else}object{$endif}
+  TJSONObjectDecoder = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// contains the decoded field names
     FieldNames: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// contains the decoded field values
@@ -5270,7 +5270,7 @@ type
 
   /// store all parameters for a TSQLRestServer.URI() method call
   // - see TSQLRestClient to check how data is expected in our RESTful format
-  TSQLRestURIParams = packed record
+  TSQLRestURIParams = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// input parameter containing the caller URI
     Url: RawUTF8;
     /// input parameter containing the caller method
@@ -5292,6 +5292,7 @@ type
     // e.g. TEXT_CONTENT_TYPE_HEADER or HTML_CONTENT_TYPE_HEADER: if not set,
     // the default JSON_CONTENT_TYPE_HEADER will be returned to the client,
     // meaning that the message is JSON
+    // - you can use OutBodyType() function to retrieve the stored content-type
     OutHead: RawUTF8;
     /// output parameter to be set to the response message body
     OutBody: RawUTF8;
@@ -5316,6 +5317,13 @@ type
     LowLevelConnectionID: Int64;
     /// low-level properties of the current protocol context
     LowLevelFlags: TSQLRestURIParamsLowLevelFlags;
+    /// initialize the non RawUTF8 values
+    procedure Init; overload;
+    /// initialize the input values
+    procedure Init(const aURI,aMethod,aInHead,aInBody: RawUTF8); overload;
+    /// retrieve the "Content-Type" value from OutHead
+    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
+    function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
   end;
 
   /// used to map set of parameters for a TSQLRestServer.URI() method
@@ -5412,10 +5420,10 @@ type
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
-  {$ifdef UNICODE}
-  TSQLAccessRights = record
-  {$else}
+  {$ifndef ISDELPHI2010}
   TSQLAccessRights = object
+  {$else}
+  TSQLAccessRights = record
   {$endif}
     /// set of allowed actions on the server side
     AllowRemoteExecute: TSQLAllowRemoteExecute;
@@ -8460,10 +8468,10 @@ type
   // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
-  {$ifdef UNICODE}
-  TSQLRecordPropertiesMapping = record
-  {$else}
+  {$ifndef ISDELPHI2010}
   TSQLRecordPropertiesMapping = object
+  {$else}
+  TSQLRecordPropertiesMapping = record
   {$endif}
   private
     /// storage of main read-only properties
@@ -9708,7 +9716,7 @@ type
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj) of object;
 
   /// describe an interface-based service provider method
-  TServiceMethod = {$ifndef UNICODE}object{$else}record{$endif}
+  TServiceMethod = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
     /// the method URI
     // - basicaly the method name as declared in Delphi code (e.g. 'Add' for
@@ -10583,7 +10591,7 @@ type
   end;
 
   /// define the rules for a given method as used internaly by TInterfaceStub
-  TInterfaceStubRules = {$ifdef UNICODE}record{$else}object{$endif}
+  TInterfaceStubRules = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// the mocking / stubing rules associated to this method
     Rules: array of TInterfaceStubRule;
     /// index in Rules[] of the default rule, i.e. the one with Params=''
@@ -10630,7 +10638,7 @@ type
   TInterfaceStubLogLayouts = set of TInterfaceStubLogLayout;
 
   /// used to keep track of one stubbed method call
-  TInterfaceStubLog = {$ifdef UNICODE}record{$else}object{$endif}
+  TInterfaceStubLog = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// call timestamp, in milliseconds
     // - is filled with GetTickCount64() API returned value
     TimeStamp64: Int64;
@@ -12062,7 +12070,7 @@ type
   TSQLRestCacheEntryValueDynArray = array of TSQLRestCacheEntryValue;
 
   /// for TSQLRestCache, stores a table settings and values
-  TSQLRestCacheEntry = {$ifndef UNICODE}object{$else}record{$endif}
+  TSQLRestCacheEntry = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
     /// TRUE if this table should use caching
     // - i.e. if was not set, or worth it for this table (e.g. in-memory table)
@@ -14633,10 +14641,10 @@ type
   /// used to access a TSQLRestServer from its TSQLRestServerURIString URI
   // - URI format is 'address:port/root', and may be transmitted as
   // TSQLRestServerURIString text instances
-  {$ifdef UNICODE}
-  TSQLRestServerURI = record
-  {$else}
+  {$ifndef ISDELPHI2010}
   TSQLRestServerURI = object
+  {$else}
+  TSQLRestServerURI = record
   {$endif}
   private
     function GetURI: TSQLRestServerURIString;
@@ -16586,6 +16594,21 @@ type
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
 
+  /// store information about registered interface callbacks
+  TSQLRestClientCallbackItem = record
+    /// the identifier of the callback, as sent to the server side
+    // - computed from TSQLRestClientURICallbacks.fCurrentID counter
+    ID: integer;
+    /// pointer typecast to the associated IInvokable variable
+    Instance: pointer;
+    //// information about the associated IInvokable
+    Factory: TInterfaceFactory;
+    /// set to TRUE if the instance was released from the server
+    ReleasedFromServer: boolean;
+  end;
+  /// points to information about registered interface callbacks
+  PSQLRestClientCallbackItem = ^TSQLRestClientCallbackItem;
+
   /// store the references to active interface callbacks on a REST Client
   TSQLRestClientCallbacks = class(TSynPersistentLocked)
   protected
@@ -16597,17 +16620,8 @@ type
     /// how many callbacks are registered
     Count: integer;
     /// list of registered interface callbacks
-    List: array of record
-      /// the identifier of the callback, as sent to the server side
-      // - computed from TSQLRestClientURICallbacks.fCurrentID counter
-      ID: integer;
-      /// pointer typecast to the associated IInvokable variable
-      Instance: pointer;
-      //// information about the associated IInvokable
-      Factory: TInterfaceFactory;
-      /// set to TRUE if the instance was released from the server
-      ReleasedFromServer: boolean;
-    end;
+    List: array of TSQLRestClientCallbackItem;
+    /// initialize the storage list
     constructor Create(aOwner: TSQLRestClientURI); reintroduce;
     /// register a callback event interface instance from a new computed ID
     function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
@@ -16617,8 +16631,16 @@ type
     // - note that the same IInvokable instance may be registered for several IDs
     function UnRegister(aInstance: pointer): boolean; overload;
     /// find the index of the ID in the internal list
-    // - warning: this method should be called within an Enter...Leave lock
+    // - warning: this method should be called within Safe.Lock/Safe.Unlock
     function FindIndex(aID: integer): integer;
+    /// find a matching callback
+    // - will call FindIndex(aItem.ID) within Safe.Lock/Safe.Unlock
+    // - returns TRUE if aItem.ID was found and aItem filled, FALSE otherwise
+    function FindEntry(var aItem: TSQLRestClientCallbackItem): boolean;
+    /// find a matching entry
+    // - will call FindIndex(aID) within Safe.Lock/Safe.Unlock
+    // - returns TRUE if aID was found and aInstance/aFactory set, FALSE otherwise
+    function FindAndRelease(aID: integer): boolean;
   end;
 
   /// a generic REpresentational State Transfer (REST) client with URI
@@ -16670,9 +16692,7 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
-    function InternalNotificationMethodExecute(instance: pointer;
-      factory: TInterfaceFactory; methodIndex: integer; res: TTextWriter;
-      const par: RawUTF8; out head: RawUTF8; out status: cardinal): boolean; virtual;
+    procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
@@ -23384,7 +23404,7 @@ type
   // - code generated is very optimized: stack and memory usage, CPU registers
   // prefered, multiplication avoided to calculate memory position from index,
   // hand tuned assembler...
-  TUTF8QuickSort = {$ifndef UNICODE}object{$else}record{$endif}
+  TUTF8QuickSort = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
     // sort parameters
     fComp: TUTF8Compare;
@@ -23600,7 +23620,7 @@ begin
 end;
 
 type
-  TUTF8QuickSortMulti = {$ifndef UNICODE}object{$else}record{$endif}
+  TUTF8QuickSortMulti = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
     Results: PPUtf8CharArray;
     IDColumn: PPUtf8CharArray;
@@ -32694,6 +32714,34 @@ end;
 {$endif}
 
 
+{ TSQLRestURIParams }
+
+procedure TSQLRestURIParams.Init;
+begin
+  OutStatus := 0;
+  OutInternalState := 0;
+  RestAccessRights := nil;
+  LowLevelConnectionID := 0;
+  byte(LowLevelFlags) := 0;
+end;
+
+procedure TSQLRestURIParams.Init(const aURI,aMethod,aInHead,aInBody: RawUTF8);
+begin
+  Init;
+  Url := aURI;
+  Method := aMethod;
+  InHead := aInHead;
+  InBody := aInBody;
+end;
+
+function TSQLRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+begin
+  result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
+  if GuessJSONIfNoneSet and (result='') then
+    result := JSON_CONTENT_TYPE_VAR;
+end;
+
+
 { TSQLRestClientCallbacks }
 
 constructor TSQLRestClientCallbacks.Create(aOwner: TSQLRestClientURI);
@@ -32709,6 +32757,48 @@ begin
       if List[result].ID=aID then
         exit;
   result := -1;
+end;
+
+function TSQLRestClientCallbacks.FindEntry(var aItem: TSQLRestClientCallbackItem): boolean;
+var i: Integer;
+    P: PSQLRestClientCallbackItem;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    P := pointer(List);
+    for i := 1 to Count do
+      if P^.ID=aItem.ID then begin
+        if P^.Instance<>nil then begin
+          result := true;
+          aItem := P^;
+        end;
+        exit;
+      end else
+      inc(P);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSQLRestClientCallbacks.FindAndRelease(aID: integer): boolean;
+var i: Integer;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    i := FindIndex(aID);
+    if i<0 then
+      exit;
+    List[i].ReleasedFromServer := True;
+  finally
+    Safe.UnLock;
+  end;
+  result := true;
 end;
 
 function TSQLRestClientCallbacks.UnRegisterByIndex(index: integer): boolean;
@@ -32890,35 +32980,97 @@ begin
 end;
 {$endif MSWINDOWS}
 
-function TSQLRestClientURI.InternalNotificationMethodExecute(instance: pointer;
-  factory: TInterfaceFactory; methodIndex: integer; res: TTextWriter;
-  const par: RawUTF8; out head: RawUTF8; out status: cardinal): boolean;
-var method: PServiceMethod;
-    exec: TServiceMethodExecute;
+procedure TSQLRestClientURI.InternalNotificationMethodExecute(
+  var Ctxt: TSQLRestURIParams);
+var url,root,interfmethod,interf,id,method,frames: RawUTF8;
+    callback: TSQLRestClientCallbackItem;
+    methodIndex: integer;
+    WR: TTextWriter;
+    ok: Boolean;
+  procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
+  var method: PServiceMethod;
+      exec: TServiceMethodExecute;
+  begin
+    method := @callback.Factory.Methods[methodIndex];
+    {$ifdef MSWINDOWS}
+    if (fServiceNotificationMethodViaMessages.Wnd<>0) and
+       (method^.ArgsOutputValuesCount=0) then begin
+      // expects no output -> asynchronous non blocking notification in UI thread
+      Ctxt.OutStatus := 0;
+      exec := TSQLRestClientURIServiceNotification.Create(method);
+      TSQLRestClientURIServiceNotification(exec).fOwner := self;
+      TSQLRestClientURIServiceNotification(exec).fInstance := callback.Instance;
+      TSQLRestClientURIServiceNotification(exec).fPar := par;
+      with fServiceNotificationMethodViaMessages do
+        ok := PostMessage(Wnd,Msg,Wnd,LPARAM(exec));
+      if ok then
+        exit;
+    end else // if PostMessage() failed (e.g. invalid Wnd/Msg) -> blocking exec
+    {$endif}
+      exec := TServiceMethodExecute.Create(method);
+    try
+      ok := exec.ExecuteJson([callback.Instance],pointer(par),res);
+      Ctxt.OutHead := exec.ServiceCustomAnswerHead;
+      Ctxt.OutStatus := exec.ServiceCustomAnswerStatus;
+    finally
+      exec.Free;
+    end;
+  end;
 begin
-  method := @factory.Methods[methodIndex];
-  {$ifdef MSWINDOWS}
-  if (fServiceNotificationMethodViaMessages.Wnd<>0) and
-     (method^.ArgsOutputValuesCount=0) then begin
-    // expects no output -> asynchronous non blocking notification in UI thread
-    status := 0;
-    exec := TSQLRestClientURIServiceNotification.Create(method);
-    TSQLRestClientURIServiceNotification(exec).fOwner := self;
-    TSQLRestClientURIServiceNotification(exec).fInstance := instance;
-    TSQLRestClientURIServiceNotification(exec).fPar := par;
-    with fServiceNotificationMethodViaMessages do
-      result := PostMessage(Wnd,Msg,Wnd,LPARAM(exec));
-    if result then
-      exit;
-  end else // if PostMessage() failed (e.g. invalid Wnd/Msg) -> blocking exec
-  {$endif}
-    exec := TServiceMethodExecute.Create(method);
+  Ctxt.OutStatus := HTML_BADREQUEST;
+  url := Ctxt.Url;
+  if url='' then
+    exit;
+  if url[1]='/' then
+    system.delete(url,1,1);
+  Split(Split(url,'/',root),'/',interfmethod,id); // 'root/BidirCallback.AsynchEvent/1'
+  if not IdemPropNameU(root,Model.Root) then
+    exit;
+  callback.ID := GetInteger(pointer(id));
+  if callback.ID<=0 then
+    exit;
+  if interfmethod='_free_' then begin
+    if fFakeCallbacks.FindAndRelease(callback.ID) then
+      Ctxt.OutStatus := HTML_SUCCESS;
+    exit;
+  end;
+  if not fFakeCallbacks.FindEntry(callback) then
+    exit;
+  if (Ctxt.InHead<>'') and
+     (callback.Factory.MethodIndexCurrentFrameCallback>=0) then begin
+    frames := FindIniNameValue(pointer(Ctxt.InHead),'SEC-WEBSOCKET-FRAME: ');
+  end;
+  split(interfmethod,'.',interf,method);
+  methodIndex := callback.Factory.FindMethodIndex(method);
+  if methodIndex<0 then
+    exit;
+  if IdemPropNameU(interfmethod,callback.Factory.Methods[methodIndex].InterfaceDotMethodName) then
   try
-    result := exec.ExecuteJson([instance],pointer(par),res);
-    head := exec.ServiceCustomAnswerHead;
-    status := exec.ServiceCustomAnswerStatus;
-  finally
-    exec.Free;
+    WR := TJSONSerializer.CreateOwnedStream;
+    try
+      WR.AddShort('{"result":[');
+      if frames='[0]' then // call before the first method of the jumbo frame
+        Call(callback.Factory.MethodIndexCurrentFrameCallback,frames,nil);
+      Call(methodIndex,Ctxt.InBody,WR);
+      if ok then begin
+        if Ctxt.OutHead='' then begin // <>'' if set via TServiceCustomAnswer
+          WR.Add(']','}');
+          Ctxt.OutStatus := HTML_SUCCESS;
+        end;
+        Ctxt.OutBody := WR.Text;
+      end else
+        Ctxt.OutStatus := HTML_SERVERERROR;
+      if frames='[1]' then // call after the last method of the jumbo frame
+        Call(callback.Factory.MethodIndexCurrentFrameCallback,frames,nil);
+    finally
+      WR.Free;
+    end;
+  except
+    on E: Exception do begin
+      Ctxt.OutHead := '';
+      Ctxt.OutBody := ObjectToJSONDebug(E);
+      Ctxt.OutStatus := HTML_SERVERERROR;
+    end;
   end;
 end;
 
@@ -33439,7 +33591,7 @@ begin
       Int64(result) := HTML_UNAVAILABLE;
       exit; // if /TimeStamp is not available, server is down!
     end;
-  FillcharFast(Call,sizeof(Call),0);
+  Call.Init;
   if (Head<>nil) and (Head^<>'') then
     Call.InHead := Head^;
   if fSessionHttpHeader<>'' then
@@ -33889,14 +34041,14 @@ begin
     Int64(result) := HTML_NOTIMPLEMENTED; // 501
     exit;
   end;
-  FillcharFast(call,SizeOf(call),0);
+  call.Init;
   call.Url := url;
   call.Method := method;
   call.LowLevelConnectionID := PtrInt(GlobalURIRequestServer);
   call.InHead := 'RemoteIP: 127.0.0.1';
   if (Head<>nil) and (Head^<>nil) then
     call.InHead := RawUTF8(Head^)+#13#10+call.InHead;
-  call.InBody := SendData;
+  SetString(call.InBody,SendData,StrLen(SendData));
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
   GlobalURIRequestServer.URI(call);
   result.Lo := call.OutStatus;
@@ -34011,7 +34163,7 @@ begin
   inc(P,4);
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
   Msg.Result := HTML_SUCCESS; // Send something back
-  FillcharFast(call,SizeOf(call),0);
+  call.Init;
   call.Url := GetNextItem(P,#1);
   call.Method := GetNextItem(P,#1);
   call.InHead := GetNextItem(P,#1);
@@ -35364,7 +35516,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1];
   if Method=mPost then begin
-    fInputPostContentType := FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER);
+    fInputPostContentType := Call^.OutBodyType(false);
     if (Parameters=nil) and
        IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
       Parameters := pointer(Call^.InBody);
@@ -37201,7 +37353,7 @@ var isAjax: boolean;
 
   procedure PrepareCall;
   begin
-    FillcharFast(call,SizeOf(call),0);
+    call.Init;
     call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
     call.Url := Model.Root;
   end;
@@ -38884,7 +39036,7 @@ begin
   SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
   Header := 'RemoteIP: 127.0.0.1';
   fServer.BeginCurrentThread(self);
-  FillcharFast(call,sizeof(call),0);
+  call.Init;
   call.LowLevelConnectionID := fPipe;
   Ticks64 := 0;
   Sleeper64 := 0;
