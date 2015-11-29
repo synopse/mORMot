@@ -4269,7 +4269,7 @@ type
     /// sort the dynamic array elements, using the Compare property function
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
-    procedure Sort;
+    procedure Sort(aCompare: TDynArraySortCompare=nil);
     /// search for an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -4299,13 +4299,16 @@ type
     /// will reverse all array elements, in place
     procedure Reverse;
     /// sort the dynamic array elements using a lookup array of indexes
-    // - it won't change the dynamic array content: only create or update
-    // the given integer lookup array, using the specified comparison function
+    // - in comparison to the Sort method, this CreateOrderedIndex won't change
+    // the dynamic array content, but only create (or update) the supplied
+    // integer lookup array, using the specified comparison function
+    // - if aCompare is not supplied, the method will use fCompare (if defined)
     // - you should provide either a void either a valid lookup table, that is
     // a table with one to one lookup (e.g. created with FillIncreasing)
     // - if the lookup table has less elements than the main dynamic array,
     // its content will be recreated
-    procedure CreateOrderedIndex(var aIndex: TIntegerDynArray; aCompare: TDynArraySortCompare);
+    procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
+      aCompare: TDynArraySortCompare);
     /// save the dynamic array content into a (memory) stream
     // - will handle array of binaries values (byte, word, integer...), array of
     // strings or array of packed records, with binaries and string properties
@@ -22886,8 +22889,11 @@ end;
 procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
 var i: integer;
 begin
-  for i := 0 to Count-1 do
-    Values[i] := StartValue+i;
+  if StartValue=0 then
+    for i := 0 to Count-1 do
+      Values[i] := i else
+    for i := 0 to Count-1 do
+      Values[i] := StartValue+i;
 end;
 
 procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
@@ -37618,11 +37624,13 @@ begin
   until I >= R;
 end;
 
-procedure TDynArray.Sort;
+procedure TDynArray.Sort(aCompare: TDynArraySortCompare);
 var QuickSort: TDynArrayQuickSort;
 begin
-  if (@fCompare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
-    Quicksort.Compare := @fCompare;
+  if @aCompare=nil then
+    Quicksort.Compare := @fCompare else
+    Quicksort.Compare := aCompare;
+  if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
     Quicksort.QuickSort(0,Count-1);
@@ -37635,13 +37643,15 @@ procedure TDynArray.CreateOrderedIndex(var aIndex: TIntegerDynArray;
 var QuickSort: TDynArrayQuickSort;
     n: integer;
 begin
-  if (@aCompare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
+  if @aCompare=nil then
+    Quicksort.Compare := @fCompare else
+    Quicksort.Compare := aCompare;
+  if (@QuickSort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
     n := Count;
     if length(aIndex)<n then begin
       SetLength(aIndex,n);
       FillIncreasing(pointer(aIndex),0,n);
     end;
-    Quicksort.Compare := @aCompare;
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
     Quicksort.Index := pointer(aIndex);

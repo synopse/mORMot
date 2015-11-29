@@ -1216,6 +1216,7 @@ end;
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 var i: integer;
     stat,last,average: TSynMonitorTime;
+    ndx: TIntegerDynArray;
 begin
   inherited InternalStat(Ctxt,W);
   if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then begin
@@ -1224,10 +1225,12 @@ begin
     stat := TSynMonitorTime.Create;
     last := TSynMonitorTime.Create;
     average := TSynMonitorTime.Create;
+    DB.Lock;
     try
+      fStatementCache.SortCacheByTotalTime(ndx);
       with fStatementCache do
       for i := 0 to Count-1 do
-      with Cache[i] do begin
+      with Cache[ndx[i]] do begin
         stat.MicroSec := Timer.TimeInMicroSec;
         last.MicroSec := Timer.LastTimeInMicroSec;
         if Timer.PauseCount=0 then // avoid division per zero
@@ -1238,6 +1241,7 @@ begin
         W.Add(',');
       end;
     finally
+      DB.UnLock;
       average.Free;
       last.Free;
       stat.Free;

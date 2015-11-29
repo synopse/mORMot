@@ -2525,14 +2525,18 @@ type
     /// hashing wrapper associated to the Cache[] array
     Caches: TDynArrayHashed;
     /// the associated SQLite3 database instance
+    // - any direct access to this cache list should be protected via DB.Lock
     DB: TSQLite3DB;
     /// intialize the cache
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
     function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil;
       ExecutionTimer: PPPrecisionTimer=nil): PSQLRequest;
-    // used internaly to release all prepared statements from Cache[]
+    /// used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
+    /// could be used e.g. for statistics
+    // - will use internally the function StatementCacheTotalTimeCompare()
+    procedure SortCacheByTotalTime(var aIndex: TIntegerDynArray);
   end;
 
   /// those classes can be used to define custom SQL functions inside a TSQLDataBase
@@ -3150,6 +3154,9 @@ function IsSQLite3File(const FileName: TFileName): boolean;
 // - this will check the 2nd file page beginning to be a valid B-TREE page
 // - in some cases, may return false negatives (depending on the password used)
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
+
+/// comparison function using TSQLStatementCache.Timer.TimeInMicroSec
+function StatementCacheTotalTimeCompare(const A,B): integer;
 
 
 implementation
@@ -5331,6 +5338,23 @@ begin
     Cache[i].Statement.Close; // close prepared statement
   Caches.Clear;
   Caches.ReHash; // need to refresh all hashs
+end;
+
+function StatementCacheTotalTimeCompare(const A,B): integer;
+var i64: Int64;
+begin
+  i64 := TSQLStatementCache(A).Timer.TimeInMicroSec-
+    TSQLStatementCache(B).Timer.TimeInMicroSec;
+  if i64<0 then
+    result := -1 else
+  if i64>0 then
+    result := 1 else
+    result := 0;
+end;
+
+procedure TSQLStatementCached.SortCacheByTotalTime(var aIndex: TIntegerDynArray);
+begin
+  Caches.CreateOrderedIndex(aIndex,StatementCacheTotalTimeCompare);
 end;
 
 
