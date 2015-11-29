@@ -5321,6 +5321,9 @@ type
     procedure Init; overload;
     /// initialize the input values
     procedure Init(const aURI,aMethod,aInHead,aInBody: RawUTF8); overload;
+    /// retrieve the "Content-Type" value from InHead
+    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
+    function InBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
@@ -32734,6 +32737,13 @@ begin
   InBody := aInBody;
 end;
 
+function TSQLRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+begin
+  result := FindIniNameValue(pointer(InHead),HEADER_CONTENT_TYPE_UPPER);
+  if GuessJSONIfNoneSet and (result='') then
+    result := JSON_CONTENT_TYPE_VAR;
+end;
+
 function TSQLRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
   result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
@@ -35516,7 +35526,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1];
   if Method=mPost then begin
-    fInputPostContentType := Call^.OutBodyType(false);
+    fInputPostContentType := Call^.InBodyType(false);
     if (Parameters=nil) and
        IdemPChar(pointer(fInputPostContentType),'APPLICATION/X-WWW-FORM-URLENCODED') then
       Parameters := pointer(Call^.InBody);
