@@ -2167,6 +2167,11 @@ var
   // - is defined as a var, so that you may be able to override the default
   // settings, for the whole process
   DOUBLE_PRECISION: integer = 15;
+  /// best possible precision when rendering a "extended" kind of float
+  // - can be used as parameter for ExtendedToString/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  EXTENDED_PRECISION: integer = 18;
 
 type
   {$ifdef CPUARM}
@@ -5890,7 +5895,7 @@ type
   /// the kind of variables handled by TJSONCustomParser
   // - the last item should be ptCustom, for non simple types
   TJSONCustomParserRTTIType = (
-    ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
+    ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
     {$ifndef NOVARIANTS}ptVariant, {$endif}
@@ -31874,10 +31879,10 @@ end;
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(TypeName: PUTF8Char;
   TypeNameLen: Integer; var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType;
 const
-  SORTEDMAX = {$ifdef NOVARIANTS}29{$else}30{$endif};
+  SORTEDMAX = {$ifdef NOVARIANTS}30{$else}31{$endif};
   SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char =
     ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY',
-     'DOUBLE','INT64','INTEGER','PTRINT','PTRUINT',
+     'DOUBLE','EXTENDED','INT64','INTEGER','PTRINT','PTRUINT',
      'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE',
      'STRING','SYNUNICODE','TCREATETIME','TDATETIME','TGUID',
      'TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED',
@@ -31887,7 +31892,7 @@ const
    // warning: recognized types should match at binary storage level!
    SORTEDTYPES: array[0..SORTEDMAX] of TJSONCustomParserRTTIType =
      (ptArray,ptBoolean,ptByte,ptCardinal,ptCurrency,
-      ptDouble,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,
+      ptDouble,ptExtended,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,
       ptRawByteString,ptRawJSON,ptRawUTF8,ptRecord,ptSingle,
       ptString,ptSynUnicode,ptTimeLog,ptDateTime,ptGUID,
       ptID,ptTimeLog,ptInt64,ptInt64,
@@ -31978,10 +31983,11 @@ begin
     Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
     {$endif}
     case TFloatType(Typ^) of
-    ftSingle: result := ptSingle;
-    ftDoub:   result := ptDouble;
-    ftCurr:   result := ptCurrency;
-    // ftExtended, ftComp: not implemented yet
+    ftSingle:   result := ptSingle;
+    ftDoub:     result := ptDouble;
+    ftCurr:     result := ptCurrency;
+    ftExtended: result := ptExtended;
+    // ftComp: not implemented yet
     end;
   end;
   end;
@@ -32062,7 +32068,7 @@ procedure TJSONCustomParserRTTI.ComputeDataSizeAfterAdd;
 const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCustom
   JSONRTTI_SIZE: array[TJSONCustomParserRTTIType] of byte = (
     SizeOf(PtrUInt),SizeOf(Boolean),SizeOf(Byte),SizeOf(Cardinal),SizeOf(Currency),
-    SizeOf(Double),SizeOf(Int64),SizeOf(Integer),SizeOf(RawByteString),
+    SizeOf(Double),SizeOf(Extended),SizeOf(Int64),SizeOf(Integer),SizeOf(RawByteString),
     SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single),SizeOf(String),SizeOf(SynUnicode),
     SizeOf(TDateTime),SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
@@ -32280,6 +32286,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
+      ptExtended:  PExtended(Data)^ := GetExtended(PropValue);
       ptInt64,ptID:SetInt64(PropValue,PInt64(Data)^);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
@@ -32394,6 +32401,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptCardinal:  aWriter.AddU(PCardinal(Value)^);
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
     ptDouble:    aWriter.AddDouble(unaligned(PDouble(Value)^));
+    ptExtended:  aWriter.Add(PExtended(Value)^,EXTENDED_PRECISION);
     ptInt64,ptID:aWriter.Add(PInt64(Value)^);
     ptInteger:   aWriter.Add(PInteger(Value)^);
     ptSingle:    aWriter.AddSingle(PSingle(Value)^);

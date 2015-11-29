@@ -270,8 +270,8 @@ const
      wRecordVersion); // sftRecordVersion
 
   TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
-  //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble,
-    wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,
+  //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
+    wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,  wDouble,
   //ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     wInt64,  wInteger,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
   //ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
