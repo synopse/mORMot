@@ -5354,7 +5354,8 @@ end;
 
 procedure TSQLStatementCached.SortCacheByTotalTime(var aIndex: TIntegerDynArray);
 begin
-  Caches.CreateOrderedIndex(aIndex,StatementCacheTotalTimeCompare);
+  Caches.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}CreateOrderedIndex(
+    aIndex,StatementCacheTotalTimeCompare);
 end;
 
 
