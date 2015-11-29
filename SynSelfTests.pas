@@ -6929,7 +6929,7 @@ begin
     (Props.Fields.List[Stmt.Select[0].Field-1].Name='YearOfDeath'));
   Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='distinct'));
   Check(Stmt.Limit=20);
-  New('select id from tab where id>:(1): and integerdynarray ( yearofbirth , :(10): ) '+
+  New('select id from tab where id>:(1): and integerdynarraycontains ( yearofbirth , :(10): ) '+
     'order by firstname desc limit 20');
   Check(Stmt.TableName='tab');
   Check((length(Stmt.Select)=1) and (Stmt.Select[0].Field=0) and (Stmt.Select[0].Alias=''));
@@ -6938,8 +6938,9 @@ begin
   Check(Stmt.Where[0].Operator=opGreaterThan);
   Check(Stmt.Where[0].ValueInteger=1);
   Check(Props.Fields.List[Stmt.Where[1].Field-1].Name='YearOfBirth');
-  Check(Stmt.Where[1].FunctionName='INTEGERDYNARRAY');
+  Check(Stmt.Where[1].FunctionName='INTEGERDYNARRAYCONTAINS');
   Check(Stmt.Where[1].ValueInteger=10);
+  Check(Stmt.Where[1].Operator=opContains);
   Check((length(Stmt.OrderByField)=1)and(Props.Fields.List[Stmt.OrderByField[0]-1].Name='FirstName'));
   Check(Stmt.OrderByDesc);
   Check(Stmt.Limit=20);

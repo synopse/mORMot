@@ -49100,7 +49100,7 @@ begin
     inc(P,2); // ignore :(...): parameter
   Where.ValueSQLLen := P-Where.ValueSQL;
   P := GotoNextNotSpace(P);
-  if P^=')' then begin
+  if (P^=')') and (Where.FunctionName='') then begin
     B := P;
     repeat
       inc(P);
