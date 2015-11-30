@@ -891,18 +891,24 @@ begin
     fStoredClassRecordProps.SimpleFieldsBits[soSelect]);
   try
     if (Stmt.SQLStatement='') or // parsing failed
-      not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
-      // SQL statement too complex for TSynTableStatement
+      not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
+      InternalLog('%.AdaptSQLForEngineList: statement too complex [%]',
+        [ClassType,SQL],sllWarning);
       exit;
+    end;
     if Stmt.Offset<>0 then begin
-      InternalLog('%.AdaptSQLForEngineList: Unhandled OFFSET for "%"',[self,SQL],sllDebug);
+      InternalLog('%.AdaptSQLForEngineList: unsupported OFFSET for [%]',
+        [ClassType,SQL],sllWarning);
       exit;
     end;
     if Stmt.Limit=0 then
       limit.Position := posNone else begin
       limit := fProperties.SQLLimitClause;
-      if limit.Position=posNone then
-        exit; // unknown syntax (e.g. dDefault)
+      if limit.Position=posNone then begin
+        InternalLog('%.AdaptSQLForEngineList: unknown "%" LIMIT syntax for [%]',
+          [ClassType,ToText(fProperties.DBMS)^,SQL],sllWarning);
+        exit;
+      end;
       limitSQL := FormatUTF8(limit.InsertFmt,[Stmt.Limit]);
     end;
     extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
@@ -966,8 +972,8 @@ begin
         for f := 0 to n do
         with Stmt.Where[f] do begin
           if (FunctionName<>'') or (Operator>high(DB_SQLOPERATOR)) then begin
-            InternalLog('%.AdaptSQLForEngineList: Unhandled function %() for "%"',
-              [self,FunctionName,SQL],sllDebug);
+            InternalLog('%.AdaptSQLForEngineList: unsupported function %() for [%]',
+              [ClassType,FunctionName,SQL],sllWarning);
             exit;
           end;
           if f>0 then

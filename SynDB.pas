@@ -3353,7 +3353,40 @@ const
     '=','<>','<','<=','>','>=',' in ',' is null',' is not null',' like ');
 
 
+/// retrieve the text of a given Database SQL dialect enumeration
+// - see also TSQLDBConnectionProperties.GetDBMSName() method
+function ToText(DBMS: TSQLDBDefinition): PShortString; overload;
+
+/// retrieve the text of a given Database field type enumeration
+// - see also TSQLDBFieldTypeToString() function
+function ToText(Field: TSQLDBFieldType): PShortString; overload;
+
+/// retrieve the ready-to-be displayed text of a given Database field
+// type enumeration
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
+
+
 implementation
+
+function ToText(DBMS: TSQLDBDefinition): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBDefinition),ord(DBMS));
+end;
+
+function ToText(Field: TSQLDBFieldType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(Field));
+end;
+
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
+var PS: PShortString;
+begin
+  if cardinal(aType)<=cardinal(high(aType)) then begin
+    PS := ToText(aType);
+    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
+  end else
+    result := IntToStr(ord(aType));
+end;
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
 begin
@@ -6062,7 +6095,7 @@ end;
 function TSQLDBConnectionProperties.GetDBMSName: RawUTF8;
 var PS: PShortString;
 begin
-  PS := GetEnumName(TypeInfo(TSQLDBDefinition),ord(DBMS));
+  PS := ToText(DBMS);
   SetString(result,PAnsiChar(@PS^[2]),ord(PS^[0])-1);
 end;
 
@@ -6461,16 +6494,6 @@ begin
   end;
 end;
 
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
-var PS: PShortString;
-begin
-  if cardinal(aType)<=cardinal(high(aType)) then begin
-    PS := GetEnumName(TypeInfo(TSQLDBFieldType),ord(aType));
-    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
-  end else
-    result := IntToStr(ord(aType));
-end;
-
 procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
@@ -6478,7 +6501,7 @@ begin
      (length(Values)<ValuesCount) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
-      [self,Param,TSQLDBFieldTypeToString(ParamType)]);
+      [self,Param,ToText(ParamType)^]);
 end;
 
 procedure TSQLDBStatement.BindArray(Param: Integer; const Values: array of Int64);
@@ -6702,7 +6725,7 @@ begin
   {$endif}
   ftBlob:     VariantToRawByteString(Temp,RawByteString(Dest));
   else raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type "%"',
-    [self,TSQLDBFieldTypeToString(result)]);
+    [self,ToText(result)^]);
   end;
 end;
 {$endif}
@@ -6828,7 +6851,7 @@ begin
           ftBlob: W.AddShort(BLOB[Tab]);  // ForceBlobAsNull should be true
           else raise ESQLDBException.CreateUTF8(
             '%.FetchAllToCSVValues: Invalid ColumnType(%) %',
-            [self,F,TSQLDBFieldTypeToString(ColumnType(F))]);
+            [self,F,ToText(ColumnType(F))^]);
         end;
         if F=FMax then
           W.AddCR else
@@ -7375,7 +7398,7 @@ begin
   if (NewType in [ftUnknown,ftNull]) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
-      [self,Param,TSQLDBFieldTypeToString(NewType)]);
+      [self,Param,ToText(NewType)^]);
   SetLength(result^.VArray,ArrayCount);
   result^.VInt64 := ArrayCount;
   fParamsArrayCount := ArrayCount;
