@@ -109,27 +109,35 @@ begin
   result := true;
 end;
 
+var
+  AdminControlConnecting: TForm; // only one Open() attempt at once
+
 function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel):
   boolean;
 var
-  temp: TForm;
   exec: TServiceCustomAnswer;
 begin
   result := false;
-  if Assigned(fAdmin) or (Definition.Orm.User = '') then
+  if Assigned(fAdmin) or (Definition.Orm.User = '') or Assigned(AdminControlConnecting)
+    then
     exit;
   try
-    temp := CreateTempForm('Connecting to ' + Definition.ORM.ServerName);
+    AdminControlConnecting := CreateTempForm('Connecting to ' + Definition.ORM.ServerName);
     try
       Application.ProcessMessages;
+      if Model = nil then
+        Model := TSQLModel.Create([], '');
+      Model.OnClientIdle := TLoginForm.OnIdleProcess; // allow basic UI interactivity
       fClient := AdministratedDaemonClient(Definition, Model);
-      fClient.Services.Resolve(IAdministratedDaemon, fAdmin);
+      if not fClient.Services.Resolve(IAdministratedDaemon, fAdmin) then
+        raise EDDDRestClient.CreateUTF8('Resolve(IAdministratedDaemon)=false: check % version',
+          [Definition.ORM.ServerName]);
       exec := fAdmin.DatabaseExecute('', '#version');
       version := _JsonFast(exec.Content);
       fDefinition := Definition;
       result := true;
     finally
-      temp.Free;
+      FreeAndNil(AdminControlConnecting);
     end;
   except
     on E: Exception do begin
@@ -225,7 +233,7 @@ begin
   fDBFrame := nil;
   fAdmin := nil;
   fDefinition.Free;
-  if fClient<>nil then begin
+  if fClient <> nil then begin
     Sleep(200); // leave some time to flush all pending CallBackUnRegister()
     FreeAndNil(fClient);
   end;
