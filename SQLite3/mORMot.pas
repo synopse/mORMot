@@ -8721,6 +8721,9 @@ type
     fEvents: PEnumType;
     fTableProps: TSQLModelRecordPropertiesObjArray;
     fCustomCollationForAll: array[TSQLFieldType] of RawUTF8;
+    {$ifndef LVCL}
+    fOnClientIdle: TOnIdleSynBackgroundThread;
+    {$endif}
     /// contains the caller of CreateOwnedStream()
     fRestOwner: TSQLRest;
     /// for every table, contains a locked record list
@@ -8974,6 +8977,14 @@ type
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TSQLLocks entry by table
     property Locks: TSQLLocksDynArray read fLocks;
+    {$ifndef LVCL}
+    /// set a callback event to be executed in loop during client remote
+    // blocking process, e.g. to refresh the UI during a somewhat long request
+    // - will be passed to TSQLRestClientURI.OnIdle property by
+    // TSQLRestClientURI.RegisteredClassCreateFrom() method, if applying
+    property OnClientIdle: TOnIdleSynBackgroundThread
+      read fOnClientIdle write fOnClientIdle;
+    {$endif}
   published
     /// the Root URI path of this Database Model
     property Root: RawUTF8 read fRoot write fRoot;
@@ -33403,14 +33414,21 @@ begin
   end;
 end;
 
+{$ifdef SSPIAUTH}
+const
+  SSPI_DEFINITION_USERNAME = '***SSPI***';
+{$endif}
+
 constructor TSQLRestClientURI.RegisteredClassCreateFrom(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition);
 begin
-  if fModel=nil then
-    Create(aModel); // if not already created with a reintroduced constructor
+  if fModel=nil then // if not already created with a reintroduced constructor
+    Create(aModel);
+  if fModel<>nil then
+    fOnIdle := fModel.OnClientIdle; // allow UI interactivity during SetUser()
   if aDefinition.User<>'' then begin
     {$ifdef SSPIAUTH}
-    if aDefinition.User='***SSPI***' then
+    if aDefinition.User=SSPI_DEFINITION_USERNAME then
       SetUser('',aDefinition.PasswordPlain) else
     {$endif}
       SetUser(aDefinition.User,aDefinition.PasswordPlain,true);
@@ -33425,7 +33443,7 @@ begin
   if (fSessionAuthentication<>nil) and (fSessionUser<>nil) then begin
     {$ifdef SSPIAUTH}
     if fSessionAuthentication.InheritsFrom(TSQLRestServerAuthenticationSSPI) then
-      Definition.User := '***SSPI***' else
+      Definition.User := SSPI_DEFINITION_USERNAME else
     {$endif}
        Definition.User := fSessionUser.LogonName;
      Definition.PasswordPlain := fSessionUser.fPasswordHashHexa;
