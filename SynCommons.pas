@@ -22458,10 +22458,14 @@ begin
         SetLength(result,n+1);
         with result[n] do begin
           Name := Dir+F.Name;
+          {$ifdef MSWINDOWS}
           {$ifdef HASINLINE} // FPC or Delphi 2006+
           Size := F.Size;
           {$else} // F.Size was limited to 32 bits on older Delphi
           Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
+          {$endif}
+          {$else}
+          Size := F.Size;
           {$endif}
           Attr := F.Attr;
           {$ifdef ISDELPHIXE2}
