@@ -9648,6 +9648,8 @@ begin
         'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
   Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
         'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
+        'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
   Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
         'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
   Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',

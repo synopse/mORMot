@@ -958,13 +958,6 @@ begin
         end;
       end else begin
         dec(n);
-        if (n>0) and Stmt.Where[1].JoinedOR then
-          for f := 2 to n do
-          if not Stmt.Where[f].JoinedOR then begin
-            InternalLog('%.AdaptSQLForEngineList: Unhandled mixed AND/OR for "%"',
-              [self,SQL],sllDebug);
-            exit;
-          end;
         W.AddShort(' where ');
         if limit.Position=posWhere then begin
           W.AddString(limitSQL);
