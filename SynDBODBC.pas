@@ -1805,7 +1805,8 @@ begin
   inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
   // stored UserID is used by SQLSplitProcedureName
   if (aUserID = '') then
-    FUserID := FindIniNameValue(pointer(SynCommons.UpperCase(StringReplaceAll(aDatabaseName,';',sLineBreak))), 'UID=');
+    FUserID := FindIniNameValue(pointer(SynCommons.UpperCase(
+      StringReplaceAll(aDatabaseName,';',sLineBreak))), 'UID=');
 end;
 
 function TODBCConnectionProperties.NewConnection: TSQLDBConnection;

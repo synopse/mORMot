@@ -861,6 +861,7 @@ const
   soCurrent = soFromCurrent;
   reInvalidPtr = 2;
   PathDelim  = '\';
+  sLineBreak = #13#10;
 
 type
   PPointer = ^Pointer;
