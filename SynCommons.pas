@@ -13064,7 +13064,11 @@ function _Json(const JSON: RawUTF8; var Value: variant;
 // ! Obj(NameValuePairs,JSON_OPTIONS[true]);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
-function _ObjFast(const NameValuePairs: array of const): variant;
+function _ObjFast(const NameValuePairs: array of const): variant; overload;
+
+/// initialize a variant instance to store any object as a TDocVariant
+// - is a wrapper around _JsonFast(ObjectToJson(aObject))
+function _ObjFast(aObject: TObject): variant; overload;
 
 /// initialize a variant instance to store some document-based array content
 // - this global function is an handy alias to:
@@ -35914,6 +35918,15 @@ begin
   if TVarData(result).VType and VTYPE_STATIC<>0 then
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
+end;
+
+function _ObjFast(aObject: TObject): variant;
+begin
+  if TVarData(result).VType and VTYPE_STATIC<>0 then
+    VarClear(result);
+  if TDocVariantData(result).InitJSONInPlace(
+      pointer(ObjectToJson(aObject)),JSON_OPTIONS_FAST)=nil then
+    VarClear(result);
 end;
 
 function _ArrFast(const Items: array of const): variant;
