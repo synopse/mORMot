@@ -46547,7 +46547,7 @@ begin
     if Session<>nil then
       Ctxt.Returns(['result',Session.fPrivateSalt,
         'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
-        'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]);
+        'server',fServer.Model.Root,'version',ExeVersion.Version.Detailed]);
   finally
     User.Free;
   end;
@@ -46918,7 +46918,7 @@ begin
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
           Ctxt.Returns(['result',Session.IDCardinal,
             'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]);
+            'server',fServer.Model.Root,'version',ExeVersion.Version.Detailed]);
           exit; // success
         end;
       end else
@@ -47028,12 +47028,12 @@ begin
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
             'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main]),
+            'server',fServer.Model.Root,'version',ExeVersion.Version.Detailed]),
             HTML_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Main,
+            'server',fServer.Model.Root,'version',ExeVersion.Version.Detailed,
             'data',BinToBase64(OutData)]);
     finally
       User.Free;
