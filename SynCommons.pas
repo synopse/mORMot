@@ -3375,16 +3375,26 @@ function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
 type
-  TFindFilesDynArray = array of record
+  /// file found result item, as returned by FindFiles()
+  TFindFiles = {$ifndef UNICODE}object{$else}record{$endif}
+    /// the matching file name
     Name: TFileName;
+    /// the matching file attributes
     Attr: Integer;
+    /// the matching file size
     Size: Int64;
+    /// the matching file date/time
     TimeStamp: TDateTime;
+    /// fill the item properties from a FindFirst/FindNext's TSearchRec
+    procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
   end;
+  /// result list, as returned by FindFiles()
+  TFindFilesDynArray = array of TFindFiles;
 
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
-function FindFiles(const Directory,Mask: TFileName): TFindFilesDynArray;
+function FindFiles(const Directory,Mask: TFileName;
+  const IgnoreFileName: TFileName=''): TFindFilesDynArray;
 
 {$ifdef DELPHI5OROLDER}
 /// DirectoryExists returns a boolean value that indicates whether the
@@ -22440,7 +22450,27 @@ begin
     result := false;
 end;
 
-function FindFiles(const Directory,Mask: TFileName): TFindFilesDynArray;
+procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
+begin
+  Name := Directory+F.Name;
+  {$ifdef MSWINDOWS}
+  {$ifdef HASINLINE} // FPC or Delphi 2006+
+  Size := F.Size;
+  {$else} // F.Size was limited to 32 bits on older Delphi
+  Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
+  {$endif}
+  {$else}
+  Size := F.Size;
+  {$endif}
+  Attr := F.Attr;
+  {$ifdef ISDELPHIXE2}
+  TimeStamp := F.TimeStamp;
+  {$else}
+  TimeStamp := FileDateToDateTime(F.Time);
+  {$endif}
+end;
+
+function FindFiles(const Directory,Mask,IgnoreFileName: TFileName): TFindFilesDynArray;
 var F: TSearchRec;
     n: integer;
     Dir: TFileName;
@@ -22454,26 +22484,10 @@ begin
       {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
       {$endif}
       if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-         (F.Name[1]<>'.') then begin
+         (F.Name[1]<>'.') and ((IgnoreFileName='') or
+          (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
         SetLength(result,n+1);
-        with result[n] do begin
-          Name := Dir+F.Name;
-          {$ifdef MSWINDOWS}
-          {$ifdef HASINLINE} // FPC or Delphi 2006+
-          Size := F.Size;
-          {$else} // F.Size was limited to 32 bits on older Delphi
-          Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
-          {$endif}
-          {$else}
-          Size := F.Size;
-          {$endif}
-          Attr := F.Attr;
-          {$ifdef ISDELPHIXE2}
-          TimeStamp := F.TimeStamp;
-          {$else}
-          TimeStamp := FileDateToDateTime(F.Time);
-          {$endif}
-        end;
+        result[n].FromSearchRec(Dir,F);
         inc(n);
       end;
       {$ifndef DELPHI5OROLDER}
