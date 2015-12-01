@@ -26,7 +26,6 @@ uses
 
 type
   TDBFrame = class(TFrame)
-    lstTables: TListBox;
     pnlRight: TPanel;
     pnlTop: TPanel;
     mmoSQL: TMemo;
@@ -37,11 +36,17 @@ type
     btnHistory: TButton;
     btnCmd: TButton;
     pmCmd: TPopupMenu;
+    pnlLeft: TPanel;
+    lstTables: TListBox;
+    pnlLeftTop: TPanel;
+    edtLabels: TEdit;
+    chkTables: TCheckBox;
     procedure lstTablesDblClick(Sender: TObject); virtual;
     procedure btnExecClick(Sender: TObject); virtual;
     procedure drwgrdResultClick(Sender: TObject); virtual;
     procedure btnHistoryClick(Sender: TObject); virtual;
     procedure btnCmdClick(Sender: TObject); virtual;
+    procedure edtLabelsChange(Sender: TObject);
   protected
     fmmoResultRow: integer;
     fJson: RawJSON;
@@ -62,13 +67,14 @@ type
     GridLastTableName: RawUTF8;
     Client: TSQLHttpClientWebsockets;
     Admin: IAdministratedDaemon;
-    Tables: TRawUTF8DynArray;
+    Tables: TStringList;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
     OnAfterExecute: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
+    procedure EnableChkTables(const aCaption: string);
     procedure Open; virtual;
     procedure AddSQL(SQL: string; AndExec: boolean);
     destructor Destroy; override;
@@ -96,6 +102,7 @@ const
 constructor TDBFrame.Create(AOwner: TComponent);
 begin
   inherited;
+  fSQLLogFile := ChangeFileExt(ExeVersion.ProgramFileName, '.history');
   mmoResult := TMemoEx.Create(self);
   mmoResult.Name := 'mmoResult';
   mmoResult.Parent := pnlRight;
@@ -108,24 +115,21 @@ begin
   mmoResult.RightMargin := 130;
   mmoResult.RightMarginVisible := true;
   mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
+  pnlLeftTop.Height := 30;
+  Tables := TStringList.Create;
 end;
 
 procedure TDBFrame.Open;
 var
   i: integer;
+  aTables: TRawUTF8DynArray;
 begin
-  fSQLLogFile := ChangeFileExt(ExeVersion.ProgramFileName, '.history');
   drwgrdResult.Align := alClient;
-  with lstTables.Items do
-  try
-    BeginUpdate;
-    Clear;
-    Tables := Admin.DatabaseTables(DatabaseName);
-    for i := 0 to high(Tables) do
-      Add(UTF8ToString(Tables[i]));
-  finally
-    EndUpdate;
-  end;
+  aTables := Admin.DatabaseTables(DatabaseName);
+  Tables.Clear;
+  for i := 0 to high(aTables) do
+    Tables.Add(UTF8ToString(aTables[i]));
+  edtLabelsChange(nil);
   mmoSQL.Text := '#help';
   btnExecClick(nil);
   mmoSQL.Text := '';
@@ -311,6 +315,7 @@ destructor TDBFrame.Destroy;
 begin
   FreeAndNil(Grid);
   FreeAndNil(AssociatedModel);
+  FreeAndNil(Tables);
   inherited;
 end;
 
@@ -474,6 +479,40 @@ var
 begin
   exec := Admin.DatabaseExecute(DatabaseName, sql);
   result := exec.Content;
+end;
+
+procedure TDBFrame.EnableChkTables(const aCaption: string);
+begin
+  pnlLeftTop.Height := 44;
+  chkTables.Show;
+  chkTables.Caption := aCaption;
+end;
+
+procedure TDBFrame.edtLabelsChange(Sender: TObject);
+var
+  i, index: integer;
+  match, previous: string;
+begin
+  i := lstTables.ItemIndex;
+  if i >= 0 then
+    previous := lstTables.Items[i];
+  index := -1;
+  match := SysUtils.UpperCase(edtLabels.Text);
+  with lstTables.Items do
+  try
+    BeginUpdate;
+    Clear;
+    for i := 0 to Tables.Count - 1 do
+      if (match = '') or (Pos(match, SysUtils.UpperCase(Tables[i])) > 0) then begin
+        AddObject(Tables[i], Tables.Objects[i]);
+        if previous = Tables[i] then
+          index := Count - 1;
+      end;
+  finally
+    EndUpdate;
+  end;
+  if index >= 0 then
+    lstTables.ItemIndex := index;
 end;
 
 end.
