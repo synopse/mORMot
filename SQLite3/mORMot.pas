@@ -2254,6 +2254,9 @@ type
   // - by default, function will check that the supplied JSON value would
   // be a JSON string when the property is a string, unless j2oIgnoreStringType
   // is defined and JSON numbers are accepted and stored as text
+  // - by default any unexpected value for enumerations would be marked as
+  // invalid, unless j2oIgnoreUnknownEnum is defined, so that in such case the
+  // ordinal 0 value is left, and loading continues
   // - by default, only simple kind of variant types (string/numbers) are
   // handled: set j2oHandleCustomVariants if you want to handle any custom -
   // in this case , it will handle direct JSON [array] of {object}: but if you
@@ -2265,7 +2268,7 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns
   TJSONToObjectOption = (
-    j2oIgnoreUnknownProperty, j2oIgnoreStringType,
+    j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
     j2oSetterExpectsToFreeTempInstance);
   /// set of options for JSONToObject() parsing process
@@ -43216,11 +43219,15 @@ doProp: // normal property value
         if wasString then begin // in case enum stored as string
           V := P^.PropType^.EnumBaseType^.GetEnumNameValue(PropValue);
           if V<0 then
-            exit;
+            if j2oIgnoreUnknownEnum in Options then
+              V := 0 else
+              exit;
         end else begin
           V := GetInteger(PropValue,err);
           if err<>0 then
-            exit; // invalid value
+            if j2oIgnoreUnknownEnum in Options then
+              V := 0 else
+              exit; // invalid value
         end;
         P^.SetOrdProp(Value,V);
       end;
