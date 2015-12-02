@@ -33358,6 +33358,7 @@ begin
     fSessionPrivateKey := 0;
     fSessionAuthentication := nil;
     fSessionServer := '';
+    fSessionGroup := 0;
     fSessionVersion := '';
     FreeAndNil(fSessionUser);
   end;
@@ -47108,12 +47109,14 @@ begin
       if Sender.CallBackGet('Auth',['UserName','',
           'data',BinToBase64(OutData)],Response,nil,0)<>HTML_SUCCESS then
         exit;
-      JSONDecode(pointer(Response),['result','data','logonname','server','version'],Values);
+      JSONDecode(pointer(Response),
+        ['result','data','logonname','server','version','logongroup'],Values);
       result := Values[0];
       InData := Base64ToBin(Values[1]);
-      User.LogonName := Values[2];
+      User.LogonName := Values[2]; // not known by caller
       Sender.fSessionServer := values[3]; // as in ClientGetSessionKey
       Sender.fSessionVersion := values[4];
+      SetInt64(values[5],PInt64(@Sender.fSessionGroup)^);
       if InData='' then
         break;
     until false;
