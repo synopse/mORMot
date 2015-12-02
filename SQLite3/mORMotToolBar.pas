@@ -334,9 +334,15 @@ type
   TSQLLister = class;
 
   /// this event is called when a button is pressed
+  // - here ActionValue contains the ordinal value of the custom button 
   TSQLListerEvent = procedure(Sender: TObject;
-    const RecordClass: TSQLRecordClass;
+    RecordClass: TSQLRecordClass;
     ActionValue: integer) of object;
+
+  /// this event is called after actMark*/actUnmarkAll has been executed
+  TMarkActionEvent = procedure(Sender: TObject;
+    RecordClass: TSQLRecordClass;
+    MarkAction: TSQLAction) of object;
 
   /// a hidden component, used for handling toolbar buttons of actions
   // to be performed on a TSQLRecordClass list
@@ -346,6 +352,7 @@ type
     fPager: TSynPager;
     fPage: TSynPage;
     fOnButtonClick: TSQLListerEvent;
+    fOnMarkAction: TMarkActionEvent;
     fClass: TSQLRecordClass;
     fActionMax: cardinal;
     fActionHints: string;
@@ -460,6 +467,8 @@ type
     /// set to to a "Details" level, according to the bsCheck button pushed
     // - set to the Action index which is currently available
     property ReportDetailedIndex: integer read fReportDetailedIndex;
+    /// a callback event, triggerred after actMark*/actUnmarkAll has been executed
+    property OnMarkAction: TMarkActionEvent read fOnMarkAction write fOnMarkAction;
   end;
 
   /// create one or more toolbars in a ribbon page, according to an enumeration
@@ -914,6 +923,7 @@ end;
 procedure TSQLLister.ActionButtonClick(Sender: TObject);
 var aAction: integer;
     A: TSQLAction absolute aAction;
+    submenuact: TSQLAction;
     Btn: TSynToolButton absolute Sender;
     iTB,iGB: integer;
     TB: TSynToolBar;
@@ -924,17 +934,23 @@ begin
   aAction := isActionButton(Sender);
   case A of
     actNoAction: exit;
-    actUnMarkAll:
-      // (un)marking are standard actions
-      TableToGrid.SetMark(A);
+    actUnMarkAll: begin
+      TableToGrid.SetMark(A); // unmarking as standard action
+      if Assigned(fOnMarkAction) then
+        fOnMarkAction(Sender,fClass,A);
+    end;
     actMark:
       if Sender.InheritsFrom(TSynToolButton) then
         Btn.DoDropDown else
-      if Sender.InheritsFrom(TMenuItem) then
-        // actMarkAllEntries..actMarkBeforeOneYear are regrouped in
-        // the only one aAction=actMark button
-        TableToGrid.SetMark(TSQLAction(TMenuItem(Sender).Tag));
-    else begin
+      if Sender.InheritsFrom(TMenuItem) then begin
+        // actMarkAllEntries..actMarkBeforeOneYear are stored in the Menu.Tag,
+        // and gathered under the aAction=actMark button
+        submenuact := TSQLAction(TMenuItem(Sender).Tag);
+        TableToGrid.SetMark(submenuact);
+        if Assigned(fOnMarkAction) then
+          fOnMarkAction(Sender,fClass,submenuact);
+      end;
+    else begin // custom (not actMark*) buttons
       if Sender.InheritsFrom(TSynToolButton) and
          (Btn.Style=bsCheck) then begin
         if Btn.Down then begin

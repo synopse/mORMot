@@ -8284,12 +8284,12 @@ type
   // actmarkAllEntries..actmarkOlderThanOneYear items
   // - actUnmarkAll (standard action) to UnMark all rows
   // - actmarkAllEntries to Mark all rows
-  // - actMarkForToday to Mark rows for today
-  // - actMarkForThisWeek to Mark rows for This Week
-  // - actMarkForThisMonth to Mark rows for this month
-  // - actMarkForYestday to Mark rows for today
-  // - actMarkForLastWeek to Mark rows for Last Week
-  // - actMarkForLastMonth to Mark rows for Last month
+  // - actmarkToday to Mark rows for today
+  // - actmarkThisWeek to Mark rows for this Week
+  // - actmarkThisMonth to Mark rows for this month
+  // - actmarkYesterday to Mark rows for today
+  // - actmarkLastWeek to Mark rows for Last Week
+  // - actmarkLastMonth to Mark rows for Last month
   // - actmarkOlderThanOneDay to Mark rows After one day
   // - actmarkOlderThanOneWeek to Mark rows older than one week
   // - actmarkOlderThanOneMonth to Mark rows older than one month
