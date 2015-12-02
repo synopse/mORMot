@@ -16691,6 +16691,7 @@ type
     fSessionHttpHeader: RawUTF8; // e.g. for TSQLRestServerAuthenticationHttpBasic
     fSessionServer: RawUTF8;
     fSessionVersion: RawUTF8;
+    fSessionGroup: TID;
     /// used to make the internal client-side process reintrant
     fMutex: TRTLCriticalSection;
     fRemoteLogClass: TSynLog;
@@ -17175,6 +17176,8 @@ type
     property SessionServer: RawUTF8 read fSessionServer;
     /// the remote server version, as retrieved after a SetUser() success
     property SessionVersion: RawUTF8 read fSessionVersion;
+    /// the authentivcated user group, as retrieved after a SetUser() success
+    property SessionGroup: TID read fSessionGroup;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -18199,7 +18202,7 @@ begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 {$else}
 begin
-  SetInt64(P,Int64(result));
+  SetInt64(P,PInt64(@result)^);
 {$endif}
 {$else}
 asm
@@ -18214,7 +18217,7 @@ begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(pointer(U));
 {$else}
 begin
-  SetInt64(pointer(U),Int64(result));
+  SetInt64(pointer(U),PInt64(@result)^);
 {$endif}
 {$else}
 asm
@@ -46582,11 +46585,12 @@ var resp: RawUTF8;
     values: TPUtf8CharDynArray;
 begin
   if (sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTML_SUCCESS) or
-     (JSONDecode(pointer(resp),['result','server','version'],values)=nil) then
+     (JSONDecode(pointer(resp),['result','server','version','logongroup'],values)=nil) then
     result := '' else begin
     result := values[0];
     Sender.fSessionServer := values[1];
     Sender.fSessionVersion := values[2];
+    SetInt64(values[3],PInt64(@Sender.fSessionGroup)^);
   end;
 end;
 
