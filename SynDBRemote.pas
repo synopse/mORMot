@@ -96,6 +96,8 @@ type
     fHttps: boolean;
     fProperties: TSQLDBConnectionProperties;
     fProtocol: TSQLDBProxyConnectionProtocol;
+    fSafe: TSynLocker;
+    fProcessLocked: boolean;
     // this is where the process would take place
     function Process(Ctxt: THttpServerRequest): cardinal;
   public
@@ -107,14 +109,17 @@ type
     // ! Create(aProps,'remotedb');
     // - you can optionally register one user credential, or change the
     // transmission Protocol which is TSQLDBRemoteConnectionProtocol by default
-    // - aProperties.ThreadingMode will be set to tmMainConnection - in fact,
-    // you should better use a single thread for the process, but you may
-    // define a small thread pool for the process IF the provider supports it
+    // - aProperties.ThreadingMode will be set to the optional aThreadMode
+    // parameter tmMainConnection by default, which would also set ProcessLocked
+    // to TRUE - in fact, you should better use a single thread for the process,
+    // but you may define a small thread pool for the process IF the provider
+    // supports it
     constructor Create(aProperties: TSQLDBConnectionProperties;
       const aDatabaseName: RawUTF8; const aPort: RawUTF8=SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
-      aProtocol: TSQLDBProxyConnectionProtocolClass=nil); virtual;
+      aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); virtual;
     /// released used memory
     destructor Destroy; override;
     /// the associated database connection properties
@@ -127,6 +132,10 @@ type
     // - to manage user authentication, use AuthenticateUser/DisauthenticateUser
     // methods of Protocol.Authenticate
     property Protocol: TSQLDBProxyConnectionProtocol read fProtocol write fProtocol;
+    /// if the internal Process() method would be protected by a critical section
+    // - set to TRUE if constructor's aThreadMode is left to its default
+    // tmMainConnection value
+    property ProcessLocked: boolean read fProcessLocked write fProcessLocked;
   end;
 
   /// implements a SynDB HTTP server via the user-land Sockets API
@@ -143,7 +152,8 @@ type
       const aDatabaseName: RawUTF8; const aPort: RawUTF8=SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
-      aProtocol: TSQLDBProxyConnectionProtocolClass=nil); override;
+      aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
   end;
 
   {$ifndef ONLYUSEHTTPSOCKET}
@@ -162,7 +172,8 @@ type
       const aDatabaseName: RawUTF8; const aPort: RawUTF8=SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUTF8=''; const aPassword: RawUTF8='';
       aHttps: boolean=false; aThreadPoolCount: integer=1;
-      aProtocol: TSQLDBProxyConnectionProtocolClass=nil); override;
+      aProtocol: TSQLDBProxyConnectionProtocolClass=nil;
+      aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode=tmMainConnection); override;
   end;
 
   {$endif ONLYUSEHTTPSOCKET}
@@ -275,12 +286,17 @@ implementation
 
 constructor TSQLDBServerAbstract.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName,aPassword: RawUTF8; aHttps: boolean;
-  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
+  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
 begin
   fProperties := aProperties;
-  if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then
-    TSQLDBConnectionPropertiesThreadSafe(fProperties).ThreadingMode := tmMainConnection;
+  if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then begin
+    TSQLDBConnectionPropertiesThreadSafe(fProperties).ThreadingMode := aThreadMode;
+    if aThreadMode=tmMainConnection then
+      fProcessLocked := true;
+  end;
   fDatabaseName := aDatabaseName;
+  fSafe.Init;
   fPort := aPort;
   fHttps := aHttps;
   fThreadPoolCount := aThreadPoolCount;
@@ -294,6 +310,7 @@ begin
   inherited;
   fServer.Free;
   fProtocol.Free;
+  fSafe.Done;
 end;
 
 function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
@@ -304,7 +321,14 @@ begin
     result := STATUS_NOTFOUND;
     exit;
   end;
-  fProperties.ThreadSafeConnection.RemoteProcessMessage(Ctxt.InContent,o,fProtocol);
+  try
+    if fProcessLocked then
+      fSafe.Lock;
+    fProperties.ThreadSafeConnection.RemoteProcessMessage(Ctxt.InContent,o,fProtocol);
+  finally
+    if fProcessLocked then
+      fSafe.UnLock;
+  end;
   Ctxt.OutContent := o;
   Ctxt.OutContentType := BINARY_CONTENT_TYPE;
   result := STATUS_SUCCESS;
@@ -456,7 +480,8 @@ end;
 
 constructor TSQLDBServerHttpApi.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName,aPassword: RawUTF8; aHttps: boolean;
-  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
+  aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
 var status: integer;
 begin
   inherited;
@@ -482,7 +507,8 @@ end;
 
 constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName, aPassword: RawUTF8;
-  aHttps: boolean; aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass);
+  aHttps: boolean; aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
+  aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
 begin
   inherited;
   fServer := THttpServer.Create(aPort{$ifdef USETHREADPOOL},fThreadPoolCount{$endif});
