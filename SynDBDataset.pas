@@ -463,6 +463,7 @@ var Log: ISynLog;
     Field: TField;
 begin
   Log := SynDBLog.Enter(Self);
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   with Log.Instance do
     if sllSQL in Family.Level then
       Log(sllSQL,SQLWithInlinedParams,self,2048);

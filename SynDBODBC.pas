@@ -1529,6 +1529,7 @@ label retry;
 begin
   if fStatement=nil then
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',[self]);
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   if fSQL<>'' then
     with SynDBLog.Enter(Self,nil,true).Instance do

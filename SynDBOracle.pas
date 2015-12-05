@@ -2618,6 +2618,7 @@ label txt;
 begin
   if (fStatement=nil) then
     raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare',[self]);
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   with SynDBLog.Add do
     if sllSQL in Family.Level then begin
       if (Connection.Properties as TSQLDBOracleConnectionProperties).LogSQLWithoutValues then

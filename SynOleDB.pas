@@ -1845,9 +1845,10 @@ begin
     if Assigned(fRowSet) or (fColumnCount>0) or
        (fColumnBindings<>nil) or (fParamBindings<>nil) then
       raise EOleDBException.CreateUTF8('Missing call to %.Reset',[self]);
-    SetLength(IDLists, fParamCount);
+    inherited ExecutePrepared; // set fConnection.fLastAccessTicks
+    // 2. bind parameters
+    SetLength(IDLists,fParamCount);
     try
-      // 2. bind parameters
       if fParamCount=0 then
         // no parameter to bind
         fDBParams.cParamSets := 0 else begin
@@ -1893,7 +1894,7 @@ begin
           BI^.ulParamSize := 0;
           PO^ := i;
           // check array binding
-          if Length(P.VArray) >0 then begin
+          if Length(P.VArray)>0 then begin
             BI^.pwszDataSourceType := 'table';
             B^.wType := DBTYPE_TABLE;
             B^.cbMaxLen := sizeof(IUnknown);

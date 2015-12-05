@@ -1997,7 +1997,8 @@ type
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
-    procedure ExecutePrepared; virtual; abstract;
+    // - this void default implementation will call set fConnection.fLastAccess
+    procedure ExecutePrepared; virtual;
     /// Reset the previous prepared statement
     // - some drivers expect an explicit reset before binding parameters and
     // executing the statement another time
@@ -4109,10 +4110,11 @@ begin
     exit;
   end;
   Ticks := GetTickCount64;
-  if (fLastAccessTicks<>0) and
-     (Ticks-fLastAccessTicks>fProperties.fConnectionTimeOutTicks) then
-    result := true else
-    fLastAccessTicks := Ticks;
+  if (fLastAccessTicks=0) or (Ticks-fLastAccessTicks<fProperties.fConnectionTimeOutTicks) then
+    // brand new connection, or active enough connection
+    fLastAccessTicks := Ticks else
+    // notify connection is clearly outdated
+    result := true;
 end;
 
 function TSQLDBConnection.GetInTransaction: boolean;
@@ -7285,6 +7287,12 @@ begin
   end;
 end;
 
+procedure TSQLDBStatement.ExecutePrepared;
+begin
+  fConnection.fLastAccessTicks := GetTickCount64;
+  // a do-nothing default method
+end;
+
 procedure TSQLDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
@@ -8297,6 +8305,7 @@ var Input: TSQLDBProxyConnectionCommandExecute;
 const CMD: array[boolean] of TSQLDBProxyConnectionCommand = (
   cExecute, cExecuteToBinary);
 begin
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // execute the statement
   ParamsToCommand(Input);
   TSQLDBProxyConnectionPropertiesAbstract(fConnection.fProperties).Process(

@@ -701,6 +701,7 @@ procedure TSQLDBSQLite3Statement.ExecutePrepared;
 var SQLToBeLogged: RawUTF8;
     Timer: TPrecisionTimer;
 begin
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fBindShouldStoreValue then begin
     SQLToBeLogged := SQLWithInlinedParams;
     if length(SQLToBeLogged)>512 then begin

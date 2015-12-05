@@ -809,6 +809,7 @@ procedure TSQLDBFirebirdStatement.ExecutePrepared;
 var MainConn: TSQLDBFirebirdConnection;
     i: integer;
 begin
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   MainConn := TSQLDBFirebirdConnection(fConnection);
   with TFirebirdLib(MainConn.fFirebirdInstance) do begin
     // 1. release any deprecated main transaction/statement
