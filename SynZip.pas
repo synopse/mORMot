@@ -153,6 +153,7 @@ unit SynZip;
    - renamed ZipFormat parameter to ZlibFormat, and introduce it also for
      uncompression, so that both deflate and zlib layout are handled
    - allow reading files of size 0 in TZipRead
+   - fixed TZipWrite.Destroy issue as reported by [aa468640c59]
    - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler
 
 }
@@ -934,7 +935,7 @@ begin
     InternalWrite(pointer(IntName)^,fhr.fileInfo.nameLen);
   end;
   InternalWrite(lhr,sizeof(lhr));
-  inherited;
+  inherited Destroy;
 end;
 
 
@@ -1066,10 +1067,9 @@ end;
 
 destructor TZipWrite.Destroy;
 begin
-  inherited;
+  inherited Destroy; // will write TLastHeader content
   SetEndOfFile(Handle);
   FileClose(Handle);
-  inherited;
 end;
 
 
@@ -1246,7 +1246,7 @@ end;
 destructor TZipRead.Destroy;
 begin
   UnMap;
-  inherited;
+  inherited Destroy;
 end;
 
 function TZipRead.NameToIndex(const aName: TFileName): integer;
