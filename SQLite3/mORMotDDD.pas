@@ -171,8 +171,18 @@ function ToText(res: TCQRSResult): PShortString; overload;
 
 const
   /// successfull result enumerates for I*Query/I*Command CQRS
-  // - those items won't generate a sllDDDError log entry, for instance
-  CQRSRESULT_SUCCESS = [cqrsSuccess,cqrsSuccessWithMoreData,cqrsNoMoreData];
+  // - those items would generate no log entry
+  // - i.e. any command not included in CQRSRESULT_SUCCESS nor CQRSRESULT_WARNING
+  // would trigger a sllDDDError log entry
+  CQRSRESULT_SUCCESS = [
+    cqrsSuccess, cqrsSuccessWithMoreData, cqrsNoMoreData, cqrsNotFound];
+
+  /// dubious result enumerates for I*Query/I*Command CQRS
+  // - those items would generate a sllDDDInfo log entry
+  // - i.e. any command not included in CQRSRESULT_SUCCESS nor CQRSRESULT_WARNING
+  // would trigger a sllDDDError log entry
+  CQRSRESULT_WARNING = [
+    cqrsNotFound, cqrsNoMatch];
 
 
 { ----- Services / Daemon Interfaces }
@@ -1061,12 +1071,20 @@ begin
 end;
 
 procedure TCQRSService.AfterInternalCqrsSetResult;
+{$ifdef WITHLOG}
+var
+  level: TSynLogInfo;
+{$endif}
 begin
   {$ifdef WITHLOG}
-  if not (fLastError in CQRSRESULT_SUCCESS) then
-    if sllDDDError in fLog.Level then
-      fLog.SynLog.Log(sllDDDError,'%.CqrsSetResult(%) state=% %',
-        [ClassType,ToText(fLastError)^,ToText(fState)^,fLastErrorContext],self);
+  if fLastError in CQRSRESULT_SUCCESS then
+    exit;
+  if fLastError in CQRSRESULT_WARNING then
+    level := sllDDDInfo else
+    level := sllDDDError;
+  if level in fLog.Level then
+      fLog.SynLog.Log(level, '%.CqrsSetResult(%) state=% %',
+        [ClassType, ToText(fLastError)^, ToText(fState)^, fLastErrorContext], self);
   {$endif}
 end;
 
