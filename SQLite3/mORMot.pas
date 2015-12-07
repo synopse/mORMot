@@ -34123,10 +34123,8 @@ begin
       if Read=0 then begin
         SleepHiRes(100); // nothing available -> wait a little and retry
         Read := FileRead(Handle,P^,L);
-        if Read=0 then begin // server may be down -> abort
+        if Read=0 then // server may be down -> abort
           raise ECommunicationException.Create('ReadString');
-          exit;
-        end;
       end;
       inc(P,Read);
       dec(L,Read);
@@ -48149,12 +48147,12 @@ begin
     // not existing -> create new instance from RTTI
     {$ifdef HASINTERFACERTTI}
     result := TInterfaceFactoryRTTI.Create(aInterface);
+    InterfaceFactoryCache.Add(result);
     {$else}
     result := nil; // make compiler happy
     raise EInterfaceFactoryException.CreateUTF8('No RTTI available for I%: please '+
       'define the methods using a TInterfaceFactoryGenerated wrapper',[aInterface^.Name]);
     {$endif}
-    InterfaceFactoryCache.Add(result);
   finally
     InterfaceFactoryCache.Safe.UnLock;
   end;
