@@ -138,6 +138,7 @@ begin
       result := true;
     finally
       FreeAndNil(AdminControlConnecting);
+      Model.OnClientIdle := nil; // back to default blocking behavior (safer UI)
     end;
   except
     on E: Exception do begin

@@ -10259,6 +10259,8 @@ type
     /// retrieve the version as a 32 bits integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
+    /// build date and time of this exe file, as plain text
+    function BuildDateTimeString: string;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -28928,6 +28930,11 @@ end;
 function TFileVersion.Version32: integer;
 begin
   result := Major shl 16+Minor shl 8+Release;
+end;
+
+function TFileVersion.BuildDateTimeString: string;
+begin
+  DateTimeToIso8601StringVar(fBuildDateTime,' ',result);
 end;
 
 procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
