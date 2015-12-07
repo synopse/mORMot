@@ -10259,6 +10259,7 @@ type
     fMethod: TDynArrayHashed;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUTF8;
+    fInterfaceName: RawUTF8;
     {$ifndef NOVARIANTS}
     fDocVariantOptions: TDocVariantOptions;
     {$endif}
@@ -10266,7 +10267,6 @@ type
     fFakeStub: PByteArray;
     fMethodIndexCallbackReleased: Integer;
     fMethodIndexCurrentFrameCallback: Integer;
-    function GetInterfaceName: RawUTF8;
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
@@ -10314,6 +10314,11 @@ type
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactoryException if the method is not known
     function CheckMethodIndex(aMethodName: PUTF8Char): integer; overload;
+    /// returns the full 'Interface.MethodName' text, from a method index
+    // - the method index should start at 0 for _free_/_contract_/_signature_
+    // pseudo-methods, and start at index 3 for real Methods[]
+    // - will return plain 'Interface' text, if aMethodIndex is incorrect
+    function GetFullMethodName(aMethodIndex: integer): RawUTF8;
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
@@ -10352,7 +10357,7 @@ type
   published
     /// will return the interface name, e.g. 'ICalculator'
     // - published property to be serializable as JSON e.g. for debbuging info
-    property InterfaceName: RawUTF8 read GetInterfaceName;
+    property InterfaceName: RawUTF8 read fInterfaceName;
   end;
   {$M-}
 
@@ -18488,7 +18493,7 @@ begin
   for i := 0 to n-1 do
     if IncludePropType then
       result[i] := FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name]) else
-      result[i] := props[i]^.Name;
+      result[i] := ToUTF8(props[i]^.Name);
 end;
 
 function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false): RawUTF8;
@@ -18983,16 +18988,15 @@ begin // Address.Street1 -> Address_Street1
   result.fNameUnflattened := result.fName;
   max := high(aFlattenedProps);
   for i := max downto 0 do
-    result.fNameUnflattened :=
-      ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'.'+result.fNameUnflattened;
+    result.fNameUnflattened := ToUTF8(aFlattenedProps[i]^.Name)+'.'+result.fNameUnflattened;
   if (max>=0) and (aFlattenedProps[max]^.PropType^.
      ClassFieldCount(pilIgnoreIfGetter in aOptions)=1) then begin
     // Birth.Date -> Birth or Address.Country.Iso -> Address_Country
-    result.fName := ShortStringToAnsi7String(aFlattenedProps[max]^.Name);
+    result.fName := ToUTF8(aFlattenedProps[max]^.Name);
     dec(max);
   end;
   for i := max downto 0 do
-    result.fName := ShortStringToAnsi7String(aFlattenedProps[i]^.Name)+'_'+result.fName;
+    result.fName := ToUTF8(aFlattenedProps[i]^.Name)+'_'+result.fName;
 end;
 begin
   if aPropInfo=nil then
@@ -19086,7 +19090,7 @@ end;
 
 function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
 begin
-  result := ShortStringToUTF8(fPropType^.Name);
+  result := ToUTF8(fPropType^.Name);
 end;
 
 function TSQLPropInfoRTTI.GetFieldAddr(Instance: TObject): pointer;
@@ -19120,7 +19124,7 @@ begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil)=AS_UNIQUE then
     Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;
-  inherited Create(ShortStringToAnsi7String(aPropInfo^.Name),aSQLFieldType,attrib,
+  inherited Create(ToUTF8(aPropInfo^.Name),aSQLFieldType,attrib,
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
@@ -21122,7 +21126,7 @@ function TSQLPropInfoRecordRTTI.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo=nil then
     result := inherited GetSQLFieldRTTITypeName else
-    result := ShortStringToUTF8(fTypeInfo^.Name);
+    result := ToUTF8(fTypeInfo^.Name);
 end;
 
 constructor TSQLPropInfoRecordRTTI.Create(aRecordInfo: PTypeInfo;
@@ -21230,7 +21234,7 @@ function TSQLPropInfoRecordFixedSize.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo=nil then
     result := inherited GetSQLFieldRTTITypeName else
-    result := ShortStringToUTF8(fTypeInfo^.Name);
+    result := ToUTF8(fTypeInfo^.Name);
 end;
 
 constructor TSQLPropInfoRecordFixedSize.Create(aRecordSize: cardinal;
@@ -21354,7 +21358,7 @@ begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil)=AS_UNIQUE then
     Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;ieldWidth=10
-  Create(aPropInfo^.PropType{$ifndef FPC}^{$endif},ShortStringToAnsi7String(aPropInfo^.Name),
+  Create(aPropInfo^.PropType{$ifndef FPC}^{$endif},ToUTF8(aPropInfo^.Name),
     aPropIndex,aPropInfo^.GetFieldAddr(nil),attrib,aPropInfo^.Index);
 end;
 
@@ -21381,7 +21385,7 @@ function TSQLPropInfoCustomJSON.GetSQLFieldRTTITypeName: RawUTF8;
 begin
   if fTypeInfo=nil then
     result := inherited GetSQLFieldRTTITypeName else
-    result := ShortStringToUTF8(fTypeInfo^.Name);
+    result := ToUTF8(fTypeInfo^.Name);
 end;
 
 procedure TSQLPropInfoCustomJSON.SetCustomParser(
@@ -25416,7 +25420,7 @@ begin
         tkClass: begin
           Obj := P^.GetObjProp(Value);
           if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
-             WriteObject(Obj,SubCompName+RawUTF8(P^.Name)+'.',false);
+             WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
         end;
         {$ifndef NOVARIANTS}
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
@@ -28962,7 +28966,7 @@ begin
       if Props.fSQLFillPrepareMany='' then begin
         if aSQLFrom<>'' then
           aSQLFrom := aSQLFrom+',';
-        aSQLFrom := aSQLFrom+SQLTableName+' '+RawUTF8(aField[1]);
+        aSQLFrom := aSQLFrom+SQLTableName+' '+ToUTF8(aField[1]);
       end;
       inc(aField[1]);
     end;
@@ -34317,7 +34321,7 @@ begin
       pmr := @methodTable^.entries[0];
       for i := 0 to MethodTable^.count-1 do begin
         CallBack.Code := pmr^.addr;
-        ServiceMethodRegister(aPrefix+RawUTF8(pmr^.name^),TSQLRestServerCallBack(CallBack));
+        ServiceMethodRegister(aPrefix+ToUTF8(pmr^.name^),TSQLRestServerCallBack(CallBack));
         inc(pmr);
       end;
     end;
@@ -34369,7 +34373,7 @@ begin
           else
           end;
         CallBack.Code := M^.Addr;
-        ServiceMethodRegister(aPrefix+RawUTF8(M^.Name),TSQLRestServerCallBack(CallBack));
+        ServiceMethodRegister(aPrefix+ToUTF8(M^.Name),TSQLRestServerCallBack(CallBack));
         inc(PByte(M),M^.Len);
       end;
     end;
@@ -35633,7 +35637,8 @@ begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
-            Log.Log(sllUserAuth,'%/%',[aSession.User.LogonName,aSession.ID],self);
+            Log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
+              aSession.RemoteIP],self);
             {$endif}
             fSessionAccessRights := aSession.fAccessRights; // local copy
             Call^.RestAccessRights := @fSessionAccessRights;
@@ -35947,7 +35952,9 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
 var xml: RawUTF8;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
-  Log.Log(sllServiceCall,'%%',[URI,ServiceParameters],Server);
+  if sllServiceCall in Log.GenericFamily.Level then
+    Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
+     ServiceMethodIndex),ServiceParameters],Server);
   {$endif}
   if Assigned(Service.OnMethodExecute) and
      (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
@@ -42370,24 +42377,24 @@ begin
   for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
     case P^.PropType^.Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}:
-        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
+        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
           Int64ToUtf8(P^.GetInt64Prop(Value)));
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
         V := P^.GetOrdProp(Value);
         //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
-        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),
+        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
           Int32ToUtf8(V));
       end;
       {$ifdef UNICODE}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
       tkLString, tkWString: begin
         P^.GetLongStrValue(Value,tmp);
-        UpdateIniEntry(IniContent,Section,SubCompName+RawUTF8(P^.Name),tmp);
+        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),tmp);
         end;
       tkClass:
       if Section='' then begin // recursive call works only as plain object
         Obj := P^.GetObjProp(Value);
         if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
-          WriteObject(Value,IniContent,Section,SubCompName+RawUTF8(P^.Name)+'.');
+          WriteObject(Value,IniContent,Section,SubCompName+ToUTF8(P^.Name)+'.');
       end;
       // tkString (shortstring) and tkInterface are not handled
     end;
@@ -43402,7 +43409,7 @@ begin
         Obj := P^.GetObjProp(Value);
         if {$ifdef MSWINDOWS}(PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and{$endif}
            Obj.InheritsFrom(TPersistent) then
-          ReadObject(Obj,From,SubCompName+RawUTF8(P^.Name)+'.');
+          ReadObject(Obj,From,SubCompName+ToUTF8(P^.Name)+'.');
       end;
 {$ifndef NOVARIANTS}
       tkVariant: begin
@@ -48257,13 +48264,14 @@ begin
   if IsNullGUID(fInterfaceIID) then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create: % has no GUID',[self,aInterface^.Name]);
+  fInterfaceName := ToUTF8(fInterfaceTypeInfo^.Name);
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
     @fMethodsCount,true);
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount=0 then
     raise EInterfaceFactoryException.CreateUTF8(
-      '%.Create(%): interface has no RTTI',[self,aInterface^.Name]);
+      '%.Create(%): interface has no RTTI',[self,fInterfaceName]);
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
   SetLength(fMethods,fMethodsCount);
@@ -48514,11 +48522,20 @@ begin
   result := CheckMethodIndex(RawUTF8(aMethodName));
 end;
 
-function TInterfaceFactory.GetInterfaceName: RawUTF8;
+function TInterfaceFactory.GetFullMethodName(aMethodIndex: integer): RawUTF8;
 begin
-  if (self=nil) or (fInterfaceTypeInfo=nil) then
+  if self=nil then
     result := '' else
-    result := ShortStringToUTF8(fInterfaceTypeInfo^.Name);
+    if aMethodIndex<0 then
+      result := fInterfaceName else
+      if aMethodIndex<length(SERVICE_PSEUDO_METHOD) then
+        result := fInterfaceName+'.'+
+          SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)] else begin
+        dec(aMethodIndex,length(SERVICE_PSEUDO_METHOD));
+        if aMethodIndex<integer(fMethodsCount) then
+          result := fInterfaceName+'.'+fMethods[aMethodIndex].URI else
+          result := fInterfaceName;
+      end;
 end;
 
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
@@ -48691,7 +48708,7 @@ var P: Pointer;
   begin
     raise EInterfaceFactoryException.CreateUTF8(
       '%.AddMethodsFromTypeInfo(%.%) failed - %',
-      [self,fInterfaceTypeInfo^.Name,aURI,FormatUTF8(Format,Args)]);
+      [self,fInterfaceName,aURI,FormatUTF8(Format,Args)]);
   end;
 
 begin
@@ -48856,9 +48873,9 @@ var meth: PServiceMethod;
 begin
   if Length(aParams) mod ARGPERARG<>0 then
     raise EInterfaceFactoryException.CreateUTF8(
-      '%: invalid aParams count for %.AddMethod("%")',[fInterfaceTypeInfo^.Name,self,aName]);
+      '%: invalid aParams count for %.AddMethod("%")',[fInterfaceName,self,aName]);
   meth := fMethod.AddUniqueName(aName,'%.% method: duplicated generated name for %',
-    [fInterfaceTypeInfo^.Name,aName,self]);
+    [fInterfaceName,aName,self]);
   na := length(aParams) div ARGPERARG;
   SetLength(meth^.Args,na+1); // leave Args[0]=self
   with meth^.Args[0] do begin
@@ -48974,7 +48991,7 @@ constructor EInterfaceStub.Create(Sender: TInterfaceStub;
   const Method: TServiceMethod; const Error: RawUTF8);
 begin
   inherited CreateUTF8('Error in % for %.% - %',
-    [Sender,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,Error]);
+    [Sender,Sender.fInterface.fInterfaceName,Method.URI,Error]);
 end;
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
@@ -49173,7 +49190,7 @@ begin
   result := aValid;
   if aExpectationFailed and not aValid then
     raise EInterfaceStub.CreateUTF8('%.InternalCheck(%) failed: %',
-      [self,fInterface.fInterfaceTypeInfo^.Name,FormatUTF8(aErrorMsgFmt,aErrorMsgArgs)]);
+      [self,fInterface.fInterfaceName,FormatUTF8(aErrorMsgFmt,aErrorMsgArgs)]);
 end;
 
 constructor TInterfaceStub.Create(const aInterfaceName: RawUTF8; out aStubbedInterface);
@@ -49196,12 +49213,12 @@ end;
 
 constructor TInterfaceStub.Create(aInterface: PTypeInfo);
 begin
-  Create(TInterfaceFactory.Get(aInterface),RawUTF8(aInterface^.Name));
+  Create(TInterfaceFactory.Get(aInterface),ToUTF8(aInterface^.Name));
 end;
 
 constructor TInterfaceStub.Create(const aGUID: TGUID);
 begin
-  Create(TInterfaceFactory.Get(aGUID),GUIDToRawUTF8(aGUID));
+  Create(TInterfaceFactory.Get(aGUID),ToUTF8(aGUID));
 end;
 
 procedure TInterfaceStub.IntSetOptions(Options: TInterfaceStubOptions);
@@ -49498,7 +49515,7 @@ begin
         if imoReturnErrorIfNoRuleDefined in Options then begin
           result := false;
           Log.CustomResults := FormatUTF8('No stubbing rule defined for %.%',
-            [fInterface.fInterfaceTypeInfo^.Name,aMethod.URI]);
+            [fInterface.fInterfaceName,aMethod.URI]);
         end else
           result := true;
       end else
@@ -50241,8 +50258,8 @@ begin
   fInterface := TInterfaceFactory.Get(aInterface);
   fRest := aRest;
   fInstanceCreation := aInstanceCreation;
-  fInterfaceURI := aInterface^.Name;
   fInterfaceMangledURI := BinToBase64URI(@fInterface.fInterfaceIID,sizeof(TGUID));
+  fInterfaceURI := ToUTF8(aInterface^.Name);
   if fInterfaceURI[1] in ['I','i'] then
     delete(fInterfaceURI,1,1);
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
