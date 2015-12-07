@@ -138,7 +138,7 @@ begin
       result := true;
     finally
       FreeAndNil(AdminControlConnecting);
-      Model.OnClientIdle := nil; // back to default blocking behavior (safer UI)
+      fClient.OnIdle := nil; // back to default blocking behavior (safer UI)
     end;
   except
     on E: Exception do begin
@@ -223,6 +223,8 @@ destructor TAdminControl.Destroy;
 var
   i: integer;
 begin
+  if fClient <> nil then
+    fClient.OnIdle := TLoginForm.OnIdleProcess; // allow basic UI interactivity
   for i := 0 to high(fLogFrames) do begin
     EndLog(fLogFrames[i]);
     fLogFrames[i].Admin := nil;
@@ -235,7 +237,10 @@ begin
   fAdmin := nil;
   fDefinition.Free;
   if fClient <> nil then begin
-    Sleep(200); // leave some time to flush all pending CallBackUnRegister()
+    for i := 1 to 10 do begin
+      Sleep(50); // leave some time to flush all pending CallBackUnRegister()
+      Application.ProcessMessages;
+    end;
     FreeAndNil(fClient);
   end;
   inherited Destroy;
