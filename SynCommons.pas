@@ -399,6 +399,7 @@ unit SynCommons;
   - UTF-8 process will now handle UTF-16 surrogates - see ticket [4a0382367d] -
     UnicodeCharToUTF8/NextUTF8Char are renamed WideCharToUTF8/NextUTF8UCS4 and
     new UTF16CharToUTF8/UCS4ToUTF8 functions have been introduced
+  - added ToUTF8() overloaded functions, which could be used on most simple types
   - introducing TSynTimeZone class, for cross-platform local time handling 
   - added TextColor() and TextBackground() functions - will initialize internal
     console process after any manual AllocConsole call
@@ -428,7 +429,7 @@ unit SynCommons;
   - included x64 asm of FillChar() and Move() for Win64 - Delphi RTL will be
     patched at startup, if the DOPATCHTRTL conditional is defined
   - introduced FillcharFast() and MoveFast() global function variables,
-    pointing to optimized asm versions, depending on the CPU abilities 
+    pointing to optimized asm versions, depending on the CPU abilities
   - FastCode-based x86 asm Move() procedure will handle source=dest
   - faster x86/x64 asm versions of StrUInt32() StrInt32() StrInt64() functions
   - new StrUInt64(), UniqueRawUTF8(), FastNewRawUTF8() and SetRawUTF8() functions
@@ -1762,6 +1763,21 @@ function StringToUTF8(const Text: string): RawUTF8; overload;
 procedure StringToUTF8(const Text: string; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert any generic VCL Text into an UTF-8 encoded String
+function ToUTF8(const Text: string): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
+// - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
+// a RTTI type or property name: it won't work with Ansi-encoded strings 
+function ToUTF8(const Ansi7Text: ShortString): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TGUID into UTF-8 encoded text
+// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
+// - if you need the embracing { }, use GUIDToRawUTF8() function instead
+function ToUTF8(const guid: TGUID): RawUTF8; overload;
+
 {$ifndef NOVARIANTS}
 
 type
@@ -1773,6 +1789,12 @@ type
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
 function VariantToUTF8(const V: Variant): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any Variant into UTF-8 encoded String
+// - use VariantSaveJSON() instead if you need a conversion to JSON with
+// custom parameters
+function ToUTF8(const V: Variant): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Variant into UTF-8 encoded String
@@ -2123,7 +2145,7 @@ function Int32ToUtf8(Value: integer): RawByteString; overload;
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - result as var parameter saves a local assignment and a try..finally
-procedure Int32ToUTF8(Value : integer; var result: RawUTF8); overload;
+procedure Int32ToUTF8(Value: integer; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
@@ -2131,6 +2153,16 @@ procedure Int32ToUTF8(Value : integer; var result: RawUTF8); overload;
 // - result as var parameter saves a local assignment and a try..finally
 procedure Int64ToUtf8(Value: Int64; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// use our fast RawUTF8 version of IntToStr()
+function ToUTF8(Value: PtrInt): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+{$ifndef CPU64}
+/// use our fast RawUTF8 version of IntToStr()
+function ToUTF8(Value: Int64): RawByteString; overload;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
 function UInt32ToUtf8(Value: cardinal): RawByteString; overload;
@@ -5320,6 +5352,7 @@ function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - if you do not need the embracing { }, use ToUTF8() overloaded function
 function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 
 /// convert a TGUID into text
@@ -15810,6 +15843,29 @@ begin
 end;
 {$endif}
 
+{$ifdef UNICODE}
+function ToUTF8(const Text: string): RawUTF8;
+begin
+  RawUnicodeToUtf8(pointer(Text),length(Text),result);
+end;
+{$else}
+function ToUTF8(const Text: string): RawUTF8;
+begin
+  result := CurrentAnsiConvert.AnsiToUTF8(Text);
+end;
+{$endif}
+
+function ToUTF8(const Ansi7Text: ShortString): RawUTF8;
+begin
+  SetString(result,PAnsiChar(@Ansi7Text[1]),ord(Ansi7Text[0]));
+end;
+
+function ToUTF8(const guid: TGUID): RawUTF8;
+begin
+  FastNewRawUTF8(result,36);
+  GUIDToText(pointer(result),@guid);
+end;
+
 procedure Int32ToUTF8(Value : integer; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
@@ -17278,6 +17334,12 @@ begin
 end;
 
 function VariantToUTF8(const V: Variant): RawUTF8;
+var wasString: boolean;
+begin
+  VariantToUTF8(V,result,wasString);
+end;
+
+function ToUTF8(const V: Variant): RawUTF8; overload;
 var wasString: boolean;
 begin
   VariantToUTF8(V,result,wasString);
@@ -18875,7 +18937,25 @@ end;
 
 {$endif}
 
-function UInt32ToUTF8(Value: Cardinal): RawByteString; // faster than SysUtils.IntToStr
+{$ifndef CPU64} // already implemented by ToUTF8(Value: PtrInt) below
+function ToUTF8(Value: Int64): RawByteString;
+var tmp: array[0..23] of AnsiChar;
+    P: PAnsiChar;
+begin
+  P := StrInt64(@tmp[23],Value);
+  SetString(result,P,@tmp[23]-P);
+end;
+{$endif}
+
+function ToUTF8(Value: PtrInt): RawByteString;
+var tmp: array[0..15] of AnsiChar;
+    P: PAnsiChar;
+begin
+  P := StrInt32(@tmp[15],Value);
+  SetString(result,P,@tmp[15]-P);
+end;
+
+function UInt32ToUTF8(Value: Cardinal): RawByteString;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -41312,7 +41392,7 @@ begin
   vtPWideChar:
     AddW(pointer(VPWideChar),StrLenW(VPWideChar),Escape);
   vtAnsiString:
-    Add(VAnsiString,Escape); // expect RawUTF8
+    Add(VAnsiString,length(RawUTF8(VAnsiString)),Escape); // expect RawUTF8
   vtCurrency:
     AddCurr64(VInt64^);
   vtWideString:
