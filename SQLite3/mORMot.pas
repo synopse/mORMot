@@ -9647,7 +9647,9 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
     // cleared with ObjArrClear() and not TDynArray.Clear
-    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray);
+    // - vIsInXMM is used under 64 bit ABI, for floating point constant arguments
+    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray
+      {$ifdef CPU64}, vIsInXMM{$endif});
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -47503,9 +47505,6 @@ const
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
-  {$ifdef CPU64}
-  CONST_STOREDINXMM: TServiceMethodValueTypes = [smvDouble, smvDateTime];
-  {$else}
   // always aligned to 8 bytes boundaries for x64
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
@@ -47515,7 +47514,6 @@ const
     {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
     PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
  // Object, RawJSON, DynArray, Interface
-   {$endif}
 
   CONST_ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
     smvRawUTF8, smvRawJSON, smvString, smvRawByteString, smvWideString, smvRecord,
@@ -47717,14 +47715,14 @@ begin
         V := nil; // make compiler happy
       end;
       {$ifdef LINUX}
-      {$else}
-      REGRDX: if ValueType in CONST_STOREDINXMM then
+      {$else} // see https://msdn.microsoft.com/en-us/library/zthk2dkh.aspx
+      REGRDX: if vIsInXMM in ValueKindAsm then
                 V := @aCall.XMM1 else
                 V := @aCall.RDX;
-      REGR8:  if ValueType in CONST_STOREDINXMM then
+      REGR8:  if vIsInXMM in ValueKindAsm then
                 V := @aCall.XMM2 else
                 V := @aCall.R8;
-      REGR9:  if ValueType in CONST_STOREDINXMM then
+      REGR9:  if vIsInXMM in ValueKindAsm then
                 V := @aCall.XMM3 else
                 V := @aCall.R9;
       {$endif}
@@ -47900,15 +47898,14 @@ begin
   result := 0;
   resultType := smvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
+  case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef CPU64}
-  if resultType in CONST_STOREDINXMM then
-    aCall.XMM1 := PDouble(@result)^;
+  smvDouble,smvDateTime: aCall.XMM1 := PDouble(@result)^;
   {$else}
-  case resultType of // al/ax/eax/eax:edx already in result
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
-  end;
   {$endif}
+  end;
 end;
 {$endif CPUARM}
 
@@ -48278,7 +48275,7 @@ begin
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
-    InterfaceDotMethodName := InterfaceName+'.'+URI;
+    InterfaceDotMethodName := fInterfaceName+'.'+URI;
     if InterfaceDotMethodName[1] in ['I','i'] then
       delete(InterfaceDotMethodName,1,1); // as in TServiceFactory.Create
     ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
@@ -48380,15 +48377,23 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
       include(ArgsUsed,ValueType);
-      if ValueType in [smvRawUTF8..smvWideString] then
-        Include(ValueKindAsm,vIsString);
-      if (ValueType=smvDynArray) and (ObjArraySerializers.Find(ArgTypeInfo)<>nil) then
-        Include(ValueKindAsm,vIsObjArray);
       if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
           {$ifdef FPC},smvDynArray{$endif}]) or
          (ValueDirection in [smdVar,smdOut]) or
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
+      case ValueType of
+      smvRawUTF8..smvWideString:
+        Include(ValueKindAsm,vIsString);
+      smvDynArray:
+        if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
+          Include(ValueKindAsm,vIsObjArray);
+      {$ifdef CPU64}
+      smvDouble,smvDateTime:
+        if (reg<=REG_LAST) and not (vPassedByReference in ValueKindAsm) then
+          Include(ValueKindAsm,vIsInXMM);
+      {$endif}
+      end;
       case ValueType of
         smvBoolean:
           SizeInStorage := 1;
@@ -48533,7 +48538,7 @@ begin
           SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)] else begin
         dec(aMethodIndex,length(SERVICE_PSEUDO_METHOD));
         if aMethodIndex<integer(fMethodsCount) then
-          result := fInterfaceName+'.'+fMethods[aMethodIndex].URI else
+          result := fMethods[aMethodIndex].InterfaceDotMethodName else
           result := fInterfaceName;
       end;
 end;
