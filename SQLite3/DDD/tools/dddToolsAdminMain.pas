@@ -122,7 +122,7 @@ begin
     then
     exit;
   try
-    AdminControlConnecting := CreateTempForm('Connecting to ' + Definition.ORM.ServerName);
+    AdminControlConnecting := CreateTempForm('Connecting to ' + string(Definition.ORM.ServerName));
     try
       Application.ProcessMessages;
       if Model = nil then

@@ -5,21 +5,21 @@ object DBFrame: TDBFrame
   Height = 339
   TabOrder = 0
   object spl2: TSplitter
-    Left = 185
+    Left = 169
     Top = 0
     Height = 339
   end
   object pnlRight: TPanel
-    Left = 188
+    Left = 172
     Top = 0
-    Width = 501
+    Width = 517
     Height = 339
     Align = alClient
     TabOrder = 0
     object spl1: TSplitter
       Left = 1
       Top = 113
-      Width = 499
+      Width = 515
       Height = 3
       Cursor = crVSplit
       Align = alTop
@@ -27,18 +27,18 @@ object DBFrame: TDBFrame
     object pnlTop: TPanel
       Left = 1
       Top = 1
-      Width = 499
+      Width = 515
       Height = 112
       Align = alTop
       Constraints.MinHeight = 100
       TabOrder = 0
       DesignSize = (
-        499
+        515
         112)
       object mmoSQL: TMemo
         Left = 0
         Top = 0
-        Width = 438
+        Width = 454
         Height = 111
         Anchors = [akLeft, akTop, akRight, akBottom]
         Font.Charset = DEFAULT_CHARSET
@@ -50,7 +50,7 @@ object DBFrame: TDBFrame
         TabOrder = 0
       end
       object btnExec: TButton
-        Left = 445
+        Left = 461
         Top = 8
         Width = 43
         Height = 25
@@ -63,7 +63,7 @@ object DBFrame: TDBFrame
         OnClick = btnExecClick
       end
       object btnHistory: TButton
-        Left = 445
+        Left = 461
         Top = 40
         Width = 43
         Height = 25
@@ -76,7 +76,7 @@ object DBFrame: TDBFrame
         OnClick = btnHistoryClick
       end
       object btnCmd: TButton
-        Left = 445
+        Left = 461
         Top = 72
         Width = 43
         Height = 25
@@ -93,7 +93,7 @@ object DBFrame: TDBFrame
     object drwgrdResult: TDrawGrid
       Left = 1
       Top = 116
-      Width = 499
+      Width = 515
       Height = 117
       Align = alTop
       Font.Charset = DEFAULT_CHARSET
@@ -110,14 +110,14 @@ object DBFrame: TDBFrame
   object pnlLeft: TPanel
     Left = 0
     Top = 0
-    Width = 185
+    Width = 169
     Height = 339
     Align = alLeft
     TabOrder = 1
     object lstTables: TListBox
       Left = 1
       Top = 45
-      Width = 183
+      Width = 167
       Height = 293
       Align = alClient
       Font.Charset = DEFAULT_CHARSET
@@ -133,17 +133,17 @@ object DBFrame: TDBFrame
     object pnlLeftTop: TPanel
       Left = 1
       Top = 1
-      Width = 183
+      Width = 167
       Height = 44
       Align = alTop
       TabOrder = 1
       DesignSize = (
-        183
+        167
         44)
       object edtLabels: TEdit
         Left = 5
         Top = 4
-        Width = 172
+        Width = 156
         Height = 21
         Hint = 'Incremental Search'
         Anchors = [akLeft, akTop, akRight]
@@ -155,7 +155,7 @@ object DBFrame: TDBFrame
       object chkTables: TCheckBox
         Left = 8
         Top = 26
-        Width = 153
+        Width = 156
         Height = 17
         Caption = 'chkTables'
         TabOrder = 1
