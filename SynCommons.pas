@@ -5075,7 +5075,7 @@ type
     /// finaalize the list memory and resources
     destructor Destroy; override;
     /// append a task, specifying a delay in milliseconds from current time
-    procedure AddTask(aMilliSecondsDelayFromNow: integer; const aTask: RawByteString);
+    procedure AddTask(aMilliSecondsDelayFromNow: integer; const aTask: RawByteString); virtual;
     /// append several tasks, specifying a delay in milliseconds between tasks
     // - first supplied delay would be computed from the current time, then
     // it would specify how much time to wait between the next supplied task
@@ -5085,6 +5085,8 @@ type
     // - returns '' if there is no scheduled task available at the current time
     // - returns the next stack as defined corresponding to its specified delay
     function NextPendingTask: RawByteString; virtual;
+    /// flush all pending tasks
+    procedure Clear; virtual;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynlocker read fSafe;
@@ -50544,6 +50546,18 @@ begin
         result := fTask[0].Task;
         fTasks.FastDeleteSorted(0);
       end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TPendingTaskList.Clear;
+begin
+  if (self=nil) or (fCount=0) then
+    exit;
+  fSafe.Lock;
+  try
+    fTasks.Clear;
   finally
     fSafe.UnLock;
   end;
