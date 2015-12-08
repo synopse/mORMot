@@ -11515,6 +11515,12 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 procedure SetVariantNull(var Value: variant);
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  NullVarData: TVarData = (VType: varNull);
+var
+  /// a slightly faster alternative to Variants.Null function
+  Null: variant absolute NullVarData;
+
 {$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
@@ -15899,6 +15905,9 @@ begin
     vtBoolean: if V.VBoolean then
                  value := 1 else
                  value := 0;
+    {$ifndef NOVARIANTS}
+    vtVariant: value := V.VVariant^;
+    {$endif}
     else begin
       result := false;
       exit;
@@ -15917,6 +15926,9 @@ begin
                  value := 0;
     vtExtended: value := V.VExtended^;
     vtCurrency: value := V.VCurrency^;
+    {$ifndef NOVARIANTS}
+    vtVariant: value := V.VVariant^;
+    {$endif}
     else begin
       result := false;
       exit;
@@ -16039,7 +16051,7 @@ begin
   with V do
   case V.VType of
     vtString:
-      result := VString^;
+      SetRawUTF8(result,@VString^[1],ord(VString^[0]));
     vtAnsiString:
       result := RawUTF8(VAnsiString); // expect UTF-8 content
     {$ifdef UNICODE}
