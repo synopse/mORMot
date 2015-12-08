@@ -52933,8 +52933,7 @@ end;
 
 
 function ObjectFromInterface(const aValue: IInterface): TObject;
-{$ifndef ISDELPHI2010}
-{$ifndef CPU64}
+{$ifndef HASINTERFACEASTOBJECT}
 type
   TObjectFromInterfaceStub = packed record
     Stub: cardinal;
@@ -52944,39 +52943,32 @@ type
   end;
   PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 {$endif}
-{$endif}
 begin
-  if aValue=nil then begin
+  if aValue<>nil then
+    {$ifdef HASINTERFACEASTOBJECT}
+    result := aValue as TObject else // slower but always working
+    {$else}
+    with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
+    case Stub of // address of VMT[0] entry, i.e. QueryInterface
+      $04244483: begin
+        result := pointer(PtrInt(aValue)+ShortJmp);
+        exit;
+      end;
+      $04244481: begin
+        result := pointer(PtrInt(aValue)+LongJmp);
+        exit;
+      end;
+      else // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
+      if Stub=PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then begin
+        result := TInterfacedObjectFake(pointer(aValue)).SelfFromInterface;
+        exit;
+      end else begin
+        result := nil;
+        exit;
+      end;
+    end else
+    {$endif}
     result := nil;
-    exit;
-  end;
-  {$ifdef ISDELPHI2010}
-  result := aValue as TObject; // slower but always working
-  {$else}
-  {$ifdef FPC}
-  result := aValue as TObject;
-  {$else}
-  with PObjectFromInterfaceStub(PPointer(PPointer(aValue)^)^)^ do
-  case Stub of // address of VMT[0] entry, i.e. QueryInterface
-    $04244483: begin
-      result := pointer(PtrInt(aValue)+ShortJmp);
-      exit;
-    end;
-    $04244481: begin
-      result := pointer(PtrInt(aValue)+LongJmp);
-      exit;
-    end;
-    else // recognize TInterfaceFactory.CreateFakeInstance() stub/mock
-    if Stub=PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then begin
-      result := TInterfacedObjectFake(pointer(aValue)).SelfFromInterface;
-      exit;
-    end else begin
-      result := nil;
-      exit;
-    end;
-  end;
-  {$endif}
-  {$endif}
 end;
 
 procedure SetWeak(aInterfaceField: PIInterface; const aValue: IInterface);

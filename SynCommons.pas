@@ -16089,18 +16089,12 @@ begin
          result := PShortString(PPointer(PPtrInt(VObject)^+vmtClassName)^)^ else
          result := '';
     vtInterface:
-      {$ifdef ISDELPHI2010}
-      if VInterface<>nil then
-        result := PShortString(PPointer(PPtrInt(IInterface(VInterface) as TObject)^+vmtClassName)^)^ else
-        result := '';
-      {$else}
-      {$ifdef FPC}
+      {$ifdef HASINTERFACEASTOBJECT}
       if VInterface<>nil then
         result := PShortString(PPointer(PPtrInt(IInterface(VInterface) as TObject)^+vmtClassName)^)^ else
         result := '';
       {$else}
       PointerToHex(VInterface,result);
-      {$endif}
       {$endif}
     {$ifndef NOVARIANTS}
     vtVariant:

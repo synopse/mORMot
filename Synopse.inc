@@ -193,6 +193,7 @@
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define HASAESNI}
   {$define HASTTHREADSTART}
+  {$define HASINTERFACEASTOBJECT}
   {$define FPC_OR_UNICODE}
   {$define DELPHI5ORFPC}
 
@@ -323,6 +324,7 @@
       {$define ISDELPHI2010}
       {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
+      {$define HASINTERFACEASTOBJECT}
       {$ifdef NEWRTTINOTUSED}
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
