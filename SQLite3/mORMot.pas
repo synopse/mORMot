@@ -49163,7 +49163,7 @@ begin
     end;
 end;
 
-{$endif}
+{$endif NOVARIANTS}
 
 constructor TInterfaceStub.Create(aFactory: TInterfaceFactory;
   const aInterfaceName: RawUTF8);
@@ -49347,7 +49347,7 @@ begin
     aEvent,aEventParams);
 end;
 
-{$endif}
+{$endif NOVARIANTS}
 
 function TInterfaceStub.ExpectsCount(const aMethodName: RawUTF8; aOperator: TSQLQueryOperator;
   aValue: cardinal): TInterfaceStub;
@@ -49539,7 +49539,7 @@ begin
             ExecutesCtxt.Free;
           end;
         end;
-{$ifndef NOVARIANTS}
+        {$ifndef NOVARIANTS}
         isExecutesVariant: begin
           ExecutesCtxt := TOnInterfaceStubExecuteParamsVariant.Create(
             self,@aMethod,aParams,Values);
@@ -49554,7 +49554,8 @@ begin
             ExecutesCtxt.Free;
           end;
         end;
-{$endif}isRaises:
+        {$endif}
+        isRaises:
           raise ExceptionClass.Create(UTF8ToString(Values));
         isReturns: begin
           result := true;

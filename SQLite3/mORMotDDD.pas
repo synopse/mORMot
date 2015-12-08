@@ -2322,8 +2322,6 @@ var rest: TSQLRest;
     valid: Boolean;
     status: variant;
     res: TCQRSResult;
-    mem: TSynMonitorMemory;
-    disk: TSynMonitoryDisk;
     cmd: integer;
 begin
   result.Header := JSON_CONTENT_TYPE_HEADER_VAR;
@@ -2367,26 +2365,7 @@ begin
         inc(P,table+1);
       end;
       {$endif}
-      mem := TSynMonitorMemory.Create;
-      disk := TSynMonitoryDisk.Create; // current drive
-      with SystemInfo {$ifdef MSWINDOWS},OSVersionInfo {$endif} do
-      result.Content := JSONEncode([
-        'host',ExeVersion.Host,'user',ExeVersion.User,
-        {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
-        'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
-        'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
-        'hypervisor',cf_HYP in CpuFeatures,
-        {$endif}{$endif}
-        'cpucount',
-        {$ifdef MSWINDOWS}
-        dwNumberOfProcessors,'os',FormatUTF8(
-          '% % (%.%.%)',[GetEnumNameTrimed(TypeInfo(TWindowsVersion),OSVersion),
-          szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]),
-        'wow64',IsWow64{$ifdef MSWINDOWS_INCLUDESENV},'env',value{$endif}{$else}
-        nprocs,'os',FormatUTF8('%-% %',[uts.sysname,uts.release,uts.version])
-        {$endif},'mem',mem,'disk',disk]);
-      disk.Free;
-      mem.Free;
+      result.Content := SystemInfoJson;
       exit;
     end;
     {$ifdef WITHLOG}

@@ -2378,28 +2378,11 @@ type TR = record
      end;
 var A,B,C: TR;
     i: integer;
-    {$ifdef LINUX}
-    uts: UtsName;
-    {$endif}
 begin
-  {$ifdef LINUX}
-  {$ifdef FPC}
-  FPUname(uts);
-  {$else}
-  uname(uts);
-  {$endif}
-  {$endif}
   if Pos('Using mORMot',Owner.CustomVersions)=0 then
     Owner.CustomVersions := Owner.CustomVersions+#13#10'Using mORMot '+
-      SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+
-    {$ifdef MSWINDOWS}
-    string(GetEnumName(TypeInfo(TWindowsVersion),ord(OSVersion))^)+
-    ' with code page '+IntToString(GetACP)
-    {$else}
-    {$ifdef LINUX}
-    string(uts.sysname)+' '+string(uts.release)+' '+string(uts.version)
-    {$endif}
-    {$endif};
+      SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+string(OSVersionText)
+      {$ifdef MSWINDOWS}+' with code page '+IntToString(GetACP){$endif};
   fillchar(A,sizeof(A),0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;

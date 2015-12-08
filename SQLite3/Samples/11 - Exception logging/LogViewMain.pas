@@ -863,8 +863,7 @@ begin
           s := ' / '+UTF8ToString(InstanceName);
         if OS=wUnknown then
           win := UTF8ToString(DetailedOS) else
-          win := format('Windows %s (service pack %d)',
-            [GetCaptionFromEnum(TypeInfo(TWindowsVersion),ord(OS)),ServicePack]);
+          win := format('Windows %s (service pack %d)',[WINDOWS_NAME[OS],ServicePack]);
         s := format(sStats,
           [FileName,Ansi7ToString(KB(Map.Size)),
            UTF8ToString(ExecutableName),s,Ansi7ToString(ExecutableVersion),
@@ -1215,4 +1214,4 @@ begin
     RenameFile('temp~.log',dlgSaveList.FileName);
 end;
 
-end.
+end.

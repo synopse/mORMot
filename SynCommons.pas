@@ -830,7 +830,11 @@ type
 {$ifdef ISDELPHI2009}
   PtrUInt = cardinal; { see http://synopse.info/forum/viewtopic.php?id=136 }
 {$else}
-  PtrUInt = {$ifdef UNICODE}NativeUInt{$else}cardinal{$endif};
+  {$ifdef UNICODE}
+  PtrUInt = NativeUInt;
+  {$else}
+  PtrUInt = cardinal;
+  {$endif}
 {$endif}
   /// a CPU-dependent unsigned integer type cast of a pointer of pointer
   // - used for 64 bits compatibility, native under Free Pascal Compiler
@@ -838,13 +842,25 @@ type
 
   /// a CPU-dependent signed integer type cast of a pointer / register
   // - used for 64 bits compatibility, native under Free Pascal Compiler
-  PtrInt = {$ifdef UNICODE}NativeInt{$else}integer{$endif};
+{$ifdef ISDELPHI2009}
+  PtrInt = integer;
+{$else}
+  {$ifdef UNICODE}
+  PtrInt = NativeInt;
+  {$else}
+  PtrInt = integer;
+  {$endif}
+{$endif}
   /// a CPU-dependent signed integer type cast of a pointer of pointer
   // - used for 64 bits compatibility, native under Free Pascal Compiler
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
-  QWord = {$ifdef HASINLINE}UInt64{$else}Int64{$endif};
+  {$ifdef HASINLINE}
+  QWord = UInt64;
+  {$else}
+  QWord = Int64;
+  {$endif}
 
   {$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
@@ -914,8 +930,9 @@ type
   TPtrUIntDynArray = array of PtrUInt;
 
 {$ifndef NOVARIANTS}
-  /// a pointer to a variant array
+  /// a variant values array
   TVariantArray = array[0..MaxInt div SizeOf(Variant)-1] of Variant;
+  /// a pointer to a variant array
   PVariantArray = ^TVariantArray;
 
   /// a dynamic array of variant values
@@ -931,9 +948,11 @@ type
 // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
 // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
 // - all conversion to/from AnsiString or RawUTF8 must be explicit
-{$ifdef UNICODE} RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
-{$else}          RawUnicode = type AnsiString;
-{$endif}
+  {$ifdef UNICODE}
+  RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
+  {$else}
+  RawUnicode = type AnsiString;
+  {$endif}
 
   /// RawUTF8 is an UTF-8 String stored in an AnsiString
   // - use this type instead of System.UTF8String, which behavior changed
@@ -941,16 +960,22 @@ type
   // is consistent and compatible with all versions of Delphi compiler
   // - mimic Delphi 2009 UTF8String, without the charset conversion overhead
   // - all conversion to/from AnsiString or RawUnicode must be explicit
-{$ifdef UNICODE} RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
-{$else}          RawUTF8 = type AnsiString; {$endif}
+  {$ifdef UNICODE}
+  RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
+  {$else}
+  RawUTF8 = type AnsiString;
+  {$endif}
 
   /// WinAnsiString is a WinAnsi-encoded AnsiString (code page 1252)
   // - use this type instead of System.String, which behavior changed
   // between Delphi 2009 compiler and previous versions: our implementation
   // is consistent and compatible with all versions of Delphi compiler
   // - all conversion to/from RawUTF8 or RawUnicode must be explicit
-{$ifdef UNICODE} WinAnsiString = type AnsiString(1252); // WinAnsi Codepage
-{$else}          WinAnsiString = type AnsiString; {$endif}
+  {$ifdef UNICODE}
+  WinAnsiString = type AnsiString(1252); // WinAnsi Codepage
+  {$else}
+  WinAnsiString = type AnsiString;
+  {$endif}
 
 {$ifndef UNICODE}
   /// define RawByteString, as it does exist in Delphi 2009+
@@ -980,8 +1005,11 @@ type
   //   has been made much faster since Windows Vista/Seven)
   // - starting with Delphi 2009, it uses fastest UnicodeString type, which
   //   allow Copy On Write, Reference Counting and fast heap memory allocation
-  {$ifdef UNICODE}SynUnicode = UnicodeString;
-  {$else}         SynUnicode = WideString; {$endif}
+  {$ifdef UNICODE}
+  SynUnicode = UnicodeString;
+  {$else}
+  SynUnicode = WideString;
+  {$endif}
 
   PRawUnicode = ^RawUnicode;
   PRawJSON = ^RawJSON;
@@ -1727,7 +1755,7 @@ function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString; overload; i
 // but is faster, since use no Win32 API call
 procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
 
-{$endif}
+{$endif HASVARUSTRING}
 
 {$ifdef UNICODE}
 
@@ -1746,7 +1774,8 @@ function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: integer): Unicod
 /// convert a Win-Ansi string into a Delphi 2009+ Unicode string
 // - this function is faster than default RTL, since use no Win32 API call
 function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; inline; overload;
-{$endif}
+
+{$endif UNICODE}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
 // - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
@@ -2335,7 +2364,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 function StrLenPas(S: pointer): PtrInt;
 
 {$ifdef FPC}
-/// FPC will use its internal optimized implementation
+/// FPC will use its internal optimized implementations
 function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillChar;
 {$else}
@@ -2785,6 +2814,7 @@ function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
 
 {$ifdef USENORMTOUPPER}
+
 /// fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
 // - this version expects u1 and u2 to be zero-terminated
 // - this version will decode each UTF-8 glyph before using NormToUpper[]
@@ -2848,7 +2878,7 @@ function LowerCaseU(const S: RawUTF8): RawUTF8;
 // - will not set the last char to #0 (caller must do that if necessary)
 function ConvertCaseUTF8(P: PUTF8Char; const Table: TNormTableByte): PtrInt;
 
-{$endif}
+{$endif USENORMTOUPPER}
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
@@ -2921,7 +2951,7 @@ function FindIniEntryW(const Content: string; const Section, Name: RawUTF8): str
 {$ifdef FPC}
 /// our fast RawUTF8 version of Trim(), for FPC only
 function Trim(const S: RawUTF8): RawUTF8;
-{$endif}
+{$endif FPC}
 
 {$ifdef PUREPASCAL}
 
@@ -4572,10 +4602,10 @@ type
     function Find(const Elem): integer; inline;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
-  {$else}
+  {$else UNDIRECTDYNARRAY}
   TDynArrayHashed = object(TDynArray)
   protected
-  {$endif}
+  {$endif UNDIRECTDYNARRAY}
     fHashElement: TDynArrayHashOne;
     fHasher: THasher;
     fHashs: TSynHashDynArray;
@@ -5300,6 +5330,7 @@ procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer); overlo
 
 {$endif DELPHI5OROLDER}
 
+
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
@@ -5373,6 +5404,7 @@ function RandomGUID: TGUID; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
+  /// stack-allocated ASCII string, used by GUIDToShort() function
   TGUIDShortString = string[38];
 
 const
@@ -5599,8 +5631,7 @@ function SortDynArrayVariantI(const A,B): integer;
 
 /// compare two "array of variant" elements, with or without case sensitivity
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
-
-{$endif}
+{$endif NOVARIANTS}
 
 
 /// hash one AnsiString content with the suppplied Hasher() function
@@ -5633,7 +5664,7 @@ function HashUnicodeString(const Elem; Hasher: THasher): cardinal;
 /// case-insensitive hash one UnicodeString content with the suppplied Hasher() function
 // - work with UnicodeString in Delphi 2009+
 function HashUnicodeStringI(const Elem; Hasher: THasher): cardinal;
-{$endif}
+{$endif UNICODE}
 
 {$ifndef NOVARIANTS}
 /// case-sensitive hash one variant content with the suppplied Hasher() function
@@ -5641,7 +5672,7 @@ function HashVariant(const Elem; Hasher: THasher): cardinal;
 
 /// case-insensitive hash one variant content with the suppplied Hasher() function
 function HashVariantI(const Elem; Hasher: THasher): cardinal;
-{$endif}
+{$endif NOVARIANTS}
 
 /// hash one PtrUInt (=NativeUInt) value with the suppplied Hasher() function
 function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
@@ -6246,6 +6277,7 @@ type
   end;
 
   /// the available logging events, as handled by TSynLog
+  // - defined in SynCommons so that it may be used with TTextWriter.AddEndOfLine
   // - sllInfo will log general information events
   // - sllDebug will log detailed debugging information
   // - sllTrace will log low-level step by step debugging information
@@ -10326,7 +10358,12 @@ const
 // - generally does not include the release or build numbers
 // - returns Cardinal(-1) in case of failure
 function GetFileVersion(const FileName: TFileName): cardinal;
+
 {$endif}
+
+/// returns a JSON object containing deailed information about the computer
+// - including Host, User, CPU, OS, freemem, freedisk...
+function SystemInfoJson: RawUTF8;
 
 {$ifdef MSWINDOWS}
 
@@ -10335,10 +10372,10 @@ type
   TWindowsVersion = (
     wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
     wVista, wVista_64, wServer2008, wServer2008_64,
-    wServer2008_R2, wServer2008_R2_64, wSeven, wSeven_64,
+    wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64, wServer2014R2, wServer2014R2_64);
+    wTen, wTen_64, wServer2016, wServer2016_64);
   {$ifndef UNICODE}
   /// not defined in older Delphi versions
   TOSVersionInfoEx = record
@@ -10356,10 +10393,21 @@ type
   end;
   {$endif}
 
+const
+  /// the recognized Windows versions, as plain text
+  WINDOWS_NAME: array[TWindowsVersion] of RawUTF8 = (
+    '', '2000', 'XP', 'XP 64bit', 'Server 2003', 'Server 2003 R2',
+    'Vista', 'Vista 64bit', 'Server 2008', 'Server 2008 64bit',
+    '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
+    '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
+    '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit');
+
 var
-  /// is set to TRUE if the current process is running under WOW64
+  /// is set to TRUE if the current process is a 32 bit image running under WOW64
   // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
   // to run seamlessly on 64-bit Windows
+  // - equals always FALSE if the current executable is a 64 bit image
   IsWow64: boolean;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
@@ -10371,6 +10419,9 @@ var
   OSVersionInfo: TOSVersionInfoEx;
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
+  /// the current Operating System version, as retrieved for the current process
+  // - contains e.g. 'Windows Seven 64 Service Pack 1 (6.1.7601)'
+  OSVersionText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -10405,6 +10456,7 @@ var
     nprocs: integer;
     uts: UtsName;
   end;
+  OSVersionText: RawUTF8;
 
 {$ifdef KYLIX3}
 
@@ -13450,6 +13502,9 @@ type
     constructor Create; override;
     /// finalize the class, and its nested TSynMonitorSize instances
     destructor Destroy; override;
+    /// some text corresponding to current 'free/total' memory information
+    // - returns e.g. '10.3 GB / 15.6 GB'
+    class function FreeAsText: RawUTF8;
     {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
@@ -13481,7 +13536,7 @@ type
   end;
 
   /// value object able to gather information about a system drive
-  TSynMonitoryDisk = class(TSynPersistent)
+  TSynMonitorDisk = class(TSynPersistent)
   protected
     fName: RawUTF8;
     fVolumeName: RawUTF8;
@@ -13499,6 +13554,9 @@ type
     constructor Create; override;
     /// finalize the class, and its nested TSynMonitorSize instances
     destructor Destroy; override;
+    /// some text corresponding to current 'free/total' disk information
+    // - could return e.g. 'D: 64.4 GB / 213.4 GB'
+    class function FreeAsText: RawUTF8;
   published
     /// the disk name
     property Name: RawUTF8 read GetName;
@@ -13877,8 +13935,8 @@ type
 
 
 /// convert a size to a human readable value
-// - append MB, KB or B symbol
-// - for MB and KB, add one fractional digit
+// - append TB, GB, MB, KB or B symbol
+// - for TB, GB, MB and KB, add one fractional digit
 function KB(bytes: Int64): RawUTF8;
 
 /// convert a micro seconds elapsed time into a human readable value
@@ -19898,35 +19956,37 @@ begin
   GetVersionEx(OSVersionInfo);
   Vers := wUnknown;
   with OSVersionInfo do
+  // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833
   case dwMajorVersion of
     5: case dwMinorVersion of
-     0: Vers := w2000;
-     1: Vers := wXP;
-     2: if (wProductType=VER_NT_WORKSTATION) and
-           (SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64) then
-          Vers := wXP_64 else
-        if GetSystemMetrics(SM_SERVERR2)=0 then
-          Vers := wServer2003 else
-          Vers := wServer2003_R2;
-    end;
-    6: begin
-    case dwMinorVersion of
-     0: Vers := wVista;
-     1: Vers := wSeven;
-     2: Vers := wEight;
-     3: Vers := wEightOne;
-     4: Vers := wTen;
-    end;
-    if Vers<>wUnknown then begin
-      if wProductType<>VER_NT_WORKSTATION then
-        inc(Vers,2); // e.g. wEight -> wServer2012
-      if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
-        inc(Vers);   // e.g. wEight -> wEight64
-    end;
-    end;
+       0: Vers := w2000;
+       1: Vers := wXP;
+       2: if (wProductType=VER_NT_WORKSTATION) and
+             (SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64) then
+            Vers := wXP_64 else
+          if GetSystemMetrics(SM_SERVERR2)=0 then
+            Vers := wServer2003 else
+            Vers := wServer2003_R2;
+      end;
+    6: case dwMinorVersion of
+       0: Vers := wVista;
+       1: Vers := wSeven;
+       2: Vers := wEight;
+       3: Vers := wEightOne;
+       4: Vers := wTen;
+       end;
     10: Vers := wTen;
   end;
+  if Vers>=wVista then begin
+    if OSVersionInfo.wProductType<>VER_NT_WORKSTATION then
+      inc(Vers,2); // e.g. wEight -> wServer2012
+    if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
+      inc(Vers);   // e.g. wEight -> wEight64
+  end;
   OSVersion := Vers;
+  with OSVersionInfo do
+    OSVersionText := FormatUTF8('Windows % % (%.%.%)',
+      [WINDOWS_NAME[Vers],szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]);
 end;
 
 {$else}
@@ -19939,6 +19999,8 @@ begin
   {$else}
   FPUname(SystemInfo.uts);
   {$endif}
+  with SystemInfo.uts do
+    OSVersionText := FormatUTF8('%-% %',[sysname,release,version]);
 end;
 
 {$ifdef KYLIX3}
@@ -28857,6 +28919,25 @@ begin
 end;
 
 
+function SystemInfoJson: RawUTF8;
+begin
+  with SystemInfo do
+    result := JSONEncode([
+      'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
+      {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
+      'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
+      'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
+      'hypervisor',cf_HYP in CpuFeatures,
+      {$endif}{$endif}
+      'cpucount',
+      {$ifdef MSWINDOWS}
+      dwNumberOfProcessors,{$ifndef CPU64}'wow64',IsWow64,{$endif}
+      {$else MSWINDOWS}
+      nprocs,
+      {$endif MSWINDOWS}
+      'freemem',TSynMonitorMemory.FreeAsText,'freedisk',TSynMonitorDisk.FreeAsText]);
+end;
+
 {$ifdef MSWINDOWS}
 
 {$ifdef DELPHI6OROLDER}
@@ -36429,7 +36510,7 @@ begin
   result := SortDynArrayVariantComp(TVarData(A),TVarData(B),true);
 end;
 
-{$endif}
+{$endif NOVARIANTS}
 
 function TDynArray.Add(const Elem): integer;
 begin
@@ -43830,8 +43911,12 @@ end;
 function KB(bytes: Int64): RawUTF8;
 var hi,rem: cardinal;
 begin
-  if bytes>=1024*1024 then begin
-    if bytes>=1024*1024*1024 then begin
+  if bytes>=1 shl 20 then begin
+    if bytes>=Int64(1) shl 40 then begin
+      bytes := bytes shr 20;
+      result := ' TB';
+    end else
+    if bytes>=1 shl 30 then begin
       bytes := bytes shr 10;
       result := ' GB';
     end else
@@ -44122,6 +44207,16 @@ begin
   inherited Destroy;
 end;
 
+class function TSynMonitorMemory.FreeAsText: RawUTF8;
+begin
+  with TSynMonitorMemory.Create do
+  try
+    result := FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text]);
+  finally
+    Free;
+  end;
+end;
+
 {$ifndef NOVARIANTS}
 class function TSynMonitorMemory.ToVariant: variant;
 begin
@@ -44290,16 +44385,16 @@ begin
 end;
 
 
-{ TSynMonitoryDisk }
+{ TSynMonitorDisk }
 
-constructor TSynMonitoryDisk.Create;
+constructor TSynMonitorDisk.Create;
 begin
   fAvailableSize := TSynMonitorSize.Create;
   fFreeSize := TSynMonitorSize.Create;
   fTotalSize := TSynMonitorSize.Create;
 end;
 
-destructor TSynMonitoryDisk.Destroy;
+destructor TSynMonitorDisk.Destroy;
 begin
   fAvailableSize.Free;
   fFreeSize.Free;
@@ -44307,28 +44402,38 @@ begin
   inherited;
 end;
 
-function TSynMonitoryDisk.GetName: RawUTF8;
+function TSynMonitorDisk.GetName: RawUTF8;
 begin
   RetrieveDiskInfo;
   result := fName;
 end;
 
-function TSynMonitoryDisk.GetAvailable: TSynMonitorSize;
+function TSynMonitorDisk.GetAvailable: TSynMonitorSize;
 begin
   RetrieveDiskInfo;
   result := fAvailableSize;
 end;
 
-function TSynMonitoryDisk.GetFree: TSynMonitorSize;
+function TSynMonitorDisk.GetFree: TSynMonitorSize;
 begin
   RetrieveDiskInfo;
   result := fFreeSize;
 end;
 
-function TSynMonitoryDisk.GetTotal: TSynMonitorSize;
+function TSynMonitorDisk.GetTotal: TSynMonitorSize;
 begin
   RetrieveDiskInfo;
   result := fTotalSize;
+end;
+
+class function TSynMonitorDisk.FreeAsText: RawUTF8;
+begin
+  with TSynMonitorDisk.Create do
+  try
+    result := FormatUTF8('% % / %',[Name,FreeSize.Text,TotalSize.Text]);
+  finally
+    Free;
+  end;
 end;
 
 {$ifdef MSWINDOWS}
@@ -44337,7 +44442,7 @@ function GetDiskFreeSpaceExA(lpDirectoryName: PAnsiChar;
   lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
 {$endif}
 
-procedure TSynMonitoryDisk.RetrieveDiskInfo;
+procedure TSynMonitorDisk.RetrieveDiskInfo;
   procedure RetrieveInfo;
   {$ifdef MSWINDOWS}
   var tmp: array[byte] of AnsiChar;

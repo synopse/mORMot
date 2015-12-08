@@ -34,7 +34,7 @@ type
 {$endif}
   protected
     /// event called when the User click on a ribbon button
-    procedure ActionClick(Sender: TObject; const RecordClass: TSQLRecordClass;
+    procedure ActionClick(Sender: TObject; RecordClass: TSQLRecordClass;
       ActionValue: integer);
 	  /// display some help
     procedure HelpClick(Sender: TObject);
@@ -64,7 +64,7 @@ implementation
 {$R FileMain.res}
 
 procedure TMainForm.ActionClick(Sender: TObject;
-  const RecordClass: TSQLRecordClass; ActionValue: integer);
+  RecordClass: TSQLRecordClass; ActionValue: integer);
 var Action: TFileAction absolute ActionValue;
     Tab: TSQLRibbonTab;
     ActionCaption, ActionHint: string;
