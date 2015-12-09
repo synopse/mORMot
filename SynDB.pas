@@ -286,6 +286,9 @@ unit SynDB;
     TSQLDBProcColumnDefineDynArray, TSQLDBConnectionProperties.GetProcedureParameters
     and SQLGetParameter methods - by EMartin
   - added Informix DBMS (dInformix), tested against Informix 11.70 by EMartin
+  - fixed misallocation of the parameter direction in GetProcedureParameters
+  - enhancement parsing stored procedure name MS SQL Server (e.g. dbo.procname;1) in SQLSplitProcedureName
+  - fixed typo SQL statement for getting Firebird stored procedure parameters in SQLGetParameter
 
 }
 
@@ -5186,9 +5189,9 @@ begin
       F.ColumnPrecision := ColumnInt(3);
       F.ColumnScale := ColumnInt(4);
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
-      case FindCSVIndex(pointer(ColumnUTF8(5)),'IN,OUT,INOUT') of
-        1: F.ColumnParamType := paramIn;
-        3: F.ColumnParamType := paramInOut;
+      case FindCSVIndex('IN,OUT,INOUT',ColumnUTF8(5),',',false) of
+        0: F.ColumnParamType := paramIn;
+        2: F.ColumnParamType := paramInOut;
       else // any other is assumed as out
         F.ColumnParamType := paramOut;
       end;
@@ -5279,7 +5282,9 @@ begin
     if ProcName='' then begin
       ProcName := Owner;
       SetSchemaNameToOwner;
-    end;
+    end
+    else if fDBMS=dMSSQL then
+      Split(ProcName, ';', ProcName); // discard ;1 when MSSQL stored procedure name is ProcName;1 
   end;
   end;
 end;
@@ -5414,7 +5419,7 @@ begin
   dFirebird: begin
     result :=
       'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
-      ' b.rdb$field_length, b.rdb$field_precision, b.rdb$.field_scale,' +
+      ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
       ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
       'from rdb$procedure_parameters a, rdb$fields b ' +
       'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' + SynCommons.UpperCase(aProcName) + ''' ' +
