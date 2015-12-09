@@ -985,6 +985,9 @@ type
     procedure ToText(Value: Currency; var Result: RawUTF8);
     /// convert a floating-point value into text
     function ToTextFunc(Value: double): string;
+    /// swap two by-reference floating-point values
+    // - would validate pointer use instead of XMM1/XMM2 registers under Win64 
+    procedure Swap(var n1,n2: double);
     /// do some work with strings, sets and enumerates parameters,
     // testing also var (in/out) parameters and set as a function result
     function SpecialCall(Txt: RawUTF8; var Int: integer; var Card: cardinal; field: TSynTableFieldTypes;
@@ -11674,6 +11677,7 @@ type
   public
     function Add(n1,n2: integer): integer;
     function Subtract(n1,n2: double): double;
+    procedure Swap(var n1,n2: double);
     function Multiply(n1,n2: Int64): Int64;
     procedure ToText(Value: Currency; var Result: RawUTF8);
     function ToTextFunc(Value: double): string;
@@ -11765,6 +11769,14 @@ end;
 function TServiceCalculator.Subtract(n1, n2: double): double;
 begin
   result := n1-n2;
+end;
+
+procedure TServiceCalculator.Swap(var n1,n2: double);
+var tmp: double;
+begin
+  tmp := n2;
+  n2 := n1;
+  n1 := tmp;
 end;
 
 function TServiceCalculator.Test(A, B: Integer): RawUTF8;
@@ -12004,7 +12016,7 @@ procedure TestCalculator(const I: ICalculator);
 var t,i1,i2,i3: integer;
     c: cardinal;
     cu: currency;
-    n1,n2: double;
+    n1,n2,s1,s2: double;
     o: TSynTableFieldOptions;
     Ints: TIntegerDynArray;
     Strs1: TRawUTF8DynArray;
@@ -12023,6 +12035,13 @@ begin
     n1 := Random*1E-9-Random*1E-8;
     n2 := n1*Random;
     CheckSame(I.Subtract(n1,n2),n1-n2);
+    s1 := n1;
+    s2 := n2;
+    CheckSame(s1,n1);
+    CheckSame(s2,n2);
+    I.Swap(s1,s2);
+    CheckSame(s1,n2);
+    CheckSame(s2,n1);
     cu := i1*0.01;
     I.ToText(cu,s);
     Check(s=Curr64ToStr(PInt64(@cu)^));
@@ -12461,16 +12480,17 @@ var S: TServiceFactory;
 const
   ROUTING: array[0..1] of TSQLRestServerURIContextClass =
     (TSQLRestRoutingREST,TSQLRestRoutingJSON_RPC);
-const ExpectedURI: array[0..4] of RawUTF8 =
-        ('Add','Multiply','Subtract','ToText','ToTextFunc');
-      ExpectedParCount: array[0..4] of Integer = (4,4,4,3,3);
-      ExpectedArgs: array[0..4] of TServiceMethodValueTypes =
+const ExpectedURI: array[0..5] of RawUTF8 =
+        ('Add','Multiply','Subtract','ToText','ToTextFunc','Swap');
+      ExpectedParCount: array[0..5] of Integer = (4,4,4,3,3,3);
+      ExpectedArgs: array[0..5] of TServiceMethodValueTypes =
         ([smvSelf,smvInteger],[smvSelf,smvInt64],[smvSelf,smvDouble],
-         [smvSelf,smvCurrency,smvRawUTF8],[smvSelf,smvDouble,smvString]);
+         [smvSelf,smvCurrency,smvRawUTF8],[smvSelf,smvDouble,smvString],
+         [smvSelf,smvDouble]);
       ExpectedTypes: array[0..4] of String[10] =
         ('Integer','Int64','Double','Currency','Double');
-      ExpectedType: array[0..4] of TServiceMethodValueType =
-        (smvInteger,smvInt64,smvDouble,smvCurrency,smvDouble);
+      ExpectedType: array[0..5] of TServiceMethodValueType =
+        (smvInteger,smvInt64,smvDouble,smvCurrency,smvDouble,smvDouble);
       ExpectedResult: array[0..2] of String[10] = ('Integer','Int64','Double');
 begin
   if CheckFailed(fModel=nil) then exit; // should be called once
@@ -12498,8 +12518,8 @@ begin
   fClient.Server.Services.ExpectMangledURI := false;
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods)=7) then exit;
-  Check(S.ContractHash='"2C0E079E73D1727B"'); // string -> utf8
+  if CheckFailed(length(S.InterfaceFactory.Methods)=8) then exit;
+  Check(S.ContractHash='"2808B548C9F6D59D"');
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
@@ -12511,19 +12531,25 @@ begin
       Check(Args[0].ValueDirection=smdConst);
       Check(Args[0].ValueType=smvSelf);
       Check(Args[0].ArgTypeName^='ICalculator');
-      Check(Args[1].ValueDirection=smdConst);
       Check(Args[1].ValueType=ExpectedType[i]);
-      if i<3 then
-        Check(Args[1].ParamName^='n1') else
-        Check(Args[1].ParamName^='Value');
       if i<3 then begin
+        // 0 function Add(n1,n2: integer): integer;
+        // 1 function Multiply(n1,n2: Int64): Int64;
+        // 2 function Subtract(n1,n2: double): double;
+        Check(Args[1].ParamName^='n1');
+        Check(Args[1].ValueDirection=smdConst);
         Check(Args[2].ParamName^='n2');
         Check(Args[2].ValueDirection=smdConst);
         Check(Args[2].ValueType=ExpectedType[i]);
         Check(IdemPropName(Args[3].ArgTypeName^,ExpectedTypes[i]),string(Args[3].ArgTypeName^));
         Check(Args[3].ValueDirection=smdResult);
         Check(Args[3].ValueType=ExpectedType[i]);
-      end else begin
+      end else
+      if i<5 then begin
+        // 3 procedure ToText(Value: Currency; var Result: RawUTF8);
+        // 4 function ToTextFunc(Value: double): string;
+        Check(Args[1].ParamName^='Value');
+        Check(Args[1].ValueDirection=smdConst);
         Check(Args[2].ParamName^='Result');
         if i<4 then
           Check(Args[2].ValueDirection=smdVar) else
@@ -12531,6 +12557,12 @@ begin
         if i<4 then
           Check(Args[2].ValueType=smvRawUTF8) else
           Check(Args[2].ValueType=smvString);
+      end else begin
+        // 5 procedure Swap(var n1,n2: double);
+        Check(Args[1].ParamName^='n1');
+        Check(Args[1].ValueDirection=smdVar);
+        Check(Args[2].ParamName^='n2');
+        Check(Args[2].ValueDirection=smdVar);
       end;
     end;
   // IComplexCalculator + IComplexNumber services
