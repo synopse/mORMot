@@ -1001,6 +1001,18 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously, but with a given Ctxt instance for each)
     function Request(Ctxt: THttpServerRequest): cardinal; virtual;
+    /// server can send a request back to the client, when the connection has
+    // been upgraded e.g. to WebSockets
+    // - InURL/InMethod/InContent properties are input parameters (InContentType
+    // is ignored)
+    // - OutContent/OutContentType/OutCustomHeader are output parameters
+    // - CallingThread should be set to the client's Ctxt.CallingThread
+    // value, so that the method could know which connnection is to be used -
+    // it will return STATUS_NOTFOUND (404) if the connection is unknown
+    // - result of the function is the HTTP error code (200 if OK, e.g.)
+    // - warning: this void implementation will raise an ECrtSocket exception -
+    // inherited classes should override it, e.g. as in TWebSocketServerRest
+    function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; virtual;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlzo/synlz) protocols
@@ -3569,6 +3581,12 @@ begin
   if Assigned(OnRequest) then
     result := OnRequest(Ctxt) else
     result := STATUS_NOTFOUND;
+end;
+
+function THttpServerGeneric.Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal;
+begin
+  raise ECrtSocket.CreateFmt('%s.Callback is not implemented: try to use '+
+    'another communication protocol, e.g. WebSockets',[ClassName]);
 end;
 
 procedure THttpServerGeneric.NotifyThreadStart(Sender: TSynThread);

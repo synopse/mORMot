@@ -33994,7 +33994,6 @@ begin // TSQLRest.BatchSend() ensured that Batch contains some data
   end;
 end;
 
-
 procedure TSQLRestClientURI.BatchAbort;
 begin
   if self<>nil then

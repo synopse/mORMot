@@ -990,37 +990,33 @@ function TSQLHttpServer.NotifyCallback(aSender: TSQLRestServer;
   const aInterfaceDotMethodName, aParams: RawUTF8; aConnectionID: Int64;
   aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
 var ctxt: THttpServerRequest;
-    mode: TWebSocketProcessNotifyCallback;
     status: cardinal;
 begin
   result := false;
   if self<>nil then
   try
-    if (fHttpServer<>nil) and fHttpServer.InheritsFrom(TWebSocketServerRest) then begin
+    if fHttpServer<>nil then begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
       ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
       try
         ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
           aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
-        if aResult=nil then // see TInterfacedObjectFakeServer.CallbackInvoke
-          mode := wscNonBlockWithoutAnswer else
-          mode := wscBlockWithAnswer;
-        status := TWebSocketServerRest(fHttpServer).WebSocketsCallback(ctxt,mode);
+        status := fHttpServer.Callback(ctxt,aResult=nil);
         if status=HTML_SUCCESS then begin
           if aResult<>nil then
             aResult^ := Ctxt.OutContent;
           result := true;
         end else
           if aErrorMsg<>nil then
-            aErrorMsg^ := FormatUTF8('%.NotifyCallback(%) returned status=%',
-              [self,aConnectionID,status]);
+            aErrorMsg^ := FormatUTF8('%.Callback(%) received status=% from %',
+              [fHttpServer,aConnectionID,status,ctxt.URL]);
       finally
         ctxt.Free;
       end;
     end else
       if aErrorMsg<>nil then
-        aErrorMsg^ := FormatUTF8('NotifyCallback over % is unsupported',[fHttpServer]);
+        aErrorMsg^ := FormatUTF8('%.NotifyCallback with fHttpServer=nil',[self]);
   except
     on E: Exception do
       if aErrorMsg<>nil then

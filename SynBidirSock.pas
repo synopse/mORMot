@@ -631,7 +631,7 @@ type
     // value, so that the method could know which connnection is to be used -
     // it will return STATUS_NOTFOUND (404) if the connection is unknown
     // - result of the function is the HTTP error code (200 if OK, e.g.)
-    function WebSocketsCallback(Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
+    function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal; override;
   end;
 
 
@@ -2011,20 +2011,25 @@ begin
     fProtocols.AddOnce(TWebSocketProtocolJSON.Create(aWebSocketsURI));
 end;
 
-function TWebSocketServerRest.WebSocketsCallback(
-  Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal;
+function TWebSocketServerRest.Callback(
+  Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal;
 var connection: TWebSocketServerResp;
+    mode: TWebSocketProcessNotifyCallback;
 begin
-  WebSocketLog.Add.Log(sllTrace,'%.WebSocketsCallback url=% socket=%',
-    [ClassType,Ctxt.URL,Ctxt.ConnectionID],self);
   if Ctxt=nil then
-    connection := nil else
-    connection := IsActiveWebSocket(Ctxt.ConnectionID);
-  if connection<>nil then
-    //  this request is a websocket, on a non broken connection
-    result := connection.NotifyCallback(Ctxt,aMode) else begin
-    WebSocketLog.Add.Log(sllError,'%.WebSocketsCallback(%) on inactive socket %',
+    connection := nil else begin
+    WebSocketLog.Add.Log(sllTrace,'%.Callback(%) on socket=%',
       [ClassType,Ctxt.URL,Ctxt.ConnectionID],self);
+    connection := IsActiveWebSocket(Ctxt.ConnectionID);
+  end;
+  if connection<>nil then begin
+    //  this request is a websocket, on a non broken connection
+    if aNonBlocking then // see TInterfacedObjectFakeServer.CallbackInvoke
+      mode := wscNonBlockWithoutAnswer else
+      mode := wscBlockWithAnswer;
+    result := connection.NotifyCallback(Ctxt,mode);
+  end else begin
+    WebSocketLog.Add.Log(sllError,'%.Callback on inactive socket',[ClassType],self);
     result := STATUS_NOTFOUND;
   end;
 end;
