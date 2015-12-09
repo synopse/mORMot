@@ -929,15 +929,16 @@ var FN: TFileName;
     Loc: RawUTF8;
     Map: TSynMapFile;
 begin
-  if FLog<>nil then begin
+  if (FLog<>nil) and (FLog.ExecutableName<>'') then begin
     FN := ChangeFileExt(ExtractFileName(UTF8ToString(FLog.ExecutableName)),'.map');
     FN := FN+';'+ChangeFileExt(FN,'.mab');
-  end else
-    FN := '*.map;*.mab';
+  end;
   with TOpenDialog.Create(Application) do
   try
     DefaultExt := '.map';
-    Filter := FN+'|'+FN;
+    Filter := '*.map;*.mab|*.map;*.mab';
+    if FN<>'' then
+      Filter := FN+'|'+FN+'|'+Filter;
     Options := [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing];
     if not Execute then
       exit;
