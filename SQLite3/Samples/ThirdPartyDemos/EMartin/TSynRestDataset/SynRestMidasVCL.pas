@@ -51,6 +51,7 @@ unit SynRestMidasVCL;
     but read/only)
   - introducing TSynRestDataSet (under Delphi), which allows to apply updates:
     will be used now for overloaded ToClientDataSet() functions result
+  - fixed Delphi XE2 compilation issue with SetCommandText declaration	
 
 
 }
@@ -128,7 +129,11 @@ type
     function PSGetCommandText: string; override;
     {$endif}
     {$IFNDEF NEXTGEN}
+    {$ifdef ISDELPHIXE2}
     procedure SetCommandText(Value: WideString); override;
+    {$else ISDELPHIXE2}
+    procedure SetCommandText(Value: String); override;
+    {$endif ISDELPHIXE2}
     {$ELSE}
     procedure SetCommandText(Value: String); override;
     {$ENDIF !NEXTGEN}
@@ -367,7 +372,11 @@ end;
 {$endif ISDELPHI2007ANDUP}
 
 {$IFNDEF NEXTGEN}
+{$ifdef ISDELPHIXE2}
 procedure TSynRestDataSet.SetCommandText(Value: WideString);
+{$else ISDELPHIXE2}
+procedure TSynRestDataSet.SetCommandText(Value: String);
+{$endif ISDELPHIXE2}
 {$ELSE}
 procedure TSynRestDataSet.SetCommandText(Value: String);
 {$ENDIF !NEXTGEN}

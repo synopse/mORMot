@@ -48,6 +48,7 @@ unit SynRestVCL;
   Version 1.18
   - first public release, corresponding to Synopse mORMot Framework 1.18,
     which is an extraction from former SynDBVCL.pas unit.
+  - Added that blob field updates they are made with AddJSONEscapeString.
 
 }
 
@@ -420,7 +421,7 @@ begin
   if Assigned(fOnGetURISignature) then
     fOnGetURISignature(Self, lTmpURI);
   Result := FormatUTF8('%%' , [fBaseURL, lTmpURI]);
-  if fURI.Https then
+  if fURI.Https and (Result[5] <> 's') then
     System.Insert('s', Result, 5);
 end;
 
@@ -686,8 +687,7 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
           begin
             Add('"');
             lBlob :=  BlobToTSQLRawBlob(PUTF8Char(aParams[I].AsBlob));
-            AddString(lBlob);
-            //WrBase64(PAnsiChar(lBlob), Length(lBlob), False);
+            AddJSONEscapeString(lBlob);
             Add('"');
           end;
           Add(',');
