@@ -833,7 +833,9 @@ unit mORMot;
     - new TSQLRestClientURI.ForceBlobTransfertTable[] property which enable to
       get and set BLOB fields values with usual Add/Update/Retrieve methods for
       a particular table (more tuned than existing ForceBlobTransfert property)
-    - added TSQLRestClientURI.SessionID property
+    - once authenticated, TSQLRestClientURI.SessionUser would have all its
+      properties retrieved from the remote server
+    - added TSQLRestClientURI.SessionID/SessionServer/SessionVersion properties
     - added TSQLRestClientURI.CallBack() method allowing any HTTP verb
     - added new TSQLRestClientURI.RetryOnceOnTimeout property
     - fixed TServiceFactoryClient.Get() not working properly in sicPerSession,
@@ -13939,7 +13941,7 @@ type
     // root/Auth service with the supplied parameters, then retrieve and
     // decode the "result": session key and any other values (e.g. "version")
     class function ClientGetSessionKey(Sender: TSQLRestClientURI;
-      const aNameValueParameters: array of const): RawUTF8; virtual;
+      User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8; virtual;
   public
     /// initialize the authentication method to a specified server
     // - you can define several authentication schemes for the same server
@@ -16698,7 +16700,7 @@ type
     fSessionHttpHeader: RawUTF8; // e.g. for TSQLRestServerAuthenticationHttpBasic
     fSessionServer: RawUTF8;
     fSessionVersion: RawUTF8;
-    fSessionGroup: TID;
+    fSessionData: RawByteString;
     /// used to make the internal client-side process reintrant
     fMutex: TRTLCriticalSection;
     fRemoteLogClass: TSynLog;
@@ -17167,24 +17169,18 @@ type
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
     // is not enabled - i.e. after a fresh Create() without SetUser() call
     property SessionID: cardinal read fSessionID;
-  public
-    /// the current user as set by SetUser() method
-    // - returns nil if no User is currently authenticated
-    // - only available fields by default are LogonName and PasswordHashHexa:
-    // you can run code similar to the following to fill all needed properties:
-    // !  if fClient.SessionUser<>nil then
-    // !  begin
-    // !    fClient.Retrieve('LogonName=?',[],[fClient.SessionUser.LogonName],
-    // !      fClient.SessionUser); // fill ID, DisplayName, GroupRights
-    // !    fClient.RetrieveBlobFields(fClient.SessionUser); // optional Data
-    // !  end;
-    property SessionUser: TSQLAuthUser read fSessionUser;
     /// the remote server executable name, as retrieved after a SetUser() success
     property SessionServer: RawUTF8 read fSessionServer;
     /// the remote server version, as retrieved after a SetUser() success
     property SessionVersion: RawUTF8 read fSessionVersion;
-    /// the authentivcated user group, as retrieved after a SetUser() success
-    property SessionGroup: TID read fSessionGroup;
+  public
+    /// the current user as set by SetUser() method
+    // - contans nil if no User is currently authenticated
+    // - once authenticated, a TSQLAuthUser instance is set, with its ID,
+    // LogonName, DisplayName, PasswordHashHexa and GroupRights (filled with a
+    // TSQLAuthGroup ID casted as a pointer) properties - you can retrieve any
+    // optional binary data associated with this user via RetrieveBlobFields()
+    property SessionUser: TSQLAuthUser read fSessionUser;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -33364,8 +33360,8 @@ begin
     fSessionPrivateKey := 0;
     fSessionAuthentication := nil;
     fSessionServer := '';
-    fSessionGroup := 0;
     fSessionVersion := '';
+    fSessionData := '';
     FreeAndNil(fSessionUser);
   end;
 end;
@@ -33382,7 +33378,7 @@ begin
     pointer(aUser.PasswordHashHexa),length(aUser.PasswordHashHexa));
   fSessionUser := aUser;
   fSessionAuthentication := aAuth;
-  aUser := nil;
+  aUser := nil; // now owned by this instance
   result := true;
 end;
 
@@ -46578,8 +46574,9 @@ begin
   try // now client is authenticated -> create a session
     fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
     if Session<>nil then
-      Ctxt.Returns(['result',Session.fPrivateSalt,
-        'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+      with Session.User do
+      Ctxt.Returns(['result',Session.fPrivateSalt,'logonid',IDValue,
+        'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
         'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
   finally
     User.Free;
@@ -46587,17 +46584,22 @@ begin
 end;
 
 class function TSQLRestServerAuthentication.ClientGetSessionKey(
-  Sender: TSQLRestClientURI; const aNameValueParameters: array of const): RawUTF8;
+  Sender: TSQLRestClientURI; User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8;
 var resp: RawUTF8;
     values: TPUtf8CharDynArray;
 begin
-  if (sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTML_SUCCESS) or
-     (JSONDecode(pointer(resp),['result','server','version','logongroup'],values)=nil) then
+  if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTML_SUCCESS) or
+     (JSONDecode(pointer(resp),['result','data','server','version',
+       'logonid','logonname','logondisplay','logongroup'],values)=nil) then
     result := '' else begin
-    result := values[0];
-    Sender.fSessionServer := values[1];
-    Sender.fSessionVersion := values[2];
-    SetInt64(values[3],PInt64(@Sender.fSessionGroup)^);
+    SetString(result,values[0],StrLen(values[0]));
+    Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
+    Sender.fSessionServer := values[2];
+    Sender.fSessionVersion := values[3];
+    SetID(values[4],User.fID);
+    User.LogonName := values[5]; // set/fix using values from server
+    User.DisplayName := values[6];
+    User.GroupRights := pointer(GetInteger(values[7]));
   end;
 end;
 
@@ -46605,6 +46607,7 @@ class function TSQLRestServerAuthentication.ClientSetUser(Sender: TSQLRestClient
   const aUserName, aPassword: RawUTF8;
   aPassworKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear): boolean;
 var U: TSQLAuthUser;
+    key: RawUTF8;
 begin
   result := false;
   if Sender=nil then
@@ -46618,7 +46621,8 @@ begin
       if aPassworKind<>passClear then
         U.PasswordHashHexa := aPassword else
         U.PasswordPlain := aPassword; // compute SHA256('salt'+aPassword);
-      result := Sender.SessionCreate(self,U,ClientComputeSessionKey(Sender,U));
+      key := ClientComputeSessionKey(Sender,U);
+      result := Sender.SessionCreate(self,U,key);
     finally
       U.Free;
     end;
@@ -46789,7 +46793,7 @@ begin
   if aServerNonce='' then
     exit;
   aClientNonce := Nonce(false);
-  result := ClientGetSessionKey(Sender,['UserName',User.LogonName,'Password',
+  result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);
 end;
@@ -46818,7 +46822,7 @@ end;
 class function TSQLRestServerAuthenticationNone.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 begin
-  result := ClientGetSessionKey(Sender,['UserName',User.LogonName]);
+  result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName]);
 end;
 
 
@@ -46851,15 +46855,14 @@ begin
   try // inherited ClientSetUser() won't fit with Auth() method below
     ClientSetUserHttpOnly(Sender,aUserName,aPassword);
     Sender.fSessionAuthentication := self; // to enable ClientSessionSign()
-    res := ClientGetSessionKey(Sender,[]);
-    if res<>'' then begin
-      U := TSQLAuthUser.Create;
-      try
-        U.LogonName := trim(aUserName);
+    U := TSQLAuthUser.Create;
+    try
+      U.LogonName := trim(aUserName);
+      res := ClientGetSessionKey(Sender,U,[]);
+      if res<>'' then
         result := Sender.SessionCreate(self,U,res);
-      finally
-        U.Free;
-      end;
+    finally
+      U.Free;
     end;
   finally
     if not result then begin
@@ -46964,8 +46967,9 @@ begin
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
-          Ctxt.Returns(['result',Session.IDCardinal,
-            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+          with Session.User do
+          Ctxt.Returns(['result',Session.IDCardinal,'logonid',IDValue,
+            'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
             'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
           exit; // success
         end;
@@ -47073,16 +47077,18 @@ begin
       User.PasswordHashHexa := ''; // override with context
       fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
       if Session<>nil then
+        with Session.User do
         if BrowserAuth then
           Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
-            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
+            'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
+            'logongroup',GroupRights.IDValue,
             'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]),
             HTML_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-            'logonname',Session.User.LogonName,'logongroup',Session.User.GroupRights.ID,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed,
-            'data',BinToBase64(OutData)]);
+            'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
+            'logongroup',GroupRights.ID,'server',ExeVersion.ProgramName,
+            'version',ExeVersion.Version.Detailed,'data',BinToBase64(OutData)]);
     finally
       User.Free;
     end else
@@ -47096,34 +47102,26 @@ end;
 class function TSQLRestServerAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var SecCtx: TSecContext;
-    InData, OutData: RawByteString;
-    Response: RawUTF8;
-    Values: TPUtf8CharDynArray;
+    OutData: RawByteString;
 begin
   result := '';
   InvalidateSecContext(SecCtx,0);
+  Sender.fSessionData := '';
   try
     repeat
       if User.LogonName<>'' then
-        ClientSSPIAuthWithPassword(SecCtx,InData,User.LogonName,User.PasswordHashHexa,OutData) else
-        ClientSSPIAuth(SecCtx,InData,User.PasswordHashHexa,OutData);
+        ClientSSPIAuthWithPassword(SecCtx,Sender.fSessionData,
+          User.LogonName,User.PasswordHashHexa,OutData) else
+        ClientSSPIAuth(SecCtx,Sender.fSessionData,User.PasswordHashHexa,OutData);
       if OutData='' then
         break;
       if result<>'' then
-        break;
+        break; // 2nd pass
       // 1st call will return data, 2nd call SessionKey
-      if Sender.CallBackGet('Auth',['UserName','',
-          'data',BinToBase64(OutData)],Response,nil,0)<>HTML_SUCCESS then
+      result := ClientGetSessionKey(Sender,User,['UserName','','data',BinToBase64(OutData)]);
+      if result='' then
         exit;
-      JSONDecode(pointer(Response),
-        ['result','data','logonname','server','version','logongroup'],Values);
-      result := Values[0];
-      InData := Base64ToBin(Values[1]);
-      User.LogonName := Values[2]; // not known by caller
-      Sender.fSessionServer := values[3]; // as in ClientGetSessionKey
-      Sender.fSessionVersion := values[4];
-      SetInt64(values[5],PInt64(@Sender.fSessionGroup)^);
-      if InData='' then
+      if Sender.fSessionData='' then
         break;
     until false;
     result := SecDecrypt(SecCtx,Base64ToBin(result));
