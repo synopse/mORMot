@@ -343,6 +343,15 @@ type
     property State: TCQRSQueryState read fState;
   end;
 
+  /// a CQRS Service, which maintain an internal list of "Subscribers"
+  // - allow to notify in cascade when a callback is released
+  TCQRSServiceSubscribe = class(TCQRSService)
+  protected
+    fSubscriber: array of IServiceWithCallbackReleased;
+    // will call all fSubscriber[].CallbackReleased() methods
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
+  end;
+
 /// returns the text equivalency of a CQRS state enumeration
 function ToText(res: TCQRSQueryState): PShortString; overload;
 
@@ -805,7 +814,7 @@ type
   // be able to launch and administrate such process, via a remote REST link
   // - inherited class should override the Internal* virtual abstract protected
   // methods to supply the actual process (e.g. set a background thread)
-  TDDDAdministratedDaemon = class(TCQRSService,IAdministratedDaemon)
+  TDDDAdministratedDaemon = class(TCQRSService, IAdministratedDaemon)
   protected
     {$ifdef WITHLOG}
     fLog: TSynLogFamily;
@@ -1130,6 +1139,25 @@ procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
   const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const);
 begin
   CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
+end;
+
+
+{ TCQRSServiceSubscribe }
+
+procedure TCQRSServiceSubscribe.CallbackReleased(const callback: IInvokable;
+  const interfaceName: RawUTF8);
+var i: integer;
+begin
+  fLockerEnter;
+  try
+    fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=% fSubscriber.Count=%',
+      [ClassType,callback,interfaceName,ObjectFromInterface(callback),
+       length(fSubscriber)],Self);
+    for i := 0 to high(fSubscriber) do // try to release on ALL subscribers
+      fSubscriber[i].CallbackReleased(callback, interfaceName);
+  finally
+    fLocker.Leave;
+  end;
 end;
 
 
