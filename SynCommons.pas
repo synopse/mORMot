@@ -4095,7 +4095,7 @@ type
     djByte, djWord, djInteger, djCardinal, djSingle,
     djInt64, djDouble, djCurrency,
     djTimeLog, djDateTime, djRawUTF8, djWinAnsi, djString, djRawByteString,
-    djWideString, djSynUnicode,
+    djWideString, djSynUnicode, djInterface,
     {$ifndef NOVARIANTS}djVariant,{$endif}
     djCustom);
 
@@ -5710,14 +5710,16 @@ var
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
-    SortDynArrayAnsiString, SortDynArrayUnicodeString, SortDynArrayUnicodeString,
+    SortDynArrayAnsiString, SortDynArrayUnicodeString,
+    SortDynArrayUnicodeString, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
     (nil, SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger,
     SortDynArrayCardinal, SortDynArraySingle,
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
-    SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI, SortDynArrayUnicodeStringI,
+    SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI,
+    SortDynArrayUnicodeStringI, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariantI,{$endif} nil));
 
   /// helper array to get the hashing function corresponding to a given
@@ -5729,14 +5731,14 @@ var
     HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
-    HashAnsiString, HashWideString, HashSynUnicode,
+    HashAnsiString, HashWideString, HashSynUnicode, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
-    HashAnsiStringI, HashWideStringI, HashSynUnicodeI,
+    HashAnsiStringI, HashWideStringI, HashSynUnicodeI, HashPointer,
     {$ifndef NOVARIANTS}HashVariantI,{$endif} nil));
 
 
@@ -6622,7 +6624,7 @@ type
     procedure AddInstanceName(Instance: TObject; SepChar: AnsiChar);
     /// append an Instance name and pointer, as 'TObjectList(00425E68)'+SepChar
     // - Instance must be not nil
-    // - overriden version in TJSONSerializer would implement IncludeUnitName 
+    // - overriden version in TJSONSerializer would implement IncludeUnitName
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName: boolean); virtual;
     /// append a quoted string as JSON, with in-place decoding
@@ -36249,7 +36251,7 @@ var DynArray: TDynArray;
 const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = (
     '','byte','word','integer','cardinal','single','Int64','double','currency',
     'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','RawByteString',
-    'WideString','SynUnicode',{$ifndef NOVARIANTS}'variant',{$endif}'');
+    'WideString','SynUnicode','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -37172,7 +37174,7 @@ end;
 const
   PTRSIZ = sizeof(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}sizeof(Variant),{$endif} 0);
 
 function TDynArray.GetArrayTypeName: RawUTF8;
@@ -37203,7 +37205,9 @@ begin
     if fTypeInfo=TypeInfo(TRawByteStringDynArray) then
       fKnownType := djRawByteString else
     if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
-      fKnownType := djSynUnicode
+      fKnownType := djSynUnicode else
+    if fTypeInfo=TypeInfo(TInterfaceDynArray) then
+      fKnownType := djInterface
   {$ifdef CPU64} else {$else} ; 8: {$endif}
      if fTypeInfo=TypeInfo(TDoubleDynArray) then
        fKnownType := djDouble else
@@ -37233,6 +37237,7 @@ Bin:  case ElemSize of
       {$ifndef NOVARIANTS}
       tkVariant: fKnownType := djVariant;
       {$endif}
+      tkInterface: fKnownType := djInterface;
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         FieldTable := ElemType;
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -37380,6 +37385,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         djString:   UTF8DecodeToString(Val,StrLen(Val),string(PPointerArray(fValue^)^[i]));
         djWideString: UTF8ToWideString(Val,StrLen(Val),WideString(PPointerArray(fValue^)^[i]));
         djSynUnicode: UTF8ToSynUnicode(Val,StrLen(Val),SynUnicode(PPointerArray(fValue^)^[i]));
+        djInterface: raise ESynException.Create('djInterface not readable');
         end;
       end;
     end;
@@ -40630,7 +40636,7 @@ begin // code below must match TDynArray.LoadFromJSON
       WrBase64(PPointerArray(P)^[i],Length(PRawByteStringArray(P)^[i]),true);
       Add(',');
     end;
-  djTimeLog..djString,djWideString..djSynUnicode: // add textual JSON content
+  djTimeLog..djString,djWideString..djInterface: // add textual JSON content
     for i := 0 to n do begin
       Add('"');
       case T of
@@ -40645,6 +40651,7 @@ begin // code below must match TDynArray.LoadFromJSON
         {$else}
         AddAnyAnsiString(PRawByteStringArray(P)^[i],twJSONEscape,0);
         {$endif}
+      djInterface: AddPointer(PPtrIntArray(P)^[i]);
       end;
       Add('"',',');
     end;
