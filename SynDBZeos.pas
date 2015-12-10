@@ -163,14 +163,15 @@ uses
   {$IFDEF ENABLE_OLEDB}
   ZDbcOleDB,
   {$ENDIF}
+  {$IFDEF ENABLE_ODBC}
+  ZDbcODBCCon,
+  {$ENDIF}
   // main ZDBC units
   ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
   SynLog,
   SynDB;
-
-
 
 
 { -------------- ZEOS database components direct process }
@@ -373,7 +374,19 @@ procedure SetZEOSProtocols;
 
 implementation
 
-
+{$ifdef ZEOS72UP}
+uses ZDbcMetadata;
+{$ELSE}
+const
+  FirstDbcIndex = 1;
+  TableNameIndex = 3;
+  ColumnNameIndex = 4;
+  TableColColumnTypeIndex = 5;
+  TableColColumnTypeNameIndex = 6;
+  TableColColumnSizeIndex = 7;
+  TableColColumnDecimalDigitsIndex = 9;
+  IndexInfoColColumnNameIndex = 9;
+{$ENDIF}
 
 { TSQLDBZEOSConnectionProperties }
 
@@ -515,6 +528,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   end;
   dMSSQL: begin
     fUseCache := true;
+    fStatementParams.Add('enhanced_column_info=false');
     //fStatementParams.Add('use_ole_update_params=True'); //see 'ADO'
     //fStatementParams.Add('internal_buffer_size=131072'); //see 'ADO'
   end;
@@ -595,7 +609,11 @@ begin
     res := meta.GetTables('','','',TableTypes);
     n := 0;
     while res.Next do
-      AddSortedRawUTF8(Tables,n,SynUnicodeToUtf8(res.GetUnicodeString(3)));
+      {$IFDEF ZEOS72UP}
+      AddSortedRawUTF8(Tables,n,res.GetUTF8String(TableNameIndex));
+      {$ELSE}
+      AddSortedRawUTF8(Tables,n,SynUnicodeToUtf8(res.GetUnicodeString(TableNameIndex)));
+      {$ENDIF}
     SetLength(Tables,n);
   end else
     inherited;
@@ -619,17 +637,26 @@ begin
     FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray),Fields,djRawUTF8,@n,true);
     FillChar(F,sizeof(F),0);
     while res.Next do begin
-      F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(4));
-      F.ColumnTypeNative := SynUnicodeToUtf8(res.GetUnicodeString(6));
-      F.ColumnType := TZSQLTypeToTSQLDBFieldType(TZSQLType(res.GetInt(5)));
-      F.ColumnLength := res.GetInt(7);
-      F.ColumnPrecision := res.GetInt(9);
+      {$IFDEF ZEOS72UP}
+      F.ColumnName := res.GetUTF8String(ColumnNameIndex);
+      F.ColumnTypeNative := res.GetUTF8String(TableColColumnTypeNameIndex);
+      {$ELSE}
+      F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(ColumnNameIndex));
+      F.ColumnTypeNative := SynUnicodeToUtf8(res.GetUnicodeString(TableColColumnTypeNameIndex));
+      {$ENDIF}
+      F.ColumnType := TZSQLTypeToTSQLDBFieldType(TZSQLType(res.GetInt(TableColColumnTypeIndex)));
+      F.ColumnLength := res.GetInt(TableColColumnSizeIndex);
+      F.ColumnPrecision := res.GetInt(TableColColumnDecimalDigitsIndex);
       FA.Add(F);
     end;
     if n>0 then begin
       res := meta.GetIndexInfo('',sSchema,sTableName,false,true);
       while res.Next do begin
-        F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(9));
+        {$IFDEF ZEOS72UP}
+        F.ColumnName := res.GetUTF8String(IndexInfoColColumnNameIndex);
+        {$ELSE}
+        F.ColumnName := SynUnicodeToUtf8(res.GetUnicodeString(IndexInfoColColumnNameIndex));
+        {$ENDIF}
         i := FA.Find(F);
         if i>=0 then
           Fields[i].ColumnIndexed := true;
@@ -834,12 +861,12 @@ begin
         case VType of
         ftUnknown:
           raise ESQLDBZEOS.CreateUTF8(
-            '%.ExecutePrepared: Unknown type array parameter #%',[aStatement,p+1]);
+            '%.ExecutePrepared: Unknown type array parameter #%',[aStatement,p+FirstDbcIndex]);
         ftNull: begin
           // handle null column
           for j := 0 to fParamsArrayCount -1 do
             fNullArray[p][j] := True;
-          fStatement.SetDataArray(p+1,'',stString,vtUTF8String);
+          fStatement.SetDataArray(p+FirstDbcIndex,'',stString,vtUTF8String);
         end;
         else begin
           // array binding of ftInt64..ftBlob values from fParams[p].VArray[]
@@ -852,35 +879,35 @@ begin
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 SetInt64(pointer(VArray[j]),fInt64Array[n][j]);
-            fStatement.SetDataArray(p+1,fInt64Array[n],stLong);
+            fStatement.SetDataArray(p+FirstDbcIndex,fInt64Array[n],stLong);
           end;
           ftDouble: begin
             SetLength(fDoubleArray[n],fParamsArrayCount);
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 fDoubleArray[n][j] := GetExtended(pointer(VArray[j]));
-            fStatement.SetDataArray(p+1,fDoubleArray[n],stDouble);
+            fStatement.SetDataArray(p+FirstDbcIndex,fDoubleArray[n],stDouble);
           end;
           ftCurrency: begin
             SetLength(fCurDynArray[n],fParamsArrayCount);
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 fCurDynArray[n][j] := StrToCurrency(pointer(VArray[j]));
-            fStatement.SetDataArray(p+1,fCurDynArray[n],stCurrency);
+            fStatement.SetDataArray(p+FirstDbcIndex,fCurDynArray[n],stCurrency);
           end;
           ftDate: begin
             SetLength(fDateDynArray[n],fParamsArrayCount);
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 fDateDynArray[n][j] := Iso8601ToDateTime(UnQuoteSQLString(VArray[j]));
-            fStatement.SetDataArray(p+1,fDateDynArray[n],stTimeStamp);
+            fStatement.SetDataArray(p+FirstDbcIndex,fDateDynArray[n],stTimeStamp);
           end;
           ftUTF8: begin
             SetLength(fUTF8DynArray[n],fParamsArrayCount);
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 UnQuoteSQLStringVar(pointer(VArray[j]),fUTF8DynArray[n][j]);
-            fStatement.SetDataArray(p+1,fUTF8DynArray[n],stString,vtUTF8String);
+            fStatement.SetDataArray(p+FirstDbcIndex,fUTF8DynArray[n],stString,vtUTF8String);
           end;
           ftBlob: begin
               SetLength(fBlobDynArray[n],fParamsArrayCount);
@@ -888,14 +915,14 @@ begin
                 if not fNullArray[p][j] then
                   fBlobDynArray[n][j] := TZAbstractBlob.CreateWithData(
                     Pointer(VArray[j]),length(VArray[j]));
-              fStatement.SetDataArray(p+1,fBlobDynArray[n],stBinaryStream);
+              fStatement.SetDataArray(p+FirstDbcIndex,fBlobDynArray[n],stBinaryStream);
             end;
           end;
           inc(ndx[VType]);
         end;
         end;
       end;
-      fStatement.SetNullArray(p+1,stBoolean,fNullArray[p]);
+      fStatement.SetNullArray(p+FirstDbcIndex,stBoolean,fNullArray[p]);
     end;
     for kind := low(ndx) to high(ndx) do
       assert(ndx[kind]=fDynArraySize[kind]);
@@ -995,7 +1022,6 @@ procedure TSQLDBZEOSStatement.ExecutePrepared;
 var i,n: integer;
     Props: TSQLDBZEOSConnectionProperties;
     Log: ISynLog;
-    blob: IZBlob;
     name: string;
 {$ifdef ZEOS72UP}
     arrayBinding: TZeosArrayBinding;
@@ -1008,8 +1034,10 @@ begin
       Log(sllSQL,SQLWithInlinedParams,self,2048);
   if fStatement=nil then
     raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() invalid call',[self]);
+  {$ifndef ZEOS72UP} //commenting this makes it possible to seek cursor pos to 0 and use the interface again -> e.g. ReadOneByOneRate
   if fResultSet<>nil then
     raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared() miss a Reset',[self]);
+  {$ENDIF}
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
   if fParamsArrayCount>0 then
@@ -1025,8 +1053,8 @@ begin
   if (fParamsArrayCount>0) and (not fExpectResults) then
     raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported',[self]) else
   {$endif}
-    for i := 1 to fParamCount do
-    with fParams[i-1] do begin
+    for i := 0 to fParamCount-1 do
+    with fParams[i] do begin
       if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
         case VType of
         ftInt64, ftUTF8: VData := UTF8Array2PostgreArray(VArray);
@@ -1035,29 +1063,27 @@ begin
         VType := ftUTF8;
       end;
       case VType of
-      ftNull:     fStatement.SetNull(i,stUnknown);
-      ftInt64:    fStatement.SetLong(i,VInt64);
-      ftDouble:   fStatement.SetDouble(i,PDouble(@VInt64)^);
+      ftNull:     fStatement.SetNull(i+FirstDbcIndex,stUnknown);
+      ftInt64:    fStatement.SetLong(i+FirstDbcIndex,VInt64);
+      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,PDouble(@VInt64)^);
       ftCurrency: {$ifdef ZEOS72UP}
-                  fStatement.SetCurrency(i,PCurrency(@VInt64)^);
+                  fStatement.SetCurrency(i+FirstDbcIndex,PCurrency(@VInt64)^);
                   {$else}
-                  fStatement.SetBigDecimal(i,PCurrency(@VInt64)^);
+                  fStatement.SetBigDecimal(i+FirstDbcIndex,PCurrency(@VInt64)^);
                   {$endif}
-      ftDate:     fStatement.SetTimestamp(i,PDateTime(@VInt64)^);
+      ftDate:     fStatement.SetTimestamp(i+FirstDbcIndex,PDateTime(@VInt64)^);
       ftUTF8:     {$ifdef ZEOS72UP}
-                  fStatement.SetUTF8String(i,VData);
+                  fStatement.SetUTF8String(i+FirstDbcIndex,VData);
                   {$else}
                     {$ifdef UNICODE}  // ZWideString = SynUnicode in fact
-                    fStatement.SetString(i,UTF8ToSynUnicode(VData));
+                    fStatement.SetString(i+FirstDbcIndex,UTF8ToSynUnicode(VData));
                     {$else}
-                    fStatement.SetString(i,VData); // see controls_cp=CP_UTF8
+                    fStatement.SetString(i+FirstDbcIndex,VData); // see controls_cp=CP_UTF8
                     {$endif}
                   {$endif}
-      ftBlob: begin
-        blob := TZAbstractBlob.CreateWithData(Pointer(VData),length(VData)
-          {$ifndef ZEOS72UP},fStatement.GetConnection{$endif});
-        fStatement.SetBlob(i,stBinaryStream,blob);
-      end;
+      ftBlob:     fStatement.SetBlob(i+FirstDbcIndex,stBinaryStream,
+                    TZAbstractBlob.CreateWithData(Pointer(VData),length(VData)
+                    {$ifndef ZEOS72UP},fStatement.GetConnection{$endif}));
       else
         raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid type parameter #%',
           [self,i]);
@@ -1078,18 +1104,18 @@ begin
         fResultInfo := fResultSet.GetMetadata;
         n := fResultInfo.GetColumnCount;
         fColumn.Capacity := n;
-        for i := 1 to n do begin
-          name := fResultInfo.GetColumnLabel(i);
+        for i := 0 to n-1 do begin
+          name := fResultInfo.GetColumnLabel(i+FirstDbcIndex);
           if name='' then
-            name := fResultInfo.GetColumnName(i);
+            name := fResultInfo.GetColumnName(i+FirstDbcIndex);
           PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(
             // Delphi<2009: already UTF-8 encoded due to controls_cp=CP_UTF8
             {$ifdef UNICODE}StringToUTF8{$endif}(name)))^.ColumnType :=
-              Props.TZSQLTypeToTSQLDBFieldType(fResultInfo.GetColumnType(i));
+              Props.TZSQLTypeToTSQLDBFieldType(fResultInfo.GetColumnType(i+FirstDbcIndex));
         end;
       end;
     end else
-      fStatement.ExecutePrepared;
+      fStatement.ExecuteUpdatePrepared; //ExecutePrepared allways trys to determine a possible LastResultSet
     // 3. handle out parameters
     // -> TODO (fStatement is IZCallableStatement)
   {$ifdef ZEOS72UP}
@@ -1103,7 +1129,9 @@ procedure TSQLDBZEOSStatement.Reset;
 begin
   if fResultSet<>nil then begin
     fResultInfo := nil;
-    fResultSet := nil;
+    {$ifndef ZEOS72UP}
+    fResultSet := nil; //commenting this makes it possible to seek cursor pos to 0 and use the interface again -> e.g. ReadOneByOneRate
+    {$ENDIF}
   end;
   if fStatement<>nil then
     fStatement.ClearParameters;
@@ -1133,7 +1161,7 @@ var blob: IZBlob;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnBlob(%) ResultSet=%',[self,Col,fResultSet]);
-  blob := fResultSet.GetBlob(Col+1);
+  blob := fResultSet.GetBlob(Col+FirstDbcIndex);
   if (blob=nil) or blob.IsEmpty then
     result := '' else
     result := blob.GetString; // ZAnsiString = RawByteString
@@ -1144,9 +1172,9 @@ begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnCurrency(%) ResultSet=%',[self,Col,fResultSet]);
   {$ifdef ZEOS72UP}
-  result := fResultSet.GetCurrency(Col+1);
+  result := fResultSet.GetCurrency(Col+FirstDbcIndex);
   {$else}
-  result := fResultSet.GetBigDecimal(Col+1);
+  result := fResultSet.GetBigDecimal(Col+FirstDbcIndex);
   {$endif}
 end;
 
@@ -1154,28 +1182,28 @@ function TSQLDBZEOSStatement.ColumnDateTime(Col: Integer): TDateTime;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDateTime(%) ResultSet=%',[self,Col,fResultSet]);
-  result := fResultSet.GetTimestamp(Col+1);
+  result := fResultSet.GetTimestamp(Col+FirstDbcIndex);
 end;
 
 function TSQLDBZEOSStatement.ColumnDouble(Col: Integer): double;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnDouble(%) ResultSet=%',[self,Col,fResultSet]);
-  result := fResultSet.GetDouble(Col+1);
+  result := fResultSet.GetDouble(Col+FirstDbcIndex);
 end;
 
 function TSQLDBZEOSStatement.ColumnInt(Col: Integer): Int64;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnInt(%) ResultSet=%',[self,Col,fResultSet]);
-  result := fResultSet.GetLong(Col+1);
+  result := fResultSet.GetLong(Col+FirstDbcIndex);
 end;
 
 function TSQLDBZEOSStatement.ColumnNull(Col: Integer): boolean;
 begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnNull(%) ResultSet=%',[self,Col,fResultSet]);
-  result := fResultSet.IsNull(Col+1);
+  result := fResultSet.IsNull(Col+FirstDbcIndex);
 end;
 
 function TSQLDBZEOSStatement.ColumnUTF8(Col: Integer): RawUTF8;
@@ -1183,12 +1211,12 @@ begin
   if (fResultSet=nil) or (cardinal(Col)>=cardinal(fColumnCount)) then
     raise ESQLDBZEOS.CreateUTF8('%.ColumnUTF8(%) ResultSet=%',[self,Col,fResultSet]);
   {$ifdef ZEOS72UP}
-  result := fResultSet.GetUTF8String(Col+1);
+  result := fResultSet.GetUTF8String(Col+FirstDbcIndex);
   {$else}
     {$ifdef UNICODE}
-    StringToUTF8(fResultSet.GetString(Col+1),result);
+    StringToUTF8(fResultSet.GetString(Col+FirstDbcIndex),result);
     {$else}
-    result := fResultSet.GetString(Col+1); // thanks to controls_cp=CP_UTF8
+    result := fResultSet.GetString(Col+FirstDbcIndex); // thanks to controls_cp=CP_UTF8
     {$endif}
   {$endif}
 end;
@@ -1208,14 +1236,8 @@ var col: integer;
 procedure WriteIZBlob;
 var blob: IZBlob;
 begin
-  blob := fResultSet.GetBlob(col+1);
+  blob := fResultSet.GetBlob(col+FirstDbcIndex);
   WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
-end;
-procedure WriteUTF8;
-var tmp: RawUTF8;
-begin
-  tmp := fResultSet.GetUTF8String(Col+1);
-  WR.AddJSONEscape(pointer(tmp),length(tmp));
 end;
 begin // take care of the layout of internal ZDBC buffers for each provider
   if WR.Expand then
@@ -1223,37 +1245,39 @@ begin // take care of the layout of internal ZDBC buffers for each provider
   for col := 0 to fColumnCount-1 do begin
     if WR.Expand then
       WR.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
-    if fResultSet.IsNull(col+1) then
+    if fResultSet.IsNull(col+FirstDbcIndex) then
       WR.AddShort('null') else begin
     case fColumns[col].ColumnType of
       ftNull:
         WR.AddShort('null');
       ftInt64:
         if fDBMS in [dMySQL,dPostgreSQL] then begin
-          P := fResultSet.GetPAnsiChar(col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
           WR.AddNoJSONEscape(P,Len);
         end else
-          WR.Add(fResultSet.GetLong(col+1));
+          WR.Add(fResultSet.GetLong(col+FirstDbcIndex));
       ftDouble:
         if fDBMS in [dMySQL,dPostgreSQL] then begin
-          P := fResultSet.GetPAnsiChar(col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
           WR.AddNoJSONEscape(P,Len);
         end else
-          WR.AddDouble(fResultSet.GetDouble(col+1));
+          WR.AddDouble(fResultSet.GetDouble(col+FirstDbcIndex));
       ftCurrency:
-        if fDBMS in [dSQLite] then
-          WR.AddDouble(fResultSet.GetDouble(col+1)) else
-          WR.AddCurr64(fResultSet.GetCurrency(col+1));
+        if fDBMS = dSQLite then
+          WR.AddDouble(fResultSet.GetDouble(col+FirstDbcIndex)) else
+          WR.AddCurr64(fResultSet.GetCurrency(col+FirstDbcIndex));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(fResultSet.GetTimeStamp(col+1));
+        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex));
         WR.Add('"');
       end;
       ftUTF8: begin
         WR.Add('"');
-        if fDBMS in [dMSSQL] then
-          WriteUTF8 else begin
-          P := fResultSet.GetPAnsiChar(col+1,Len);
+        if fDBMS = dMSSQL then begin
+          P := Pointer(fResultSet.GetPWideChar(Col+FirstDbcIndex, Len));
+          WR.AddJSONEscapeW(Pointer(P), Len);
+        end else begin
+          P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
           WR.AddJSONEscape(P,Len);
         end;
         WR.Add('"');
@@ -1262,7 +1286,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
         if fForceBlobAsNull then
           WR.AddShort('null') else
         if fDBMS in [dMySQL,dSQLite] then begin
-          P := fResultSet.GetPAnsiChar(col+1,Len);
+          P := fResultSet.GetPAnsiChar(col+FirstDbcIndex,Len);
           WR.WrBase64(p,Len,true); // withMagic=true
         end else
           WriteIZBlob;
