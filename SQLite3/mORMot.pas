@@ -42419,7 +42419,7 @@ var i: integer;
 begin
   if (Value1=nil) or (Value2=nil) then
     result := Value1=Value2 else
-  if Value1.InheritsFrom(TSQLRecord) and Value1.InheritsFrom(TSQLRecord) then
+  if Value1.InheritsFrom(TSQLRecord) and Value2.InheritsFrom(TSQLRecord) then
     result := TSQLRecord(Value1).SameValues(TSQLRecord(Value2)) else begin
     result := false;
     C1 := Value1.ClassType;
