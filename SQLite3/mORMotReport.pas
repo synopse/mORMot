@@ -2347,22 +2347,29 @@ begin
   fHeaderDone := true;
   if (fHeaderLines.Count = 0) then exit;
   SaveLayout;
-  if Assigned(fStartPageHeader) then
-    fStartPageHeader(Self);
-  Font.Color := clBlack;
-  DoHeaderFooterInternal(fHeaderLines);
-  if Assigned(fEndPageHeader) then
-    fEndPageHeader(Self);
-  GetLineHeight;
-  inc(fCurrentYPos,fLineHeight shr 2); // add a small header gap
-  fHeaderHeight := fCurrentYPos-fPageMarginsPx.Top;
-  RestoreSavedLayout;
+  fInHeaderOrFooter := true;
+  try
+    if Assigned(fStartPageHeader) then
+      fStartPageHeader(Self);
+    Font.Color := clBlack;
+    DoHeaderFooterInternal(fHeaderLines);
+    if Assigned(fEndPageHeader) then
+      fEndPageHeader(Self);
+    GetLineHeight;
+    inc(fCurrentYPos,fLineHeight shr 2); // add a small header gap
+    fHeaderHeight := fCurrentYPos-fPageMarginsPx.Top;
+  finally
+    fInHeaderOrFooter := false;
+    RestoreSavedLayout;
+  end;
 end;
 
 procedure TGDIPages.DoFooter;
 begin
   if (fFooterLines.Count = 0) then exit;
   SaveLayout;
+  fInHeaderOrFooter := true;
+  try
   fCurrentYPos :=
     fPhysicalSizePx.y - fPageMarginsPx.bottom - fFooterHeight + fFooterGap;
   if Assigned(fStartPageFooter) then
@@ -2370,14 +2377,16 @@ begin
   DoHeaderFooterInternal(fFooterLines);
   if Assigned(fEndPageFooter) then
     fEndPageFooter(Self);
-  RestoreSavedLayout;
+  finally
+    fInHeaderOrFooter := false;
+    RestoreSavedLayout;
+  end;
 end;
 
 procedure TGDIPages.DoHeaderFooterInternal(Lines: TObjectList);
 var i: integer;
 begin
   SaveLayout;
-  fInHeaderOrFooter := true;
   try
     for i := 0 to Lines.Count -1 do
       with THeaderFooter(Lines[i]) do
@@ -2386,7 +2395,6 @@ begin
         PrintFormattedLine(Text, State.Flags);
       end;
   finally
-    fInHeaderOrFooter := false;
     RestoreSavedLayout;
   end;
 end;
