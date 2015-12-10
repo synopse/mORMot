@@ -1150,9 +1150,8 @@ var i: integer;
 begin
   fLockerEnter;
   try
-    fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=% fSubscriber.Count=%',
-      [ClassType,callback,interfaceName,ObjectFromInterface(callback),
-       length(fSubscriber)],Self);
+    fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=%',
+      [ClassType,callback,interfaceName,ObjectFromInterface(callback)],Self);
     for i := 0 to high(fSubscriber) do // try to release on ALL subscribers
       fSubscriber[i].CallbackReleased(callback, interfaceName);
   finally
