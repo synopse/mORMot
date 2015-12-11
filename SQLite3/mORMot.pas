@@ -45273,6 +45273,7 @@ var Added: boolean;
 
 var P: PPropInfo;
     i, j, V, c, codepage: integer;
+    V64: Int64;
     Obj: TObject;
     List: TList absolute Value;
 {$ifndef LVCL}
@@ -45288,6 +45289,9 @@ var P: PPropInfo;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
     WS: WideString;
+    {$ifdef UNICODE}
+    US: UnicodeString;
+    {$endif}
     tmp: RawByteString;
     dyn: TDynArray;
     dynObjArray: PClassInstance;
@@ -45421,8 +45425,11 @@ begin
       Kind := P^.PropType^.Kind;
       case Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
-          HR(P);
-          Add(P^.GetInt64Prop(Value));
+          V64 := P^.GetInt64Prop(Value);
+          if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
+            HR(P);
+            Add(V64);
+          end;
         end;
         {$ifdef FPC} tkBool, {$endif}
         tkEnumeration, tkInteger, tkSet: begin
@@ -45471,22 +45478,28 @@ begin
           end;
         end;
         {$ifdef FPC}tkAString,{$endif} tkLString: begin
-          HR(P);
           codepage := P^.PropType^.AnsiStringCodePage;
-          if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then
-            AddShort('""') else begin
-            Add('"');
+          if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then begin
+            if not (woDontStoreEmptyString in Options) then begin
+              HR(P);
+              AddShort('""');
+            end;
+          end else begin
             P^.GetLongStrProp(Value,tmp);
-            if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
-               ((woHideSynPersistentPassword in Options) or
-                (woFullExpand in Options)) and
-               P^.GetterIsField and (P^.GetterAddr(Value)=
-                 TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
-              if tmp<>'' then
-                AddShort('***')
-            end else
-              AddAnyAnsiString(tmp,twJSONEscape,codepage);
-            Add('"');
+            if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
+              HR(P);
+              Add('"');
+              if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
+                 ((woHideSynPersistentPassword in Options) or
+                  (woFullExpand in Options)) and
+                 P^.GetterIsField and (P^.GetterAddr(Value)=
+                   TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
+                if tmp<>'' then
+                  AddShort('***')
+              end else
+                AddAnyAnsiString(tmp,twJSONEscape,codepage);
+              Add('"');
+            end;
           end;
         end;
         tkFloat: begin
@@ -45507,18 +45520,23 @@ begin
         end;
         {$ifdef UNICODE}
         tkUString: begin // write converted to UTF-8
-          HR(P);
-          Add('"');
-          AddJSONEscapeW(pointer(P^.GetUnicodeStrProp(Value)));
-          Add('"');
+          US := P^.GetUnicodeStrProp(Value);
+          if (US<>'') or not (woDontStoreEmptyString in Options) then begin
+            HR(P);
+            Add('"');
+            AddJSONEscapeW(pointer(US));
+            Add('"');
+          end;
         end;
         {$endif}
         tkWString: begin // write converted to UTF-8
-          HR(P);
-          Add('"');
           P^.GetWideStrProp(Value,WS);
-          AddJSONEscapeW(pointer(WS));
-          Add('"');
+          if (WS<>'') or not (woDontStoreEmptyString in Options) then begin
+            HR(P);
+            Add('"');
+            AddJSONEscapeW(pointer(WS));
+            Add('"');
+          end;
         end;
         tkDynArray: begin
           HR(P);

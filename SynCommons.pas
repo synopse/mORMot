@@ -6366,13 +6366,16 @@ type
   // - any variant published property would be stored with their own
   // serialization option, unless woVariantAsNonExtendedJson is set to force
   // strict JSON content
+  // - void strings would be serialized as "", unless woDontStoreEmptyString
+  // is defined so that such properties would not be written
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix,
     woSQLRawBlobAsBase64, woHideSynPersistentPassword,
-    woObjectListWontStoreClassName, woVariantAsNonExtendedJson);
+    woObjectListWontStoreClassName, woVariantAsNonExtendedJson,
+    woDontStoreEmptyString);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
