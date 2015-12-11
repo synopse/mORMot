@@ -9841,7 +9841,7 @@ type
     // define Input/Output as dvoSerializeAsExtendedJson
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   public
-    /// this overriden method will create an index on the 'Method' column
+    /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
   published
@@ -15564,6 +15564,9 @@ type
     // or ServiceDefine() methods - e.g.
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
     // - this overriden method would return a TServiceContainerServer instance
+    // - you may enable SOA audit trail for all methods execution:
+    // ! (aRestSOAServer.ServiceContainer as TServiceContainerServer).SetServiceLog(
+    // !   aRestLogServer,TSQLRecordService);
     function ServiceContainer: TServiceContainer; override;
 
     /// compute the full statistics about this server, as JSON

@@ -1568,7 +1568,7 @@ To create instances of such {\f1\fs20 variant}, you can use some easy-to-remembe
 You have two non excluding ways of using the {\f1\fs20 TDocVariant} storage:
 - As regular {\f1\fs20 variant} variables, then using either late-binding or faster {\f1\fs20 _Safe()} to access its data;
 - Directly as {\f1\fs20 TDocVariantData} variables, then later on returing a {\f1\fs20 variant} instance using {\f1\fs20 variant(aDocVariantData)}.
-Note that you do not need to protect any stack-allocated {\f1\fs20 TDocVariantData} instance with a {\f1\fs20 try..finally}, since the compiler will do it for you. This {\f1\fs20 record} type has a lot of powerful methods, e.g. to apply map/reduce on the content, or do advanced searchs or marshalling.
+Note that you do not need to protect any stack-allocated {\f1\fs20 TDocVariantData} instance with a {\f1\fs20 try..finally}, since the compiler will do it for you. This {\f1\fs20 record} type has a lot of powerful methods, e.g. to apply {\i @*map/reduce@} on the content, or do advanced searchs or marshalling.
 :   Variant object documents
 The more straightforward is to use @*late-binding@ to set the properties of a new {\f1\fs20 TDocVariant} instance:
 !var V: variant;
@@ -2640,7 +2640,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i MongoDB} storage, in just one line of code - see @84@.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i @*MongoDB@} storage, in just one line of code - see @84@.
 :      JSON operations from SQL code
 As we stated, any {\f1\fs20 variant} field would be serialized as @*JSON@, then stored as plain TEXT in the database. In order to make a complex query on the stored JSON, you could retrieve it in your end-user code, then use the corresponding {\f1\fs20 @*TDocVariant@} instance to perform the search on its content. Of course, all this has a noticeable performance cost, especially when the data tend to grow.
 The natural way of solving those performance issue is to add some "regular" RDBMS fields, with a proper index, then perform the requests on those fields. But sometimes, you may need to do some addition query, perhaps in conjunction with "regular" field lookup, on the JSON data stored itself.\line In order to avoid the slowest conversion to the ORM client side, we defined some @*SQL function@s, dedicated to JSON process.
@@ -3276,7 +3276,7 @@ By default, this method will compute the {\f1\fs20 @*TModTime@ / sftModTime} and
 !    end;
 !end;
 You may override this method for you own purpose, saved the fact that you call this inherited implementation to properly handle {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} @*published properties@.
-:85 Audit-trail for change tracking
+:85 Audit Trail for change tracking
 Since most @*CRUD@ operations are centered within the scope of our {\i mORMot} server, we implemented in the @*ORM@ an integrated mean of tracking changes (aka @**Audit Trail@) of any {\f1\fs20 TSQLRecord}.
 Keeping a track of the history of business objects is one very common need for software modeling, and a must-have for any accurate data @*model@ing, like @54@. By default, as expected by the @*OOP@ model, any change to an object will forget any previous state of this object. But thanks to {\i mORMot}'s exclusive change-tracking feature, you can persist the history of your objects.
 :  Enabling audit-trail
@@ -6278,7 +6278,7 @@ Here are some typical WHERE clauses, and the corresponding {\i MongoDB} query do
 |{\f1\fs20 min(RowID),max(RowID),Count(RowID)}|{\f1\fs20 \{$group:\{_id:null,f0:\{$min:"$_id"\},f1:\{$max:"$_id"\},f2:\{$sum:1\}\}\},\{$project:\{_id:0,"min(RowID)":"$f0","max(RowID)":"$f1","Count(RowID)":"$f2"\}\}}
 |{\f1\fs20 min(RowID) as a,max(RowID)+1 as b,Count(RowID) as c}|{\f1\fs20 \{$group:\{_id:null,f0:\{$min:"$_id"\},f1:\{$max:"$_id"\},f2:\{$sum:1\}\}\},\{$project:\{_id:0,"a":"$f0","b":\{$add:["$f1",1]\},"c":"$f2"\}\}}
 |%
-Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex {\i NoSQL} query (e.g. using aggregation functions or the {\i Map/Reduce} pattern) by using directly the {\f1\fs20 TMongoCollection} methods.
+Note that parenthesis and mixed {\f1\fs20 AND} {\f1\fs20 OR} expressions are not handled yet. You could always execute any complex {\i NoSQL} query (e.g. using aggregation functions or the {\i @*Map/Reduce@} pattern) by using directly the {\f1\fs20 TMongoCollection} methods.
 But for most business code, {\i mORMot} allows to share the same exact code between your regular SQL databases or NoSQL engines. You do not need to learn the {\i MongoDB} query syntax: the ODM would compute the right expression for you, depending on the database engine it runs on.
 :  BATCH mode
 In addition to individual @*CRUD@ operations, our {\i MongoDB} is able to use BATCH mode for adding or deleting documents.
@@ -10577,6 +10577,101 @@ Or if only the {\f1\fs20 TServiceCalculator.Add} method has to be protected, you
 !  SetOptions(['Add'],[optExecInMainThread]);
 In fact, the {\f1\fs20 SetOptions()} method follows a call signature similar to the one used for defining the service security.
 For best performance, you may define your service methods be called without any locking, but rely on some convenient classes defined in {\f1\fs20 SynCommons.pas} - as the {\f1\fs20 @*TAutoLocker@} class or the {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process.\line A similar thread safety concern also applies to @*MVVM@ methods - see @111@.
+:183  Audit Trail for Services
+We have seen previously how the @*ORM@ part of the framework is able to provide an @85@. It is a very convenient way of storing the change of state of the data. On the other side, in any modern @*SOA@ solution, data is not at the center any more, but services. Sometimes, the data is not stored within your server, but in a third-party @17@. Being able to monitor the service execution of the whole system becomes sooner or later mandatory. Our framework allows to create an {\i @**Audit Trail@} of any incoming or outgoing service operation, in a secure, efficient and automated way.
+:   When logging is not enough
+By default, any {\f1\fs20 interface}-based service process would be logged by the framework - see @73@ - in dedicated {\f1\fs20 sllServiceCall} and {\f1\fs20 sllServiceReturn} log levels. You may see output similar to the following:
+$18:03:18 Enter   mORMot.TSQLRestServerFullMemory(024500A0).URI(POST root/DomUserQuery.SelectByLogonName/1 inlen=7)
+$!18:03:18 Service call      mORMot.TSQLRestServerFullMemory(024500A0) DomUserQuery.SelectByLogonName["979"]
+$18:03:18 Server             mORMot.TSQLRestServerFullMemory(024500A0)   POST root/DomUserQuery.SelectByLogonName SOA-Interface -> 200 with outlen=21 in 16 us
+$!18:03:18 Service return    mORMot.TSQLRestServerFullMemory(024500A0) {"result":[0],"id":1}
+$18:03:18 Leave   00.000.017
+The above lines match the execution of the following method, as defined in {\f1\fs20 dddDomUserCQRS.pas}:
+!  IDomUserQuery = interface(ICQRSService)
+!    ['{198C01D6-5189-4B74-AAF4-C322237D7D53}']
+!    /// would select a single TUser from its logon name
+!    // - then use Get() method to retrieve its content
+!    function SelectByLogonName(const aLogonName: RawUTF8): TCQRSResult;
+!  ...
+The actual execution was:
+! IDomUserQuery.SelectByLogonName('979') -> cqrsSuccess
+Here {\f1\fs20 cqrsSuccess} is the first item of the enumeration result, returned as an integer JSON value {\f1\fs20 "result":[0]} by the method:
+!  TCQRSResult =
+!    (cqrsSuccess, cqrsSuccessWithMoreData,
+!     cqrsUnspecifiedError, cqrsBadRequest, cqrsNotFound,
+!    ...
+This detailed log (including micro-second timing on the "{\i Leave}" rows) is very helpful for support, especially to investigate about any error occurring on a production server. But it would not be enough (or on the contrary provide "too much information" which "kills the information") to monitor the higher level of the process, especially on a server with a lot of concurrent activity.
+:   Tracing Service Methods
+The framework allows to optionally store each @*SOA@ method execution in a database, with the input and output parameters, and accurate timing.\line You could enable this automated process:
+- Either at service level, using {\f1\fs20 TServiceFactoryServer.SetServiceLog()};
+- Or for all services of a {\f1\fs20 TSQLRestServer.ServiceContainer} instance, via {\f1\fs20 TServiceContainerServer.SetServiceLog()}.
+For instance, you may enable it for a whole @*REST@ server:
+! (aRestSOAServer.ServiceContainer as TServiceContainerServer).SetServiceLog(
+!   aRestLogServer,TSQLRecordServiceLog);
+This single command would create an Audit Trail with all service calls made on {\f1\fs20 aRestSOAServer} to the {\f1\fs20 TSQLRecordServiceLog} ORM class of {\f1\fs20 aRestLogServer}. Keeping a dedicated REST server for the log entries would reduce the overhead on the main server, and ease its maintenance.
+Actual storage takes place within a class inheriting from {\f1\fs20 TSQLRecordServiceLog}:
+!  TSQLRecordServiceLog = class(TSQLRecord)
+!  ...
+!  published
+!    /// the 'interface.method' identifier of this call
+!    // - this column will be indexed, for fast SQL queries, with the MicroSec
+!    // column (for performance tuning)
+!    property Method: RawUTF8 read fMethod write fMethod;
+!    /// the input parameters, as a JSON document
+!    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+!    // shortened field names, for smaller TEXT storage
+!    // - content may be searched using JsonGet/JsonHas SQL functions on a
+!    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+!    property Input: variant read fInput write fInput;
+!    /// the output parameters, as a JSON document, including result: for a function
+!    // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
+!    // shortened field names, for smaller TEXT storage
+!    // - content may be searched using JsonGet/JsonHas SQL functions on a
+!    // SQlite3 storage, or with direct document query under MongoDB/PostgreSQL
+!    property Output: variant read fOutput write fOutput;
+!    /// the Session ID, if there is any
+!    property Session: integer read fSession write fSession;
+!    /// the User ID, if there is an identified Session
+!    property User: integer read fUser write fUser;
+!    /// will be filled by the ORM when this record is written in the database
+!    property Time: TModTime read fTime write fTime;
+!    /// execution time of this method, in micro seconds
+!    property MicroSec: integer read fMicroSec write fMicroSec;
+!  end;
+The @*ORM@ would therefore store the following table on its database:
+\graph DBServiceLog ServiceLog Record Layout
+rankdir=LR;
+node [shape=Mrecord];
+struct1 [label="ID : TID|Input : variant|Method : RawUTF8|MicroSec : integer|Output : variant|Session : integer|Time : TModTime|User : integer"];
+\
+As you can see, all input and output parameters are part of the record, as two {\f1\fs20 @*TDocVariant@} instances. Since they are stored as JSON/TEXT, you could perform some requests directly on their content, especially if actual storage take place in a {\i @*MongoDB@} database: you may even use dedicated indexes on the parameter values, and/or run advanced {\i @*map/reduce@} queries.
+Since very accurate timing, with a micro-second resolution, is part of the information, you would be able to make filtering or advanced statistics using simple SQL clauses. It has never been easier to monitor your @*SOA@ system, and identify potential issues. You may easily extract this information from your database, and feed a real-time visual monitoring chart system, for instance. Or identify and spy unusual execution patterns (e.g. unexpected timing or redounding error codes), which would match some SQL requests: those SQL statements may be run automatically on a regular basis, to prevent any problem before it actually happen.
+:   Tracing Asynchronous External Calls
+Sometimes, your server may be the client of another process. In an @*SOA@ environment, you may interface with a third-party @*REST@ service for an external process, e.g. sending a real-time notification.
+On the REST client instance, you can execute the {\f1\fs20 TServiceFactoryClient.SendNotifications()} method for a given service:
+!  aNotificationClientService.SendNotifications(aServicesLogRest,
+!    TSQLRecordServiceNotifications, fSettings.NotificationsRetrySeconds);
+This single command would create an Audit Trail with all notification calls sent to {\f1\fs20 aNotificationClientService}, in the {\f1\fs20 TSQLRecordServiceNotifications} ORM class of {\f1\fs20 aServicesLogRest}.
+You may use the following {\f1\fs20 TSQLRecordServiceNotifications class}:
+!  TSQLRecordServiceNotifications = class(TSQLRecordServiceLog)
+!  ...
+!  published
+!    /// when this notification has been sent
+!    // - equals 0 until it was actually notified
+!    property Sent: TTimeLog read fSent write fSent;
+!  end;
+Which would be stored in the following table:
+\graph DBServiceNotifications ServiceNotifications Record Layout
+rankdir=LR;
+node [shape=Mrecord];
+struct1 [label="ID : TID|Sent : TTimeLog|Input : variant|Method : RawUTF8|MicroSec : integer|Output : variant|Session : integer|Time : TModTime|User : integer"];
+\
+The additional {\f1\fs20 Sent} property would contain the {\f1\fs20 TTimeLog} time-stamp on which the notification would have taken place.
+In fact, all methods executed via this notification service would now be first stored in this table, then the remote HTTP notifications would take place asynchronously in the background. Transmission would be in order (first-in-first-out), and in case of any connection problem (e.g. the remote server not returning a {\f1\fs20 200 HTTP SUCCESS} status code), it won't move to the next entry, and would retry after the {\f1\fs20 NotificationsRetrySeconds} period, as supplied to the {\f1\fs20 SendNotifications()} method.
+Of course, you may define your own sub-class, to customize the destination Audit Trail table:
+!type
+!  TSQLMyNotifications = class(TSQLRecordServiceNotifications);
+Thanks to those {\f1\fs20 TSQLRecordServiceLog} classes, high-level support and analysis has never become easier. The actual implementation of those features has been tuned to minimize the impact on main performance, by using e.g. delayed write operations via @28@, or a dedicated background thread for the asynchronous notification process.
 :  Transmission content
 All data is transmitted as @*JSON@ arrays or objects, according to the requested URI.
 We'll discuss how data is expected to be transmitted, at the application level.
