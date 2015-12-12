@@ -52,7 +52,7 @@ unit SynRestMidasVCL;
   - introducing TSynRestDataSet (under Delphi), which allows to apply updates:
     will be used now for overloaded ToClientDataSet() functions result
   - fixed Delphi XE2 compilation issue with SetCommandText declaration	
-
+  - bug fix skipping first record
 
 }
 
@@ -239,7 +239,6 @@ begin
   if (aJSON = '') then
     Exit;
   lSQLTableJSON := TSQLTableJSON.Create('', aJSON);
-  lSQLTableJSON.Step;
   lData := TRawByteStringStream.Create('');
   try
     JSONToBinary(lSQLTableJSON, lData);

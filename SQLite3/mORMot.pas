@@ -15566,7 +15566,7 @@ type
     // - this overriden method would return a TServiceContainerServer instance
     // - you may enable SOA audit trail for all methods execution:
     // ! (aRestSOAServer.ServiceContainer as TServiceContainerServer).SetServiceLog(
-    // !   aRestLogServer,TSQLRecordService);
+    // !   aRestLogServer,TSQLRecordServiceLog);
     function ServiceContainer: TServiceContainer; override;
 
     /// compute the full statistics about this server, as JSON
