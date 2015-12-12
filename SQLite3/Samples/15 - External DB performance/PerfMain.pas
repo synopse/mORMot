@@ -310,6 +310,17 @@ begin
       dMSSQL,'(localdb)\v11.0'),'','',' MSSQL2012',false);
     {$endif}
     {$endif USELOCALDBMSSQLEXPRESS}
+    {$if defined (USEZEOS) and defined(ZEOS73UP)}
+    Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI('odbc_w[mssql]', '', ''),
+      'DRIVER={SQL Server Native Client 11.0};Server=(localdb)\ProjectsV13;DataBase=zeoslib;Trusted_Connection=Yes;MARS_Connection=yes',
+      '','',' ODBC_W MSSQL2012',false);
+    Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI('odbc_a[mssql]', '', ''),
+      'DRIVER={SQL Server Native Client 11.0};Server=(localdb)\ProjectsV13;DataBase=zeoslib;Trusted_Connection=Yes;MARS_Connection=yes',
+      '','',' ODBC_A MSSQL2012',false);
+    Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI('OleDB[mssql]', '', ''),
+      'Provider=SQLNCLI11.1;Integrated Security=SSPI;Persist Security Info=False;User ID="";Initial Catalog=zeoslib;'+
+      'Data Source=(localdb)\ProjectsV13;MarsConn=Yes;Initial File Name="";Server SPN=""','','',' OleDB MSSQL2012',false);
+    {$ifend}
 
     // -------- (local) MS SQL Server 2008 R2
     // get native 10.0 client e.g. as ENU/x86/sqlncli.msi or ENU/x64/sqlncli.msi
