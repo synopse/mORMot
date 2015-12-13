@@ -12522,6 +12522,12 @@ type
     // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
     function ToRawUTF8DynArray: TRawUTF8DynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// save a document as an CSV of UTF-8 encoded JSON
+    // - will expect the document to be a dvArray - otherwise, will raise a
+    // EDocVariant exception
+    // - will use VariantToUTF8() to populate the result array: as a consequence,
+    // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
+    function ToCSV(const Separator: RawUTF8=','): RawUTF8;
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
@@ -35485,6 +35491,13 @@ begin
   ToRawUTF8DynArray(result);
 end;
 
+function TDocVariantData.ToCSV(const Separator: RawUTF8=','): RawUTF8;
+var tmp: TRawUTF8DynArray; // fast enough in practice
+begin
+  ToRawUTF8DynArray(tmp);
+  result := RawUTF8ArrayToCSV(tmp,Separator);
+end;
+
 procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
   const NameValueSep, ItemSep: RawUTF8; Escape: TTextWriterKind);
 var ndx: integer;
@@ -35566,8 +35579,12 @@ end;
 
 function TDocVariantData.GetRawUTF8ByName(const aName: RawUTF8): RawUTF8;
 var wasString: boolean;
+    v: PVariant;
 begin
-  VariantToUTF8(GetVarDataByName(aName)^,result,wasString);
+  v := GetVarDataByName(aName);
+  if PVarData(v)^.VType<=varNull then
+    result := '' else
+    VariantToUTF8(v^,result,wasString);
 end;
 
 procedure TDocVariantData.SetInt64ByName(const aName: RawUTF8;
