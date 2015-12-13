@@ -117,6 +117,7 @@ end;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
+// for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
 
 interface
 

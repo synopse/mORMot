@@ -21570,21 +21570,19 @@ begin
   SetString(result,PAnsiChar(pointer(S)),i);
 end;
 
-const
+var
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
-  // - our enhanced SysUtils.pas (normal and LVCL) contains the same array
-  // - should be local for better code generation
-  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+  // - is local for better code generation
+  TwoDigitsHex: array[byte] of array[1..2] of AnsiChar;
+  TwoDigitsHexW: array[AnsiChar] of word absolute TwoDigitsHex;
+  TwoDigitsHexWB: array[byte] of word absolute TwoDigitsHex;
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j, v: cardinal;
+var j: cardinal;
 begin
   for j := 1 to BinBytes do begin
-    v := byte(Bin^);
-    Hex[0] := HexChars[v shr 4];
-    Hex[1] := HexChars[v and $F];
+    PWord(Hex)^ := TwoDigitsHexW[Bin^];
     inc(Hex,2);
     inc(Bin);
   end;
@@ -21617,12 +21615,10 @@ begin
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j, v: cardinal;
+var j: integer;
 begin
   for j := BinBytes-1 downto 0 do begin
-    v := byte(Bin^);
-    Hex[j*2] := HexChars[v shr 4];
-    Hex[j*2+1] := HexChars[v and $F];
+    PWord(Hex+j*2)^ := TwoDigitsHexW[Bin^];
     inc(Bin);
   end;
 end;
@@ -25423,8 +25419,7 @@ begin
     ord(' '): p^ := '+';
     else begin
       p^ := '%'; inc(p);
-      p^ := HexChars[c shr 4]; inc(p);
-      p^ := HexChars[c and $F];
+      PWord(p)^ := TwoDigitsHexWB[c]; inc(p);
     end;
     end; // case c of
     inc(p);
@@ -27914,33 +27909,28 @@ function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 var i: integer;
 begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   for i := 3 downto 0 do begin
-    P[0] := HexChars[PtrUInt(guid[i]) shr 4 and $F];
-    P[1] := HexChars[PtrUInt(guid[i]) and $F];
+    PWord(P)^ := TwoDigitsHexWB[guid[i]];
     inc(P,2);
   end;
   inc(PByte(guid),4);
   for i := 1 to 2 do begin
     P[0] := '-';
-    P[1] := HexChars[PtrUInt(guid[1]) shr 4 and $F];
-    P[2] := HexChars[PtrUInt(guid[1]) and $F];
-    P[3] := HexChars[PtrUInt(guid[0]) shr 4 and $F];
-    P[4] := HexChars[PtrUInt(guid[0]) and $F];
+    PWord(P+1)^ := TwoDigitsHexWB[guid[1]];
+    PWord(P+3)^ := TwoDigitsHexWB[guid[0]];
     inc(PByte(guid),2);
     inc(P,5);
   end;
   P[0] := '-';
-  P[1] := HexChars[PtrUInt(guid[0]) shr 4 and $F];
-  P[2] := HexChars[PtrUInt(guid[0]) and $F];
-  P[3] := HexChars[PtrUInt(guid[1]) shr 4 and $F];
-  P[4] := HexChars[PtrUInt(guid[1]) and $F];
+  PWord(P+1)^ := TwoDigitsHexWB[guid[0]];
+  PWord(P+3)^ := TwoDigitsHexWB[guid[1]];
   P[5] := '-';
   inc(PByte(guid),2);
   inc(P,6);
   for i := 0 to 5 do begin
-    P[i*2]   := HexChars[PtrUInt(guid[i]) shr 4 and $F];
-    P[i*2+1] := HexChars[PtrUInt(guid[i]) and $F];
+    PWord(P)^ := TwoDigitsHexWB[guid[i]];
+    inc(P,2);
   end;
-  result := P+12;
+  result := P;
 end;
 
 function HexaToByte(P: PUTF8Char; var Dest: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -40764,6 +40754,13 @@ begin
 end;
 
 procedure TTextWriter.AddPointer(P: PtrUInt);
+  procedure Pointer4ToHex(B: PWordArray; P: PtrUInt);
+  begin
+    B[3] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
+    B[2] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
+    B[1] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
+    B[0] := TwoDigitsHexWB[P];
+  end;
 begin
   if BEnd-B<=sizeof(P)*2 then
     FlushToStream;
@@ -40771,21 +40768,12 @@ begin
   if P and $ffffffff00000000<>0 then begin
     BinToHexDisplay(@P,PAnsiChar(B+1),8);
     inc(B,16);
-  end else begin // truncate to 8 hexa chars for most heap-allocated pointers
-    BinToHexDisplay(@P,PAnsiChar(B+1),4);
-    inc(B,8);
+    exit;
   end;
-{$else}
-  B[8] := HexChars[P and $F]; P := P shr 4;
-  B[7] := HexChars[P and $F]; P := P shr 4;
-  B[6] := HexChars[P and $F]; P := P shr 4;
-  B[5] := HexChars[P and $F]; P := P shr 4;
-  B[4] := HexChars[P and $F]; P := P shr 4;
-  B[3] := HexChars[P and $F]; P := P shr 4;
-  B[2] := HexChars[P and $F]; P := P shr 4;
-  B[1] := HexChars[P];
-  inc(B,8);
+  // truncate to 8 hexa chars for most heap-allocated pointers
 {$endif}
+  Pointer4ToHex(@B[1],P);
+  inc(B,8);
 end;
 
 procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
@@ -41037,7 +41025,7 @@ begin
         ; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
       #9,#10,#13: begin // characters below ' ', #9 e.g. -> // '&#x09;'
         AddShort('&#x');
-        Add(HexChars[ord(Text[i]) shr 4],HexChars[ord(Text[i]) and $F]);
+        AddByteToHex(ord(Text[i]));
         Add(';');
       end;
       '<': AddShort('&lt;');
@@ -41067,8 +41055,7 @@ procedure TTextWriter.AddByteToHex(Value: byte);
 begin
   if BEnd-B<=1 then
     FlushToStream;
-  B[1] := HexChars[Value shr 4];
-  B[2] := HexChars[Value and $f];
+  PWord(B+1)^ := TwoDigitsHexWB[Value];
   inc(B,2);
 end;
 
@@ -41404,7 +41391,7 @@ noesc:c := i;
       ord('"'): c := ord('\')+ord('"')shl 8;
       1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
         AddShort('\u00');
-        c := ord(HexCharsLower[c shr 4])+ord(HexCharsLower[c and $F])shl 8;
+        c := TwoDigitsHexWB[c];
       end;
       else goto noesc;
       end;
@@ -41445,7 +41432,7 @@ begin
       ord('\'),ord('"'): Add('\',AnsiChar(c));
       1..7,11,14..31: begin // characters below ' ', #7 e.g. -> // 'u0007'
         AddShort('\u00');
-        Add(HexCharsLower[c shr 4],HexCharsLower[c and $F]);
+        AddByteToHex(c);
       end;
       else break;
       end;
@@ -51454,6 +51441,7 @@ const n2u: array[138..255] of byte =
    85,85,89,222,223,65,65,65,65,65,65,198,67,69,69,69,69,73,73,73,73,68,78,79,
    79,79,79,79,247,79,85,85,85,85,89,222,89);
 {$endif OWNNORMTOUPPER}
+const HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
 begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
@@ -51501,9 +51489,13 @@ begin
     ConvertHexToBin[i+(ord('a')-ord('A'))] := v;
     inc(v);
   end;
+  for i := 0 to 255 do begin
+    TwoDigitsHex[i][1] := HexChars[i shr 4];
+    TwoDigitsHex[i][2] := HexChars[i and $f];
+  end;
   // initialize our internaly used TSynAnsiConvert engines
   TSynAnsiConvert.Engine(0);
-  // initialize tables for crc32cfast()
+  // initialize tables for crc32cfast() and SymmetricEncrypt/FillRandom
   for i := 0 to 255 do begin
     crc := i;
     for n := 1 to 8 do

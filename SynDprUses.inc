@@ -3,6 +3,9 @@
   {$ifdef Unix} // we may also be on Darwin / OSX  
   cthreads, // if you use threads: always needed for servers
   cwstring, // optional WideString manager, but won't hurt
+  {$else}
+  cmem,  // default FPC's heap manager is very RAM hungry (one heap per thread)
+  //FastMM4,  // need the latest version, e.g. from lib\kylix sub folder
   {$endif}
 {$else}  // enable FastMM4 on older versions of Delphi
   {$IFDEF CONDITIONALEXPRESSIONS}
