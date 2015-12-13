@@ -1764,6 +1764,9 @@ type
       RequestEvent: TSynLogInfo=sllSQL; ReplyEvent: TSynLogInfo=sllDB;
       ReplyEventMaxSize: cardinal=1024);
 
+    /// retrieve extended server version and build information, as text
+    // - will create a string from ServerBuildInfo object, e.g. as
+    function ServerBuildInfoText: RawUTF8;
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
     // ! ServerBuildInfo.version = '2.4.9'
@@ -5359,6 +5362,22 @@ begin
   LogReplyEventMaxSize := ReplyEventMaxSize;
 end;
 
+function TMongoClient.ServerBuildInfoText: RawUTF8;
+begin
+  with _Safe(ServerBuildInfo)^ do
+    if Count=0 then
+      result := '' else begin
+      result := FormatUTF8('MongoDB % %',[U['version'],U['javascriptEngine']]);
+      with A['storageEngines']^ do begin
+        // "storageEngines":["devnull","ephemeralForTest","mmapv1","wiredTiger"]
+        DeleteByValue('devnull');
+        DeleteByValue('ephemeralForTest');
+        if Count>0 then
+          result := result+' '+ToCSV;
+      end;
+    end;
+end;
+
 function TMongoClient.GetOneReadConnection: TMongoConnection;
 function GetUnlockedSecondaryIndex: integer;
 var retry: integer;
@@ -5535,13 +5554,12 @@ end;
 
 function TMongoClient.GetServerBuildInfoNumber: cardinal;
   procedure ComputeIt;
-  var vArr: variant;
   begin
-    GetServerBuildInfo; // circumvent a FPC compilation issue
-    vArr := fServerBuildInfo.versionArray;
-    if vArr._Count=4 then
-      fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
-        vArr._(0)*1000000+vArr._(1)*10000+vArr._(2)*100+vArr._(3);
+    with _Safe(GetServerBuildInfo)^.A['versionArray']^ do
+      if Count=4 then
+        fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
+          integer(Values[0])*1000000+integer(Values[1])*10000+
+          integer(Values[2])*100+integer(Values[3]);
   end;
 begin
   if self=nil then

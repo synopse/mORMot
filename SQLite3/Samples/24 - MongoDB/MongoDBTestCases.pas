@@ -7,6 +7,7 @@ interface
 // if defined, will test with 5000 records instead of the default 100 records
 {.$define ADD5000}
 
+// if defined, will create the DB with one "toto" user, to validate authentication 
 {.$define TESTMONGOAUTH}
 
 uses
@@ -174,6 +175,9 @@ begin
   serverTime := res.system.currentTime; // direct conversion to TDateTime
   Check(serverTime<>0);
   CheckSame(Now,serverTime,0.5);
+  if System.Pos('MongoDB',Owner.CustomVersions)=0 then
+    Owner.CustomVersions := Owner.CustomVersions+'Using '+
+      string(fClient.ServerBuildInfoText);
   fExpectedCount := COLL_COUNT;
 end;
 
