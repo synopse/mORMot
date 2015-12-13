@@ -1834,7 +1834,8 @@ end;
 
 procedure TSQLRestServerDB.InternalBatchStop;
 const MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
-var ndx,f,r,prop,fieldCount,valuesCount,rowCount,valuesFirstRow: integer;
+var ndx,f,r,prop,fieldCount,valuesCount,
+    rowCount,valuesFirstRow: integer;
     P: PUTF8Char;
     DecodeSaved,UpdateEventNeeded: boolean;
     Fields, Values: TRawUTF8DynArray;
@@ -1854,7 +1855,7 @@ begin
       raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
-    if fBatchValuesCount=1 then begin // handle single record insertion as usual
+    if fBatchValuesCount=1 then begin // handle single record insert
       Decode.Decode(fBatchValues[0],nil,pInlined,fBatchID[0]);
       if Props.RecordVersionField<>nil then
         InternalRecordVersionHandle(
@@ -1928,7 +1929,7 @@ begin
           if rowCount>1 then
             SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
           fStatementGenericSQL := SQL; // full log on error
-          PrepareStatement(valuesCount+fieldCount>MAX_PARAMS);
+          PrepareStatement((rowCount<5) or (valuesCount+fieldCount>MAX_PARAMS));
           prop := 0;
           for f := 0 to valuesCount-1 do begin
             if GetBit(ValuesNull[0],f) then
