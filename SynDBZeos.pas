@@ -1230,6 +1230,7 @@ end;
 
 {$ifdef ZEOS72UP}
 procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter);
+{$if not (defined(ZEOS73UP) and defined(USE_SYNCOMMONS))}
 var col: integer;
     P: PAnsiChar;
     Len: NativeUInt;
@@ -1239,7 +1240,11 @@ begin
   blob := fResultSet.GetBlob(col+FirstDbcIndex);
   WR.WrBase64(blob.GetBuffer,blob.Length,true); // withMagic=true
 end;
+{$IFEND}
 begin // take care of the layout of internal ZDBC buffers for each provider
+  {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+  fResultSet.ColumnsToJSON(WR);
+  {$ELSE}
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount-1 do begin
@@ -1299,6 +1304,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
     WR.Add('}');
+  {$IFEND}
 end;
 {$endif ZEOS72UP}
 
