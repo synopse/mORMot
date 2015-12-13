@@ -214,4 +214,14 @@ object MainForm: TMainForm
     TabOrder = 14
     OnClick = btnGitSynchClick
   end
+  object chkCopyLink: TCheckBox
+    Left = 496
+    Top = 482
+    Width = 89
+    Height = 17
+    Caption = 'and copy link'
+    Checked = True
+    State = cbChecked
+    TabOrder = 15
+  end
 end

@@ -29,6 +29,7 @@ type
     btnSynPdf: TButton;
     btnDMustache: TButton;
     btnLVCL: TButton;
+    chkCopyLink: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -105,6 +106,8 @@ procedure TMainForm.btnFullSynchClick(Sender: TObject);
 begin
   btnFossilSynch.Click;
   btnGitSynch.Click;
+  if chkCopyLink.Checked then
+    btnCopyLink.Click;
 end;
 
 procedure TMainForm.btnFossilSynchClick(Sender: TObject);
@@ -129,7 +132,7 @@ begin
   DescFile := fBatPath+'desc.txt';
   FileFromString('{'+IntToStr(VersionNumber)+'} '+Desc,DescFile);
   WinExecAndWait32(fBatPath+'FossilCommit.bat "'+DescFile+'"',fFossilRepository,SW_SHOWNORMAL,INFINITE);
-  ReadStatus;
+  mmoDescription.SetFocus;
 end;
 
 procedure TMainForm.btnGitSynchClick(Sender: TObject);
@@ -191,6 +194,7 @@ begin
   WinExecAndWait32(format('%s%s "%s" "%s" "%s" "%s" "%s"',
       [fBatPath,BatchFile,fFossilRepository,fGitRepository,fGitExe,DescFile,fDevPath]),
      fGitRepository,SW_SHOWNORMAL,INFINITE);
+  mmoDescription.SetFocus;
 end;
 
 procedure TMainForm.btnRefreshStatusClick(Sender: TObject);
