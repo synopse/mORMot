@@ -70,6 +70,7 @@ type
     Tables: TStringList;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
+    TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
     OnAfterExecute: TNotifyEvent;
@@ -117,6 +118,7 @@ begin
   mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
   pnlLeftTop.Height := 30;
   Tables := TStringList.Create;
+  TableDblClickSelect.Init(false);
 end;
 
 procedure TDBFrame.Open;
@@ -144,7 +146,10 @@ begin
   if i < 0 then
     exit;
   table := lstTables.Items[i];
-  sql := 'select * from ' + table;
+  sql := string(TableDblClickSelect.Value(RawUTF8(table)));
+  if sql='' then
+    sql := '*';
+  sql := 'select '+sql+' from ' + table;
   if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and (Pos
     (table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
     sql := sql + ' order by id desc';
