@@ -65,9 +65,9 @@ uses
   mORMot,
   mORMotDDD,
   SynSQLite3, mORMotSQLite3, // for internal SQlite3 database
-  SynDB, mORMotDB,  // for TDDDRestSettings on external SQL database
-  mORMotMongoDB,    // for TDDDRestSettings on external NoSQL database
-  mORMotWrappers;   // for TDDDRestSettings to publish wrapper methods
+  SynDB, mORMotDB,           // for TDDDRestSettings on external SQL database
+  SynMongoDB, mORMotMongoDB, // for TDDDRestSettings on external NoSQL database
+  mORMotWrappers;            // for TDDDRestSettings to publish wrapper methods
 
 
 { ----- Manage Service/Daemon settings }
@@ -454,6 +454,19 @@ type
       const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
   end;
 
+  /// storage class for a remote MongoDB server direct access settings
+  TDDDMongoDBRestSettings = class(TDDDRestSettings)
+  public
+    /// set the default values for direct MongoDB server connection
+    // - if MongoServerAddress is '?', entry with default value would be saved
+    // in the settings, but NewRestInstance() would ignore it: once the
+    // remote MongoDB server IP is known, you may just replace '?' to use it
+    // - if MongoServerPort is 0, would use MONGODB_DEFAULTPORT = 27017
+    // - if MongoUser and MongoPassword are set, would call TMongoClient.OpenAuth()
+    procedure SetDefaults(const Root, MongoServerAddress: RawUTF8;
+      MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+  end;
+  
 
 implementation
 
@@ -773,6 +786,24 @@ end;
 procedure TDDDAppSettingsStorageFile.InternalStore;
 begin
   FileFromString(fInitialJsonContent,fSettingsJsonFileName);
+end;
+
+
+{ TDDDMongoDBRestSettings }
+
+procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress: RawUTF8;
+  MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+begin
+  if fORM.Kind<>'' then
+    exit;
+  fRoot := Root;
+  fORM.Kind := 'MongoDB';
+  if MongoServerPort=0 then
+    MongoServerPort := MONGODB_DEFAULTPORT;
+  fORM.ServerName := FormatUTF8('%:%',[MongoServerAddress,MongoServerPort]);
+  fORM.DatabaseName := MongoDatabase;
+  fORM.User := MongoUser;
+  fORM.PasswordPlain := MongoPassword;
 end;
 
 end.
