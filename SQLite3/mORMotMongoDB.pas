@@ -317,7 +317,9 @@ begin
     exit;
   if SameText(aDefinition.Kind,'MongoDB') then begin
     Split(aDefinition.ServerName,':',server,port);
-    client := TMongoClient.Create(server,UTF8ToInteger(port,MONGODB_DEFAULTPORT));
+    if (server='') or (server[1] in ['?','*']) or (aDefinition.DatabaseName='') then
+      exit; // check mandatory MongoDB IP and Database
+    client := TMongoClient.Create(server,UTF8ToInteger(port,1024,65535,MONGODB_DEFAULTPORT));
     try
       with aDefinition do
         if (User<>'') and (Password<>'') then begin
@@ -328,6 +330,7 @@ begin
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
       StaticMongoDBRegisterAll(TSQLRestServer(result),database,aOptions);
+      result.PrivateGarbageCollector.Add(client); // connection owned by server
     except
       FreeAndNil(result);
       client.Free; // avoid memory leak
