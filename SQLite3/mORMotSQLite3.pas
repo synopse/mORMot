@@ -1770,6 +1770,7 @@ procedure TSQLRestServerDB.AdministrationExecute(const DatabaseName,SQL: RawUTF8
   var result: RawJSON);
 var new,cmd,fn: RawUTF8;
     bfn: TFileName;
+    i: integer;
 begin
   inherited AdministrationExecute(DatabaseName,SQL,result);
   if (SQL<>'') and (SQL[1]='#') then begin
@@ -1779,7 +1780,18 @@ begin
       result[length(result)] := '|';
       result := result+'#db|#backup localfilename"';
     end;
-    2: result := ObjectToJSON(DB,[woFullExpand]);
+    2: begin
+      result := ObjectToJSON(DB,[woFullExpand]);
+      if fStaticData<>nil then begin
+        for i := 0 to high(fStaticData) do
+          if fStaticData[i]<>nil then
+            new := new+ObjectToJSON(fStaticData[i],[woFullExpand])+',';
+        if new<>'' then begin
+          new[length(new)] := ']';
+          new := '"StaticTables":['+new+'}';
+        end;
+      end;
+    end;
     3: begin
       split(SQL,' ',cmd,fn);
       if fn='' then

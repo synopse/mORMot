@@ -186,7 +186,7 @@ type
     fProperties: TSQLDBConnectionProperties;
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
     fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
-    // ID handling during Add/Insert 
+    // ID handling during Add/Insert
     fEngineAddUseSelectMaxID: Boolean;
     fEngineLockedMaxID: TID;
     fOnEngineAddComputeID: TOnEngineAddComputeID;
@@ -280,6 +280,7 @@ type
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
       out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
       Occasion: TSQLOccasion; BatchOptions: TSQLRestBatchOptions): RawUTF8;
+    function GetConnectionProperties: TSQLDBConnectionProperties;
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
@@ -364,8 +365,9 @@ type
     // a TSQLRestStorageExternal
     class function ConnectionProperties(aClass: TSQLRecordClass;
       aServer: TSQLRestServer): TSQLDBConnectionProperties; overload;
+  published
     /// the associated external database connection
-    function ConnectionProperties: TSQLDBConnectionProperties; overload;
+    property Properties: TSQLDBConnectionProperties read GetConnectionProperties;
     /// by default, any INSERT will compute the new ID from an internal variable
     // - it is very fast and reliable, unless external IDs can be created
     // outside this engine
@@ -1797,10 +1799,10 @@ end;
 class function TSQLRestStorageExternal.ConnectionProperties(
   aClass: TSQLRecordClass; aServer: TSQLRestServer): TSQLDBConnectionProperties;
 begin
-  result := Instance(aClass,aServer).ConnectionProperties;
+  result := Instance(aClass,aServer).GetConnectionProperties;
 end;
 
-function TSQLRestStorageExternal.ConnectionProperties: TSQLDBConnectionProperties;
+function TSQLRestStorageExternal.GetConnectionProperties: TSQLDBConnectionProperties;
 begin
   if self=nil then
     result := nil else

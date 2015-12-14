@@ -13378,20 +13378,6 @@ type
     property AcquireWriteTimeOut: cardinal index execORMWrite
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
 
-    /// the current UTC Date and Time, as retrieved from the server
-    // - this property will return the timestamp as TTimeLog / Int64
-    // after correction from the Server returned time-stamp (if any)
-    // - is used e.g. by TSQLRecord.ComputeFieldsBeforeWrite to update TModTime
-    // and TCreateTime published fields
-    // - default implementation will return the executable UTC time, i.e. NowUTC
-    // so that any GUI code should convert this UTC value into local time
-    // - on TSQLRestServer, if you use an external database, the TSQLDBConnection
-    // ServerTimeStamp value will be set to this property
-    // - you can use this value in a WHERE clause for a query, as such:
-    // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
-    // - or you could use ServerTimeStamp everywhere in your code, when you need
-    // a reference time base
-    property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
     // - this default implementation will handle #time #model #rest commands
     procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); virtual;
@@ -13425,9 +13411,23 @@ type
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
       read fRoutingClass write SetRoutingClass;
-  published
     /// the Database Model associated with this REST Client or Server
     property Model: TSQLModel read fModel;
+  published
+    /// the current UTC Date and Time, as retrieved from the server
+    // - this property will return the timestamp as TTimeLog / Int64
+    // after correction from the Server returned time-stamp (if any)
+    // - is used e.g. by TSQLRecord.ComputeFieldsBeforeWrite to update TModTime
+    // and TCreateTime published fields
+    // - default implementation will return the executable UTC time, i.e. NowUTC
+    // so that any GUI code should convert this UTC value into local time
+    // - on TSQLRestServer, if you use an external database, the TSQLDBConnection
+    // ServerTimeStamp value will be set to this property
+    // - you can use this value in a WHERE clause for a query, as such:
+    // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
+    // - or you could use ServerTimeStamp everywhere in your code, when you need
+    // a reference time base
+    property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
     {$ifdef WITHLOG}
     /// the logging class used for this instance
     // - is set by default to SQLite3Log, but could be set to a custom class
@@ -15849,9 +15849,6 @@ type
 
     /// read only access to a boolean value set to true if table data was modified
     property Modified: boolean read fModified write fModified;
-    /// read only access to the class defining the record type stored in this
-    // REST storage
-    property StoredClass: TSQLRecordClass read fStoredClass;
     /// read only access to the ORM properties of the associated record type
     // - may be nil if this instance is not associated with a TSQLModel
     property StoredClassProps: TSQLModelRecordProperties read fStoredClassProps;
@@ -15862,6 +15859,10 @@ type
     /// enable low-level trace of StorageLock/StorageUnlock methods
     // - may be used to resolve low-level race conditions
     property StorageLockLogTrace: boolean read fStorageLockLogTrace write fStorageLockLogTrace;
+  published
+    /// read only access to the class defining the record type stored in this
+    // REST storage
+    property StoredClass: TSQLRecordClass read fStoredClass;
   end;
 
   /// event prototype called by TSQLRestStorageInMemory.FindWhereEqual() or
@@ -16184,8 +16185,6 @@ type
     // - the loop execution will be protected via StorageLock/StorageUnlock 
     procedure ForEach(WillModifyContent: boolean;
       OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
-    /// read-only access to the number of TSQLRecord values
-    property Count: integer read GetCount;
     /// read-only access to the TSQLRecord values, storing the data
     // - this returns directly the item class instance stored in memory: if you
     // change the content, it will affect the internal data - so for instance
@@ -16199,6 +16198,7 @@ type
     property ListPtr: PPointerArray read GetListPtr;
     /// read-only access to the ID of a TSQLRecord values
     property ID[Index: integer]: TID read GetID;
+  published
     /// read only access to the file name specified by constructor
     // - you can call the TSQLRestServer.StaticDataCreate method to
     // update the file name of an already instanciated static table
@@ -16222,6 +16222,8 @@ type
     // update the associated TSQLVirtualTableJSON
     property CommitShouldNotUpdateFile: boolean read fCommitShouldNotUpdateFile
       write fCommitShouldNotUpdateFile;
+    /// read-only access to the number of TSQLRecord values
+    property Count: integer read GetCount;
   end;
 
   /// REST storage with direct access to a memory database, to be used as
@@ -16276,6 +16278,7 @@ type
     // one TSQLRestStorageRemote instance
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aRemoteRest: TSQLRest); reintroduce; virtual;
+  published
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;
@@ -16383,14 +16386,15 @@ type
     procedure UpdateToFile; virtual;
     /// clear all internal TObjectList content
     procedure DropDatabase; virtual;
-    /// the file name used for data persistence
-    property FileName: TFileName read fFileName write fFileName;
     /// direct access to the storage TObjectList storage instances
     // - you can then access to Storage[Table].Count and Storage[Table].Items[]
     property Storage[aTable: TSQLRecordClass]: TSQLRestStorageInMemory read GetStorage;
     /// direct access to the storage TObjectList storage instances
     // - you can then access via Storage[TableIndex].Count and Items[]
     property Storages: TSQLRestStorageInMemoryDynArray read fStorage;
+  published
+    /// the file name used for data persistence
+    property FileName: TFileName read fFileName write fFileName;
     /// set if the file content is to be compressed binary, or standard JSON
     // - it will use TSQLRestStorageInMemory LoadFromJSON/LoadFromBinary
     // SaveToJSON/SaveToBinary methods for optimized storage
@@ -16449,6 +16453,7 @@ type
     // - this overridden method will just return TRUE: in this remote access,
     // true coherency will be performed on the ORM server side
     function AfterDeleteForceCoherency(TableIndex: integer; aID: TID): boolean; override;
+  published
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;

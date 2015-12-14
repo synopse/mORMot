@@ -95,7 +95,6 @@ type
   // - JOINed SQL statements are not handled yet
   TSQLRestStorageMongoDB = class(TSQLRestStorage)
   protected
-    /// the associated MongoDB collection
     fCollection: TMongoCollection;
     fEngineLastID: TID;
     fEngineAddUseSelectMaxID: boolean;
@@ -175,6 +174,7 @@ type
     // - but you can still add items to it - whereas Collection.Drop would
     // trigger GPF issues
     procedure Drop;
+  published
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
     /// force to compute the next ID from the remote database at each request
