@@ -5246,6 +5246,9 @@ type
     // - may be used to minimize the transmitted content, e.g. when serializing
     // to JSON for the most
     SmallFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for the all fields storing some data
+    // - match COPIABLE_FIELDS mask, i.e. all fields except sftMany
+    CopiableFieldsBits: TSQLFieldBits;
     /// contains the main field index (e.g. mostly 'Name')
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
     // - contains -1 if no field matches
@@ -12956,13 +12959,21 @@ type
     // - on success, returns the new ROWID value; on error, returns 0
     // - on success, Value.ID is updated with the new ROWID
     // - the TSQLRawBlob(BLOB) fields values are not set by this method, to
-    // preserve bandwidth
+    // preserve bandwidth - see UpdateBlobFields() and AddWithBlobs() methods
     // - the TSQLRecordMany fields are not set either: they are separate
     // instances created by TSQLRecordMany.Create, with dedicated methods to
     // access to the separated pivot table
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       DoNotAutoComputeFields: boolean=false): TID; overload; virtual;
+    /// create a new member, including its BLOB fields
+    // - implements REST POST collection
+    // - this method would create a JSON representation of the document
+    // including the BLOB fields as Base64 encoded text, so would be less
+    // efficient than a dual Add() + UpdateBlobFields() methods if the
+    // binary content has a non trivial size
+    function AddWithBlobs(Value: TSQLRecord; ForceID: boolean=false;
+      DoNotAutoComputeFields: boolean=false): TID; virtual;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
     // - the aSimpleFields parameters must follow explicitely the order of published
@@ -26701,7 +26712,7 @@ procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
 begin
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    SetVariantByRef(PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^,result) else
+    SetVariantByValue(PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^,result) else
     ByMethod;
 end;
 
@@ -31853,6 +31864,26 @@ begin
   finally
     Value.Free;
   end;
+end;
+
+function TSQLRest.AddWithBlobs(Value: TSQLRecord;
+  ForceID, DoNotAutoComputeFields: boolean): TID;
+var TableIndex: integer;
+    JSONValues: RawUTF8;
+begin
+  if Value=nil then begin
+    result := 0;
+    exit;
+  end;
+  TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
+  if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+    Value.ComputeFieldsBeforeWrite(self,seAdd);
+  JSONValues := Value.GetJSONValues(true,ForceID,Value.RecordProps.CopiableFieldsBits);
+  // on success, returns the new ROWID value; on error, returns 0
+  result := EngineAdd(TableIndex,JSONValues); // will call static if necessary
+  // on success, Value.ID is updated with the new ROWID
+  Value.fID := result;
+  // here fCache.Notify is not called, since the JSONValues is verbose
 end;
 
 function TSQLRest.AddOrUpdate(Value: TSQLRecord): TID;
@@ -44456,7 +44487,7 @@ var i,j, nProps: integer;
     nCopiableFields: integer;
     isTSQLRecordMany: boolean;
     F: TSQLPropInfo;
-label Simple, Small;
+label Simple, Small, Copiabl;
 begin
   InitializeCriticalSection(fLock);
   if aTable=nil then
@@ -44537,8 +44568,7 @@ begin
         fSQLTableUpdateBlobFields := fSQLTableUpdateBlobFields+F.Name+'=?,';
         fSQLTableRetrieveBlobFields := fSQLTableRetrieveBlobFields+F.Name+',';
         fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
-        CopiableFields[nCopiableFields] := F;
-        inc(nCopiableFields);
+        goto Copiabl;
       end;
       sftID: // = TSQLRecord(aID)
         if isTSQLRecordMany and
@@ -44580,8 +44610,7 @@ begin
            'field is allowed per class',[Table]);
         fRecordVersionField := F as TSQLPropInfoRTTIRecordVersion;
         fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
-        CopiableFields[nCopiableFields] := F;
-        inc(nCopiableFields);
+        goto Copiabl;
       end; // TRecordVersion is a copiable but not a simple field!
       sftVariant: // sftNullable are included in SmallfieldsBits
         goto Simple;
@@ -44593,6 +44622,7 @@ Simple: SimpleFields[nSimple] := F;
         include(SimpleFieldsBits[soSelect],i);
         fSQLTableSimpleFieldsNoRowID := fSQLTableSimpleFieldsNoRowID+F.Name+',';
         fSQLTableRetrieveAllFields := fSQLTableRetrieveAllFields+','+F.Name;
+Copiabl:include(CopiableFieldsBits,i);
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
       end;
