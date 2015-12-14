@@ -5067,7 +5067,7 @@ begin
   Request.ToBSONDocument(doc);
   if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) and
      (Client.LogRequestEvent in Client.Log.Family.Level) then
-    Client.Log.Log(Client.fLogRequestEvent,Request.ToJSON(modMongoShell));
+    Client.Log.Log(Client.fLogRequestEvent,Request.ToJSON(modMongoShell),Request);
   result := fSocket.TrySndLow(pointer(doc),length(doc));
 end;
 
@@ -5115,7 +5115,7 @@ begin
   if (Client.LogReplyEvent<>sllNone) and (Client.Log<>nil) and
      (Client.LogReplyEvent in Client.Log.Family.Level) then
     Client.Log.Log(Client.LogReplyEvent,
-      Result.ToJSON(modMongoShell,True,Client.LogReplyEventMaxSize));
+      Result.ToJSON(modMongoShell,True,Client.LogReplyEventMaxSize),Request);
   if mrfQueryFailure in Result.ResponseFlags then
     raise EMongoRequestException.Create('Query failure',self,Request,Result);
 end;
@@ -5145,7 +5145,7 @@ begin
           if Header.OpCode=ord(opMsg) then begin
             if Client.Log<>nil then
               Client.Log.Log(sllWarning,'Msg from MongoDB: %',
-                [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)]);
+                [BSONToJSON(@PByteArray(result)[sizeof(Header)],betDoc,DataLen,modMongoShell)],Request);
           end else
             raise EMongoRequestException.CreateUTF8(
               '%.GetReply: ResponseTo=% Expected:% in current blocking mode',
@@ -5782,7 +5782,7 @@ begin
   if Database.Client.Log<>nil then
     Database.Client.Log.Enter(self);
   result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
-  Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res]);
+  Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res],self);
   if result='' then
     Database.fCollections.Delete(fDatabase.fCollections.IndexOf(Name));
 end;
@@ -5830,7 +5830,7 @@ begin
     fDatabase.RunCommand(BSONVariant(
       '{ createIndexes: ?, indexes: [?] }',[],[Name,doc]),res) else
     fDatabase.GetCollectionOrCreate('system.indexes').Insert([doc]);
-  Database.Client.Log.Log(sllTrace,'EnsureIndex("%",%)->%',[Name,doc,res]);
+  Database.Client.Log.Log(sllTrace,'EnsureIndex("%",%)->%',[Name,doc,res],self);
 end;
 
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUTF8;
