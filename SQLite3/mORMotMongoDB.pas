@@ -226,7 +226,7 @@ type
   // by definition, ID/RowID will be mapped as 'id', but other fields will
   // use their first letter, and another other letter if needed (after a '_',
   // or in uppercase, or the next one) e.g. FirstName -> 'f', LastName -> 'l',
-  // LockedAccount: 'la'...
+  // LockedAccount: 'la'... - WARNING: not yet implemented
   TStaticMongoDBRegisterOption = (
     mrDoNotRegisterUserGroupTables,
     mrMapAutoFieldsIntoSmallerLength
@@ -310,7 +310,7 @@ function TSQLRestMongoDBCreate(aModel: TSQLModel;
   aOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 var client: TMongoClient;
     database: TMongoDatabase;
-    server,port: RawUTF8;
+    server,port, pwd: RawUTF8;
 begin
   result := nil;
   if aDefinition=nil then
@@ -320,8 +320,10 @@ begin
     client := TMongoClient.Create(server,UTF8ToInteger(port,MONGODB_DEFAULTPORT));
     try
       with aDefinition do
-        if (User<>'') and (Password<>'') then
-          database := client.OpenAuth(DatabaseName,User,PasswordPlain) else
+        if (User<>'') and (Password<>'') then begin
+          pwd := PasswordPlain;
+          database := client.OpenAuth(DatabaseName,User,pwd);
+        end else
           database := client.Open(DatabaseName);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
