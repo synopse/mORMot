@@ -105,10 +105,13 @@ type
   // would definitively be faster
   // - in all cases, to ensure that a centralized MongoDB server has unique
   // ID, you should better pre-compute the ID using your own algorithm
-  // depending on your nodes topology, and not rely on the ORM
+  // depending on your nodes topology, and not rely on the ORM, e.g. using
+  // SetEngineAddComputeIdentifier() method, which would allocate a
+  // TSynUniqueIdentifierGenerator and associate eacSynUniqueIdentifier
   TSQLRestStorageMongoDBEngineAddComputeID = (
     eacLastIDOnce, eacLastIDEachTime,
-    eacMaxIDOnce, eacMaxIDEachTime);
+    eacMaxIDOnce, eacMaxIDEachTime,
+    eacSynUniqueIdentifier);
 
   /// REST server with direct access to a MongoDB external database
   // - handle all REST commands via direct SynMongoDB call
@@ -118,6 +121,7 @@ type
   protected
     fCollection: TMongoCollection;
     fEngineLastID: TID;
+    fEngineGenerator: TSynUniqueIdentifierGenerator;
     fEngineAddCompute: TSQLRestStorageMongoDBEngineAddComputeID;
     fBSONProjectionSimpleFields: variant;
     fBSONProjectionBlobFields: variant;
@@ -192,15 +196,23 @@ type
       Unique: boolean; IndexName: RawUTF8=''): boolean; override;
 
     /// drop the whole table content
+    // - in practice, dropping the whole MongoDB database would be faster
     // - but you can still add items to it - whereas Collection.Drop would
     // trigger GPF issues
     procedure Drop;
+    /// initialize an internal time-based unique ID generator, linked to
+    // a genuine process identifier
+    // - will allocate a local TSynUniqueIdentifierGenerator
+    // - EngineAddCompute would be set to eacSynUniqueIdentifier
+    procedure SetEngineAddComputeIdentifier(aIdentifier: word);
   published
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
     /// how the next ID would be compute at each insertion
     // - default eacLastIDOnce may be the fastest, but other options are
     // available, and may be used in some special cases
+    // - consider using SetEngineAddComputeIdentifier() which is both safe
+    // and fast, with a cloud of servers sharing the same MongoDB collection
     property EngineAddCompute: TSQLRestStorageMongoDBEngineAddComputeID
       read fEngineAddCompute write fEngineAddCompute;
   end;
@@ -257,8 +269,11 @@ type
 // - the collection names will follow the class names
 // - this function will call aServer.InitializeTables to create any missing
 // index or populate default collection content
+// - if aMongoDBIdentifier is not 0, then SetEngineAddComputeIdentifier()
+// would be called
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions=[]): boolean;
+  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions=[];
+  aMongoDBIdentifier: word=0): boolean;
 
 /// create a new TSQLRest instance, possibly using MongoDB for its ORM process
 // - if aDefinition.Kind matches a TSQLRest registered class, one new instance
@@ -271,9 +286,11 @@ function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
 // created from aDefinition.DatabaseName, using authentication if
 // aDefinition.User/Password credentials are set
 // - it will return nil if the supplied aDefinition is invalid
+// - if aMongoDBIdentifier is not 0, then SetEngineAddComputeIdentifier()
+// would be called for all created TSQLRestStorageMongoDB
 function TSQLRestMongoDBCreate(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aOptions: TStaticMongoDBRegisterOptions): TSQLRest; overload;
+  aOptions: TStaticMongoDBRegisterOptions; aMongoDBIdentifier: word=0): TSQLRest; overload;
 
 
 implementation
@@ -304,8 +321,10 @@ begin
 end;
 
 function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
-  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions): boolean;
+  aMongoDatabase: TMongoDatabase; aOptions: TStaticMongoDBRegisterOptions;
+  aMongoDBIdentifier: word): boolean;
 var i: integer;
+    storage: TSQLRestStorageMongoDB;
 begin
   if (aServer=nil) or (aMongoDatabase=nil) then begin
     result := false;
@@ -317,16 +336,20 @@ begin
     if (mrDoNotRegisterUserGroupTables in aOptions) and
        (Tables[i].InheritsFrom(TSQLAuthGroup) or
         Tables[i].InheritsFrom(TSQLAuthUser)) then
-      continue else
-    if StaticMongoDBRegister(Tables[i],aServer,aMongoDatabase,'')=nil then
-      result := false;
+      continue else begin
+      storage := StaticMongoDBRegister(Tables[i],aServer,aMongoDatabase,'');
+      if storage=nil then
+        result := false else
+        if aMongoDBIdentifier<>0 then
+          storage.SetEngineAddComputeIdentifier(aMongoDBIdentifier);
+      end;
   if result then // ensure TSQLRecord.InitializeTable() is called
     aServer.InitializeTables([]); // will create indexes and default data
 end;
 
 function TSQLRestMongoDBCreate(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
-  aOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  aOptions: TStaticMongoDBRegisterOptions; aMongoDBIdentifier: word): TSQLRest;
 var client: TMongoClient;
     database: TMongoDatabase;
     server,port, pwd: RawUTF8;
@@ -348,7 +371,7 @@ begin
           database := client.Open(DatabaseName);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
-      StaticMongoDBRegisterAll(TSQLRestServer(result),database,aOptions);
+      StaticMongoDBRegisterAll(TSQLRestServer(result),database,aOptions,aMongoDBIdentifier);
       result.PrivateGarbageCollector.Add(client); // connection owned by server
     except
       FreeAndNil(result);
@@ -447,6 +470,7 @@ destructor TSQLRestStorageMongoDB.Destroy;
 begin
   inherited;
   FreeAndNil(fBatchWriter);
+  fEngineGenerator.Free;
   {$ifdef WITHLOG}
   if fOwner<>nil then
     fOwner.LogFamily.SynLog.Log(sllInfo,
@@ -468,6 +492,18 @@ begin
     result := fCollection.Count;
 end;
 
+procedure TSQLRestStorageMongoDB.SetEngineAddComputeIdentifier(aIdentifier: word);
+begin
+  fEngineGenerator.Free;
+  fEngineGenerator := TSynUniqueIdentifierGenerator.Create(aIdentifier);
+  fEngineAddCompute := eacSynUniqueIdentifier;
+end;
+
+function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(eac));
+end;
+
 function TSQLRestStorageMongoDB.EngineNextID: TID;
 
   procedure ComputeMax_ID;
@@ -478,21 +514,30 @@ function TSQLRestStorageMongoDB.EngineNextID: TID;
     case fEngineAddCompute of
     eacLastIDOnce, eacLastIDEachTime: begin
       res := fCollection.FindDoc(BSONVariant('{$query:{},$orderby:{_id:-1}}'),BSONVariant(['_id',1]));
-      fEngineLastID := _Safe(res)^.I['_id'];
+      if not VarIsEmptyOrNull(res) then
+        fEngineLastID := _Safe(res)^.I['_id'];
     end;
     eacMaxIDOnce, eacMaxIDEachTime: begin
       res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
-      fEngineLastID := _Safe(res)^.I['max'];
+      if not VarIsEmptyOrNull(res) then
+        fEngineLastID := _Safe(res)^.I['max'];
     end;
+    else
+      raise EORMMongoDBException.CreateUTF8('Unexpected %.EngineNextID with %',
+        [self,ToText(fEngineAddCompute)^]);
     end;
     {$ifdef WITHLOG}
-    fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=% in % using %',
-      [fEngineLastID,timer.Stop,GetEnumName(
-        TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(fEngineAddCompute))^],self);
+    fOwner.LogFamily.SynLog.Log(sllInfo,'ComputeMax_ID=% in % using %',
+      [fEngineLastID,timer.Stop,ToText(fEngineAddCompute)^],self);
     {$endif}
   end;
 
 begin
+  if (fEngineAddCompute=eacSynUniqueIdentifier) and (fEngineGenerator<>nil) then begin
+    result := fEngineGenerator.ComputeNew;
+    fEngineLastID := result;
+    exit;
+  end;
   EnterCriticalSection(fStorageCriticalSection);
   if (fEngineLastID=0) or (fEngineAddCompute in [eacLastIDEachTime,eacMaxIDEachTime]) then
     ComputeMax_ID;
@@ -568,6 +613,9 @@ begin
       result := EngineNextID;
       doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
     end else begin
+      if fEngineAddCompute=eacSynUniqueIdentifier then
+        raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: unexpected set '+
+          '%.ID=% with %',[self,fStoredClass,result,fEngineGenerator]);
       EnterCriticalSection(fStorageCriticalSection);
       if result>fEngineLastID then
         fEngineLastID := result;

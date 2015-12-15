@@ -268,6 +268,8 @@ type
     // external SQL database if it matches a TSQLDBConnectionProperties classname
     // - if aDefaultLocalSQlite3 is TRUE, then if Definition.Kind is '',
     // a local SQlite3 file database will be initiated
+    // - if aMongoDBIdentifier is not 0, then it will be supplied to every
+    // TSQLRestStorageMongoDB.SetEngineAddComputeIdentifier() created
     // - will return nil if the supplied Definition is not correct
     // - note that the supplied Model.Root is expected to be the default root
     // URI, which will be overriden with this TDDDRestSettings.Root property
@@ -275,6 +277,7 @@ type
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
+      aMongoDBIdentifier: word=0;
       aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
@@ -553,7 +556,7 @@ end;
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
   aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-  aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 
   procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
   var FN: RawUTF8;
@@ -609,7 +612,7 @@ begin
          (fORM.Kind='TSQLRestServerFullMemory') then
         DeleteFile(UTF8ToString(fORM.ServerName));
     result := TSQLRestMongoDBCreate(aModel,ORM,
-      riHandleAuthentication in aOptions,aMongoDBOptions);
+      riHandleAuthentication in aOptions,aMongoDBOptions,aMongoDBIdentifier);
     if result=nil then // failed to use MongoDB -> try external or internal DB
       result := TSQLRestExternalDBCreate(aModel,ORM,
         riHandleAuthentication in aOptions,aExternalDBOptions);
