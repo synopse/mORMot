@@ -77,6 +77,9 @@ uses
   {$ifdef KYLIX3}
   LibC,
   {$endif}
+  {$ifdef HASINLINE}
+  Contnrs,
+  {$endif}
   SysUtils,
   Classes,
   Variants,
@@ -89,6 +92,24 @@ type
   /// exeception class raised by this units
   EORMMongoDBException = class(EORMException);
 
+  /// how TSQLRestStorageMongoDB would compute the next ID to be inserted
+  // - you may choose to retrieve the last inserted ID via
+  // $ {$query:{},$orderby:{_id:-1}}
+  // or search for the current maximum ID in the collection via
+  // $ {$group:{_id:null,max:{$max:"$_id"}}}
+  // - eacLastIDOnce and eacMaxIDOnce would execute the request once when
+  // the storage instance is first started, whereas eacLastIDEachTime and
+  // eacMaxIDEachTime would be execute before each insertion
+  // - with big amount of data, retrieving the maximum ID (eacMaxID*) performs
+  // a full scan, which would be very slow: the last inserted ID (eacLastID*)
+  // would definitively be faster
+  // - in all cases, to ensure that a centralized MongoDB server has unique
+  // ID, you should better pre-compute the ID using your own algorithm
+  // depending on your nodes topology, and not rely on the ORM
+  TSQLRestStorageMongoDBEngineAddComputeID = (
+    eacLastIDOnce, eacLastIDEachTime,
+    eacMaxIDOnce, eacMaxIDEachTime);
+
   /// REST server with direct access to a MongoDB external database
   // - handle all REST commands via direct SynMongoDB call
   // - is used by TSQLRestServer.URI for faster RESTful direct access
@@ -97,7 +118,7 @@ type
   protected
     fCollection: TMongoCollection;
     fEngineLastID: TID;
-    fEngineAddUseSelectMaxID: boolean;
+    fEngineAddCompute: TSQLRestStorageMongoDBEngineAddComputeID;
     fBSONProjectionSimpleFields: variant;
     fBSONProjectionBlobFields: variant;
     fBSONProjectionBlobFieldsNames: TRawUTF8DynArray;
@@ -177,13 +198,11 @@ type
   published
     /// the associated MongoDB collection instance
     property Collection: TMongoCollection read fCollection;
-    /// force to compute the next ID from the remote database at each request
-    // - it would decrease performance, but may be used in some special cases
-    // - note that setting this property to TRUE may be unsafe: a ID value
-    /// collision may occur very easily, if the ID is increased outside the
-    // mORMot core in-between maxID computation and document insertion 
-    property EngineAddUseSelectMaxID: Boolean read fEngineAddUseSelectMaxID
-      write fEngineAddUseSelectMaxID;
+    /// how the next ID would be compute at each insertion
+    // - default eacLastIDOnce may be the fastest, but other options are
+    // available, and may be used in some special cases
+    property EngineAddCompute: TSQLRestStorageMongoDBEngineAddComputeID
+      read fEngineAddCompute write fEngineAddCompute;
   end;
 
 
@@ -453,18 +472,29 @@ function TSQLRestStorageMongoDB.EngineNextID: TID;
 
   procedure ComputeMax_ID;
   var res: variant;
+      timer: TPrecisionTimer;
   begin
-    res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
-    if DocVariantType.IsOfType(res) then
-      fEngineLastID := VariantToInt64Def(res.max,0);
+    timer.Start;
+    case fEngineAddCompute of
+    eacLastIDOnce, eacLastIDEachTime: begin
+      res := fCollection.FindDoc(BSONVariant('{$query:{},$orderby:{_id:-1}}'),BSONVariant(['_id',1]));
+      fEngineLastID := _Safe(res)^.I['_id'];
+    end;
+    eacMaxIDOnce, eacMaxIDEachTime: begin
+      res := fCollection.AggregateDocFromJson('{$group:{_id:null,max:{$max:"$_id"}}}');
+      fEngineLastID := _Safe(res)^.I['max'];
+    end;
+    end;
     {$ifdef WITHLOG}
-    fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=%',[fEngineLastID],self);
+    fOwner.LogFamily.SynLog.Log(sllInfo,'Computed EngineNextID=% in % using %',
+      [fEngineLastID,timer.Stop,GetEnumName(
+        TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(fEngineAddCompute))^],self);
     {$endif}
   end;
 
 begin
   EnterCriticalSection(fStorageCriticalSection);
-  if (fEngineLastID=0) or fEngineAddUseSelectMaxID then
+  if (fEngineLastID=0) or (fEngineAddCompute in [eacLastIDEachTime,eacMaxIDEachTime]) then
     ComputeMax_ID;
   inc(fEngineLastID);
   result := fEngineLastID;
