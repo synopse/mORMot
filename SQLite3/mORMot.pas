@@ -15789,6 +15789,7 @@ type
     // - this method is called only if the WHERE clause of SQL refers to the
     // static table name only (not needed to check it twice)
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; virtual;
+    function GetStoredClassName: RawUTF8;
   public
     /// initialize the abstract storage data
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); reintroduce; virtual;
@@ -15859,10 +15860,12 @@ type
     /// enable low-level trace of StorageLock/StorageUnlock methods
     // - may be used to resolve low-level race conditions
     property StorageLockLogTrace: boolean read fStorageLockLogTrace write fStorageLockLogTrace;
-  published
     /// read only access to the class defining the record type stored in this
     // REST storage
     property StoredClass: TSQLRecordClass read fStoredClass;
+  published
+    /// name of the class defining the record type stored in this REST storage
+    property StoredClassName: RawUTF8 read GetStoredClassName;
   end;
 
   /// event prototype called by TSQLRestStorageInMemory.FindWhereEqual() or
@@ -41425,6 +41428,13 @@ begin
       SQL := fStoredClassProps.SQL.SelectAllWithID else
       result := IdemPropNameU(fStoredClassProps.SQL.SelectAllWithID,SQL);
   end;
+end;
+
+function TSQLRestStorage.GetStoredClassName: RawUTF8;
+begin
+  if self<>nil then
+    result := ShortStringToAnsi7String(PShortString(PPointer(PtrInt(fStoredClass)+vmtClassName)^)^) else
+    result := '';
 end;
 
 
