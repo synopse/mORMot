@@ -13953,6 +13953,92 @@ type
     procedure DisauthenticateUser(const aName: RawUTF8); override;
   end;
 
+type
+  /// 64 bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
+  // - mapped by TSynUniqueIdentifierBits memory structure
+  // - may be used on client side for something similar to a MongoDB ObjectID,
+  // but compatible with TSQLRecord.ID: TID properties
+  TSynUniqueIdentifier = type Int64;
+
+  {$A-}
+  /// map 64 bit integer unique identifier internal memory structure
+  // - as stored in TSynUniqueIdentifier, and computed by
+  // TSynUniqueIdentifierGenerator
+  {$ifndef UNICODE}
+  TSynUniqueIdentifierBits = object
+  {$else}
+  TSynUniqueIdentifierBits = record
+  {$endif}
+  public
+    /// 16 bit counter, starting with a random value
+    Counter: word;
+    /// 16 bit unique process identifier
+    ProcessID: word;
+    /// low-endian 4-byte value representing the seconds since the Unix epoch
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
+    UnixCreateTime: cardinal;
+    /// fill this unique identifier structure from its TSynUniqueIdentifier value
+    // - is just a wrapper around PInt64(@self)^
+    procedure From(const AID: TSynUniqueIdentifier);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert this identifier as a Int64 numerical value
+    // - is just a wrapper around PInt64(@self)^
+    function AsInt64: TSynUniqueIdentifier;
+      {$ifdef HASINLINE}inline;{$endif}
+{$ifndef NOVARIANTS}
+    /// convert this identifier as an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2015-12-15T20:15:05","Identifier":10,"Counter":3391}
+    function AsVariant: variant;
+{$endif NOVARIANTS}
+    /// extract the UTC generation timestamp from the identifier as TDateTime
+    function CreateUTCDateTime: TDateTime;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// extract the UTC generation timestamp from the identifier
+    function CreateTimeLog: TTimeLog;
+    /// compare two Identifiers
+    function Equal(const Another: TSynUniqueIdentifierBits): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// compare this Identifier with a type-casted Int64 value
+    function Equal(const Another: Int64): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+  {$A+}
+  
+  /// points to a 64 bit integer identifier, as computed by TSynUniqueIdentifierGenerator
+  // - may be used to access the identifier internals, from its stored
+  // Int64 or TSynUniqueIdentifier value 
+  PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
+
+  /// thread-safe 64 bit integer unique identifier computation
+  // - may be used on client side for something similar to a MongoDB ObjectID,
+  // but compatible with TSQLRecord.ID: TID properties
+  // - each identifier would contain a 16 bit process identifier, which is
+  // supplied by the application, and should be unique for this process at a
+  // given time
+  TSynUniqueIdentifierGenerator = class(TSynPersistent)
+  protected
+    fLastTix: cardinal;
+    fUnixCreateTime: cardinal;
+    fLatestCounterOverflowUnixCreateTime: cardinal;
+    fIdentifier: word;
+    fLastCounter: word;
+    fSafe: TSynLocker;
+  public
+    /// initialize the generator
+    constructor Create(aIdentifier: word); reintroduce;
+    /// finalize the generator structure
+    destructor Destroy; override;
+    /// return a new unique ID
+    procedure ComputeNew(out result: TSynUniqueIdentifierBits); overload;
+    /// return a new unique ID, type-casted to an Int64
+    function ComputeNew: Int64; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+  published
+    /// the process identifier, associated with this generator
+    property Identifier: word read fIdentifier write fIdentifier;
+  end;
+  
 
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
@@ -50977,6 +51063,93 @@ begin
 end;
 
 
+{ TSynUniqueIdentifierBits }
+
+function TSynUniqueIdentifierBits.AsInt64: TSynUniqueIdentifier;
+begin
+  result := PInt64(@self)^;
+end;
+
+{$ifndef NOVARIANTS}
+function TSynUniqueIdentifierBits.AsVariant: variant;
+begin
+  result := _ObjFast(['Created',DateTimeToIso8601Text(CreateUTCDateTime),
+    'Identifier',ProcessID,'Counter',Counter]);
+end;
+{$endif NOVARIANTS}
+
+function TSynUniqueIdentifierBits.Equal(const Another: TSynUniqueIdentifierBits): boolean;
+begin
+  result := PInt64(@self)^=PInt64(@Another)^;
+end;
+
+function TSynUniqueIdentifierBits.Equal(const Another: Int64): boolean;
+begin
+  result := PInt64(@self)^=Another;
+end;
+
+procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
+begin
+  PInt64(@self)^ := AID;
+end;
+
+function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
+begin
+  PTimeLogBits(@result)^.From(UnixTimeToDateTime(UnixCreateTime));
+end;
+
+function TSynUniqueIdentifierBits.CreateUTCDateTime: TDateTime;
+begin
+  result := UnixTimeToDateTime(UnixCreateTime);
+end;
+
+
+{ TSynUniqueIdentifierGenerator }
+
+procedure TSynUniqueIdentifierGenerator.ComputeNew(
+  out result: TSynUniqueIdentifierBits);
+var tix, currentTime: cardinal;
+begin
+  tix := GetTickCount64 shr 8;
+  fSafe.Lock;
+  try
+    if tix<>fLastTix then begin
+      fLastTix := tix;
+      currentTime := DateTimeToUnixTime(NowUTC);
+      if currentTime>fUnixCreateTime then begin
+        fUnixCreateTime := currentTime;
+        fLastCounter := 0; // reset
+      end;
+    end;
+    inc(fLastCounter);
+    if fLastCounter=0 then // collision (unlikely) -> cheat on timestamp
+      inc(fUnixCreateTime);
+    result.UnixCreateTime := fUnixCreateTime;
+    result.ProcessID := fIdentifier;
+    result.Counter := fLastCounter;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
+begin
+  ComputeNew(PSynUniqueIdentifierBits(@result)^);
+end;
+
+constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: word);
+begin
+  fIdentifier := aIdentifier;
+  fSafe.Init;
+end;
+
+destructor TSynUniqueIdentifierGenerator.Destroy;
+begin
+  fSafe.Done;
+  inherited Destroy;
+end;
+
+
 { TSynBackgroundThreadAbstract }
 
 {$ifdef MSWINDOWS}
@@ -51582,6 +51755,7 @@ initialization
   {$warnings OFF}
   Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));
   {$warnings ON}
+  Assert(sizeof(TSynUniqueIdentifierBits)=sizeof(TSynUniqueIdentifier));
 
 finalization
   GarbageCollectorFree;

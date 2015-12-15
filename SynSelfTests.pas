@@ -331,6 +331,8 @@ type
     procedure _TSynValidate;
     /// low-level TSynLogFile class
     procedure _TSynLogFile;
+    /// client side geniune 64 bit identifiers generation
+    procedure _TSynUniqueIdentifier;
   end;
 
   /// this test case will test most low-level functions, classes and types
@@ -4090,6 +4092,32 @@ begin
     Check(a[i-1].FirstName<a[i].FirstName);
 end;
 
+
+procedure TTestLowLevelCommon._TSynUniqueIdentifier;
+var gen: TSynUniqueIdentifierGenerator;
+    i1,i2: TSynUniqueIdentifierBits;
+    i: integer;
+    json: RawUTF8;
+begin
+  gen := TSynUniqueIdentifierGenerator.Create(10);
+  for i := 1 to 100000 do begin
+    gen.ComputeNew(i1);
+    gen.ComputeNew(i2);
+    check(i1.ProcessID=10);
+    check(i2.ProcessID=10);
+    check(i1.UnixCreateTime<=i2.UnixCreateTime);
+    i2.Counter := i1.Counter+1;
+    check(i1.AsInt64<i2.AsInt64);
+    check(not i1.Equal(i2));
+    i2.From(i1.AsInt64);
+    check(i1.Equal(i2));
+    json := VariantSaveJSON(i1.AsVariant);
+    check(VariantSaveJSON(i2.AsVariant)=json);
+    check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%}',
+      [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter]));
+  end;
+  gen.Free;
+end;
 
 { TTestLowLevelTypes }
 
