@@ -2265,6 +2265,9 @@ function DoubleToStr(Value: Double): RawUTF8;
 /// fast retrieve the position of a given character
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 
+/// fast retrieve the position of any value of a given set of characters
+function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
+
 /// a non case-sensitive RawUTF8 version of Pos()
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
@@ -18546,13 +18549,14 @@ function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 {$ifdef PUREPASCAL}
 begin
   Result := Str;
-  while Result^<>Chr do begin
-    if Result^=#0 then begin
-      Result := nil;
-      Exit;
+  if Result<>nil then
+    while Result^<>Chr do begin
+      if Result^=#0 then begin
+        Result := nil;
+        Exit;
+      end;
+      Inc(Result);
     end;
-    Inc(Result);
-  end;
 end;
 {$else}
 asm // faster version by AB - eax=Str dl=Chr
@@ -18568,6 +18572,28 @@ asm // faster version by AB - eax=Str dl=Chr
 @z:
 end;
 {$endif}
+
+function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
+var s: PAnsiChar;
+    c: AnsiChar;
+begin
+  if (Str<>nil) and (Characters<>nil) then
+    repeat
+      c := Str^;
+      if c=#0 then
+        break;
+      s := Characters;
+      repeat
+        if s^=c then begin
+          result := Str;
+          exit;
+        end;
+        inc(s);
+      until s^=#0;
+      inc(Str);
+    until false;
+  result := nil;
+end;
 
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
 var i,j,n: integer;
@@ -43421,7 +43447,7 @@ begin
       break;
     end;
   until false;
-  Result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
+  result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
 end;
 
 
@@ -43449,50 +43475,50 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolea
     T := 1;
     PLen := Length(pattern);
     TLen := Length(text);
-    Result := mNONE;
-    while ((Result = mNONE) and (P <= PLen)) do begin
+    result := mNONE;
+    while ((result = mNONE) and (P <= PLen)) do begin
       if T > TLen then begin
         if (Pattern[P] = KLEENE_STAR) and (P+1 > PLen) then
-          Result := mVALID else
-          Result := mABORT;
+          result := mVALID else
+          result := mABORT;
         exit;
       end else
       case Pattern[P] of
         KLEENE_STAR:
-          Result := MatchAfterStar(Copy(Pattern,P,PLen),Copy(Text,T,TLen));
+          result := MatchAfterStar(Copy(Pattern,P,PLen),Copy(Text,T,TLen));
         RANGE_OPEN: begin
-          Inc(P);
+          inc(P);
           Invert := False;
           if (Pattern[P] = EXCLAMATION_NEGATE) or
             (Pattern[P] = CARET_NEGATE) then begin
             Invert := True;
-            Inc(P);
+            inc(P);
           end;
           if (Pattern[P] = RANGE_CLOSE) then begin
-            Result := mPATTERN;
-            Exit;
+            result := mPATTERN;
+            exit;
           end;
           MemberMatch := False;
           while Pattern[P] <> RANGE_CLOSE do begin
             RangeStart := P;
             RangeEnd := P;
-            Inc(P);
+            inc(P);
             if P > PLen then begin
-              Result := mPATTERN;
-              Exit;
+              result := mPATTERN;
+              exit;
             end;
             if Pattern[P] = RANGE then begin
-              Inc(P);
+              inc(P);
               RangeEnd := P;
               if (P > PLen) or (Pattern[RangeEnd] = RANGE_CLOSE) then begin
-                Result := mPATTERN;
-                Exit;
+                result := mPATTERN;
+                exit;
               end;
-              Inc(P);
+              inc(P);
             end;
             if P > PLen then begin
-              Result := mPATTERN;
-              Exit;
+              result := mPATTERN;
+              exit;
             end;
             if RangeStart < RangeEnd then begin
               if (Text[T] >= Pattern[RangeStart]) and
@@ -43510,60 +43536,60 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolea
             end;
           end;
           if (Invert and MemberMatch) or (not (Invert or MemberMatch)) then begin
-            Result := mRANGE;
-            Exit;
+            result := mRANGE;
+            exit;
           end;
           if MemberMatch then
             while (P <= PLen) and (Pattern[P] <> RANGE_CLOSE) do
-              Inc(P);
+              inc(P);
           if P > PLen then begin
-            Result := mPATTERN;
-            Exit;
+            result := mPATTERN;
+            exit;
           end;
         end;
       else
         if Pattern[P] <> SINGLE then
           if Pattern[P] <> Text[T] then
-            Result := mLITERAL;
+            result := mLITERAL;
       end;
-      Inc(P);
-      Inc(T);
+      inc(P);
+      inc(T);
     end;
-    if Result = mNONE then
+    if result = mNONE then
       if T <= TLen then
-        Result := mEND else
-        Result := mVALID;
+        result := mEND else
+        result := mVALID;
   end;
 
   function MatchAfterStar(Pattern, Text: RawUTF8): TMatch;
   var P, T, PLen, TLen: Integer;
   begin
-    Result := mNONE;
+    result := mNONE;
     P := 1;
     T := 1;
     PLen := Length(Pattern);
     TLen := Length(Text);
     if TLen = 1 then begin
-      Result := mVALID;
-      Exit;
+      result := mVALID;
+      exit;
     end else
     if (PLen = 0) or (TLen = 0) then begin
-      Result := mABORT;
-      Exit;
+      result := mABORT;
+      exit;
     end;
     while ((T <= TLen) and (P < PLen)) and ((Pattern[P] = SINGLE) or
       (Pattern[P] = KLEENE_STAR)) do begin
       if Pattern[P] = SINGLE then
-        Inc(T);
-      Inc(P);
+        inc(T);
+      inc(P);
     end;
     if T >= TLen then begin
-      Result := mABORT;
-      Exit;
+      result := mABORT;
+      exit;
     end else
     if P >= PLen then begin
-      Result := mVALID;
-      Exit;
+      result := mVALID;
+      exit;
     end;
     repeat
       if (Pattern[P] = Text[T]) or (Pattern[P] = RANGE_OPEN) then begin
@@ -43573,22 +43599,22 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolea
         TLen := Length(Text);
         p := 1;
         t := 1;
-        Result  := Matche(Pattern, Text);
-        if Result <> mVALID then
-          Result := mNONE; // retry until end of Text, (check below) or Result valid
+        result  := Matche(Pattern, Text);
+        if result <> mVALID then
+          result := mNONE; // retry until end of Text, (check below) or result valid
       end;
-      Inc(T);
+      inc(T);
       if (T > TLen) or (P > PLen) then begin
-        Result := mABORT;
-        Exit;
+        result := mABORT;
+        exit;
       end;
-    until Result <> mNONE;
+    until result <> mNONE;
   end;
 
 begin // IsMatch() main block
   if CaseInsensitive then
-    Result := (Matche(LowerCase(Pattern), LowerCase(Text)) = mVALID) else
-    Result := (Matche(Pattern, Text) = mVALID);
+    result := (Matche(LowerCase(Pattern), LowerCase(Text)) = mVALID) else
+    result := (Matche(Pattern, Text) = mVALID);
 end;
 
 

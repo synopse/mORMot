@@ -3424,6 +3424,14 @@ begin
     check(JsonPropNameValid(@edf[i])<>(i in [5,7]));
   for i := 15 downto 0 do
     check(JsonPropNameValid(@eda[i])=(i>8));
+  Check(PosCharAny('ABC','z')=nil);
+  Check(PosCharAny('ABC','A')^='A');
+  Check(PosCharAny('ABC','B')^='B');
+  Check(PosCharAny('ABC','C')^='C');
+  Check(PosCharAny('ABC','az')=nil);
+  Check(PosCharAny('ABC','aA')^='A');
+  Check(PosCharAny('ABC','bB')^='B');
+  Check(PosCharAny('ABC','cC')^='C');
 end;
 
 procedure TTestLowLevelCommon._TSynTable;
@@ -4227,8 +4235,11 @@ begin
   Check(TVarData(v).VType=varInt64);
   Check(v=123456789012345678);
   GetVariantFromJSON('1234567890123456789',False,V,nil);
+  Check(TVarData(v).VType=varInt64);
+  Check(v=1234567890123456789);
+  GetVariantFromJSON('12345678901234567890',False,V,nil);
   Check(TVarData(v).VType=varDouble);
-  CheckSame(v,1234567890123456789);
+  CheckSame(v,12345678901234567890.0);
   GetVariantFromJSON('-123.1',False,V,nil);
   Check(TVarData(v).VType=varCurrency);
   Check(v=-123.1);
