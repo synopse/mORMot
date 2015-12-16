@@ -7656,7 +7656,8 @@ type
     // field values of this row, uncoupled to the TSQLTable instance life time
     procedure ToDocVariant(Row: integer; out doc: variant;
       options: TDocVariantOptions=JSON_OPTIONS_FAST;
-      expandTimeLogAsText: boolean=false); overload;
+      expandTimeLogAsText: boolean=false; expandEnumsAsText: boolean=false;
+      expandHugeIDAsUniqueIdentifier: boolean=false); overload;
     /// retrieve all row values as a dynamic array of variants, ready to be
     // accessed via late-binding
     // - if readonly is TRUE, will contain an array of TSQLTableRowVariant, which
@@ -22322,11 +22323,15 @@ var
   SQLTableRowVariantType: TCustomVariantType = nil;
 
 procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
-  options: TDocVariantOptions; expandTimeLogAsText: boolean);
+  options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
+  expandHugeIDAsUniqueIdentifier: boolean);
+const JAN2015_UNIX = 1420070400;
 var Values: TVariantDynArray;
     V: PPUtf8CharArray;
-    f: integer;
+    f,enum,err: integer;
     t: TTimeLogBits;
+    id: TSynUniqueIdentifierBits;
+    addID: boolean;
 begin
   if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
@@ -22334,11 +22339,26 @@ begin
     InitFieldNames;
   if not Assigned(fFieldType) then
     InitFieldTypes;
+  addID := false;
   SetLength(Values,fFieldCount);
   V := @fResults[Row*FieldCount];
   for f := 0 to fFieldCount-1 do
-    ValueVarToVariant(V[f],fFieldType[f].ContentType,TVarData(Values[f]),true,
-      fFieldType[f].ContentTypeInfo,options);
+  with fFieldType[f] do
+    if expandHugeIDAsUniqueIdentifier and (f=fFieldIndexID) then begin
+      SetInt64(V[f],PInt64(@id)^);
+      if id.UnixCreateTime>JAN2015_UNIX then
+        addID := true;
+      Values[f] := PInt64(@id)^;
+    end else begin
+    if expandEnumsAsText and (ContentType=sftEnumerate) then begin
+      enum := GetInteger(V[f],err);
+      if (err=0) and (ContentTypeInfo<>nil) then begin
+        Values[f] := PEnumType(ContentTypeInfo)^.GetEnumNameOrd(enum)^;
+        continue;
+      end;
+    end;
+    ValueVarToVariant(V[f],ContentType,TVarData(Values[f]),true,ContentTypeInfo,options);
+  end;
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
   if expandTimeLogAsText then
     for f := 0 to fFieldCount-1 do
@@ -22346,6 +22366,8 @@ begin
          VariantToInt64(Values[f],t.Value) then
         TDocVariantData(doc).AddValue(
           fFieldNames[f]+'_As_Text',RawUTF8ToVariant(t.Text(true,' ')));
+  if addID then
+    TDocVariantData(doc).AddValue('id',id.AsVariant);
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
