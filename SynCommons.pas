@@ -23903,6 +23903,8 @@ begin
           break else
           result := result shl 3+result+result; // fast result := result*10
           inc(result,c);
+        if result<0 then
+          exit; // overflow (>$7FFFFFFFFFFFFFFF)
         inc(P);
       until false;
       break;
@@ -33993,7 +33995,7 @@ exponent:     inc(json);
       'e','E':
         goto exponent;
       #0: 
-        if json-start<=18 then begin // integer number (with Int64 precision)
+        if json-start<=19 then begin // signed Int64 precision
           result := varInt64;
           exit;
         end else begin
@@ -34009,12 +34011,15 @@ end;
 
 function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData): boolean;
 var err: integer;
+label dbl;
 begin
   if JSON<>nil then
     with Value do
     case TextToVariantNumberType(JSON) of
     varInt64: begin
-      SetInt64(JSON,VInt64);
+      VInt64 := GetInt64(JSON,err);
+      if err<>0 then
+        goto dbl; // overflow (>$7FFFFFFFFFFFFFFF) -> try floating point
       if (VInt64<=high(integer)) and (VInt64>=low(integer)) then
         VType := varInteger else
         VType := varInt64;
@@ -34028,7 +34033,7 @@ begin
       exit;
     end;
     varDouble: begin
-      VDouble := GetExtended(JSON,err);
+dbl:  VDouble := GetExtended(JSON,err);
       if err=0 then begin
         VType := varDouble;
         result := true;
