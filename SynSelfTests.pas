@@ -4092,32 +4092,51 @@ begin
     Check(a[i-1].FirstName<a[i].FirstName);
 end;
 
-
 procedure TTestLowLevelCommon._TSynUniqueIdentifier;
 var gen: TSynUniqueIdentifierGenerator;
     i1,i2: TSynUniqueIdentifierBits;
+    i3: TSynUniqueIdentifier;
     i: integer;
     json: RawUTF8;
 begin
-  gen := TSynUniqueIdentifierGenerator.Create(10);
-  for i := 1 to 100000 do begin
-    gen.ComputeNew(i1);
-    gen.ComputeNew(i2);
-    check(i1.ProcessID=10);
-    check(i2.ProcessID=10);
-    check(i1.UnixCreateTime<=i2.UnixCreateTime);
-    i2.Counter := i1.Counter+1;
-    check(i1.AsInt64<i2.AsInt64);
-    check(not i1.Equal(i2));
-    i2.From(i1.AsInt64);
-    check(i1.Equal(i2));
-    json := VariantSaveJSON(i1.AsVariant);
-    check(VariantSaveJSON(i2.AsVariant)=json);
-    check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%}',
-      [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter]));
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    for i := 1 to 100000 do begin
+      gen.ComputeNew(i1);
+      gen.ComputeNew(i2);
+      check(i1.ProcessID=10);
+      check(i2.ProcessID=10);
+      check(i1.UnixCreateTime<=i2.UnixCreateTime);
+      i2.Counter := i1.Counter+1;
+      check(i1.AsInt64<i2.AsInt64);
+      check(not i1.Equal(i2));
+      i2.From(i1.AsInt64);
+      check(i1.Equal(i2));
+      json := VariantSaveJSON(i1.AsVariant);
+      check(VariantSaveJSON(i2.AsVariant)=json);
+      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%}',
+        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter]));
+      json := gen.ToObfuscated(i1.AsInt64);
+      check(gen.FromObfuscated(json,i3));
+      check(i1.Equal(i3));
+      check(Length(json)=24);
+      inc(json[12]);
+      check(not gen.FromObfuscated(json,i3));
+      dec(json[12]);
+    end;
+  finally
+    gen.Free;
   end;
-  gen.Free;
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    i3 := 0;
+    check(gen.FromObfuscated(json,i3),'SharedObfuscationKey');
+    check(i1.Equal(i3));
+  finally
+    gen.Free;
+  end;
 end;
+
 
 { TTestLowLevelTypes }
 

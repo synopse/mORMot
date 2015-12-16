@@ -10396,7 +10396,7 @@ type
     wServicePackMinor: WORD;
     wSuiteMask: WORD;
     wProductType: BYTE;
-    wReserved:BYTE;
+    wReserved: BYTE;
   end;
   {$endif}
 
@@ -10427,7 +10427,7 @@ var
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
   /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 Service Pack 1 (6.1.7601)'
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)'
   OSVersionText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
@@ -12544,7 +12544,7 @@ type
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
     function ToTextPairs(const NameValueSep: RawUTF8='=';
-      const ItemSep: RawUTF8=#13#10): RawUTF8;
+      const ItemSep: RawUTF8=#13#10; Escape: TTextWriterKind=twJSONEscape): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
@@ -14010,12 +14010,17 @@ type
   // Int64 or TSynUniqueIdentifier value 
   PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
 
+  /// a 24 chars cyphered hexadecimal string, mapping a TSynUniqueIdentifier
+  // - has handled by TSynUniqueIdentifierGenerator.ToObfuscated/FromObfuscated
+  TSynUniqueIdentifierObfuscated = type RawUTF8;
+
   /// thread-safe 64 bit integer unique identifier computation
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TSQLRecord.ID: TID properties
   // - each identifier would contain a 16 bit process identifier, which is
   // supplied by the application, and should be unique for this process at a
   // given time
+  // - identifiers may be obfuscated as cyphered and signed hexadecimal text
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
     fLastTix: cardinal;
@@ -14023,10 +14028,13 @@ type
     fLatestCounterOverflowUnixCreateTime: cardinal;
     fIdentifier: word;
     fLastCounter: word;
+    fCrypto: array[0..7] of cardinal;
     fSafe: TSynLocker;
   public
     /// initialize the generator
-    constructor Create(aIdentifier: word); reintroduce;
+    // - you can supply an obfuscation key, which should be shared for the
+    // whole system, so that you may use FromObfuscated/ToObfuscated methods
+    constructor Create(aIdentifier: word; const aSharedObfuscationKey: RawUTF8=''); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
@@ -14034,6 +14042,23 @@ type
     /// return a new unique ID, type-casted to an Int64
     function ComputeNew: Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
+    // - cyphering includes simple key-based encryption and a CRC-32 digital signature
+    function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
+    /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
+    // - any file extension (e.g. '.jpeg') woul dbe first
+    // - returns true if the supplied obfuscated text has the expected layout
+    // and a valid digital signature
+    // - returns false if the supplied obfuscated text is invalid
+    function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
+      out aIdentifier: TSynUniqueIdentifierBits): boolean; overload;
+    /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
+    // - any file extension (e.g. '.jpeg') woul dbe first
+    // - returns true if the supplied obfuscated text has the expected layout
+    // and a valid digital signature
+    // - returns false if the supplied obfuscated text is invalid
+    function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
+      out aIdentifier: TSynUniqueIdentifier): boolean; overload;
   published
     /// the process identifier, associated with this generator
     property Identifier: word read fIdentifier write fIdentifier;
@@ -20091,8 +20116,8 @@ begin
   end;
   OSVersion := Vers;
   with OSVersionInfo do
-    OSVersionText := FormatUTF8('Windows % % (%.%.%)',
-      [WINDOWS_NAME[Vers],szCSDVersion,dwMajorVersion,dwMinorVersion,dwBuildNumber]);
+    OSVersionText := FormatUTF8('Windows % SP% (%.%.%)',
+      [WINDOWS_NAME[Vers],wServicePackMajor,dwMajorVersion,dwMinorVersion,dwBuildNumber]);
 end;
 
 {$else}
@@ -23902,7 +23927,7 @@ begin
         if c>9 then
           break else
           result := result shl 3+result+result; // fast result := result*10
-          inc(result,c);
+        inc(result,c);
         if result<0 then
           exit; // overflow (>$7FFFFFFFFFFFFFFF)
         inc(P);
@@ -29025,7 +29050,6 @@ begin
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
       'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
       'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
-      'hypervisor',cf_HYP in CpuFeatures,
       {$endif}{$endif}
       'cpucount',
       {$ifdef MSWINDOWS}
@@ -33994,7 +34018,7 @@ exponent:     inc(json);
           break;
       'e','E':
         goto exponent;
-      #0: 
+      #0:
         if json-start<=19 then begin // signed Int64 precision
           result := varInt64;
           exit;
@@ -35622,9 +35646,9 @@ begin
 end;
 
 function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
-  const ItemSep: RawUTF8=#13#10): RawUTF8;
+  const ItemSep: RawUTF8=#13#10; Escape: TTextWriterKind=twJSONEscape): RawUTF8;
 begin
-  ToTextPairsVar(result,NameValueSep,ItemSep);
+  ToTextPairsVar(result,NameValueSep,ItemSep,Escape);
 end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
@@ -51142,9 +51166,20 @@ begin
   ComputeNew(PSynUniqueIdentifierBits(@result)^);
 end;
 
-constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: word);
+constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: word;
+  const aSharedObfuscationKey: RawUTF8);
+var i, len: integer;
+    crc: cardinal;
 begin
   fIdentifier := aIdentifier;
+  len := length(aSharedObfuscationKey);
+  crc := crc32ctab[0,aIdentifier and 1023];
+  for i := 0 to high(fCrypto) do begin
+    crc := crc32ctab[0,crc and 1023] xor
+           kr32(i,pointer(aSharedObfuscationKey),len) xor
+           crc32c(i,pointer(aSharedObfuscationKey),len);
+    fCrypto[i] := crc; // naive but good enough in practice
+  end;
   fSafe.Init;
 end;
 
@@ -51152,6 +51187,57 @@ destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
   fSafe.Done;
   inherited Destroy;
+end;
+
+type // used to compute a 24 hexadecimal chars obfuscated pseudo file name
+  TSynUniqueIdentifierObfuscatedBits = packed record
+    crc: cardinal;
+    case integer of
+      0: (id: TSynUniqueIdentifier);
+      1: (rec: TSynUniqueIdentifierBits);
+  end;
+
+function TSynUniqueIdentifierGenerator.ToObfuscated(
+  const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
+var bits: TSynUniqueIdentifierObfuscatedBits;
+begin
+  result := '';
+  if (self=nil) or (aIdentifier=0) then
+    exit;
+  bits.id := aIdentifier;
+  bits.crc := crc32C(bits.rec.ProcessID,@bits.id,sizeof(bits.id))
+    xor FCrypto[bits.rec.ProcessID and high(fCrypto)];
+  bits.id := bits.id xor PInt64(@fCrypto[high(fCrypto)])^;
+  result := SynCommons.BinToHex(@bits,SizeOf(bits));
+end;
+
+function TSynUniqueIdentifierGenerator.FromObfuscated(
+  const aObfuscated: TSynUniqueIdentifierObfuscated;
+  out aIdentifier: TSynUniqueIdentifier): boolean;
+var bits: TSynUniqueIdentifierObfuscatedBits;
+    len: integer;
+begin
+  result := false;
+  len := PosEx('.',aObfuscated);
+  if len=0 then
+    len := Length(aObfuscated) else
+    dec(len); // trim right '.jpg'
+  if (len<>sizeof(bits)*2) or
+     not SynCommons.HexToBin(pointer(aObfuscated),@bits,sizeof(bits)) then
+    exit;
+  bits.id := bits.id xor PInt64(@fCrypto[high(fCrypto)])^;
+  if crc32c(bits.rec.ProcessID,@bits.id,SizeOf(bits.id))
+     xor FCrypto[bits.rec.ProcessID and high(fCrypto)]=bits.crc then begin
+    aIdentifier := bits.id;
+    result := true;
+  end;
+end;
+
+function TSynUniqueIdentifierGenerator.FromObfuscated(
+  const aObfuscated: TSynUniqueIdentifierObfuscated;
+  out aIdentifier: TSynUniqueIdentifierBits): boolean;
+begin
+  result := FromObfuscated(aObfuscated,PSynUniqueIdentifierBits(@aIdentifier)^);
 end;
 
 
