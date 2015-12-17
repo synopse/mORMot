@@ -4108,7 +4108,8 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
-function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
+function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
+  PropNameLen: integer): PPropInfo;
 
 /// retrieve a Field property RTTI information searching for a Property class type
 // - this special version also search into parent properties
@@ -4197,6 +4198,20 @@ var
   /// a shared list of T*ObjArray registered serializers
   // - you should not access this variable, but via inline methods
   ObjArraySerializers: TPointerClassHash;
+
+/// fill a class instance from a TDocVariant object document properties
+// - returns FALSE if the variant is not a dvObject, TRUE otherwise
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+
+/// fill a T*ObjArray variable from a TDocVariant array document values
+// - will always erase the T*ObjArray instance, and fill it from arr values
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: TClass); overload;
+
+/// fill a T*ObjArray variable from a TDocVariant array document values
+// - will always erase the T*ObjArray instance, and fill it from arr values
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: PClassInstance); overload;
 
 
 { ************ cross-cutting classes and types }
@@ -18577,18 +18592,18 @@ begin
   result := nil;
 end;
 
-function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char): PPropInfo;
+unction ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
+  PropNameLen: integer): PPropInfo;
 {$ifndef FPC}
-var i, L: integer;
+var i: integer;
 {$endif}
 begin
   {$ifdef FPC}
   result := pointer(GetFPCPropInfo(aClassType,PropName));
   {$else}
-  L := StrLen(PropName);
-  while (L<>0) and (aClassType<>nil) do begin
+  while (PropNameLen<>0) and (aClassType<>nil) do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if IdemPropName(result^.Name,PropName,L) then
+      if IdemPropName(result^.Name,PropName,PropNameLen) then
         exit else
         result := result^.Next;
     aClassType := aClassType.ClassParent;
@@ -18637,6 +18652,47 @@ begin
   if (aTypeInfo=nil) or (aTypeInfo^.Kind<>tkEnumeration) then
     result := '' else
     result := aTypeInfo^.EnumBaseType^.GetEnumNameTrimed(aIndex);
+end;
+
+function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
+var p: integer;
+    prop: PPropInfo;
+begin
+  if (doc.Kind=dvObject) and (doc.Count>0) and (obj<>nil) then begin
+    for p := 0 to doc.Count-1 do begin
+      prop := ClassFieldPropWithParentsFromUTF8(
+        PPointer(obj)^,pointer(doc.Names[p]),length(doc.Names[p]));
+      if prop<>nil then
+        prop^.SetFromVariant(obj,doc.Values[p]);
+    end;
+    result := true;
+  end else
+    result := false;
+end;
+
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: TClass);
+var instance: TClassInstance;
+begin
+  instance.Init(objClass);
+  DocVariantToObjArray(arr,objArray,@instance);
+end;
+
+procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
+  objClass: PClassInstance);
+var i: integer;
+    obj: TObjectDynArray absolute objArray;
+begin
+  if objClass=nil then
+    exit;
+  ObjArrayClear(obj);
+  if (arr.Kind<>dvArray) or (arr.Count=0) then
+    exit;
+  SetLength(obj,arr.Count);
+  for i := 0 to arr.Count-1 do begin
+    obj[i] := objClass.CreateNew;
+    DocVariantToObject(_Safe(arr.Values[i])^,obj[i]);
+  end;
 end;
 
 
