@@ -13185,8 +13185,9 @@ function _Json(const JSON: RawUTF8; var Value: variant;
 function _ObjFast(const NameValuePairs: array of const): variant; overload;
 
 /// initialize a variant instance to store any object as a TDocVariant
-// - is a wrapper around _JsonFast(ObjectToJson(aObject))
-function _ObjFast(aObject: TObject): variant; overload;
+// - is a wrapper around _JsonFast(ObjectToJson(aObject,aOptions))
+function _ObjFast(aObject: TObject;
+   aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): variant; overload;
 
 /// initialize a variant instance to store some document-based array content
 // - this global function is an handy alias to:
@@ -14211,7 +14212,7 @@ uses
   SysCall,
   {$endif}
   {$endif}
-  SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
+  SynFPCTypInfo, TypInfo; // small wrapper unit around FPC's TypInfo.pp
 {$endif}
 
 
@@ -36269,12 +36270,12 @@ begin
   TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
 end;
 
-function _ObjFast(aObject: TObject): variant;
+function _ObjFast(aObject: TObject; aOptions: TTextWriterWriteObjectOptions): variant;
 begin
   if TVarData(result).VType and VTYPE_STATIC<>0 then
     VarClear(result);
   if TDocVariantData(result).InitJSONInPlace(
-      pointer(ObjectToJson(aObject)),JSON_OPTIONS_FAST)=nil then
+      pointer(ObjectToJson(aObject,aOptions)),JSON_OPTIONS_FAST)=nil then
     VarClear(result);
 end;
 
@@ -51136,7 +51137,7 @@ end;
 function TSynUniqueIdentifierBits.AsVariant: variant;
 begin
   result := _ObjFast(['Created',DateTimeToIso8601Text(CreateUTCDateTime),
-    'Identifier',ProcessID,'Counter',Counter]);
+    'Identifier',ProcessID,'Counter',Counter,'Value',PInt64(@self)^]);
 end;
 {$endif NOVARIANTS}
 

@@ -4101,6 +4101,7 @@ begin
 end;
 
 procedure TTestLowLevelCommon._TSynUniqueIdentifier;
+const JAN2015_UNIX = 1420070400;
 var gen: TSynUniqueIdentifierGenerator;
     i1,i2: TSynUniqueIdentifierBits;
     i3: TSynUniqueIdentifier;
@@ -4114,6 +4115,7 @@ begin
       gen.ComputeNew(i2);
       check(i1.ProcessID=10);
       check(i2.ProcessID=10);
+      check(i1.UnixCreateTime>JAN2015_UNIX);
       check(i1.UnixCreateTime<=i2.UnixCreateTime);
       i2.Counter := i1.Counter+1;
       check(i1.AsInt64<i2.AsInt64);
@@ -4122,8 +4124,8 @@ begin
       check(i1.Equal(i2));
       json := VariantSaveJSON(i1.AsVariant);
       check(VariantSaveJSON(i2.AsVariant)=json);
-      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%}',
-        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter]));
+      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
+        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.AsInt64]));
       json := gen.ToObfuscated(i1.AsInt64);
       check(gen.FromObfuscated(json,i3));
       check(i1.Equal(i3));
