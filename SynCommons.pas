@@ -2103,9 +2103,6 @@ type
 /// convert the endianness of a given unsigned 32 bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
 
-/// convert the endianness of a given unsigned 16 bit integer into BigEndian
-function bswap16(a: word): word;
-
 {$ifndef ISDELPHI2007ANDUP}
 type
   TBytes = array of byte;
@@ -17812,18 +17809,6 @@ asm
 end;
 {$endif}
 {$endif CPU64}
-
-{$ifdef PUREPASCAL}
-function bswap16(a: word): word; {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := ((a and $ff)shl 8)or((a and $ff00)shr 8);
-end;
-{$else}
-function bswap16(a: word): word;
-asm
-  xchg ah,al;
-end;
-{$endif}
 
 {$ifndef ENHANCEDRTL} { our Enhanced Runtime (or LVCL) library contain fast asm versions }
 
