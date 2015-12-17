@@ -5377,8 +5377,10 @@ function IsNullGUID(const guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
-// - returning the newly inserted index in guids[]
-function AddGUID(var guids: TGUIDDynArray; const guid: TGUID): integer;
+// - returning the newly inserted index in guids[], or an existing index in
+// guids[] if NoDuplicates is TRUE and TGUID already exists
+function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
+  NoDuplicates: boolean=false): integer;
 
 /// append a TGUID binary content as text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -28044,8 +28046,13 @@ begin
   {$endif}
 end;
 
-function AddGUID(var guids: TGUIDDynArray; const guid: TGUID): integer;
+function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
+  NoDuplicates: boolean): integer;
 begin
+  if NoDuplicates then
+    for result := 0 to length(guids)-1 do
+      if IsEqualGUID(guid,guids[result]) then
+        exit;
   result := length(guids);
   SetLength(guids,result+1);
   guids[result] := guid;
