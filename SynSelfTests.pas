@@ -4106,7 +4106,7 @@ var gen: TSynUniqueIdentifierGenerator;
     i1,i2: TSynUniqueIdentifierBits;
     i3: TSynUniqueIdentifier;
     i: integer;
-    json: RawUTF8;
+    json, obfusc: RawUTF8;
 begin
   gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
   try
@@ -4117,22 +4117,21 @@ begin
       check(i2.ProcessID=10);
       check(i1.UnixCreateTime>JAN2015_UNIX);
       check(i1.UnixCreateTime<=i2.UnixCreateTime);
-      i2.Counter := i1.Counter+1;
-      check(i1.AsInt64<i2.AsInt64);
+      check(i1.Value<i2.Value);
       check(not i1.Equal(i2));
-      i2.From(i1.AsInt64);
+      i2.From(i1.Value);
       check(i1.Equal(i2));
       json := VariantSaveJSON(i1.AsVariant);
       check(VariantSaveJSON(i2.AsVariant)=json);
       check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
-        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.AsInt64]));
-      json := gen.ToObfuscated(i1.AsInt64);
-      check(gen.FromObfuscated(json,i3));
+        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.Value]));
+      obfusc := gen.ToObfuscated(i1.Value);
+      check(gen.FromObfuscated(obfusc,i3));
       check(i1.Equal(i3));
-      check(Length(json)=24);
-      inc(json[12]);
-      check(not gen.FromObfuscated(json,i3));
-      dec(json[12]);
+      check(Length(obfusc)=24);
+      inc(obfusc[12]);
+      check(not gen.FromObfuscated(obfusc,i3));
+      dec(obfusc[12]);
     end;
   finally
     gen.Free;
@@ -4140,7 +4139,7 @@ begin
   gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
   try
     i3 := 0;
-    check(gen.FromObfuscated(json,i3),'SharedObfuscationKey');
+    check(gen.FromObfuscated(obfusc,i3),'SharedObfuscationKey');
     check(i1.Equal(i3));
   finally
     gen.Free;

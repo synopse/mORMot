@@ -22431,7 +22431,6 @@ var Values: TVariantDynArray;
     f,enum,err: integer;
     t: TTimeLogBits;
     id: TSynUniqueIdentifierBits;
-    addID: boolean;
 begin
   if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
@@ -22439,7 +22438,6 @@ begin
     InitFieldNames;
   if not Assigned(fFieldType) then
     InitFieldTypes;
-  addID := false;
   SetLength(Values,fFieldCount);
   V := @fResults[Row*FieldCount];
   for f := 0 to fFieldCount-1 do
@@ -22447,8 +22445,8 @@ begin
     if expandHugeIDAsUniqueIdentifier and (f=fFieldIndexID) then begin
       SetInt64(V[f],PInt64(@id)^);
       if id.UnixCreateTime>JAN2015_UNIX then
-        addID := true;
-      Values[f] := PInt64(@id)^;
+        Values[f] := id.AsVariant else
+        Values[f] := id.Value;
     end else begin
     if expandEnumsAsText and (ContentType=sftEnumerate) then begin
       enum := GetInteger(V[f],err);
@@ -22456,18 +22454,15 @@ begin
         Values[f] := PEnumType(ContentTypeInfo)^.GetEnumNameOrd(enum)^;
         continue;
       end;
+    end else
+    if expandTimeLogAsText and (ContentType in [sftTimeLog,sftModTime,sftCreateTime]) then begin
+      SetInt64(V[f],t.Value);
+      Values[f] := _ObjFast(['Time',t.Text(true),'Value',PInt64(@t)^]);
+      continue;
     end;
     ValueVarToVariant(V[f],ContentType,TVarData(Values[f]),true,ContentTypeInfo,options);
   end;
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
-  if expandTimeLogAsText then
-    for f := 0 to fFieldCount-1 do
-      if (fFieldType[f].ContentType in [sftTimeLog,sftModTime,sftCreateTime]) and
-         VariantToInt64(Values[f],t.Value) then
-        TDocVariantData(doc).AddValue(
-          fFieldNames[f],RawUTF8ToVariant(t.Text(true,' ')));
-  if addID then
-    TDocVariantData(doc).AddValue('id',id.AsVariant);
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
@@ -45730,17 +45725,17 @@ begin
               case Kind of
               tkEnumeration:
               with P^.PropType^.EnumBaseType^ do begin
-                 Add('"');
-                 AddTrimLeftLowerCase(GetEnumNameOrd(V));
-                 Add('"');
-                 if woHumanReadableEnumSetAsComment in Options then
-                   GetEnumNameTrimedAll(CustomComment);
+                Add('"');
+                AddTrimLeftLowerCase(GetEnumNameOrd(V));
+                Add('"');
+                if woHumanReadableEnumSetAsComment in Options then
+                  GetEnumNameTrimedAll(CustomComment);
               end;
               tkSet:
               with P^.PropType^.SetEnumType^ do begin
                 GetSetNameCSV(Self,V,',',woHumanReadableFullSetsAsStar in Options);
-               if woHumanReadableEnumSetAsComment in Options then
-                 GetEnumNameTrimedAll(CustomComment,'"*" or a set of ');
+                if woHumanReadableEnumSetAsComment in Options then
+                  GetEnumNameTrimedAll(CustomComment,'"*" or a set of ');
               end;
               else
                 Add(V);

@@ -3462,6 +3462,7 @@ function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName=''): TFindFilesDynArray;
 
 {$ifdef DELPHI5OROLDER}
+
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): Boolean;
@@ -13968,28 +13969,34 @@ type
 
   {$A-}
   /// map 64 bit integer unique identifier internal memory structure
-  // - as stored in TSynUniqueIdentifier, and computed by
+  // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
   // TSynUniqueIdentifierGenerator
+  // - bits 0..14 map a 15 bit increasing counter (collision-free)
+  // - bits 15..30 map a 16 bit process identifier
+  // - bits 31..63 map a 33 bit UTC time, encoded as seconds since Unix epoch
   {$ifndef UNICODE}
   TSynUniqueIdentifierBits = object
   {$else}
   TSynUniqueIdentifierBits = record
   {$endif}
   public
-    /// 16 bit counter, starting with a random value
-    Counter: word;
+    /// the actual 64 bit storage value
+    Value: TSynUniqueIdentifier;
+    /// 15 bit counter (0..32767), starting with a random value
+    function Counter: word;
+      {$ifdef HASINLINE}inline;{$endif}
     /// 16 bit unique process identifier
-    ProcessID: word;
+    // - as specified to TSynUniqueIdentifierGenerator constructor
+    function ProcessID: word;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
-    UnixCreateTime: cardinal;
+    // - it uses in fact a 33 bit resolution, so is "Year 2038" bug-free
+    function UnixCreateTime: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
     // - is just a wrapper around PInt64(@self)^
     procedure From(const AID: TSynUniqueIdentifier);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// convert this identifier as a Int64 numerical value
-    // - is just a wrapper around PInt64(@self)^
-    function AsInt64: TSynUniqueIdentifier;
       {$ifdef HASINLINE}inline;{$endif}
 {$ifndef NOVARIANTS}
     /// convert this identifier as an explicit TDocVariant JSON object
@@ -14033,7 +14040,8 @@ type
     fUnixCreateTime: cardinal;
     fLatestCounterOverflowUnixCreateTime: cardinal;
     fIdentifier: word;
-    fLastCounter: word;
+    fIdentifierShifted: cardinal;
+    fLastCounter: cardinal;
     fCrypto: array[0..7] of cardinal;
     fSafe: TSynLocker;
   public
@@ -14044,6 +14052,7 @@ type
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
+    // - this method is very optimized, and would use very little CPU
     procedure ComputeNew(out result: TSynUniqueIdentifierBits); overload;
     /// return a new unique ID, type-casted to an Int64
     function ComputeNew: Int64; overload;
@@ -14067,7 +14076,7 @@ type
       out aIdentifier: TSynUniqueIdentifier): boolean; overload;
   published
     /// the process identifier, associated with this generator
-    property Identifier: word read fIdentifier write fIdentifier;
+    property Identifier: word read fIdentifier;
   end;
   
 
@@ -26823,11 +26832,14 @@ end;
 function NowUTC: TDateTime;
 {$ifdef MSWINDOWS}
 var SystemTime: TSystemTime;
+    time: TDateTime;
 begin
   GetSystemTime(SystemTime);
   with SystemTime do
-    result := EncodeDate(wYear,wMonth,wDay)+
-              EncodeTime(wHour,wMinute,wSecond,wMilliseconds);
+    if TryEncodeDate(wYear,wMonth,wDay,result) and
+       TryEncodeTime(wHour,wMinute,wSecond,wMilliseconds,time) then
+      result := result+time else
+      result := 0;
 end;
 {$else}
 begin
@@ -51128,42 +51140,52 @@ end;
 
 { TSynUniqueIdentifierBits }
 
-function TSynUniqueIdentifierBits.AsInt64: TSynUniqueIdentifier;
+function TSynUniqueIdentifierBits.Counter: word;
 begin
-  result := PInt64(@self)^;
+  result := PWord(@Value)^ and $7fff;
+end;
+
+function TSynUniqueIdentifierBits.ProcessID: word;
+begin
+  result := (PCardinal(@Value)^ shr 15) and $ffff;
+end;
+
+function TSynUniqueIdentifierBits.UnixCreateTime: cardinal;
+begin
+  result := Value shr 31;
 end;
 
 {$ifndef NOVARIANTS}
 function TSynUniqueIdentifierBits.AsVariant: variant;
 begin
   result := _ObjFast(['Created',DateTimeToIso8601Text(CreateUTCDateTime),
-    'Identifier',ProcessID,'Counter',Counter,'Value',PInt64(@self)^]);
+    'Identifier',ProcessID,'Counter',Counter,'Value',Value]);
 end;
 {$endif NOVARIANTS}
 
 function TSynUniqueIdentifierBits.Equal(const Another: TSynUniqueIdentifierBits): boolean;
 begin
-  result := PInt64(@self)^=PInt64(@Another)^;
+  result := Value=Another.Value;
 end;
 
 function TSynUniqueIdentifierBits.Equal(const Another: Int64): boolean;
 begin
-  result := PInt64(@self)^=Another;
+  result := Value=Another;
 end;
 
 procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
 begin
-  PInt64(@self)^ := AID;
+  Value := AID;
 end;
 
 function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
 begin
-  PTimeLogBits(@result)^.From(UnixTimeToDateTime(UnixCreateTime));
+  PTimeLogBits(@result)^.From(UnixTimeToDateTime(Value shr 31));
 end;
 
 function TSynUniqueIdentifierBits.CreateUTCDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime(UnixCreateTime);
+  result := UnixTimeToDateTime(Value shr 31);
 end;
 
 
@@ -51184,12 +51206,13 @@ begin
         fLastCounter := 0; // reset
       end;
     end;
-    inc(fLastCounter);
-    if fLastCounter=0 then // collision (unlikely) -> cheat on timestamp
+    if fLastCounter=$7fff then begin // collision (unlikely) -> cheat on timestamp
       inc(fUnixCreateTime);
-    result.UnixCreateTime := fUnixCreateTime;
-    result.ProcessID := fIdentifier;
-    result.Counter := fLastCounter;
+      fLastCounter := 0;
+    end else
+      inc(fLastCounter);
+    result.Value := Int64(fLastCounter or fIdentifierShifted) or
+                    (Int64(fUnixCreateTime) shl 31);
   finally
     fSafe.UnLock;
   end;
@@ -51206,6 +51229,7 @@ var i, len: integer;
     crc: cardinal;
 begin
   fIdentifier := aIdentifier;
+  fIdentifierShifted := aIdentifier shl 15;
   len := length(aSharedObfuscationKey);
   crc := crc32ctab[0,aIdentifier and 1023];
   for i := 0 to high(fCrypto) do begin
@@ -51226,9 +51250,7 @@ end;
 type // used to compute a 24 hexadecimal chars obfuscated pseudo file name
   TSynUniqueIdentifierObfuscatedBits = packed record
     crc: cardinal;
-    case integer of
-      0: (id: TSynUniqueIdentifier);
-      1: (rec: TSynUniqueIdentifierBits);
+    id: TSynUniqueIdentifierBits;
   end;
 
 function TSynUniqueIdentifierGenerator.ToObfuscated(
@@ -51238,10 +51260,10 @@ begin
   result := '';
   if (self=nil) or (aIdentifier=0) then
     exit;
-  bits.id := aIdentifier;
-  bits.crc := crc32C(bits.rec.ProcessID,@bits.id,sizeof(bits.id))
-    xor FCrypto[bits.rec.ProcessID and high(fCrypto)];
-  bits.id := bits.id xor PInt64(@fCrypto[high(fCrypto)])^;
+  bits.id.Value := aIdentifier;
+  bits.crc := crc32C(bits.id.ProcessID,@bits.id,sizeof(bits.id))
+    xor FCrypto[bits.id.ProcessID and high(fCrypto)];
+  bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)])^;
   result := SynCommons.BinToHex(@bits,SizeOf(bits));
 end;
 
@@ -51259,10 +51281,10 @@ begin
   if (len<>sizeof(bits)*2) or
      not SynCommons.HexToBin(pointer(aObfuscated),@bits,sizeof(bits)) then
     exit;
-  bits.id := bits.id xor PInt64(@fCrypto[high(fCrypto)])^;
-  if crc32c(bits.rec.ProcessID,@bits.id,SizeOf(bits.id))
-     xor FCrypto[bits.rec.ProcessID and high(fCrypto)]=bits.crc then begin
-    aIdentifier := bits.id;
+  bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)])^;
+  if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id))
+     xor FCrypto[bits.id.ProcessID and high(fCrypto)]=bits.crc then begin
+    aIdentifier := bits.id.Value;
     result := true;
   end;
 end;
