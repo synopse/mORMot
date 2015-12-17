@@ -2992,6 +2992,10 @@ type
     // - this method will check the property type, e.g. setting '' for strings,
     // and 0 for numbers, or running FreeAndNil() on any nested object
     procedure SetDefaultValue(Instance: TObject);
+    {$ifndef NOVARIANTS}
+    /// low-level setter of the property value from a supplied variant
+    procedure SetFromVariant(Instance: TObject; const Value: variant);
+    {$endif NOVARIANTS}
     /// read an TObject published property, as saved by ObjectToJSON() function
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
@@ -25758,6 +25762,49 @@ begin
 end;
 
 const null_vardata: TVarData = (VType: varNull);
+
+{$ifndef NOVARIANTS}
+procedure TPropInfo.SetFromVariant(Instance: TObject; const Value: variant);
+var i: integer;
+    i64: Int64;
+    u: RawUTF8;
+    d: double;
+begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    if VariantToInteger(Value,i) then
+      SetOrdProp(Instance,i) else
+    if (PropType^.Kind=tkEnumeration) and VariantToUTF8(Value,u) then begin
+      i := PropType^.EnumBaseType^.GetEnumNameValue(pointer(u),length(u));
+      if i>=0 then
+        SetOrdProp(Instance,i)
+    end;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    if VariantToInt64(Value,i64) then
+      SetInt64Prop(Instance,i64);
+  {$ifdef UNICODE}tkUString,{$endif}tkLString,tkWString{$ifdef FPC},tkAString{$endif}:
+    if VariantToUTF8(Value,u) then
+      SetLongStrValue(Instance,u);
+  tkFloat:
+    if VariantToDouble(Value,d) then
+      SetFloatProp(Instance,d);
+  tkVariant:
+    SetVariantProp(Instance,Value);
+  tkClass:
+    DocVariantToObject(_Safe(Value)^,GetObjProp(Instance));
+  tkDynArray:
+    DocVariantToObjArray(_Safe(Value)^,GetFieldAddr(Instance)^,
+      TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif}));
+  {$ifdef PUBLISHRECORD}
+  tkRecord{$ifdef FPC},tkObject{$endif}: begin
+    VariantSaveJSON(Value,twJSONEscape,u);
+    RecordLoadJSON(GetFieldAddr(Instance)^,pointer(u),PropType{$ifndef FPC}^{$endif});
+  end;
+  {$endif}
+  end;
+end;
+{$endif NOVARIANTS}
 
 procedure TPropInfo.SetDefaultValue(Instance: TObject);
 var Item: TObject;
