@@ -4669,6 +4669,7 @@ type
   TSQLRestStorage = class;
   TSQLRestStorageRemote = class;
   TSQLRestClientURI = class;
+  TInterfaceFactory = class;
 {$M-}
 
   /// class-reference type (metaclass) of TSQLRecord
@@ -9844,15 +9845,27 @@ type
     // QueryInterface, _AddRef, and _Release are always defined by default
     // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
     ExecutionMethodIndex: integer;
-    /// retrieve a var / out / result argument index in Args[] from its name
+    /// retrieve an argument index in Args[] from its name
     // - search is case insensitive
+    // - if Input is TRUE, will search within const / var arguments
+    // - if Input is FALSE, will search within var / out / result arguments
     // - returns -1 if not found
-    function ArgResultIndex(ArgName: PUTF8Char; ArgNameLen: integer): integer;
-    /// find the next var / out / result argument index in Args[]
+    function ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer; Input: boolean): integer;
+    /// find the next argument index in Args[]
+    // - if Input is TRUE, will search within const / var arguments
+    // - if Input is FALSE, will search within var / out / result arguments
     // - returns true if arg is the new value, false otherwise
-    function ArgResultNext(var arg: integer): boolean;
-    /// convert input parameters encoded as a JSON array into a JSON object
-    function ArgsInputArrayToObject(P: PUTF8Char): RawUTF8;
+    function ArgNext(var arg: integer; Input: boolean): boolean;
+    /// convert parameters encoded as a JSON array into a JSON object
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    function ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
+    {$ifndef NOVARIANTS}
+    /// normalize a TDocVariant containing the input or output arguments values
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    procedure ArgsAsDocVariantFix(var ArgsObject: TDocVariantData; Input: boolean);
+    {$endif}
   end;
 
   /// describe all mtehods of an interface-based service provider
@@ -10287,7 +10300,9 @@ type
   // than the client life time just finished)
   TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
 
-  {$M+}
+  /// a dynamic array of TInterfaceFactory instances
+  TInterfaceFactoryObjArray = array of TInterfaceFactory;
+
   /// class handling interface RTTI and fake implementation class
   // - a thread-safe global list of such class instances is implemented to cache
   // information for better speed: use class function TInterfaceFactory.Get()
@@ -10341,6 +10356,9 @@ type
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
     class function GetUsedInterfaces: TObjectList;
+    /// add some TInterfaceFactory instances from their GUID
+    class procedure AddToObjArray(var Obj: TInterfaceFactoryObjArray;
+       const aGUIDs: array of TGUID);
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -10348,9 +10366,16 @@ type
     // - do not call this constructor directly, but TInterfaceFactory.Get()
     constructor Create(aInterface: PTypeInfo);
     /// find the index of a particular method in internal Methods[] list
+    // - will search for a match against Methods[].URI property
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will return -1 if the method is not known
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
+    /// find the index of a particular interface.method in internal Methods[] list
+    // - will search for a match against Methods[].InterfaceDotMethodName property
+    // - won't find the default AddRef/Release/QueryInterface methods
+    // - will return -1 if the method is not known
+    function FindFullMethodIndex(const aFullMethodName: RawUTF8;
+      alsoSearchExactMethodName: boolean=false): integer;
     /// find the index of a particular method in internal Methods[] list
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactoryException if the method is not known
@@ -10404,7 +10429,6 @@ type
     // - published property to be serializable as JSON e.g. for debbuging info
     property InterfaceName: RawUTF8 read fInterfaceName;
   end;
-  {$M-}
 
   {$ifdef HASINTERFACERTTI}
 
@@ -10554,7 +10578,7 @@ type
     // - using this default Named[] property is recommended
     property Named[const ParamName: RawUTF8]: variant read GetInNamed write SetOutNamed; default;
   end;
-{$endif}
+{$endif NOVARIANTS}
 
   /// parameters used by TInterfaceStub.Executes() events callbacks as JSON
   // - this class will expect input and output parameters to be encoded as
@@ -10597,7 +10621,7 @@ type
   // ! with Ctxt do Output[0] := Input[0]-Input[1];
   // - you can call Ctxt.Error() to notify the caller for an execution error
   TOnInterfaceStubExecuteVariant = procedure(Ctxt: TOnInterfaceStubExecuteParamsVariant) of object;
-{$endif}
+{$endif NOVARIANTS}
 
   /// event called by the TInterfaceStub.Executes() fluent method for JSON process
   // - by default Ctxt.Result shall contain the default JSON array result for
@@ -18592,7 +18616,7 @@ begin
   result := nil;
 end;
 
-unction ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
+function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
   PropNameLen: integer): PPropInfo;
 {$ifndef FPC}
 var i: integer;
@@ -22500,7 +22524,7 @@ function TSQLTable.FieldPropFromTables(const PropName: RawUTF8;
   procedure SearchInQueryTables(aPropName: PUTF8Char; aTableIndex: integer);
   begin
     if IsRowID(aPropName) then begin
-      result := sftID;
+      result := sftInteger;
       PropInfo := nil;
       TableIndex := aTableIndex;
       exit;
@@ -43391,7 +43415,7 @@ begin
       SetID(PropValue,TSQLRecord(Value).fID);
       continue;
     end;
-    P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName);
+    P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,StrLen(PropName));
     if P=nil then // unknown property
       if j2oIgnoreUnknownProperty in Options then begin
         From := GotoNextJSONItem(From,1,@EndOfObject);
@@ -45535,7 +45559,7 @@ var Added: boolean;
   end;
 
 var P: PPropInfo;
-    i, j, V, c, codepage: integer;
+    i, V, c, codepage: integer;
     V64: Int64;
     Obj: TObject;
     List: TList absolute Value;
@@ -45547,7 +45571,6 @@ var P: PPropInfo;
     Table: TSQLTable absolute Value;
     aClassType: TClass;
     Kind: TTypeKind;
-    PS: PShortString;
     UtfP: PPUtf8CharArray;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
@@ -45715,22 +45738,7 @@ begin
               end;
               tkSet:
               with P^.PropType^.SetEnumType^ do begin
-                Add('[');
-                if (woHumanReadableFullSetsAsStar in Options) and
-                   (MaxValue<32) and GetAllBits(V,MaxValue+1) then
-                  AddShort('"*"') else begin
-                  PS := @NameList;
-                  for j := MinValue to MaxValue do begin
-                    if GetBit(V,j) then begin
-                      Add('"');
-                      AddTrimLeftLowerCase(PS);
-                      Add('"',',');
-                    end;
-                    inc(PtrUInt(PS),ord(PS^[0])+1); // next item
-                  end;
-                end;
-                CancelLastComma;
-                Add(']');
+                GetSetNameCSV(Self,V,',',woHumanReadableFullSetsAsStar in Options);
                if woHumanReadableEnumSetAsComment in Options then
                  GetEnumNameTrimedAll(CustomComment,'"*" or a set of ');
               end;
@@ -45922,7 +45930,8 @@ procedure TJSONSerializer.AddTypedJSONWithOptions(aTypeInfo: pointer; var aValue
 var i: integer;
     PS: PShortString;
 begin
-  if not ((woFullExpand in Options) or (woHumanReadable in Options)) then
+  if not ((woFullExpand in Options) or (woHumanReadable in Options) or
+          (woEnumSetsAsText in Options)) then
     AddTypedJSON(aTypeInfo,aValue) else
   if aTypeInfo<>nil then
     case PTypeInfo(aTypeInfo)^.Kind of
@@ -48073,7 +48082,7 @@ begin
           break; // end of JSON object
         ValLen := StrLen(Val);
         if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
-          arg := method^.ArgResultIndex(Val,ValLen); // only if were not in-order
+          arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
           if arg<0 then
             RaiseError('unexpected parameter "%"',[Val]);
         end;
@@ -48161,10 +48170,10 @@ begin
       if resultAsJSONObject then begin
         if (R^=#0) or (R^='}') then
           break else // end of JSON object
-          if not method^.ArgResultNext(arg) then
+          if not method^.ArgNext(arg,false) then
             arg := 0; // no next result argument -> force manual search
       end else
-      if not method^.ArgResultNext(arg) then
+      if not method^.ArgNext(arg,false) then
         break; // end of JSON array
     until false;
   end else
@@ -48486,6 +48495,18 @@ begin
   result := nil;
 end;
 
+class procedure TInterfaceFactory.AddToObjArray(var Obj: TInterfaceFactoryObjArray;
+   const aGUIDs: array of TGUID);
+var i: integer;
+    fac: TInterfaceFactory;
+begin
+  for i := 0 to high(aGUIDs) do begin
+    fac := Get(aGUIDs[i]);
+    if fac<>nil then
+      ObjArrayAddOnce(Obj,fac);
+  end;
+end;
+
 class function TInterfaceFactory.GUID2TypeInfo(
   const aGUIDs: array of TGUID): PTypeInfoDynArray;
 var i: integer;
@@ -48608,7 +48629,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
           goto error;
         end;
       smvInterface:
-        if ValueDirection in [smdVar,smdResult] then begin
+        if ValueDirection in [smdVar,smdOut,smdResult] then begin
           ErrorMsg := ' - interface not allowed as output: use a const parameter';
           goto error;
         end;
@@ -48798,6 +48819,18 @@ begin
     result := -1;
   end else
     result := fMethod.FindHashed(aMethodName);
+end;
+
+function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
+  alsoSearchExactMethodName: boolean): integer;
+begin
+  if PosEx('.',aFullMethodName)>=0 then
+    for result := 0 to fMethodsCount-1 do
+      if IdemPropNameU(fMethods[result].InterfaceDotMethodName,aFullMethodName) then
+        exit;
+  if alsoSearchExactMethodName then
+    result := FindMethodIndex(aFullMethodName) else
+    result := -1;
 end;
 
 function TInterfaceFactory.CheckMethodIndex(const aMethodName: RawUTF8): integer;
@@ -52169,30 +52202,44 @@ type
     Wrapper: TDynArray;
   end;
 
-function TServiceMethod.ArgResultIndex(ArgName: PUTF8Char; ArgNameLen: integer): integer;
+function TServiceMethod.ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer;
+  Input: boolean): integer;
 begin
   if ArgNameLen>0 then
+    if Input then begin
+      for result := ArgsInFirst to ArgsInLast do
+        with Args[result] do
+        if IdemPropName(ParamName^,ArgName,ArgNameLen) then
+          if ValueDirection in [smdConst,smdVar] then
+            exit else // found
+            break; // right name, but wrong direction
+    end else
     for result := ArgsOutFirst to ArgsOutLast do
       with Args[result] do
       if IdemPropName(ParamName^,ArgName,ArgNameLen) then
         if ValueDirection in [smdVar,smdOut,smdResult] then
-          exit else
+          exit else // found
           break; // right name, but wrong direction
   result := -1;
 end;
 
-function TServiceMethod.ArgResultNext(var arg: integer): boolean;
+function TServiceMethod.ArgNext(var arg: integer; Input: boolean): boolean;
 begin
   result := true;
   inc(arg);
-  while arg<=ArgsOutLast do
-    if Args[arg].ValueDirection in [smdVar,smdOut,smdResult] then
-      exit else
-      inc(arg);
+  if Input then
+    while arg<=ArgsInLast do
+      if Args[arg].ValueDirection in [smdConst,smdVar] then
+        exit else
+        inc(arg) else
+    while arg<=ArgsOutLast do
+      if Args[arg].ValueDirection in [smdVar,smdOut,smdResult] then
+        exit else
+        inc(arg);
   result := false;
 end;
 
-function TServiceMethod.ArgsInputArrayToObject(P: PUTF8Char): RawUTF8;
+function TServiceMethod.ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
 var i: integer;
     W: TTextWriter;
     Value: PUTF8Char;
@@ -52203,11 +52250,16 @@ begin
     if (P=nil) or (P^<>'[') then
       P := nil else
       inc(P);
-    for i := ArgsInFirst to ArgsInLast do
+    for i := 1 to length(Args)-1 do
     if P=nil then
       break else
-      with Args[i] do
-      if ValueDirection<>smdOut then begin
+      with Args[i] do begin
+        if Input then begin
+          if ValueDirection in [smdOut,smdResult] then
+            continue;
+        end else
+          if ValueDirection=smdConst then
+            continue;
         W.AddPropName(ParamName^);
         P := GotoNextNotSpace(P);
         Value := P;
@@ -52216,12 +52268,65 @@ begin
           inc(P);
         W.AddNoJsonEscape(Value,P-Value);
       end;
+    W.CancelLastComma;
     W.Add('}');
     W.SetText(result);
   finally
     W.Free;
   end;
 end;
+
+{$ifndef NOVARIANTS}
+
+procedure TServiceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
+  Input: boolean);
+var a,ndx: integer;
+    enum: Int64;
+    obj: TObject;
+    arr: pointer;
+    inst: PClassInstance;
+begin
+  if (ArgsObject.Count>0) and (ArgsObject.Kind=dvObject) then
+  for a := 0 to ArgsObject.Count-1 do begin
+    ndx := ArgIndex(pointer(ArgsObject.Names[a]),length(ArgsObject.Names[a]),Input);
+    if ndx>=0 then
+      with Args[ndx] do
+      case ValueType of
+      smvEnum:
+        if VariantToInt64(ArgsObject.Values[a],enum) then
+          ArgsObject.Values[a] := PTypeInfo(ArgTypeInfo)^.EnumBaseType^.
+            GetEnumNameOrd(enum)^;
+      smvSet:
+        if VariantToInt64(ArgsObject.Values[a],enum) then
+          ArgsObject.Values[a] := PTypeInfo(ArgTypeInfo)^.SetEnumType^.
+            GetSetNameAsDocVariant(enum);
+      smvObject: begin
+        obj := ArgTypeInfo^.ClassCreate;
+        try
+          if DocVariantToObject(_Safe(ArgsObject.Values[a])^,obj) then
+            ArgsObject.Values[a] := _ObjFast(obj,[woEnumSetsAsText]);
+        finally
+          obj.Free;
+        end;
+      end;
+      smvDynArray:
+      if vIsObjArray in ValueKindAsm then begin
+        inst := TJSONSerializer.RegisterObjArrayFindType(ArgTypeInfo);
+        if inst=nil then
+          continue;
+        arr := nil;
+        try
+          DocVariantToObjArray(_Safe(ArgsObject.Values[a])^,arr,inst);
+          ArgsObject.Values[a] := _JsonFast(ObjArrayToJSON(arr,[woEnumSetsAsText]));
+        finally
+          ObjArrayClear(arr);
+        end;
+      end;
+      end;
+  end;
+end;
+
+{$endif NOVARIANTS}
 
 
 { TServiceMethodExecute }
@@ -53037,7 +53142,7 @@ begin
   if ParamsAsJSONObject and (clientDrivenID='') then begin
     ndx := fInterface.FindMethodIndex(aMethod);
     if ndx>=0 then  // ParamsAsJSONObject won't apply to _signature_ e.g.
-      sent := fInterface.Methods[ndx].ArgsInputArrayToObject(Pointer(sent));
+      sent := fInterface.Methods[ndx].ArgsArrayToObject(Pointer(sent),true);
   end;
   // call remote server
   status := fClient.URI(uri,'POST',@resp,@head,@sent).Lo;
@@ -53502,7 +53607,3 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
-
-
-
-
