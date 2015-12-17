@@ -7464,6 +7464,8 @@ type
     fQueryTables: TSQLRecordClassDynArray;
     fQueryColumnTypes: array of TSQLFieldType;
     fQuerySQL: RawUTF8;
+    fQueryTableNameFromSQL: RawUTF8;
+    fQueryTableIndexFromSQL: integer; // -2=nosearch -1=notfound fQueryTables[0..n]
     /// field length information
     fFieldLengthMean: TIntegerDynArray;
     fFieldLengthMeanSum: integer;
@@ -7475,6 +7477,10 @@ type
     procedure InitFieldTypes;
     /// fill the internal fFieldNames[] array
     procedure InitFieldNames;
+    /// guess the property type information from ORM 
+    function FieldPropFromTables(const PropName: RawUTF8;
+      out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
+    function GetQueryTableNameFromSQL: RawUTF8;
   public
     /// initialize the result table
     // - you can optionaly associate the corresponding TSQLRecordClass types,
@@ -8036,6 +8042,8 @@ type
     property QueryTables: TSQLRecordClassDynArray read fQueryTables;
     /// contains the associated SQL statement on Query
     property QuerySQL: RawUTF8 read fQuerySQL;
+    /// returns the SQL Table name, guessed from the associated QuerySQL statement 
+    property QueryTableNameFromSQL: RawUTF8 read GetQueryTableNameFromSQL;
     /// read-only access to the number of data Rows in this table
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself
@@ -22365,7 +22373,7 @@ begin
       if (fFieldType[f].ContentType in [sftTimeLog,sftModTime,sftCreateTime]) and
          VariantToInt64(Values[f],t.Value) then
         TDocVariantData(doc).AddValue(
-          fFieldNames[f]+'_As_Text',RawUTF8ToVariant(t.Text(true,' ')));
+          fFieldNames[f],RawUTF8ToVariant(t.Text(true,' ')));
   if addID then
     TDocVariantData(doc).AddValue('id',id.AsVariant);
 end;
@@ -22412,45 +22420,66 @@ begin
   end;
 end;
 
-function FieldPropFromTable(const aTable: TSQLRecordClass; const PropName: RawUTF8;
-  out PropInfo: TSQLPropInfo): TSQLFieldType;
+function TSQLTable.GetQueryTableNameFromSQL: RawUTF8;
 begin
-  if IsRowID(pointer(PropName)) then begin
-    result := sftInteger;
-    PropInfo := nil;
-  end else begin
-    PropInfo := aTable.RecordProps.Fields.ByRawUTF8Name(PropName);
-    if PropInfo<>nil then
-      result := PropInfo.SQLFieldTypeStored else
-      result := sftUnknown;
-  end;
+  if (fQueryTableNameFromSQL='') and (fQuerySQL<>'') then
+    fQueryTableNameFromSQL := GetTableNameFromSQLSelect(fQuerySQL,true);
+  result := fQueryTableNameFromSQL;
 end;
 
-function FieldPropFromTables(const Tables: TSQLRecordClassDynArray;
-  const PropName: RawUTF8; out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
+function TSQLTable.FieldPropFromTables(const PropName: RawUTF8;
+  out PropInfo: TSQLPropInfo; out TableIndex: integer): TSQLFieldType;
+  procedure SearchInQueryTables(aPropName: PUTF8Char; aTableIndex: integer);
+  begin
+    if IsRowID(aPropName) then begin
+      result := sftID;
+      PropInfo := nil;
+      TableIndex := aTableIndex;
+      exit;
+    end else
+    if fQueryTables[aTableIndex]<>nil then begin
+      PropInfo := fQueryTables[aTableIndex].RecordProps.Fields.ByName(aPropName);
+      if PropInfo<>nil then begin
+        result := PropInfo.SQLFieldTypeStored;
+        if result<>sftUnknown then 
+          TableIndex := aTableIndex;
+        exit;
+      end;
+      result := sftUnknown;
+    end;
+  end;
 var i,t: integer;
 begin
   TableIndex := -1;
-  if length(Tables)=1 then begin
-    result := FieldPropFromTable(Tables[0],PropName,PropInfo);
+  if fQueryTableIndexFromSQL=-2 then begin
+    fQueryTableIndexFromSQL := -1;
+    if (fQueryTables<>nil) and (QueryTableNameFromSQL<>'') then
+      for i := 0 to length(fQueryTables)-1 do
+        if IdemPropNameU(fQueryTables[i].SQLTableName,fQueryTableNameFromSQL) then begin
+          fQueryTableIndexFromSQL := i;
+          break;
+        end;
+  end;
+  if fQueryTableIndexFromSQL>=0 then begin
+    SearchInQueryTables(pointer(PropName),fQueryTableIndexFromSQL);
     if result<>sftUnknown then
-      TableIndex := 0;
-  end else begin
+      exit;
+  end;
+  if length(fQueryTables)=1 then
+    SearchInQueryTables(pointer(PropName),0)
+  else begin
     i := PosEx('.',PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
-      for t := 0 to high(Tables) do begin
-        result := FieldPropFromTable(Tables[t],PropName,PropInfo);
-        if result<>sftUnknown then begin
-          TableIndex := t;
+      for t := 0 to high(fQueryTables) do begin
+        SearchInQueryTables(pointer(PropName),t);
+        if result<>sftUnknown then
           exit;
-        end;
       end
     else // handle property names as 'ClassName.PropertyName'
-      for t := 0 to high(Tables) do
-        if Tables[t]<>nil then // avoid GPF
-        if IdemPropNameU(Tables[t].RecordProps.SQLTableName,pointer(PropName),i) then begin
-          TableIndex := t;
-          result := FieldPropFromTable(Tables[t],copy(PropName,i+2,255),PropInfo);
+      for t := 0 to high(fQueryTables) do
+        if fQueryTables[t]<>nil then // avoid GPF
+        if IdemPropNameU(fQueryTables[t].RecordProps.SQLTableName,pointer(PropName),i) then begin
+          SearchInQueryTables(@PropName[i+2],t);
           exit;
         end;
     result := sftUnknown;
@@ -22525,8 +22554,7 @@ begin
     if Assigned(fQueryColumnTypes) then
       FieldType := fQueryColumnTypes[f] else
     if Assigned(QueryTables) then begin // retrieve column info from field name
-      FieldType := FieldPropFromTables(
-        QueryTables,fResults[f],FieldPropInfo,FieldTableIndex);
+      FieldType := FieldPropFromTables(fResults[f],FieldPropInfo,FieldTableIndex);
       if FieldPropInfo<>nil then begin
         if FieldPropInfo.InheritsFrom(TSQLPropInfoRTTI) then
           FieldTypeInfo := TSQLPropInfoRTTI(FieldPropInfo).PropType;
@@ -23831,6 +23859,7 @@ constructor TSQLTable.Create(const aSQL: RawUTF8);
 begin
   fQuerySQL := aSQL;
   fFieldIndexID := -1;
+  fQueryTableIndexFromSQL := -2; // indicates not searched
 end;
 
 constructor TSQLTable.CreateFromTables(const Tables: array of TSQLRecordClass;
