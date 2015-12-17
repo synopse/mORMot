@@ -2576,6 +2576,14 @@ type
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumNameTrimed(const Value): RawUTF8;
        {$ifdef HASINLINE}inline;{$endif}
+    /// get the enumeration names corresponding to a set value 
+    function GetSetNameCSV(Value: integer; SepChar: AnsiChar=',';
+      FullSetsAsStar: boolean=false): RawUTF8; overload;
+    /// get the enumeration names corresponding to a set value
+    procedure GetSetNameCSV(W: TTextWriter; Value: integer; SepChar: AnsiChar=',';
+      FullSetsAsStar: boolean=false); overload;
+    /// get the enumeration names corresponding to a set value, as a JSON array 
+    function GetSetNameAsDocVariant(Value: integer; FullSetsAsStar: boolean=false): variant;
     ///  get the corresponding caption name, without the first lowercase chars
     // (otDone -> 'Done')
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -27349,6 +27357,59 @@ asm // eax=PEnumType edx=Value
 @z: lea eax,NULL_SHORTSTRING
 end;
 {$endif}
+
+function TEnumType.GetSetNameCSV(Value: integer; SepChar: AnsiChar;
+  FullSetsAsStar: boolean): RawUTF8;
+var W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(1024);
+  try
+    GetSetNameCSV(W,Value,SepChar,FullSetsAsStar);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TEnumType.GetSetNameCSV(W: TTextWriter; Value: integer; SepChar: AnsiChar;
+  FullSetsAsStar: boolean);
+var j: integer;
+    PS: PShortString;
+begin
+  W.Add('[');
+  if FullSetsAsStar and (MaxValue<32) and GetAllBits(Value,MaxValue+1) then
+    W.AddShort('"*"') else begin
+    PS := @NameList;
+    for j := MinValue to MaxValue do begin
+      if GetBit(Value,j) then begin
+        W.Add('"');
+        W.AddTrimLeftLowerCase(PS);
+        W.Add('"',SepChar);
+      end;
+      inc(PtrUInt(PS),ord(PS^[0])+1); // next item
+    end;
+  end;
+  W.CancelLastComma;
+  W.Add(']');
+end;
+
+function TEnumType.GetSetNameAsDocVariant(Value: integer; FullSetsAsStar: boolean): variant;
+var j: integer;
+    PS: PShortString;
+    arr: TDocVariantData;
+begin
+  arr.InitFast;
+  if FullSetsAsStar and (MaxValue<32) and GetAllBits(Value,MaxValue+1) then
+    arr.AddItem('*') else begin
+    PS := @NameList;
+    for j := MinValue to MaxValue do begin
+      if GetBit(Value,j) then
+        arr.AddItem(RawUTF8ToVariant(TrimLeftLowerCaseShort(PS)));
+      inc(PtrUInt(PS),ord(PS^[0])+1); // next item
+    end;
+  end;
+  result := variant(arr);
+end;
 
 function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
