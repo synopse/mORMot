@@ -7097,7 +7097,8 @@ type
     procedure SetFieldValue(const PropName: RawUTF8; Value: PUTF8Char);
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
-    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits): variant; overload;
+    function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+      options: PDocVariantOptions=nil): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
@@ -29409,9 +29410,9 @@ end;
 {$ifndef NOVARIANTS}
 
 function TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits): variant;
+  const withFields: TSQLFieldBits; options: PDocVariantOptions): variant;
 begin
-  GetAsDocVariant(withID,withFields,result);
+  GetAsDocVariant(withID,withFields,result,options);
 end;
 
 procedure TSQLRecord.GetAsDocVariant(withID: boolean;
@@ -38766,6 +38767,7 @@ var EndOfObject: AnsiChar;
     RunStatic: TSQLRest;
     RunStaticKind: TSQLRestServerKind;
     CurrentContext: TSQLRestServerURIContext;
+    counts: array[mPOST..mDELETE] of cardinal;
 
   procedure PerformAutomaticCommit;
   var i: integer;
@@ -38790,7 +38792,7 @@ var EndOfObject: AnsiChar;
       not CurrentContext.Call.RestAccessRights^.CanExecuteORMWrite(
         URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
   end;
-  
+
 {$ifdef WITHLOG}
 var Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -38833,6 +38835,7 @@ begin
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
   Count := 0;
+  FillcharFast(counts,SizeOf(counts),0);
   fAcquireExecution[execORMWrite].fSafe.Lock; // multi thread protection 
   try // to protect automatic transactions and global write lock
   try // to protect InternalBatchStart/Stop locking
@@ -39001,6 +39004,7 @@ begin
         [self,Method]);
       end;
       inc(Count);
+      inc(counts[URIMethod]);
     until EndOfObject=']';
     if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then
       // send pending rows within transaction
@@ -39009,6 +39013,8 @@ begin
     if RunningBatchRest<>nil then
       RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
     fAcquireExecution[execORMWrite].fSafe.UnLock;
+    InternalLog('EngineBatchSend add=% update=% delete=% %',
+      [counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable],sllTrace);
   end;
   except
     on Exception do begin
