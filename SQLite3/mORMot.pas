@@ -29421,6 +29421,8 @@ var f: integer;
     doc: TDocVariantData absolute result;
 begin
   VarClear(result);
+  if self=nil then
+    exit;
   Fields := RecordProps.Fields;
   doc.InitFast(Fields.Count+1,dvObject);
   if options<>nil then // force options
@@ -29435,7 +29437,9 @@ end;
 function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean;
   options: PDocVariantOptions): variant;
 begin
-  GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect],result,options);
+  if self=nil then
+    VarClear(result) else
+    GetAsDocVariant(withID,RecordProps.SimpleFieldsBits[soSelect],result,options);
 end;
 
 function TSQLRecord.GetFieldVariant(const PropName: string): Variant;

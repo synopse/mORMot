@@ -2619,6 +2619,9 @@ function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 function CSVEncode(const NameValuePairs: array of const;
   const KeySeparator: RawUTF8='='; const ValueSeparator: RawUTF8=#13#10): RawUTF8;
 
+/// find a given name in name/value pairs, and returns the value as RawUTF8
+function ArrayOfConstValueAsText(const NameValuePairs: array of const;
+  const aName: RawUTF8): RawUTF8;
 
 /// returns TRUE if the given text buffer contains A..Z,0..9,_ characters
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -26038,6 +26041,20 @@ begin
     end;
 end;
 
+function ArrayOfConstValueAsText(const NameValuePairs: array of const;
+  const aName: RawUTF8): RawUTF8;
+var i: integer;
+    name: RawUTF8;
+begin
+  for i := 1 to length(NameValuePairs) shr 1 do
+    if VarRecToUTF8IsString(NameValuePairs[i*2-2],name) and
+       IdemPropNameU(name,aName) then begin
+      VarRecToUTF8(NameValuePairs[i*2-1],result);
+      exit;
+    end;
+  result := '';
+end;
+      
 function IsZero(P: pointer; Length: integer): boolean;
 var i: integer;
 begin
@@ -50851,7 +50868,9 @@ end;
 function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8): RawUTF8;
 var i: integer;
 begin
-  i := fDynArray.FindHashed(aName);
+  if @self=nil then
+    i := -1 else
+    i := fDynArray.FindHashed(aName);
   if i<0 then
     result := aDefaultValue else
     result := List[i].Value;
