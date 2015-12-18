@@ -461,13 +461,12 @@ type
   TDDDMongoDBRestSettings = class(TDDDRestSettings)
   public
     /// set the default values for direct MongoDB server connection
-    // - if MongoServerAddress is '?', entry with default value would be saved
-    // in the settings, but NewRestInstance() would ignore it: once the
+    // - if MongoServerAddress is e.g. '?:27017', entry with default value would
+    // be saved in the settings, but NewRestInstance() would ignore it: once the
     // remote MongoDB server IP is known, you may just replace '?' to use it
-    // - if MongoServerPort is 0, would use MONGODB_DEFAULTPORT = 27017
     // - if MongoUser and MongoPassword are set, would call TMongoClient.OpenAuth()
-    procedure SetDefaults(const Root, MongoServerAddress: RawUTF8;
-      MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+    procedure SetDefaults(const Root, MongoServerAddress, MongoDatabase,
+      MongoUser, MongoPassword: RawUTF8);
   end;
   
 
@@ -602,11 +601,6 @@ begin
   try
     if fORM.Kind='' then
       exit;
-    {$ifndef LINUX}
-    if (fWrapperTemplateFolder='') and
-       DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
-      fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
-    {$endif}
     if (optEraseDBFileAtStartup in Options) and (fORM.ServerName<>'') then
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
@@ -794,16 +788,14 @@ end;
 
 { TDDDMongoDBRestSettings }
 
-procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress: RawUTF8;
-  MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress,
+  MongoDatabase, MongoUser, MongoPassword: RawUTF8);
 begin
   if fORM.Kind<>'' then
     exit;
   fRoot := Root;
   fORM.Kind := 'MongoDB';
-  if MongoServerPort=0 then
-    MongoServerPort := MONGODB_DEFAULTPORT;
-  fORM.ServerName := FormatUTF8('%:%',[MongoServerAddress,MongoServerPort]);
+  fORM.ServerName := MongoServerAddress;
   fORM.DatabaseName := MongoDatabase;
   fORM.User := MongoUser;
   fORM.PasswordPlain := MongoPassword;
