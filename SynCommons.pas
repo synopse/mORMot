@@ -5508,10 +5508,18 @@ function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec; TypeInfo: po
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
 // enhanced RTTI), if available
+// - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later
+// a temporary copy if you need to access it later, or the overloaded RecordLoadJSON()
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+  EndOfObject: PUTF8Char=nil): PUTF8Char; overload;
+
+/// fill a record content from a JSON serialization as saved by
+// TTextWriter.AddRecordJSON / RecordSaveJSON
+// - will use default Base64 encoding over RecordSave() binary - or custom true
+// JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
+// enhanced RTTI), if available
+function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolean; overload;
 
 /// copy a record content from source to Dest
 // - this unit includes a fast optimized asm version for x86
@@ -31904,7 +31912,7 @@ var wasString, wasValid: boolean;
     EndOfObj: AnsiChar;
     Val: PUTF8Char;
 begin // code below must match TTextWriter.AddRecordJSON
-  result := nil;
+  result := nil; // indicates error
   if JSON=nil then
     exit;
   if (@Rec=nil) or (TypeInfo=nil) then
@@ -31938,6 +31946,13 @@ begin // code below must match TTextWriter.AddRecordJSON
     result := JSON;
   if EndOfObject<>nil then
     EndOfObject^ := EndOfObj;
+end;
+
+function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolean;
+var tmp: RawUTF8; // make private copy
+begin
+  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON));
+  result := RecordLoadJSON(Rec,pointer(tmp),TypeInfo)<>nil;
 end;
 
 
