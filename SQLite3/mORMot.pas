@@ -2601,7 +2601,8 @@ type
     // ! PTypeInfo(TypeInfo(TMyEnum))^.EnumBaseType^.AddCaptionStrings(ComboBox.Items);
     procedure AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
     /// retrieve all trimed element names as CSV
-    procedure GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8='');
+    procedure GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8='';
+      quotedValues: boolean=false);
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
@@ -27605,7 +27606,8 @@ begin
   GetCaptionFromPCharLen(pointer(GetEnumNameTrimed(Value)),result);
 end;
 
-procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8);
+procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawUTF8;
+  quotedValues: boolean);
 var i: integer;
     V: PShortString;
 begin
@@ -27614,7 +27616,11 @@ begin
     AddString(Prefix);
     V := @NameList;
     for i := MinValue to MaxValue do begin
+      if quotedValues then
+        Add('"');
       AddTrimLeftLowerCase(V);
+      if quotedValues then
+        Add('"');
       Add(',');
       inc(PtrUInt(V),length(V^)+1);
     end;
@@ -45729,13 +45735,13 @@ begin
                 AddTrimLeftLowerCase(GetEnumNameOrd(V));
                 Add('"');
                 if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameTrimedAll(CustomComment);
+                  GetEnumNameTrimedAll(CustomComment,'',true);
               end;
               tkSet:
               with P^.PropType^.SetEnumType^ do begin
                 GetSetNameCSV(Self,V,',',woHumanReadableFullSetsAsStar in Options);
                 if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameTrimedAll(CustomComment,'"*" or a set of ');
+                  GetEnumNameTrimedAll(CustomComment,'"*" or a set of ',true);
               end;
               else
                 Add(V);
