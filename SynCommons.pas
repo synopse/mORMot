@@ -51276,7 +51276,7 @@ begin
   if (self=nil) or (aIdentifier=0) then
     exit;
   bits.id.Value := aIdentifier;
-  bits.crc := crc32C(bits.id.ProcessID,@bits.id,sizeof(bits.id))
+  bits.crc := crc32c(bits.id.ProcessID,@bits.id,sizeof(bits.id))
     xor FCrypto[bits.id.ProcessID and high(fCrypto)];
   bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
   result := BinToHex(@bits,SizeOf(bits));
@@ -51294,7 +51294,7 @@ begin
     len := Length(aObfuscated) else
     dec(len); // trim right '.jpg'
   if (len<>sizeof(bits)*2) or
-     not HexToBin(pointer(aObfuscated),@bits,sizeof(bits)) then
+     not SynCommons.HexToBin(pointer(aObfuscated),@bits,sizeof(bits)) then
     exit;
   bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
   if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id))
