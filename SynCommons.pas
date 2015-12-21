@@ -3686,13 +3686,19 @@ function CharSetToCodePage(CharSet: integer): cardinal;
 /// convert a code page to a char set
 function CodePageToCharSet(CodePage: Cardinal): Integer;
 
+/// retrieve the MIME content type from a supplied binary buffer
+// - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
+// - returns DefaultContentType if the binary buffer has an unknown layout
+function GetMimeContentTypeFromBuffer(Content: Pointer; Len: integer;
+  const DefaultContentType: RawUTF8): RawUTF8;
+
 /// retrieve the MIME content type from a supplied binary buffer or file name
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
 // 'application/extension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: integer;
-   const FileName: TFileName=''): RawUTF8;
+   const FileName: TFileName=''): RawUTF8; 
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
@@ -28719,81 +28725,88 @@ begin
   end;
 end;
 
-function GetMimeContentType(Content: Pointer; Len: integer;
-  const FileName: TFileName=''): RawUTF8;
-begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
-  result := '';
+function GetMimeContentTypeFromBuffer(Content: Pointer; Len: integer;
+  const DefaultContentType: RawUTF8): RawUTF8;
+begin
+  result := DefaultContentType;
   if (Content<>nil) and (Len>4) then
     case PCardinal(Content)^ of
-    $04034B50: Result := 'application/zip'; // 50 4B 03 04
-    $46445025: Result := 'application/pdf'; //  25 50 44 46 2D 31 2E
-    $21726152: Result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
-    $AFBC7A37: Result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
-    $75B22630: Result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
-    $9AC6CDD7: Result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
-    $474E5089: Result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
-    $38464947: Result := 'image/gif'; // 47 49 46 38
-    $46464F77: Result := 'application/font-woff'; // wOFF in BigEndian
+    $04034B50: result := 'application/zip'; // 50 4B 03 04
+    $46445025: result := 'application/pdf'; //  25 50 44 46 2D 31 2E
+    $21726152: result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
+    $AFBC7A37: result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
+    $75B22630: result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
+    $9AC6CDD7: result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
+    $474E5089: result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
+    $38464947: result := 'image/gif'; // 47 49 46 38
+    $46464F77: result := 'application/font-woff'; // wOFF in BigEndian
     $46464952: if Len>16 then // RIFF
       case PCardinalArray(Content)^[2] of
-      $50424557: Result := 'image/webp';
+      $50424557: result := 'image/webp';
       end;
     $002A4949, $2A004D4D, $2B004D4D:
-      Result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
+      result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
     $E011CFD0: // Microsoft Office applications D0 CF 11 E0 = DOCFILE
       if Len>600 then
       case PWordArray(Content)^[256] of // at offset 512
-        $A5EC: Result := 'application/msword'; // EC A5 C1 00
+        $A5EC: result := 'application/msword'; // EC A5 C1 00
         $FFFD: // FD FF FF
           case PByteArray(Content)^[516] of
-            $0E,$1C,$43: Result := 'application/vnd.ms-powerpoint';
-            $10,$1F,$20,$22,$23,$28,$29: Result := 'application/vnd.ms-excel';
+            $0E,$1C,$43: result := 'application/vnd.ms-powerpoint';
+            $10,$1F,$20,$22,$23,$28,$29: result := 'application/vnd.ms-excel';
           end;
       end;
     else
       case PCardinal(Content)^ and $00ffffff of
-        $685A42: Result := 'application/bzip2'; // 42 5A 68
-        $088B1F: Result := 'application/gzip'; // 1F 8B 08
-        $492049: Result := 'image/tiff'; // 49 20 49
-        $FFD8FF: Result := 'image/jpeg'; // FF D8 FF DB/E0/E1/E2/E3/E8
+        $685A42: result := 'application/bzip2'; // 42 5A 68
+        $088B1F: result := 'application/gzip'; // 1F 8B 08
+        $492049: result := 'image/tiff'; // 49 20 49
+        $FFD8FF: result := 'image/jpeg'; // FF D8 FF DB/E0/E1/E2/E3/E8
         else
           case PWord(Content)^ of
-            $4D42: Result := 'image/bmp'; // 42 4D
+            $4D42: result := 'image/bmp'; // 42 4D
           end;
       end;
     end;
-  if (Result='') and (FileName<>'') then begin
-    Result := LowerCase(StringToAnsi7(ExtractFileExt(FileName)));
-    case PosEx(copy(Result,2,4),
+end;
+function GetMimeContentType(Content: Pointer; Len: integer;
+  const FileName: TFileName=''): RawUTF8;
+begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
+  if Content<>nil then
+    result := GetMimeContentTypeFromBuffer(Content,Len,'') else
+    result := '';
+  if (result='') and (FileName<>'') then begin
+    result := LowerCase(StringToAnsi7(ExtractFileExt(FileName)));
+    case PosEx(copy(result,2,4),
         'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
         'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff') of
       // 63   68  72  76   81   86   91   96  100  105
-      1:  Result := 'image/png';
-      5:  Result := 'image/gif';
-      9:  Result := 'image/tiff';
-      14,18: Result := 'image/jpeg';
-      23: Result := 'image/bmp';
-      27,91: Result := 'application/msword';
-      31,35: Result := HTML_CONTENT_TYPE;
-      40: Result := 'text/css';
-      44: Result := 'application/javascript';
+      1:  result := 'image/png';
+      5:  result := 'image/gif';
+      9:  result := 'image/tiff';
+      14,18: result := 'image/jpeg';
+      23: result := 'image/bmp';
+      27,91: result := 'application/msword';
+      31,35: result := HTML_CONTENT_TYPE;
+      40: result := 'text/css';
+      44: result := 'application/javascript';
       // text/javascript and application/x-javascript are obsolete (RFC 4329)
-      47: Result := 'image/x-icon';
-      51,105: Result := 'application/font-woff';
-      55: Result := TEXT_CONTENT_TYPE;
-      59: Result := 'image/svg+xml';
-      63,68,72,96: Result := XML_CONTENT_TYPE;
-      76: Result := 'image/webp';
-      81,86: Result := 'text/cache-manifest';
-      100: Result := JSON_CONTENT_TYPE_VAR;
+      47: result := 'image/x-icon';
+      51,105: result := 'application/font-woff';
+      55: result := TEXT_CONTENT_TYPE;
+      59: result := 'image/svg+xml';
+      63,68,72,96: result := XML_CONTENT_TYPE;
+      76: result := 'image/webp';
+      81,86: result := 'text/cache-manifest';
+      100: result := JSON_CONTENT_TYPE_VAR;
       else
-        if Result<>'' then
-          Result := 'application/'+copy(result,2,10);
+        if result<>'' then
+          result := 'application/'+copy(result,2,10);
     end;
   end;
-  if Result='' then
-    Result := BINARY_CONTENT_TYPE;
+  if result='' then
+    result := BINARY_CONTENT_TYPE;
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;

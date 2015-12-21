@@ -3868,10 +3868,18 @@ const
    'webp','image/webp',
    'manifest','text/cache-manifest',
    'appcache','text/cache-manifest');
+  BIN: array[0..1] of Cardinal = (
+    $04034B50,$38464947);
+  BIN_MIME: array[0..1] of RawUTF8 = (
+    'application/zip','image/gif');
 var i: integer;
 begin
   for i := 0 to high(MIMES)shr 1 do
     Check(GetMimeContentType(nil,0,'toto.'+MIMES[i*2])=StringToAnsi7(MIMES[i*2+1]),MIMES[i*2]);
+  for i := 0 to high(BIN) do begin
+    Check(GetMimeContentType(@BIN[i],34,'')=BIN_MIME[i]);
+    Check(GetMimeContentTypeFromBuffer(@BIN[i],34,'')=BIN_MIME[i]);
+  end;
 end;
 
 procedure TTestLowLevelCommon._TSynLogFile;
