@@ -2239,6 +2239,9 @@ type
     function Drop: RawUTF8;
 
     /// calculate the number of documents in the collection
+    // - be aware that this method may be somewhat slow for huge collections,
+    // since a full scan of an index is to be performed: if your purpose is
+    // to ensure that a collection contains items, use rather IsEmpty method
     function Count: Int64;
     /// calculate the number of documents in the collection that match
     // a specific query
@@ -2256,6 +2259,9 @@ type
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
       MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64; overload;
+    /// returns TRUE if the collection has no document, FALSE otherwise 
+    // - is much faster than Count, especially for huge collections
+    function IsEmpty: boolean;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
@@ -5472,6 +5478,7 @@ begin
     if not fConnections[0].Opened then
     try
       fConnections[0].Open;
+      AfterOpen; // need ServerBuildInfoNumber just below
       digest := PasswordDigest(UserName,Password);
       if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin // MONGODB-CR
         // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
@@ -5537,7 +5544,6 @@ begin
               [self,DatabaseName,err,res]);
         end;
       end;
-      AfterOpen;
     except
       fConnections[0].Close;
       raise;
@@ -5865,6 +5871,13 @@ begin
     cmd := FormatUTF8('%,skip:%',[cmd,NumberToSkip]);
   fDatabase.RunCommand(BSONVariant(cmd+'}'),res);
   result := _Safe(res)^.GetValueOrDefault('n',0);
+end;
+
+function TMongoCollection.IsEmpty: boolean;
+var res: variant;
+begin // much faster than Count>0 for huge collections
+  res := FindDoc(BSONVariant('{$query:{}}'),BSONVariant(['_id',1]));
+  result := VarIsEmptyOrNull(res);
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;

@@ -481,7 +481,9 @@ end;
 function TSQLRestStorageMongoDB.TableHasRows(
   Table: TSQLRecordClass): boolean;
 begin
-  result := TableRowCount(Table)>0;
+  if (fCollection=nil) or (Table<>fStoredClass) then
+    result := false else
+    result := not fCollection.IsEmpty;
 end;
 
 function TSQLRestStorageMongoDB.TableRowCount(
