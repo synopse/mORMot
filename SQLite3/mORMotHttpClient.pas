@@ -456,34 +456,31 @@ implementation
 { TSQLHttpClientGeneric }
 
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
-var Head, Content, ContentType, ContentTypeInHead: RawUTF8;
-    P: PUTF8Char;
+var Head, Content, ContentType: RawUTF8;
+    P, PBeg: PUTF8Char;
     res: Int64Rec;
 begin
 {$ifdef WITHLOG}
   fLogClass.Enter(self,nil,true);
 {$endif}
-  Head := Call.InHead;
-  Content := Call.InBody;
   if InternalCheckOpen then begin
-    if Head<>'' then begin
-      P := pointer(Head);
-      if IdemPChar(P,'CONTENT-TYPE:') then begin
-        ContentTypeInHead := GetNextLine(P+14,P);
-        if P=nil then
-          Head := '' else
-          system.delete(Head,1,P-pointer(Head)); // trim entry in header
-        if Content<>'' then begin
-          ContentType := GetMimeContentType(pointer(Content),Length(Content));
-          if ContentType=BINARY_CONTENT_TYPE then
-            ContentType := '';
-        end;
-        if ContentType='' then
-          ContentType := ContentTypeInHead;
+    Head := Call.InHead;
+    Content := Call.InBody;
+    ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
+    P := pointer(Head);
+    while P<>nil do begin
+      PBeg := GetNextLineBegin(P,P);
+      if IdemPChar(PBeg,'CONTENT-TYPE:') then begin
+        ContentType := GetNextLine(PBeg+14,P); // retrieve customized type
+        if P=nil then // last entry in header
+          SetLength(Head,PBeg-pointer(Head)) else
+          system.delete(Head,PBeg-pointer(Head)+1,P-PBeg);
+        Head := trim(Head);
+        break;
       end;
     end;
-    if ContentType='' then
-      ContentType := JSON_CONTENT_TYPE_VAR;
+    if Content<>'' then // always favor content type from binary
+      ContentType := GetMimeContentTypeFromBuffer(pointer(Content),Length(Content),ContentType);
     EnterCriticalSection(fMutex);
     try
       res := InternalRequest(Call.Url,Call.Method,Head,Content,ContentType);
