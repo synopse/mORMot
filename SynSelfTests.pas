@@ -5591,8 +5591,8 @@ begin
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
     Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // Idle,Started,Finished,Destroying'+
-      #$D#$A#9'"Sets": ["*"] // "*" or a set of Idle,Started,Finished,Destroying'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // "Idle","Started","Finished","Destroying"'+
+      #$D#$A#9'"Sets": ["*"] // "*" or a set of "Idle","Started","Finished","Destroying"'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
