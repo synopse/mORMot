@@ -29,6 +29,7 @@ unit mORMotHttpClient;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Eva Freimann (EVaF)
   - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
@@ -108,6 +109,8 @@ unit mORMotHttpClient;
        a global mutex, as other TSQLRestClientURI implementations already did)
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
        exception on connection error (as expected by TSQLRestClientURI.URI)
+     - ensure TSQLHttpClientGeneric.InternalURI would not erase any custom
+       header supplied by the method, when Content-Type appears (thanks EVaF)
      - TSQLHttpClient* classes will now handle properly reconnection in case
        of connection break via overridden InternalCheckOpen/InternalClose methods
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
@@ -453,7 +456,7 @@ implementation
 { TSQLHttpClientGeneric }
 
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
-var Head, Content, ContentType: RawUTF8;
+var Head, Content, ContentType, ContentTypeInHead: RawUTF8;
     P: PUTF8Char;
     res: Int64Rec;
 begin
@@ -466,15 +469,17 @@ begin
     if Head<>'' then begin
       P := pointer(Head);
       if IdemPChar(P,'CONTENT-TYPE:') then begin
-        inc(P,14);
+        ContentTypeInHead := GetNextLine(P+14,P);
+        if P=nil then
+          Head := '' else
+          system.delete(Head,1,P-pointer(Head)); // trim entry in header
         if Content<>'' then begin
           ContentType := GetMimeContentType(pointer(Content),Length(Content));
-          if ContentType='application/octet-stream' then
+          if ContentType=BINARY_CONTENT_TYPE then
             ContentType := '';
         end;
         if ContentType='' then
-          ContentType := GetNextLine(P,P);
-        Head := ''; // header is processed -> no need to send Content-Type twice
+          ContentType := ContentTypeInHead;
       end;
     end;
     if ContentType='' then
