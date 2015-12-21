@@ -9741,6 +9741,17 @@ type
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddDefaultJSON(WR: TTextWriter);
+    {$ifndef NOVARIANTS}
+    /// normalize a value containing one input or output argument
+    // - sets and enumerates would be translated to strings (also in embedded
+    // objects and T*ObjArray)
+    procedure FixValue(var Value: variant);
+    /// normalize a value containing one input or output argument, and add
+    // it to a destination variant Document
+    // - sets and enumerates would be translated to strings (also in embedded
+    // objects and T*ObjArray)
+    procedure FixValueAndAddToObject(const Value: variant; var DestDoc: TDocVariantData);
+    {$endif}
   end;
 
   /// describe a service provider method arguments
@@ -51998,6 +52009,56 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS}
+
+procedure TServiceMethodArgument.FixValueAndAddToObject(const Value: variant;
+  var DestDoc: TDocVariantData);
+var v: variant;
+begin
+  v := Value;
+  FixValue(v);
+  DestDoc.AddValue(ShortStringToAnsi7String(ParamName^),v);
+end;
+
+procedure TServiceMethodArgument.FixValue(var Value: variant);
+var enum: Int64;
+    obj: TObject;
+    arr: pointer;
+    inst: PClassInstance;
+begin
+  case ValueType of
+  smvEnum:
+    if VariantToInt64(Value,enum) then
+      Value := PTypeInfo(ArgTypeInfo)^.EnumBaseType^.GetEnumNameOrd(enum)^;
+  smvSet:
+    if VariantToInt64(Value,enum) then
+      Value := PTypeInfo(ArgTypeInfo)^.SetEnumType^.GetSetNameAsDocVariant(enum);
+  smvObject: begin
+    obj := ArgTypeInfo^.ClassCreate;
+    try
+      if DocVariantToObject(_Safe(Value)^,obj) then
+        Value := _ObjFast(obj,[woEnumSetsAsText]);
+    finally
+      obj.Free;
+    end;
+  end;
+  smvDynArray:
+  if vIsObjArray in ValueKindAsm then begin
+    arr := nil;
+    inst := TJSONSerializer.RegisterObjArrayFindType(ArgTypeInfo);
+    if inst<>nil then
+      try
+        DocVariantToObjArray(_Safe(Value)^,arr,inst);
+        Value := _JsonFast(ObjArrayToJSON(arr,[woEnumSetsAsText]));
+      finally
+        ObjArrayClear(arr);
+      end;
+  end;
+  end;
+end;
+
+{$endif NOVARIANTS}
+
 
 { TAutoCreateFields }
 
@@ -52304,48 +52365,34 @@ end;
 procedure TServiceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
   Input: boolean);
 var a,ndx: integer;
-    enum: Int64;
-    obj: TObject;
-    arr: pointer;
-    inst: PClassInstance;
+    doc: TDocVariantData;
 begin
-  if (ArgsObject.Count>0) and (ArgsObject.Kind=dvObject) then
+  if ArgsObject.Count>0 then
+  case ArgsObject.Kind of
+  dvObject:
   for a := 0 to ArgsObject.Count-1 do begin
     ndx := ArgIndex(pointer(ArgsObject.Names[a]),length(ArgsObject.Names[a]),Input);
     if ndx>=0 then
-      with Args[ndx] do
-      case ValueType of
-      smvEnum:
-        if VariantToInt64(ArgsObject.Values[a],enum) then
-          ArgsObject.Values[a] := PTypeInfo(ArgTypeInfo)^.EnumBaseType^.
-            GetEnumNameOrd(enum)^;
-      smvSet:
-        if VariantToInt64(ArgsObject.Values[a],enum) then
-          ArgsObject.Values[a] := PTypeInfo(ArgTypeInfo)^.SetEnumType^.
-            GetSetNameAsDocVariant(enum);
-      smvObject: begin
-        obj := ArgTypeInfo^.ClassCreate;
-        try
-          if DocVariantToObject(_Safe(ArgsObject.Values[a])^,obj) then
-            ArgsObject.Values[a] := _ObjFast(obj,[woEnumSetsAsText]);
-        finally
-          obj.Free;
-        end;
-      end;
-      smvDynArray:
-      if vIsObjArray in ValueKindAsm then begin
-        inst := TJSONSerializer.RegisterObjArrayFindType(ArgTypeInfo);
-        if inst=nil then
-          continue;
-        arr := nil;
-        try
-          DocVariantToObjArray(_Safe(ArgsObject.Values[a])^,arr,inst);
-          ArgsObject.Values[a] := _JsonFast(ObjArrayToJSON(arr,[woEnumSetsAsText]));
-        finally
-          ObjArrayClear(arr);
-        end;
-      end;
-      end;
+      Args[ndx].FixValue(ArgsObject.Values[a]);
+  end;
+  dvArray:
+    if Input then begin
+      if ArgsObject.Count<>integer(ArgsInputValuesCount) then
+        exit;
+      doc.InitFast;
+      for a := ArgsInFirst to ArgsInLast do
+        if Args[a].ValueDirection in [smdConst,smdVar] then
+          Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count],doc);
+      ArgsObject := doc;
+    end else begin
+      if ArgsObject.Count<>integer(ArgsOutputValuesCount) then
+        exit;
+      doc.InitFast;
+      for a := ArgsOutFirst to ArgsOutLast do
+        if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then
+          Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count],doc);
+      ArgsObject := doc;
+    end;
   end;
 end;
 
