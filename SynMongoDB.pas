@@ -1727,8 +1727,7 @@ type
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
     fLatestReadConnectionIndex: integer;
-    function GetServerBuildInfo: variant;
-    function GetServerBuildInfoNumber: cardinal;
+    procedure AfterOpen; virtual; 
     function GetOneReadConnection: TMongoConnection;
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
@@ -1774,7 +1773,7 @@ type
     // - this property is cached, so request is sent only once
     // - you may easier use ServerBuildInfoNumber to check for available
     // features at runtime
-    property ServerBuildInfo: variant read GetServerBuildInfo;
+    property ServerBuildInfo: variant read fServerBuildInfo;
     /// access to a given MongoDB database
     // - try to open it via a non-authenticated connection it if not already:
     // will raise an exception on error, or will return an instance
@@ -1796,7 +1795,7 @@ type
     // ! 3000300 for MongoDB 3.0.3
     // - this property is cached, so can be used to check for available
     // features at runtime
-    property ServerBuildInfoNumber: cardinal read GetServerBuildInfoNumber;
+    property ServerBuildInfoNumber: cardinal read fServerBuildInfoNumber;
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
     // - default is rpPrimary, i.e. reading from the main primary instance
@@ -5429,8 +5428,10 @@ begin
     result := nil else begin
     result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
     if result=nil then begin // not already opened -> try now from primary host
-      if not fConnections[0].Opened then
+      if not fConnections[0].Opened then begin
         fConnections[0].Open;
+        AfterOpen;
+      end;
       result := TMongoDatabase.Create(Self,DatabaseName);
       fDatabases.AddObject(DatabaseName,result);
     end;
@@ -5536,6 +5537,7 @@ begin
               [self,DatabaseName,err,res]);
         end;
       end;
+      AfterOpen;
     except
       fConnections[0].Close;
       raise;
@@ -5545,28 +5547,15 @@ begin
   end;
 end;
 
-function TMongoClient.GetServerBuildInfo: variant;
+procedure TMongoClient.AfterOpen;
 begin
-  if TVarData(fServerBuildInfo).VType=varEmpty then
-     fConnections[0].RunCommand('admin','buildinfo',fServerBuildInfo);
-  result := fServerBuildInfo;
-end;
-
-function TMongoClient.GetServerBuildInfoNumber: cardinal;
-  procedure ComputeIt;
-  begin
-    with _Safe(GetServerBuildInfo)^.A['versionArray']^ do
+  if VarIsEmptyOrNull(fServerBuildInfo) then begin
+    fConnections[0].RunCommand('admin','buildinfo',fServerBuildInfo);
+    with _Safe(fServerBuildInfo)^.A['versionArray']^ do
       if Count=4 then
         fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
           integer(Values[0])*1000000+integer(Values[1])*10000+
           integer(Values[2])*100+integer(Values[3]);
-  end;
-begin
-  if self=nil then
-    result := 0 else begin
-    if fServerBuildInfoNumber=0 then
-      ComputeIt;
-    result := fServerBuildInfoNumber;
   end;
 end;
 
