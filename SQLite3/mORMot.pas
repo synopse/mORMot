@@ -6338,6 +6338,7 @@ type
     fOptions: TSQLRestBatchOptions;
     fOnWrite: TOnBatchWrite;
     function GetCount: integer;
+    function GetSizeBytes: cardinal;
     procedure SetExpandedJSONWriter(Props: TSQLRecordProperties;
       ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
   public
@@ -6446,6 +6447,8 @@ type
     property Rest: TSQLRest read fRest;
     /// retrieve the current number of pending transactions in the BATCH sequence
     property Count: integer read GetCount;
+    /// retrieve the current JSON size of pending transaction in the BATCH sequence
+    property SizeBytes: cardinal read GetSizeBytes;
     /// read only access to the main associated TSQLRecord class (if any)
     property Table: TSQLRecordClass read fTable;
     /// how many times Add() has been called for this BATCH process
@@ -30856,6 +30859,13 @@ begin
     result := fBatchCount;
 end;
 
+function TSQLRestBatch.GetSizeBytes: cardinal;
+begin
+  if self=nil then
+    result := 0 else
+    result := fBatch.TextLength;
+end;
+
 procedure TSQLRestBatch.SetExpandedJSONWriter(Props: TSQLRecordProperties;
   ForceResetFields, withID: boolean; const WrittenFields: TSQLFieldBits);
 begin
@@ -39014,8 +39024,9 @@ begin
     if RunningBatchRest<>nil then
       RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
     fAcquireExecution[execORMWrite].fSafe.UnLock;
-    InternalLog('EngineBatchSend add=% update=% delete=% %%',
-      [counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table],sllTrace);
+    InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
+      [KB(length(Data)),counts[mPOST],counts[mPUT],counts[mDELETE],
+       MethodTable,Table],sllTrace);
   end;
   except
     on Exception do begin
