@@ -6476,7 +6476,7 @@ type
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
     /// property set to the current GetTickCount64 value when Reset is called
-    property ResetTix: Int64 read fTix;
+    property ResetTix: Int64 read fTix write fTix;
   end;
 
   /// root class for defining and mapping database records
@@ -38831,6 +38831,7 @@ begin
     byte(batchOptions) := GetNextItemCardinal(Sent,',');
   end else
     byte(batchOptions) := 0;
+  MethodTable := nil;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
@@ -39013,8 +39014,8 @@ begin
     if RunningBatchRest<>nil then
       RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
     fAcquireExecution[execORMWrite].fSafe.UnLock;
-    InternalLog('EngineBatchSend add=% update=% delete=% %',
-      [counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable],sllTrace);
+    InternalLog('EngineBatchSend add=% update=% delete=% %%',
+      [counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table],sllTrace);
   end;
   except
     on Exception do begin
