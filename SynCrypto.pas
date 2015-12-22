@@ -31,6 +31,7 @@ unit SynCrypto;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - EvaF
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Wolfgang Ehrhardt under zlib license for AES "pure pascal" versions
   - souchaud
@@ -1428,7 +1429,7 @@ var i: integer;
 begin
   FillcharFast(k0,sizeof(k0),0);
   if keylen>64 then
-    sha.Full(key,64,PSHA1Digest(@k0)^) else
+    sha.Full(key,keylen,PSHA1Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
@@ -1489,7 +1490,7 @@ var i: integer;
 begin
   FillcharFast(k0,sizeof(k0),0);
   if keylen>64 then
-    sha.Full(key,64,PSHA256Digest(@k0)^) else
+    sha.Full(key,keylen,PSHA256Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
