@@ -14083,14 +14083,7 @@ type
     // and a valid digital signature
     // - returns false if the supplied obfuscated text is invalid
     function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
-      out aIdentifier: TSynUniqueIdentifierBits): boolean; overload;
-    /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
-    // - any file extension (e.g. '.jpeg') woul dbe first
-    // - returns true if the supplied obfuscated text has the expected layout
-    // and a valid digital signature
-    // - returns false if the supplied obfuscated text is invalid
-    function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
-      out aIdentifier: TSynUniqueIdentifier): boolean; overload;
+      out aIdentifier: TSynUniqueIdentifier): boolean; 
   published
     /// the process identifier, associated with this generator
     property Identifier: word read fIdentifier;
@@ -51334,13 +51327,6 @@ begin
     aIdentifier := bits.id.Value;
     result := true;
   end;
-end;
-
-function TSynUniqueIdentifierGenerator.FromObfuscated(
-  const aObfuscated: TSynUniqueIdentifierObfuscated;
-  out aIdentifier: TSynUniqueIdentifierBits): boolean;
-begin
-  result := FromObfuscated(aObfuscated,PSynUniqueIdentifierBits(@aIdentifier)^);
 end;
 
 
