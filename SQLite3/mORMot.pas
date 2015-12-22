@@ -774,7 +774,6 @@ unit mORMot;
     - introducing ObjectEquals() global function for fast by value comparison
     - sets including all enumerate values will be written in JSON as "*"
       with woHumanReadable option (and recognized as such e.g. by JSONToObject);
-      see also the new TJSONSerializer.AddTypedJSONWithOptions() method
     - new woStorePointer option to let ObjectToJSON() add "Address":"0431298a"
     - added ObjectFromInterfaceImplements() functions working with any
       implementation class, including TInterfacedObjectFake
@@ -4010,13 +4009,6 @@ type
     /// override method, handling IncludeUnitName option
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName: boolean); override;
-    /// override method, able to write sets using RTTI
-    procedure AddTypedJSON(aTypeInfo: pointer; const aValue); overload; override;
-    /// overloaded method, able to write sets using RTTI in human readable mode
-    // - if woFullExpand or woHumanReadable is set, enumerates and sets will
-    // be stored as JSON string
-    procedure AddTypedJSONWithOptions(aTypeInfo: pointer; var aValue;
-      Options: TTextWriterWriteObjectOptions);
     /// if TRUE, would force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string
     // - i.e. root/table/id REST would be ready-to-be-consummed from AJAX clients
@@ -18403,7 +18395,7 @@ begin
         {$ifdef FPC}
         inc(result);
         {$else}
-        inc(PtrUInt(result),result^.Len);
+        inc(PByte(result),result^.Len);
         {$endif}
     end;
     {$ifdef FPC}
@@ -18491,7 +18483,7 @@ begin
       PropInfo := AlignToPtr(@CP^.PropList);
       result := CP^.PropCount;
     {$else} // code is a bit abstract, but compiles very well for Delphi/Kylix
-    inc(PtrInt(ClassType),vmtTypeInfo);
+    inc(PByte(ClassType),vmtTypeInfo);
     if PPointer(ClassType)^<>nil then // avoid GPF if no RTTI available
       with PTypeInfo(PPointer(ClassType)^)^, PClassType(@Name[ord(Name[0])+1])^,
         PClassProp(@UnitName[ord(UnitName[0])+1])^ do begin
@@ -23744,20 +23736,20 @@ begin
       if Params.Asc then begin // ascending order comparaison
         while compI<0 do begin
           inc(I);
-          inc(PtrInt(CI),FieldCountNextPtr); // next row
+          inc(PByte(CI),FieldCountNextPtr); // next row
         end;
         while compJ>0 do begin
           dec(J);
-          dec(PtrInt(CJ),FieldCountNextPtr); // previous row
+          dec(PByte(CJ),FieldCountNextPtr); // previous row
         end;
       end else begin // descending order comparaison
         while compI>0 do begin
           inc(I);
-          inc(PtrInt(CI),FieldCountNextPtr); // next row
+          inc(PByte(CI),FieldCountNextPtr); // next row
         end;
         while compJ<0 do begin
           dec(J);
-          dec(PtrInt(CJ),FieldCountNextPtr); // previous row
+          dec(PByte(CJ),FieldCountNextPtr); // previous row
         end;
       end;
       if I<=J then begin
@@ -23785,8 +23777,8 @@ begin
           SetPP(CI,I);
         inc(I);
         dec(J);
-        inc(PtrInt(CI),FieldCountNextPtr);
-        dec(PtrInt(CJ),FieldCountNextPtr);
+        inc(PByte(CI),FieldCountNextPtr);
+        dec(PByte(CJ),FieldCountNextPtr);
       end else
         break;
     until I>J;
@@ -24438,7 +24430,7 @@ begin
       if ((Lang<>sndxNone) and SoundEx.UTF8(pointer(EnumValue))) or
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
         include(EnumValues,i);
-      inc(PtrUInt(P),ord(P^[0])+1);
+      inc(PByte(P),ord(P^[0])+1);
       // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
     end;
     // then search directly from the INTEGER value
@@ -27277,14 +27269,14 @@ function TTypeInfo.DynArrayItemType(aDataSize: PInteger): PTypeInfo;
 begin
   if @self=nil then
     result := nil else
-    result := TypeInfoToRecordInfo(@self,aDataSize);
+    result := DynArrayTypeInfoToRecordInfo(@self,aDataSize);
 end;
 
 function TTypeInfo.DynArrayItemSize: integer;
 begin
   if @self=nil then
     result := 0 else
-    TypeInfoToRecordInfo(@self,@result);
+    DynArrayTypeInfoToRecordInfo(@self,@result);
 end;
 
 function TTypeInfo.AnsiStringCodePage: integer;
@@ -27474,8 +27466,7 @@ begin
   if cardinal(Value)<=cardinal(MaxValue) then
     while Value>0 do begin
       dec(Value);
-      inc(PtrUInt(result),ord(result^[0])+1);
-      //{$ifdef FPC}result := AlignToPtr(result);{$endif} // shortstrings not aligned
+      inc(PByte(result),ord(result^[0])+1);
     end else
     result := @NULL_SHORTSTRING;
 end;
@@ -27524,7 +27515,7 @@ begin
         W.AddTrimLeftLowerCase(PS);
         W.Add('"',SepChar);
       end;
-      inc(PtrUInt(PS),ord(PS^[0])+1); // next item
+      inc(PByte(PS),ord(PS^[0])+1); // next item
     end;
   end;
   W.CancelLastComma;
@@ -27543,7 +27534,7 @@ begin
     for j := MinValue to MaxValue do begin
       if GetBit(Value,j) then
         arr.AddItem(RawUTF8ToVariant(TrimLeftLowerCaseShort(PS)));
-      inc(PtrUInt(PS),ord(PS^[0])+1); // next item
+      inc(PByte(PS),ord(PS^[0])+1); // next item
     end;
   end;
   result := variant(arr);
@@ -27551,36 +27542,13 @@ end;
 
 function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
-var PS: PShortString;
-    P: PUTF8Char;
-    PLen: integer;
 begin
   if (Value<>nil) and (ValueLen>0) then begin
-    if Value^ in ['a'..'z'] then begin
-      // e.g. 'sllWarning'
-      PS := @NameList;
-      for result := 0 to MaxValue do
-        if IdemPropName(PS^,Value,ValueLen) then
-          exit else
-          inc(PtrUInt(PS),ord(PS^[0])+1);
-    end;
-    if AlsoTrimLowerCase then begin
-      // e.g. 'Warning'
-      PS := @NameList;
-      for result := 0 to MaxValue do begin
-        PLen := Length(PS^);
-        P := @PS^[1];
-        while (PLen>0) and (P^ in ['a'..'z']) do begin
-          inc(P);
-          dec(PLen);
-        end;
-        if (PLen>0) and IdemPropName(Value,P,ValueLen,PLen) then
-          exit else
-          inc(PtrUInt(PS),ord(PS^[0])+1);
-      end;
-    end;
-  end;
-  result := -1;
+    result := FindShortStringListExact(@NameList,MaxValue,Value,ValueLen);
+    if (result<0) and AlsoTrimLowerCase then
+      result := FindShortStringListTrimLowerCase(@NameList,MaxValue,Value,ValueLen);
+  end else
+    result := -1;
 end;
 
 function TEnumType.GetEnumNameValue(const EnumName: ShortString): Integer;
@@ -27637,7 +27605,7 @@ begin
       if quotedValues then
         Add('"');
       Add(',');
-      inc(PtrUInt(V),length(V^)+1);
+      inc(PByte(V),length(V^)+1);
     end;
     CancelLastComma;
     SetText(result);
@@ -27662,7 +27630,7 @@ begin
       if asJSONArray then
         Add('"');
       Add(',');
-      inc(PtrUInt(V),length(V^)+1);
+      inc(PByte(V),length(V^)+1);
     end;
     CancelLastComma;
     if asJSONArray then
@@ -27685,7 +27653,7 @@ begin
     if TrimLeftLowerCase then
       result[i] := TrimLeftLowerCaseShort(V) else
       result[i] := RawUTF8(V^);
-    inc(PtrUInt(V),length(V^)+1);
+    inc(PByte(V),length(V^)+1);
   end;
 end;
 
@@ -27721,7 +27689,7 @@ begin
         GetCaptionFromPCharLen(Line,s);
         Strings.AddObject(s,pointer(i));
       end;
-      inc(PtrUInt(V),length(V^)+1);
+      inc(PByte(V),length(V^)+1);
     end;
   {$ifndef LVCL}
   finally
@@ -27743,36 +27711,21 @@ begin
 end;
 
 function TEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
-var P: PUTF8Char;
-    L: integer;
-    V: PShortString;
 begin
-  V := @NameList;
-  for result := 0 to MaxValue do begin
-    L := ord(V^[0]);
-    P := @V^[1];
-    while (L>0) and (P^ in ['a'..'z']) do begin  // ignore left lowercase chars
-      inc(P);
-      dec(L);
-    end;
-    if L=0 then begin // no uppercase in this enum value caption -> try whole
-      if IdemPropName(EnumName,V^) then
-        exit;
-    end else // P^ points to the first uppercase char in this enum value caption
-      if IdemPropName(EnumName,P,L) then
-        exit;
-    inc(PtrUInt(V),length(V^)+1);
-  end;
-  result := -1;
+  result := FindShortStringListTrimLowerCase(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
+  if result<0 then
+    result := FindShortStringListExact(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
 end;
 
 function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char): Integer;
-var EnumName: shortstring; // temporary string
+var ValueLen: integer;
 begin
   if Value=nil then
     result := -1 else begin
-    EnumName := Value;
-    result := GetEnumNameTrimedValue(EnumName);
+    ValueLen := StrLen(Value);
+    result := FindShortStringListTrimLowerCase(@NameList,MaxValue,Value,ValueLen);
+    if result<0 then
+      result := FindShortStringListExact(@NameList,MaxValue,Value,ValueLen);
   end;
 end;
 
@@ -30294,7 +30247,7 @@ begin
   SetLength(Tables,TabParametersCount+length(NonVisibleTables));
   for i := 0 to TabParametersCount-1 do begin
     Tables[i] := TabParameters^.Table;
-    inc(PtrUInt(TabParameters),TabParametersSize);
+    inc(PByte(TabParameters),TabParametersSize);
   end;
   for i := 0 to high(NonVisibleTables) do
     Tables[i+TabParametersCount] := NonVisibleTables[i];
@@ -43208,7 +43161,7 @@ var P: PPropInfo;
     ItemInstance: TClassInstance;
     ValueClass, ItemClass: TClass;
     V: PtrInt;
-    ndx,err: integer;
+    err: integer;
     E: TSynExtended;
     V64: Int64;
     PropName: PUTF8Char;
@@ -43482,26 +43435,7 @@ begin
         goto doProp else
       {$endif}
       if (Kind=tkSet) and (From^='[') then begin // set as string array
-        repeat inc(From) until not (From^ in [#1..' ']);
-        V := 0;
-        if From^=']' then
-          repeat inc(From) until not (From^ in [#1..' ']) else
-          with P^.PropType^.SetEnumType^ do
-          repeat
-            PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
-            if (PropValue=nil) or (not wasString) then
-              exit;
-            if PropValue^='*' then begin
-              if MaxValue<32 then
-                V := ALLBITS_CARDINAL[MaxValue+1] else
-                V := -1;
-              break;
-            end;
-            ndx := GetEnumNameValue(PropValue);
-            if ndx<0 then
-              exit; // invalid enum string value
-            SetBit(V,ndx);
-          until EndOfObject=']';
+        V := GetSetNameValue(P^.PropType{$ifndef FPC}^{$endif},From,EndOfObject);
         P^.SetOrdProp(Value,V);
       end else
       if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+
@@ -45772,7 +45706,7 @@ begin
               end;
               tkSet:
               with P^.PropType^.SetEnumType^ do begin
-                GetSetNameCSV(Self,V,',',woHumanReadableFullSetsAsStar in Options);
+                GetSetNameCSV(self,V,',',woHumanReadableFullSetsAsStar in Options);
                 if woHumanReadableEnumSetAsComment in Options then
                   GetEnumNameTrimedAll(CustomComment,'"*" or a set of ',true);
               end;
@@ -45928,68 +45862,6 @@ begin
     end;
   end;
   inherited AddInstancePointer(Instance,SepChar,IncludeUnitName);
-end;
-
-procedure TJSONSerializer.AddTypedJSON(aTypeInfo: pointer; const aValue);
-var i: integer;
-    PS: PShortString;
-begin
-  if aTypeInfo<>nil then
-  case PTypeInfo(aTypeInfo)^.Kind of
-  tkSet: begin
-    Add('[');
-    with PTypeInfo(aTypeInfo)^.SetEnumType^ do begin
-      PS := @NameList;
-      for i := MinValue to MaxValue do begin
-        if GetBit(aValue,i) then begin
-          Add('"');
-          AddShort(PS^);
-          Add('"');
-          Add(',');
-        end;
-        inc(PtrUInt(PS),ord(PS^[0])+1);
-      end;
-    end;
-    CancelLastComma;
-    Add(']');
-  end;
-  else
-    inherited; // handle other types
-  end else
-    AddShort('null');
-end;
-
-procedure TJSONSerializer.AddTypedJSONWithOptions(aTypeInfo: pointer; var aValue;
-  Options: TTextWriterWriteObjectOptions);
-var i: integer;
-    PS: PShortString;
-begin
-  if not ((woFullExpand in Options) or (woHumanReadable in Options) or
-          (woEnumSetsAsText in Options)) then
-    AddTypedJSON(aTypeInfo,aValue) else
-  if aTypeInfo<>nil then
-    case PTypeInfo(aTypeInfo)^.Kind of
-      tkSet: begin
-        Add('[');
-        with PTypeInfo(aTypeInfo)^.SetEnumType^  do begin
-          PS := @NameList;
-          for i := MinValue to MaxValue do begin
-            if GetBit(aValue,i) then begin
-              Add('"');
-              AddTrimLeftLowerCase(PS);
-              Add('"',',');
-            end;
-            inc(PtrUInt(PS),ord(PS^[0])+1); // next item
-          end;
-        end;
-        CancelLastComma;
-        Add(']');
-      end;
-    else
-      inherited AddTypedJSON(aTypeInfo, aValue);
-    end
-  else
-    AddShort('null');
 end;
 
 procedure TJSONSerializer.SetWriteAsJsonNotAsString(Value: boolean);
@@ -52024,12 +51896,14 @@ procedure TServiceMethodArgument.FixValue(var Value: variant);
 var enum: Int64;
     obj: TObject;
     arr: pointer;
-    inst: PClassInstance;
+    dyn: TDynArray;
+    rec: TByteDynArray;
+    json: RawUTF8;
 begin
   case ValueType of
   smvEnum:
     if VariantToInt64(Value,enum) then
-      Value := PTypeInfo(ArgTypeInfo)^.EnumBaseType^.GetEnumNameOrd(enum)^;
+      RawUTF8ToVariant(PTypeInfo(ArgTypeInfo)^.EnumBaseType^.GetEnumNameTrimed(enum),Value);
   smvSet:
     if VariantToInt64(Value,enum) then
       Value := PTypeInfo(ArgTypeInfo)^.SetEnumType^.GetSetNameAsDocVariant(enum);
@@ -52043,17 +51917,30 @@ begin
     end;
   end;
   smvDynArray:
-  if vIsObjArray in ValueKindAsm then begin
-    arr := nil;
-    inst := TJSONSerializer.RegisterObjArrayFindType(ArgTypeInfo);
-    if inst<>nil then
+    if _Safe(Value)^.Kind=dvArray then begin
+      arr := nil;
+      dyn.Init(ArgTypeInfo,arr);
       try
-        DocVariantToObjArray(_Safe(Value)^,arr,inst);
-        Value := _JsonFast(ObjArrayToJSON(arr,[woEnumSetsAsText]));
+        VariantSaveJSON(Value,twJSONEscape,json);
+        dyn.LoadFromJSON(pointer(json));
+        json := dyn.SaveToJSON(true);
+        Value := _JsonFast(json);
       finally
-        ObjArrayClear(arr);
+        dyn.Clear;
       end;
-  end;
+    end;
+  smvRecord:
+    if _Safe(Value)^.Kind=dvObject then begin
+      SetLength(rec,ArgTypeInfo^.RecordType^.Size);
+      try
+        VariantSaveJSON(Value,twJSONEscape,json);
+        RecordLoadJSON(rec[0],pointer(json),ArgTypeInfo);
+        json := RecordSaveJSON(rec[0],ArgTypeInfo,true);
+        Value := _JsonFast(json);
+      finally
+        RecordClear(rec[0],ArgTypeInfo);
+      end;
+    end;
   end;
 end;
 
