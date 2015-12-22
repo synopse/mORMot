@@ -170,8 +170,8 @@ begin
     mmoResult.OnGetLineAttr := nil
   else
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-  mmoResult.TopRow := 0;
   mmoResult.Text := UTF8ToString(StringReplaceTabs(JSON, '    '));
+  mmoResult.SetCaret(0, 0);
   fJson := '';
 end;
 
