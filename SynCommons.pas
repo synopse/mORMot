@@ -4427,7 +4427,7 @@ type
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
-    function SaveToJSON: RawUTF8;
+    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -5352,24 +5352,40 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
-// - will search for the exact text (this function won't trim the lowercase
-// 'a'..'z' chars on the left side of the text)
+// - will search for the exact text and also trim the lowercase 'a'..'z' chars on
+// left side of the text if no exact match is found and AlsoTrimLowerCase is TRUE
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
-function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
+  AlsoTrimLowerCase: boolean=false): Integer;
 
-/// compute the record size from its low-level RTTI
-function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
+/// helper to retrieve the bit mapped integer value of a set from its JSON text
+// - if supplied P^ is a JSON integer number, will read it directly
+// - if P^ maps some ["item1","item2"] content, would fill all matching bits
+// - if P^ contains ['*'], would fill all bits
+function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
+  out EndOfObject: AnsiChar): cardinal;
 
-/// retrieve the type name from its low-level RTTI
-procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
-  const default: RawUTF8=''); overload;
+/// fast search of an exact case-insensitive match of a RTTI's PShortString array
+function FindShortStringListExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: integer): integer;
+
+/// fast search of an left-trimmed lowercase match of a RTTI's PShortString array
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: integer): integer;
 
 /// retrieve the type name from its low-level RTTI
 function TypeInfoToName(aTypeInfo: pointer): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// retrieve the type name from its low-level RTTI
+procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
+  const default: RawUTF8=''); overload;
+
+/// retrieve the record size from its low-level RTTI
+function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
+
 /// retrieve the item type information of a dynamic array low-level RTTI
-function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
+function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
   aDataSize: PInteger=nil): pointer;
 
 /// compare two TGUID values
@@ -5498,8 +5514,10 @@ function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
 /// save record into its JSON serialization as saved by TTextWriter.AddRecordJSON
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
-// enhanced RTTI), if available
-function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
+// enhanced RTTI), if available (following EnumSetsAsText optional parameter
+// for nested enumerates and sets)
+function RecordSaveJSON(const Rec; TypeInfo: pointer;
+  EnumSetsAsText: boolean=false): RawUTF8;
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - return nil if the Source buffer is incorrect
@@ -5576,7 +5594,9 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
-function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8; overload;
+// (following EnumSetsAsText optional parameter for nested enumerates and sets)
+function DynArraySaveJSON(var Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean=false): RawUTF8; overload;
 
 /// serialize a dynamic array content, supplied as raw binary, as JSON
 // - Value shall be set to the source dynamic array field
@@ -6439,6 +6459,22 @@ type
   TTextWriterHTMLFormat = (
     hfAnyWhere, hfOutsideAttributes, hfWithinAttributes);
 
+  /// available global options for a TTextWriter instance
+  // - TTextWriter.WriteObject() method behavior would be set via their own
+  // TTextWriterWriteObjectOptions, and won't be affected by those settings
+  // - by default, custom serializers defined via RegisterCustomJSONSerializer()
+  // would let AddRecordJSON() and AddDynArrayJSON() write enumerates and sets
+  // as integer numbers, unless twoEnumSetsAsTextInRecord is set
+  // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
+  // internal memory buffer when it appears undersized - FlushFinal will set it
+  // before calling a last FlushToStream
+  TTextWriterOption = (
+    twoEnumSetsAsTextInRecord,
+    twoFlushToStreamNoAutoResize);
+  /// options set for a TTextWriter instance
+  // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
+  TTextWriterOptions = set of TTextWriterOption;
+
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
   // - some dedicated methods is able to encode any data with JSON escape
@@ -6447,8 +6483,9 @@ type
     B, BEnd: PUTF8Char;
     fStream: TStream;
     fInitialStreamPosition: cardinal;
-    fStreamIsOwned, fFlushToStreamNoAutoResize: boolean;
+    fStreamIsOwned: boolean;
     fTotalFileSize: cardinal;
+    fCustomOptions: TTextWriterOptions;
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
@@ -6847,6 +6884,9 @@ type
     // for BLOB stream
     // - typical content could be
     // ! '[1,2,3,4]' or '["\uFFF0base64encodedbinary"]'
+    // - by default, custom serializers defined via RegisterCustomJSONSerializer()
+    // would write enumerates and sets as integer numbers, unless
+    // twoEnumSetsAsTextInRecord is set in the instance Options
     procedure AddDynArrayJSON(const aDynArray: TDynArray); overload;
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - just a wrapper around the other overloaded method, creating a
@@ -6873,6 +6913,9 @@ type
     // a custom serialization, in case of a previous registration via
     // RegisterCustomJSONSerializer() class method - from a dynamic array
     // handling this kind of records, or directly from TypeInfo() of the record
+    // - by default, custom serializers defined via RegisterCustomJSONSerializer()
+    // would write enumerates and sets as integer numbers, unless
+    // twoEnumSetsAsTextInRecord is set in the instance Options
     procedure AddRecordJSON(const Rec; TypeInfo: pointer);
     {$ifndef NOVARIANTS}
     /// append a variant content as number or string
@@ -6891,9 +6934,15 @@ type
     // then save its content with default or custom serialization
     procedure AddVoidRecordJSON(TypeInfo: pointer);
     /// append a JSON value from its RTTI type
-    // - will handle tkClass,tkEnumeration,tkRecord,tkDynArray,tkVariant types
+    // - handle tkClass,tkEnumeration,tkSet,tkRecord,tkDynArray,tkVariant types
     // - write null for other types
-    procedure AddTypedJSON(aTypeInfo: pointer; const aValue); virtual;
+    // - if EnumSetsAsText is FALSE, tkEnumeration and tkSet would be written as
+    // integer numbers; if EnumSetsAsText is TRUE, they would be serialized as
+    // a JSON string (for tkEnumeration) or JSON array of strings (for tkSet)
+    // - if FullSetsAsStar is TRUE, a tkSet value containing all its items
+    // would be serialized as the ["*"] JSON array  
+    procedure AddTypedJSON(aTypeInfo: pointer; const aValue;
+      EnumSetsAsText, FullSetsAsStar: boolean);
     /// serialize as JSON the given object
     // - this default implementation will write null, or only write the
     // class name and pointer if FullExpand is true - use TJSONSerializer.
@@ -7015,7 +7064,7 @@ type
       aTypeName: RawUTF8=''); overload;
     /// define a custom serialization for several simple types
     // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
-    // method for each supplied type information 
+    // method for each supplied type information
     class procedure RegisterCustomJSONSerializerFromTextSimpleType(
        const aTypeInfos: array of pointer); overload;
     /// undefine a custom serialization for a given dynamic array or record
@@ -7066,12 +7115,6 @@ type
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk
     property TextLength: cardinal read GetLength;
-    /// if a call to FlushToStream should try to resize the internal memory
-    // buffer when it appears undersized
-    // - set to FALSE by default, to increase performance, as expected
-    // - FlushFinal will set it to TRUE before calling a last FlushToStream
-    property FlushToStreamNoAutoResize: boolean
-      read fFlushToStreamNoAutoResize write fFlushToStreamNoAutoResize;
     /// define how AddEndOfLine method stores its line feed characters
     // - by default (FALSE), it will append a CR (#13) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
@@ -7084,6 +7127,9 @@ type
     // TTextWriter constructor, it can be forced via this property, before
     // any writting
     property Stream: TStream read fStream write SetStream;
+    /// global options to customize this TTextWriter instance process
+    // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
+    property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
   end;
 
   /// simple writer to a Stream, specialized for the JSON format and SQL export
@@ -15741,7 +15787,8 @@ begin
   result := UTF8ToWideChar(pointer(Dest),Pointer(S),result);
 end;
 
-function RawUnicodeToUtf8(Dest: PUTF8Char; DestLen: PtrInt; Source: PWideChar; SourceLen: PtrInt): PtrInt; overload;
+function RawUnicodeToUtf8(Dest: PUTF8Char; DestLen: PtrInt; Source: PWideChar;
+  SourceLen: PtrInt): PtrInt; overload;
 var c: Cardinal;
     Tail: PWideChar;
     i,j: integer;
@@ -16928,6 +16975,7 @@ const
                      tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
    // maps record or object types
    tkRecordTypes = [tkObject,tkRecord];
+   tkRecordTypeOrSet = [tkObject,tkRecord];
 
 {$else}
 
@@ -16941,16 +16989,18 @@ type
 const
   // maps record or object types
   tkRecordTypes = [tkRecord];
+  tkRecordTypeOrSet = tkRecord;
 
 {$endif}
 
 type
   TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong);
   TFloatType = (ftSingle,ftDoub,ftExtended,ftComp,ftCurr);
+  TTypeKinds = set of TTypeKind;
   PTypeKind = ^TTypeKind;
 
   PStrRec = ^TStrRec;
-  /// map the Delphi string header, as defined in System.pas
+  /// map the Delphi/FPC string header, as defined in System.pas
   TStrRec =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
@@ -16973,14 +17023,14 @@ type
     _Padding: LongInt;
     {$endif}
     /// the associated code page used for this string
-    // - exist only since Delphi 2009
+    // - exist only since Delphi/FPC 2009
     // - 0 or 65535 for RawByteString
     // - 1200=CP_UTF16 for UnicodeString
     // - 65001=CP_UTF8 for RawUTF8
     // - the current code page for AnsiString
     codePage: Word;
     /// either 1 (for AnsiString) or 2 (for UnicodeString)
-    // - exist only since Delphi 2009
+    // - exist only since Delphi/FPC 2009
     elemSize: Word;
   {$endif UNICODE}
     /// string reference count (basic garbage memory mechanism)
@@ -16991,7 +17041,7 @@ type
 {$endif FPC}
   end;
 
-  /// map the Delphi dynamic array header (stored before each instance)
+  /// map the Delphi/FPC dynamic array header (stored before each instance)
   TDynArrayRec =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
@@ -17006,7 +17056,7 @@ type
     property length: sizeint read GetLength write SetLength;
     {$else}
     {$ifdef CPUX64}
-    _Padding: LongInt; // Delphi XE2+ expects 16 byte alignment
+    _Padding: LongInt; // Delphi/FPC XE2+ expects 16 byte alignment
     {$endif}
     refCnt: Longint;
     /// length in element count
@@ -17020,68 +17070,30 @@ type
   {$PACKRECORDS C}
   {$endif}
 
-  /// map the Delphi dynamic array RTTI
-  PDynArrayTypeInfo = ^TDynArrayTypeInfo;
-  TDynArrayTypeInfo =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-    kind: TTypeKind;
-    NameLen: Byte;
-    {$ifdef FPC}
-    elSize: SizeUInt;
-    elType2: PDynArrayTypeInfo;
-    varType: LongInt;
-    elType: PDynArrayTypeInfo;
-    //DynUnitName: ShortStringBase;
-    {$else}
-    // storage byte count for this field
-    elSize: Longint;
-    // nil for unmanaged field
-    elType: ^PDynArrayTypeInfo;
-    // OleAuto compatible type
-    varType: Integer;
-    // also unmanaged field
-    elType2: ^PDynArrayTypeInfo;
-    {$endif}
-  end;
+  PTypeInfo = ^TTypeInfo;
+  {$ifdef FPC}
+  PTypeInfoStored = PTypeInfo;
+  {$else}
+  PTypeInfoStored = ^PTypeInfo;
+  {$endif}
 
-  /// map the Delphi static array RTTI
-  PArrayTypeInfo = ^TArrayTypeInfo;
-  TArrayTypeInfo =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-    Size: Integer;
-    // product of lengths of all dimensions
-    elCount: Integer;
-    elType: ^PDynArrayTypeInfo;
-    dimCount: Byte;
-    dims: array[0..255 {DimCount-1}] of ^PDynArrayTypeInfo;
-  end;
-
-
-  /// map the Delphi record field RTTI
+  /// map the Delphi/FPC record field RTTI
   TFieldInfo =
     //{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
     //{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
+    TypeInfo: PTypeInfoStored;
     {$ifdef FPC}
-    TypeInfo: PDynArrayTypeInfo;
     Offset: sizeint;
     {$else}
-    TypeInfo: ^PDynArrayTypeInfo;
     Offset: PtrUInt;
     {$endif FPC}
   end;
-
   {$ifdef ISDELPHI2010}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
   TEnhancedFieldInfo = packed record
-    TypeInfo: ^PDynArrayTypeInfo;
+    TypeInfo: PTypeInfoStored;
     Offset: PtrUInt;
     Flags: Byte;
     NameLen: byte; // = Name[0] = length(Name)
@@ -17089,25 +17101,77 @@ type
   PEnhancedFieldInfo = ^TEnhancedFieldInfo;
   {$endif}
 
-  /// map the Delphi record RTTI
-  TFieldTable =
+  /// map the Delphi/FPC RTTI content
+  TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
-    Kind: TTypeKind;
-    NameLen: byte; // = Name[0] = length(Name)
-    Size: cardinal;
-    ManagedCount: integer;
-    ManagedFields: array[0..0] of TFieldInfo;
-    {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
-    NumOps: Byte;
-    //RecOps: array[0..0] of Pointer;
-    AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
-    AllFields: array[0..0] of TEnhancedFieldInfo;
-    {$endif ISDELPHI2010}
+    kind: TTypeKind;
+    NameLen: byte;
+    case TTypeKind of
+    tkDynArray: (
+      {$ifdef FPC}
+      elSize: SizeUInt;
+      elType2: PTypeInfoStored;
+      varType: LongInt;
+      elType: PTypeInfoStored;
+      //DynUnitName: ShortStringBase;
+      {$else}
+      // storage byte count for this field
+      elSize: Longint;
+      // nil for unmanaged field
+      elType: PTypeInfoStored;
+      // OleAuto compatible type
+      varType: Integer;
+      // also unmanaged field
+      elType2: PTypeInfoStored;
+      {$endif}
+    );
+    tkArray: (
+      {$ifdef FPC}
+      // and $7FFFFFFF needed
+      arraySize: SizeInt;
+      // product of lengths of all dimensions
+      elCount: SizeInt;
+      {$else}
+      arraySize: Integer;
+      // product of lengths of all dimensions
+      elCount: Integer;
+      {$endif}
+      arrayType: PTypeInfoStored;
+      dimCount: Byte;
+      dims: array[0..255 {DimCount-1}] of PTypeInfoStored;
+    );
+    tkRecord{$ifdef FPC},tkObject{$endif}: (
+      recSize: cardinal;
+      ManagedCount: integer;
+      ManagedFields: array[0..0] of TFieldInfo;
+      {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
+      NumOps: Byte;
+      //RecOps: array[0..0] of Pointer;
+      AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
+      AllFields: array[0..0] of TEnhancedFieldInfo;
+      {$endif ISDELPHI2010}
+    );
+    tkEnumeration: (
+      EnumType: TOrdType;
+      MinValue: longint;
+      MaxValue: longint;
+      EnumBaseType: PTypeInfoStored;
+      NameList: string[255];
+    );
+    tkInteger: (
+      IntegerType: TOrdType;
+    );
+    tkSet: (
+      SetType: TOrdType;
+      SetBaseType: PTypeInfoStored;
+    );
+    tkFloat: (
+      FloatType: TFloatType;
+    );
   end;
-  PFieldTable = ^TFieldTable;
 
 const
   /// codePage offset = string header size
@@ -17225,30 +17289,67 @@ begin
   end;
 end;
 
-function TypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
+function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
+{$ifdef HASINLINE} inline;
+begin
+  if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := GetFPCAlignPtr(aTypeInfo);
+    {$else}
+    result := aTypeInfo;
+    inc(PtrUInt(result),result^.NameLen);
+    {$endif}
+  end else
+    result := nil;
+end;
+{$else}
+asm
+    test eax,eax
+    jz @z
+    cmp dl,[eax]
+    movzx ecx,byte ptr [eax+1]
+    jnz @n
+    add eax,ecx
+    ret
+@n: xor eax,eax
+@z:
+end;
+{$endif}
+
+function GetTypeInfo(aTypeInfo: pointer; const aExpectedKind: TTypeKinds): PTypeInfo; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := aTypeInfo;
+  if (result<>nil) and (result^.Kind in aExpectedKind) then
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := GetFPCAlignPtr(result)
+    {$else}
+    inc(PtrUInt(result),result^.NameLen)
+    {$endif}
+  else
+    result := nil;
+end;
+
+function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
   aDataSize: PInteger=nil): pointer;
-var Typ: PDynArrayTypeInfo absolute aDynArrayTypeInfo;
+var info: PTypeInfo;
 begin
   result := nil;
-  if (aDynArrayTypeInfo<>nil) and (Typ^.kind=tkDynArray) then begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Typ := GetFPCAlignPtr(Typ);
-    {$else}
-    inc(PtrUInt(Typ),Typ^.NameLen);
-    {$endif}
-    if Typ^.elType<>nil then
-      result := Typ^.elType{$ifndef FPC}^{$endif};
-    if aDataSize<>nil then
-      aDataSize^ := Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
-  end;
+  info := GetTypeInfo(aDynArrayTypeInfo,tkDynArray);
+  if info=nil then
+    exit;
+  if info^.elType<>nil then
+    result := info^.elType{$ifndef FPC}^{$endif};
+  if aDataSize<>nil then
+    aDataSize^ := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
 end;
 
 procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8='');
-var Typ: PDynArrayTypeInfo absolute aTypeInfo;
 begin
-  if Typ<>nil then
-    SetRawUTF8(result,PAnsiChar(@Typ.NameLen)+1,Typ.NameLen) else
+  if aTypeInfo<>nil then
+    SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
+      PTypeInfo(aTypeInfo)^.NameLen) else
     result := default;
 end;
 
@@ -17257,40 +17358,136 @@ begin
   TypeInfoToName(aTypeInfo,Result,'');
 end;
 
-function RecordTypeInfoFieldTable(aRecordTypeInfo: Pointer): PFieldTable;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := aRecordTypeInfo;
-  if (result=nil) or not(result^.Kind in tkRecordTypes) then begin
-    result := nil;
-    exit;
-  end;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := GetFPCAlignPtr(result);
-  {$else}
-  inc(PtrUInt(result),result^.NameLen);
-  {$endif}
-end;
-
 function RecordTypeInfoSize(aRecordTypeInfo: Pointer): integer;
-var FieldTable: PFieldTable;
+var info: PTypeInfo;
 begin
-  FieldTable := RecordTypeInfoFieldTable(aRecordTypeInfo);
-  if FieldTable=nil then
+  info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+  if info=nil then
     result := 0 else
-    result := FieldTable^.Size;
+    result := info^.recSize;
 end;
 
-function TypeInfoSize(aTypeInfo: pointer): integer;
+function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
+  out Names: PShortString): boolean;
+var info: PTypeInfo;
 begin
-  if aTypeInfo=nil then
-    result := 0 else begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    aTypeInfo := GetFPCAlignPtr(aTypeInfo);
-    {$else}
-    inc(PtrUInt(aTypeInfo),PFieldTable(aTypeInfo)^.NameLen);
+  info := GetTypeInfo(aTypeInfo,tkEnumeration);
+  if info<>nil then begin
+    {$ifdef FPC}
+    if info^.EnumBaseType<>nil then
     {$endif}
-    result := PFieldTable(aTypeInfo)^.Size;
+      info := GetTypeInfo(info^.EnumBaseType{$ifndef FPC}^{$endif},tkEnumeration);
+    MaxValue := info^.MaxValue;
+    Names := @info.NameList;
+    result := true;
+  end else
+    result := false;
+end;
+
+function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
+  out Names: PShortString): boolean;
+var info: PTypeInfo;
+begin
+  info := GetTypeInfo(aTypeInfo,tkSet);
+  if info<>nil then
+    {$ifdef FPC}
+    if info^.SetBaseType=nil then
+      result := GetEnumInfo(aTypeInfo,MaxValue,Names) else
+    {$endif}
+      result := GetEnumInfo(info^.SetBaseType{$ifndef FPC}^{$endif},MaxValue,Names) else
+    result := false;
+end;
+
+function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+const NULL_SHORTSTRING: string[1] = '';
+var MaxValue: integer;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,result) and
+     (cardinal(aIndex)<=cardinal(MaxValue)) then
+    while aIndex>0 do begin
+      dec(aIndex);
+      inc(PByte(result),ord(result^[0])+1); // next short string
+    end else
+    result := @NULL_SHORTSTRING;
+end;
+
+function FindShortStringListExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: integer): integer;
+begin
+  for result := 0 to MaxValue do
+    if (ord(List^[0])=aValuelen) and
+       IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
+      exit else
+      inc(PByte(List),ord(List^[0])+1); // next short string
+  result := -1;
+end;
+
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: integer): integer;
+var P: PUTF8Char;
+    PLen: integer;
+begin
+  for result := 0 to MaxValue do begin
+    PLen := ord(List^[0]);
+    P := @List^[1];
+    while (PLen>0) and (P^ in ['a'..'z']) do begin
+      inc(P);
+      dec(PLen);
+    end;
+    if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,P,PLen) then
+      exit else
+      inc(PByte(List),ord(List^[0])+1);
+  end;
+  result := -1;
+end;
+
+function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
+  AlsoTrimLowerCase: boolean): Integer;
+var List: PShortString;
+    MaxValue: integer;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,List) then begin
+    result := FindShortStringListExact(List,MaxValue,aValue,aValueLen);
+    if (result<0) and AlsoTrimLowerCase then
+      result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen);
+  end else
+    result := -1;
+end;
+
+function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
+  out EndOfObject: AnsiChar): cardinal;
+var Names: PShortString;
+    Text: PUTF8Char;
+    wasString: boolean;
+    MaxValue, TextLen, i: integer;
+begin
+  result := 0;
+  if (P<>nil) and GetSetInfo(aTypeInfo,MaxValue,Names) then begin
+    P := GotoNextNotSpace(P);
+    if P^='[' then begin
+      P := GotoNextNotSpace(P+1);
+      if P^=']' then GotoNextNotSpace(P+1) else
+      repeat
+        Text := GetJSONField(P,P,@wasString,@EndOfObject);
+        if (Text=nil) or not wasString then begin
+          P := nil;
+          break;
+        end;
+        if Text^='*' then begin
+          if MaxValue<32 then
+            result := ALLBITS_CARDINAL[MaxValue+1] else
+            result := cardinal(-1);
+          exit;
+        end;
+        TextLen := StrLen(Text);
+        i := FindShortStringListExact(Names,MaxValue,Text,TextLen);
+        if i<0 then
+          i := FindShortStringListTrimLowerCase(Names,MaxValue,Text,TextLen);
+        if i>=0 then
+          SetBit(result,i);
+      until EndOfObject=']';
+    end else
+      result := GetCardinal(GetJSONField(P,P,nil,@EndOfObject));
   end;
 end;
 
@@ -27990,59 +28187,6 @@ begin
     (ChangeFileExt(ExeVersion.ProgramFileName,'.log')));
 end;
 
-{$ifndef FPC}
-function GetEnumBaseTypeList(aTypeInfo: pointer; out MaxValue: Integer): PShortString;
-begin
-  if aTypeInfo=nil then
-    result := nil else begin
-    inc(PByte(aTypeInfo)); // TypeInfo.Name
-    inc(PByte(aTypeInfo),PByte(aTypeInfo)^+sizeof(byte)*2+sizeof(longint)*2);
-    aTypeInfo := PPointer(PPointer(aTypeInfo)^)^; // BaseType
-    inc(PByte(aTypeInfo)); // BaseTypeInfo.Name
-    inc(PByte(aTypeInfo),PByte(aTypeInfo)^+sizeof(Byte)*2+sizeof(longint));
-    MaxValue := PLongint(aTypeInfo)^;
-    result := pointer(PtrUInt(aTypeInfo)+sizeof(longint)+sizeof(pointer));
-  end;
-end;
-{$endif}
-
-function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
-{$ifdef FPC}
-begin
-  result := GetFPCEnumName(aTypeInfo, aIndex); // from SynFPCTypInfo
-{$else}
-var MaxValue: integer;
-const NULL_SHORTSTRING: string[1] = '';
-begin
-  result := GetEnumBaseTypeList(aTypeInfo,MaxValue);
-  if result<>nil then
-    if aIndex>MaxValue then
-      result := @NULL_SHORTSTRING else
-      while aIndex>0 do begin
-        inc(PByte(result),ord(result^[0])+1); // next short string
-        dec(aIndex);
-      end;
-{$endif}
-end;
-
-function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): Integer;
-{$ifdef FPC}
-begin
-  result := GetFPCEnumValue(aTypeInfo, aValue); // from SynFPCTypInfo
-{$else}
-var List: PShortString;
-    MaxValue: integer;
-begin
-  List := GetEnumBaseTypeList(aTypeInfo,MaxValue);
-  if List<>nil then
-    for result := 0 to MaxValue do
-      if IdemPropName(List^,aValue,aValueLen) then
-        exit else
-        inc(PByte(List),ord(List^[0])+1); // next short string
-  result := -1;
-{$endif}
-end;
-
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
 {$ifdef CPU64}
 var a: array[0..1] of Int64 absolute guid1;
@@ -29938,55 +30082,23 @@ end;
 
 {$ifdef FPC}
 
-function RTTIArraySize(typeInfo: Pointer): SizeInt;
-type
-  PArrayInfo=^TArrayInfo;
-  TArrayInfo=
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-    ElSize: SizeInt;
-    ElCount: SizeInt;
-    ElInfo: Pointer;
-  end;
-begin
-  with PArrayInfo(pointer(GetFPCTypeData(typeInfo)))^ do
-    result := (ElSize and $7FFFFFFF) * ElCount;
-end;
-
-function RTTIRecordSize(typeInfo: Pointer): SizeInt; inline;
-type
-  PRecordInfo=^TRecordInfo;
-  TRecordInfo=
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-    Size: Longint;
-    Count: Longint;
-    { Elements: array[count] of TRecordElement }
-  end;
-begin
-  result := PRecordInfo(pointer(GetFPCTypeData(typeInfo)))^.Size;
-end;
-
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
-  case PTypeKind(typeinfo)^ of
+  case PTypeKind(typeInfo)^ of
     tkLString,tkLStringOld,tkWString,tkUString,
     tkInterface,tkDynarray:
       result := sizeof(Pointer);
-{$ifdef FPC_HAS_FEATURE_VARIANTS}
+    {$ifndef NOVARIANTS}
     tkVariant:
       result := sizeof(TVarData);
-{$endif FPC_HAS_FEATURE_VARIANTS}
+    {$endif}
     tkArray:
-      result := RTTIArraySize(typeinfo);
+      with GetTypeInfo(typeInfo,tkArray)^ do
+        result := (arraySize and $7FFFFFFF) * ElCount;
     tkObject,tkRecord:
-      result := RTTIRecordSize(typeinfo);
+      result := GetTypeInfo(typeInfo,PTypeKind(typeInfo)^)^.recSize;
   else
-    raise ESynException.CreateUTF8('RTTIManagedSize(%)',[PByte(typeinfo)^]);
+    raise ESynException.CreateUTF8('RTTIManagedSize(%)',[PByte(typeInfo)^]);
   end;
 end;
 
@@ -30033,7 +30145,7 @@ end;
 {$endif FPC}
 
 function RecordEquals(const RecA, RecB; TypeInfo: pointer): boolean;
-var FieldTable: PFieldTable absolute TypeInfo;
+var info: PTypeInfo;
     F: integer;
     Field: ^TFieldInfo;
     Diff: cardinal;
@@ -30049,16 +30161,12 @@ begin
     exit;
   end;
   result := false;
-  if not (FieldTable^.Kind in tkRecordTypes) then
+  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  if info=nil then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignPtr(FieldTable);
-  {$else}
-  inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$endif}
-  Field := @FieldTable^.ManagedFields[0];
+  Field := @info^.ManagedFields[0];
   Diff := 0;
-  for F := 1 to FieldTable^.ManagedCount do begin
+  for F := 1 to info^.ManagedCount do begin
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       if not CompareMem(A,B,Diff) then
@@ -30109,9 +30217,9 @@ begin
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordEquals(kind=%)',
             [ord(Field^.TypeInfo^.Kind)]) else begin
-          if F=FieldTable^.ManagedCount then
-            Diff := FieldTable.Size-Field^.Offset else
-            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          if F=info^.ManagedCount then
+            Diff := info.recSize-Field^.Offset else
+            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           if not CompareMem(A,B,Diff) then
             exit; // binary block not equal
         end;
@@ -30125,32 +30233,27 @@ begin
     inc(Diff,Field^.Offset);
     inc(Field);
   end;
-  if CompareMem(A,B,FieldTable.Size-Diff) then
+  if CompareMem(A,B,info.recSize-Diff) then
     result := true;
 end;
 
 function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
-var FieldTable: PFieldTable absolute TypeInfo;
+var info, infoNested: PTypeInfo;
     F, Len: integer;
     Field: ^TFieldInfo;
     P: PPtrUInt;
     R: PAnsiChar;
     DynArray: TDynArray;
-    IntFieldTable: PFieldTable;
 begin
   R := @Rec;
-  if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
+  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  if (R=nil) or (info=nil) then begin
     result := 0; // should have been checked before
-    exit; // raise Exception.CreateUTF8('% is not a record',[FieldTable^.NameLen]);
+    exit;
   end;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignPtr(FieldTable);
-  {$else}
-  inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$endif}
-  Field := @FieldTable.ManagedFields[0];
-  result := FieldTable.Size;
-  for F := 1 to FieldTable.ManagedCount do begin
+  Field := @info.ManagedFields[0];
+  result := info.recSize;
+  for F := 1 to info.ManagedCount do begin
     P := pointer(R+Field.Offset);
     case Field.TypeInfo^.Kind of
       tkDynArray: begin
@@ -30175,13 +30278,13 @@ begin
           exit; // invalid/unhandled nested record content
         end;
         inc(result,Len);
-        IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+        infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        IntFieldTable := GetFPCAlignPtr(IntFieldTable);
+        infoNested := GetFPCAlignPtr(infoNested);
         {$else}
-        inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
+        inc(PtrUInt(infoNested),infoNested^.NameLen);
         {$endif}
-        dec(result,IntFieldTable^.Size);
+        dec(result,infoNested^.recSize);
       end;
       {$ifndef NOVARIANTS}
       tkVariant: begin
@@ -30205,28 +30308,23 @@ begin
 end;
 
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
-var FieldTable: PFieldTable absolute TypeInfo;
+var info, infoNested: PTypeInfo;
     F, LenBytes: integer;
     Diff: cardinal;
     Field: ^TFieldInfo;
     R: PAnsiChar;
     Kind: TTypeKind;
     DynArray: TDynArray;
-    IntFieldTable: PFieldTable;
 begin
   R := @Rec;
-{  if FieldTable^.Kind<>tkRecord then begin // should have been checked before
-    result := nil;
-    exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
-  end; }
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignPtr(FieldTable);
-  {$else}
-  inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$endif}
-  Field := @FieldTable^.ManagedFields[0];
+  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  if (R=nil) or (info=nil) then begin
+    result := nil; // should have been checked before
+    exit;
+  end;
+  Field := @info^.ManagedFields[0];
   Diff := 0;
-  for F := 1 to FieldTable^.ManagedCount do begin
+  for F := 1 to info^.ManagedCount do begin
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(R^,Dest^,Diff);
@@ -30262,13 +30360,13 @@ begin
         result := nil; // invalid/unhandled record content
         exit;
       end;
-      IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+      infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      IntFieldTable := GetFPCAlignPtr(IntFieldTable);
+      infoNested := GetFPCAlignPtr(infoNested);
       {$else}
-      inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
+      inc(PtrUInt(infoNested),infoNested^.NameLen);
       {$endif}
-      Diff := IntFieldTable^.Size; // size of the record in record
+      Diff := infoNested^.recSize;
     end;
     {$ifndef NOVARIANTS}
     tkVariant: begin
@@ -30284,9 +30382,9 @@ begin
       else
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordSave(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
-          if F=FieldTable^.ManagedCount then
-            Diff := FieldTable.Size-Field^.Offset else
-            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          if F=info^.ManagedCount then
+            Diff := info.recSize-Field^.Offset else
+            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(R^,Dest^,Diff);
           inc(Dest,Diff);
         end;
@@ -30301,7 +30399,7 @@ begin
     inc(Diff,Field.Offset);
     inc(Field);
   end;
-  Diff := FieldTable^.Size-Diff;
+  Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
     raise ESynException.Create('RecordSave diff') else
   if Diff<>0 then begin
@@ -30398,10 +30496,10 @@ asm
         {$else}
         jmp System.Error
         {$endif}
-@@array:movzx ecx,[edx].TFieldTable.NameLen
+@@array:movzx ecx,[edx].TTypeInfo.NameLen
         add ecx,edx
-        mov edx,dword ptr [ecx].TFieldTable.ManagedFields[0] // Fields[0].TypeInfo^
-        mov ecx,[ecx].TFieldTable.ManagedCount
+        mov edx,dword ptr [ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov ecx,[ecx].TTypeInfo.ManagedCount
         mov edx,[edx]
         jmp System.@FinalizeArray
 {$endif CPU64}
@@ -30409,28 +30507,23 @@ end;
 {$endif FPC}
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
-var FieldTable: PFieldTable absolute TypeInfo;
+var info, infoNested: PTypeInfo;
     F, LenBytes: integer;
     Diff: cardinal;
     Field: ^TFieldInfo;
     R: PAnsiChar;
     Kind: TTypeKind;
     DynArray: TDynArray;
-    IntFieldTable: PFieldTable;
 begin
   R := @Rec;
-  if (R=nil) or not(FieldTable^.Kind in tkRecordTypes) then begin
+  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  if (R=nil) or (info=nil) then begin
     result := nil; // should have been checked before
-    exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
+    exit;
   end;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  FieldTable := GetFPCAlignPtr(FieldTable);
-  {$else}
-  inc(PtrUInt(FieldTable),FieldTable^.NameLen);
-  {$endif}
-  Field := @FieldTable^.ManagedFields[0];
+  Field := @info^.ManagedFields[0];
   if Source=nil then begin  // inline RecordClear() function
-    for F := 1 to  FieldTable^.ManagedCount do begin
+    for F := 1 to  info^.ManagedCount do begin
       _Finalize(R+Field^.Offset,Field^.TypeInfo{$ifndef FPC}^{$endif});
       inc(Field);
     end;
@@ -30438,7 +30531,7 @@ begin
     exit;
   end;
   Diff := 0;
-  for F := 1 to FieldTable^.ManagedCount do begin
+  for F := 1 to info^.ManagedCount do begin
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(Source^,R^,Diff);
@@ -30477,13 +30570,13 @@ begin
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
       Source := RecordLoad(R^,Source,Field.TypeInfo{$ifndef FPC}^{$endif});
-      IntFieldTable := pointer(Field.TypeInfo{$ifndef FPC}^{$endif});
+      infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      IntFieldTable := GetFPCAlignPtr(IntFieldTable);
+      infoNested := GetFPCAlignPtr(infoNested);
       {$else}
-      inc(PtrUInt(IntFieldTable),IntFieldTable^.NameLen);
+      inc(PtrUInt(infoNested),infoNested^.NameLen);
       {$endif}
-      Diff := IntFieldTable^.Size; // size of the record in record
+      Diff := infoNested^.recSize;
     end;
     {$ifndef NOVARIANTS}
     tkVariant: begin
@@ -30495,9 +30588,9 @@ begin
       else
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordLoad(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
-          if F=FieldTable^.ManagedCount then
-            Diff := FieldTable.Size-Field^.Offset else
-            Diff := FieldTable^.ManagedFields[F].Offset-Field^.Offset;
+          if F=info^.ManagedCount then
+            Diff := info.recSize-Field^.Offset else
+            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(Source^,R^,Diff);
           inc(Source,Diff);
         end;
@@ -30512,7 +30605,7 @@ begin
     inc(Diff,Field.Offset);
     inc(Field);
   end;
-  Diff := FieldTable^.Size-Diff;
+  Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
     raise ESynException.Create('RecordLoad diff') else
   if Diff<>0 then begin
@@ -30590,24 +30683,24 @@ asm // faster version by AB
         { ->    EAX pointer to record to be finalized   }
         {       EDX pointer to type info                }
 (* // this TObject.Create-like initialization sounds slower
-  movzx ecx,byte ptr [edx].TFieldTable.NameLen
-  mov edx,[edx+ecx].TFieldTable.Size
+  movzx ecx,byte ptr [edx].TTypeInfo.NameLen
+  mov edx,[edx+ecx].TTypeInfo.Size
   xor ecx,ecx
   jmp dword ptr [FillCharFast] *)
-        movzx ecx,byte ptr [edx].TFieldTable.NameLen
+        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
         push ebx
         mov ebx,eax
         push esi
         push edi
-        mov edi,[edx+ecx].TFieldTable.ManagedCount
-        lea esi,[edx+ecx].TFieldTable.ManagedFields
+        mov edi,[edx+ecx].TTypeInfo.ManagedCount
+        lea esi,[edx+ecx].TTypeInfo.ManagedFields
         test edi,edi
         jz @@end
 @@loop: mov edx,[esi].TFieldInfo.TypeInfo
         mov eax,[esi].TFieldInfo.&Offset
         mov edx,[edx]
         lea esi,esi+8
-        movzx ecx,[edx].TFieldTable.Kind
+        movzx ecx,[edx].TTypeInfo.Kind
         lea eax,eax+ebx // eax=data to be initialized
         jmp dword ptr [@@Tab+ecx*4-tkLString*4]
 @@Tab:  dd @@ptr, @@ptr, @@variant, @@array, @@array, @@ptr, @@ptr, @@ptr, @@ptr
@@ -30677,20 +30770,20 @@ asm // faster version by AB (direct call to finalization procedures)
         { ->    EAX pointer to record to be finalized   }
         {       EDX pointer to type info                }
         { <-    EAX pointer to record to be finalized   }
-        movzx ecx,byte ptr [edx].TFieldTable.NameLen
+        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
         push ebx
         mov ebx,eax
         push esi         
         push edi
-        mov edi,[edx+ecx].TFieldTable.ManagedCount
-        lea esi,[edx+ecx].TFieldTable.ManagedFields
+        mov edi,[edx+ecx].TTypeInfo.ManagedCount
+        lea esi,[edx+ecx].TTypeInfo.ManagedFields
         test edi,edi
         jz @@end
 @@loop: mov edx,[esi].TFieldInfo.TypeInfo
         mov eax,[esi].TFieldInfo.&Offset
         mov edx,[edx]
         lea esi,[esi+8]
-        movzx ecx,[edx].TFieldTable.Kind
+        movzx ecx,[edx].TTypeInfo.Kind
         lea eax,eax+ebx // eax=data to be initialized
         sub cl,tkLString
         {$ifdef UNICODE}
@@ -30726,10 +30819,10 @@ asm // faster version by AB (direct call to finalization procedures)
         pop esi
         pop ebx
         jmp System.Error
-@@array:movzx ecx,[edx].TFieldTable.NameLen
+@@array:movzx ecx,[edx].TTypeInfo.NameLen
         add ecx,edx
-        mov edx,dword ptr [ecx].TFieldTable.ManagedFields[0] // Fields[0].TypeInfo^
-        mov ecx,[ecx].TFieldTable.ManagedCount
+        mov edx,dword ptr [ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov ecx,[ecx].TTypeInfo.ManagedCount
         mov edx,[edx]
         call System.@FinalizeArray
         // we made Call @@Array -> ret to continue
@@ -30744,17 +30837,17 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         push ebx
         push esi
         push edi
-        movzx ebx,byte ptr [ecx].TFieldTable.NameLen
+        movzx ebx,byte ptr [ecx].TTypeInfo.NameLen
         mov esi,edx                     // esi = source
         mov edi,eax                     // edi = dest
         add ebx,ecx                     // ebx = TFieldTable
         xor eax,eax                     // eax = current offset
-        mov ebp,[ebx].TFieldTable.ManagedCount // ebp = TFieldInfo count
-        mov ecx,[ebx].TFieldTable.Size
+        mov ebp,[ebx].TTypeInfo.ManagedCount // ebp = TFieldInfo count
+        mov ecx,[ebx].TTypeInfo.recSize
         test ebp,ebp
         jz @fullcopy
         push ecx                        // sizeof(record) on stack
-        add ebx,offset TFieldTable.ManagedFields[0] // ebx = first TFieldInfo
+        add ebx,offset TTypeInfo.ManagedFields[0] // ebx = first TFieldInfo
 @next:  mov ecx,[ebx].TFieldInfo.&Offset
         mov edx,[ebx].TFieldInfo.TypeInfo
         sub ecx,eax
@@ -30768,7 +30861,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         inc ecx
         jnz @mov1
 @nomov: mov eax,edi
-        movzx ecx,[edx].TFieldTable.Kind
+        movzx ecx,[edx].TTypeInfo.Kind
         cmp ecx,tkLString
         je @@LString
         jb @@err
@@ -30791,18 +30884,18 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         jmp System.Error
         nop // all functions below have esi=source edi=dest
 @@Array:
-        movzx ecx,byte ptr [edx].TFieldTable.NameLen
-        push dword ptr [edx+ecx].TFieldTable.Size
-        push dword ptr [edx+ecx].TFieldTable.ManagedCount
-        mov ecx,dword ptr [edx+ecx].TFieldTable.ManagedFields[0] // Fields[0].TypeInfo^
+        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
+        push dword ptr [edx+ecx].TTypeInfo.recSize
+        push dword ptr [edx+ecx].TTypeInfo.ManagedCount
+        mov ecx,dword ptr [edx+ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
         mov ecx,[ecx]
         mov edx,esi
         call System.@CopyArray
         pop eax // restore sizeof(Array)
         jmp @@finish
 @@Record:
-        movzx ecx,byte ptr [edx].TFieldTable.NameLen
-        mov ecx,[edx+ecx].TFieldTable.Size
+        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
+        mov ecx,[edx+ecx].TTypeInfo.recSize
         push ecx
         mov ecx,edx
         mov edx,esi
@@ -31667,13 +31760,13 @@ function TJSONCustomParsers.TryToGetFromRTTI(aDynArrayTypeInfo,
   aRecordTypeInfo: pointer): integer;
 var Reg: TJSONCustomParserRegistration;
     RegRoot: TJSONCustomParserRTTI;
-    FieldTable: PFieldTable;
+    info: PTypeInfo;
     added: boolean;
     ndx: integer;
 begin
   result := -1;
-  FieldTable := RecordTypeInfoFieldTable(aRecordTypeInfo);
-  if FieldTable=nil then
+  info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+  if info=nil then
     exit; // not enough RTTI
   Reg.RecordTypeInfo := aRecordTypeInfo;
   Reg.DynArrayTypeInfo := aDynArrayTypeInfo;
@@ -31683,9 +31776,9 @@ begin
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
   {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
-    inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
-    inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
-    if FieldTable^.AllCount=0 then
+    inc(PByte(info),info^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
+    inc(PByte(info),info^.NumOps*sizeof(pointer)); // jump RecOps[]
+    if info^.AllCount=0 then
       exit; // not enough RTTI -> avoid exception in constructor below
   end;
   {$else}
@@ -31716,7 +31809,7 @@ begin
       exit;
     end else begin
       if aRecordTypeInfo=nil then // record RTTI not specified: guess now
-        aRecordTypeInfo := TypeInfoToRecordInfo(aDynArrayTypeInfo);
+        aRecordTypeInfo := DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo);
       if aRecordTypeInfo=nil then begin
         for result := 0 to fParsersCount-1 do
           if fParser[result].DynArrayTypeInfo=aDynArrayTypeInfo then begin
@@ -31843,10 +31936,10 @@ begin
   if (aTypeInfo=nil) or (self=nil) then
     raise ESynException.CreateUTF8('%.Search(%)',[self,aTypeInfo]);
   FillcharFast(Reg,sizeof(Reg),0);
-  case PDynArrayTypeInfo(aTypeInfo)^.kind of
+  case PTypeKind(aTypeInfo)^ of
   tkDynArray: begin
     Reg.DynArrayTypeInfo := aTypeInfo;
-    Reg.RecordTypeInfo := TypeInfoToRecordInfo(aTypeInfo);
+    Reg.RecordTypeInfo := DynArrayTypeInfoToRecordInfo(aTypeInfo);
     result := DynArraySearch(Reg.DynArrayTypeInfo,Reg.RecordTypeInfo,false);
   end;
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
@@ -31855,7 +31948,7 @@ begin
     result := RecordSearch(Reg.RecordTypeInfo,false);
   end;
   else raise ESynException.CreateUTF8('%.Search(kind=%) not DynArray or Record',
-    [self,ord(PDynArrayTypeInfo(aTypeInfo)^.kind)]);
+    [self,PByte(aTypeInfo)^]);
   end;
   if not AddIfNotExisting then
     exit;
@@ -31914,10 +32007,12 @@ begin
   end;
 end;
 
-function RecordSaveJSON(const Rec; TypeInfo: pointer): RawUTF8;
+function RecordSaveJSON(const Rec; TypeInfo: pointer; EnumSetsAsText: boolean): RawUTF8;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
+    if EnumSetsAsText then
+      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
     AddRecordJSON(Rec,TypeInfo);
     SetText(result);
   finally
@@ -31942,9 +32037,9 @@ begin // code below must match TTextWriter.AddRecordJSON
     raise ESynException.CreateUTF8('Invalid RecordLoadJSON(%) call',[TypeInfo]);
   if JSON^=' ' then repeat inc(JSON); if JSON^=#0 then exit; until JSON^<>' ';
   if PCardinal(JSON)^=JSON_BASE64_MAGIC_QUOTE then begin
-    if not (PDynArrayTypeInfo(TypeInfo)^.kind in tkRecordTypes) then
-      raise ESynException.CreateUTF8('RecordLoadJSON(%) kind=%',
-        [TypeInfo,ord(PDynArrayTypeInfo(TypeInfo)^.kind)]);
+    if not (PTypeKind(TypeInfo)^ in tkRecordTypes) then
+      raise ESynException.CreateUTF8('RecordLoadJSON(%/%)',
+        [PShortString(@PTypeInfo(TypeInfo).NameLen)^,PByte(TypeInfo)^]);
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
     if (Val=nil) or (not wasString) or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
@@ -31996,6 +32091,7 @@ end;
 
 constructor TJSONCustomParserCustomSimple.Create(
   const aPropertyName, aCustomTypeName: RawUTF8; aCustomType: pointer);
+var info: PTypeInfo;
 begin
   inherited Create(aPropertyName,aCustomTypeName);
   fCustomTypeInfo := aCustomType;
@@ -32005,38 +32101,29 @@ begin
   end else
   if fCustomTypeInfo<>nil then begin
     TypeInfoToName(fCustomTypeInfo,fCustomTypeName,aCustomTypeName);
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    fTypeData := GetFPCTypeData(fCustomTypeInfo);
-    {$else}
-    with PDynArrayTypeInfo(fCustomTypeInfo)^ do
-      fTypeData := pointer(PtrUInt(@elSize)+NameLen);
-    {$endif}
+    info := GetTypeInfo(fCustomTypeInfo,[tkEnumeration,tkSet,tkArray,tkDynArray]);
+    fTypeData := info;
     case PTypeKind(fCustomTypeInfo)^ of
     tkEnumeration, tkSet: begin
-      case TOrdType(PByte(fTypeData)^) of
+      case info^.EnumType of
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
       end;
       if PTypeKind(fCustomTypeInfo)^=tkEnumeration then
-        fKnownType := ktEnumeration else begin
+        fKnownType := ktEnumeration else
         fKnownType := ktSet;
-        {$ifndef FPC}
-        inc(PByte(fTypeData)); // jump over TOrdType (see TTypeInfo.SetEnumType)
-        fTypeData := PPointer(PPointer(fTypeData)^)^;
-        {$endif}
-      end;
     end;
     tkArray: begin
-      if PArrayTypeInfo(fTypeData)^.dimCount<>1 then
+      if info^.dimCount<>1 then
         raise ESynException.CreateUTF8(
           '%.Create("%") supports only one dimension static array)',
           [self,aCustomTypeName]);
       fKnownType := ktStaticArray;
-      fDataSize := PArrayTypeInfo(fTypeData)^.Size;
-      fFixedSize := fDataSize div PArrayTypeInfo(fTypeData)^.elCount;
+      fDataSize := info^.arraySize {$ifdef FPC}and $7FFFFFFF{$endif};
+      fFixedSize := fDataSize div info^.elCount;
       fNestedArray := TJSONCustomParserRTTI.CreateFromRTTI(
-        '',PArrayTypeInfo(fTypeData)^.elType^,fFixedSize);
+        '',info^.arrayType{$ifndef FPC}^{$endif},fFixedSize);
     end;
     tkDynArray:
       fKnownType := ktDynamicArray;
@@ -32065,40 +32152,22 @@ end;
 procedure TJSONCustomParserCustomSimple.CustomWriter(
   const aWriter: TTextWriter; const aValue);
 var i: integer;
-    i64: Int64;
     V: PByte;
 begin
   case fKnownType of
   ktStaticArray: begin
     aWriter.Add('[');
     V := @aValue;
-    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do begin
+    for i := 1 to PTypeInfo(fTypeData)^.elCount do begin
       fNestedArray.WriteOneLevel(aWriter,V,[]);
       aWriter.Add(',');
     end;
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
-  (*  max: integer; item: PShortString;
-  ktSet: begin // written as an object with set names as fields = true/false
-    aWriter.Add('{');
-    item := GetEnumBaseTypeList(fTypeData,max);
-    for i := 0 to max do begin
-      aWriter.AddPropName(item^);
-      aWriter.Add(GetBit(aValue,i));
-      aWriter.Add(',');
-      inc(PByte(item),ord(item^[0])+1); // next short string
-    end;
-    aWriter.CancelLastComma;
-    aWriter.Add('}');
-  end;
-  *)
-  ktEnumeration, ktSet: begin
-    i64 := 0;
-    MoveFast(aValue,i64,fDataSize);
-    aWriter.Add(i64); // storing the value as binary/integer is safe and fast
-    //aWriter.AddShort(GetEnumName(fCustomTypeInfo,byte(aValue))^);
-  end;
+  ktEnumeration, ktSet: 
+    aWriter.AddTypedJSON(fCustomTypeInfo,aValue,
+      twoEnumSetsAsTextInRecord in aWriter.CustomOptions, true);
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): Unsupported',
         [self,fCustomTypeName]);
@@ -32118,8 +32187,7 @@ end;
 function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
-    i: integer;
-    i64: Int64;
+    i,i32: integer;
     wasString: boolean;
     Val: PByte;
 begin
@@ -32129,10 +32197,10 @@ begin
     if P^<>'[' then
       exit; // we expect a true array here
     P := GotoNextNotSpace(P+1);
-    if JSONArrayCount(P)<>PArrayTypeInfo(fTypeData)^.elCount then
+    if JSONArrayCount(P)<>PTypeInfo(fTypeData)^.elCount then
       exit; // invalid number of items
     Val := @aValue;
-    for i := 1 to PArrayTypeInfo(fTypeData)^.elCount do
+    for i := 1 to PTypeInfo(fTypeData)^.elCount do
       if not fNestedArray.ReadOneLevel(P,Val,[]) then
         exit else
       if P=nil then
@@ -32146,6 +32214,11 @@ begin
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomReader("%"): Unsupported',
         [self,fCustomTypeName]);
+  ktSet: begin
+    i32 := GetSetNameValue(fCustomTypeInfo,P,EndOfObject);
+    MoveFast(i32,aValue,fDataSize);
+    result := P;
+  end;
   else begin // encoded as JSON strings
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
     if PropValue=nil then
@@ -32154,16 +32227,13 @@ begin
     ktGUID:
       if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
         result := P;
-    ktSet,ktEnumeration: begin
+    ktEnumeration: begin
       if wasString then
-        if fKnownType=ktSet then
-          raise ESynException.CreateUTF8('%.CustomReader("%") not implemented yet from string',
-            [self,fCustomTypeName]) else
-          i64 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
-        SetInt64(PropValue,i64);
-      if i64<0 then
+        i32 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+        i32 := GetCardinal(PropValue);
+      if i32<0 then
         exit;
-      MoveFast(i64,aValue,fDataSize);
+      MoveFast(i32,aValue,fDataSize);
       result := P;
     end;
     ktFixedArray:
@@ -32335,13 +32405,11 @@ end;
 
 class function TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(Info: pointer;
   ItemSize: integer): TJSONCustomParserRTTIType;
-var Item: PDynArrayTypeInfo absolute Info;
-    Typ: PByte;
 begin
   result := ptCustom;
   if Info=nil then
     exit;
-  case Item^.Kind of
+  case PTypeKind(Info)^ of
   tkLString{$ifdef FPC},tkLStringOld{$endif}: result := ptRawUTF8;
   tkWString: result := ptWideString;
   {$ifdef UNICODE}
@@ -32359,36 +32427,27 @@ begin
   tkVariant: result := ptVariant;
   {$endif}
   tkDynArray: result := ptArray;
-  tkChar, tkClass, tkMethod, tkWChar, tkInterface,
-  tkInteger, tkSet: begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Typ := GetFPCAlignPtr(pointer(Item));
-    {$else}
-    Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-    {$endif}
-    case TOrdType(Typ^) of
+  tkChar: result := ptByte;
+  tkWChar: result := ptWord;
+  tkClass, tkMethod, tkInterface: result := ptPtrInt;
+  tkInteger, tkSet:
+    case GetTypeInfo(Info,[tkInteger,tkSet])^.IntegerType of
     otSByte,otUByte: result := ptByte;
     otSWord,otUWord: result := ptWord;
     otSLong: result := ptInteger;
     otULong: result := ptCardinal;
     end;
-  end;
   tkInt64: result := ptInt64;
   {$ifdef FPC}
   tkBool: result := ptBoolean;
   {$else}
   tkEnumeration:
-    if Item=TypeInfo(boolean) then
+    if Info=TypeInfo(boolean) then
       result := ptBoolean;
       // other enumerates will use TJSONCustomParserCustomSimple below
   {$endif}
-  tkFloat: begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Typ := GetFPCAlignPtr(Item);
-    {$else}
-    Typ := pointer(PtrUInt(@Item.elSize)+Item.NameLen);
-    {$endif}
-    case TFloatType(Typ^) of
+  tkFloat:
+    case GetTypeInfo(Info,tkFloat)^.FloatType of
     ftSingle:   result := ptSingle;
     ftDoub:     result := ptDouble;
     ftCurr:     result := ptCurrency;
@@ -32396,12 +32455,11 @@ begin
     // ftComp: not implemented yet
     end;
   end;
-  end;
 end;
 
 class function TJSONCustomParserRTTI.CreateFromRTTI(
   const PropertyName: RawUTF8; Info: pointer; ItemSize: integer): TJSONCustomParserRTTI;
-var Item: PDynArrayTypeInfo absolute Info;
+var Item: PTypeInfo absolute Info;
     ItemType: TJSONCustomParserRTTIType;
     ItemTypeName: RawUTF8;
     ndx: integer;
@@ -33138,20 +33196,20 @@ end;
 
 procedure TJSONRecordRTTI.FromEnhancedRTTI(
   Props: TJSONCustomParserRTTI; Info: pointer);
-var FieldTable: PFieldTable;
+var FieldTable: PTypeInfo;
     i: integer;
     FieldSize: cardinal;
     RecField: PEnhancedFieldInfo;
     ItemFields: array of PEnhancedFieldInfo;
-    ItemField: PDynArrayTypeInfo;
+    ItemField: PTypeInfo;
     ItemFieldName: RawUTF8;
     ItemFieldSize: cardinal;
     Item, ItemArray: TJSONCustomParserRTTI;
 begin // only tkRecord is needed here
-  FieldTable := RecordTypeInfoFieldTable(Info);
+  FieldTable := GetTypeInfo(Info,tkRecord);
   if FieldTable=nil then
     raise ESynException.CreateUTF8('%.FromEnhancedRTTI(%=record?)',[self,Info]);
-  FieldSize := FieldTable^.Size;
+  FieldSize := FieldTable^.recSize;
   inc(PByte(FieldTable),FieldTable^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
   inc(PByte(FieldTable),FieldTable^.NumOps*sizeof(pointer)); // jump RecOps[]
   if FieldTable^.AllCount=0 then
@@ -33171,7 +33229,7 @@ begin // only tkRecord is needed here
       ItemFieldSize := FieldSize-ItemFields[i].Offset else
       ItemFieldSize := ItemFields[i+1].Offset-ItemFields[i].Offset;
     if ItemFields[i]^.TypeInfo<>nil then
-      ItemField := ItemFields[i]^.TypeInfo^ else
+      ItemField := ItemFields[i]^.TypeInfo{$ifndef FPC}^{$endif} else
       ItemField := nil;
     SetRawUTF8(ItemFieldName,PAnsiChar(@ItemFields[i]^.NameLen)+1,ItemFields[i]^.NameLen);
     Item := AddItemFromRTTI(ItemFieldName,ItemField,ItemFieldSize);
@@ -33179,11 +33237,11 @@ begin // only tkRecord is needed here
     case Item.PropertyType of
     ptArray: begin
       inc(PByte(ItemField),ItemField^.NameLen);
-      ItemArray := AddItemFromRTTI('',ItemField^.elType2^,
+      ItemArray := AddItemFromRTTI('',ItemField^.elType2{$ifndef FPC}^{$endif},
         ItemField^.elSize {$ifdef FPC}and $7FFFFFFF{$endif});
       if (ItemArray.PropertyType=ptCustom) and
          (ItemArray.ClassType=TJSONCustomParserRTTI) then
-        FromEnhancedRTTI(Item,ItemField^.elType2^) else begin
+        FromEnhancedRTTI(Item,ItemField^.elType2{$ifndef FPC}^{$endif}) else begin
         SetLength(Item.fNestedProperty,1);
         Item.fNestedProperty[0] := ItemArray;
         Item.ComputeNestedDataSize;
@@ -36434,10 +36492,13 @@ begin
   result := DynArray.LoadFromJSON(JSON,EndOfObject);
 end;
 
-function DynArraySaveJSON(var Value; TypeInfo: pointer): RawUTF8;
+function DynArraySaveJSON(var Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean): RawUTF8;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
   try
+    if EnumSetsAsText then
+      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
     AddDynArrayJSON(TypeInfo,Value);
     SetText(result);
   finally
@@ -36941,7 +37002,7 @@ end;
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
 var i, n, LenBytes: integer;
     P: PAnsiChar;
-    FieldTable: PFieldTable;
+    nested: PTypeInfo;
     NestedArray: TDynArray;
 begin
   if fValue=nil then begin
@@ -36968,7 +37029,7 @@ begin
   if ElemType=nil then
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
-        [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
+        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
       // binary types: store as once
       n := n*integer(ElemSize);
       MoveFast(P^,Dest^,n);
@@ -37003,15 +37064,15 @@ begin
       end;
     {$endif}
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      FieldTable := ElemType;
+      nested := ElemType; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      FieldTable := GetFPCAlignPtr(FieldTable);
+      nested := GetFPCAlignPtr(nested);
       {$else}
-      inc(PtrUInt(FieldTable),FieldTable^.NameLen);
+      inc(PtrUInt(nested),nested^.NameLen);
       {$endif}
-      if FieldTable^.ManagedCount=0 then begin
+      if nested^.ManagedCount=0 then begin
         {$ifndef LVCL}
-        assert(FieldTable^.Size=ElemSize);
+        assert(nested^.recSize=ElemSize);
         {$endif}
         n := n*integer(ElemSize);
         MoveFast(P^,Dest^,n);
@@ -37054,7 +37115,7 @@ begin
   if ElemType=nil then
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
-        [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else
+        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of
@@ -37112,10 +37173,12 @@ begin
       raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
-function TDynArray.SaveToJSON: RawUTF8;
+function TDynArray.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
   try
+    if EnumSetsAsText then
+      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
     AddDynArrayJSON(self);
     SetText(result);
   finally
@@ -37405,7 +37468,7 @@ begin
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
-var FieldTable: PFieldTable;
+var nested: PTypeInfo;
 label Bin, Rec;
 begin
   if fKnownType<>djNone then begin
@@ -37461,15 +37524,15 @@ Bin:  case ElemSize of
       {$endif}
       tkInterface: fKnownType := djInterface;
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        FieldTable := ElemType;
+        nested := ElemType; // inlined GetTypeInfo()
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-rec:    FieldTable := GetFPCAlignPtr(FieldTable);
+rec:    nested := GetFPCAlignPtr(nested);
         {$else}
-rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
+rec:    inc(PtrUInt(nested),(nested^.NameLen));
         {$endif}
-        if FieldTable^.ManagedCount=0 then // only binary content -> full content
+        if nested^.ManagedCount=0 then // only binary content -> full content
           goto Bin;
-        with FieldTable^.ManagedFields[0] do
+        with nested^.ManagedFields[0] do
         case Offset of
         0: case TypeInfo^.Kind of
             tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
@@ -37478,7 +37541,7 @@ rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
             tkUString: fKnownType := djString;
             {$endif}
             tkRecord{$ifdef FPC},tkObject{$endif}: begin
-              FieldTable := pointer(TypeInfo{$ifndef FPC}^{$endif});
+              nested := pointer(TypeInfo{$ifndef FPC}^{$endif});
               goto Rec;
             end;
             {$ifndef NOVARIANTS}
@@ -37486,14 +37549,14 @@ rec:    inc(PtrUInt(FieldTable),(FieldTable^.NameLen));
             {$endif}
             else begin
               {$ifdef FPC} // unmanaged fields have RTTI in newest FPC! :)
-              if (FieldTable^.ManagedCount<>1) and // emulate Delphi behavior
-                 (FieldTable^.ManagedFields[1].TypeInfo^.Kind in tkManagedTypes) then
-              case FieldTable^.ManagedFields[1].Offset of
+              if (nested^.ManagedCount<>1) and // emulate Delphi behavior
+                 (nested^.ManagedFields[1].TypeInfo^.Kind in tkManagedTypes) then
+              case nested^.ManagedFields[1].Offset of
                 1: fKnownType := djByte;
                 2: fKnownType := djWord;
                 4: fKnownType := djInteger;
                 8: fKnownType := djInt64;
-                else fKnownSize := FieldTable^.ManagedFields[1].Offset;
+                else fKnownSize := nested^.ManagedFields[1].Offset;
               end else
               {$endif}
               goto bin;
@@ -37624,24 +37687,20 @@ end;
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
   var Count, ElemSize: integer): pointer;
 var Hash: PCardinalArray absolute Source;
-    Typ: PDynArrayTypeInfo absolute aTypeInfo;
+    info: PTypeInfo;
 begin
   result := nil;
-  if (aTypeInfo=nil) or (Typ^.kind<>tkDynArray) then
+  info := GetTypeInfo(aTypeInfo,tkDynArray);
+  if info=nil then
     exit; // invalid type information
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Typ := GetFPCAlignPtr(Typ);
-  {$else}
-  inc(PtrUInt(Typ),Typ^.NameLen);
-  {$endif}
-  if (Typ^.ElType<>nil) or (Source=nil) or
-     (Source[0]<>AnsiChar(Typ^.elSize)) or (Source[1]<>#0) then
+  if (info^.ElType<>nil) or (Source=nil) or
+     (Source[0]<>AnsiChar(info^.elSize)) or (Source[1]<>#0) then
     exit; // invalid type information or Source content
-  ElemSize := Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
   if (Count<>0) and (Hash32(@Hash[1],
-      Count*Typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif})=Hash[0]) then
+      Count*info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif})=Hash[0]) then
     result := @Hash[1]; // returns valid Source content
 end;
 
@@ -37686,7 +37745,7 @@ end;
 function TDynArray.LoadFrom(Source: PAnsiChar): PAnsiChar;
 var i, n, LenBytes: integer;
     P: PAnsiChar;
-    FieldTable: PFieldTable;
+    infoNested: PTypeInfo;
     Hash: PCardinalArray;
     NestedArray: TDynArray;
 begin
@@ -37721,7 +37780,7 @@ begin
   if ElemType=nil then
   if GetIsObjArray then
     raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
-      [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^]) else begin
+      [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
     // binary type was stored as once
     n := n*integer(ElemSize);
     MoveFast(Source^,P^,n);
@@ -37739,7 +37798,7 @@ begin
         { Delphi 2009+: set Code page for this AnsiString }
         if LenBytes<>0 then
           SetCodePage(PRawByteString(P)^,PWord(PtrUInt(ElemType)+
-            PDynArrayTypeInfo(ElemType)^.NameLen+2)^,false);
+            PTypeInfo(ElemType)^.NameLen+2)^,false);
         {$endif}
       end;
       tkWString:
@@ -37753,15 +37812,15 @@ begin
       inc(P,sizeof(PtrUInt));
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      FieldTable := ElemType;
+      infoNested := ElemType; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      FieldTable := GetFPCAlignPtr(FieldTable);
+      infoNested := GetFPCAlignPtr(infoNested);
       {$else}
-      inc(PtrUInt(FieldTable),FieldTable^.NameLen);
+      inc(PtrUInt(infoNested),infoNested^.NameLen);
       {$endif}
-      if FieldTable^.ManagedCount=0 then begin
+      if infoNested^.ManagedCount=0 then begin
         {$ifndef LVCL}
-        assert(FieldTable^.Size=ElemSize);
+        assert(infoNested^.recSize=ElemSize);
         {$endif}
         n := n*integer(ElemSize);
         MoveFast(Source^,P^,n);
@@ -38271,19 +38330,16 @@ procedure TDynArray.Init(aTypeInfo: pointer; var aValue; aCountPointer: PInteger
 begin
   fValue := @aValue;
   fTypeInfo := aTypeInfo;
-  with PDynArrayTypeInfo(aTypeInfo)^ do begin
-    if kind<>tkDynArray then
-      raise ESynException.CreateUTF8('Not a dynamic array: %',[PShortString(@NameLen)^]);
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    aTypeInfo := GetFPCAlignPtr(aTypeInfo);
-    {$else}
-    inc(PtrUInt(aTypeInfo),NameLen);
-    {$endif}
-  end;
-  with PDynArrayTypeInfo(aTypeInfo)^ do begin
-    fElemSize := elSize {$ifdef FPC}and $7FFFFFFF{$endif};
-    fElemType := elType;
-  end;
+  if PTypeKind(aTypeInfo)^<>tkDynArray then // inlined GetTypeInfo()
+    raise ESynException.CreateUTF8('Not a dynamic array: %',
+      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^]);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  aTypeInfo := GetFPCAlignPtr(aTypeInfo);
+  {$else}
+  inc(PtrUInt(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
+  {$endif}
+  fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  fElemType := PTypeInfo(aTypeInfo)^.elType;
   if fElemType<>nil then
     {$ifndef FPC}
     fElemType := PPointer(fElemType)^;
@@ -38299,7 +38355,7 @@ begin
   fSorted := false;
   fKnownType := djNone;
   fIsObjArray := oaUnknown;
-end;
+end;                
 
 procedure TDynArray.InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
   aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
@@ -38402,7 +38458,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   NeededSize := NewLength*ElemSize+Sizeof(TDynArrayRec);
   if NeededSize>1024*1024*512 then // max allowed memory block is 512MB
     raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
-      [PShortString(@PDynArrayTypeInfo(ArrayType).NameLen)^,NewLength]);
+      [PShortString(@PTypeInfo(ArrayType).NameLen)^,NewLength]);
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
     if NewLength<OldLength then
@@ -38665,7 +38721,7 @@ begin
       { Delphi 2009+: set Code page for this AnsiString }
       if PPtrUInt(@Elem)^<>0 then
         SetCodePage(RawByteString(Elem),PWord(PtrUInt(ElemType)+
-          PDynArrayTypeInfo(ElemType)^.NameLen+2)^,false);
+          PTypeInfo(ElemType)^.NameLen+2)^,false);
       {$endif}
     end;
     tkWString: // WideString internal length is in bytes
@@ -39517,6 +39573,8 @@ function ObjArrayToJSON(const aObjArray; Options: TTextWriterWriteObjectOptions)
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
+    if woEnumSetsAsText in Options then
+      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
     AddObjArrayJSON(aObjArray,Options);
     SetText(result);
   finally
@@ -40408,7 +40466,7 @@ begin
   result := false;
   if aTypeInfo=nil then
     exit;
-  case PFieldTable(aTypeInfo)^.kind of
+  case PTypeKind(aTypeInfo)^ of
   tkRecord{$ifdef FPC},tkObject{$endif}:
     ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
   tkDynArray:
@@ -40430,7 +40488,7 @@ begin
   result := nil;
   if aTypeInfo=nil then
     exit;
-  case PFieldTable(aTypeInfo)^.kind of
+  case PTypeKind(aTypeInfo)^ of
   tkRecord{$ifdef FPC},tkObject{$endif}:
     ndx := GlobalJSONCustomParsers.RecordSearch(aTypeInfo,aAddIfNotExisting);
   tkDynArray:
@@ -40462,7 +40520,7 @@ procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
 var customWriter: TDynArrayJSONCustomWriter;
 begin
   if (self=nil) or (@Rec=nil) or (TypeInfo=nil) or
-     not(PDynArrayTypeInfo(TypeInfo)^.kind in tkRecordTypes) then
+     not(PTypeKind(TypeInfo)^ in tkRecordTypes) then
     raise ESynException.CreateUTF8('Invalid %.AddRecordJSON(%)',[self,TypeInfo]);
   if GlobalJSONCustomParsers.RecordSearch(TypeInfo,customWriter,nil) then
     customWriter(self,Rec) else
@@ -40471,17 +40529,12 @@ end;
 
 procedure TTextWriter.AddVoidRecordJSON(TypeInfo: pointer);
 var tmp: TBytes;
-    typ: PDynArrayTypeInfo;
+    info: PTypeInfo;
 begin
-  typ := TypeInfo;
-  if (self=nil) or (typ=nil) or not(typ^.kind in tkRecordTypes) then
+  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  if (self=nil) or (info=nil) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  typ := GetFPCAlignPtr(typ);
-  {$else}
-  inc(PtrUInt(typ),typ^.NameLen);
-  {$endif}
-  SetLength(tmp,typ^.elSize {$ifdef FPC}and $7FFFFFFF{$endif});
+  SetLength(tmp,info^.recSize {$ifdef FPC}and $7FFFFFFF{$endif});
   AddRecordJSON(tmp[0],TypeInfo);
 end;
 
@@ -40593,16 +40646,47 @@ begin
   Add(']');
 end;
 
-procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
+procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue;
+  EnumSetsAsText,FullSetsAsStar: boolean);
+var max, i: Integer;
+    PS: PShortString;
 begin
   case PTypeKind(aTypeInfo)^ of
     tkClass:
       WriteObject(TObject(aValue),[woFullExpand]);
-    tkEnumeration: begin
-      Add('"');
-      AddShort(GetEnumName(aTypeInfo,byte(aValue))^);
-      Add('"');
-    end;
+    tkEnumeration:
+      if EnumSetsAsText then begin
+        Add('"');
+        AddTrimLeftLowerCase(GetEnumName(aTypeInfo,byte(aValue)));
+        Add('"');
+      end else
+        AddU(byte(aValue));
+    tkSet:
+      if GetSetInfo(aTypeInfo,max,PS) then
+        if EnumSetsAsText then begin
+          Add('[');
+          if FullSetsAsStar and GetAllBits(cardinal(aValue),max+1) then
+            AddShort('"*"') else begin
+            for i := 0 to max do begin
+              if GetBit(aValue,i) then begin
+                Add('"');
+                AddTrimLeftLowerCase(PS);
+                Add('"',',');
+              end;
+              inc(PByte(PS),ord(PS^[0])+1); // next short string
+            end;
+            CancelLastComma;
+          end;
+          Add(']');
+        end else
+        if max<8 then
+          AddU(byte(aValue)) else
+        if max<16 then
+          AddU(word(aValue)) else
+        if max<32 then
+          AddU(cardinal(aValue)) else
+          Add(Int64(aValue))
+      else AddShort('null');
     tkRecord{$ifdef FPC},tkObject{$endif}:
       AddRecordJSON(aValue,aTypeInfo);
     tkDynArray:
@@ -41014,7 +41098,7 @@ begin
     // add hexa characters
     SynCommons.BinToHex(PAnsiChar(Bin),PAnsiChar(B),ChunkBytes);
     inc(B,ChunkBytes*2);
-    inc(PtrInt(Bin),ChunkBytes);
+    inc(PByte(Bin),ChunkBytes);
     dec(BinBytes,ChunkBytes);
     if BinBytes=0 then break;
     // Flush writes B-buf+1 -> special one below:
@@ -41309,7 +41393,7 @@ begin
       inc(B,i);
       if i=Len then
         break;
-      inc(PtrInt(P),i);
+      inc(PByte(P),i);
       dec(Len,i);
       // FlushInc writes B-buf+1 -> special one below:
       inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf));
@@ -42076,7 +42160,8 @@ begin
     fEchoStart := 0;
   end;
   inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
-  if (not fFlushToStreamNoAutoResize) and (fTempBufSize<49152) and
+  if (not (twoFlushToStreamNoAutoResize in fCustomOptions)) and
+     (fTempBufSize<49152) and
      (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
     FreeMem(fTempBuf); // with big content (256KB) comes bigger buffer (64KB)
     fTempBufSize := 65536;
@@ -42109,7 +42194,7 @@ end;
 
 procedure TTextWriter.FlushFinal;
 begin
-  fFlushToStreamNoAutoResize := true;
+  Include(fCustomOptions,twoFlushToStreamNoAutoResize);
   FlushToStream;
 end;
 

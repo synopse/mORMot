@@ -3591,7 +3591,7 @@ begin
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
     fWriter.AddFieldName(aName);
-    fWriter.AddTypedJSON(aTypeInfo,aValue);
+    fWriter.AddTypedJSON(aTypeInfo,aValue,true,true);
   finally
     LogTrailerUnLock(Level);
   end;

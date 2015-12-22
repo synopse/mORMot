@@ -4466,7 +4466,7 @@ begin
   W.AddShort('collection:"');
   W.AddJSONEscape(pointer(fFullCollectionName));
   W.AddShort('",opCode:');
-  W.AddTypedJSON(TypeInfo(TMongoOperation),fRequestOpCode);
+  W.AddTypedJSON(TypeInfo(TMongoOperation),fRequestOpCode,true,false);
   W.AddShort(',requestID:');
   W.AddU(fRequestID);
   if fResponseTo<>0 then begin

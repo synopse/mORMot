@@ -6755,6 +6755,7 @@ begin
      Check(GetEnumNameValue(tmp)=i);
      Check(GetEnumNameValue(pointer(tmp))=i);
      Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TOrdType),i)^)=i);
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp),true)=i);
      tmp := GetEnumName(i)^;
      Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp))=i);
   end;
