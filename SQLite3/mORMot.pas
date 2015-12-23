@@ -45694,7 +45694,8 @@ begin
                (Kind=tkEnumeration) and (P^.PropType^=TypeInfo(boolean)){$endif} then
               Add(boolean(V)) else
               if (woFullExpand in Options) or (woHumanReadable in Options) or
-                 (woEnumSetsAsText in Options) then
+                 (woEnumSetsAsText in Options) or
+                 (twoEnumSetsAsTextInRecord in CustomOptions) then
               case Kind of
               tkEnumeration:
               with P^.PropType^.EnumBaseType^ do begin
