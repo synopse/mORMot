@@ -138,7 +138,8 @@ begin
       result := true;
     finally
       FreeAndNil(AdminControlConnecting);
-      fClient.OnIdle := nil; // back to default blocking behavior (safer UI)
+      if fClient <> nil then
+        fClient.OnIdle := nil; // back to default blocking behavior (safer UI)
     end;
   except
     on E: Exception do begin
