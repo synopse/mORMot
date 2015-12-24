@@ -5832,7 +5832,7 @@ The following {\i NoSQL} engines can be accessed from {\i mORMot}'s {\i Object D
 |{\i @*MongoDB@}|#1 NoSQL database engine
 |%
 We can in fact consider our {\f1\fs20 @**TSQLRestStorageInMemory@} instance, and its {\f1\fs20 TObjectList} storage, as a {\i NoSQL} very fast in-memory engine, written in pure Delphi. See @57@ for details about this feature.
-{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
+{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2015, {\i MongoDB} is at 4th place of the most popular types of database management systems, and at first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
 - Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
@@ -5877,6 +5877,13 @@ Note that for this low-level command, we used a {\f1\fs20 TDocVariant}, and its 
 In fact, if you put your mouse over the {\f1\fs20 res} variable during debugging, you will see the following JSON content:
 µ{"system":{"currentTime":"2014-05-06T15:24:25","hostname":"Acer","cpuAddrSize":64,"memSizeMB":3934,"numCores":4,"cpuArch":"x86_64","numaEnabled":false},"os":{"type":"Windows","name":"Microsoft Windows 7","version":"6.1 SP1 (build 7601)"},"extra":{"pageSize":4096},"ok":1}
 And we simply access to the server time by writing {\f1\fs20 res.system.currentTime}.
+Here connection was made anonymously. It would work only if the {\f1\fs20 mongod} instance is running on the same computer. Safe remote connection, including user authentication, could be made via the {\f1\fs20 TMongoClient.OpenAuth()} method: it supports the latest {\f1\fs20 SCRAM-SHA-1} challenge-response mechanism (supported since {\i MongoDB} 3.x), or the deprecated {\f1\fs20 MONGODB-CR} (for older versions).
+!    ...
+!  Client := TMongoClient.Create('localhost',27017);
+!  try
+!    DB := Client.OpenAuth('mydb','mongouser','mongopwd');
+!    ...
+For safety reasons, never let a {\i MongoDB} server be remotely accessible without proper authentication, as stated by @http://docs.mongodb.org/manual/administration/security-access-control The {\f1\fs20 TMongoDatabase.CreateUser()}, {\f1\fs20 CreateUserForThisDatabase()} and {\f1\fs20 DropUser()} methods allow to easily manage credentials from your applications.
 :  Adding some documents to the collection
 We will now explain how to add documents to a given collection.
 We assume that we have a {\f1\fs20 DB: TMongoDatabase} instance available. Then we will create the documents with a {\f1\fs20 TDocVariant} instance, which will be filled via late-binding, and via a {\f1\fs20 doc.Clear} pseudo-method used to flush any previous property value:
