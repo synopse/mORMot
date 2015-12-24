@@ -17369,6 +17369,7 @@ end;
 
 function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
   out Names: PShortString): boolean;
+{$ifdef HASINLINE} inline;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkEnumeration);
@@ -17383,6 +17384,29 @@ begin
   end else
     result := false;
 end;
+{$else}
+asm // eax=aTypeInfo edx=MaxValue ecx=Names
+    test eax,eax
+    jz @z
+    cmp byte ptr [eax],tkEnumeration
+    jnz @n
+    push ecx
+    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
+    mov eax,[eax+ecx+TTypeInfo.EnumBaseType]
+    mov eax,[eax]
+    mov cl,[eax+TTypeInfo.NameLen]
+    add eax,ecx
+    mov ecx,[eax+TTypeInfo.MaxValue]
+    mov [edx],ecx
+    pop ecx
+    lea eax,[eax+TTypeInfo.NameList]
+    mov [ecx],eax
+    mov al,1
+    ret
+@n: xor eax,eax
+@z:
+end;
+{$endif}
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
   out Names: PShortString): boolean;
@@ -17400,6 +17424,7 @@ end;
 
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 const NULL_SHORTSTRING: string[1] = '';
+{$ifdef HASINLINE}
 var MaxValue: integer;
 begin
   if GetEnumInfo(aTypeInfo,MaxValue,result) and
@@ -17410,6 +17435,47 @@ begin
     end else
     result := @NULL_SHORTSTRING;
 end;
+{$else}
+asm // eax=aTypeInfo edx=aIndex
+    or     eax,eax
+    jz     @0
+    cmp    byte ptr [eax],tkEnumeration
+    jnz    @0
+    movzx  ecx,byte ptr [eax+TTypeInfo.NameLen]
+    mov    eax,[eax+ecx+TTypeInfo.EnumBaseType]
+    mov    eax,[eax]
+    mov    cl,[eax+TTypeInfo.NameLen]
+    cmp    edx,[eax+ecx+TTypeInfo.MaxValue]
+    ja     @0
+    lea    eax,[eax+ecx+TTypeInfo.NameList]
+    or     edx,edx
+    jz     @z
+    push   edx
+    shr    edx,2
+    jz     @1
+@4: dec    edx
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    jnz @4
+    pop    edx
+    and    edx,3
+    jnz    @s
+@z: ret
+@1: pop    edx
+@s: mov    cl,[eax]
+    dec    edx
+    lea    eax,[eax+ecx+1] // next short string
+    jnz    @s
+    ret
+@0: lea    eax,NULL_SHORTSTRING
+end;
+{$endif}
 
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
