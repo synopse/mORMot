@@ -4135,7 +4135,7 @@ begin
         [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.Value]));
       obfusc := gen.ToObfuscated(i1.Value);
       check(gen.FromObfuscated(obfusc,i3));
-      check(i1.Equal(i3));
+      check(i1.Value=i3);
       check(Length(obfusc)=24);
       inc(obfusc[12]);
       check(not gen.FromObfuscated(obfusc,i3));
@@ -4148,7 +4148,7 @@ begin
   try
     i3 := 0;
     check(gen.FromObfuscated(obfusc,i3),'SharedObfuscationKey');
-    check(i1.Equal(i3));
+    check(i1.Value=i3);
   finally
     gen.Free;
   end;
@@ -6760,8 +6760,6 @@ begin
      tmp := GetEnumName(i)^;
      Check(SynCommons.GetEnumNameValue(TypeInfo(TSynLogInfo),pointer(tmp),length(tmp))=i);
   end;
-  Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
-    PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
   for astext := false to true do begin
     integer(s) := 0;
     for i := -1 to ord(high(TSynLogInfo)) do begin
@@ -6771,15 +6769,19 @@ begin
       if astext then
         case i of
         -1: Check(tmp='[]');
-        0: Check(tmp='["None"]');
+        0:  Check(tmp='["None"]');
         else if i=ord(high(TSynLogInfo)) then
-          Check(tmp='["*"]');
+            Check(tmp='["*"]');
         end else
         Check(GetInteger(pointer(tmp))=integer(s));
       P := pointer(tmp);
       Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
+      if astext then
+        Check(eoo=']');
     end;
   end;
+  Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
+    PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
   with PTypeInfo(TypeInfo(TSQLRecordTest))^ do begin
     Check(InheritsFrom(TSQLRecordTest));
     Check(InheritsFrom(TSQLRecord));

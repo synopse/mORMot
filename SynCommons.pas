@@ -14093,10 +14093,7 @@ type
     /// extract the UTC generation timestamp from the identifier
     function CreateTimeLog: TTimeLog;
     /// compare two Identifiers
-    function Equal(const Another: TSynUniqueIdentifierBits): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// compare this Identifier with a type-casted Int64 value
-    function Equal(const Another: Int64): boolean; overload;
+    function Equal(const Another: TSynUniqueIdentifierBits): boolean;
       {$ifdef HASINLINE}inline;{$endif}
   end;
   {$A+}
@@ -17569,7 +17566,9 @@ begin
           exit;
         end;
         TextLen := StrLen(Text);
-        i := FindShortStringListExact(Names,MaxValue,Text,TextLen);
+        if Text^ in ['a'..'z'] then
+          i := FindShortStringListExact(Names,MaxValue,Text,TextLen) else
+          i := -1;
         if i<0 then
           i := FindShortStringListTrimLowerCase(Names,MaxValue,Text,TextLen);
         if i>=0 then
@@ -51384,11 +51383,6 @@ end;
 function TSynUniqueIdentifierBits.Equal(const Another: TSynUniqueIdentifierBits): boolean;
 begin
   result := Value=Another.Value;
-end;
-
-function TSynUniqueIdentifierBits.Equal(const Another: Int64): boolean;
-begin
-  result := Value=Another;
 end;
 
 procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
