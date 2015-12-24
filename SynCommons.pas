@@ -17466,7 +17466,10 @@ begin
     P := GotoNextNotSpace(P);
     if P^='[' then begin
       P := GotoNextNotSpace(P+1);
-      if P^=']' then GotoNextNotSpace(P+1) else
+      if P^=']' then begin
+        EndOfObject := ']';
+        P := GotoNextNotSpace(P+1);
+      end else
       repeat
         Text := GetJSONField(P,P,@wasString,@EndOfObject);
         if (Text=nil) or not wasString then begin
