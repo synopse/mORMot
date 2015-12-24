@@ -14081,20 +14081,22 @@ type
     // - is just a wrapper around PInt64(@self)^
     procedure From(const AID: TSynUniqueIdentifier);
       {$ifdef HASINLINE}inline;{$endif}
-{$ifndef NOVARIANTS}
+    {$ifndef NOVARIANTS}
     /// convert this identifier as an explicit TDocVariant JSON object
     // - returns e.g.
     // ! {"Created":"2015-12-15T20:15:05","Identifier":10,"Counter":3391}
     function AsVariant: variant;
-{$endif NOVARIANTS}
+    {$endif NOVARIANTS}
     /// extract the UTC generation timestamp from the identifier as TDateTime
     function CreateUTCDateTime: TDateTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the UTC generation timestamp from the identifier
     function CreateTimeLog: TTimeLog;
+    {$ifndef DELPHI5OROLDER}
     /// compare two Identifiers
     function Equal(const Another: TSynUniqueIdentifierBits): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
   end;
   {$A+}
   
@@ -37583,8 +37585,10 @@ begin
       fKnownType := djRawByteString else
     if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
       fKnownType := djSynUnicode else
+    {$ifndef DELPHI5OROLDER}
     if fTypeInfo=TypeInfo(TInterfaceDynArray) then
       fKnownType := djInterface
+    {$endif}
   {$ifdef CPU64} else {$else} ; 8: {$endif}
      if fTypeInfo=TypeInfo(TDoubleDynArray) then
        fKnownType := djDouble else
@@ -51380,10 +51384,12 @@ begin
 end;
 {$endif NOVARIANTS}
 
+{$ifndef DELPHI5OROLDER}
 function TSynUniqueIdentifierBits.Equal(const Another: TSynUniqueIdentifierBits): boolean;
 begin
   result := Value=Another.Value;
 end;
+{$endif}
 
 procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
 begin

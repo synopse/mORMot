@@ -3958,6 +3958,55 @@ begin
   end;
 end;
 
+procedure TTestLowLevelCommon._TSynUniqueIdentifier;
+const JAN2015_UNIX = 1420070400;
+var gen: TSynUniqueIdentifierGenerator;
+    i1,i2: TSynUniqueIdentifierBits;
+    i3: TSynUniqueIdentifier;
+    i: integer;
+    {$ifndef NOVARIANTS}json,{$endif} obfusc: RawUTF8;
+begin
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    for i := 1 to 100000 do begin
+      gen.ComputeNew(i1);
+      gen.ComputeNew(i2);
+      check(i1.ProcessID=10);
+      check(i2.ProcessID=10);
+      check(i1.UnixCreateTime>JAN2015_UNIX);
+      check(i1.UnixCreateTime<=i2.UnixCreateTime);
+      check(i1.Value<i2.Value);
+      {$ifndef NOVARIANTS}
+      check(not i1.Equal(i2));
+      i2.From(i1.Value);
+      check(i1.Equal(i2));
+      json := VariantSaveJSON(i1.AsVariant);
+      check(VariantSaveJSON(i2.AsVariant)=json);
+      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
+        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.Value]));
+      {$endif}
+      obfusc := gen.ToObfuscated(i1.Value);
+      check(gen.FromObfuscated(obfusc,i3));
+      check(i1.Value=i3);
+      check(Length(obfusc)=24);
+      inc(obfusc[12]);
+      check(not gen.FromObfuscated(obfusc,i3));
+      dec(obfusc[12]);
+    end;
+  finally
+    gen.Free;
+  end;
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    i3 := 0;
+    check(gen.FromObfuscated(obfusc,i3),'SharedObfuscationKey');
+    check(i1.Value=i3);
+  finally
+    gen.Free;
+  end;
+end;
+
+
 {$ifndef DELPHI5OROLDER}
 
 type
@@ -4106,52 +4155,6 @@ begin
     CheckItem(a[i],a[i].fID);
   for i := 1 to da.Count-1 do
     Check(a[i-1].FirstName<a[i].FirstName);
-end;
-
-procedure TTestLowLevelCommon._TSynUniqueIdentifier;
-const JAN2015_UNIX = 1420070400;
-var gen: TSynUniqueIdentifierGenerator;
-    i1,i2: TSynUniqueIdentifierBits;
-    i3: TSynUniqueIdentifier;
-    i: integer;
-    json, obfusc: RawUTF8;
-begin
-  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
-  try
-    for i := 1 to 100000 do begin
-      gen.ComputeNew(i1);
-      gen.ComputeNew(i2);
-      check(i1.ProcessID=10);
-      check(i2.ProcessID=10);
-      check(i1.UnixCreateTime>JAN2015_UNIX);
-      check(i1.UnixCreateTime<=i2.UnixCreateTime);
-      check(i1.Value<i2.Value);
-      check(not i1.Equal(i2));
-      i2.From(i1.Value);
-      check(i1.Equal(i2));
-      json := VariantSaveJSON(i1.AsVariant);
-      check(VariantSaveJSON(i2.AsVariant)=json);
-      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
-        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.Value]));
-      obfusc := gen.ToObfuscated(i1.Value);
-      check(gen.FromObfuscated(obfusc,i3));
-      check(i1.Value=i3);
-      check(Length(obfusc)=24);
-      inc(obfusc[12]);
-      check(not gen.FromObfuscated(obfusc,i3));
-      dec(obfusc[12]);
-    end;
-  finally
-    gen.Free;
-  end;
-  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
-  try
-    i3 := 0;
-    check(gen.FromObfuscated(obfusc,i3),'SharedObfuscationKey');
-    check(i1.Value=i3);
-  finally
-    gen.Free;
-  end;
 end;
 
 
@@ -6773,7 +6776,7 @@ begin
         else if i=ord(high(TSynLogInfo)) then
             Check(tmp='["*"]');
         end else
-        Check(GetInteger(pointer(tmp))=integer(s));
+        Check(GetCardinal(pointer(tmp))=cardinal(s));
       P := pointer(tmp);
       Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
       if astext then
