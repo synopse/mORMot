@@ -582,6 +582,7 @@ unit SynCommons;
     class to replace CreateInRawByteStringStream and CreateInMemoryStream methods
   - now TFileBufferReader.Read() allows forward reading when Data=nil
   - added RecordSaveJSON() function which follows TTextWriter.AddRecordJSON() format
+  - added SaveJSON() function to handle any kind of complex types from RTTI
   - added TSynNameValue.InitFromIniSection() method and optional default value
     parameter to TSynNameValue.Value()
   - added TSynNameValue.Delete() and SetBlobDataPtr() methods
@@ -5469,6 +5470,23 @@ function StringToGUID(const text: string): TGUID;
 // is not a valid TGUID
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
 
+
+/// serialize most kind of content as JSON, using its RTTI
+// - is just a wrapper around TTextWriter.AddTypedJSON()
+// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
+// tkVariant kind of content - other kinds would return 'null'
+procedure SaveJSON(const Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean; var result: RawUTF8); overload;
+
+/// serialize most kind of content as JSON, using its RTTI
+// - is just a wrapper around TTextWriter.AddTypedJSON()
+// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
+// tkVariant kind of content - other kinds would return 'null'
+function SaveJSON(const Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean=false): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties
@@ -5518,6 +5536,7 @@ function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
 // for nested enumerates and sets)
 function RecordSaveJSON(const Rec; TypeInfo: pointer;
   EnumSetsAsText: boolean=false): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - return nil if the Source buffer is incorrect
@@ -5595,8 +5614,9 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
 // (following EnumSetsAsText optional parameter for nested enumerates and sets)
-function DynArraySaveJSON(var Value; TypeInfo: pointer;
+function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean=false): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// serialize a dynamic array content, supplied as raw binary, as JSON
 // - Value shall be set to the source dynamic array field
@@ -6893,7 +6913,7 @@ type
     // temporary TDynArray wrapper on the stack
     // - to be used e.g. for custom record JSON serialization, within a
     // TDynArrayJSONCustomWriter callback
-    procedure AddDynArrayJSON(aTypeInfo: pointer; var aValue); overload;
+    procedure AddDynArrayJSON(aTypeInfo: pointer; const aValue); overload;
     {$ifdef UNDIRECTDYNARRAY}
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
@@ -17368,7 +17388,7 @@ begin
 end;
 
 function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;
+  out Names: PShortString): boolean;    
 {$ifdef HASINLINE} inline;
 var info: PTypeInfo;
 begin
@@ -31765,6 +31785,26 @@ end;
 
 { ************  Custom record / dynamic array JSON serialization }
 
+procedure SaveJSON(const Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean; var result: RawUTF8);
+begin
+  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  try
+    if EnumSetsAsText then
+      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
+    AddTypedJSON(TypeInfo,Value,EnumSetsAsText,true);
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
+function SaveJSON(const Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean=false): RawUTF8;
+begin
+  SaveJSON(Value,TypeInfo,EnumSetsAsText,result);
+end;
+
 type
   /// information about one customized JSON serialization
   TJSONCustomParserRegistration = record
@@ -32078,15 +32118,7 @@ end;
 
 function RecordSaveJSON(const Rec; TypeInfo: pointer; EnumSetsAsText: boolean): RawUTF8;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
-  try
-    if EnumSetsAsText then
-      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
-    AddRecordJSON(Rec,TypeInfo);
-    SetText(result);
-  finally
-    Free;
-  end;
+  SaveJSON(Rec,TypeInfo,EnumSetsAsText,result);
 end;
 
 const
@@ -36561,18 +36593,10 @@ begin
   result := DynArray.LoadFromJSON(JSON,EndOfObject);
 end;
 
-function DynArraySaveJSON(var Value; TypeInfo: pointer;
+function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
-  try
-    if EnumSetsAsText then
-      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
-    AddDynArrayJSON(TypeInfo,Value);
-    SetText(result);
-  finally
-    Free;
-  end;
+  SaveJSON(Value,TypeInfo,EnumSetsAsText,result);
 end;
 
 function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
@@ -40679,10 +40703,10 @@ begin
 end;
 {$endif NOVARIANTS}
 
-procedure TTextWriter.AddDynArrayJSON(aTypeInfo: pointer; var aValue);
+procedure TTextWriter.AddDynArrayJSON(aTypeInfo: pointer; const aValue);
 var DynArray: TDynArray;
 begin
-  DynArray.Init(aTypeInfo,aValue);
+  DynArray.Init(aTypeInfo,pointer(@aValue)^);
   AddDynArrayJSON(DynArray);
 end;
 

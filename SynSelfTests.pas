@@ -6737,16 +6737,17 @@ end;
 
 {$endif LVCL}
 
-type
-  TOrdTypeSet = set of TOrdType;
-
 procedure TTestLowLevelTypes.RTTI;
 var i: Integer;
     tmp: RawUTF8;
     auto: TPersistentAutoCreateFieldsTest;
+    s: TSynLogInfos;
+    astext: boolean;
+    P: PUTF8Char;
+    eoo: AnsiChar;
 begin
-  with PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType^ do
-    for i := 0 to integer(high(TOrdType)) do begin
+  with PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
+    for i := 0 to integer(high(TSynLogInfo)) do begin
 {$ifdef VERBOSE}writeln(i,' ',GetEnumName(i)^, ' ',GetEnumNameTrimed(i));{$endif}
      tmp := GetEnumNameTrimed(i);
      Check(GetEnumNameValue(GetEnumName(i)^)=i);
@@ -6754,13 +6755,31 @@ begin
      Check(GetEnumNameTrimedValue(pointer(tmp))=i);
      Check(GetEnumNameValue(tmp)=i);
      Check(GetEnumNameValue(pointer(tmp))=i);
-     Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TOrdType),i)^)=i);
-     Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp),true)=i);
+     Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TSynLogInfo),i)^)=i);
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TSynLogInfo),pointer(tmp),length(tmp),true)=i);
      tmp := GetEnumName(i)^;
-     Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp))=i);
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TSynLogInfo),pointer(tmp),length(tmp))=i);
   end;
-  Check(PTypeInfo(TypeInfo(TOrdTypeSet))^.SetEnumType=
-    PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType);
+  Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
+    PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
+  for astext := false to true do begin
+    integer(s) := 0;
+    for i := -1 to ord(high(TSynLogInfo)) do begin
+      if i>=0 then
+        SetBit(s,i);
+      tmp := SaveJSON(s,TypeInfo(TSynLogInfos),astext);
+      if astext then
+        case i of
+        -1: Check(tmp='[]');
+        0: Check(tmp='["None"]');
+        else if i=ord(high(TSynLogInfo)) then
+          Check(tmp='["*"]');
+        end else
+        Check(GetInteger(pointer(tmp))=integer(s));
+      P := pointer(tmp);
+      Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
+    end;
+  end;
   with PTypeInfo(TypeInfo(TSQLRecordTest))^ do begin
     Check(InheritsFrom(TSQLRecordTest));
     Check(InheritsFrom(TSQLRecord));
