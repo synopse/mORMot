@@ -1631,7 +1631,7 @@ You may also trans-type your {\f1\fs20 variant} instance into a {\f1\fs20 TDocVa
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
 By definition, trans-typing via a {\f1\fs20 TDocVariantData record} is slightly faster than using late-binding.
-But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 _Safe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
+But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 _Safe(aVariant)^} function (or {\f1\fs20 DocVariantType.IsOfType(aVariant)} or {\f1\fs20 DocVariantData(aVariant)^}), which will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
 ! with _Safe(V1)^ do                        // note ^ to de-reference into TDocVariantData
 !   for ndx := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[ndx],'=',Values[ndx]);  // direct access to the internal storage arrays
@@ -1718,7 +1718,7 @@ When using @*late-binding@, the object properties or array items are retrieved a
 !  assert(V='["root",{"name":"Jim"},3.1415]');
 !  V.Delete(1);                    // delete an item in the main array
 !  assert(V='["root",3.1415]');
-Of course, trans-typing into a {\f1\fs20 TDocVariantData record} is possible, and will be slightly faster than using late-binding. As usual, using {\f1\fs20 DocVariantData(aVariant)^} function is safer, especially when working on {\f1\fs20 varByRef} members returned via late-binding.
+Of course, trans-typing into a {\f1\fs20 TDocVariantData record} is possible, and will be slightly faster than using late-binding. As usual, using {\f1\fs20 _Safe(aVariant)^} function is safer, especially when working on {\f1\fs20 varByRef} members returned via late-binding.
 As with an {\i object} document, you can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack, if you do not need any {\f1\fs20 variant}-oriented access to the array:
 !var Doc: TDocVariantData;
 ! ...
