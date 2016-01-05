@@ -14075,7 +14075,7 @@ type
     /// low-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     // - it uses in fact a 33 bit resolution, so is "Year 2038" bug-free
-    function UnixCreateTime: cardinal;
+    function CreateTimeUnix: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
     // - is just a wrapper around PInt64(@self)^
@@ -14088,9 +14088,11 @@ type
     function AsVariant: variant;
     {$endif NOVARIANTS}
     /// extract the UTC generation timestamp from the identifier as TDateTime
-    function CreateUTCDateTime: TDateTime;
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
+    function CreateDateTime: TDateTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// extract the UTC generation timestamp from the identifier
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
     function CreateTimeLog: TTimeLog;
     {$ifndef DELPHI5OROLDER}
     /// compare two Identifiers
@@ -51371,7 +51373,7 @@ begin
   result := (PCardinal(@Value)^ shr 15) and $ffff;
 end;
 
-function TSynUniqueIdentifierBits.UnixCreateTime: cardinal;
+function TSynUniqueIdentifierBits.CreateTimeUnix: cardinal;
 begin
   result := Value shr 31;
 end;
@@ -51379,7 +51381,7 @@ end;
 {$ifndef NOVARIANTS}
 function TSynUniqueIdentifierBits.AsVariant: variant;
 begin
-  result := _ObjFast(['Created',DateTimeToIso8601Text(CreateUTCDateTime),
+  result := _ObjFast(['Created',DateTimeToIso8601Text(CreateDateTime),
     'Identifier',ProcessID,'Counter',Counter,'Value',Value]);
 end;
 {$endif NOVARIANTS}
@@ -51401,7 +51403,7 @@ begin
   PTimeLogBits(@result)^.From(UnixTimeToDateTime(Value shr 31));
 end;
 
-function TSynUniqueIdentifierBits.CreateUTCDateTime: TDateTime;
+function TSynUniqueIdentifierBits.CreateDateTime: TDateTime;
 begin
   result := UnixTimeToDateTime(Value shr 31);
 end;

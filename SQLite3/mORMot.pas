@@ -22452,7 +22452,7 @@ begin
   with fFieldType[f] do
     if expandHugeIDAsUniqueIdentifier and (f=fFieldIndexID) then begin
       SetInt64(V[f],PInt64(@id)^);
-      if id.UnixCreateTime>JAN2015_UNIX then
+      if id.CreateTimeUnix>JAN2015_UNIX then
         Values[f] := id.AsVariant else
         Values[f] := id.Value;
     end else begin

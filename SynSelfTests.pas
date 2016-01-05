@@ -3973,8 +3973,8 @@ begin
       gen.ComputeNew(i2);
       check(i1.ProcessID=10);
       check(i2.ProcessID=10);
-      check(i1.UnixCreateTime>JAN2015_UNIX);
-      check(i1.UnixCreateTime<=i2.UnixCreateTime);
+      check(i1.CreateTimeUnix>JAN2015_UNIX);
+      check(i1.CreateTimeUnix<=i2.CreateTimeUnix);
       check(i1.Value<i2.Value);
       {$ifndef NOVARIANTS}
       check(not i1.Equal(i2));
@@ -3983,7 +3983,7 @@ begin
       json := VariantSaveJSON(i1.AsVariant);
       check(VariantSaveJSON(i2.AsVariant)=json);
       check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
-        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter,i1.Value]));
+        [DateTimeToIso8601Text(i1.CreateDateTime),i1.ProcessID,i1.Counter,i1.Value]));
       {$endif}
       obfusc := gen.ToObfuscated(i1.Value);
       check(gen.FromObfuscated(obfusc,i3));
