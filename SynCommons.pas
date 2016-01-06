@@ -17334,7 +17334,7 @@ asm
     test eax,eax
     jz @z
     cmp dl,[eax]
-    movzx ecx,byte ptr [eax+1]
+    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
     jnz @n
     add eax,ecx
     ret
@@ -17344,7 +17344,7 @@ end;
 {$endif}
 
 function GetTypeInfo(aTypeInfo: pointer; const aExpectedKind: TTypeKinds): PTypeInfo; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+{$ifdef HASINLINE} inline;
 begin
   result := aTypeInfo;
   if (result<>nil) and (result^.Kind in aExpectedKind) then
@@ -17356,6 +17356,19 @@ begin
   else
     result := nil;
 end;
+{$else}
+asm // eax=aTypeInfo edx=aExpectedKind
+    test eax,eax
+    jz @z
+    movzx ecx,byte ptr [eax]
+    bt edx,ecx
+    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
+    jnb @n
+    add eax,ecx
+@z: ret
+@n: xor eax,eax
+end;
+{$endif}
 
 function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
   aDataSize: PInteger=nil): pointer;
@@ -17506,30 +17519,33 @@ end;
 
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
+var PLen: integer;
 begin
-  for result := 0 to MaxValue do
-    if (ord(List^[0])=aValuelen) and
-       IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
+  for result := 0 to MaxValue do begin
+    PLen := ord(List^[0]);
+    if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
       exit else
-      inc(PByte(List),ord(List^[0])+1); // next short string
+      inc(PByte(List),PLen+1); // next short string
+  end;
   result := -1;
 end;
 
 function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
-var P: PUTF8Char;
-    PLen: integer;
+var PLen: integer;
 begin
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
-    P := @List^[1];
-    while (PLen>0) and (P^ in ['a'..'z']) do begin
-      inc(P);
+    inc(PUTF8Char(List));
+    repeat
+      if not(PUTF8Char(List)^ in ['a'..'z']) then
+        break;
+      inc(PUTF8Char(List));
       dec(PLen);
-    end;
-    if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,P,PLen) then
+    until PLen=0;
+    if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,PUTF8Char(List),PLen) then
       exit else
-      inc(PByte(List),ord(List^[0])+1);
+      inc(PUTF8Char(List),PLen);
   end;
   result := -1;
 end;
@@ -32202,6 +32218,7 @@ end;
 constructor TJSONCustomParserCustomSimple.Create(
   const aPropertyName, aCustomTypeName: RawUTF8; aCustomType: pointer);
 var info: PTypeInfo;
+    kind: TTypeKind;
 begin
   inherited Create(aPropertyName,aCustomTypeName);
   fCustomTypeInfo := aCustomType;
@@ -32211,36 +32228,41 @@ begin
   end else
   if fCustomTypeInfo<>nil then begin
     TypeInfoToName(fCustomTypeInfo,fCustomTypeName,aCustomTypeName);
+    kind := PTypeKind(fCustomTypeInfo)^;
     info := GetTypeInfo(fCustomTypeInfo,[tkEnumeration,tkSet,tkArray,tkDynArray]);
     fTypeData := info;
-    case PTypeKind(fCustomTypeInfo)^ of
+    if info<>nil then
+    case kind of
     tkEnumeration, tkSet: begin
       case info^.EnumType of
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
       end;
-      if PTypeKind(fCustomTypeInfo)^=tkEnumeration then
+      if kind=tkEnumeration then
         fKnownType := ktEnumeration else
         fKnownType := ktSet;
+      exit; // success
     end;
     tkArray: begin
       if info^.dimCount<>1 then
         raise ESynException.CreateUTF8(
           '%.Create("%") supports only one dimension static array)',
-          [self,aCustomTypeName]);
+          [self,fCustomTypeName]);
       fKnownType := ktStaticArray;
       fDataSize := info^.arraySize {$ifdef FPC}and $7FFFFFFF{$endif};
       fFixedSize := fDataSize div info^.elCount;
       fNestedArray := TJSONCustomParserRTTI.CreateFromRTTI(
         '',info^.arrayType{$ifndef FPC}^{$endif},fFixedSize);
+      exit; // success
     end;
-    tkDynArray:
+    tkDynArray: begin
       fKnownType := ktDynamicArray;
-    else
-      raise ESynException.CreateUTF8('%.Create("%") unsupported type: %',
-        [self,aCustomTypeName,PByte(fCustomTypeInfo)^]);
+      exit; // success
     end;
+    end;
+    raise ESynException.CreateUTF8('%.Create("%") unsupported type: % (%)',
+      [self,fCustomTypeName,GetEnumName(TypeInfo(TTypeKind),ord(kind))^,ord(kind)]);
   end;
 end;
 
