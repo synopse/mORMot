@@ -14099,6 +14099,12 @@ type
     function Equal(const Another: TSynUniqueIdentifierBits): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     {$endif}
+    /// convert the identifier into a 16 chars hexadecimal string
+    function ToHexa: RawUTF8;
+    /// fill this unique identifier back from a 16 chars hexadecimal string
+    // - returns TRUE if the supplied hexadecimal is on the expected format
+    // - returns FALSE if the supplied text is invalid
+    function FromHexa(const hexa: RawUTF8): boolean;
   end;
   {$A+}
   
@@ -51406,6 +51412,16 @@ end;
 function TSynUniqueIdentifierBits.CreateDateTime: TDateTime;
 begin
   result := UnixTimeToDateTime(Value shr 31);
+end;
+
+function TSynUniqueIdentifierBits.ToHexa: RawUTF8;
+begin
+  result := Int64ToHex(Value);
+end;
+
+function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUTF8): boolean;
+begin
+  result := HexDisplayToBin(pointer(Hexa),@Value,sizeof(Value));
 end;
 
 
