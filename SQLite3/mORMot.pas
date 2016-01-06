@@ -9786,6 +9786,13 @@ type
   TServiceMethodExecuteCallback =
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj) of object;
 
+  /// how TServiceMethod.TServiceMethod method would return the generated document
+  // - will return either a dvObject or dvArray TDocVariantData, depending on
+  // the expected returned document layout
+  // - returned content could be "normalized" (for any set or enumerate) if
+  // Kind is pdvObjectFixed
+  TServiceMethodParamsDocVariantKind = (pdvArray, pdvObject, pdvObjectFixed);
+
   /// describe an interface-based service provider method
   TServiceMethod = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
@@ -9868,8 +9875,19 @@ type
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     function ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
+    /// returns a dynamic array list of all parameter names
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    function ArgsNames(Input: Boolean): TRawUTF8DynArray;
     {$ifndef NOVARIANTS}
+    /// computes a TDocVariant containing the input or output arguments values
+    // - Values[] should contain the input/output raw values
+    // - Kind would specify the expected returned document layout
+    procedure ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+      out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
+      Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
     /// normalize a TDocVariant containing the input or output arguments values
+    // - "normalization" will ensure sets and enums are seralized as text
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     procedure ArgsAsDocVariantFix(var ArgsObject: TDocVariantData; Input: boolean);
@@ -10544,6 +10562,12 @@ type
     /// constructor of one parameters marshalling instance
     constructor Create(aSender: TInterfaceStub; aMethod: PServiceMethod;
       const aParams,aEventParams: RawUTF8); override;
+    /// returns the input parameters as a TDocVariant object or array
+    function InputAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+      Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]): variant;
+    /// returns the output parameters as a TDocVariant object or array
+    function OutputAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+      Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]): variant;
     /// input parameters when calling the method
     // - order shall follow the method const and var parameters
     // ! Stub.Add(10,20) -> Input[0]=10, Input[1]=20
@@ -49391,6 +49415,20 @@ begin
     end;
 end;
 
+function TOnInterfaceStubExecuteParamsVariant.InputAsDocVariant(
+  Kind: TServiceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
+begin
+  VarClear(result);
+  fMethod^.ArgsValuesAsDocVariant(Kind,TDocVariantData(Result),fInput,true,Options);
+end;
+
+function TOnInterfaceStubExecuteParamsVariant.OutputAsDocVariant(
+  Kind: TServiceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
+begin
+  VarClear(result);
+  fMethod^.ArgsValuesAsDocVariant(Kind,TDocVariantData(Result),fOutput,false,Options);
+end;
+
 {$endif NOVARIANTS}
 
 constructor TInterfaceStub.Create(aFactory: TInterfaceFactory;
@@ -51886,11 +51924,11 @@ end;
 
 procedure TServiceMethodArgument.FixValueAndAddToObject(const Value: variant;
   var DestDoc: TDocVariantData);
-var v: variant;
+var tempCopy: variant;
 begin
-  v := Value;
-  FixValue(v);
-  DestDoc.AddValue(ShortStringToAnsi7String(ParamName^),v);
+  tempCopy := Value;
+  FixValue(tempCopy);
+  DestDoc.AddValue(ShortStringToAnsi7String(ParamName^),tempCopy);
 end;
 
 procedure TServiceMethodArgument.FixValue(var Value: variant);
@@ -52248,7 +52286,46 @@ begin
   end;
 end;
 
+function TServiceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
+var a,n: integer;
+begin
+  if Input then begin
+    SetLength(result,ArgsInputValuesCount);
+    n := 0;
+    for a := ArgsInFirst to ArgsInLast do
+      if Args[a].ValueDirection in [smdConst,smdVar] then begin
+        result[n] := ShortStringToAnsi7String(Args[a].ParamName^);
+        inc(n);
+      end;
+  end else begin
+    SetLength(result,ArgsOutputValuesCount);
+    n := 0;
+    for a := ArgsOutFirst to ArgsOutLast do
+      if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+        result[n] := ShortStringToAnsi7String(Args[a].ParamName^);
+        inc(n);
+      end;
+  end;
+end;
+
 {$ifndef NOVARIANTS}
+
+procedure TServiceMethod.ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
+  out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
+  Options: TDocVariantOptions);
+begin
+  case Kind of
+  pdvObject, pdvObjectFixed: begin
+    Dest.InitObjectFromVariants(ArgsNames(Input),Values,Options);
+    if Kind=pdvObjectFixed then
+      ArgsAsDocVariantFix(Dest,Input);
+  end;
+  pdvArray:
+    Dest.InitArrayFromVariants(Values,Options);
+  else
+    Dest.Init(Options);
+  end;
+end;
 
 procedure TServiceMethod.ArgsAsDocVariantFix(var ArgsObject: TDocVariantData;
   Input: boolean);
@@ -52267,7 +52344,7 @@ begin
     if Input then begin
       if ArgsObject.Count<>integer(ArgsInputValuesCount) then
         exit;
-      doc.InitFast;
+      doc.Init(ArgsObject.Options);
       for a := ArgsInFirst to ArgsInLast do
         if Args[a].ValueDirection in [smdConst,smdVar] then
           Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count],doc);
@@ -52275,7 +52352,7 @@ begin
     end else begin
       if ArgsObject.Count<>integer(ArgsOutputValuesCount) then
         exit;
-      doc.InitFast;
+      doc.Init(ArgsObject.Options);
       for a := ArgsOutFirst to ArgsOutLast do
         if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then
           Args[a].FixValueAndAddToObject(ArgsObject.Values[doc.Count],doc);

@@ -12510,10 +12510,11 @@ type
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as variant dynamic array
     // - if Items is [], the variant will be set as null
-    // - will be almost immediate, since TVariantDynArray is reference-counted
+    // - will be almost immediate, since TVariantDynArray is reference-counted,
+    // unless ItemsCopiedByReference is set to FALSE
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
-      aOptions: TDocVariantOptions=[]);
+      aOptions: TDocVariantOptions=[]; ItemsCopiedByReference: boolean=true);
     /// initialize a variant instance to store some document-based object content
     // - object will be initialized with names and values supplied as dynamic arrays
     // - if aNames and aValues are [] or do have matching sizes, the variant
@@ -13305,7 +13306,7 @@ function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const):
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[false])
+// ! DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[false])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
 // arrays were created with
@@ -13318,7 +13319,7 @@ procedure _Unique(var DocVariant: variant);
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[true])
+// ! DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[true])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-reference whatever options the nested objects or
 // arrays were created with
@@ -17491,7 +17492,7 @@ asm // eax=aTypeInfo edx=aIndex
     or     edx,edx
     jz     @z
     push   edx
-    shr    edx,2
+    shr    edx,2 // fast pipelined by-four scanning 
     jz     @1
 @4: dec    edx
     mov    cl,[eax]
@@ -34768,13 +34769,15 @@ begin
 end;
 
 procedure TDocVariantData.InitArrayFromVariants(const Items: TVariantDynArray;
-  aOptions: TDocVariantOptions=[]);
+  aOptions: TDocVariantOptions; ItemsCopiedByReference: boolean);
 begin
   if Items=nil then
     VType := varNull else begin
     Init(aOptions,dvArray);
     VCount := length(Items);
     VValue := Items; // fast by-reference copy of VValue[]
+    if not ItemsCopiedByReference then
+      InitCopy(variant(self),aOptions);
   end;
 end;
 
@@ -36569,12 +36572,12 @@ end;
 
 procedure _Unique(var DocVariant: variant);
 begin
-  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[false]);
+  DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[false]);
 end;
 
 procedure _UniqueFast(var DocVariant: variant);
 begin
-  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS_FAST);
+  DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS_FAST);
 end;
 
 function _Copy(const DocVariant: variant): variant;
