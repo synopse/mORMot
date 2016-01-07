@@ -11904,7 +11904,7 @@ const
      dvoNameCaseSensitive,dvoSerializeAsExtendedJson]);
 
   /// TDocVariant options to be used so that JSON serialization would
-  // use the extended JSON syntax for field names
+  // use the unquoted JSON syntax for field names
   // - you could use it e.g. on a TSQLRecord variant published field to
   // reduce the JSON escape process during storage in the database, by
   // customizing your TSQLModel instance:

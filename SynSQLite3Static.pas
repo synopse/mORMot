@@ -953,7 +953,7 @@ begin
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
+  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -1039,7 +1039,7 @@ begin
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
+  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;

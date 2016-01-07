@@ -10834,6 +10834,7 @@ type
     function IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
       aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
     function GetLogHash: cardinal;
+    procedure OnExecuteToLog(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     /// low-level internal constructor
     constructor Create(aFactory: TInterfaceFactory;
       const aInterfaceName: RawUTF8); reintroduce; overload; virtual;
@@ -10925,6 +10926,10 @@ type
     // - callback's Ctxt: TOnInterfaceStubExecuteParamsVariant's Method field
     // would identify the executed method
     function Executes(aEvent: TOnInterfaceStubExecuteVariant; const aEventParams: RawUTF8=''): TInterfaceStub; overload;
+    /// will add execution rules for all methods to log the input parameters
+    // - aKind would define how the input parameters are serialized in JSON
+    function Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
+       aKind: TServiceMethodParamsDocVariantKind): TInterfaceStub; overload;
 {$endif}
 
     /// add an exception rule for a given method
@@ -49624,7 +49629,38 @@ begin
   for i := 0 to fInterface.MethodsCount-1 do
     fRules[i].AddRule(self,isExecutesVariant,'',aEventParams,TNotifyEvent(aEvent));
   result := self;
-end; 
+end;
+
+type
+  TInterfaceStubExecutesToLog = packed record
+    Log: TSynLogClass;
+    LogLevel: TSynLogInfo;
+    Kind: TServiceMethodParamsDocVariantKind;
+  end;
+  PInterfaceStubExecutesToLog = ^TInterfaceStubExecutesToLog;
+
+procedure TInterfaceStub.OnExecuteToLog(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+begin
+  if length(Ctxt.EventParams)=sizeof(TInterfaceStubExecutesToLog) then
+    with PInterfaceStubExecutesToLog(Ctxt.EventParams)^ do
+      Log.Add.Log(LogLevel,'% %',[Ctxt.Method^.InterfaceDotMethodName,
+        Ctxt.InputAsDocVariant(Kind,JSON_OPTIONS_FAST_EXTENDED)]);
+end;
+
+function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
+   aKind: TServiceMethodParamsDocVariantKind): TInterfaceStub;
+var tmp: RawUTF8;
+begin
+  SetLength(tmp,SizeOf(TInterfaceStubExecutesToLog));
+  with PInterfaceStubExecutesToLog(tmp)^ do begin
+    Log := aLog;
+    LogLevel := aLogLevel;
+    Kind := aKind;
+  end;
+  Executes(OnExecuteToLog,tmp);
+  result := self;
+end;
+
 
 {$endif NOVARIANTS}
 
