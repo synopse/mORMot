@@ -12558,6 +12558,8 @@ type
     // or per-value (if you set JSON_OPTIONS[false]) whatever options the nested
     // objects or arrays were created with
     // - will raise an EDocVariant if the supplied variant is not a TDocVariant
+    // - you may rather use _Unique() or _UniqueFast() wrappers if you want to
+    // ensure that a TDocVariant instance is unique
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitCopy(const SourceDocVariant: variant; aOptions: TDocVariantOptions);
     /// initialize a variant instance to store some document-based object content
@@ -13306,7 +13308,7 @@ function _JsonFastFmt(const Format: RawUTF8; const Args,Params: array of const):
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[false])
+// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[false])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
 // arrays were created with
@@ -13319,7 +13321,7 @@ procedure _Unique(var DocVariant: variant);
 /// ensure a document-based variant instance will have only per-value nested
 // objects or array documents
 // - is just a wrapper around:
-// ! DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[true])
+// ! TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[true])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-reference whatever options the nested objects or
 // arrays were created with
@@ -36571,13 +36573,13 @@ begin
 end;
 
 procedure _Unique(var DocVariant: variant);
-begin
-  DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS[false]);
+begin // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
+  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS[false]);
 end;
 
 procedure _UniqueFast(var DocVariant: variant);
-begin
-  DocVariantData(DocVariant)^.InitCopy(DocVariant,JSON_OPTIONS_FAST);
+begin // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
+  TDocVariantData(DocVariant).InitCopy(DocVariant,JSON_OPTIONS_FAST);
 end;
 
 function _Copy(const DocVariant: variant): variant;
