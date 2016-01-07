@@ -3170,6 +3170,13 @@ begin
   Check(UpperCaseUnicode('abcdefABCD')='ABCDEFABCD');
   Check(LowerCaseUnicode('abcdefABCD')='abcdefabcd');
   {$endif}
+  Check(StringReplaceAll('abcabcabc','toto','toto')='abcabcabc');
+  Check(StringReplaceAll('abcabcabc','toto','titi')='abcabcabc');
+  Check(StringReplaceAll('abcabcabc','ab','AB')='ABcABcABc');
+  Check(StringReplaceAll('abcabcabc','bc','')='aaa');
+  Check(StringReplaceAll('abcabcabc','bc','B')='aBaBaB');
+  Check(StringReplaceAll('abcabcabc','bc','bcd')='abcdabcdabcd');
+  Check(StringReplaceAll('abcabcabc','c','C')='abCabCabC');
 end;
 
 procedure TTestLowLevelCommon.Iso8601DateAndTime;

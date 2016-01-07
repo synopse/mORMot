@@ -3918,20 +3918,30 @@ function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: Integer; Index: PtrInt; CoValues: PIntegerDynArray=nil): PtrInt;
 
 /// add an integer value at the end of a dynamic array of integers
-// - true if Value was added successfully in Values[], in this case
+// - returns TRUE if Value was added successfully in Values[], in this case
 // length(Values) will be increased
 function AddInteger(var Values: TIntegerDynArray; Value: integer;
   NoDuplicates: boolean=false): boolean; overload;
 
 /// add an integer value at the end of a dynamic array of integers
 // - this overloaded function will use a separate Count variable (faster)
-// - true if Value was added successfully in Values[], in this case
-// length(Values) will be increased
+// - it won't search for any existing duplicate
+procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
+  Value: integer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// add an integer value at the end of a dynamic array of integers
+// - this overloaded function will use a separate Count variable (faster),
+// and would allow to search for duplicates
+// - returns TRUE if Value was added successfully in Values[], in this case
+// ValuesCount will be increased, but length(Values) would stay fixed most
+// of the time (since it stores the Values[] array capacity)
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: integer; NoDuplicates: boolean=false): boolean; overload;
+  Value: integer; NoDuplicates: boolean): boolean; overload;
 
 /// add a 64 bit integer value at the end of a dynamic array of integers
 procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// delete any integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
@@ -18819,24 +18829,40 @@ end;
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
   procedure Process(j: integer);
-  var i: integer;
+  var oldlen,newlen,i,last,posCount,sharedlen: integer;
+      pos: TIntegerDynArray;
+      src,dst: PAnsiChar;
   begin
-    Result := '';
-    i := 1;
+    oldlen := length(OldPattern);
+    newlen := length(NewPattern);
+    SetLength(pos,64);
+    pos[0] := j;
+    posCount := 1;
     repeat
-      Result := Result+Copy(S,i,j-i)+NewPattern;
-      i := j+length(OldPattern);
-      j := PosEx(OldPattern, S, i);
-      if j=0 then begin
-        Result := Result+Copy(S, i, maxInt);
+      j := PosEx(OldPattern,S,j+oldlen);
+      if j=0 then
         break;
-      end;
+      AddInteger(pos,posCount,j);
     until false;
+    SetString(result,nil,Length(S)-oldlen*PosCount+newlen*PosCount);
+    last := 1;
+    src := pointer(s);
+    dst := pointer(result);
+    for i := 0 to posCount-1 do begin
+      sharedlen := pos[i]-last;
+      MoveFast(src^,dst^,sharedlen);
+      inc(src,sharedlen+oldlen);
+      inc(dst,sharedlen);
+      MoveFast(pointer(NewPattern)^,dst^,newlen);
+      inc(dst,newlen);
+      last := pos[i]+oldlen;
+    end;
+    MoveFast(src^,dst^,length(S)-last+1);
   end;
 
 var j: integer;
 begin
-  if (S='') or (OldPattern=NewPattern) then
+  if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
     result := S else begin
     j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
     if j=0 then
@@ -23467,8 +23493,17 @@ begin
   result := true
 end;
 
+procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
+  Value: integer);
+begin
+  if ValuesCount=length(Values) then
+    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+  Values[ValuesCount] := Value;
+  inc(ValuesCount);
+end;
+
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: integer; NoDuplicates: boolean=false): boolean; overload;
+  Value: integer; NoDuplicates: boolean): boolean; overload;
 begin
   if NoDuplicates and IntegerScanExists(pointer(Values),ValuesCount,Value) then begin
     result := false;
