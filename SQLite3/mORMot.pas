@@ -10578,7 +10578,7 @@ type
     // result (if method is not a procedure)
     // - if the supplied Index is out of range, an EInterfaceStub will be raised
     // - can be used as such:
-    // !  procedure TFooTestCase.ExecuteBar(var Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    // !  procedure TFooTestCase.ExecuteBar(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     // !  begin // Input[0]=i
     // !    Ctxt.Output[0] := Ctxt.Input[0]+1;  // i := i+1;
     // !    Ctxt.Output[1] := 42;               // result := 42;
@@ -10596,7 +10596,7 @@ type
     // to work with, and safer in case of method signature change (like parameter
     // add or rename)
     // - marked as default property, so you can use it e.g. as such:
-    // !  procedure TFooTestCase.ExecuteBar(var Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    // !  procedure TFooTestCase.ExecuteBar(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     // !  begin
     // !    Ctxt['i'] := Ctxt['i']+1;  // i := i+1;
     // !    Ctxt['result'] := 42;      // result := 42;
@@ -10661,7 +10661,7 @@ type
   // !  P := pointer(Ctxt.Params);
   // !  Ctxt.Returns([GetNextItemDouble(P)-GetNextItemDouble(P)]);
   // - you can call Ctxt.Error() to notify the caller for an execution error
-  TOnInterfaceStubExecuteJSON = procedure(Ctxt: TOnInterfaceStubExecuteParamsJSON)of object;
+  TOnInterfaceStubExecuteJSON = procedure(Ctxt: TOnInterfaceStubExecuteParamsJSON) of object;
 
   /// diverse types of stubbing / mocking rules
   // - isUndefined is the first, since it will be a ExpectsCount() weak rule
@@ -10920,6 +10920,11 @@ type
     // - raise an Exception if the method name does not exist for this interface
     function Executes(const aMethodName: RawUTF8; const aParams: array of const;
       aEvent: TOnInterfaceStubExecuteVariant; const aEventParams: RawUTF8=''): TInterfaceStub; overload;
+    /// add an execution rule for all methods, with Variant marshalling
+    // - optional aEventParams parameter will be transmitted to aEvent handler
+    // - callback's Ctxt: TOnInterfaceStubExecuteParamsVariant's Method field
+    // would identify the executed method
+    function Executes(aEvent: TOnInterfaceStubExecuteVariant; const aEventParams: RawUTF8=''): TInterfaceStub; overload;
 {$endif}
 
     /// add an exception rule for a given method
@@ -49566,7 +49571,6 @@ begin
   result := self;
 end;
 
-
 function TInterfaceStub.Executes(const aMethodName, aParams: RawUTF8;
   aEvent: TOnInterfaceStubExecuteJSON; const aEventParams: RawUTF8): TInterfaceStub;
 begin
@@ -49612,6 +49616,15 @@ begin
   result := Executes(aMethodName,JSONEncodeArrayOfConst(aParams,true),
     aEvent,aEventParams);
 end;
+
+function TInterfaceStub.Executes(aEvent: TOnInterfaceStubExecuteVariant;
+  const aEventParams: RawUTF8): TInterfaceStub;
+var i: integer;
+begin
+  for i := 0 to fInterface.MethodsCount-1 do
+    fRules[i].AddRule(self,isExecutesVariant,'',aEventParams,TNotifyEvent(aEvent));
+  result := self;
+end; 
 
 {$endif NOVARIANTS}
 
