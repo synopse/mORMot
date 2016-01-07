@@ -45307,6 +45307,7 @@ begin
     {$elseif defined(VER280)}'Delphi XE7'
     {$elseif defined(VER290)}'Delphi XE8'
     {$elseif defined(VER300)}'Delphi 10 Seattle'
+    {$elseif defined(VER310)}'Delphi 11 BigBen'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
