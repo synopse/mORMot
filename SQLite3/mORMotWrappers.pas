@@ -712,7 +712,8 @@ begin
     info.name := typName;
   end;
   end;
-  list.AddItem(info);
+  if not VarIsEmptyOrNull(info) then
+    list.AddItem(info);
 end;
 var siz: integer;
     enum: PEnumType;
