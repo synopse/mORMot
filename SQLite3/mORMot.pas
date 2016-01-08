@@ -13123,9 +13123,10 @@ type
     function Update(aTable: TSQLRecordClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
-    // - implements REST POST if Value.ID=0 or PUT collection on Value.ID
+    // - implements REST POST if Value.ID=0 or ForceID is set, or a REST PUT
+    // collection on Value.ID
     // - will return the created or updated ID
-    function AddOrUpdate(Value: TSQLRecord): TID;
+    function AddOrUpdate(Value: TSQLRecord; ForceID: boolean=false): TID;
     /// update one field/column value a given member
     // - implements REST PUT collection with one field value
     // - only one single field shall be specified in FieldValue, but could
@@ -32147,15 +32148,20 @@ begin
   // here fCache.Notify is not called, since the JSONValues is verbose
 end;
 
-function TSQLRest.AddOrUpdate(Value: TSQLRecord): TID;
+function TSQLRest.AddOrUpdate(Value: TSQLRecord; ForceID: boolean): TID;
 begin
-  if (self=nil) or (Value=nil) then
-    result := 0 else
-  if Value.fID=0 then
-    result := Add(Value,true) else
-    if Update(Value) then
-      result := Value.fID else
-      result := 0;
+  if (self=nil) or (Value=nil) then begin
+    result := 0;
+    exit;
+  end;
+  if ForceID or (Value.fID=0) then begin
+    result := Add(Value,true,ForceID);
+    if (result<>0) or (Value.fID=0) then
+      exit;
+  end;
+  if Update(Value) then
+    result := Value.fID else
+    result := 0;
 end;
 
 procedure TSQLRest.QueryAddCustom(aTypeInfo: pointer; aEvent: TSQLQueryEvent;
