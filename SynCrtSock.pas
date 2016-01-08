@@ -2853,7 +2853,7 @@ begin
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
-    ReceiveTimeout := TimeOut;
+    ReceiveTimeout := TimeOut;           
     SendTimeout := TimeOut;
   end;
   TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers

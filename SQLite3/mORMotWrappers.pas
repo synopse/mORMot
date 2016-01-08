@@ -841,8 +841,10 @@ begin
   // compute the Model information as JSON
   result := _ObjFast(['time',NowToString, 'year',CurrentYear,
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-    'orm',variant(fORM),
-    'soa',fSOA]);
+    'exeVersion',ExeVersion.Version.Detailed,
+    'exeInfo',ExeVersion.ProgramFullSpec,
+    'orm',variant(fORM), 
+    'soa',fSOA]);      
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
   if fHasAnyRecord then
