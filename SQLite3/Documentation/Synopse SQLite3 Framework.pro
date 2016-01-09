@@ -1875,6 +1875,198 @@ Similarly, you may use {\f1\fs20 TSynTimeZone.UtcToLocal} or {\f1\fs20 TSynTimeZ
 You would have to create the needed {\f1\fs20 .tz} compressed file under a Windows machine, then provide this file together with any {\i Linux} server executable, in its very same folder. On a @*Cloud@-like system, you may store this information in a centralized server, e.g. via a dedicated service - see @63@ - generated from a single reference {\i Windows} system via {\f1\fs20 TSynTimeZone.SaveToBuffer}, and later on use {\f1\fs20 TSynTimeZone.LoadFromBuffer} to decode it from all your cloud nodes. The main benefit is that the time information would stay consistent whatever system it runs on, as you may expect.
 Your User Interface could retrieve the IDs and ready to be displayed text from {\f1\fs20 TSynTimeZone.Ids} and {\f1\fs20 TSynTimeZone.Displays} properties, as plain {\f1\fs20 TStrings} instance, which index would follow the {\f1\fs20 TSynTimeZone.Zone[]} internal information.
 As a nice side effect, the {\f1\fs20 TSynTimeZone} binary internal storage has been found out to be very efficient, and much faster than a manual reading of the {\i Windows} registry. Complex local time calculation could be done on the server side, with no fear of breaking down your processing performances.
+:184  Safe locks for multi-thread applications
+:   Protect your resources
+Once your application is @*multi-thread@ed, concurrent data access should be protected. Otherwise, a "@*race condition@" issue may appear: for instance, if two threads modify a variable at the same time (e.g. decrease a counter), values may become incoherent and unsafe to use. The most known symptom is the "@*deadlock@", by which the whole application appears to be blocked and unresponsive. On a server system, which is expected to run 24/7 with no maintenance, such an issue is to be avoided.
+In Delphi, protection of a resource (which may be an object, or any variable) is usually done via {\i @**Critical Section@s}. A {\i critical section} is an object used to make sure, that some part of the code is executed only by one thread at a time. A {\i critical section} needs to be created/initialized before it can be used and be released when it is not needed anymore. Then, some code is protected using {\i Enter/Leave} methods, which would {\i lock} its execution: in practice, only a single thread would own the {\i critical section}, so only a single thread would be able to execute this code section, and other threads would wait until the lock is released. For best performance, the protected sections should be as small as possible - otherwise the benefit of using threads may be voided, since any other thread would wait for the thread owning the {\i critical section} to release the lock.
+:   Fixing TRTLCriticalSection
+In practice, you may use a {\f1\fs20 TCriticalSection} class, or the lower-level {\f1\fs20 TRTLCriticalSection} record, which is perhaps to be preferred, since it would use less memory, and could easily be included as a (protected) field to any {\f1\fs20 class} definition.
+Let's say we want to protect any access to the variables a and b. Here's how to do it with the critical sections approach:
+!var CS: TRTLCriticalSection;
+!    a, b: integer;
+!// set before the threads start
+!InitializeCriticalSection(CS);
+!// in each TThread.Execute:
+!EnterCriticalSection(CS);
+!try // protect the lock via a try ... finally block
+!  // from now on, you can safely make changes to the variables
+!  inc(a);
+!  inc(b);
+!finally
+!  // end of safe block
+!  LeaveCriticalSection(CriticalSection);
+!end;
+!// when the threads stop
+!DeleteCriticalSection(CS);
+In newest versions of Delphi, you may use a {\f1\fs20 @*TMonitor@} class, which would let the lock be owned by any Delphi {\f1\fs20 TObject}. Before XE5, there was some performance issue, and even now, this Java-inspired feature may not be the best approach, since it is tied to a single object, and is not compatible with older versions of Delphi (or FPC).
+Eric Grange reported some years ago - see @https://www.delphitools.info/2011/11/30/fixing-tcriticalsection - that {\f1\fs20 TRTLCriticalSection} (along with {\f1\fs20 TMonitor}) suffers from a severe design flaw in which entering/leaving different {\i critical sections} can end up serializing your threads, and the whole can even end up performing worse than if your threads had been serialized. This is because it's a small, dynamically allocated object, so several {\f1\fs20 TRTLCriticalSection} memory can end up in the same CPU cache line, and when that happens, you'll have cache conflicts aplenty between the cores running the threads.
+The fix proposed by Eric is dead simple:
+!type
+!   TFixedCriticalSection = class(TCriticalSection)
+!   private
+!     FDummy: array [0..95] of Byte;
+!   end;
+:   Introducing TSynLocker
+Since we wanted to use a {\f1\fs20 TRTLCriticalSection} record instead of a {\f1\fs20 TCriticalSection} class instance, we defined a {\f1\fs20 @**TSynLocker@} record in {\f1\fs20 SynCommons.pas}:
+!  TSynLocker = record
+!  private
+!    fSection: TRTLCriticalSection;
+!  public
+!    Padding: array[0..6] of TVarData;
+!    procedure Init;
+!    procedure Done;
+!    procedure Lock;
+!    procedure UnLock;
+!  end;
+As you can see, the {\f1\fs20 Padding[]} array would ensure that the CPU cache-line issue won't affect our object.
+{\f1\fs20 TSynLocker} use is close to {\f1\fs20 TRTLCriticalSection}, with some method-oriented behavior:
+!var safe: TSynLocker;
+!    a, b: integer;
+!// set before the threads start
+!safe.Init;
+!// in each TThread.Execute:
+!safe.Lock
+!try // protect the lock via a try ... finally block
+!  // from now on, you can safely make changes to the variables
+!  inc(a);
+!  inc(b);
+!finally
+!  // end of safe block
+!  safe.Unlock;
+!end;
+!// when the threads stop
+!safe.Done;
+If your purpose is to protect a method execution, you may use the {\f1\fs20 TSynLocker.ProtectMethod} function or explicit {\f1\fs20 Lock/Unlock}, as such:
+!type
+!  TMyClass = class
+!  protected
+!    fSafe: TSynLocker;
+!    fField: integer;
+!  public
+!    constructor Create;
+!    destructor Destroy; override;
+!    procedure UseLockUnlock;
+!    procedure UseProtectMethod;
+!  end;
+!
+!{ TMyClass }
+!
+!constructor TMyClass.Create;
+!begin
+!!  fSafe.Init; // we need to initialize the lock
+!end;
+!
+!destructor TMyClass.Destroy;
+!begin
+!!  fSafe.Done; // finalize the lock
+!  inherited;
+!end;
+!
+!procedure TMyClass.UseLockUnlock;
+!begin
+!!  fSafe.Lock;
+!  try
+!    // now we can safely access any protected field from multiple threads
+!    inc(fField);
+!  finally
+!!    fSafe.UnLock;
+!  end;
+!end;
+!
+!procedure TMyClass.UseProtectMethod;
+!begin
+!!  fSafe.ProtectMethod; // calls fSafe.Lock and return IUnknown local instance
+!  // now we can safely access any protected field from multiple threads
+!  inc(fField);
+!  // here fSafe.UnLock will be called when IUnknown is released
+!end;
+:   Inheriting from T*Locked
+For your own classes definition, you may inherit from some classes providing a {\f1\fs20 TSynLocker} instance, as defined in {\f1\fs20 SynCommons.pas}:
+!  TSynPersistentLocked = class(TSynPersistent)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TObjectListLocked = class(TObjectList)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TRawUTF8ListHashedLocked = class(TRawUTF8ListHashed)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+All those classes will initialize and finalize their owned {\f1\fs20 Safe} instance, in their {\f1\fs20 constructor/destructor}.
+So, we may have written our class as such:
+!type
+!  TMyClass = class(TSynPersistentLocked)
+!  protected
+!    fField: integer;
+!  public
+!    procedure UseLockUnlock;
+!    procedure UseProtectMethod;
+!  end;
+!
+!{ TMyClass }
+!
+!procedure TMyClass.UseLockUnlock;
+!begin
+!  fSafe.Lock;
+!  try
+!    // now we can safely access any protected field from multiple threads
+!    inc(fField);
+!  finally
+!    fSafe.UnLock;
+!  end;
+!end;
+!
+!procedure TMyClass.UseProtectMethod;
+!begin
+!  fSafe.ProtectMethod; // calls fSafe.Lock and return IUnknown local instance
+!  // now we can safely access any protected field from multiple threads
+!  inc(fField);
+!  // here fSafe.UnLock will be called when IUnknown is released
+!end;
+As you can see, the {\f1\fs20 Safe: TSynLocker} instance would be defined and handled at {\f1\fs20 TSynPersistentLocked} parent level.
+:   Safe locked storage in TSynLocker
+When we fixed the potential CPU cache-line issue, do you remember that we added a padding binary buffer to the {\f1\fs20 TSynLocker} definition? Since we do not want to waste resource, {\f1\fs20 TSynLocker} gives easy access to its internal data, and allow to directly handle those values. Since it is stored as 7 slots of {\f1\fs20 variant} values, you could store any kind of data, including complex {\f1\fs20 @*TDocVariant@} document or array.
+Our class may use this feature, and store its integer field value in the internal slot 0:
+!type
+!  TMyClass = class(TSynPersistentLocked)
+!  public
+!    procedure UseInternalIncrement;
+!    function FieldValue: integer;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.FieldValue: integer;
+!begin // value read would also be protected by the mutex
+!  result := fSafe.LockedInt64[0];
+!end;
+!
+!procedure TMyClass.UseInternalIncrement;
+!begin // this dedicated method would ensure an atomic increase
+!  fSafe.LockedInt64Increment(0,1);
+!end;
+Please note that we used the {\f1\fs20 TSynLocker.LockedInt64Increment()} method, since the following would not be safe:
+!procedure TMyClass.UseInternalIncrement;
+!begin
+!  fSafe.LockedInt64[0] := fSafe.LockedInt64[0]+1;
+!end;
+In the above line, two locks are acquired (one per {\f1\fs20 LockedInt64} property call), so another thread may modify the value in-between, and the increment may not be as accurate as expected.
+{\f1\fs20 TSynLocker} offers some dedicated properties and methods to handle this safe storage. Those expect an {\f1\fs20 Index} value, from {\f1\fs20 0..6} range:
+!    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+!    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+!    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+!    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+!    function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+!    function LockedExchange(Index: integer; const Value: variant): variant;
+!    function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+You may store a {\f1\fs20 pointer} or a reference to a {\f1\fs20 TObject} instance, if necessary.
+Having such a tool-set of thread-safe methods does make sense, in the context of our framework, which offers multi-thread server abilities - see @25@.
 \page
 :3Object-Relational Mapping
 %cartoon02.png
@@ -7284,20 +7476,20 @@ Therefore, for truly safe communication between {\i mORMot} nodes, you may consi
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
 As a result, on the Server side, our framework was designed to be @**thread-safe@.
 On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This @*KISS@ design ensure better test coverage.
-On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex (critical section), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
+On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex ({\i @**Critical Section@s}), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
 :  Thread safe design
 We will now focus on the server side, which is the main strategic point (and potential bottleneck or point of failure) of any {\i Client-Server} architecture.
 In order to achieve this thread-safety without sacrificing performance, the following rules were applied in {\f1\fs20 TSQLRestServer.URI}:
 - Most of this method's logic is to process the URI and parameters of the incoming request (in {\f1\fs20 TSQLRestServerURIContext.URIDecode*} methods), so is thread-safe by design (e.g. {\f1\fs20 Model} and {\f1\fs20 RecordProps} access do not change during process);
 - At @*REST@ful / @*CRUD@ level, {\f1\fs20 Add/Update/Delete/TransactionBegin/Commit/Rollback} methods are locked by default (with a 2 seconds timeout), and {\f1\fs20 Retrieve*} methods are not;
-- {\f1\fs20 TSQLRestStorage} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestStorageInMemory@} uses a per-Table Critical Section;
+- {\f1\fs20 TSQLRestStorage} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestStorageInMemory@} uses a per-Table {\i Critical Section};
 - {\f1\fs20 TSQLRestServerCallBack} method-based services - i.e. @*published method@s of the inherited {\f1\fs20 TSQLRestServer} class as stated @49@ - must be implemented to be thread-safe by default;
 - {\f1\fs20 Interface}-based services - see @63@ - have several execution modes, including thread safe automated options (see {\f1\fs20 TServiceMethodOption}) or manual thread safety expectation, for better scaling - see @72@;
 - A protected {\f1\fs20 fSessionCriticalSection} is used to protect shared {\f1\fs20 fSession[]} access between clients;
 - The {\i @*SQLite3@} engine access is protected at SQL/JSON @*cache@ level, via {\f1\fs20 DB.LockJSON()} calls in {\f1\fs20 @*TSQLRestServerDB@} methods;
 - Remote external tables - see @27@ - use thread-safe connections and statements when accessing the databases via SQL;
 - Access to {\f1\fs20 fStats} was not made thread-safe, since this data is indicative only: a {\i mutex} was not used to protect this resource.
-We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
+We tried to make the internal {\i Critical Sections} as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
 At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
 From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
 :  Advanced threading settings
@@ -8248,7 +8440,7 @@ will let our server method return the following JSON object:
 $ {"Result":7.32}
 That is, a perfectly AJAX-friendly request.
 Note that all parameters are expected to be plain case-insensitive {\f1\fs20 'A'..'Z','0'..'9'} characters.
-An {\i important point} is to remember that the implementation of the callback method {\b must be thread-safe} - as stated by @25@. In fact, the {\f1\fs20 TSQLRestServer.URI} method expects such callbacks to handle the thread-safety on their side. It's perhaps some more work to handle a critical section in the implementation, but, in practice, it's the best way to achieve performance and scalability: the resource locking can be made at the tiniest code level.
+An {\i important point} is to remember that the implementation of the callback method {\b must be thread-safe} - as stated by @25@ and @184@. In fact, the {\f1\fs20 TSQLRestServer.URI} method expects such callbacks to handle the thread-safety on their side. It's perhaps some more work to handle a {\i critical section} in the implementation, but, in practice, it's the best way to achieve performance and scalability: the resource locking can be made at the tiniest code level.
 \page
 : Defining the client
 The client-side is implemented by calling some dedicated methods, and providing the service name ({\f1\fs20 'sum'}) and its associated parameters:
@@ -10563,7 +10755,7 @@ But if you need a special process to take place during the class instance initia
 But from the @*SOA@ point of view, it could make sense to use a dedicated method with proper parameters to initialize your instance, e.g. in you are in {\f1\fs20 sicClientDriven} execution mode. See in @74@ some sample code implementing a {\f1\fs20 IRemoteSQL} service, with a dedicated {\f1\fs20 Connect()} method to be called before all other methods to initialize a {\f1\fs20 sicClientDriven} instance.
 :72  Server-side execution options (threading)
 When a service is registered on the server side, some options can be defined in order to specify its execution details, using the {\f1\fs20 TServiceFactoryServer.SetOptions()} method.
-By default, service methods are called within the thread which received them. That is, when hosted by @*multi-thread@ed server instances (e.g. {\f1\fs20 TSQLite3HttpServer} or {\f1\fs20 TSQLRestServerNamedPipeResponse}), the method context can be re-entrant - unless it has been defined with {\f1\fs20 sicSingle} or {\f1\fs20 sicPerThread} instance lifetime modes. It allows better response time and CPU use, but drawback is that the method implementation shall be thread-safe. This is the technical reason why service implementation methods have to handle multi-threading safety carefully, e.g. by using {\f1\fs20 TRTLCriticalSection} mutex on purpose.
+By default, service methods are called within the thread which received them. That is, when hosted by @*multi-thread@ed server instances (e.g. {\f1\fs20 TSQLite3HttpServer} or {\f1\fs20 TSQLRestServerNamedPipeResponse}), the method context can be re-entrant - unless it has been defined with {\f1\fs20 sicSingle} or {\f1\fs20 sicPerThread} instance lifetime modes. It allows better response time and CPU use, but drawback is that the method implementation shall be thread-safe. This is the technical reason why service implementation methods have to handle multi-threading safety carefully, e.g. by using @184@ on purpose.
 The following execution options are available:
 |%35%65
 |\b TServiceMethodOptions|Description\b0
