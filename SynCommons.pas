@@ -4981,6 +4981,8 @@ type
   // - in respect to the TCriticalSection class, fix a potential CPU cache line
   // conflict which may degrade the multi-threading performance, as reported by
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
+  // - internal padding is used to safely store up to 7 values protected
+  // from concurrent access with a mutex
   {$ifdef UNICODE}
   TSynLocker = record
   {$else}
@@ -4988,16 +4990,39 @@ type
   {$endif}
   private
     fSection: TRTLCriticalSection;
-    {$HINTS OFF} // does not complain if filler is declared but never used
-    fPadding: array[0..11] of Int64; // ensure no CPU cache line mixup
-    {$HINTS ON}
+    function GetVariant(Index: integer): Variant;
+    procedure SetVariant(Index: integer; const Value: Variant);
+    function GetInt64(Index: integer): Int64;
+    procedure SetInt64(Index: integer; const Value: Int64);
+    function GetPointer(Index: integer): Pointer;
+    procedure SetPointer(Index: integer; const Value: Pointer);
+    function GetUTF8(Index: integer): RawUTF8;
+    procedure SetUTF8(Index: integer; const Value: RawUTF8);
   public
+    /// internal padding data, also used to store up to 7 variables
+    // - this memory buffer will ensure no CPU cache line mixup occurs
+    // - you should not use this field directly, but rather the Locked[],
+    // LockedInt64[], LockedUTF8[] or LockedPointer[] methods
+    // - if you want to access those array values, ensure you protect them
+    // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
+    // and maintain the PaddingMaxUsedIndex field accurately
+    Padding: array[0..6] of TVarData;
+    /// maximum index of the last value stored in the internal Padding[] array
+    // - equals -1 if no value is actually stored, or a 0..6 number otherwise
+    // - you should not have to use this field, but for optimized low-level
+    // direct access to Padding[] values, within a Lock/UnLock safe block
+    PaddingMaxUsedIndex: integer;
     /// initialize the mutex
+    // - calling this method is mandatory (e.g. in the class constructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
     procedure Init;
       {$ifdef HASINLINE}inline;{$endif}
     /// finalize the mutex
+    // - calling this method is mandatory (e.g. in the class constructor owning
+    // the TSynLocker instance), otherwise you may encounter unexpected
+    // behavior, like access violations or memory leaks
     procedure Done;
-      {$ifdef HASINLINE}inline;{$endif}
     /// lock the instance for exclusive access
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
@@ -5021,6 +5046,48 @@ type
     /// release the instance for exclusive access
     procedure UnLock;
       {$ifdef HASINLINE}inline;{$endif}
+    /// safe locked access to a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // LockedPointer and LockedUTF8 array properties
+    // - returns null if the Index is out of range
+    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+    /// safe locked access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+    /// safe locked access to a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns nil if the Index is out of range, or does not store a pointer
+    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+    /// safe locked access to an UTF-8 string value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedPointer array properties
+    // - UTF-8 string will be stored internally as a varString variant
+    // - returns '' if the Index is out of range, or does not store a string
+    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+    /// safe locked in-place increment to an Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns the newly stored value
+    // - if the internal value is not defined yet, would use 0 as default value
+    function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+    /// safe locked in-place exchange of a Variant value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - returns the previous stored value, or null if the Index is out of range
+    function LockedExchange(Index: integer; const Value: variant): variant;
+    /// safe locked in-place exchange of a pointer/TObject value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - pointers will be stored internally as a varUnknown variant
+    // - returns the previous stored value, nil if the Index is out of range,
+    // or does not store a pointer
+    function LockedPointerExchange(Index: integer; Value: pointer): pointer;
   end;
 
   /// adding locking methods to a TSynPersistent with virtual constructor
@@ -39948,10 +40015,14 @@ end;
 procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
+  PaddingMaxUsedIndex := -1;
 end;
 
 procedure TSynLocker.Done;
+var i: integer;
 begin
+  for i := 0 to PaddingMaxUsedIndex do
+    VarClear(variant(Padding[i]));
   DeleteCriticalSection(fSection);
 end;
 
@@ -39968,6 +40039,178 @@ end;
 function TSynLocker.TryLock: boolean;
 begin
   result := TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif};
+end;
+
+function TSynLocker.GetVariant(Index: integer): Variant;
+begin
+  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then // PaddingMaxUsedIndex may be -1
+    try
+      EnterCriticalSection(fSection);
+      result := variant(Padding[Index]);
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    VarClear(result);
+end;
+
+procedure TSynLocker.SetVariant(Index: integer; const Value: Variant);
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      if Index>PaddingMaxUsedIndex then
+        PaddingMaxUsedIndex := Index;
+      variant(Padding[Index]) := Value;
+    finally
+      LeaveCriticalSection(fSection);
+    end;
+end;
+
+function TSynLocker.GetInt64(Index: integer): Int64;
+begin
+  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+    try
+      EnterCriticalSection(fSection);
+      result := VariantToInt64Def(variant(Padding[index]),0);
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    result := 0;
+end;
+
+procedure TSynLocker.SetInt64(Index: integer; const Value: Int64);
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      if Index>PaddingMaxUsedIndex then
+        PaddingMaxUsedIndex := Index;
+      variant(Padding[Index]) := Value;
+    finally
+      LeaveCriticalSection(fSection);
+    end;
+end;
+
+function TSynLocker.GetPointer(Index: integer): Pointer;
+begin
+  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+    try
+      EnterCriticalSection(fSection);
+      with Padding[index] do
+        if VType=varUnknown then
+          result := VUnknown else
+          result := nil;
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    result := nil;
+end;
+
+procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      if Index>PaddingMaxUsedIndex then
+        PaddingMaxUsedIndex := Index;
+      with Padding[index] do begin
+        if VType<>varUnknown then begin
+          VarClear(PVariant(@VType)^);
+          VType := varUnknown;
+        end;
+        VUnknown := Value;
+      end;
+    finally
+      LeaveCriticalSection(fSection);
+    end;
+end;
+
+function TSynLocker.GetUTF8(Index: integer): RawUTF8;
+var wasString: Boolean;
+begin
+  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+    try
+      EnterCriticalSection(fSection);
+      VariantToUTF8(variant(Padding[Index]),result,wasString);
+      if not wasString then
+        result := '';
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    result := '';
+end;
+
+procedure TSynLocker.SetUTF8(Index: integer; const Value: RawUTF8);
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      if Index>PaddingMaxUsedIndex then
+        PaddingMaxUsedIndex := Index;
+      RawUTF8ToVariant(Value,Padding[Index],varString);
+    finally
+      LeaveCriticalSection(fSection);
+    end;
+end;
+
+function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      if Index<=PaddingMaxUsedIndex then
+        result := VariantToInt64Def(variant(Padding[index]),0) else begin
+        PaddingMaxUsedIndex := Index;
+        result := 0;
+      end;
+      variant(Padding[Index]) := Int64(result+Increment);
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    result := 0;
+end;
+
+function TSynLocker.LockedExchange(Index: integer; const Value: Variant): Variant;
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      with Padding[index] do begin
+        if Index<=PaddingMaxUsedIndex then
+          result := PVariant(@VType)^ else begin
+          PaddingMaxUsedIndex := Index;
+          VarClear(result);
+        end;
+        PVariant(@VType)^ := Value;
+      end;
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    VarClear(result);
+end;
+
+function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
+begin
+  if cardinal(Index)<=high(Padding) then
+    try
+      EnterCriticalSection(fSection);
+      with Padding[index] do begin
+        if Index<=PaddingMaxUsedIndex then
+          if VType=varUnknown then
+            result := VUnknown else begin
+            VarClear(PVariant(@VType)^);
+            result := nil;
+          end else begin
+          PaddingMaxUsedIndex := Index;
+          result := nil;
+        end;
+        VType := varUnknown;
+        VUnknown := Value;
+      end;
+    finally
+      LeaveCriticalSection(fSection);
+    end else
+    result := nil;
 end;
 
 
