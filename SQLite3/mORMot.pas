@@ -28688,7 +28688,12 @@ begin
     case Props.Kind of
     rFTS3, rFTS4: begin
       if Props.fFTSWithoutContentExpression<>'' then
-        result := result+'content="",';
+        if Props.fFTSWithoutContentTableIndex<0 then
+          raise EModelException.CreateUTF8('Invalid %.FTSWithoutContentTableIndex',[self]) else
+          // see https://www.sqlite.org/fts3.html#section_6_2_2
+          result := result+'content="'+
+            aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName+'",'+
+            Props.fFTSWithoutContentExpression+',';
       if Count=0 then
         raise EModelException.CreateUTF8(
           'Virtual FTS class % should have published properties',[self]);
@@ -28697,7 +28702,8 @@ begin
         if SQLFieldTypeStored<>sftUTF8Text then
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
-          result := result+Name+',';
+          if Props.fFTSWithoutContentExpression='' then
+            result := result+Name+',';
       if InheritsFrom(TSQLRecordFTS3Porter) or
          InheritsFrom(TSQLRecordFTS4Porter) then
         result := result+' tokenize=porter)' else
