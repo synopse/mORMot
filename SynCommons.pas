@@ -5046,6 +5046,22 @@ type
     /// release the instance for exclusive access
     procedure UnLock;
       {$ifdef HASINLINE}inline;{$endif}
+    /// will enter the mutex until the IUnknown reference is released
+    // - could be used as such under Delphi:
+    // !begin
+    // !  ... // unsafe code
+    // !  Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // local hidden IUnknown will release the lock for the method
+    // - warning: under FPC, you should assign its result to a local variable -
+    // see bug http://bugs.freepascal.org/view.php?id=26602
+    // !var LockFPC: IUnknown;
+    // !begin
+    // !  ... // unsafe code
+    // !  LockFPC := Safe.ProtectMethod;
+    // !  ... // thread-safe code
+    // !end; // LockFPC will release the lock for the method
+    function ProtectMethod: IUnknown;
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // LockedPointer and LockedUTF8 array properties
@@ -13919,7 +13935,7 @@ type
     // !end; // local hidden IUnknown will release the lock for the method
     // - warning: under FPC, you should assign its result to a local variable -
     // see bug http://bugs.freepascal.org/view.php?id=26602
-    // !var LockFPC: IUnknown;;
+    // !var LockFPC: IUnknown;
     // !begin
     // !  ... // unsafe code
     // !  LockFPC := fSharedAutoLocker.ProtectMethod;
@@ -13975,6 +13991,8 @@ type
     procedure Enter;
     /// leave the mutex
     procedure Leave;
+    /// access to the locking methods of this instance
+    property Safe: TSynLocker read fSafe;
   end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
@@ -40010,6 +40028,31 @@ begin
 end;
 
 
+{ TAutoLock }
+
+type
+  /// used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
+  PSynLocker = ^TSynLocker;
+  TAutoLock = class(TInterfacedObject)
+  protected
+    fLock: PSynLocker;
+  public
+    constructor Create(aLock: PSynLocker);
+    destructor Destroy; override;
+  end;
+
+constructor TAutoLock.Create(aLock: PSynLocker);
+begin
+  fLock := aLock;
+  fLock^.Lock;
+end;
+
+destructor TAutoLock.Destroy;
+begin
+  fLock^.UnLock;
+end;
+
+
 { TSynLocker }
 
 procedure TSynLocker.Init;
@@ -40039,6 +40082,11 @@ end;
 function TSynLocker.TryLock: boolean;
 begin
   result := TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif};
+end;
+
+function TSynLocker.ProtectMethod: IUnknown;
+begin
+  result := TAutoLock.Create(@self);
 end;
 
 function TSynLocker.GetVariant(Index: integer): Variant;
@@ -45339,30 +45387,6 @@ begin
 end;
 
 
-type
-  /// used by TAutoLocker
-  TAutoLock = class(TInterfacedObject)
-  protected
-    fLock: TAutoLocker;
-  public
-    constructor Create(aLock: TAutoLocker);
-    destructor Destroy; override;
-  end;
-
-{ TAutoLock }
-
-constructor TAutoLock.Create(aLock: TAutoLocker);
-begin
-  fLock := aLock;
-  fLock.Enter;
-end;
-
-destructor TAutoLock.Destroy;
-begin
-  fLock.Leave;
-end;
-
-
 { TAutoLocker }
 
 constructor TAutoLocker.Create;
@@ -45378,7 +45402,7 @@ end;
 
 function TAutoLocker.ProtectMethod: IUnknown;
 begin
-  result := TAutoLock.Create(self);
+  result := TAutoLock.Create(@fSafe);
 end;
 
 procedure TAutoLocker.Enter;
