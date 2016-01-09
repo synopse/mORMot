@@ -2030,6 +2030,33 @@ So, we may have written our class as such:
 !  // here fSafe.UnLock will be called when IUnknown is released
 !end;
 As you can see, the {\f1\fs20 Safe: TSynLocker} instance would be defined and handled at {\f1\fs20 TSynPersistentLocked} parent level.
+:   Injecting IAutoLocker instances
+If your class inherits from {\f1\fs20 @*TInjectableObject@}, you may even define the following:
+!type
+!  TMyClass = class(TInjectableObject)
+!  private
+!    fLock: IAutoLocker;
+!  public
+!    function AnyMethod: integer;
+!  published
+!    property Lock: IAutoLocker read fLock write fLock;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.AnyMethod: integer;
+!begin
+!  result := Lock.Safe^.LockedInt64[0];
+!end;
+!
+!var c: TMyClass;
+!begin
+!  c := TMyClass.CreateInjected([],[],[]);
+!  Assert(c.AnyMethod=0);
+!  c.Free;
+!end;
+Here we use dependency resolution - see @161@ - to let the {\f1\fs20 TMyClass.CreateInjected} constructor scan its {\f1\fs20 published} properties, and therefore search for a provider of {\f1\fs20 IAutoLocker}. Since {\f1\fs20 IAutoLocker} is globally registered to be resolved with {\f1\fs20 TAutoLocker}, our class would  initialize its {\f1\fs20 fLock} field with a new instance. Now we could use {\f1\fs20 Lock.Safe^} to access the associated {\f1\fs20 TSynLocker} critical section, as usual.
+Of course, this may be more complicated than manual {\f1\fs20 TSynLocker} handling, but if you are writing an interface-based service - see @63@, your class may inherit from {\f1\fs20 TInjectableObject} for its own dependency resolution, so this trick may be very convenient.
 :   Safe locked storage in TSynLocker
 When we fixed the potential CPU cache-line issue, do you remember that we added a padding binary buffer to the {\f1\fs20 TSynLocker} definition? Since we do not want to waste resource, {\f1\fs20 TSynLocker} gives easy access to its internal data, and allow to directly handle those values. Since it is stored as 7 slots of {\f1\fs20 variant} values, you could store any kind of data, including complex {\f1\fs20 @*TDocVariant@} document or array.
 Our class may use this feature, and store its integer field value in the internal slot 0:

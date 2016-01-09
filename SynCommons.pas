@@ -5105,6 +5105,7 @@ type
     // or does not store a pointer
     function LockedPointerExchange(Index: integer; Value: pointer): pointer;
   end;
+  PSynLocker = ^TSynLocker;
 
   /// adding locking methods to a TSynPersistent with virtual constructor
   // - you may use this class instead of the RTL TCriticalSection, since it
@@ -13942,6 +13943,8 @@ type
     // !  ... // thread-safe code
     // !end; // LockFPC will release the lock for the method
     function ProtectMethod: IUnknown;
+    /// gives an access to the internal low-level TSynLocker instance used 
+    function Safe: PSynLocker; 
   end;
 
   /// reference counted block code critical section
@@ -13992,7 +13995,7 @@ type
     /// leave the mutex
     procedure Leave;
     /// access to the locking methods of this instance
-    property Safe: TSynLocker read fSafe;
+    function Safe: PSynLocker; 
   end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
@@ -40032,7 +40035,6 @@ end;
 
 type
   /// used by TAutoLocker.ProtectMethod and TSynLocker.ProtectMethod
-  PSynLocker = ^TSynLocker;
   TAutoLock = class(TInterfacedObject)
   protected
     fLock: PSynLocker;
@@ -45415,6 +45417,10 @@ begin
   fSafe.UnLock;
 end;
 
+function TAutoLocker.Safe: PSynLocker;
+begin
+  result := @fSafe;
+end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
 {$ifndef NOVARIANTS}
